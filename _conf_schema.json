@@ -1,0 +1,78 @@
+{
+    "enabled_groups": {
+        "type": "list",
+        "description": "启用分析功能的QQ群列表",
+        "default": [],
+        "hint": "填入允许使用分析功能的QQ群号，为空则所有群都可使用",
+        "items": {
+            "type": "string"
+        }
+    },
+    "max_messages": {
+        "type": "int",
+        "description": "最大分析消息数量",
+        "default": 1000,
+        "hint": "单次分析的最大消息条数，建议500-2000"
+    },
+    "analysis_days": {
+        "type": "int",
+        "description": "默认分析天数",
+        "default": 1,
+        "hint": "默认分析最近几天的消息，建议1-7天"
+    },
+    "auto_analysis_time": {
+        "type": "string",
+        "description": "自动分析时间",
+        "default": "22:00",
+        "hint": "每日自动分析的时间，格式HH:MM"
+    },
+    "enable_auto_analysis": {
+        "type": "bool",
+        "description": "启用自动分析",
+        "default": false,
+        "hint": "是否在指定时间自动进行群聊分析，启用需要在群内手动触发一次分析 /分析设置 test ，否则获取不到实例，不会自动分析"
+    },
+    "output_format": {
+        "type": "string",
+        "description": "输出格式",
+        "default": "image",
+        "hint": "分析报告的输出格式：image(图片)、text(文本)"
+    },
+
+    "min_messages_threshold": {
+        "type": "int",
+        "description": "最小消息数阈值",
+        "default": 50,
+        "hint": "进行分析所需的最小消息数量"
+    },
+    "topic_analysis_enabled": {
+        "type": "bool",
+        "description": "启用话题分析",
+        "default": true,
+        "hint": "是否使用LLM进行智能话题分析"
+    },
+    "user_title_analysis_enabled": {
+        "type": "bool",
+        "description": "启用用户称号分析",
+        "default": true,
+        "hint": "是否使用LLM进行用户称号分析"
+    },
+    "max_topics": {
+        "type": "int",
+        "description": "最大话题数量",
+        "default": 5,
+        "hint": "分析报告中显示的最大话题数量"
+    },
+    "max_user_titles": {
+        "type": "int",
+        "description": "最大用户称号数量",
+        "default": 8,
+        "hint": "分析报告中显示的最大用户称号数量"
+    },
+    "max_query_rounds": {
+        "type": "int",
+        "description": "最大消息查询轮数",
+        "default": 35,
+        "hint": "⚠️ 警告：增加此值会导致大量Token消耗！默认值35轮（有一定消耗）。设置过高可能导致LLM费用激增"
+    }
+}
