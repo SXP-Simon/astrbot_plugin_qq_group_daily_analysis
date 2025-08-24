@@ -1,5 +1,18 @@
-name: helloworld # 这是你的插件的唯一识别名。
-desc: 这是 AstrBot 的默认插件，支持关键词回复。 # 插件简短描述
-version: v1.3 # 插件版本号。格式：v1.1.1 或者 v1.1
-author: Soulter # 作者
-repo: https://github.com/Soulter/helloworld # 插件的仓库地址
+name: astrbot_qq_group_daily_analysis # 这是你的插件的唯一识别名。
+desc: QQ群日常分析插件 - 生成精美的群聊分析报告，支持话题分析、用户称号、群聊金句等功能  # 插件简短描述
+help: |  # 插件的帮助信息
+  智能分析群聊活动，生成精美的日常分析报告
+  
+  主要功能：
+  - 话题分析和总结
+  - 用户称号分配
+  - 群聊金句识别
+  - 可视化报告
+  - 定时自动分析
+  
+  命令：
+  /群分析 [天数] - 分析群聊活动
+  /分析设置 [操作] - 管理设置（enable/disable/status/test）
+version: v1.0.0 # 插件版本号。格式：v1.1.1 或者 v1.1
+author: SXP-Simon # 作者
+repo: https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis # 插件的仓库地址
