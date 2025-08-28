@@ -23,7 +23,7 @@
     "auto_analysis_time": {
         "type": "string",
         "description": "自动分析时间",
-        "default": "22:00",
+        "default": "09:00",
         "hint": "每日自动分析的时间，格式HH:MM"
     },
     "enable_auto_analysis": {
@@ -36,7 +36,7 @@
         "type": "string",
         "description": "输出格式",
         "default": "image",
-        "hint": "分析报告的输出格式：image(图片)、text(文本)"
+        "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)"
     },
 
     "min_messages_threshold": {
@@ -74,5 +74,17 @@
         "description": "最大消息查询轮数",
         "default": 35,
         "hint": "⚠️ 警告：增加此值会导致大量Token消耗！默认值35轮（有一定消耗）。设置过高可能导致LLM费用激增"
+    },
+    "pdf_output_dir": {
+        "type": "string",
+        "description": "PDF输出目录",
+        "default": "data/plugins/astrbot-qq-group-daily-analysis/reports",
+        "hint": "PDF报告文件的保存目录"
+    },
+    "pdf_filename_format": {
+        "type": "string",
+        "description": "PDF文件名格式",
+        "default": "群聊分析报告_{group_id}_{date}.pdf",
+        "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
     }
 }

@@ -62,10 +62,14 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 | enabled_groups | 启用分析的QQ群列表 | [] (所有群) |
 | max_messages | 最大分析消息数量 | 1000 |
 | analysis_days | 默认分析天数 | 1 |
-| output_format | 输出格式 (pdf/image/text) | pdf |
-| require_admin | 仅管理员可用 | false |
+| output_format | 输出格式 (image/text/pdf) | image |
 | topic_analysis_enabled | 启用话题分析 | true |
 | user_title_analysis_enabled | 启用用户称号分析 | true |
+| pdf_output_dir | PDF文件输出目录 | reports |
+| pdf_filename_format | PDF文件名格式 | 群聊分析报告_{group_id}_{date}.pdf |
+| enable_auto_analysis | 启用自动分析 | false |
+| auto_analysis_time | 自动分析时间 | 09:00 |
+
 
 ## 分析内容
 
@@ -77,12 +81,12 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 - 最活跃时段
 
 ### 💬 话题分析
-- 自动提取3-5个主要话题
+- 自动提取主要话题
 - 识别话题参与者
 - 总结讨论要点和结论
 
 ### 🏆 用户称号
-基于用户行为特征分配称号：
+基于用户行为特征分配称号（例）：
 - **水群小能手**: 发言频繁的活跃用户
 - **技术专家**: 经常讨论技术话题
 - **夜猫子**: 深夜活跃用户
@@ -117,6 +121,12 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 - 支持基础群聊分析功能
 - 智能话题和用户称号分析
 - 精美可视化报告生成
+
+### v1.1.0
+- 修复了部分bug
+- 优化了权限情况，管理员控制绝大部分命令（防止滥用 token）
+- 增加了定时自动触发分析功能
+- 发送 PDF 版的推送，提供命令安装相关配置，也可以不配置 PDF 版
 
 ## 许可证
 

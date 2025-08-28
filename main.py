@@ -7,16 +7,42 @@ import json
 import asyncio
 import base64
 import aiohttp
+import subprocess
+import sys
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from pathlib import Path
 from dataclasses import dataclass
-from collections import defaultdict, Counter
+from collections import defaultdict
 
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger, AstrBotConfig
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+from astrbot.core.message.components import File
+from astrbot.core.star.filter.permission import PermissionType
+
+# PDF 生成相关导入
+PYPPETEER_AVAILABLE = False
+PYPPETEER_VERSION = None
+
+# 尝试导入 pyppeteer
+try:
+    import pyppeteer
+    from pyppeteer import launch
+    PYPPETEER_AVAILABLE = True
+
+    # 检查版本
+    try:
+        PYPPETEER_VERSION = pyppeteer.__version__
+        logger.info(f"使用 pyppeteer {PYPPETEER_VERSION} 作为 PDF 引擎")
+    except AttributeError:
+        PYPPETEER_VERSION = "unknown"
+        logger.info("使用 pyppeteer (版本未知) 作为 PDF 引擎")
+
+except ImportError:
+    logger.warning("pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
 
 
 @dataclass
@@ -59,7 +85,7 @@ class GroupStatistics:
     "astrbot_qq_group_daily_analysis",
     "SXP-Simon",
     "QQ群日常分析插件 - 生成精美的群聊日常分析报告",
-    "1.0.0",
+    "1.1.0",
     "https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis"
 )
 class QQGroupDailyAnalysis(Star):
@@ -67,23 +93,24 @@ class QQGroupDailyAnalysis(Star):
         super().__init__(context)
         self.config = config
 
-        # 先从配置文件加载配置（如果存在）
-        self._load_config_from_file()
+        # 直接从AstrBot配置系统读取配置
+        self.enabled_groups = config.get("enabled_groups", [])
+        self.max_messages = config.get("max_messages", 1000)
+        self.analysis_days = config.get("analysis_days", 1)
+        self.auto_analysis_time = config.get("auto_analysis_time", "09:00")
+        self.enable_auto_analysis = config.get("enable_auto_analysis", False)
+        self.output_format = config.get("output_format", "image")
 
-        # 然后从AstrBot配置系统读取（优先级更高）
-        self.enabled_groups = config.get("enabled_groups", getattr(self, 'enabled_groups', []))
-        self.max_messages = config.get("max_messages", getattr(self, 'max_messages', 1000))
-        self.analysis_days = config.get("analysis_days", getattr(self, 'analysis_days', 1))
-        self.auto_analysis_time = config.get("auto_analysis_time", getattr(self, 'auto_analysis_time', "09:00"))
-        self.enable_auto_analysis = config.get("enable_auto_analysis", getattr(self, 'enable_auto_analysis', False))
-        self.output_format = config.get("output_format", getattr(self, 'output_format', "image"))
+        self.min_messages_threshold = config.get("min_messages_threshold", 50)
+        self.topic_analysis_enabled = config.get("topic_analysis_enabled", True)
+        self.user_title_analysis_enabled = config.get("user_title_analysis_enabled", True)
+        self.max_topics = config.get("max_topics", 5)
+        self.max_user_titles = config.get("max_user_titles", 8)
+        self.max_query_rounds = config.get("max_query_rounds", 35)
 
-        self.min_messages_threshold = config.get("min_messages_threshold", getattr(self, 'min_messages_threshold', 50))
-        self.topic_analysis_enabled = config.get("topic_analysis_enabled", getattr(self, 'topic_analysis_enabled', True))
-        self.user_title_analysis_enabled = config.get("user_title_analysis_enabled", getattr(self, 'user_title_analysis_enabled', True))
-        self.max_topics = config.get("max_topics", getattr(self, 'max_topics', 5))
-        self.max_user_titles = config.get("max_user_titles", getattr(self, 'max_user_titles', 8))
-        self.max_query_rounds = config.get("max_query_rounds", getattr(self, 'max_query_rounds', 35))
+        # PDF 相关配置
+        self.pdf_output_dir = config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
+        self.pdf_filename_format = config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
 
         # 启动定时任务
         self.scheduler_task = None
@@ -97,6 +124,7 @@ class QQGroupDailyAnalysis(Star):
         logger.info("QQ群日常分析插件已初始化")
 
     @filter.command("群分析")
+    @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(self, event: AiocqhttpMessageEvent, days: Optional[int] = None):
         """
         分析群聊日常活动
@@ -164,6 +192,34 @@ class QQGroupDailyAnalysis(Star):
                     logger.warning("图片报告生成失败，回退到文本报告")
                     text_report = await self._generate_text_report(analysis_result)
                     yield event.plain_result(f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}")
+            elif self.output_format == "pdf":
+                if not PYPPETEER_AVAILABLE:
+                    yield event.plain_result("❌ PDF 功能不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+                    return
+
+                # yield event.plain_result("📄 正在生成 PDF 报告，请稍候...")
+                # yield event.plain_result("💡 首次使用可能需要下载 Chromium 浏览器，请耐心等待...")
+
+                pdf_path = await self._generate_pdf_report(analysis_result, group_id)
+                if pdf_path:
+                    # 发送 PDF 文件
+                    pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
+                    result = event.make_result()
+                    result.chain.append(pdf_file)
+                    yield result
+                    # yield event.plain_result(f"✅ PDF 报告已生成并发送")
+                else:
+                    # 如果 PDF 生成失败，提供详细的错误信息和解决方案
+                    yield event.plain_result("❌ PDF 报告生成失败")
+                    yield event.plain_result("🔧 可能的解决方案：")
+                    yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
+                    yield event.plain_result("2. 检查网络连接是否正常")
+                    yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
+
+                    # 回退到文本报告
+                    logger.warning("PDF 报告生成失败，回退到文本报告")
+                    text_report = await self._generate_text_report(analysis_result)
+                    yield event.plain_result(f"\n📝 以下是文本版本的分析报告：\n\n{text_report}")
             else:
                 text_report = await self._generate_text_report(analysis_result)
                 yield event.plain_result(text_report)
@@ -172,7 +228,141 @@ class QQGroupDailyAnalysis(Star):
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员")
 
+    @filter.command("设置格式")
+    @filter.permission_type(PermissionType.ADMIN)
+    async def set_output_format(self, event: AiocqhttpMessageEvent, format_type: str = ""):
+        """
+        设置分析报告输出格式
+        用法: /设置格式 [image|text|pdf]
+        """
+        if not isinstance(event, AiocqhttpMessageEvent):
+            yield event.plain_result("❌ 此功能仅支持QQ群聊")
+            return
+
+        group_id = event.get_group_id()
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令")
+            return
+
+        # 检查管理员权限
+        if not await self._is_admin(event):
+            yield event.plain_result("❌ 仅群管理员可以修改设置")
+            return
+
+        if not format_type:
+            yield event.plain_result(f"""📊 当前输出格式: {self.output_format}
+
+可用格式:
+• image - 图片格式 (默认)
+• text - 文本格式
+• pdf - PDF 格式 {'✅' if PYPPETEER_AVAILABLE else '❌ (需安装 pyppeteer)'}
+
+用法: /设置格式 [格式名称]""")
+            return
+
+        format_type = format_type.lower()
+        if format_type not in ["image", "text", "pdf"]:
+            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
+            return
+
+        if format_type == "pdf" and not PYPPETEER_AVAILABLE:
+            yield event.plain_result("❌ PDF 格式不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+            return
+
+        self.output_format = format_type
+        self.config["output_format"] = format_type
+        self.config.save_config()
+        yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
+
+    @filter.command("安装PDF")
+    @filter.permission_type(PermissionType.ADMIN)
+    async def install_pdf_deps(self, event: AiocqhttpMessageEvent):
+        """
+        安装 PDF 功能依赖
+        用法: /安装PDF
+        """
+        global PYPPETEER_AVAILABLE
+
+        if not isinstance(event, AiocqhttpMessageEvent):
+            yield event.plain_result("❌ 此功能仅支持QQ群聊")
+            return
+
+        # 检查管理员权限
+        if not await self._is_admin(event):
+            yield event.plain_result("❌ 仅群管理员可以安装依赖")
+            return
+
+        yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
+
+        try:
+            # 检查是否已安装
+            if PYPPETEER_AVAILABLE:
+                yield event.plain_result("✅ pyppeteer 已安装，正在检查 Chromium...")
+
+                # 检查 Chromium
+                try:
+                    import pyppeteer
+                    # 尝试获取 Chromium 路径
+                    try:
+                        chromium_path = pyppeteer.executablePath()
+                        if Path(chromium_path).exists():
+                            yield event.plain_result("✅ PDF 功能已完全可用！")
+                            return
+                    except Exception:
+                        # executablePath() 可能失败，说明 Chromium 未安装
+                        pass
+
+                    yield event.plain_result("🔄 Chromium 未安装，正在下载...")
+                    success = await self._install_chromium()
+                    if success:
+                        yield event.plain_result("✅ PDF 功能安装完成！")
+                    else:
+                        yield event.plain_result("❌ Chromium 安装失败，请检查网络连接。\n💡 可尝试手动安装：在 Python 中运行 'import pyppeteer; await pyppeteer.launch()'")
+                    return
+                except Exception as e:
+                    yield event.plain_result(f"⚠️ 检查 Chromium 时出错: {e}")
+
+            # 尝试安装更新版本的 pyppeteer
+            yield event.plain_result("📦 正在安装/更新 pyppeteer 库...")
+
+            # 强制安装稳定版本的 pyppeteer (1.0.2)
+            yield event.plain_result("🔄 强制安装 pyppeteer 稳定版本 (1.0.2)...")
+            yield event.plain_result("� 使用 1.0.2 版本可避免 Chromium 下载问题")
+            success = await self._install_package("pyppeteer==1.0.2")
+
+            if not success:
+                yield event.plain_result("❌ pyppeteer 安装失败")
+                yield event.plain_result("🔧 请尝试手动安装稳定版本：")
+                yield event.plain_result("   pip install pyppeteer==1.0.2")
+                yield event.plain_result("💡 如果仍然失败，请检查网络连接或使用代理")
+                return
+
+            yield event.plain_result("✅ pyppeteer 安装成功！")
+
+            # 重新检查可用性
+            try:
+                # 重新导入以获取最新版本
+                import importlib
+                if 'pyppeteer' in sys.modules:
+                    importlib.reload(sys.modules['pyppeteer'])
+
+                from pyppeteer import launch
+                PYPPETEER_AVAILABLE = True
+
+                yield event.plain_result("🎉 PDF 功能安装完成！")
+                yield event.plain_result("💡 现在可以使用 /设置格式 pdf 启用 PDF 报告")
+                yield event.plain_result("✨ 使用稳定版本 pyppeteer 1.0.2，兼容性更好")
+                yield event.plain_result("� 注意：首次生成 PDF 时会自动下载 Chromium")
+
+            except ImportError:
+                yield event.plain_result("⚠️ pyppeteer 安装可能未完成，请重启插件后重试")
+
+        except Exception as e:
+            logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
+
     @filter.command("分析设置")
+    @filter.permission_type(PermissionType.ADMIN)
     async def analysis_settings(self, event: AiocqhttpMessageEvent, action: str = "status"):
         """
         管理分析设置
@@ -200,7 +390,8 @@ class QQGroupDailyAnalysis(Star):
         if action == "enable":
             if group_id not in self.enabled_groups:
                 self.enabled_groups.append(group_id)
-                await self._save_config()
+                self.config["enabled_groups"] = self.enabled_groups
+                self.config.save_config()
                 yield event.plain_result("✅ 已为当前群启用日常分析功能")
 
                 # 重新加载配置并启动定时任务
@@ -211,7 +402,8 @@ class QQGroupDailyAnalysis(Star):
         elif action == "disable":
             if group_id in self.enabled_groups:
                 self.enabled_groups.remove(group_id)
-                await self._save_config()
+                self.config["enabled_groups"] = self.enabled_groups
+                self.config.save_config()
                 yield event.plain_result("✅ 已为当前群禁用日常分析功能")
             else:
                 yield event.plain_result("ℹ️ 当前群未启用日常分析功能")
@@ -244,15 +436,22 @@ class QQGroupDailyAnalysis(Star):
             auto_status = "已启用" if self.enable_auto_analysis else "未启用"
             scheduler_status = "运行中" if hasattr(self, 'scheduler_task') and self.scheduler_task and not self.scheduler_task.done() else "未运行"
 
+            if PYPPETEER_AVAILABLE:
+                pdf_status = f"可用 (pyppeteer {PYPPETEER_VERSION})"
+            else:
+                pdf_status = "不可用 (使用 /安装PDF 命令安装)"
             yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status}
 • 自动分析: {auto_status} ({self.auto_analysis_time})
 • 定时任务: {scheduler_status}
 • 输出格式: {self.output_format}
+• PDF 功能: {pdf_status}
 • 最小消息数: {self.min_messages_threshold}
-• 最大查询轮数: {self.max_query_rounds} 
+• 最大查询轮数: {self.max_query_rounds}
 
-💡 可用命令: enable, disable, status, reload, test""")
+💡 可用命令: enable, disable, status, reload, test
+💡 支持的输出格式: image, text, pdf
+💡 其他命令: /设置格式, /安装PDF""")
 
     async def _get_bot_qq_id(self):
         """获取机器人QQ号"""
@@ -268,6 +467,67 @@ class QQGroupDailyAnalysis(Star):
         """检查是否为管理员 - 已简化为允许所有用户"""
         # 允许所有用户使用设置功能
         return True
+
+    async def _install_package(self, package_name: str) -> bool:
+        """安装 Python 包"""
+        try:
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "pip", "install", package_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                logger.info(f"成功安装包: {package_name}")
+                return True
+            else:
+                logger.error(f"安装包 {package_name} 失败: {stderr.decode()}")
+                return False
+
+        except Exception as e:
+            logger.error(f"安装包 {package_name} 时出错: {e}")
+            return False
+
+    async def _install_chromium(self) -> bool:
+        """安装 Chromium 浏览器"""
+        try:
+            # 尝试直接启动浏览器，这会触发自动下载
+            logger.info("尝试通过启动浏览器来触发 Chromium 下载")
+
+            import pyppeteer
+            browser = await pyppeteer.launch(headless=True, args=['--no-sandbox'])
+            await browser.close()
+
+            logger.info("成功安装并测试 Chromium")
+            return True
+
+        except Exception as e:
+            logger.error(f"通过启动浏览器安装 Chromium 失败: {e}")
+
+            # 备用方法：尝试命令行安装
+            try:
+                logger.info("尝试命令行安装方法")
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, "-c",
+                    "import pyppeteer; import asyncio; asyncio.run(pyppeteer.launch())",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                stdout, stderr = await process.communicate()
+
+                if process.returncode == 0:
+                    logger.info("成功通过命令行安装 Chromium")
+                    return True
+                else:
+                    logger.error(f"命令行安装失败: {stderr.decode()}")
+                    return False
+
+            except Exception as e2:
+                logger.error(f"命令行安装 Chromium 时出错: {e2}")
+                return False
 
     async def _fetch_group_messages_unified(self, client, group_id: str, days: int) -> List[Dict]:
         """统一的群聊消息获取方法"""
@@ -476,6 +736,28 @@ class QQGroupDailyAnalysis(Star):
                     
         return dict(user_stats)
 
+    def _render_html_template(self, template: str, data: Dict) -> str:
+        """简单的 HTML 模板渲染"""
+        result = template
+
+        # 调试：记录渲染数据
+        logger.info(f"渲染数据键: {list(data.keys())}")
+
+        for key, value in data.items():
+            placeholder = f"{{{key}}}"  # 修正：使用单大括号
+            # 调试：记录替换过程
+            if placeholder in result:
+                logger.debug(f"替换 {placeholder} -> {str(value)[:100]}...")
+            result = result.replace(placeholder, str(value))
+
+        # 检查是否还有未替换的占位符
+        import re
+        remaining_placeholders = re.findall(r'\{[^}]+\}', result)
+        if remaining_placeholders:
+            logger.warning(f"未替换的占位符: {remaining_placeholders[:10]}")
+
+        return result
+
     async def _get_user_avatar(self, user_id: str) -> Optional[str]:
         """获取用户头像的base64编码"""
         try:
@@ -504,7 +786,7 @@ class QQGroupDailyAnalysis(Star):
                 for content in msg.get("message", []):
                     if content.get("type") == "text":
                         text = content.get("data", {}).get("text", "").strip()
-                        if text and len(text) > 2:  # 过滤太短的消息
+                        if text and len(text) > 2 and not text.startswith(("/")):  # 过滤太短的消息和对机器人的命令
                             text_messages.append({
                                 "sender": nickname,
                                 "time": msg_time,
@@ -514,11 +796,11 @@ class QQGroupDailyAnalysis(Star):
             if not text_messages:
                 return []
 
-            # 限制消息数量以避免token过多
-            if len(text_messages) > 100:
-                # 均匀采样
-                step = len(text_messages) // 100
-                text_messages = text_messages[::step]
+            # # 限制消息数量以避免token过多
+            # if len(text_messages) > 100:
+            #     # 均匀采样
+            #     step = len(text_messages) // 100
+            #     text_messages = text_messages[::step]
 
             # 构建LLM提示词
             messages_text = "\n".join([
@@ -527,10 +809,18 @@ class QQGroupDailyAnalysis(Star):
             ])
 
             prompt = f"""
-请分析以下群聊记录，提取出3-5个主要话题。对于每个话题，请提供：
-1. 话题名称（简洁明了）
-2. 主要参与者（最多3人）
+你是一个帮我进行群聊信息总结的助手，生成总结内容时，你需要严格遵守下面的几个准则：
+请分析接下来提供的群聊记录，提取出最多{self.max_topics}个主要话题。
+
+对于每个话题，请提供：
+1. 话题名称（突出主题内容，尽量简明扼要）
+2. 主要参与者（最多5人）
 3. 话题详细描述（包含关键信息和结论）
+
+注意：
+- 对于比较有价值的点，稍微用一两句话详细讲讲，比如不要生成 “Nolan 和 SOV 讨论了 galgame 中关于性符号的衍生情况” 这种宽泛的内容，而是生成更加具体的讨论内容，让其他人只看这个消息就能知道讨论中有价值的，有营养的信息。
+- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，是哪个群友做了什么事情，而不要直接生成和群友没有关系的语句。
+- 对于每一条总结，尽量讲清楚前因后果，以及话题的结论，是什么，为什么，怎么做，如果用户没有讲到细节，则可以不用这么做。
 
 群聊记录：
 {messages_text}
@@ -540,7 +830,7 @@ class QQGroupDailyAnalysis(Star):
   {{
     "topic": "话题名称",
     "contributors": ["参与者1", "参与者2"],
-    "detail": "详细描述话题内容、讨论要点和结论"
+    "detail": "详细描述话题内容、讨论要点和结论，并且符合约束的准则。"
   }}
 ]
 """
@@ -553,7 +843,7 @@ class QQGroupDailyAnalysis(Star):
 
             response = await provider.text_chat(
                 prompt=prompt,
-                max_tokens=2000,
+                max_tokens=3000,
                 temperature=0.3
             )
 
@@ -606,9 +896,9 @@ class QQGroupDailyAnalysis(Star):
             if not user_summaries:
                 return []
 
-            # 按消息数量排序，取前8名
+            # 按消息数量排序，取前N名（根据配置）
             user_summaries.sort(key=lambda x: x["message_count"], reverse=True)
-            user_summaries = user_summaries[:8]
+            user_summaries = user_summaries[:self.max_user_titles]
 
             # 构建LLM提示词
             users_text = "\n".join([
@@ -623,14 +913,15 @@ class QQGroupDailyAnalysis(Star):
 请为以下群友分配合适的称号和MBTI类型。每个人只能有一个称号，每个称号只能给一个人。
 
 可选称号：
-- 水群小能手: 发言频繁但内容轻松的人
+- 龙王: 发言频繁但内容轻松的人
 - 技术专家: 经常讨论技术话题的人
 - 夜猫子: 经常在深夜发言的人
-- 表情包批发商: 经常发表情的人
+- 表情包军火库: 经常发表情的人
 - 沉默终结者: 经常开启话题的人
-- 剧作家: 平均发言长度很长的人
-- KOL: 在群里很有影响力的人
+- 评论家: 平均发言长度很长的人
+- 阳角: 在群里很有影响力的人
 - 互动达人: 经常回复别人的人
+- ... (你可以自行进行拓展添加)
 
 用户数据：
 {users_text}
@@ -695,7 +986,7 @@ class QQGroupDailyAnalysis(Star):
                     if content.get("type") == "text":
                         text = content.get("data", {}).get("text", "").strip()
                         # 过滤长度适中、可能有趣的消息
-                        if 5 <= len(text) <= 100 and not text.startswith(("http", "www")):
+                        if 5 <= len(text) <= 100 and not text.startswith(("http", "www", "/")):
                             interesting_messages.append({
                                 "sender": nickname,
                                 "time": msg_time,
@@ -705,11 +996,11 @@ class QQGroupDailyAnalysis(Star):
             if not interesting_messages:
                 return []
 
-            # 限制消息数量以避免token过多
-            if len(interesting_messages) > 50:
-                # 均匀采样
-                step = len(interesting_messages) // 50
-                interesting_messages = interesting_messages[::step]
+            # # 限制消息数量以避免token过多
+            # if len(interesting_messages) > 50:
+            #     # 均匀采样
+            #     step = len(interesting_messages) // 50
+            #     interesting_messages = interesting_messages[::step]
 
             # 构建LLM提示词
             messages_text = "\n".join([
@@ -717,18 +1008,22 @@ class QQGroupDailyAnalysis(Star):
                 for msg in interesting_messages
             ])
 
+            # 计算金句数量，默认5句，但可以根据配置调整
+            max_quotes = min(8, max(3, self.max_topics))  # 根据话题数量调整金句数量，3-8句之间
+
             prompt = f"""
-请从以下群聊记录中挑选出3-5句最有趣、最有意思的"金句"。这些金句可以是：
-- 幽默搞笑的发言
-- 富有哲理的话语  
-- 意外的神回复
-- 有创意的表达
-- 让人印象深刻的句子
+请从以下群聊记录中挑选出{max_quotes}句最具冲击力、最令人惊叹的"金句"。这些金句需满足：
+- 核心标准：**逆天的神人发言**，即具备颠覆常识的脑洞、逻辑跳脱的表达或强烈反差感的原创内容
+- 典型特征：包含某些争议话题元素、夸张类比、反常规结论、一本正经的"胡说八道"或突破语境的清奇思路，并且具备一定的冲击力，让人印象深刻。
 
 对于每个金句，请提供：
-1. 原文内容
+1. 原文内容（完整保留发言细节）
 2. 发言人昵称
-3. 选择理由（为什么觉得这句话有趣）
+3. 选择理由（具体说明其"逆天"之处，如逻辑颠覆点/脑洞角度/反差感/争议话题元素）
+
+此外，我将对你进行严格约束：
+- 优先筛选 **逆天指数最高** 的内容：发情、性压抑话题 > 争议话题 > 元素级 > 颠覆认知级 > 逻辑跳脱级 > 趣味调侃级，剔除单纯玩梗或网络热词堆砌的普通发言
+- 重点标记包含极端类比、反常识论证或无厘头结论的内容，并且包含一定的争议话题元素。
 
 群聊记录：
 {messages_text}
@@ -738,7 +1033,7 @@ class QQGroupDailyAnalysis(Star):
   {{
     "content": "金句原文",
     "sender": "发言人昵称", 
-    "reason": "选择这句话的理由"
+    "reason": "选择这句话的理由（需明确说明逆天特质）"
   }}
 ]
 """
@@ -776,6 +1071,116 @@ class QQGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
             return []
+
+    async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
+        """将 HTML 内容转换为 PDF 文件"""
+        try:
+            # 尝试启动浏览器，如果 Chromium 不存在会自动下载
+            logger.info("启动浏览器进行 PDF 转换")
+
+            # 配置浏览器启动参数，避免 Chromium 下载问题
+            launch_options = {
+                'headless': True,
+                'args': [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--no-first-run',
+                    '--disable-extensions',
+                    '--disable-default-apps'
+                ]
+            }
+
+            # 如果是 Windows 系统，尝试使用系统 Chrome
+            if sys.platform.startswith('win'):
+                # 常见的 Chrome 安装路径
+                chrome_paths = [
+                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                    r"C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe".format(os.environ.get('USERNAME', '')),
+                ]
+
+                for chrome_path in chrome_paths:
+                    if Path(chrome_path).exists():
+                        launch_options['executablePath'] = chrome_path
+                        logger.info(f"使用系统 Chrome: {chrome_path}")
+                        break
+
+            browser = await launch(**launch_options)
+            page = await browser.newPage()
+
+            # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
+            await page.setContent(html_content)
+            # 等待页面加载完成
+            try:
+                await page.waitForSelector('body', {'timeout': 10000})
+            except Exception:
+                # 如果等待失败，继续执行（可能页面已经加载完成）
+                pass
+
+            # 导出 PDF
+            await page.pdf({
+                'path': output_path,
+                'format': 'A4',
+                'printBackground': True,
+                'margin': {
+                    'top': '10mm',
+                    'right': '10mm',
+                    'bottom': '10mm',
+                    'left': '10mm'
+                },
+                'scale': 0.8
+            })
+
+            await browser.close()
+            logger.info(f"PDF 生成成功: {output_path}")
+            return True
+
+        except Exception as e:
+            error_msg = str(e)
+            if "Chromium downloadable not found" in error_msg:
+                logger.error("Chromium 下载失败，建议安装 pyppeteer2 或使用系统 Chrome")
+            elif "No usable sandbox" in error_msg:
+                logger.error("沙盒权限问题，已尝试禁用沙盒")
+            else:
+                logger.error(f"HTML 转 PDF 失败: {e}")
+            return False
+
+    async def _generate_pdf_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
+        """生成 PDF 格式的分析报告"""
+        try:
+            # 确保输出目录存在
+            output_dir = Path(self.pdf_output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # 生成文件名
+            current_date = datetime.now().strftime('%Y%m%d')
+            filename = self.pdf_filename_format.format(
+                group_id=group_id,
+                date=current_date
+            )
+            pdf_path = output_dir / filename
+
+            # 准备渲染数据
+            render_data = await self._prepare_render_data(analysis_result)
+            logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
+
+            # 生成 HTML 内容
+            html_content = self._render_html_template(self._get_pdf_html_template(), render_data)
+            logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
+
+            # 转换为 PDF
+            success = await self._html_to_pdf(html_content, str(pdf_path))
+
+            if success:
+                return str(pdf_path.absolute())
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"生成 PDF 报告失败: {e}")
+            return None
 
     async def _generate_image_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
         """生成图片格式的分析报告"""
@@ -1327,7 +1732,7 @@ class QQGroupDailyAnalysis(Star):
             </div>
 
             <div class="section">
-                <h2 class="section-title">💬 群聊金句</h2>
+                <h2 class="section-title">💬 群圣经</h2>
                 {{ quotes_html | safe }}
             </div>
         </div>
@@ -1629,7 +2034,7 @@ class QQGroupDailyAnalysis(Star):
             </div>
 
             <div class="section">
-                <h2 class="section-title">💬 群聊金句</h2>
+                <h2 class="section-title">💬 群圣经</h2>
                 {quotes_html}
             </div>
         </div>
@@ -1671,7 +2076,7 @@ class QQGroupDailyAnalysis(Star):
             report += f"• {title.name} - {title.title} ({title.mbti})\n"
             report += f"  {title.reason}\n\n"
 
-        report += "💬 群聊金句\n"
+        report += "💬 群圣经\n"
         for i, quote in enumerate(stats.golden_quotes[:5], 1):
             report += f"{i}. \"{quote.content}\" —— {quote.sender}\n"
             report += f"   {quote.reason}\n\n"
@@ -1680,96 +2085,13 @@ class QQGroupDailyAnalysis(Star):
 
 
 
-    async def _save_config(self):
-        """保存配置到文件"""
-        try:
-            config_file = Path("data/plugins/astrbot-qq-group-daily-analysis/config.json")
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-
-            config_data = {
-                "enabled_groups": self.enabled_groups,
-                "max_messages": self.max_messages,
-                "analysis_days": self.analysis_days,
-                "auto_analysis_time": self.auto_analysis_time,
-                "enable_auto_analysis": self.enable_auto_analysis,
-                "output_format": self.output_format,
-
-                "min_messages_threshold": self.min_messages_threshold,
-                "topic_analysis_enabled": self.topic_analysis_enabled,
-                "user_title_analysis_enabled": self.user_title_analysis_enabled,
-                "max_topics": self.max_topics,
-                "max_user_titles": self.max_user_titles,
-                "max_query_rounds": self.max_query_rounds
-            }
-
-            with open(config_file, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, ensure_ascii=False, indent=2)
-
-        except Exception as e:
-            logger.error(f"保存配置失败: {e}")
-
-    def _load_config_from_file(self):
-        """从配置文件加载配置"""
-        try:
-            config_file = Path("data/plugins/astrbot-qq-group-daily-analysis/config.json")
-            if config_file.exists():
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    file_config = json.load(f)
-
-                # 设置默认值
-                self.enabled_groups = file_config.get("enabled_groups", [])
-                self.max_messages = file_config.get("max_messages", 1000)
-                self.analysis_days = file_config.get("analysis_days", 1)
-                self.auto_analysis_time = file_config.get("auto_analysis_time", "09:00")
-                self.enable_auto_analysis = file_config.get("enable_auto_analysis", False)
-                self.output_format = file_config.get("output_format", "image")
-
-                self.min_messages_threshold = file_config.get("min_messages_threshold", 50)
-                self.topic_analysis_enabled = file_config.get("topic_analysis_enabled", True)
-                self.user_title_analysis_enabled = file_config.get("user_title_analysis_enabled", True)
-                self.max_topics = file_config.get("max_topics", 5)
-                self.max_user_titles = file_config.get("max_user_titles", 8)
-                self.max_query_rounds = file_config.get("max_query_rounds", 35)
-
-                logger.info(f"从配置文件加载配置成功，自动分析: {self.enable_auto_analysis}, 时间: {self.auto_analysis_time}")
-            else:
-                # 设置默认值
-                self.enabled_groups = []
-                self.max_messages = 1000
-                self.analysis_days = 1
-                self.auto_analysis_time = "09:00"
-                self.enable_auto_analysis = False
-                self.output_format = "image"
-
-                self.min_messages_threshold = 50
-                self.topic_analysis_enabled = True
-                self.user_title_analysis_enabled = True
-                self.max_topics = 5
-                self.max_user_titles = 8
-                self.max_query_rounds = 35
-
-        except Exception as e:
-            logger.error(f"加载配置文件失败: {e}")
-            # 设置默认值
-            self.enabled_groups = []
-            self.max_messages = 1000
-            self.analysis_days = 1
-            self.auto_analysis_time = "09:00"
-            self.enable_auto_analysis = False
-            self.output_format = "image"
-
-            self.min_messages_threshold = 50
-            self.topic_analysis_enabled = True
-            self.user_title_analysis_enabled = True
-            self.max_topics = 5
-            self.max_user_titles = 8
-            self.max_query_rounds = 35
-
     async def _reload_config_and_restart_scheduler(self):
         """重新加载配置并重启调度器"""
         try:
-            # 重新加载配置
-            self._load_config_from_file()
+            # 重新从配置系统读取配置
+            self.enabled_groups = self.config.get("enabled_groups", [])
+            self.enable_auto_analysis = self.config.get("enable_auto_analysis", False)
+            self.auto_analysis_time = self.config.get("auto_analysis_time", "09:00")
             logger.info(f"重新加载配置: 自动分析={self.enable_auto_analysis}")
 
             # 停止现有的调度器
@@ -1885,6 +2207,27 @@ class QQGroupDailyAnalysis(Star):
                     logger.info(f"群 {group_id} 自动分析完成，已发送图片报告")
                 else:
                     logger.error(f"群 {group_id} 图片报告生成失败")
+                    # 图片生成失败时回退到文本报告
+                    text_report = await self._generate_text_report(analysis_result)
+                    await self._send_auto_analysis_text(group_id, text_report)
+                    logger.info(f"群 {group_id} 图片报告生成失败，已发送文本报告")
+            elif self.output_format == "pdf":
+                if not PYPPETEER_AVAILABLE:
+                    logger.warning(f"群 {group_id} PDF功能不可用，回退到文本报告")
+                    text_report = await self._generate_text_report(analysis_result)
+                    await self._send_auto_analysis_text(group_id, text_report)
+                    logger.info(f"群 {group_id} PDF功能不可用，已发送文本报告")
+                else:
+                    pdf_path = await self._generate_pdf_report(analysis_result, group_id)
+                    if pdf_path:
+                        # 发送PDF文件到群
+                        await self._send_auto_analysis_pdf(group_id, pdf_path)
+                        logger.info(f"群 {group_id} 自动分析完成，已发送PDF报告")
+                    else:
+                        logger.error(f"群 {group_id} PDF报告生成失败，回退到文本报告")
+                        text_report = await self._generate_text_report(analysis_result)
+                        await self._send_auto_analysis_text(group_id, text_report)
+                        logger.info(f"群 {group_id} PDF报告生成失败，已发送文本报告")
             else:
                 text_report = await self._generate_text_report(analysis_result)
                 await self._send_auto_analysis_text(group_id, text_report)
@@ -1939,6 +2282,37 @@ class QQGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"发送自动分析文本到群 {group_id} 失败: {e}")
 
+    async def _send_auto_analysis_pdf(self, group_id: str, pdf_path: str):
+        """发送自动分析的PDF结果到群"""
+        try:
+            if not self.bot_instance:
+                return
+
+            # 发送PDF文件到群
+            await self.bot_instance.api.call_action(
+                "send_group_msg",
+                group_id=group_id,
+                message=[{
+                    "type": "text",
+                    "data": {"text": "📊 每日群聊分析报告已生成："}
+                }, {
+                    "type": "file",
+                    "data": {"file": pdf_path}
+                }]
+            )
+
+        except Exception as e:
+            logger.error(f"发送自动分析PDF到群 {group_id} 失败: {e}")
+            # 如果发送PDF失败，尝试发送提示信息
+            try:
+                await self.bot_instance.api.call_action(
+                    "send_group_msg",
+                    group_id=group_id,
+                    message=f"📊 每日群聊分析报告已生成，但发送PDF文件失败。PDF文件路径：{pdf_path}"
+                )
+            except Exception as e2:
+                logger.error(f"发送PDF失败提示到群 {group_id} 也失败: {e2}")
+
     async def _get_bot_instance(self):
         """从Context获取bot实例"""
         try:
@@ -1991,3 +2365,373 @@ class QQGroupDailyAnalysis(Star):
 
         except Exception as e:
             logger.error(f"延迟启动调度器失败: {e}")
+
+    def _get_pdf_html_template(self) -> str:
+        """获取 PDF 专用的 HTML 模板"""
+        return """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群聊日常分析报告</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'SimHei', sans-serif;
+            background: #ffffff;
+            color: #1a1a1a;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header .date {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #4a5568;
+            border-bottom: 2px solid #4299e1;
+            padding-bottom: 8px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #f8f9ff;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 600;
+            color: #4299e1;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666666;
+            text-transform: uppercase;
+        }
+
+        .active-period {
+            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
+            color: #ffffff;
+            padding: 25px;
+            text-align: center;
+            margin: 30px 0;
+            border-radius: 8px;
+        }
+
+        .active-period .time {
+            font-size: 28px;
+            font-weight: 300;
+            margin-bottom: 5px;
+        }
+
+        .active-period .label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .topic-item {
+            background: #ffffff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            page-break-inside: avoid;
+        }
+
+        .topic-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .topic-number {
+            background: #4299e1;
+            color: #ffffff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 12px;
+            font-size: 12px;
+        }
+
+        .topic-title {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .topic-contributors {
+            color: #666666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .topic-detail {
+            color: #333333;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .user-title {
+            background: #ffffff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            page-break-inside: avoid;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .user-badges {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .user-title-badge {
+            background: #4299e1;
+            color: #ffffff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .user-mbti {
+            background: #667eea;
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 12px;
+        }
+
+        .user-reason {
+            color: #666666;
+            font-size: 12px;
+            max-width: 200px;
+            text-align: right;
+            line-height: 1.4;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 15px;
+            border: 2px solid #e2e8f0;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .user-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 18px;
+            color: #666666;
+            flex-shrink: 0;
+        }
+
+        .quote-item {
+            background: #faf5ff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            page-break-inside: avoid;
+        }
+
+        .quote-content {
+            font-size: 16px;
+            color: #2d3748;
+            font-weight: 500;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        .quote-author {
+            font-size: 14px;
+            color: #4299e1;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-align: right;
+        }
+
+        .quote-reason {
+            font-size: 12px;
+            color: #666666;
+            background: rgba(66, 153, 225, 0.1);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 3px solid #4299e1;
+        }
+
+        .footer {
+            background: #f8f9ff;
+            color: #666666;
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            border-radius: 8px;
+            margin-top: 40px;
+        }
+
+        @media print {
+            body {
+                font-size: 12px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .section {
+                margin-bottom: 30px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 群聊日常分析报告</h1>
+            <div class="date">{current_date}</div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">📈 基础统计</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{message_count}</div>
+                    <div class="stat-label">消息总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{participant_count}</div>
+                    <div class="stat-label">参与人数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{total_characters}</div>
+                    <div class="stat-label">总字符数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{emoji_count}</div>
+                    <div class="stat-label">表情数量</div>
+                </div>
+            </div>
+
+            <div class="active-period">
+                <div class="time">{most_active_period}</div>
+                <div class="label">最活跃时段</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">💬 热门话题</h2>
+            {topics_html}
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">🏆 群友称号</h2>
+            {titles_html}
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">💬 群圣经</h2>
+            {quotes_html}
+        </div>
+
+        <div class="footer">
+            由 AstrBot QQ群日常分析插件 生成 | {current_datetime}
+        </div>
+    </div>
+</body>
+</html>
+        """
