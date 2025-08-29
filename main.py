@@ -143,7 +143,7 @@ class GroupStatistics:
     "astrbot_qq_group_daily_analysis",
     "SXP-Simon",
     "QQ群日常分析插件 - 生成精美的群聊日常分析报告",
-    "1.3.0",
+    "1.4.0",
     "https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis"
 )
 class QQGroupDailyAnalysis(Star):
