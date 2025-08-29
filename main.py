@@ -27,22 +27,72 @@ from astrbot.core.star.filter.permission import PermissionType
 PYPPETEER_AVAILABLE = False
 PYPPETEER_VERSION = None
 
-# 尝试导入 pyppeteer
-try:
-    import pyppeteer
-    from pyppeteer import launch
-    PYPPETEER_AVAILABLE = True
-
-    # 检查版本
+def check_pyppeteer_availability():
+    """检查 pyppeteer 可用性"""
+    global PYPPETEER_AVAILABLE, PYPPETEER_VERSION
     try:
-        PYPPETEER_VERSION = pyppeteer.__version__
-        logger.info(f"使用 pyppeteer {PYPPETEER_VERSION} 作为 PDF 引擎")
-    except AttributeError:
-        PYPPETEER_VERSION = "unknown"
-        logger.info("使用 pyppeteer (版本未知) 作为 PDF 引擎")
+        import pyppeteer
+        from pyppeteer import launch
+        PYPPETEER_AVAILABLE = True
 
-except ImportError:
-    logger.warning("pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+        # 检查版本
+        try:
+            PYPPETEER_VERSION = pyppeteer.__version__
+            logger.info(f"使用 pyppeteer {PYPPETEER_VERSION} 作为 PDF 引擎")
+        except AttributeError:
+            PYPPETEER_VERSION = "unknown"
+            logger.info("使用 pyppeteer (版本未知) 作为 PDF 引擎")
+
+        return True
+    except ImportError:
+        PYPPETEER_AVAILABLE = False
+        PYPPETEER_VERSION = None
+        logger.warning("pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+        return False
+
+def reload_pyppeteer():
+    """重新加载 pyppeteer 模块"""
+    global PYPPETEER_AVAILABLE, PYPPETEER_VERSION
+    import sys
+    import importlib
+
+    try:
+        logger.info("开始重新加载 pyppeteer 模块...")
+
+        # 移除所有 pyppeteer 相关模块
+        modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith('pyppeteer')]
+        logger.info(f"移除模块: {modules_to_remove}")
+        for mod in modules_to_remove:
+            del sys.modules[mod]
+
+        # 强制重新导入
+        try:
+            import pyppeteer
+            from pyppeteer import launch
+
+            # 更新全局变量
+            PYPPETEER_AVAILABLE = True
+            try:
+                PYPPETEER_VERSION = pyppeteer.__version__
+                logger.info(f"重新加载成功，pyppeteer 版本: {PYPPETEER_VERSION}")
+            except AttributeError:
+                PYPPETEER_VERSION = "unknown"
+                logger.info("重新加载成功，pyppeteer 版本未知")
+
+            return True
+
+        except ImportError as e:
+            logger.error(f"重新导入 pyppeteer 失败: {e}")
+            PYPPETEER_AVAILABLE = False
+            PYPPETEER_VERSION = None
+            return False
+
+    except Exception as e:
+        logger.error(f"重新加载 pyppeteer 时出错: {e}")
+        return False
+
+# 初始检查
+check_pyppeteer_availability()
 
 
 @dataclass
@@ -349,22 +399,17 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("✅ pyppeteer 安装成功！")
 
             # 重新检查可用性
-            try:
-                # 重新导入以获取最新版本
-                import importlib
-                if 'pyppeteer' in sys.modules:
-                    importlib.reload(sys.modules['pyppeteer'])
+            reload_success = reload_pyppeteer()
 
-                from pyppeteer import launch
-                PYPPETEER_AVAILABLE = True
-
+            if reload_success:
                 yield event.plain_result("🎉 PDF 功能安装完成！")
+                yield event.plain_result(f"✅ pyppeteer {PYPPETEER_VERSION} 已成功加载")
                 yield event.plain_result("💡 现在可以使用 /设置格式 pdf 启用 PDF 报告")
-                yield event.plain_result("✨ 使用稳定版本 pyppeteer 1.0.2，兼容性更好")
-                yield event.plain_result("� 注意：首次生成 PDF 时会自动下载 Chromium")
-
-            except ImportError:
-                yield event.plain_result("⚠️ pyppeteer 安装可能未完成，请重启插件后重试")
+                yield event.plain_result("📝 注意：首次生成 PDF 时会自动下载 Chromium")
+            else:
+                yield event.plain_result("⚠️ pyppeteer 重新加载失败")
+                yield event.plain_result("🔄 需要你手动去重启一次 AstrBot 程序")
+                yield event.plain_result("💡 pyppeteer 包已安装，但需要重启程序才能生效")
 
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
@@ -502,11 +547,17 @@ class QQGroupDailyAnalysis(Star):
     async def _install_chromium(self) -> bool:
         """安装 Chromium 浏览器"""
         try:
+            # 确保 pyppeteer 可用
+            if not PYPPETEER_AVAILABLE:
+                logger.error("pyppeteer 不可用，无法安装 Chromium")
+                return False
+
             # 尝试直接启动浏览器，这会触发自动下载
             logger.info("尝试通过启动浏览器来触发 Chromium 下载")
 
             import pyppeteer
-            browser = await pyppeteer.launch(headless=True, args=['--no-sandbox'])
+            from pyppeteer import launch
+            browser = await launch(headless=True, args=['--no-sandbox'])
             await browser.close()
 
             logger.info("成功安装并测试 Chromium")
@@ -1267,6 +1318,15 @@ class QQGroupDailyAnalysis(Star):
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
         try:
+            # 确保 pyppeteer 可用
+            if not PYPPETEER_AVAILABLE:
+                logger.error("pyppeteer 不可用，无法生成 PDF")
+                return False
+
+            # 动态导入 pyppeteer
+            import pyppeteer
+            from pyppeteer import launch
+
             # 尝试启动浏览器，如果 Chromium 不存在会自动下载
             logger.info("启动浏览器进行 PDF 转换")
 
