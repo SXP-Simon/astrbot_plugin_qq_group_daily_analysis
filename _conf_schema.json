@@ -69,6 +69,12 @@
         "default": 8,
         "hint": "分析报告中显示的最大用户称号数量"
     },
+    "max_golden_quotes": {
+        "type": "int",
+        "description": "最大金句数量",
+        "default": 5,
+        "hint": "分析报告中显示的最大金句数量"
+    },
     "max_query_rounds": {
         "type": "int",
         "description": "最大消息查询轮数",
