@@ -23,6 +23,8 @@
 /安装PDF
 ```
 
+提示： 首次使用命令安装，最后出现提示告诉你需要重启生效，是对的，需要重启 astrbot，而不是热重载插件。
+
 此命令会自动：
 - 检查 pyppeteer 是否已安装
 - 如未安装，自动安装 pyppeteer 库
@@ -67,26 +69,6 @@ pip install pyppeteer==1.0.2
 /设置格式  # 不带参数，查看当前格式设置
 /分析设置 status  # 查看完整的插件状态
 ```
-
-## 配置选项
-
-在 `config.json` 中可以配置以下 PDF 相关选项：
-
-```json
-{
-  "output_format": "pdf",
-  "pdf_output_dir": "reports",
-  "pdf_filename_format": "群聊分析报告_{group_id}_{date}.pdf"
-}
-```
-
-### 配置说明
-
-- `output_format`: 输出格式，可选 "image"、"text"、"pdf"
-- `pdf_output_dir`: PDF 文件保存目录
-- `pdf_filename_format`: PDF 文件名格式，支持以下占位符：
-  - `{group_id}`: 群组ID
-  - `{date}`: 日期（YYYYMMDD 格式）
 
 ## PDF 报告内容
 

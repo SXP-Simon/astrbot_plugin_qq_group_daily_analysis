@@ -36,7 +36,7 @@
         "type": "string",
         "description": "输出格式",
         "default": "image",
-        "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)"
+        "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
     },
 
     "min_messages_threshold": {
