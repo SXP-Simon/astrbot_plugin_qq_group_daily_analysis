@@ -139,13 +139,6 @@ class GroupStatistics:
     token_usage: TokenUsage = field(default_factory=TokenUsage)
 
 
-@register(
-    "astrbot_qq_group_daily_analysis",
-    "SXP-Simon",
-    "QQ群日常分析插件 - 生成精美的群聊日常分析报告",
-    "1.4.0",
-    "https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis"
-)
 class QQGroupDailyAnalysis(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -167,9 +160,15 @@ class QQGroupDailyAnalysis(Star):
         self.max_golden_quotes = config.get("max_golden_quotes", 5)
         self.max_query_rounds = config.get("max_query_rounds", 35)
 
-        # PDF 相关配置
-        self.pdf_output_dir = config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
+        # PDF 相关配置 - 使用框架提供的数据目录
+        self.data_dir = self.context.get_data_dir()
+        default_pdf_dir = self.data_dir / "reports"
+        self.pdf_output_dir = Path(config.get("pdf_output_dir", str(default_pdf_dir)))
         self.pdf_filename_format = config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
+
+        # 确保 PDF 输出目录存在
+        self.pdf_output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"PDF 输出目录: {self.pdf_output_dir}")
 
         # 启动定时任务
         self.scheduler_task = None
@@ -303,11 +302,6 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        # 检查管理员权限
-        if not await self._is_admin(event):
-            yield event.plain_result("❌ 仅群管理员可以修改设置")
-            return
-
         if not format_type:
             yield event.plain_result(f"""📊 当前输出格式: {self.output_format}
 
@@ -344,11 +338,6 @@ class QQGroupDailyAnalysis(Star):
 
         if not isinstance(event, AiocqhttpMessageEvent):
             yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
-
-        # 检查管理员权限
-        if not await self._is_admin(event):
-            yield event.plain_result("❌ 仅群管理员可以安装依赖")
             return
 
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
@@ -436,11 +425,6 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
             
-        # 检查管理员权限
-        if not await self._is_admin(event):
-            yield event.plain_result("❌ 仅群管理员可以修改设置")
-            return
-            
         if action == "enable":
             if group_id not in self.enabled_groups:
                 self.enabled_groups.append(group_id)
@@ -517,10 +501,6 @@ class QQGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"获取机器人QQ号失败: {e}")
 
-    async def _is_admin(self, event: AiocqhttpMessageEvent) -> bool:
-        """检查是否为管理员 - 已简化为允许所有用户"""
-        # 允许所有用户使用设置功能
-        return True
 
     async def _install_package(self, package_name: str) -> bool:
         """安装 Python 包"""
@@ -1402,17 +1382,13 @@ class QQGroupDailyAnalysis(Star):
     async def _generate_pdf_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
         """生成 PDF 格式的分析报告"""
         try:
-            # 确保输出目录存在
-            output_dir = Path(self.pdf_output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            # 生成文件名
+            # 生成文件名（输出目录已在初始化时创建）
             current_date = datetime.now().strftime('%Y%m%d')
             filename = self.pdf_filename_format.format(
                 group_id=group_id,
                 date=current_date
             )
-            pdf_path = output_dir / filename
+            pdf_path = self.pdf_output_dir / filename
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(analysis_result)
@@ -2056,305 +2032,8 @@ class QQGroupDailyAnalysis(Star):
 </html>
         """
 
-    async def _create_html_report(self, analysis_result: Dict) -> str:
-        """创建HTML报告内容"""
-        stats = analysis_result["statistics"]
-        topics = analysis_result["topics"]
-        user_titles = analysis_result["user_titles"]
 
-        # 构建话题HTML
-        topics_html = ""
-        for i, topic in enumerate(topics[:self.max_topics], 1):
-            contributors_str = "、".join(topic.contributors)
-            topics_html += f"""
-            <div class="topic-item">
-                <div class="topic-header">
-                    <span class="topic-number">{i}</span>
-                    <span class="topic-title">{topic.topic}</span>
-                </div>
-                <div class="topic-contributors">参与者: {contributors_str}</div>
-                <div class="topic-detail">{topic.detail}</div>
-            </div>
-            """
 
-        # 构建用户称号HTML
-        titles_html = ""
-        for title in user_titles[:self.max_user_titles]:
-            titles_html += f"""
-            <div class="user-title">
-                <div class="user-info">
-                    <div class="user-details">
-                        <div class="user-name">{title.name}</div>
-                        <div class="user-badges">
-                            <div class="user-title-badge">{title.title}</div>
-                            <div class="user-mbti">{title.mbti}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="user-reason">{title.reason}</div>
-            </div>
-            """
-
-        # 构建金句HTML
-        quotes_html = ""
-        for i, quote in enumerate(stats.golden_quotes[:self.max_golden_quotes], 1):
-            quotes_html += f"""
-            <div class="quote-item">
-                <div class="quote-content">"{quote.content}"</div>
-                <div class="quote-author">—— {quote.sender}</div>
-                <div class="quote-reason">{quote.reason}</div>
-            </div>
-            """
-
-        # HTML模板
-        html_template = f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>群聊日常分析报告</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-
-        body {{
-            font-family: 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }}
-
-        .container {{
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }}
-
-        .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }}
-
-        .header h1 {{
-            font-size: 28px;
-            margin-bottom: 10px;
-        }}
-
-        .header .date {{
-            font-size: 16px;
-            opacity: 0.9;
-        }}
-
-        .content {{
-            padding: 30px;
-        }}
-
-        .section {{
-            margin-bottom: 40px;
-        }}
-
-        .section-title {{
-            font-size: 20px;
-            color: #333;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #667eea;
-        }}
-
-        .stats-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }}
-
-        .stat-item {{
-            text-align: center;
-            padding: 20px;
-            background: #f8f9ff;
-            border-radius: 10px;
-            border: 1px solid #e1e5ff;
-        }}
-
-        .stat-number {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 5px;
-        }}
-
-        .stat-label {{
-            font-size: 14px;
-            color: #666;
-        }}
-
-        .topic-item {{
-            background: #f8f9ff;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-left: 4px solid #667eea;
-        }}
-
-        .topic-header {{
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }}
-
-        .topic-number {{
-            background: #667eea;
-            color: white;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-            margin-right: 10px;
-        }}
-
-        .topic-title {{
-            font-size: 16px;
-            font-weight: bold;
-            color: #333;
-        }}
-
-        .topic-contributors {{
-            font-size: 12px;
-            color: #667eea;
-            margin-bottom: 8px;
-        }}
-
-        .topic-detail {{
-            font-size: 14px;
-            color: #666;
-            line-height: 1.5;
-        }}
-
-        .user-title {{
-            background: #f8f9ff;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }}
-
-        .user-info {{
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }}
-
-        .user-name {{
-            font-weight: bold;
-            color: #333;
-        }}
-
-        .user-title-badge {{
-            background: #667eea;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-        }}
-
-        .user-mbti {{
-            background: #764ba2;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: bold;
-        }}
-
-        .user-reason {{
-            font-size: 12px;
-            color: #666;
-            flex: 1;
-            margin-left: 15px;
-        }}
-
-        .keywords {{
-            background: #f8f9ff;
-            border-radius: 10px;
-            padding: 15px;
-            font-size: 14px;
-            color: #666;
-            line-height: 1.6;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎯 群聊日常分析报告</h1>
-            <div class="date">{datetime.now().strftime('%Y年%m月%d日')}</div>
-        </div>
-
-        <div class="content">
-            <div class="section">
-                <h2 class="section-title">📊 基础统计</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-number">{stats.message_count}</div>
-                        <div class="stat-label">消息总数</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">{stats.participant_count}</div>
-                        <div class="stat-label">参与人数</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">{stats.total_characters}</div>
-                        <div class="stat-label">总字符数</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-number">{stats.emoji_count}</div>
-                        <div class="stat-label">表情数量</div>
-                    </div>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-number">{stats.most_active_period}</div>
-                        <div class="stat-label">最活跃时段</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section">
-                <h2 class="section-title">💬 热门话题</h2>
-                {topics_html}
-            </div>
-
-            <div class="section">
-                <h2 class="section-title">🏆 群友称号</h2>
-                {titles_html}
-            </div>
-
-            <div class="section">
-                <h2 class="section-title">💬 群圣经</h2>
-                {quotes_html}
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-        """
-
-        return html_template
 
     async def _generate_text_report(self, analysis_result: Dict) -> str:
         """生成文本格式的分析报告"""
