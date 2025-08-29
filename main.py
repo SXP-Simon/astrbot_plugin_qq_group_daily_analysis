@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 
 from astrbot.api.event import filter
@@ -63,12 +63,19 @@ class UserTitle:
     reason: str
 
 
-@dataclass 
+@dataclass
 class GoldenQuote:
     """群聊金句数据结构"""
     content: str
     sender: str
     reason: str
+
+@dataclass
+class TokenUsage:
+    """Token使用统计"""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 @dataclass
 class GroupStatistics:
@@ -79,13 +86,14 @@ class GroupStatistics:
     most_active_period: str
     golden_quotes: List[GoldenQuote]
     emoji_count: int
+    token_usage: TokenUsage = field(default_factory=TokenUsage)
 
 
 @register(
     "astrbot_qq_group_daily_analysis",
     "SXP-Simon",
     "QQ群日常分析插件 - 生成精美的群聊日常分析报告",
-    "1.2.0",
+    "1.3.0",
     "https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis"
 )
 class QQGroupDailyAnalysis(Star):
@@ -106,6 +114,7 @@ class QQGroupDailyAnalysis(Star):
         self.user_title_analysis_enabled = config.get("user_title_analysis_enabled", True)
         self.max_topics = config.get("max_topics", 5)
         self.max_user_titles = config.get("max_user_titles", 8)
+        self.max_golden_quotes = config.get("max_golden_quotes", 5)
         self.max_query_rounds = config.get("max_query_rounds", 35)
 
         # PDF 相关配置
@@ -637,23 +646,36 @@ class QQGroupDailyAnalysis(Star):
         """分析消息内容"""
         # 基础统计
         stats = self._calculate_statistics(messages)
-        
+
         # 用户活跃度分析
         user_analysis = self._analyze_users(messages)
-        
+
         # 话题分析（根据配置决定是否启用）
         topics = []
+        topics_token_usage = TokenUsage()
         if self.topic_analysis_enabled:
-            topics = await self._analyze_topics(messages)
+            topics, topics_token_usage = await self._analyze_topics(messages)
 
         # 用户称号分析（根据配置决定是否启用）
         user_titles = []
+        titles_token_usage = TokenUsage()
         if self.user_title_analysis_enabled:
-            user_titles = await self._analyze_user_titles(messages, user_analysis)
-        
+            user_titles, titles_token_usage = await self._analyze_user_titles(messages, user_analysis)
+
         # 群聊金句分析
-        golden_quotes = await self._analyze_golden_quotes(messages)
+        golden_quotes, quotes_token_usage = await self._analyze_golden_quotes(messages)
         stats.golden_quotes = golden_quotes
+
+        # 汇总token使用情况
+        stats.token_usage.prompt_tokens = (topics_token_usage.prompt_tokens +
+                                         titles_token_usage.prompt_tokens +
+                                         quotes_token_usage.prompt_tokens)
+        stats.token_usage.completion_tokens = (topics_token_usage.completion_tokens +
+                                             titles_token_usage.completion_tokens +
+                                             quotes_token_usage.completion_tokens)
+        stats.token_usage.total_tokens = (topics_token_usage.total_tokens +
+                                        titles_token_usage.total_tokens +
+                                        quotes_token_usage.total_tokens)
         
         return {
             "group_id": group_id,
@@ -698,7 +720,8 @@ class QQGroupDailyAnalysis(Star):
             participant_count=len(participants),
             most_active_period=most_active_period,
             golden_quotes=[],  # 将在后续LLM分析中填充
-            emoji_count=emoji_count
+            emoji_count=emoji_count,
+            token_usage=TokenUsage()  # 初始化为空，将在LLM分析后填充
         )
 
     def _analyze_users(self, messages: List[Dict]) -> Dict[str, Dict]:
@@ -773,7 +796,7 @@ class QQGroupDailyAnalysis(Star):
             logger.error(f"获取用户头像失败 {user_id}: {e}")
             return None
 
-    async def _analyze_topics(self, messages: List[Dict]) -> List[SummaryTopic]:
+    async def _analyze_topics(self, messages: List[Dict]) -> tuple[List[SummaryTopic], TokenUsage]:
         """使用LLM分析话题"""
         try:
             # 提取文本消息
@@ -794,7 +817,7 @@ class QQGroupDailyAnalysis(Star):
                             })
 
             if not text_messages:
-                return []
+                return [], TokenUsage()
 
             # # 限制消息数量以避免token过多
             # if len(text_messages) > 100:
@@ -867,13 +890,21 @@ class QQGroupDailyAnalysis(Star):
             provider = self.context.get_using_provider()
             if not provider:
                 logger.warning("未配置LLM提供商，跳过话题分析")
-                return []
+                return [], TokenUsage()
 
             response = await provider.text_chat(
                 prompt=prompt,
-                max_tokens=6000,  # 增加token限制以避免响应被截断
+                max_tokens=10000,  # 增加token限制以避免响应被截断
                 temperature=0.6
             )
+
+            # 提取token使用统计
+            token_usage = TokenUsage()
+            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
+                usage = response.raw_completion.usage
+                token_usage.prompt_tokens = usage.prompt_tokens
+                token_usage.completion_tokens = usage.completion_tokens
+                token_usage.total_tokens = usage.total_tokens
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -938,9 +969,9 @@ class QQGroupDailyAnalysis(Star):
                     logger.debug(f"修复后的JSON: {json_text[:300]}...")
 
                     topics_data = json.loads(json_text)
-                    topics = [SummaryTopic(**topic) for topic in topics_data[:5]]
+                    topics = [SummaryTopic(**topic) for topic in topics_data[:self.max_topics]]
                     logger.info(f"话题分析成功，解析到 {len(topics)} 个话题")
-                    return topics
+                    return topics, token_usage
                 else:
                     logger.warning(f"话题分析响应中未找到JSON格式，响应内容: {result_text[:200]}...")
             except json.JSONDecodeError as e:
@@ -963,7 +994,7 @@ class QQGroupDailyAnalysis(Star):
                         topic_pattern = r'"topic":\s*"([^"]+)"[^}]*"contributors":\s*\[([^\]]+)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
                         matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
-                    for match in matches[:5]:  # 最多5个话题
+                    for match in matches[:self.max_topics]:
                         topic_name = match[0].strip()
                         contributors_str = match[1].strip()
                         detail = match[2].strip()
@@ -987,7 +1018,7 @@ class QQGroupDailyAnalysis(Star):
 
                     if topics:
                         logger.info(f"正则表达式提取成功，获得 {len(topics)} 个话题")
-                        return topics
+                        return topics, token_usage
                     else:
                         # 最后的降级方案
                         logger.info("正则表达式提取失败，使用默认话题...")
@@ -1008,13 +1039,13 @@ class QQGroupDailyAnalysis(Star):
             except Exception as e:
                 logger.error(f"话题分析处理失败: {e}")
 
-            return []
+            return [], token_usage
 
         except Exception as e:
             logger.error(f"话题分析失败: {e}")
-            return []
+            return [], TokenUsage()
 
-    async def _analyze_user_titles(self, messages: List[Dict], user_analysis: Dict) -> List[UserTitle]:
+    async def _analyze_user_titles(self, messages: List[Dict], user_analysis: Dict) -> tuple[List[UserTitle], TokenUsage]:
         """使用LLM分析用户称号"""
         try:
             # 准备用户数据
@@ -1039,7 +1070,7 @@ class QQGroupDailyAnalysis(Star):
                 })
 
             if not user_summaries:
-                return []
+                return [], TokenUsage()
 
             # 按消息数量排序，取前N名（根据配置）
             user_summaries.sort(key=lambda x: x["message_count"], reverse=True)
@@ -1087,13 +1118,21 @@ class QQGroupDailyAnalysis(Star):
             provider = self.context.get_using_provider()
             if not provider:
                 logger.warning("未配置LLM提供商，跳过用户称号分析")
-                return []
+                return [], TokenUsage()
 
             response = await provider.text_chat(
                 prompt=prompt,
                 max_tokens=1500,
                 temperature=0.5
             )
+
+            # 提取token使用统计
+            token_usage = TokenUsage()
+            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
+                usage = response.raw_completion.usage
+                token_usage.prompt_tokens = usage.prompt_tokens
+                token_usage.completion_tokens = usage.completion_tokens
+                token_usage.total_tokens = usage.total_tokens
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -1107,17 +1146,17 @@ class QQGroupDailyAnalysis(Star):
                 json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
                 if json_match:
                     titles_data = json.loads(json_match.group())
-                    return [UserTitle(**title) for title in titles_data]
+                    return [UserTitle(**title) for title in titles_data], token_usage
             except:
                 pass
 
-            return []
+            return [], token_usage
 
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
-            return []
+            return [], TokenUsage()
 
-    async def _analyze_golden_quotes(self, messages: List[Dict]) -> List[GoldenQuote]:
+    async def _analyze_golden_quotes(self, messages: List[Dict]) -> tuple[List[GoldenQuote], TokenUsage]:
         """使用LLM分析群聊金句"""
         try:
             # 提取有趣的文本消息
@@ -1139,7 +1178,7 @@ class QQGroupDailyAnalysis(Star):
                             })
 
             if not interesting_messages:
-                return []
+                return [], TokenUsage()
 
             # # 限制消息数量以避免token过多
             # if len(interesting_messages) > 50:
@@ -1154,10 +1193,10 @@ class QQGroupDailyAnalysis(Star):
             ])
 
             # 计算金句数量，默认5句，但可以根据配置调整
-            max_quotes = min(8, max(3, self.max_topics))  # 根据话题数量调整金句数量，3-8句之间
+            self.max_golden_quotes
 
             prompt = f"""
-请从以下群聊记录中挑选出{max_quotes}句最具冲击力、最令人惊叹的"金句"。这些金句需满足：
+请从以下群聊记录中挑选出{self.max_golden_quotes}句最具冲击力、最令人惊叹的"金句"。这些金句需满足：
 - 核心标准：**逆天的神人发言**，即具备颠覆常识的脑洞、逻辑跳脱的表达或强烈反差感的原创内容
 - 典型特征：包含某些争议话题元素、夸张类比、反常规结论、一本正经的"胡说八道"或突破语境的清奇思路，并且具备一定的冲击力，让人印象深刻。
 
@@ -1187,13 +1226,21 @@ class QQGroupDailyAnalysis(Star):
             provider = self.context.get_using_provider()
             if not provider:
                 logger.warning("未配置LLM提供商，跳过金句分析")
-                return []
+                return [], TokenUsage()
 
             response = await provider.text_chat(
                 prompt=prompt,
                 max_tokens=1500,
                 temperature=0.7
             )
+
+            # 提取token使用统计
+            token_usage = TokenUsage()
+            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
+                usage = response.raw_completion.usage
+                token_usage.prompt_tokens = usage.prompt_tokens
+                token_usage.completion_tokens = usage.completion_tokens
+                token_usage.total_tokens = usage.total_tokens
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -1207,15 +1254,15 @@ class QQGroupDailyAnalysis(Star):
                 json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
                 if json_match:
                     quotes_data = json.loads(json_match.group())
-                    return [GoldenQuote(**quote) for quote in quotes_data[:5]]
+                    return [GoldenQuote(**quote) for quote in quotes_data[:self.max_golden_quotes]], token_usage
             except:
                 pass
 
-            return []
+            return [], token_usage
 
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
-            return []
+            return [], TokenUsage()
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
@@ -1389,7 +1436,7 @@ class QQGroupDailyAnalysis(Star):
 
         # 构建金句HTML
         quotes_html = ""
-        for quote in stats.golden_quotes[:5]:
+        for quote in stats.golden_quotes[:self.max_golden_quotes]:
             quotes_html += f"""
             <div class="quote-item">
                 <div class="quote-content">"{quote.content}"</div>
@@ -1409,7 +1456,10 @@ class QQGroupDailyAnalysis(Star):
             "most_active_period": stats.most_active_period,
             "topics_html": topics_html,
             "titles_html": titles_html,
-            "quotes_html": quotes_html
+            "quotes_html": quotes_html,
+            "total_tokens": stats.token_usage.total_tokens,
+            "prompt_tokens": stats.token_usage.prompt_tokens,
+            "completion_tokens": stats.token_usage.completion_tokens
         }
 
     def _get_html_template(self) -> str:
@@ -1431,18 +1481,18 @@ class QQGroupDailyAnalysis(Star):
 
         body {
             font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #ffffff;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             min-height: 100vh;
-            padding: 40px 20px;
+            padding: 20px;
             line-height: 1.6;
             color: #1a1a1a;
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
             background: #ffffff;
-            border-radius: 24px;
+            border-radius: 16px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
             overflow: hidden;
         }
@@ -1472,35 +1522,54 @@ class QQGroupDailyAnalysis(Star):
         }
 
         .content {
-            padding: 48px 40px;
+            padding: 32px;
+        }
+
+        .topics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 32px;
+            align-items: start;
+        }
+
+        .users-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+            align-items: start;
         }
 
         .section {
-            margin-bottom: 56px;
-        }
-
-        .section:last-child {
             margin-bottom: 0;
         }
 
-        .section-title {
-            font-size: 1.4em;
-            font-weight: 600;
+        .full-width-section {
+            grid-column: 1 / -1;
             margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
             color: #4a5568;
             letter-spacing: -0.3px;
             display: flex;
             align-items: center;
             gap: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
         }
 
 
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 16px;
-            margin-bottom: 48px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 32px;
         }
 
         .stat-card {
@@ -1562,11 +1631,13 @@ class QQGroupDailyAnalysis(Star):
 
         .topic-item {
             background: #ffffff;
-            padding: 32px;
-            margin-bottom: 24px;
-            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 0;
+            border-radius: 12px;
             border: 1px solid #e5e5e5;
             transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
         }
 
         .topic-item:hover {
@@ -1613,21 +1684,22 @@ class QQGroupDailyAnalysis(Star):
 
         .topic-detail {
             color: #333333;
-            line-height: 1.7;
-            font-size: 0.95em;
+            line-height: 1.6;
+            font-size: 0.9em;
             font-weight: 300;
         }
 
         .user-title {
             background: #ffffff;
-            padding: 32px;
-            margin-bottom: 24px;
-            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 0;
+            border-radius: 12px;
             border: 1px solid #e5e5e5;
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
             transition: all 0.3s ease;
+            min-height: 80px;
         }
 
         .user-title:hover {
@@ -1643,24 +1715,24 @@ class QQGroupDailyAnalysis(Star):
         }
 
         .user-avatar {
-            width: 48px;
-            height: 48px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            margin-right: 20px;
+            margin-right: 16px;
             border: 2px solid #f0f0f0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
         .user-avatar-placeholder {
-            width: 48px;
-            height: 48px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            background: #f0f0f0;
+            background: linear-gradient(135deg, #f0f0f0 0%, #e2e8f0 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 20px;
-            font-size: 1.2em;
+            margin-right: 16px;
+            font-size: 1em;
             color: #999999;
             border: 2px solid #e5e5e5;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -1711,19 +1783,21 @@ class QQGroupDailyAnalysis(Star):
 
         .user-reason {
             color: #666666;
-            font-size: 0.85em;
-            max-width: 240px;
+            font-size: 0.8em;
             text-align: right;
-            line-height: 1.5;
+            line-height: 1.4;
             font-weight: 300;
-            margin-top: 4px;
+            margin-left: 16px;
+            flex: 1;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .quote-item {
             background: linear-gradient(135deg, #faf5ff 0%, #f7fafc 100%);
-            padding: 24px;
+            padding: 16px;
             margin-bottom: 16px;
-            border-radius: 16px;
+            border-radius: 12px;
             border: 1px solid #e2e8f0;
             position: relative;
             transition: all 0.3s ease;
@@ -1774,58 +1848,79 @@ class QQGroupDailyAnalysis(Star):
             opacity: 0.9;
         }
 
+        @media (min-width: 1400px) {
+            .container {
+                max-width: 1400px;
+            }
+
+            .topics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .users-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
         @media (max-width: 768px) {
             body {
-                padding: 20px 10px;
+                padding: 10px;
             }
 
             .container {
                 margin: 0;
+                max-width: 100%;
             }
 
             .header {
-                padding: 32px 24px;
+                padding: 24px 20px;
             }
 
             .header h1 {
-                font-size: 2em;
+                font-size: 1.8em;
             }
 
             .content {
-                padding: 32px 24px;
+                padding: 20px;
+            }
+
+            .topics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .users-grid {
+                grid-template-columns: 1fr;
             }
 
             .stats-grid {
                 grid-template-columns: 1fr 1fr;
-                gap: 1px;
+                gap: 12px;
             }
 
             .stat-card {
-                padding: 24px 16px;
+                padding: 20px 16px;
             }
 
             .topic-item {
-                padding: 24px;
+                padding: 20px;
             }
 
             .user-title {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 16px;
-                padding: 24px;
+                gap: 12px;
+                padding: 16px;
+                min-height: auto;
             }
 
             .user-info {
                 width: 100%;
             }
 
-            .user-mbti {
-                margin: 0;
-            }
-
             .user-reason {
                 text-align: left;
                 max-width: none;
+                margin-left: 0;
                 margin-top: 8px;
             }
         }
@@ -1839,7 +1934,8 @@ class QQGroupDailyAnalysis(Star):
         </div>
 
         <div class="content">
-            <div class="section">
+            <!-- 基础统计 - 全宽 -->
+            <div class="section full-width-section">
                 <h2 class="section-title">📈 基础统计</h2>
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -1866,16 +1962,23 @@ class QQGroupDailyAnalysis(Star):
                 </div>
             </div>
 
+            <!-- 话题网格布局 -->
             <div class="section">
                 <h2 class="section-title">💬 热门话题</h2>
-                {{ topics_html | safe }}
+                <div class="topics-grid">
+                    {{ topics_html | safe }}
+                </div>
             </div>
 
+            <!-- 用户称号网格布局 -->
             <div class="section">
                 <h2 class="section-title">🏆 群友称号</h2>
-                {{ titles_html | safe }}
+                <div class="users-grid">
+                    {{ titles_html | safe }}
+                </div>
             </div>
 
+            <!-- 群圣经 -->
             <div class="section">
                 <h2 class="section-title">💬 群圣经</h2>
                 {{ quotes_html | safe }}
@@ -1883,7 +1986,10 @@ class QQGroupDailyAnalysis(Star):
         </div>
 
         <div class="footer">
-            由 AstrBot QQ群日常分析插件 生成 | {{ current_datetime }}
+            由 AstrBot QQ群日常分析插件 生成 | {{ current_datetime }} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
+            <small style="opacity: 0.8; font-size: 0.9em;">
+                🤖 AI分析消耗：{{ total_tokens }} tokens (输入: {{ prompt_tokens }}, 输出: {{ completion_tokens }})
+            </small>
         </div>
     </div>
 </body>
@@ -1931,7 +2037,7 @@ class QQGroupDailyAnalysis(Star):
 
         # 构建金句HTML
         quotes_html = ""
-        for i, quote in enumerate(stats.golden_quotes[:5], 1):
+        for i, quote in enumerate(stats.golden_quotes[:self.max_golden_quotes], 1):
             quotes_html += f"""
             <div class="quote-item">
                 <div class="quote-content">"{quote.content}"</div>
@@ -2222,7 +2328,7 @@ class QQGroupDailyAnalysis(Star):
             report += f"  {title.reason}\n\n"
 
         report += "💬 群圣经\n"
-        for i, quote in enumerate(stats.golden_quotes[:5], 1):
+        for i, quote in enumerate(stats.golden_quotes[:self.max_golden_quotes], 1):
             report += f"{i}. \"{quote.content}\" —— {quote.sender}\n"
             report += f"   {quote.reason}\n\n"
 
@@ -2874,7 +2980,10 @@ class QQGroupDailyAnalysis(Star):
         </div>
 
         <div class="footer">
-            由 AstrBot QQ群日常分析插件 生成 | {current_datetime}
+            由 AstrBot QQ群日常分析插件 生成 | {current_datetime} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
+            <small style="opacity: 0.8; font-size: 0.9em;">
+                🤖 AI分析消耗：{total_tokens} tokens (输入: {prompt_tokens}, 输出: {completion_tokens})
+            </small>
         </div>
     </div>
 </body>
