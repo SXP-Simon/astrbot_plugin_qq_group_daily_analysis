@@ -85,7 +85,7 @@ class GroupStatistics:
     "astrbot_qq_group_daily_analysis",
     "SXP-Simon",
     "QQ群日常分析插件 - 生成精美的群聊日常分析报告",
-    "1.1.0",
+    "1.2.0",
     "https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis"
 )
 class QQGroupDailyAnalysis(Star):
@@ -802,9 +802,22 @@ class QQGroupDailyAnalysis(Star):
             #     step = len(text_messages) // 100
             #     text_messages = text_messages[::step]
 
-            # 构建LLM提示词
+            # 构建LLM提示词，清理消息内容
+            def clean_message_content(content):
+                """清理消息内容，移除可能影响JSON解析的字符"""
+                import re
+                # 替换中文引号
+                content = content.replace('"', '"').replace('"', '"')
+                content = content.replace(''', "'").replace(''', "'")
+                # 移除或替换其他特殊字符
+                content = content.replace('\n', ' ').replace('\r', ' ')
+                content = content.replace('\t', ' ')
+                # 移除可能的控制字符
+                content = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
+                return content.strip()
+
             messages_text = "\n".join([
-                f"[{msg['time']}] {msg['sender']}: {msg['content']}"
+                f"[{msg['time']}] {msg['sender']}: {clean_message_content(msg['content'])}"
                 for msg in text_messages
             ])
 
@@ -825,14 +838,29 @@ class QQGroupDailyAnalysis(Star):
 群聊记录：
 {messages_text}
 
-请以JSON格式返回，格式如下：
+重要：必须返回标准JSON格式，严格遵守以下规则：
+1. 只使用英文双引号 " 不要使用中文引号 " "
+2. 字符串内容中的引号必须转义为 \"
+3. 多个对象之间用逗号分隔
+4. 数组元素之间用逗号分隔
+5. 不要在JSON外添加任何文字说明
+6. 描述内容避免使用特殊符号，用普通文字表达
+
+请严格按照以下JSON格式返回，确保可以被标准JSON解析器解析：
 [
   {{
     "topic": "话题名称",
-    "contributors": ["参与者1", "参与者2"],
-    "detail": "详细描述话题内容、讨论要点和结论，并且符合约束的准则。"
+    "contributors": ["用户1", "用户2"],
+    "detail": "话题描述内容"
+  }},
+  {{
+    "topic": "另一个话题",
+    "contributors": ["用户3", "用户4"],
+    "detail": "另一个话题的描述"
   }}
 ]
+
+注意：返回的内容必须是纯JSON，不要包含markdown代码块标记或其他格式
 """
 
             # 调用LLM
@@ -843,8 +871,8 @@ class QQGroupDailyAnalysis(Star):
 
             response = await provider.text_chat(
                 prompt=prompt,
-                max_tokens=3000,
-                temperature=0.3
+                max_tokens=6000,  # 增加token限制以避免响应被截断
+                temperature=0.6
             )
 
             # 解析响应
@@ -856,12 +884,129 @@ class QQGroupDailyAnalysis(Star):
             # 尝试解析JSON
             try:
                 import re
-                json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
+                # 提取JSON部分
+                json_match = re.search(r'\[.*?\]', result_text, re.DOTALL)
                 if json_match:
-                    topics_data = json.loads(json_match.group())
-                    return [SummaryTopic(**topic) for topic in topics_data[:5]]
-            except:
-                pass
+                    json_text = json_match.group()
+                    logger.debug(f"话题分析JSON原文: {json_text[:500]}...")
+
+                    # 强化JSON清理和修复
+                    def fix_json(text):
+                        # 移除markdown代码块标记
+                        text = re.sub(r'```json\s*', '', text)
+                        text = re.sub(r'```\s*$', '', text)
+
+                        # 基础清理
+                        text = text.replace('\n', ' ').replace('\r', ' ')
+                        text = re.sub(r'\s+', ' ', text)
+
+                        # 替换中文引号为英文引号
+                        text = text.replace('"', '"').replace('"', '"')
+                        text = text.replace(''', "'").replace(''', "'")
+
+                        # 处理字符串内容中的特殊字符
+                        # 转义字符串内的双引号
+                        def escape_quotes_in_strings(match):
+                            content = match.group(1)
+                            # 转义内部的双引号
+                            content = content.replace('"', '\\"')
+                            return f'"{content}"'
+
+                        # 先处理字段值中的引号
+                        text = re.sub(r'"([^"]*(?:"[^"]*)*)"', escape_quotes_in_strings, text)
+
+                        # 修复截断的JSON
+                        if not text.endswith(']'):
+                            last_complete = text.rfind('}')
+                            if last_complete > 0:
+                                text = text[:last_complete + 1] + ']'
+
+                        # 修复常见的JSON格式问题
+                        # 1. 修复缺失的逗号
+                        text = re.sub(r'}\s*{', '}, {', text)
+
+                        # 2. 确保字段名有引号
+                        text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', text)
+
+                        # 3. 移除多余的逗号
+                        text = re.sub(r',\s*}', '}', text)
+                        text = re.sub(r',\s*]', ']', text)
+
+                        return text
+
+                    json_text = fix_json(json_text)
+                    logger.debug(f"修复后的JSON: {json_text[:300]}...")
+
+                    topics_data = json.loads(json_text)
+                    topics = [SummaryTopic(**topic) for topic in topics_data[:5]]
+                    logger.info(f"话题分析成功，解析到 {len(topics)} 个话题")
+                    return topics
+                else:
+                    logger.warning(f"话题分析响应中未找到JSON格式，响应内容: {result_text[:200]}...")
+            except json.JSONDecodeError as e:
+                logger.error(f"话题分析JSON解析失败: {e}")
+                logger.debug(f"修复后的JSON: {json_text if 'json_text' in locals() else 'N/A'}")
+                logger.debug(f"原始响应: {result_text}")
+
+                # 如果JSON解析失败，尝试用正则表达式提取话题信息
+                try:
+                    logger.info("JSON解析失败，尝试正则表达式提取话题...")
+                    topics = []
+
+                    # 更强的正则表达式提取话题信息，处理转义字符
+                    # 匹配每个完整的话题对象
+                    topic_pattern = r'\{\s*"topic":\s*"([^"]+)"\s*,\s*"contributors":\s*\[([^\]]+)\]\s*,\s*"detail":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
+                    matches = re.findall(topic_pattern, result_text, re.DOTALL)
+
+                    if not matches:
+                        # 尝试更宽松的匹配
+                        topic_pattern = r'"topic":\s*"([^"]+)"[^}]*"contributors":\s*\[([^\]]+)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
+                        matches = re.findall(topic_pattern, result_text, re.DOTALL)
+
+                    for match in matches[:5]:  # 最多5个话题
+                        topic_name = match[0].strip()
+                        contributors_str = match[1].strip()
+                        detail = match[2].strip()
+
+                        # 清理detail中的转义字符
+                        detail = detail.replace('\\"', '"').replace('\\n', ' ').replace('\\t', ' ')
+
+                        # 解析参与者列表
+                        contributors = []
+                        for contrib in re.findall(r'"([^"]+)"', contributors_str):
+                            contributors.append(contrib.strip())
+
+                        if not contributors:
+                            contributors = ["群友"]
+
+                        topics.append(SummaryTopic(
+                            topic=topic_name,
+                            contributors=contributors[:5],  # 最多5个参与者
+                            detail=detail # 限制长度
+                        ))
+
+                    if topics:
+                        logger.info(f"正则表达式提取成功，获得 {len(topics)} 个话题")
+                        return topics
+                    else:
+                        # 最后的降级方案
+                        logger.info("正则表达式提取失败，使用默认话题...")
+                        return [SummaryTopic(
+                            topic="群聊讨论",
+                            contributors=["群友"],
+                            detail="今日群聊内容丰富，涵盖多个话题"
+                        )]
+                except Exception as regex_e:
+                    logger.error(f"正则表达式提取失败: {regex_e}")
+                    # 最终降级方案
+                    return [SummaryTopic(
+                        topic="群聊讨论",
+                        contributors=["群友"],
+                        detail="今日群聊内容丰富，涵盖多个话题"
+                    )]
+
+            except Exception as e:
+                logger.error(f"话题分析处理失败: {e}")
 
             return []
 
