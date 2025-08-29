@@ -1,4 +1,4 @@
-name: astrbot_qq_group_daily_analysis # 这是你的插件的唯一识别名。
+name: astrbot-qq-group-daily-analysis # 这是你的插件的唯一识别名。
 desc: QQ群日常分析插件 - 生成精美的群聊分析报告，支持话题分析、用户称号、群聊金句等功能  # 插件简短描述
 help: |  # 插件的帮助信息
   智能分析群聊活动，生成精美的日常分析报告
