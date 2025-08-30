@@ -160,15 +160,11 @@ class QQGroupDailyAnalysis(Star):
         self.max_golden_quotes = config.get("max_golden_quotes", 5)
         self.max_query_rounds = config.get("max_query_rounds", 35)
 
-        # PDF 相关配置 - 使用框架提供的数据目录
-        self.data_dir = self.context.get_data_dir()
-        default_pdf_dir = self.data_dir / "reports"
-        self.pdf_output_dir = Path(config.get("pdf_output_dir", str(default_pdf_dir)))
-        self.pdf_filename_format = config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
+        # PDF 相关配置
+        self.pdf_output_dir = config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/
+reports")
 
-        # 确保 PDF 输出目录存在
-        self.pdf_output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"PDF 输出目录: {self.pdf_output_dir}")
+        self.pdf_filename_format = config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
 
         # 启动定时任务
         self.scheduler_task = None
@@ -1382,13 +1378,17 @@ class QQGroupDailyAnalysis(Star):
     async def _generate_pdf_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
         """生成 PDF 格式的分析报告"""
         try:
-            # 生成文件名（输出目录已在初始化时创建）
+            #确保输出目录存在
+            output_dir = Path(self.pdf_output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # 生成文件名
             current_date = datetime.now().strftime('%Y%m%d')
             filename = self.pdf_filename_format.format(
                 group_id=group_id,
                 date=current_date
             )
-            pdf_path = self.pdf_output_dir / filename
+            pdf_path = output_dir / filename
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(analysis_result)
