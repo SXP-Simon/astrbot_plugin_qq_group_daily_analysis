@@ -161,8 +161,7 @@ class QQGroupDailyAnalysis(Star):
         self.max_query_rounds = config.get("max_query_rounds", 35)
 
         # PDF 相关配置
-        self.pdf_output_dir = config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/
-reports")
+        self.pdf_output_dir = config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
 
         self.pdf_filename_format = config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
 
