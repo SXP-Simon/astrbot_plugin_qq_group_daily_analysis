@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from pathlib import Path
 from astrbot.api import logger
 from .templates import HTMLTemplates
+from ..visualization.activity_charts import ActivityVisualizer
 
 
 class ReportGenerator:
@@ -17,6 +18,7 @@ class ReportGenerator:
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
+        self.activity_visualizer = ActivityVisualizer()
 
     async def generate_image_report(self, analysis_result: Dict, group_id: str, html_render_func) -> Optional[str]:
         """生成图片格式的分析报告"""
@@ -31,6 +33,8 @@ class ReportGenerator:
         except Exception as e:
             logger.error(f"生成图片报告失败: {e}")
             return None
+
+
 
     async def generate_pdf_report(self, analysis_result: Dict, group_id: str) -> Optional[str]:
         """生成PDF格式的分析报告"""
@@ -113,6 +117,7 @@ class ReportGenerator:
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
+        activity_viz = stats.activity_visualization
 
         # 构建话题HTML
         topics_html = ""
@@ -166,6 +171,11 @@ class ReportGenerator:
             </div>
             """
 
+        # 生成活跃度可视化HTML
+        hourly_chart_html = self.activity_visualizer.generate_hourly_chart_html(
+            activity_viz.hourly_activity
+        )
+
         # 返回扁平化的渲染数据
         return {
             "current_date": datetime.now().strftime('%Y年%m月%d日'),
@@ -178,10 +188,14 @@ class ReportGenerator:
             "topics_html": topics_html,
             "titles_html": titles_html,
             "quotes_html": quotes_html,
+            "hourly_chart_html": hourly_chart_html,
             "total_tokens": stats.token_usage.total_tokens,
             "prompt_tokens": stats.token_usage.prompt_tokens,
             "completion_tokens": stats.token_usage.completion_tokens
         }
+
+
+
 
     def _render_html_template(self, template: str, data: Dict, use_jinja_style: bool = False) -> str:
         """HTML模板渲染，支持两种占位符格式

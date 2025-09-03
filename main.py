@@ -216,6 +216,8 @@ class QQGroupDailyAnalysis(Star):
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员")
 
+
+
     @filter.command("设置格式")
     @filter.permission_type(PermissionType.ADMIN)
     async def set_output_format(self, event: AiocqhttpMessageEvent, format_type: str = ""):
@@ -366,7 +368,7 @@ class QQGroupDailyAnalysis(Star):
 • 最大查询轮数: {max_rounds}
 
 💡 可用命令: enable, disable, status, reload, test
-💡 支持的输出格式: image, text, pdf
+💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
 💡 其他命令: /设置格式, /安装PDF""")
 
 

@@ -58,6 +58,16 @@ class EmojiStatistics:
 
 
 @dataclass
+class ActivityVisualization:
+    """活跃度可视化数据结构"""
+    hourly_activity: dict = field(default_factory=dict)  # {hour: count}
+    daily_activity: dict = field(default_factory=dict)   # {date: count}
+    user_activity_ranking: list = field(default_factory=list)  # 用户活跃度排行
+    peak_hours: list = field(default_factory=list)  # 高峰时段
+    activity_heatmap_data: dict = field(default_factory=dict)  # 热力图数据
+
+
+@dataclass
 class GroupStatistics:
     """群聊统计数据结构"""
     message_count: int
@@ -67,4 +77,5 @@ class GroupStatistics:
     golden_quotes: List[GoldenQuote]
     emoji_count: int  # 保持向后兼容
     emoji_statistics: EmojiStatistics = field(default_factory=EmojiStatistics)
+    activity_visualization: ActivityVisualization = field(default_factory=ActivityVisualization)
     token_usage: TokenUsage = field(default_factory=TokenUsage)

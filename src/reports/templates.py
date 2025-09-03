@@ -66,6 +66,103 @@ class HTMLTemplates:
         .quote-author { font-size: 0.9em; color: #4299e1; font-weight: 600; margin-bottom: 8px; text-align: right; }
         .quote-reason { font-size: 0.8em; color: #666666; font-style: normal; background: rgba(66, 153, 225, 0.1); padding: 8px 12px; border-radius: 12px; border-left: 3px solid #4299e1; }
         .footer { background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%); color: #ffffff; text-align: center; padding: 32px; font-size: 0.8em; font-weight: 300; letter-spacing: 0.5px; opacity: 0.9; }
+
+        /* 活跃度可视化样式 - 重新设计 */
+        .activity-section {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 40px;
+            border-radius: 20px;
+            margin: 40px 0;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+        .activity-chart-container {
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f0f2f5;
+        }
+        .chart-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .chart-subtitle {
+            color: #7f8c8d;
+            font-size: 0.9em;
+            font-weight: 400;
+        }
+        .hour-bar-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            height: 20px;
+            transition: all 0.2s ease;
+        }
+        .hour-bar-container:hover {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 0 8px;
+        }
+        .hour-label {
+            width: 55px;
+            text-align: left;
+            color: #4a5568;
+            font-size: 13px;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .bar-wrapper {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            gap: 12px;
+            min-width: 0;
+        }
+        .bar {
+            height: 10px;
+            background: linear-gradient(90deg, #4299e1 0%, #667eea 100%);
+            border-radius: 6px;
+            transition: all 0.3s ease-out;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(66, 153, 225, 0.2);
+        }
+        .bar:hover {
+            transform: scaleY(1.2);
+            box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+        }
+        .hourly-value-outside {
+            color: #4a5568;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 30px;
+            text-align: right;
+        }
+        .hourly-value-inside {
+            color: white;
+            font-size: 11px;
+            padding: 0 8px;
+            font-weight: 600;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
         @media (min-width: 1400px) { .container { max-width: 1400px; } .topics-grid { grid-template-columns: repeat(3, 1fr); } .users-grid { grid-template-columns: repeat(3, 1fr); } }
         @media (max-width: 768px) { body { padding: 10px; } .container { margin: 0; max-width: 100%; } .header { padding: 24px 20px; } .header h1 { font-size: 1.8em; } .content { padding: 20px; } .topics-grid { grid-template-columns: 1fr; } .users-grid { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; } .stat-card { padding: 20px 16px; } .topic-item { padding: 20px; } .user-title { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; min-height: auto; } .user-info { width: 100%; } .user-reason { text-align: left; max-width: none; margin-left: 0; margin-top: 8px; } }
     </style>
@@ -89,6 +186,16 @@ class HTMLTemplates:
                     <div class="time">{{ most_active_period }}</div>
                     <div class="label">最活跃时段</div>
                 </div>
+            </div>
+
+            <!-- 活跃度可视化部分 - 重新设计 -->
+            <div class="activity-chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">⏱️ 24小时活跃度分布</div>
+                    </div>
+                </div>
+                {{ hourly_chart_html | safe }}
             </div>
             <div class="section">
                 <h2 class="section-title">💬 热门话题</h2>
@@ -157,6 +264,72 @@ class HTMLTemplates:
         .quote-author { font-size: 14px; color: #4299e1; font-weight: 600; margin-bottom: 8px; text-align: right; }
         .quote-reason { font-size: 12px; color: #666666; background: rgba(66, 153, 225, 0.1); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #4299e1; }
         .footer { background: #f8f9ff; color: #666666; text-align: center; padding: 20px; font-size: 12px; border-radius: 8px; margin-top: 40px; }
+
+        /* PDF活跃度可视化样式 - 集成版本 */
+        .activity-chart-container {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            margin-top: 20px;
+            page-break-inside: avoid;
+        }
+        .chart-header {
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        .hour-bar-container {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            height: 16px;
+        }
+        .hour-label {
+            width: 45px;
+            text-align: left;
+            color: #4a5568;
+            font-size: 11px;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .bar-wrapper {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            gap: 8px;
+            min-width: 0;
+        }
+        .bar {
+            height: 6px;
+            background-color: #4299e1;
+            border-radius: 3px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            overflow: hidden;
+        }
+        .hourly-value-outside {
+            color: #4a5568;
+            font-size: 10px;
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 25px;
+            text-align: right;
+        }
+        .hourly-value-inside {
+            color: white;
+            font-size: 9px;
+            padding: 0 4px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
         @media print { body { font-size: 12px; } .container { padding: 10px; } .header { padding: 20px; } .section { margin-bottom: 30px; } .stats-grid { grid-template-columns: repeat(2, 1fr); } }
     </style>
 </head>
@@ -178,7 +351,15 @@ class HTMLTemplates:
                 <div class="time">{most_active_period}</div>
                 <div class="label">最活跃时段</div>
             </div>
+            <!-- 活跃度可视化部分 - 集成到基础统计 -->
+            <div class="activity-chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">⏱️ 活跃度分布</div>
+                </div>
+                {hourly_chart_html}
+            </div>
         </div>
+
         <div class="section">
             <h2 class="section-title">💬 热门话题</h2>
             {topics_html}
