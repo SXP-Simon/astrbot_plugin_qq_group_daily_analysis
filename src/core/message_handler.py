@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from collections import defaultdict
 from astrbot.api import logger
-from ...src.models.data_models import GroupStatistics, TokenUsage
+from ...src.models.data_models import GroupStatistics, TokenUsage, EmojiStatistics
 
 
 class MessageHandler:
@@ -134,7 +134,7 @@ class MessageHandler:
         total_chars = 0
         participants = set()
         hour_counts = defaultdict(int)
-        emoji_count = 0
+        emoji_statistics = EmojiStatistics()
 
         for msg in messages:
             sender_id = str(msg.get("sender", {}).get("user_id", ""))
@@ -150,7 +150,40 @@ class MessageHandler:
                     text = content.get("data", {}).get("text", "")
                     total_chars += len(text)
                 elif content.get("type") == "face":
-                    emoji_count += 1
+                    # QQ基础表情
+                    emoji_statistics.face_count += 1
+                    face_id = content.get("data", {}).get("id", "unknown")
+                    emoji_statistics.face_details[f"face_{face_id}"] = emoji_statistics.face_details.get(f"face_{face_id}", 0) + 1
+                elif content.get("type") == "mface":
+                    # 动画表情/魔法表情
+                    emoji_statistics.mface_count += 1
+                    emoji_id = content.get("data", {}).get("emoji_id", "unknown")
+                    emoji_statistics.face_details[f"mface_{emoji_id}"] = emoji_statistics.face_details.get(f"mface_{emoji_id}", 0) + 1
+                elif content.get("type") == "bface":
+                    # 超级表情
+                    emoji_statistics.bface_count += 1
+                    emoji_id = content.get("data", {}).get("p", "unknown")
+                    emoji_statistics.face_details[f"bface_{emoji_id}"] = emoji_statistics.face_details.get(f"bface_{emoji_id}", 0) + 1
+                elif content.get("type") == "sface":
+                    # 小表情
+                    emoji_statistics.sface_count += 1
+                    emoji_id = content.get("data", {}).get("id", "unknown")
+                    emoji_statistics.face_details[f"sface_{emoji_id}"] = emoji_statistics.face_details.get(f"sface_{emoji_id}", 0) + 1
+                elif content.get("type") == "image":
+                    # 检查是否是动画表情（通过summary字段判断）
+                    data = content.get("data", {})
+                    summary = data.get("summary", "")
+                    if "动画表情" in summary or "表情" in summary:
+                        # 动画表情（以image形式发送）
+                        emoji_statistics.mface_count += 1
+                        file_name = data.get("file", "unknown")
+                        emoji_statistics.face_details[f"animated_{file_name}"] = emoji_statistics.face_details.get(f"animated_{file_name}", 0) + 1
+                    else:
+                        # 普通图片，不计入表情统计
+                        pass
+                elif content.get("type") in ["record", "video"] and "emoji" in str(content.get("data", {})).lower():
+                    # 其他可能的表情类型
+                    emoji_statistics.other_emoji_count += 1
 
         # 找出最活跃时段
         most_active_hour = max(hour_counts.items(), key=lambda x: x[1])[0] if hour_counts else 0
@@ -162,6 +195,7 @@ class MessageHandler:
             participant_count=len(participants),
             most_active_period=most_active_period,
             golden_quotes=[],
-            emoji_count=emoji_count,
+            emoji_count=emoji_statistics.total_emoji_count,  # 保持向后兼容
+            emoji_statistics=emoji_statistics,
             token_usage=TokenUsage()
         )

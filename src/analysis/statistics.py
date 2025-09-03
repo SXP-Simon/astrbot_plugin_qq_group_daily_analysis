@@ -43,7 +43,24 @@ class UserAnalyzer:
                     text = content.get("data", {}).get("text", "")
                     user_stats[user_id]["char_count"] += len(text)
                 elif content.get("type") == "face":
+                    # QQ基础表情
                     user_stats[user_id]["emoji_count"] += 1
+                elif content.get("type") == "mface":
+                    # 动画表情/魔法表情
+                    user_stats[user_id]["emoji_count"] += 1
+                elif content.get("type") == "bface":
+                    # 超级表情
+                    user_stats[user_id]["emoji_count"] += 1
+                elif content.get("type") == "sface":
+                    # 小表情
+                    user_stats[user_id]["emoji_count"] += 1
+                elif content.get("type") == "image":
+                    # 检查是否是动画表情（通过summary字段判断）
+                    data = content.get("data", {})
+                    summary = data.get("summary", "")
+                    if "动画表情" in summary or "表情" in summary:
+                        # 动画表情（以image形式发送）
+                        user_stats[user_id]["emoji_count"] += 1
                 elif content.get("type") == "reply":
                     user_stats[user_id]["reply_count"] += 1
 
@@ -86,3 +103,4 @@ class UserAnalyzer:
             "night_ratio": night_ratio,
             "hourly_distribution": dict(hours)
         }
+
