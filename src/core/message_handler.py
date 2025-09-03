@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from collections import defaultdict
 from astrbot.api import logger
-from ...src.models.data_models import GroupStatistics, TokenUsage, EmojiStatistics
+from ...src.models.data_models import GroupStatistics, TokenUsage, EmojiStatistics, ActivityVisualization
+from ...src.visualization.activity_charts import ActivityVisualizer
 
 
 class MessageHandler:
@@ -16,6 +17,7 @@ class MessageHandler:
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
+        self.activity_visualizer = ActivityVisualizer()
         self.bot_qq_id = None
 
     async def set_bot_qq_id(self, bot_instance):
@@ -189,6 +191,9 @@ class MessageHandler:
         most_active_hour = max(hour_counts.items(), key=lambda x: x[1])[0] if hour_counts else 0
         most_active_period = f"{most_active_hour:02d}:00-{(most_active_hour+1)%24:02d}:00"
 
+        # 生成活跃度可视化数据
+        activity_visualization = self.activity_visualizer.generate_activity_visualization(messages)
+
         return GroupStatistics(
             message_count=len(messages),
             total_characters=total_chars,
@@ -197,5 +202,6 @@ class MessageHandler:
             golden_quotes=[],
             emoji_count=emoji_statistics.total_emoji_count,  # 保持向后兼容
             emoji_statistics=emoji_statistics,
+            activity_visualization=activity_visualization,
             token_usage=TokenUsage()
         )
