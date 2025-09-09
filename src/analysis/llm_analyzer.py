@@ -118,9 +118,9 @@ class LLMAnalyzer:
             token_usage = TokenUsage()
             if response.raw_completion and hasattr(response.raw_completion, 'usage'):
                 usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens
-                token_usage.completion_tokens = usage.completion_tokens
-                token_usage.total_tokens = usage.total_tokens
+                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
+                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
+                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -343,9 +343,9 @@ class LLMAnalyzer:
             token_usage = TokenUsage()
             if response.raw_completion and hasattr(response.raw_completion, 'usage'):
                 usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens
-                token_usage.completion_tokens = usage.completion_tokens
-                token_usage.total_tokens = usage.total_tokens
+                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
+                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
+                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -444,9 +444,9 @@ class LLMAnalyzer:
             token_usage = TokenUsage()
             if response.raw_completion and hasattr(response.raw_completion, 'usage'):
                 usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens
-                token_usage.completion_tokens = usage.completion_tokens
-                token_usage.total_tokens = usage.total_tokens
+                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
+                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
+                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
