@@ -116,11 +116,14 @@ class LLMAnalyzer:
 
             # 提取token使用统计
             token_usage = TokenUsage()
-            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
-                usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
-                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
-                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
+            # 安全地提取 usage，避免 response.raw_completion.usage 为 None 导致的 AttributeError
+            usage = None
+            if getattr(response, 'raw_completion', None) is not None:
+                usage = getattr(response.raw_completion, 'usage', None)
+                if usage:
+                    token_usage.prompt_tokens = getattr(usage, 'prompt_tokens', 0) or 0
+                    token_usage.completion_tokens = getattr(usage, 'completion_tokens', 0) or 0
+                    token_usage.total_tokens = getattr(usage, 'total_tokens', 0) or 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -341,11 +344,14 @@ class LLMAnalyzer:
 
             # 提取token使用统计
             token_usage = TokenUsage()
-            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
-                usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
-                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
-                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
+            # 安全地提取 usage，避免 response.raw_completion.usage 为 None 导致的 AttributeError
+            usage = None
+            if getattr(response, 'raw_completion', None) is not None:
+                usage = getattr(response.raw_completion, 'usage', None)
+                if usage:
+                    token_usage.prompt_tokens = getattr(usage, 'prompt_tokens', 0) or 0
+                    token_usage.completion_tokens = getattr(usage, 'completion_tokens', 0) or 0
+                    token_usage.total_tokens = getattr(usage, 'total_tokens', 0) or 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
@@ -442,11 +448,14 @@ class LLMAnalyzer:
 
             # 提取token使用统计
             token_usage = TokenUsage()
-            if response.raw_completion and hasattr(response.raw_completion, 'usage'):
-                usage = response.raw_completion.usage
-                token_usage.prompt_tokens = usage.prompt_tokens if usage.prompt_tokens else 0
-                token_usage.completion_tokens = usage.completion_tokens if usage.completion_tokens else 0
-                token_usage.total_tokens = usage.total_tokens if usage.total_tokens else 0
+            # 安全地提取 usage，避免 response.raw_completion.usage 为 None 导致的 AttributeError
+            usage = None
+            if getattr(response, 'raw_completion', None) is not None:
+                usage = getattr(response.raw_completion, 'usage', None)
+                if usage:
+                    token_usage.prompt_tokens = getattr(usage, 'prompt_tokens', 0) or 0
+                    token_usage.completion_tokens = getattr(usage, 'completion_tokens', 0) or 0
+                    token_usage.total_tokens = getattr(usage, 'total_tokens', 0) or 0
 
             # 解析响应
             if hasattr(response, 'completion_text'):
