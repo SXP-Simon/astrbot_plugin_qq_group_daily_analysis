@@ -189,9 +189,9 @@ class ReportGenerator:
             "titles_html": titles_html,
             "quotes_html": quotes_html,
             "hourly_chart_html": hourly_chart_html,
-            "total_tokens": stats.token_usage.total_tokens,
-            "prompt_tokens": stats.token_usage.prompt_tokens,
-            "completion_tokens": stats.token_usage.completion_tokens
+            "total_tokens": stats.token_usage.total_tokens if stats.token_usage.total_tokens else 0,
+            "prompt_tokens": stats.token_usage.prompt_tokens if stats.token_usage.prompt_tokens else 0,
+            "completion_tokens": stats.token_usage.completion_tokens if stats.token_usage.completion_tokens else 0
         }
 
 
