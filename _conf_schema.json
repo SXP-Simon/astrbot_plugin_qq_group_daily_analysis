@@ -99,6 +99,24 @@
         "default": 2,
         "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
     },
+    "custom_api_key": {
+        "type": "string",
+        "description": "自定义 LLM 服务 API Key (选填)",
+        "default": "",
+        "hint": "若使用自建或第三方的 LLM 服务，可在此填写 API Key；留空则使用 Astrbot 统一内置提供商。"
+    },
+    "custom_api_base_url": {
+        "type": "string",
+        "description": "自定义 LLM 服务 Base URL (选填)",
+        "default": "",
+        "hint": "自定义 LLM 服务的基础请求地址，例如 https://api.example.com/v1/chat 。留空则使用 Astrbot 统一内置提供商。"
+    },
+    "custom_model_name": {
+        "type": "string",
+        "description": "自定义 LLM 模型名称 (选填)",
+        "default": "",
+        "hint": "自定义服务所使用的模型名称，例如 gpt-4 或自定义模型标识。留空则使用 Astrbot 统一内置提供商。"
+    },
     "pdf_output_dir": {
         "type": "string",
         "description": "PDF输出目录",

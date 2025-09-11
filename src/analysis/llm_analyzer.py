@@ -20,17 +20,53 @@ class LLMAnalyzer:
         self.config_manager = config_manager
 
     async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, temperature: float):
-        """调用LLM提供者，带超时、重试与退避。"""
-        
+        """调用LLM提供者，带超时、重试与退避。支持自定义服务商。"""
         timeout = self.config_manager.get_llm_timeout()
         retries = self.config_manager.get_llm_retries()
         backoff = self.config_manager.get_llm_backoff()
 
+        # 获取自定义服务商参数
+        custom_api_key = getattr(self.config_manager, 'get_custom_api_key', lambda: None)()
+        custom_api_base = getattr(self.config_manager, 'get_custom_api_base_url', lambda: None)()
+        custom_model = getattr(self.config_manager, 'get_custom_model_name', lambda: None)()
+
         last_exc = None
         for attempt in range(1, retries + 1):
             try:
-                coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
-                return await asyncio.wait_for(coro, timeout=timeout)
+                if custom_api_key and custom_api_base and custom_model:
+                    logger.info(f"使用自定义LLM提供商: {custom_api_base} model={custom_model}")
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        headers = {
+                            "Authorization": f"Bearer {custom_api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = {
+                            "model": custom_model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "max_tokens": max_tokens,
+                            "temperature": temperature
+                        }
+                        async with session.post(custom_api_base, json=payload, headers=headers, timeout=timeout) as resp:
+                            if resp.status != 200:
+                                error_text = await resp.text()
+                                logger.error(f"自定义LLM服务商请求失败: HTTP {resp.status}, 内容: {error_text}")
+                            try:
+                                response_json = await resp.json()
+                            except Exception as json_err:
+                                error_text = await resp.text()
+                                logger.error(f"自定义LLM服务商响应JSON解析失败: {json_err}, 内容: {error_text}")
+                            # 兼容 OpenAI 格式
+                            content = response_json["choices"][0]["message"]["content"]
+                            # 构造一个兼容原有逻辑的对象
+                            class CustomResponse:
+                                completion_text = content
+                                raw_completion = response_json
+                            return CustomResponse()
+                else:
+                    logger.info(f"使用默认LLM provider: {provider}")
+                    coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
+                    return await asyncio.wait_for(coro, timeout=timeout)
             except asyncio.TimeoutError as e:
                 last_exc = e
                 logger.warning(f"LLM请求超时: 第{attempt}次, timeout={timeout}s")
