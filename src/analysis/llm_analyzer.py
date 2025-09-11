@@ -47,7 +47,8 @@ class LLMAnalyzer:
                             "max_tokens": max_tokens,
                             "temperature": temperature
                         }
-                        async with session.post(custom_api_base, json=payload, headers=headers, timeout=timeout) as resp:
+                        aio_timeout = aiohttp.ClientTimeout(total=timeout)
+                        async with session.post(custom_api_base, json=payload, headers=headers, timeout=aio_timeout) as resp:
                             if resp.status != 200:
                                 error_text = await resp.text()
                                 logger.error(f"自定义LLM服务商请求失败: HTTP {resp.status}, 内容: {error_text}")
