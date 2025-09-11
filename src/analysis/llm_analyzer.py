@@ -26,9 +26,9 @@ class LLMAnalyzer:
         backoff = self.config_manager.get_llm_backoff()
 
         # 获取自定义服务商参数
-        custom_api_key = getattr(self.config_manager, 'get_custom_api_key', lambda: None)()
-        custom_api_base = getattr(self.config_manager, 'get_custom_api_base_url', lambda: None)()
-        custom_model = getattr(self.config_manager, 'get_custom_model_name', lambda: None)()
+        custom_api_key = self.config_manager.get_custom_api_key()
+        custom_api_base = self.config_manager.get_custom_api_base_url()
+        custom_model = self.config_manager.get_custom_model_name()
 
         last_exc = None
         for attempt in range(1, retries + 1):
