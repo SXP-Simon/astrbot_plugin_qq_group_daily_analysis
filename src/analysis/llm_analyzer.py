@@ -56,8 +56,21 @@ class LLMAnalyzer:
                             except Exception as json_err:
                                 error_text = await resp.text()
                                 logger.error(f"自定义LLM服务商响应JSON解析失败: {json_err}, 内容: {error_text}")
-                            # 兼容 OpenAI 格式
-                            content = response_json["choices"][0]["message"]["content"]
+                                return None
+                            # 兼容 OpenAI 格式，安全访问嵌套字段
+                            content = None
+                            try:
+                                choices = response_json.get("choices")
+                                if choices and isinstance(choices, list) and len(choices) > 0:
+                                    message = choices[0].get("message")
+                                    if message and isinstance(message, dict):
+                                        content = message.get("content")
+                                if content is None:
+                                    logger.error(f"自定义LLM响应格式异常: {response_json}")
+                                    return None
+                            except Exception as key_err:
+                                logger.error(f"自定义LLM响应结构解析失败: {key_err}, 响应内容: {response_json}")
+                                return None
                             # 构造一个兼容原有逻辑的对象
                             class CustomResponse:
                                 completion_text = content
