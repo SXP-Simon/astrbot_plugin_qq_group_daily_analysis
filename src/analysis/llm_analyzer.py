@@ -72,8 +72,7 @@ class LLMAnalyzer:
                 logger.warning(f"LLM请求超时: 第{attempt}次, timeout={timeout}s")
             except Exception as e:
                 last_exc = e
-                logger.warning(f"LLM请求失败: 第{attempt}次, 错误: {e}")
-
+                logger.warning(f"LLM请求失败: 第{attempt}次, 错误: {last_exc}")
             # 若非最后一次，等待退避后重试
             if attempt < retries:
                 await asyncio.sleep(backoff * attempt)
