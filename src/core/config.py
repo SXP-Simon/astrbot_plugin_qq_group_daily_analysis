@@ -83,6 +83,17 @@ class ConfigManager:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
         return self.config.get("llm_backoff", 2)
 
+    def get_custom_api_key(self) -> str:
+        """获取自定义 LLM 服务的 API Key"""
+        return self.config.get("custom_api_key", "")
+
+    def get_custom_api_base_url(self) -> str:
+        """获取自定义 LLM 服务的 Base URL"""
+        return self.config.get("custom_api_base_url", "")
+
+    def get_custom_model_name(self) -> str:
+        """获取自定义 LLM 服务的模型名称"""
+        return self.config.get("custom_model_name", "")
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
         return self.config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
