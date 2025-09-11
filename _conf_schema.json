@@ -61,19 +61,19 @@
         "type": "int",
         "description": "最大话题数量",
         "default": 5,
-        "hint": "分析报告中显示的最大话题数量"
+        "hint": "分析报告中显示的最大话题数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
     },
     "max_user_titles": {
         "type": "int",
         "description": "最大用户称号数量",
         "default": 8,
-        "hint": "分析报告中显示的最大用户称号数量"
+        "hint": "分析报告中显示的最大用户称号数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
     },
     "max_golden_quotes": {
         "type": "int",
         "description": "最大金句数量",
         "default": 5,
-        "hint": "分析报告中显示的最大金句数量"
+        "hint": "分析报告中显示的最大金句数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
     },
     "max_query_rounds": {
         "type": "int",
@@ -84,8 +84,8 @@
     "llm_timeout": {
         "type": "int",
         "description": "LLM 请求超时时间（秒）",
-        "default": 30,
-        "hint": "LLM 单次请求的超时时间，单位秒。可根据模型响应速度适当调整，增大可减少超时失败，但会占用更多等待时间。"
+        "default": 100,
+        "hint": "LLM 单次请求的超时时间，单位秒。可根据模型响应速度适当调整，增大可减少超时失败，但会占用更多等待时间，思考模型可以根据情况进行调大。"
     },
     "llm_retries": {
         "type": "int",
@@ -109,13 +109,13 @@
         "type": "string",
         "description": "自定义 LLM 服务 Base URL (选填)",
         "default": "",
-        "hint": "自定义 LLM 服务的基础请求地址，例如 https://api.example.com/v1/chat 。留空则使用 Astrbot 统一内置提供商。"
+        "hint": "自定义 LLM 服务的基础请求地址，例如 https://openrouter.ai/api/v1/chat/completions 。留空则使用 Astrbot 统一内置提供商。"
     },
     "custom_model_name": {
         "type": "string",
         "description": "自定义 LLM 模型名称 (选填)",
         "default": "",
-        "hint": "自定义服务所使用的模型名称，例如 gpt-4 或自定义模型标识。留空则使用 Astrbot 统一内置提供商。"
+        "hint": "自定义服务所使用的模型名称，例如 gpt-4 、deepseek/deepseek-r1:free 或自定义模型标识，由于自定义情况复杂，无法给出有效的参数参考，需要根据实际情况例如日志报错判断。留空则使用 Astrbot 统一内置提供商。"
     },
     "pdf_output_dir": {
         "type": "string",

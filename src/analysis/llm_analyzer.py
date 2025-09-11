@@ -421,14 +421,19 @@ class LLMAnalyzer:
             else:
                 result_text = str(response)
 
+            # debug日志：打印原始响应
+            logger.debug(f"用户称号分析原始响应: {result_text[:500]}...")
+
             # 尝试解析JSON
             try:
                 json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
                 if json_match:
+                    logger.debug(f"用户称号分析JSON原文: {json_match.group()[:500]}...")
                     titles_data = json.loads(json_match.group())
                     return [UserTitle(**title) for title in titles_data], token_usage
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"用户称号分析JSON解析失败: {e}")
+                logger.debug(f"原始响应: {result_text}")
 
             return [], token_usage
 
@@ -524,14 +529,19 @@ class LLMAnalyzer:
             else:
                 result_text = str(response)
 
+            # debug日志：打印原始响应
+            logger.debug(f"金句分析原始响应: {result_text[:500]}...")
+
             # 尝试解析JSON
             try:
                 json_match = re.search(r'\[.*\]', result_text, re.DOTALL)
                 if json_match:
+                    logger.debug(f"金句分析JSON原文: {json_match.group()[:500]}...")
                     quotes_data = json.loads(json_match.group())
                     return [GoldenQuote(**quote) for quote in quotes_data[:max_golden_quotes]], token_usage
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"金句分析JSON解析失败: {e}")
+                logger.debug(f"原始响应: {result_text}")
 
             return [], token_usage
 
