@@ -81,6 +81,24 @@
         "default": 35,
         "hint": "⚠️ 警告：增加此值会导致大量Token消耗！默认值35轮（有一定消耗）。设置过高可能导致LLM费用激增"
     },
+    "llm_timeout": {
+        "type": "int",
+        "description": "LLM 请求超时时间（秒）",
+        "default": 30,
+        "hint": "LLM 单次请求的超时时间，单位秒。可根据模型响应速度适当调整，增大可减少超时失败，但会占用更多等待时间。"
+    },
+    "llm_retries": {
+        "type": "int",
+        "description": "LLM 请求重试次数",
+        "default": 2,
+        "hint": "当请求超时或失败时自动重试的次数，建议设置为1~3之间。"
+    },
+    "llm_backoff": {
+        "type": "int",
+        "description": "LLM 请求重试退避基值（秒）",
+        "default": 2,
+        "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
+    },
     "pdf_output_dir": {
         "type": "string",
         "description": "PDF输出目录",

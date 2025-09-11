@@ -6,6 +6,7 @@ LLM分析器模块
 import json
 import re
 from datetime import datetime
+import asyncio
 from typing import List, Dict, Tuple
 from astrbot.api import logger
 from ...src.models.data_models import SummaryTopic, UserTitle, GoldenQuote, TokenUsage
@@ -17,6 +18,33 @@ class LLMAnalyzer:
     def __init__(self, context, config_manager):
         self.context = context
         self.config_manager = config_manager
+
+    async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, temperature: float):
+        """调用LLM提供者，带超时、重试与退避。"""
+        
+        timeout = self.config_manager.get_llm_timeout()
+        retries = self.config_manager.get_llm_retries()
+        backoff = self.config_manager.get_llm_backoff()
+
+        last_exc = None
+        for attempt in range(1, retries + 1):
+            try:
+                coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
+                return await asyncio.wait_for(coro, timeout=timeout)
+            except asyncio.TimeoutError as e:
+                last_exc = e
+                logger.warning(f"LLM请求超时: 第{attempt}次, timeout={timeout}s")
+            except Exception as e:
+                last_exc = e
+                logger.warning(f"LLM请求失败: 第{attempt}次, 错误: {e}")
+
+            # 若非最后一次，等待退避后重试
+            if attempt < retries:
+                await asyncio.sleep(backoff * attempt)
+
+        # 最终仍失败，记录错误并返回 None 由调用方处理降级，避免抛出异常
+        logger.error(f"LLM请求全部重试失败: {last_exc}")
+        return None
 
     async def analyze_topics(self, messages: List[Dict]) -> Tuple[List[SummaryTopic], TokenUsage]:
         """使用LLM分析话题"""
@@ -108,11 +136,10 @@ class LLMAnalyzer:
                 logger.warning("未配置LLM提供商，跳过话题分析")
                 return [], TokenUsage()
 
-            response = await provider.text_chat(
-                prompt=prompt,
-                max_tokens=10000,
-                temperature=0.6
-            )
+            response = await self._call_provider_with_retry(provider, prompt, max_tokens=10000, temperature=0.6)
+            if response is None:
+                logger.error("话题分析调用LLM失败: provider返回None（重试失败）")
+                return [], TokenUsage()
 
             # 提取token使用统计
             token_usage = TokenUsage()
@@ -336,11 +363,10 @@ class LLMAnalyzer:
                 logger.warning("未配置LLM提供商，跳过用户称号分析")
                 return [], TokenUsage()
 
-            response = await provider.text_chat(
-                prompt=prompt,
-                max_tokens=1500,
-                temperature=0.5
-            )
+            response = await self._call_provider_with_retry(provider, prompt, max_tokens=1500, temperature=0.5)
+            if response is None:
+                logger.error("用户称号分析调用LLM失败: provider返回None（重试失败）")
+                return [], TokenUsage()
 
             # 提取token使用统计
             token_usage = TokenUsage()
@@ -440,11 +466,10 @@ class LLMAnalyzer:
                 logger.warning("未配置LLM提供商，跳过金句分析")
                 return [], TokenUsage()
 
-            response = await provider.text_chat(
-                prompt=prompt,
-                max_tokens=1500,
-                temperature=0.7
-            )
+            response = await self._call_provider_with_retry(provider, prompt, max_tokens=1500, temperature=0.7)
+            if response is None:
+                logger.error("金句分析调用LLM失败: provider返回None（重试失败）")
+                return [], TokenUsage()
 
             # 提取token使用统计
             token_usage = TokenUsage()
