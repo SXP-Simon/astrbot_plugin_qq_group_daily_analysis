@@ -158,13 +158,18 @@ class AutoScheduler:
                 if self.html_render_func:
                     # 使用图片格式
                     logger.info(f"群 {group_id} 自动分析使用图片报告格式")
-                    image_url = await self.report_generator.generate_image_report(analysis_result, group_id, self.html_render_func)
-                    if image_url:
-                        await self._send_image_message(group_id, image_url)
-                        logger.info(f"群 {group_id} 图片报告发送成功")
-                    else:
-                        # 图片生成失败，回退到文本
-                        logger.warning(f"群 {group_id} 图片报告生成失败，回退到文本报告")
+                    try:
+                        image_url = await self.report_generator.generate_image_report(analysis_result, group_id, self.html_render_func)
+                        if image_url:
+                            await self._send_image_message(group_id, image_url)
+                            logger.info(f"群 {group_id} 图片报告发送成功")
+                        else:
+                            # 图片生成失败，回退到文本
+                            logger.warning(f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告")
+                            text_report = self.report_generator.generate_text_report(analysis_result)
+                            await self._send_text_message(group_id, f"📊 每日群聊分析报告：\n\n{text_report}")
+                    except Exception as img_e:
+                        logger.error(f"群 {group_id} 图片报告生成异常: {img_e}，回退到文本报告")
                         text_report = self.report_generator.generate_text_report(analysis_result)
                         await self._send_text_message(group_id, f"📊 每日群聊分析报告：\n\n{text_report}")
                 else:
@@ -179,12 +184,17 @@ class AutoScheduler:
                     text_report = self.report_generator.generate_text_report(analysis_result)
                     await self._send_text_message(group_id, f"📊 每日群聊分析报告：\n\n{text_report}")
                 else:
-                    pdf_path = await self.report_generator.generate_pdf_report(analysis_result, group_id)
-                    if pdf_path:
-                        await self._send_pdf_file(group_id, pdf_path)
-                        logger.info(f"群 {group_id} 自动分析完成，已发送PDF报告")
-                    else:
-                        logger.error(f"群 {group_id} PDF报告生成失败，回退到文本报告")
+                    try:
+                        pdf_path = await self.report_generator.generate_pdf_report(analysis_result, group_id)
+                        if pdf_path:
+                            await self._send_pdf_file(group_id, pdf_path)
+                            logger.info(f"群 {group_id} 自动分析完成，已发送PDF报告")
+                        else:
+                            logger.error(f"群 {group_id} PDF报告生成失败（返回None），回退到文本报告")
+                            text_report = self.report_generator.generate_text_report(analysis_result)
+                            await self._send_text_message(group_id, f"📊 每日群聊分析报告：\n\n{text_report}")
+                    except Exception as pdf_e:
+                        logger.error(f"群 {group_id} PDF报告生成异常: {pdf_e}，回退到文本报告")
                         text_report = self.report_generator.generate_text_report(analysis_result)
                         await self._send_text_message(group_id, f"📊 每日群聊分析报告：\n\n{text_report}")
             else:
@@ -262,51 +272,6 @@ class AutoScheduler:
         except Exception as e:
             logger.error(f"发送PDF文件到群 {group_id} 失败: {e}")
             # 发送失败提示
-            try:
-                await self.bot_instance.api.call_action(
-                    "send_group_msg",
-                    group_id=group_id,
-                    message=f"📊 每日群聊分析报告已生成，但发送PDF文件失败。PDF文件路径：{pdf_path}"
-                )
-            except Exception as e2:
-                logger.error(f"发送PDF失败提示到群 {group_id} 也失败: {e2}")
-
-    async def _send_text_message(self, group_id: str, message: str):
-        """发送文本消息到群"""
-        try:
-            if not self.bot_instance:
-                return
-
-            await self.bot_instance.api.call_action(
-                "send_group_msg",
-                group_id=group_id,
-                message=message
-            )
-
-        except Exception as e:
-            logger.error(f"发送文本消息到群 {group_id} 失败: {e}")
-
-    async def _send_pdf_file(self, group_id: str, pdf_path: str):
-        """发送PDF文件到群"""
-        try:
-            if not self.bot_instance:
-                return
-
-            await self.bot_instance.api.call_action(
-                "send_group_msg",
-                group_id=group_id,
-                message=[{
-                    "type": "text",
-                    "data": {"text": "📊 每日群聊分析报告已生成："}
-                }, {
-                    "type": "file",
-                    "data": {"file": pdf_path}
-                }]
-            )
-
-        except Exception as e:
-            logger.error(f"发送PDF文件到群 {group_id} 失败: {e}")
-            # 如果发送PDF失败，尝试发送提示信息
             try:
                 await self.bot_instance.api.call_action(
                     "send_group_msg",
