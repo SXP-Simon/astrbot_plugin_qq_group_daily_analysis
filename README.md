@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v2.1.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v2.2.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -126,7 +126,7 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 - 修复了部分bug
 - 优化了权限情况，管理员控制绝大部分命令（防止滥用 token）
 - 增加了定时自动触发分析功能
-- 发送 PDF 版的推送，提供命令安装相关配置，也可以不配置 PDF 版
+- 发送 PDF 版的推送，提供命令安装相关配置，也可以不配置 PDF 版 (无法获取到实例的请根据-> 插件配置 -> 启用自动分析 下方的补充说明进行一次手动触发，让 bot 获取到自己的实例，因为最后生成报告时需要排除 bot 自己的消息)
 
 ### v1.2.0
 - 增加了对 LLM 话题分析部分的提示词提示规范，并且提供正则处理来提高服务可用性
@@ -149,6 +149,11 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 ### v2.1.0
 - 支持配置自定义 Provider 或者留空，支持自定义模型的重试和超时处理，思考模型可以根据情况延长请求超时时间 
+
+### v2.2.0
+- image 格式的报告图片清晰度提高
+- 字体稍微调大，但是实际效果也不怎么好，后续可能需要彻底改变排版方式再进行调整
+
 
 ## 许可证
 
