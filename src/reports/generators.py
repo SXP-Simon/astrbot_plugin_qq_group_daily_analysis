@@ -25,14 +25,44 @@ class ReportGenerator:
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(analysis_result)
-
             # 使用AstrBot内置的HTML渲染服务（直接传递模板和数据）
-            image_url = await html_render_func(HTMLTemplates.get_image_template(), render_payload)
+            # 使用兼容的图片生成选项（基于NetworkRenderStrategy的默认设置）
+            image_options = {
+                "full_page": True,
+                "type": "jpeg",  # 使用默认的jpeg格式提高兼容性
+                "quality": 95,   # 设置合理的质量
+            }
+            image_url = await html_render_func(
+                HTMLTemplates.get_image_template(),
+                render_payload,
+                True,  # return_url=True，返回URL而不是下载文件
+                image_options
+            )
+
+            logger.info(f"图片生成成功: {image_url}")
             return image_url
 
         except Exception as e:
-            logger.error(f"生成图片报告失败: {e}")
-            return None
+            logger.error(f"生成图片报告失败: {e}", exc_info=True)
+            # 尝试使用更简单的选项作为后备方案
+            try:
+                logger.info("尝试使用低质量选项重新生成...")
+                simple_options = {
+                    "full_page": True,
+                    "type": "jpeg",
+                    "quality": 70  # 降低质量以提高兼容性
+                }
+                image_url = await html_render_func(
+                    HTMLTemplates.get_image_template(),
+                    render_payload,
+                    True,
+                    simple_options
+                )
+                logger.info(f"使用低质量选项生成成功: {image_url}")
+                return image_url
+            except Exception as fallback_e:
+                logger.error(f"后备低质量方案也失败: {fallback_e}")
+                return None
 
 
 
