@@ -38,16 +38,12 @@ class MessageHandler:
         try:
             # 验证参数
             if self.bot_manager:
-                is_valid, error_msg = self.bot_manager.validate_for_message_fetching(group_id)
-                if not is_valid:
-                    logger.error(error_msg)
+                if not self.bot_manager.validate_for_message_fetching(group_id):
+                    logger.error(f"群 {group_id} 验证失败")
                     return []
             else:
-                if not group_id:
-                    logger.error(f"群 {group_id} 无效的群组ID")
-                    return []
-                if not bot_instance:
-                    logger.info(f"群 {group_id} 自动分析未获取到 bot 实例，跳过 Bot 消息获取")
+                if not group_id or not bot_instance:
+                    logger.error(f"群 {group_id} 参数无效")
                     return []
 
             # 计算时间范围
