@@ -33,18 +33,30 @@ class MessageHandler:
         """设置bot管理器"""
         self.bot_manager = bot_manager
 
+    def _extract_bot_qq_id_from_instance(self, bot_instance):
+        """从bot实例中提取QQ号"""
+        if hasattr(bot_instance, 'self_id') and bot_instance.self_id:
+            return str(bot_instance.self_id)
+        elif hasattr(bot_instance, 'qq') and bot_instance.qq:
+            return str(bot_instance.qq)
+        elif hasattr(bot_instance, 'user_id') and bot_instance.user_id:
+            return str(bot_instance.user_id)
+        return None
+
     async def fetch_group_messages(self, bot_instance, group_id: str, days: int) -> List[Dict]:
         """获取群聊消息记录"""
         try:
             # 验证参数
-            if self.bot_manager:
-                if not self.bot_manager.validate_for_message_fetching(group_id):
-                    logger.error(f"群 {group_id} 验证失败")
-                    return []
-            else:
-                if not group_id or not bot_instance:
-                    logger.error(f"群 {group_id} 参数无效")
-                    return []
+            if not group_id or not bot_instance:
+                logger.error(f"群 {group_id} 参数无效")
+                return []
+
+            # 确保bot_manager有QQ号用于过滤
+            if self.bot_manager and not self.bot_manager.has_bot_qq_id():
+                # 尝试从bot_instance提取QQ号
+                bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
+                if bot_qq_id:
+                    self.bot_manager.set_bot_qq_id(bot_qq_id)
 
             # 计算时间范围
             end_time = datetime.now()
