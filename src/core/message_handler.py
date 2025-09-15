@@ -15,27 +15,40 @@ from ...src.visualization.activity_charts import ActivityVisualizer
 class MessageHandler:
     """消息处理器"""
 
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, bot_manager=None):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
-        self.bot_qq_id = None
+        self.bot_manager = bot_manager
 
-    async def set_bot_qq_id(self, bot_instance):
-        """设置机器人QQ号"""
+    async def set_bot_qq_id(self, bot_qq_id: str):
+        """设置机器人QQ号（保持向后兼容）"""
         try:
-            if bot_instance and not self.bot_qq_id:
-                login_info = await bot_instance.api.call_action("get_login_info")
-                self.bot_qq_id = str(login_info.get("user_id", ""))
-                logger.info(f"获取到机器人QQ号: {self.bot_qq_id}")
+            if self.bot_manager:
+                self.bot_manager.set_bot_qq_id(bot_qq_id)
+            logger.info(f"设置机器人QQ号: {bot_qq_id}")
         except Exception as e:
-            logger.error(f"获取机器人QQ号失败: {e}")
+            logger.error(f"设置机器人QQ号失败: {e}")
+
+    def set_bot_manager(self, bot_manager):
+        """设置bot管理器"""
+        self.bot_manager = bot_manager
 
     async def fetch_group_messages(self, bot_instance, group_id: str, days: int) -> List[Dict]:
         """获取群聊消息记录"""
         try:
-            if not bot_instance or not group_id:
-                logger.error(f"群 {group_id} 无效的客户端或群组ID")
-                return []
+            # 验证参数
+            if self.bot_manager:
+                is_valid, error_msg = self.bot_manager.validate_for_message_fetching(group_id)
+                if not is_valid:
+                    logger.error(error_msg)
+                    return []
+            else:
+                if not group_id:
+                    logger.error(f"群 {group_id} 无效的群组ID")
+                    return []
+                if not bot_instance:
+                    logger.info(f"群 {group_id} 自动分析未获取到 bot 实例，跳过 Bot 消息获取")
+                    return []
 
             # 计算时间范围
             end_time = datetime.now()
@@ -90,7 +103,7 @@ class MessageHandler:
 
                             # 过滤掉机器人自己的消息
                             sender_id = str(msg.get("sender", {}).get("user_id", ""))
-                            if self.bot_qq_id and sender_id == self.bot_qq_id:
+                            if self.bot_manager and self.bot_manager.should_filter_bot_message(sender_id):
                                 continue
 
                             if msg_time >= start_time and msg_time <= end_time:

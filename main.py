@@ -18,6 +18,7 @@ from astrbot.core.star.filter.permission import PermissionType
 
 # 导入重构后的模块
 from .src.core.config import ConfigManager
+from .src.core.bot_manager import BotManager
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
 from .src.utils.pdf_utils import PDFInstaller
@@ -26,6 +27,7 @@ from .src.utils.helpers import MessageAnalyzer
 
 # 全局变量
 config_manager = None
+bot_manager = None
 message_analyzer = None
 report_generator = None
 auto_scheduler = None
@@ -37,16 +39,19 @@ class QQGroupDailyAnalysis(Star):
         self.config = config
 
         # 初始化模块化组件
-        global config_manager, message_analyzer, report_generator, auto_scheduler
+        global config_manager, bot_manager, message_analyzer, report_generator, auto_scheduler
 
         config_manager = ConfigManager(config)
-        message_analyzer = MessageAnalyzer(context, config_manager)
+        bot_manager = BotManager(config_manager)
+        bot_manager.set_context(context)
+        message_analyzer = MessageAnalyzer(context, config_manager, bot_manager)
         report_generator = ReportGenerator(config_manager)
         auto_scheduler = AutoScheduler(
             config_manager,
             message_analyzer.message_handler,
             message_analyzer,
             report_generator,
+            bot_manager,
             self.html_render  # 传入html_render函数
         )
 
@@ -62,44 +67,22 @@ class QQGroupDailyAnalysis(Star):
             # 等待10秒让系统完全初始化
             await asyncio.sleep(10)
 
-            # 尝试获取bot实例
-            bot_instance = await self._get_bot_instance()
-            if bot_instance:
-                auto_scheduler.set_bot_instance(bot_instance)
-                logger.info("已为自动调度器设置bot实例")
-            else:
-                logger.info("暂时未获取到bot实例，定时任务仍会启动")
+            # 初始化bot管理器
+            if await bot_manager.initialize_from_config():
+                logger.info("Bot管理器初始化成功，启用自动分析功能")
 
-            # 启动调度器
-            await auto_scheduler.start_scheduler()
+                # 启动调度器
+                await auto_scheduler.start_scheduler()
+            else:
+                logger.warning("Bot管理器初始化失败，无法启用自动分析功能")
+                status = bot_manager.get_status_info()
+                logger.info(f"Bot管理器状态: {status}")
 
         except Exception as e:
             logger.error(f"延迟启动调度器失败: {e}")
 
-    async def _get_bot_instance(self):
-        """从Context获取bot实例"""
-        try:
-            # 简化的获取逻辑，尝试常见的几种方式
-            if hasattr(self.context, 'get_platforms') and callable(self.context.get_platforms):
-                platforms = self.context.get_platforms()
-                for platform in platforms:
-                    if hasattr(platform, 'bot') and platform.bot:
-                        logger.info(f"从平台获取到bot实例")
-                        return platform.bot
 
-            # 尝试从context的platforms属性获取
-            if hasattr(self.context, 'platforms') and self.context.platforms:
-                for platform in self.context.platforms:
-                    if hasattr(platform, 'bot') and platform.bot:
-                        logger.info(f"从平台列表获取到bot实例")
-                        return platform.bot
 
-            logger.info("暂时无法获取bot实例")
-            return None
-
-        except Exception as e:
-            logger.error(f"获取bot实例失败: {e}")
-            return None
 
     async def _reload_config_and_restart_scheduler(self):
         """重新加载配置并重启调度器"""
@@ -131,9 +114,8 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        # 设置bot实例
-        auto_scheduler.set_bot_instance(event.bot)
-        await message_analyzer.set_bot_instance(event.bot)
+        # 更新bot实例（用于手动命令）
+        bot_manager.update_from_event(event)
 
         # 检查群组权限
         enabled_groups = config_manager.get_enabled_groups()
@@ -151,7 +133,7 @@ class QQGroupDailyAnalysis(Star):
 
         try:
             # 获取群聊消息
-            messages = await message_analyzer.message_handler.fetch_group_messages(event.bot, group_id, analysis_days)
+            messages = await message_analyzer.message_handler.fetch_group_messages(bot_manager.get_bot_instance(), group_id, analysis_days)
             if not messages:
                 yield event.plain_result("❌ 未找到足够的群聊记录，请确保群内有足够的消息历史")
                 return
@@ -338,8 +320,8 @@ class QQGroupDailyAnalysis(Star):
 
             yield event.plain_result("🧪 开始测试自动分析功能...")
 
-            # 设置bot实例
-            auto_scheduler.set_bot_instance(event.bot)
+            # 更新bot实例（用于测试）
+            bot_manager.update_from_event(event)
 
             # 执行自动分析
             try:

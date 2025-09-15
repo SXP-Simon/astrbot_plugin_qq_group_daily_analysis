@@ -117,6 +117,12 @@
         "default": "",
         "hint": "自定义服务所使用的模型名称，例如 gpt-4 、deepseek/deepseek-r1:free 或自定义模型标识，由于自定义情况复杂，无法给出有效的参数参考，需要根据实际情况例如日志报错判断。留空则使用 Astrbot 统一内置提供商。"
     },
+    "bot_qq_id": {
+        "type": "string", 
+        "description": "机器人QQ号",
+        "default": "",
+        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能"
+    },
     "pdf_output_dir": {
         "type": "string",
         "description": "PDF输出目录",

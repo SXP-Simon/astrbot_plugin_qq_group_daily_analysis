@@ -97,6 +97,10 @@ class ConfigManager:
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
         return self.config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
+    
+    def get_bot_qq_id(self) -> str:
+        """获取bot QQ号"""
+        return str(self.config.get("bot_qq_id", ""))
 
     def get_pdf_filename_format(self) -> str:
         """获取PDF文件名格式"""
