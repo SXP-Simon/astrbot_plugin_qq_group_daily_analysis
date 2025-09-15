@@ -24,29 +24,21 @@ class BotManager:
         """设置bot实例"""
         if bot_instance:
             self._bot_instance = bot_instance
-            try:
-                logger.info(f"Bot实例已设置: {type(bot_instance).__name__}")
-            except ImportError:
-                print(f"Bot实例已设置: {type(bot_instance).__name__}")
+
+            logger.info(f"Bot实例已设置: {type(bot_instance).__name__}")
         else:
-            try:
-                logger.warning("尝试设置空的bot实例")
-            except ImportError:
-                print("尝试设置空的bot实例")
+            logger.warning("尝试设置空的bot实例")
+
     
     def set_bot_qq_id(self, bot_qq_id: str):
         """设置bot QQ号"""
         if bot_qq_id:
             self._bot_qq_id = str(bot_qq_id)
-            try:
-                logger.info(f"Bot QQ号已设置: {self._bot_qq_id}")
-            except ImportError:
-                print(f"Bot QQ号已设置: {self._bot_qq_id}")
+            logger.info(f"Bot QQ号已设置: {self._bot_qq_id}")
+
         else:
-            try:
-                logger.warning("尝试设置空的bot QQ号")
-            except ImportError:
-                print("尝试设置空的bot QQ号")
+            logger.warning("尝试设置空的bot QQ号")
+
     
     def get_bot_instance(self):
         """获取当前bot实例"""
