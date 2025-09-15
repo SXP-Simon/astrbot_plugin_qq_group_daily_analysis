@@ -98,8 +98,12 @@ class BotManager:
         """从事件更新bot实例（用于手动命令）"""
         if hasattr(event, 'bot') and event.bot:
             self.set_bot_instance(event.bot)
-            # 如果没有QQ号，尝试使用配置的QQ号
-            if not self._bot_qq_id:
+            # 每次都尝试从bot实例提取QQ号
+            bot_qq_id = self._extract_bot_qq_id(event.bot)
+            if bot_qq_id:
+                self.set_bot_qq_id(bot_qq_id)
+            else:
+                # 如果bot实例没有QQ号，尝试使用配置的QQ号
                 config_qq_id = self.config_manager.get_bot_qq_id()
                 if config_qq_id:
                     self.set_bot_qq_id(config_qq_id)
