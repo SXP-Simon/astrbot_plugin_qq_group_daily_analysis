@@ -216,12 +216,13 @@ class AutoScheduler:
     async def _send_image_message(self, group_id: str, image_url: str):
         """发送图片消息到群"""
         try:
-            if not self.bot_instance:
+            bot_instance = self.bot_manager.get_bot_instance()
+            if not bot_instance:
                 logger.error(f"群 {group_id} 发送图片失败：缺少bot实例")
                 return
 
             # 发送图片消息到群
-            await self.bot_instance.api.call_action(
+            await bot_instance.api.call_action(
                 "send_group_msg",
                 group_id=group_id,
                 message=[{
@@ -240,12 +241,13 @@ class AutoScheduler:
     async def _send_text_message(self, group_id: str, text_content: str):
         """发送文本消息到群"""
         try:
-            if not self.bot_instance:
+            bot_instance = self.bot_manager.get_bot_instance()
+            if not bot_instance:
                 logger.error(f"群 {group_id} 发送文本失败：缺少bot实例")
                 return
 
             # 发送文本消息到群
-            await self.bot_instance.api.call_action(
+            await bot_instance.api.call_action(
                 "send_group_msg",
                 group_id=group_id,
                 message=text_content
@@ -258,12 +260,13 @@ class AutoScheduler:
     async def _send_pdf_file(self, group_id: str, pdf_path: str):
         """发送PDF文件到群"""
         try:
-            if not self.bot_instance:
+            bot_instance = self.bot_manager.get_bot_instance()
+            if not bot_instance:
                 logger.error(f"群 {group_id} 发送PDF失败：缺少bot实例")
                 return
 
             # 发送PDF文件到群
-            await self.bot_instance.api.call_action(
+            await bot_instance.api.call_action(
                 "send_group_msg",
                 group_id=group_id,
                 message=[{
@@ -280,7 +283,7 @@ class AutoScheduler:
             logger.error(f"发送PDF文件到群 {group_id} 失败: {e}")
             # 发送失败提示
             try:
-                await self.bot_instance.api.call_action(
+                await bot_instance.api.call_action(
                     "send_group_msg",
                     group_id=group_id,
                     message=f"📊 每日群聊分析报告已生成，但发送PDF文件失败。PDF文件路径：{pdf_path}"
