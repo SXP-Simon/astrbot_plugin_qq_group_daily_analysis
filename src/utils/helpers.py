@@ -13,16 +13,20 @@ from ...src.analysis.statistics import UserAnalyzer
 class MessageAnalyzer:
     """消息分析器 - 整合所有分析功能"""
 
-    def __init__(self, context, config_manager):
+    def __init__(self, context, config_manager, bot_manager=None):
         self.context = context
         self.config_manager = config_manager
-        self.message_handler = MessageHandler(config_manager)
+        self.bot_manager = bot_manager
+        self.message_handler = MessageHandler(config_manager, bot_manager)
         self.llm_analyzer = LLMAnalyzer(context, config_manager)
         self.user_analyzer = UserAnalyzer(config_manager)
 
     async def set_bot_instance(self, bot_instance):
-        """设置bot实例"""
-        await self.message_handler.set_bot_qq_id(bot_instance)
+        """设置bot实例（保持向后兼容）"""
+        if self.bot_manager:
+            self.bot_manager.set_bot_instance(bot_instance)
+        else:
+            await self.message_handler.set_bot_qq_id(bot_instance)
 
     async def analyze_messages(self, messages: List[Dict], group_id: str) -> Dict:
         """完整的消息分析流程"""

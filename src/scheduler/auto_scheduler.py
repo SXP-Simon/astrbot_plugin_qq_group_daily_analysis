@@ -12,21 +12,23 @@ from astrbot.api import logger
 class AutoScheduler:
     """自动调度器"""
 
-    def __init__(self, config_manager, message_handler, analyzer, report_generator, html_render_func=None):
+    def __init__(self, config_manager, message_handler, analyzer, report_generator, bot_manager, html_render_func=None):
         self.config_manager = config_manager
         self.message_handler = message_handler
         self.analyzer = analyzer
         self.report_generator = report_generator
+        self.bot_manager = bot_manager
         self.html_render_func = html_render_func
         self.scheduler_task = None
-        self.bot_instance = None
         self.last_execution_date = None  # 记录上次执行日期，防止重复执行
 
     def set_bot_instance(self, bot_instance):
-        """设置bot实例"""
-        self.bot_instance = bot_instance
-        # 同时设置消息处理器的bot实例
-        asyncio.create_task(self.message_handler.set_bot_qq_id(bot_instance))
+        """设置bot实例（保持向后兼容）"""
+        self.bot_manager.set_bot_instance(bot_instance)
+
+    def set_bot_qq_id(self, bot_qq_id: str):
+        """设置bot QQ号（保持向后兼容）"""
+        self.bot_manager.set_bot_qq_id(bot_qq_id)
 
     async def start_scheduler(self):
         """启动定时任务调度器"""
@@ -116,15 +118,20 @@ class AutoScheduler:
     async def _perform_auto_analysis_for_group(self, group_id: str):
         """为指定群执行自动分析"""
         try:
-            if not self.bot_instance:
-                logger.warning(f"群 {group_id} 自动分析跳过：未获取到bot实例")
+            # 检查bot管理器状态
+            if not self.bot_manager.is_ready_for_auto_analysis():
+                status = self.bot_manager.get_status_info()
+                logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪 - {status}")
                 return
 
             logger.info(f"开始为群 {group_id} 执行自动分析")
 
             # 获取群聊消息
             analysis_days = self.config_manager.get_analysis_days()
-            messages = await self.message_handler.fetch_group_messages(self.bot_instance, group_id, analysis_days)
+            bot_instance = self.bot_manager.get_bot_instance()
+
+            messages = await self.message_handler.fetch_group_messages(bot_instance, group_id, analysis_days)
+                
             if not messages:
                 logger.warning(f"群 {group_id} 未获取到足够的消息记录")
                 return
