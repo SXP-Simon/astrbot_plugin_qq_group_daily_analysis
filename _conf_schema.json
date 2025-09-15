@@ -3,7 +3,7 @@
         "type": "list",
         "description": "启用分析功能的QQ群列表",
         "default": [],
-        "hint": "填入允许使用分析功能的QQ群号，为空则所有群都可使用",
+        "hint": "填入允许使用分析功能的QQ群号",
         "items": {
             "type": "string"
         }
@@ -28,9 +28,15 @@
     },
     "enable_auto_analysis": {
         "type": "bool",
-        "description": "启用自动分析",
+        "description": "启用定时自动分析",
         "default": false,
-        "hint": "是否在指定时间自动进行群聊分析，启用需要在群内手动触发一次分析 /分析设置 test ，否则获取不到实例，不会自动分析"
+        "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人QQ号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
+    },
+    "bot_qq_id": {
+        "type": "string", 
+        "description": "机器人QQ号",
+        "default": "",
+        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能"
     },
     "output_format": {
         "type": "string",
@@ -116,12 +122,6 @@
         "description": "自定义 LLM 模型名称 (选填)",
         "default": "",
         "hint": "自定义服务所使用的模型名称，例如 gpt-4 、deepseek/deepseek-r1:free 或自定义模型标识，由于自定义情况复杂，无法给出有效的参数参考，需要根据实际情况例如日志报错判断。留空则使用 Astrbot 统一内置提供商。"
-    },
-    "bot_qq_id": {
-        "type": "string", 
-        "description": "机器人QQ号",
-        "default": "",
-        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能"
     },
     "pdf_output_dir": {
         "type": "string",
