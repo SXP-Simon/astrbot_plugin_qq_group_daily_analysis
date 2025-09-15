@@ -78,7 +78,11 @@ class LLMAnalyzer:
                                 raw_completion = response_json
                             return CustomResponse()
                 else:
-                    logger.info(f"使用默认LLM provider: {provider}")
+                    # 确保使用当前指定的模型
+                    if provider is None:
+                        provider = self.context.get_using_provider()
+
+                    logger.info(f"使用LLM provider: {provider}")
                     coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
                     return await asyncio.wait_for(coro, timeout=timeout)
             except asyncio.TimeoutError as e:
