@@ -19,7 +19,7 @@ class LLMAnalyzer:
         self.context = context
         self.config_manager = config_manager
 
-    async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, temperature: float):
+    async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, temperature: float, umo: str = None):
         """调用LLM提供者，带超时、重试与退避。支持自定义服务商。"""
         timeout = self.config_manager.get_llm_timeout()
         retries = self.config_manager.get_llm_retries()
@@ -80,9 +80,28 @@ class LLMAnalyzer:
                 else:
                     # 确保使用当前指定的模型
                     if provider is None:
-                        provider = self.context.get_using_provider()
+                        provider = self.context.get_using_provider(umo=umo)
+                        
+                        # 安全地获取 provider ID
+                        provider_id = 'unknown'
+                        if provider:
+                            try:
+                                meta = provider.meta()
+                                provider_id = meta.id
+                            except Exception as e:
+                                logger.debug(f"获取提供商ID失败: {e}")
+                        
+                        logger.info(f"获取到的 provider ID: {provider_id}")
+                        
+                        # 如果获取失败，尝试使用全局默认提供商或者回退方案
+                        if not provider or provider_id == 'unknown':
+                            logger.warning(f"获取的提供商不正确 (Provider ID: {provider_id})")
 
+                    
                     logger.info(f"使用LLM provider: {provider}")
+                    if not provider:
+                        logger.error("provider 为空，无法调用 text_chat，直接返回 None")
+                        return None
                     coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
                     return await asyncio.wait_for(coro, timeout=timeout)
             except asyncio.TimeoutError as e:
