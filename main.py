@@ -146,8 +146,8 @@ class QQGroupDailyAnalysis(Star):
 
             yield event.plain_result(f"📊 已获取{len(messages)}条消息，正在进行智能分析...")
 
-            # 进行分析
-            analysis_result = await message_analyzer.analyze_messages(messages, group_id)
+            # 进行分析 - 传递 unified_msg_origin 以获取正确的 LLM 提供商
+            analysis_result = await message_analyzer.analyze_messages(messages, group_id, event.unified_msg_origin)
 
             # 检查分析结果
             if not analysis_result or not analysis_result.get("statistics"):

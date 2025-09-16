@@ -30,6 +30,21 @@ class AutoScheduler:
         """设置bot QQ号（保持向后兼容）"""
         self.bot_manager.set_bot_qq_id(bot_qq_id)
 
+    def _get_platform_id(self):
+        """获取平台ID"""
+        try:
+            if hasattr(self.bot_manager, '_context') and self.bot_manager._context:
+                context = self.bot_manager._context
+                if hasattr(context, 'platform_manager') and hasattr(context.platform_manager, 'platform_insts'):
+                    platforms = context.platform_manager.platform_insts
+                    for platform in platforms:
+                        if hasattr(platform, 'metadata') and hasattr(platform.metadata, 'id'):
+                            platform_id = platform.metadata.id
+                            return platform_id
+            return "aiocqhttp"  # 默认值
+        except Exception as e:
+            return "aiocqhttp"  # 默认值
+
     async def start_scheduler(self):
         """启动定时任务调度器"""
         if not self.config_manager.get_enable_auto_analysis():
@@ -144,8 +159,10 @@ class AutoScheduler:
 
             logger.info(f"群 {group_id} 获取到 {len(messages)} 条消息，开始分析")
 
-            # 进行分析
-            analysis_result = await self.analyzer.analyze_messages(messages, group_id)
+            # 进行分析 - 构造正确的 unified_msg_origin
+            platform_id = self._get_platform_id()
+            umo = f"{platform_id}:group:{group_id}" if platform_id else None
+            analysis_result = await self.analyzer.analyze_messages(messages, group_id, umo)
             if not analysis_result:
                 logger.error(f"群 {group_id} 分析失败")
                 return

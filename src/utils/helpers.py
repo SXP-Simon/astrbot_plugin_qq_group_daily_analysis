@@ -28,7 +28,7 @@ class MessageAnalyzer:
         else:
             await self.message_handler.set_bot_qq_id(bot_instance)
 
-    async def analyze_messages(self, messages: List[Dict], group_id: str) -> Dict:
+    async def analyze_messages(self, messages: List[Dict], group_id: str, unified_msg_origin: str = None) -> Dict:
         """完整的消息分析流程"""
         try:
             # 基础统计
@@ -45,20 +45,20 @@ class MessageAnalyzer:
 
             # 话题分析
             if self.config_manager.get_topic_analysis_enabled():
-                topics, topic_tokens = await self.llm_analyzer.analyze_topics(messages)
+                topics, topic_tokens = await self.llm_analyzer.analyze_topics(messages, umo=unified_msg_origin)
                 total_token_usage.prompt_tokens += topic_tokens.prompt_tokens
                 total_token_usage.completion_tokens += topic_tokens.completion_tokens
                 total_token_usage.total_tokens += topic_tokens.total_tokens
 
             # 用户称号分析
             if self.config_manager.get_user_title_analysis_enabled():
-                user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(messages, user_analysis)
+                user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(messages, user_analysis, umo=unified_msg_origin)
                 total_token_usage.prompt_tokens += title_tokens.prompt_tokens
                 total_token_usage.completion_tokens += title_tokens.completion_tokens
                 total_token_usage.total_tokens += title_tokens.total_tokens
 
             # 金句分析
-            golden_quotes, quote_tokens = await self.llm_analyzer.analyze_golden_quotes(messages)
+            golden_quotes, quote_tokens = await self.llm_analyzer.analyze_golden_quotes(messages, umo=unified_msg_origin)
             total_token_usage.prompt_tokens += quote_tokens.prompt_tokens
             total_token_usage.completion_tokens += quote_tokens.completion_tokens
             total_token_usage.total_tokens += quote_tokens.total_tokens
