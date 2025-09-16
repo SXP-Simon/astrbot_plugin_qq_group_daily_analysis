@@ -20,7 +20,21 @@ class LLMAnalyzer:
         self.config_manager = config_manager
 
     async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, temperature: float, umo: str = None):
-        """调用LLM提供者，带超时、重试与退避。支持自定义服务商。"""
+        """
+        调用LLM提供者，带超时、重试与退避。支持自定义服务商。
+
+        Args:
+            provider: LLM服务商实例或None。
+            prompt (str): 输入的提示语。
+            max_tokens (int): 最大生成token数。
+            temperature (float): 采样温度。
+            umo (str, optional): 指定使用的模型唯一标识符（Unique Model Object），
+                用于选择特定的LLM服务商或模型。格式通常为字符串，例如 "gpt-3.5-turbo"。
+                如果为None，则使用默认模型。
+
+        Returns:
+            LLM生成的结果。
+        """
         timeout = self.config_manager.get_llm_timeout()
         retries = self.config_manager.get_llm_retries()
         backoff = self.config_manager.get_llm_backoff()
