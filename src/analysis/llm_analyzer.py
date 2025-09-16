@@ -81,8 +81,6 @@ class LLMAnalyzer:
                     # 确保使用当前指定的模型
                     if provider is None:
                         provider = self.context.get_using_provider(umo=umo)
-                        
-                        # 安全地获取 provider ID
                         provider_id = 'unknown'
                         if provider:
                             try:
@@ -90,10 +88,7 @@ class LLMAnalyzer:
                                 provider_id = meta.id
                             except Exception as e:
                                 logger.debug(f"获取提供商ID失败: {e}")
-                        
                         logger.info(f"获取到的 provider ID: {provider_id}")
-                        
-                        # 如果获取失败，尝试使用全局默认提供商或者回退方案
                         if not provider or provider_id == 'unknown':
                             logger.warning(f"获取的提供商不正确 (Provider ID: {provider_id})")
 
@@ -118,7 +113,7 @@ class LLMAnalyzer:
         logger.error(f"LLM请求全部重试失败: {last_exc}")
         return None
 
-    async def analyze_topics(self, messages: List[Dict]) -> Tuple[List[SummaryTopic], TokenUsage]:
+    async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[SummaryTopic], TokenUsage]:
         """使用LLM分析话题"""
         try:
             # 提取文本消息
@@ -203,12 +198,7 @@ class LLMAnalyzer:
 """
 
             # 调用LLM
-            provider = self.context.get_using_provider()
-            if not provider:
-                logger.warning("未配置LLM提供商，跳过话题分析")
-                return [], TokenUsage()
-
-            response = await self._call_provider_with_retry(provider, prompt, max_tokens=10000, temperature=0.6)
+            response = await self._call_provider_with_retry(None, prompt, max_tokens=10000, temperature=0.6, umo=umo)
             if response is None:
                 logger.error("话题分析调用LLM失败: provider返回None（重试失败）")
                 return [], TokenUsage()
@@ -359,7 +349,7 @@ class LLMAnalyzer:
             logger.error(f"正则表达式提取失败: {e}")
             return []
 
-    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict) -> Tuple[List[UserTitle], TokenUsage]:
+    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict, umo: str = None) -> Tuple[List[UserTitle], TokenUsage]:
         """使用LLM分析用户称号"""
         try:
             # 准备用户数据
@@ -430,12 +420,7 @@ class LLMAnalyzer:
 """
 
             # 调用LLM
-            provider = self.context.get_using_provider()
-            if not provider:
-                logger.warning("未配置LLM提供商，跳过用户称号分析")
-                return [], TokenUsage()
-
-            response = await self._call_provider_with_retry(provider, prompt, max_tokens=1500, temperature=0.5)
+            response = await self._call_provider_with_retry(None, prompt, max_tokens=1500, temperature=0.5, umo=umo)
             if response is None:
                 logger.error("用户称号分析调用LLM失败: provider返回None（重试失败）")
                 return [], TokenUsage()
@@ -477,7 +462,7 @@ class LLMAnalyzer:
             logger.error(f"用户称号分析失败: {e}")
             return [], TokenUsage()
 
-    async def analyze_golden_quotes(self, messages: List[Dict]) -> Tuple[List[GoldenQuote], TokenUsage]:
+    async def analyze_golden_quotes(self, messages: List[Dict], umo: str = None) -> Tuple[List[GoldenQuote], TokenUsage]:
         """使用LLM分析群聊金句"""
         try:
             # 提取有趣的文本消息
@@ -538,12 +523,7 @@ class LLMAnalyzer:
 """
 
             # 调用LLM
-            provider = self.context.get_using_provider()
-            if not provider:
-                logger.warning("未配置LLM提供商，跳过金句分析")
-                return [], TokenUsage()
-
-            response = await self._call_provider_with_retry(provider, prompt, max_tokens=1500, temperature=0.7)
+            response = await self._call_provider_with_retry(None, prompt, max_tokens=1500, temperature=0.7, umo=umo)
             if response is None:
                 logger.error("金句分析调用LLM失败: provider返回None（重试失败）")
                 return [], TokenUsage()
