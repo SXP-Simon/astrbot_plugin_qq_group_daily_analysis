@@ -157,9 +157,8 @@ class AutoScheduler:
     async def _perform_auto_analysis_for_group_with_timeout(self, group_id: str):
         """为指定群执行自动分析（带超时控制）"""
         try:
-            # 为每个群聊设置独立的超时时间（20分钟）
-            async with asyncio.timeout(1200):
-                await self._perform_auto_analysis_for_group(group_id)
+            # 为每个群聊设置独立的超时时间（20分钟）- 使用 asyncio.wait_for 兼容所有 Python 版本
+            await asyncio.wait_for(self._perform_auto_analysis_for_group(group_id), timeout=1200)
         except asyncio.TimeoutError:
             logger.error(f"群 {group_id} 分析超时（20分钟），跳过该群分析")
         except Exception as e:

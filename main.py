@@ -79,7 +79,7 @@ class QQGroupDailyAnalysis(Star):
                 logger.info(f"Bot管理器状态: {status}")
 
         except Exception as e:
-            logger.error(f"延迟启动调度器失败: {e}")
+            logger.debug(f"延迟启动调度器失败，可能由于短时间内多次更新插件配置: {e}")
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
