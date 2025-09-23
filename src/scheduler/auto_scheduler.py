@@ -206,7 +206,7 @@ class AutoScheduler:
 
                 # 进行分析 - 构造正确的 unified_msg_origin
                 platform_id = self._get_platform_id()
-                umo = f"{platform_id}:group:{group_id}" if platform_id else None
+                umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else None
                 analysis_result = await self.analyzer.analyze_messages(messages, group_id, umo)
                 if not analysis_result:
                     logger.error(f"群 {group_id} 分析失败")
