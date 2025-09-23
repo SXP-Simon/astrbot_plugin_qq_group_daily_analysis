@@ -79,24 +79,47 @@ class QQGroupDailyAnalysis(Star):
                 logger.info(f"Bot管理器状态: {status}")
 
         except Exception as e:
-            logger.error(f"延迟启动调度器失败: {e}")
+            logger.debug(f"延迟启动调度器失败，可能由于短时间内多次更新插件配置: {e}")
 
-
-
-
-    async def _reload_config_and_restart_scheduler(self):
-        """重新加载配置并重启调度器"""
+    async def terminate(self):
+        """插件被卸载/停用时调用，清理资源"""
         try:
-            # 重新加载配置
-            config_manager.reload_config()
-            logger.info(f"重新加载配置: 自动分析={config_manager.get_enable_auto_analysis()}")
-
-            # 重启调度器
-            await auto_scheduler.restart_scheduler()
-            logger.info("配置重载和调度器重启完成")
-
+            logger.info("开始清理QQ群日常分析插件资源...")
+            
+            global auto_scheduler, bot_manager, message_analyzer, report_generator, config_manager
+            
+            # 停止自动调度器
+            if auto_scheduler:
+                logger.info("正在停止自动调度器...")
+                await auto_scheduler.stop_scheduler()
+                logger.info("自动调度器已停止")
+            
+            # 清理bot管理器资源
+            # if bot_manager:
+            #     logger.info("正在清理bot管理器资源...")
+            #     # 如果有其他需要清理的资源，可以在这里添加
+                
+            # # 清理消息分析器资源
+            # if message_analyzer:
+            #     logger.info("正在清理消息分析器资源...")
+            #     # 如果有其他需要清理的资源，可以在这里添加
+                
+            # # 清理报告生成器资源  
+            # if report_generator:
+            #     logger.info("正在清理报告生成器资源...")
+            #     # 如果有其他需要清理的资源，可以在这里添加
+                
+            # 重置全局变量
+            auto_scheduler = None
+            bot_manager = None
+            message_analyzer = None
+            report_generator = None
+            config_manager = None
+            
+            logger.info("QQ群日常分析插件资源清理完成")
+            
         except Exception as e:
-            logger.error(f"重新加载配置失败: {e}")
+            logger.error(f"插件资源清理失败: {e}")
 
     @filter.command("群分析")
     @filter.permission_type(PermissionType.ADMIN)
