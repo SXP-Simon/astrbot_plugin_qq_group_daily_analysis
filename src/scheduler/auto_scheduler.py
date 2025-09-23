@@ -114,64 +114,123 @@ class AutoScheduler:
                 await asyncio.sleep(300)
 
     async def _run_auto_analysis(self):
-        """执行自动分析"""
+        """执行自动分析 - 并发处理所有群聊"""
         try:
-            logger.info("开始执行自动群聊分析")
+            logger.info("开始执行自动群聊分析（并发模式）")
 
-            # 为每个启用的群执行分析
             enabled_groups = self.config_manager.get_enabled_groups()
+            if not enabled_groups:
+                logger.info("没有启用的群聊需要分析")
+                return
+
+            logger.info(f"将为 {len(enabled_groups)} 个群聊并发执行分析: {enabled_groups}")
+            
+            # 创建并发任务 - 为每个群聊创建独立的分析任务
+            analysis_tasks = []
             for group_id in enabled_groups:
-                try:
-                    logger.info(f"为群 {group_id} 执行自动分析")
-                    await self._perform_auto_analysis_for_group(group_id)
-                except Exception as e:
-                    logger.error(f"群 {group_id} 自动分析失败: {e}")
+                task = asyncio.create_task(
+                    self._perform_auto_analysis_for_group_with_timeout(group_id),
+                    name=f"analysis_group_{group_id}"
+                )
+                analysis_tasks.append(task)
+            
+            # 并发执行所有分析任务，使用 return_exceptions=True 确保单个任务失败不影响其他任务
+            results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
+            
+            # 统计执行结果
+            success_count = 0
+            error_count = 0
+            
+            for i, result in enumerate(results):
+                group_id = enabled_groups[i]
+                if isinstance(result, Exception):
+                    logger.error(f"群 {group_id} 分析任务异常: {result}")
+                    error_count += 1
+                else:
+                    success_count += 1
+            
+            logger.info(f"并发分析完成 - 成功: {success_count}, 失败: {error_count}, 总计: {len(enabled_groups)}")
 
         except Exception as e:
-            logger.error(f"自动分析执行失败: {e}")
+            logger.error(f"自动分析执行失败: {e}", exc_info=True)
 
-    async def _perform_auto_analysis_for_group(self, group_id: str):
-        """为指定群执行自动分析"""
+    async def _perform_auto_analysis_for_group_with_timeout(self, group_id: str):
+        """为指定群执行自动分析（带超时控制）"""
         try:
-            # 检查bot管理器状态
-            if not self.bot_manager.is_ready_for_auto_analysis():
-                status = self.bot_manager.get_status_info()
-                logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪 - {status}")
-                return
-
-            logger.info(f"开始为群 {group_id} 执行自动分析")
-
-            # 获取群聊消息
-            analysis_days = self.config_manager.get_analysis_days()
-            bot_instance = self.bot_manager.get_bot_instance()
-
-            messages = await self.message_handler.fetch_group_messages(bot_instance, group_id, analysis_days)
-                
-            if not messages:
-                logger.warning(f"群 {group_id} 未获取到足够的消息记录")
-                return
-
-            # 检查消息数量
-            min_threshold = self.config_manager.get_min_messages_threshold()
-            if len(messages) < min_threshold:
-                logger.warning(f"群 {group_id} 消息数量不足（{len(messages)}条），跳过分析")
-                return
-
-            logger.info(f"群 {group_id} 获取到 {len(messages)} 条消息，开始分析")
-
-            # 进行分析 - 构造正确的 unified_msg_origin
-            platform_id = self._get_platform_id()
-            umo = f"{platform_id}:group:{group_id}" if platform_id else None
-            analysis_result = await self.analyzer.analyze_messages(messages, group_id, umo)
-            if not analysis_result:
-                logger.error(f"群 {group_id} 分析失败")
-                return
-
-            # 生成并发送报告
-            await self._send_analysis_report(group_id, analysis_result)
-
+            # 为每个群聊设置独立的超时时间（20分钟）
+            async with asyncio.timeout(1200):
+                await self._perform_auto_analysis_for_group(group_id)
+        except asyncio.TimeoutError:
+            logger.error(f"群 {group_id} 分析超时（20分钟），跳过该群分析")
         except Exception as e:
-            logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
+            logger.error(f"群 {group_id} 分析任务执行失败: {e}")
+    
+    async def _perform_auto_analysis_for_group(self, group_id: str):
+        """为指定群执行自动分析（核心逻辑）"""
+        # 为每个群聊使用独立的锁，避免全局锁导致串行化
+        group_lock_key = f"analysis_{group_id}"
+        if not hasattr(self, '_group_locks'):
+            self._group_locks = {}
+        
+        if group_lock_key not in self._group_locks:
+            self._group_locks[group_lock_key] = asyncio.Lock()
+        
+        async with self._group_locks[group_lock_key]:
+            try:
+                start_time = asyncio.get_event_loop().time()
+                
+                # 检查bot管理器状态
+                if not self.bot_manager.is_ready_for_auto_analysis():
+                    status = self.bot_manager.get_status_info()
+                    logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪 - {status}")
+                    return
+
+                logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
+
+                # 获取群聊消息
+                analysis_days = self.config_manager.get_analysis_days()
+                bot_instance = self.bot_manager.get_bot_instance()
+
+                messages = await self.message_handler.fetch_group_messages(bot_instance, group_id, analysis_days)
+                    
+                if not messages:
+                    logger.warning(f"群 {group_id} 未获取到足够的消息记录")
+                    return
+
+                # 检查消息数量
+                min_threshold = self.config_manager.get_min_messages_threshold()
+                if len(messages) < min_threshold:
+                    logger.warning(f"群 {group_id} 消息数量不足（{len(messages)}条），跳过分析")
+                    return
+
+                logger.info(f"群 {group_id} 获取到 {len(messages)} 条消息，开始分析")
+
+                # 进行分析 - 构造正确的 unified_msg_origin
+                platform_id = self._get_platform_id()
+                umo = f"{platform_id}:group:{group_id}" if platform_id else None
+                analysis_result = await self.analyzer.analyze_messages(messages, group_id, umo)
+                if not analysis_result:
+                    logger.error(f"群 {group_id} 分析失败")
+                    return
+
+                # 生成并发送报告
+                await self._send_analysis_report(group_id, analysis_result)
+                
+                # 记录执行时间
+                end_time = asyncio.get_event_loop().time()
+                execution_time = end_time - start_time
+                logger.info(f"群 {group_id} 分析完成，耗时: {execution_time:.2f}秒")
+
+            except Exception as e:
+                logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
+            
+            finally:
+                # 清理群聊锁资源（可选，防止内存泄漏）
+                if hasattr(self, '_group_locks') and len(self._group_locks) > 50:
+                    old_locks = list(self._group_locks.keys())[:10]
+                    for lock_key in old_locks:
+                        if not self._group_locks[lock_key].locked():
+                            del self._group_locks[lock_key]
 
     async def _send_analysis_report(self, group_id: str, analysis_result: dict):
         """发送分析报告到群"""
