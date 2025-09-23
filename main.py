@@ -82,22 +82,6 @@ class QQGroupDailyAnalysis(Star):
             logger.error(f"延迟启动调度器失败: {e}")
 
 
-
-
-    async def _reload_config_and_restart_scheduler(self):
-        """重新加载配置并重启调度器"""
-        try:
-            # 重新加载配置
-            config_manager.reload_config()
-            logger.info(f"重新加载配置: 自动分析={config_manager.get_enable_auto_analysis()}")
-
-            # 重启调度器
-            await auto_scheduler.restart_scheduler()
-            logger.info("配置重载和调度器重启完成")
-
-        except Exception as e:
-            logger.error(f"重新加载配置失败: {e}")
-
     @filter.command("群分析")
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(self, event: AiocqhttpMessageEvent, days: Optional[int] = None):
