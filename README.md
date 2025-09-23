@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v2.4.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v2.5.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -162,7 +162,9 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 ### v2.4.0
 - 纠正无法正确获取当前使用的模型情况 
 
-
+### v2.5.0
+- 处理了自动分析器的不唯一问题
+- 自动分析器并发处理群聊
 
 ## 许可证
 
