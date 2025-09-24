@@ -253,14 +253,14 @@ class LLMAnalyzer:
                 else:
                     logger.warning(f"话题分析响应中未找到JSON格式，响应内容: {result_text[:200]}...")
             except json.JSONDecodeError as e:
-                logger.debug(f"话题分析JSON解析失败: {e}")
+                logger.warming(f"话题分析JSON解析失败: {e}")
                 logger.debug(f"修复后的JSON: {json_text if 'json_text' in locals() else 'N/A'}")
                 logger.debug(f"原始响应: {result_text}")
 
                 # 如果JSON解析失败，尝试用正则表达式提取话题信息
                 topics = self._extract_topics_with_regex(result_text, max_topics)
                 if topics:
-                    logger.info(f"正则表达式提取成功，获得 {len(topics)} 个话题")
+                    logger.info(f"正则表达式提取成功，获得 {len(topics)} 个话题，话题分析 warming 可忽略")
                     return topics, token_usage
                 else:
                     # 最后的降级方案
@@ -467,8 +467,8 @@ class LLMAnalyzer:
                     titles_data = json.loads(json_match.group())
                     return [UserTitle(**title) for title in titles_data], token_usage
             except Exception as e:
-                logger.debug(f"用户称号分析JSON解析失败: {e}")
-                logger.debug(f"原始响应: {result_text}")
+                logger.warming(f"用户称号分析JSON解析失败: {e}")
+                logger.warming(f"原始响应: {result_text}")
 
             return [], token_usage
 
@@ -570,8 +570,8 @@ class LLMAnalyzer:
                     quotes_data = json.loads(json_match.group())
                     return [GoldenQuote(**quote) for quote in quotes_data[:max_golden_quotes]], token_usage
             except Exception as e:
-                logger.debug(f"金句分析JSON解析失败: {e}")
-                logger.debug(f"原始响应: {result_text}")
+                logger.warming(f"金句分析JSON解析失败: {e}")
+                logger.warming(f"原始响应: {result_text}")
 
             return [], token_usage
 
