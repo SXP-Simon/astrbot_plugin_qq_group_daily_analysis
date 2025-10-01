@@ -92,18 +92,17 @@ class AutoScheduler:
 
                 # 执行自动分析
                 if self.config_manager.get_enable_auto_analysis():
-                    # 检查是否今天已经执行过
-                    today = now.date()
-                    if self.last_execution_date == today:
-                        logger.info(f"今天 {today} 已经执行过自动分析，跳过执行")
+                    # 检查今天是否已经执行过，防止重复执行
+                    if self.last_execution_date == target_time.date():
+                        logger.info(f"今天 {target_time.date()} 已经执行过自动分析，跳过执行")
                         # 等待到明天再检查
                         await asyncio.sleep(3600)  # 等待1小时后再检查
                         continue
 
                     logger.info("开始执行定时分析")
                     await self._run_auto_analysis()
-                    self.last_execution_date = today  # 记录执行日期
-                    logger.info(f"定时分析执行完成，记录执行日期: {today}")
+                    self.last_execution_date = target_time.date()  # 记录执行日期
+                    logger.info(f"定时分析执行完成，记录执行日期: {self.last_execution_date}")
                 else:
                     logger.info("自动分析已禁用，跳过执行")
                     break
