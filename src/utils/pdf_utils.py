@@ -48,6 +48,45 @@ class PDFInstaller:
             return f"❌ 安装过程中出错: {str(e)}"
 
     @staticmethod
+    async def install_system_deps():
+        """安装系统依赖（仅提供指导）"""
+        try:
+            logger.info("提供系统依赖安装指导...")
+            
+            if sys.platform.startswith('linux'):
+                return """💡 Linux 系统依赖安装指导:
+
+1. 安装 Chrome/Chromium 浏览器:
+   Ubuntu/Debian: sudo apt-get install chromium-browser
+   CentOS/RHEL: sudo yum install chromium
+   Arch Linux: sudo pacman -S chromium
+
+2. 安装完成后，重启 AstrBot
+
+3. 如果仍然有问题，请检查系统日志"""
+            
+            elif sys.platform.startswith('win'):
+                return """💡 Windows 系统依赖安装指导:
+
+1. 安装 Google Chrome 浏览器
+2. 重启 AstrBot
+3. 如果仍然有问题，请检查系统日志"""
+            
+            elif sys.platform.startswith('darwin'):
+                return """💡 macOS 系统依赖安装指导:
+
+1. 安装 Google Chrome 浏览器
+2. 重启 AstrBot
+3. 如果仍然有问题，请检查系统日志"""
+            
+            else:
+                return "💡 请安装 Chrome 或 Chromium 浏览器，然后重启 AstrBot"
+
+        except Exception as e:
+            logger.error(f"提供系统依赖指导时出错: {e}")
+            return f"❌ 提供指导时出错: {str(e)}"
+
+    @staticmethod
     def get_pdf_status(config_manager) -> str:
         """获取PDF功能状态"""
         if config_manager.pyppeteer_available:

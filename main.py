@@ -278,9 +278,13 @@ class QQGroupDailyAnalysis(Star):
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
         try:
-            # 使用模块化的PDF安装器
+            # 安装 pyppeteer
             result = await PDFInstaller.install_pyppeteer(config_manager)
             yield event.plain_result(result)
+            
+            # 提供系统依赖安装指导
+            system_deps_result = await PDFInstaller.install_system_deps()
+            yield event.plain_result(system_deps_result)
 
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
