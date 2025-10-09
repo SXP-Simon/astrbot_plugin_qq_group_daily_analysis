@@ -148,8 +148,8 @@ class BaseAnalyzer(ABC):
                 data_objects = self.create_data_objects(regex_data)
                 return data_objects, token_usage
             else:
-                # 最后的降级方案
-                logger.warning(f"{self.get_data_type()}正则表达式提取失败，返回空列表")
+                # 最后的降级方案 - 两种方法都失败
+                logger.error(f"{self.get_data_type()}分析失败: JSON解析和正则表达式提取均未成功，返回空列表")
                 return [], token_usage
                 
         except Exception as e:

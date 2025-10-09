@@ -39,7 +39,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         构建金句分析提示词
         
         Args:
-            messages: 圣经的文本消息列表
+            messages: 群聊的文本消息列表
             
         Returns:
             提示词字符串

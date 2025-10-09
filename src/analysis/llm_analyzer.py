@@ -128,18 +128,3 @@ class LLMAnalyzer:
         """
         return fix_json(text)
     
-    def _extract_topics_with_regex(self, result_text: str, max_topics: int) -> List[SummaryTopic]:
-        """
-        向后兼容的话题正则提取方法
-        现在委托给json_utils模块处理
-        
-        Args:
-            result_text: 需要提取的文本
-            max_topics: 最大话题数量
-            
-        Returns:
-            话题对象列表
-        """
-        
-        topics_data = extract_topics_with_regex(result_text, max_topics)
-        return [SummaryTopic(**topic) for topic in topics_data]
