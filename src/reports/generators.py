@@ -11,6 +11,7 @@ from pathlib import Path
 from astrbot.api import logger
 from .templates import HTMLTemplates
 from ..visualization.activity_charts import ActivityVisualizer
+import asyncio
 
 
 class ReportGenerator:
@@ -297,7 +298,7 @@ class ReportGenerator:
             # 尝试启动浏览器，如果 Chromium 不存在会自动下载
             logger.info("启动浏览器进行 PDF 转换")
 
-            # 配置浏览器启动参数，避免 Chromium 下载问题
+            # 配置浏览器启动参数，提高稳定性，避免意外关闭
             launch_options = {
                 'headless': True,
                 'args': [
@@ -307,61 +308,132 @@ class ReportGenerator:
                     '--disable-gpu',
                     '--no-first-run',
                     '--disable-extensions',
-                    '--disable-default-apps'
+                    '--disable-default-apps',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--disable-features=TranslateUI',
+                    '--disable-ipc-flooding-protection',
+                    '--disable-background-networking',
+                    '--enable-features=NetworkService,NetworkServiceInProcess',
+                    '--force-color-profile=srgb',
+                    '--metrics-recording-only',
+                    '--disable-breakpad',
+                    '--disable-component-extensions-with-background-pages',
+                    '--disable-features=Translate,BackForwardCache,AcceptCHFrame,AvoidUnnecessaryBeforeUnloadCheckSync',
+                    '--enable-automation',
+                    '--password-store=basic',
+                    '--use-mock-keychain',
+                    '--export-tagged-pdf'
                 ]
             }
 
-            # 如果是 Windows 系统，尝试使用系统 Chrome
+            # 检测系统 Chrome/Chromium 路径
+            chrome_paths = []
+            
             if sys.platform.startswith('win'):
-                # 常见的 Chrome 安装路径
+                # Windows 系统 Chrome 安装路径
                 chrome_paths = [
                     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                     r"C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe".format(os.environ.get('USERNAME', '')),
                 ]
+            elif sys.platform.startswith('linux'):
+                # Linux 系统 Chrome/Chromium 路径
+                chrome_paths = [
+                    '/usr/bin/google-chrome',
+                    '/usr/bin/google-chrome-stable',
+                    '/usr/bin/chromium',
+                    '/usr/bin/chromium-browser',
+                    '/snap/bin/chromium',
+                ]
+            elif sys.platform.startswith('darwin'):
+                # macOS 系统 Chrome 路径
+                chrome_paths = [
+                    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+                    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+                ]
 
-                for chrome_path in chrome_paths:
-                    if Path(chrome_path).exists():
-                        launch_options['executablePath'] = chrome_path
-                        logger.info(f"使用系统 Chrome: {chrome_path}")
-                        break
+            # 查找可用的浏览器
+            for chrome_path in chrome_paths:
+                if Path(chrome_path).exists():
+                    launch_options['executablePath'] = chrome_path
+                    logger.info(f"使用系统浏览器: {chrome_path}")
+                    break
 
-            browser = await launch(**launch_options)
-            page = await browser.newPage()
+            # 尝试启动浏览器，最多重试3次
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f"尝试启动浏览器 (第 {attempt + 1} 次)")
+                    browser = await launch(**launch_options)
+                    break
+                except Exception as e:
+                    logger.warning(f"第 {attempt + 1} 次启动浏览器失败: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(2)  # 等待2秒后重试
+                    else:
+                        raise e
 
-            # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
-            await page.setContent(html_content)
-            # 等待页面加载完成
             try:
-                await page.waitForSelector('body', {'timeout': 10000})
-            except Exception:
-                # 如果等待失败，继续执行（可能页面已经加载完成）
-                pass
+                page = await browser.newPage()
 
-            # 导出 PDF
-            await page.pdf({
-                'path': output_path,
-                'format': 'A4',
-                'printBackground': True,
-                'margin': {
-                    'top': '10mm',
-                    'right': '10mm',
-                    'bottom': '10mm',
-                    'left': '10mm'
-                },
-                'scale': 0.8
-            })
+                # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
+                await page.setContent(html_content)
+                
+                # 等待页面加载完成
+                try:
+                    await page.waitForSelector('body', {'timeout': 15000})
+                except Exception:
+                    # 如果等待失败，继续执行（可能页面已经加载完成）
+                    logger.warning("等待页面加载超时，继续执行")
+                    pass
 
-            await browser.close()
-            logger.info(f"PDF 生成成功: {output_path}")
-            return True
+                # 等待额外时间确保页面完全渲染
+                await asyncio.sleep(2)
+
+                # 导出 PDF
+                await page.pdf({
+                    'path': output_path,
+                    'format': 'A4',
+                    'printBackground': True,
+                    'margin': {
+                        'top': '10mm',
+                        'right': '10mm',
+                        'bottom': '10mm',
+                        'left': '10mm'
+                    },
+                    'scale': 0.8,
+                    'displayHeaderFooter': False,
+                    'preferCSSPageSize': True
+                })
+
+                logger.info(f"PDF 生成成功: {output_path}")
+                return True
+
+            finally:
+                # 确保浏览器被关闭
+                try:
+                    await browser.close()
+                except Exception as e:
+                    logger.warning(f"关闭浏览器时出错: {e}")
 
         except Exception as e:
             error_msg = str(e)
             if "Chromium downloadable not found" in error_msg:
-                logger.error("Chromium 下载失败，建议安装 pyppeteer2 或使用系统 Chrome")
+                logger.error("Chromium 下载失败，建议安装系统 Chrome/Chromium")
+                logger.info("💡 Linux 系统建议: sudo apt-get install chromium-browser 或 sudo yum install chromium")
             elif "No usable sandbox" in error_msg:
                 logger.error("沙盒权限问题，已尝试禁用沙盒")
+            elif "Connection refused" in error_msg or "connect" in error_msg.lower():
+                logger.error("浏览器连接失败，请检查系统资源或尝试重启")
+            elif "executablePath" in error_msg and "not found" in error_msg:
+                logger.error("未找到系统浏览器，请安装 Chrome 或 Chromium")
+                logger.info("💡 安装建议: sudo apt-get install chromium-browser (Ubuntu/Debian) 或 sudo yum install chromium (CentOS/RHEL)")
+            elif "Browser closed unexpectedly" in error_msg:
+                logger.error("浏览器意外关闭，可能是由于内存不足或系统资源限制")
+                logger.info("💡 建议: 检查系统内存，或重启 AstrBot 后重试")
             else:
                 logger.error(f"HTML 转 PDF 失败: {e}")
+                logger.info("💡 可以尝试使用 /安装PDF 命令重新安装依赖，或检查系统日志获取更多信息")
             return False
