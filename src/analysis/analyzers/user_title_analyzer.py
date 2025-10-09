@@ -166,7 +166,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                     continue
                 
                 # 分析用户特征
-                night_messages = sum(stats["hours"][h] for h in range(0, 6))
+                night_messages = sum(stats["hours"][h] for h in range(6))
                 day_messages = stats["message_count"] - night_messages
                 avg_chars = stats["char_count"] / stats["message_count"] if stats["message_count"] > 0 else 0
                 
