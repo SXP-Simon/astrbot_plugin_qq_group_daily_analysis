@@ -82,6 +82,18 @@ async def call_provider_with_retry(context, config_manager, prompt: str, max_tok
                         return CustomResponse()
             else:
                 # 确保使用当前指定的模型
+                if provider is None:
+                    provider = context.get_using_provider(umo=umo)
+                    provider_id = 'unknown'
+                    if provider:
+                        try:
+                            meta = provider.meta()
+                            provider_id = meta.id
+                        except Exception as e:
+                            logger.debug(f"获取提供商ID失败: {e}")
+                    logger.info(f"获取到的 provider ID: {provider_id}")
+                    if not provider or provider_id == 'unknown':
+                        logger.warning(f"获取的提供商不正确 (Provider ID: {provider_id})")
                 provider = context.get_using_provider(umo=umo)
                 provider_id = 'unknown'
                 if provider:
