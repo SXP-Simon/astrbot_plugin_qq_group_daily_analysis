@@ -62,8 +62,14 @@ def fix_json(text: str) -> str:
         # 1. 修复缺失的逗号
         text = re.sub(r'}\s*{', '}, {', text)
         
-        # 2. 确保字段名有引号
-        text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', text)
+        # 2. 确保字段名有引号（仅在对象开始或逗号后，避免破坏字符串值）
+        def quote_field_names(match):
+            prefix = match.group(1)
+            key = match.group(2)
+            return f'{prefix}"{key}":'
+        
+        # 只在 { 或 , 后面匹配字段名，避免在字符串值中误匹配
+        text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', quote_field_names, text)
         
         # 3. 移除多余的逗号
         text = re.sub(r',\s*}', '}', text)

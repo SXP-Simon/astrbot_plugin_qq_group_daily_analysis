@@ -56,8 +56,8 @@ class TopicAnalyzer(BaseAnalyzer):
                     text = content.get("data", {}).get("text", "").strip()
                     if text and len(text) > 2 and not text.startswith("/"):
                         # 清理消息内容
-                        text = text.replace('"', '"').replace('"', '"')
-                        text = text.replace(''', "'").replace(''', "'")
+                        text = text.replace('“', '"').replace('”', '"')
+                        text = text.replace('‘', "'").replace('’', "'")
                         text = text.replace('\n', ' ').replace('\r', ' ')
                         text = text.replace('\t', ' ')
                         text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
