@@ -164,6 +164,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> List[Dict]:
                 "detail": detail
             })
         
+        logger.info(f"话题正则表达式提取成功，提取到 {len(topics)} 条有效话题内容")
         return topics
         
     except Exception as e:
@@ -212,6 +213,7 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> List[Dic
                 "reason": reason
             })
         
+        logger.info(f"用户称号正则表达式提取成功，提取到 {len(titles)} 条有效用户称号")
         return titles
         
     except Exception as e:
@@ -257,6 +259,7 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> List[D
                 "reason": reason
             })
         
+        logger.info(f"金句正则表达式提取成功，提取到 {len(quotes)} 条有效金句")
         return quotes
         
     except Exception as e:
