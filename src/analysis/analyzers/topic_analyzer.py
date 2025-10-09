@@ -177,6 +177,40 @@ class TopicAnalyzer(BaseAnalyzer):
             logger.error(f"创建话题对象失败: {e}")
             return []
     
+    def extract_text_messages(self, messages: List[Dict]) -> List[Dict]:
+        """
+        从群聊消息中提取文本消息
+        
+        Args:
+            messages: 群聊消息列表
+            
+        Returns:
+            提取的文本消息列表
+        """
+        text_messages = []
+        for msg in messages:
+            sender = msg.get("sender", {})
+            nickname = sender.get("nickname", "") or sender.get("card", "")
+            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
+            
+            for content in msg.get("message", []):
+                if content.get("type") == "text":
+                    text = content.get("data", {}).get("text", "").strip()
+                    if text and len(text) > 2 and not text.startswith("/"):
+                        # 清理消息内容
+                        text = text.replace('""', '"').replace('""', '"')
+                        text = text.replace(''', "'").replace(''', "'")
+                        text = text.replace('\n', ' ').replace('\r', ' ')
+                        text = text.replace('\t', ' ')
+                        text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+                        text_messages.append({
+                            "sender": nickname,
+                            "time": msg_time,
+                            "content": text.strip()
+                        })
+        
+        return text_messages
+    
     async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[SummaryTopic], TokenUsage]:
         """
         分析群聊话题
