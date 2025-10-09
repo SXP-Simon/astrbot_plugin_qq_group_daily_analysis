@@ -156,9 +156,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> List[Dict]:
             detail = detail.replace('\\"', '"').replace('\\n', ' ').replace('\\t', ' ')
             
             # 解析参与者列表
-            contributors = []
-            for contrib in re.findall(r'"([^"]+)"', contributors_str):
-                contributors.append(contrib.strip())
+            contributors = [contrib.strip() for contrib in re.findall(r'"([^"]+)"', contributors_str)]
             
             if not contributors:
                 contributors = ["群友"]

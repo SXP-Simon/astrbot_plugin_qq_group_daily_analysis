@@ -76,8 +76,6 @@ class TopicAnalyzer(BaseAnalyzer):
             for msg in text_messages
         ])
         
-        max_topics = self.get_max_count()
-        
         prompt = f"""
 你是一个帮我进行群聊信息总结的助手，生成总结内容时，你需要严格遵守下面的几个准则：
 请分析接下来提供的群聊记录，提取出最多{max_topics}个主要话题。

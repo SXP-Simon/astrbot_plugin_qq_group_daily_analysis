@@ -53,8 +53,6 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             for msg in messages
         ])
         
-        max_golden_quotes = self.get_max_count()
-        
         prompt = f"""
 请从以下群聊记录中挑选出{max_golden_quotes}句最具冲击力、最令人惊叹的"金句"。这些金句需满足：
 - 核心标准：**逆天的神人发言**，即具备颠覆常识的脑洞、逻辑跳脱的表达或强烈反差感的原创内容
