@@ -324,7 +324,11 @@ class ReportGenerator:
                     '--enable-automation',
                     '--password-store=basic',
                     '--use-mock-keychain',
-                    '--export-tagged-pdf'
+                    '--export-tagged-pdf',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor',
+                    '--single-process',  # 单进程模式，提高稳定性
+                    '--disable-blink-features=AutomationControlled'  # 隐藏自动化特征
                 ]
             }
 
@@ -333,10 +337,12 @@ class ReportGenerator:
             
             if sys.platform.startswith('win'):
                 # Windows 系统 Chrome 安装路径
+                username = os.environ.get('USERNAME', '')
                 chrome_paths = [
                     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                    r"C:\Users\{}\AppData\Local\Google\Chrome\Application\chrome.exe".format(os.environ.get('USERNAME', '')),
+                    rf"C:\Users\{username}\AppData\Local\Google\Chrome\Application\chrome.exe",
+                    r"C:\Program Files\Chromium\Application\chrome.exe",
                 ]
             elif sys.platform.startswith('linux'):
                 # Linux 系统 Chrome/Chromium 路径
@@ -346,6 +352,7 @@ class ReportGenerator:
                     '/usr/bin/chromium',
                     '/usr/bin/chromium-browser',
                     '/snap/bin/chromium',
+                    '/usr/bin/chromium-freeworld',
                 ]
             elif sys.platform.startswith('darwin'):
                 # macOS 系统 Chrome 路径
@@ -363,37 +370,80 @@ class ReportGenerator:
 
             # 尝试启动浏览器，最多重试3次
             max_retries = 3
+            browser = None
             for attempt in range(max_retries):
                 try:
                     logger.info(f"尝试启动浏览器 (第 {attempt + 1} 次)")
+                    # 添加更多内存友好的启动选项
+                    launch_options.update({
+                        'dumpio': True,  # 输出浏览器日志以便调试
+                        'autoClose': False,  # 防止自动关闭
+                        'handleSIGINT': False,
+                        'handleSIGTERM': False,
+                        'handleSIGHUP': False
+                    })
                     browser = await launch(**launch_options)
+                    logger.info("浏览器启动成功")
                     break
                 except Exception as e:
                     logger.warning(f"第 {attempt + 1} 次启动浏览器失败: {e}")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(2)  # 等待2秒后重试
+                        await asyncio.sleep(3)  # 增加等待时间到3秒
+                        # 尝试减少内存占用的启动选项
+                        launch_options['args'].extend([
+                            '--disable-images',
+                            '--disable-javascript',
+                            '--disable-plugins',
+                            '--disable-webgl',
+                            '--disable-threaded-animation',
+                            '--disable-threaded-scrolling',
+                            '--disable-sync',
+                            '--disable-notifications',
+                            '--disable-default-apps',
+                            '--mute-audio',
+                            '--no-zygote',
+                            '--disable-gpu-sandbox',
+                            '--disable-software-rasterizer'
+                        ])
                     else:
-                        raise e
+                        logger.error(f"多次尝试后浏览器启动失败，无法生成 PDF， {e}")
+                        return False
+
+            if not browser:
+                logger.error("浏览器启动失败，无法继续")
+                return False
 
             try:
+                # 创建新页面，设置更合理的超时时间
                 page = await browser.newPage()
-
-                # 设置页面内容 (pyppeteer 1.0.2 版本的 API)
-                await page.setContent(html_content)
                 
-                # 等待页面加载完成
+                # 设置页面视口，减少内存占用
+                await page.setViewport({
+                    'width': 1024,
+                    'height': 768,
+                    'deviceScaleFactor': 1,
+                    'isMobile': False,
+                    'hasTouch': False,
+                    'isLandscape': False
+                })
+
+                # 设置页面内容，使用更安全的加载方式
+                logger.info("开始设置页面内容...")
+                await page.setContent(html_content, {'waitUntil': 'domcontentloaded', 'timeout': 30000})
+                
+                # 等待页面基本加载完成，但不要太长时间
                 try:
-                    await page.waitForSelector('body', {'timeout': 15000})
+                    await page.waitForSelector('body', {'timeout': 5000})
+                    logger.info("页面基本加载完成")
                 except Exception:
-                    # 如果等待失败，继续执行（可能页面已经加载完成）
                     logger.warning("等待页面加载超时，继续执行")
-                    pass
+                
+                # 减少等待时间，避免内存累积
+                await asyncio.sleep(1)
 
-                # 等待额外时间确保页面完全渲染
-                await asyncio.sleep(2)
-
-                # 导出 PDF
-                await page.pdf({
+                # 导出 PDF，使用更保守的设置
+                logger.info("开始生成PDF...")
+                pdf_options = {
                     'path': output_path,
                     'format': 'A4',
                     'printBackground': True,
@@ -405,18 +455,44 @@ class ReportGenerator:
                     },
                     'scale': 0.8,
                     'displayHeaderFooter': False,
-                    'preferCSSPageSize': True
-                })
-
+                    'preferCSSPageSize': True,
+                    'timeout': 60000  # 增加PDF生成超时时间到60秒
+                }
+                
+                await page.pdf(pdf_options)
                 logger.info(f"PDF 生成成功: {output_path}")
                 return True
 
+            except Exception as e:
+                logger.error(f"PDF生成过程中出错: {e}")
+                return False
+                
             finally:
-                # 确保浏览器被关闭
-                try:
-                    await browser.close()
-                except Exception as e:
-                    logger.warning(f"关闭浏览器时出错: {e}")
+                # 确保浏览器被正确关闭
+                if browser:
+                    try:
+                        logger.info("正在关闭浏览器...")
+                        # 先关闭所有页面
+                        pages = await browser.pages()
+                        for page in pages:
+                            try:
+                                await page.close()
+                            except:
+                                pass
+                        
+                        # 等待一小段时间让资源释放
+                        await asyncio.sleep(0.5)
+                        
+                        # 关闭浏览器
+                        await browser.close()
+                        logger.info("浏览器已关闭")
+                    except Exception as e:
+                        logger.warning(f"关闭浏览器时出错: {e}")
+                        # 强制清理
+                        try:
+                            await browser.disconnect()
+                        except:
+                            pass
 
         except Exception as e:
             error_msg = str(e)
