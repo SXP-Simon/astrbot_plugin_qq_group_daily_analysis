@@ -64,6 +64,11 @@ class TopicAnalyzer(BaseAnalyzer):
                 
             try:
                 sender = msg.get("sender", {})
+                # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
+                if not isinstance(sender, dict):
+                    logger.warning(f"build_prompt 跳过sender非字典类型的消息: {type(sender)} - {sender}")
+                    continue
+                    
                 nickname = sender.get("nickname", "") or sender.get("card", "")
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
@@ -239,6 +244,11 @@ class TopicAnalyzer(BaseAnalyzer):
                 
             try:
                 sender = msg.get("sender", {})
+                # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
+                if not isinstance(sender, dict):
+                    logger.warning(f"extract_text_messages 跳过sender非字典类型的消息: {type(sender)} - {sender}")
+                    continue
+                    
                 nickname = sender.get("nickname", "") or sender.get("card", "")
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
