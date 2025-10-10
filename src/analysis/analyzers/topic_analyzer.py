@@ -44,32 +44,49 @@ class TopicAnalyzer(BaseAnalyzer):
         Returns:
             提示词字符串
         """
+        logger.debug(f"build_prompt 开始处理，输入消息数量: {len(messages) if messages else 0}")
+        logger.debug(f"输入消息类型: {type(messages)}")
+        
+        # 验证输入数据格式
+        if not isinstance(messages, list):
+            logger.error(f"build_prompt 期望列表，但收到: {type(messages)}")
+            return ""
+        
         # 提取文本消息
         text_messages = []
-        for msg in messages:
+        for i, msg in enumerate(messages):
+            logger.debug(f"build_prompt 处理第 {i+1} 条消息，类型: {type(msg)}")
+            
             # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
             if not isinstance(msg, dict):
+                logger.warning(f"build_prompt 跳过非字典类型的消息: {type(msg)} - {msg}")
                 continue
                 
-            sender = msg.get("sender", {})
-            nickname = sender.get("nickname", "") or sender.get("card", "")
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-            
-            for content in msg.get("message", []):
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    if text and len(text) > 2 and not text.startswith("/"):
-                        # 清理消息内容
-                        text = text.replace('“', '"').replace('”', '"')
-                        text = text.replace('‘', "'").replace('’', "'")
-                        text = text.replace('\n', ' ').replace('\r', ' ')
-                        text = text.replace('\t', ' ')
-                        text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
-                        text_messages.append({
-                            "sender": nickname,
-                            "time": msg_time,
-                            "content": text.strip()
-                        })
+            try:
+                sender = msg.get("sender", {})
+                nickname = sender.get("nickname", "") or sender.get("card", "")
+                msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
+                
+                for content in msg.get("message", []):
+                    if content.get("type") == "text":
+                        text = content.get("data", {}).get("text", "").strip()
+                        if text and len(text) > 2 and not text.startswith("/"):
+                            # 清理消息内容
+                            text = text.replace('“', '"').replace('”', '"')
+                            text = text.replace('‘', "'").replace('’', "'")
+                            text = text.replace('\n', ' ').replace('\r', ' ')
+                            text = text.replace('\t', ' ')
+                            text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+                            text_messages.append({
+                                "sender": nickname,
+                                "time": msg_time,
+                                "content": text.strip()
+                            })
+            except Exception as e:
+                logger.error(f"build_prompt 处理第 {i+1} 条消息时出错: {e}", exc_info=True)
+                continue
+        
+        logger.debug(f"build_prompt 提取到 {len(text_messages)} 条文本消息")
         
         if not text_messages:
             return ""
@@ -147,43 +164,57 @@ class TopicAnalyzer(BaseAnalyzer):
         Returns:
             SummaryTopic对象列表
         """
+        logger.debug(f"create_data_objects 开始处理，输入数据数量: {len(topics_data) if topics_data else 0}")
+        logger.debug(f"输入数据类型: {type(topics_data)}")
+        
         try:
             topics = []
             max_topics = self.get_max_count()
             
-            for topic_data in topics_data[:max_topics]:
+            logger.debug(f"处理前 {max_topics} 条话题数据")
+            
+            for i, topic_data in enumerate(topics_data[:max_topics]):
+                logger.debug(f"处理第 {i+1} 条话题数据，类型: {type(topic_data)}")
+                
                 # 确保topic_data是字典类型，避免'str' object has no attribute 'get'错误
                 if not isinstance(topic_data, dict):
                     logger.warning(f"跳过非字典类型的话题数据: {type(topic_data)} - {topic_data}")
                     continue
                     
-                # 确保数据格式正确
-                topic_name = topic_data.get("topic", "").strip()
-                contributors = topic_data.get("contributors", [])
-                detail = topic_data.get("detail", "").strip()
-                
-                # 验证必要字段
-                if not topic_name or not detail:
-                    logger.warning(f"话题数据格式不完整，跳过: {topic_data}")
+                try:
+                    # 确保数据格式正确
+                    topic_name = topic_data.get("topic", "").strip()
+                    contributors = topic_data.get("contributors", [])
+                    detail = topic_data.get("detail", "").strip()
+                    
+                    logger.debug(f"话题数据 - 名称: {topic_name}, 参与者: {contributors}, 详情: {detail[:50]}...")
+                    
+                    # 验证必要字段
+                    if not topic_name or not detail:
+                        logger.warning(f"话题数据格式不完整，跳过: {topic_data}")
+                        continue
+                    
+                    # 确保参与者列表有效
+                    if not contributors or not isinstance(contributors, list):
+                        contributors = ["群友"]
+                    else:
+                        # 清理参与者名称
+                        contributors = [str(c).strip() for c in contributors if c and str(c).strip()] or ["群友"]
+                    
+                    topics.append(SummaryTopic(
+                        topic=topic_name,
+                        contributors=contributors[:5],  # 最多5个参与者
+                        detail=detail
+                    ))
+                except Exception as e:
+                    logger.error(f"处理第 {i+1} 条话题数据时出错: {e}", exc_info=True)
                     continue
-                
-                # 确保参与者列表有效
-                if not contributors or not isinstance(contributors, list):
-                    contributors = ["群友"]
-                else:
-                    # 清理参与者名称
-                    contributors = [str(c).strip() for c in contributors if c and str(c).strip()] or ["群友"]
-                
-                topics.append(SummaryTopic(
-                    topic=topic_name,
-                    contributors=contributors[:5],  # 最多5个参与者
-                    detail=detail
-                ))
             
+            logger.debug(f"create_data_objects 完成，创建了 {len(topics)} 个话题对象")
             return topics
             
         except Exception as e:
-            logger.error(f"创建话题对象失败: {e}")
+            logger.error(f"创建话题对象失败: {e}", exc_info=True)
             return []
     
     def extract_text_messages(self, messages: List[Dict]) -> List[Dict]:
@@ -196,32 +227,41 @@ class TopicAnalyzer(BaseAnalyzer):
         Returns:
             提取的文本消息列表
         """
+        logger.debug(f"extract_text_messages 开始处理，输入消息数量: {len(messages) if messages else 0}")
         text_messages = []
-        for msg in messages:
+        
+        for i, msg in enumerate(messages):
+            logger.debug(f"处理第 {i+1} 条消息，类型: {type(msg)}")
             # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
             if not isinstance(msg, dict):
+                logger.warning(f"跳过非字典类型的消息: {type(msg)} - {msg}")
                 continue
                 
-            sender = msg.get("sender", {})
-            nickname = sender.get("nickname", "") or sender.get("card", "")
-            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-            
-            for content in msg.get("message", []):
-                if content.get("type") == "text":
-                    text = content.get("data", {}).get("text", "").strip()
-                    if text and len(text) > 2 and not text.startswith("/"):
-                        # 清理消息内容
-                        text = text.replace('""', '"').replace('""', '"')
-                        text = text.replace(''', "'").replace(''', "'")
-                        text = text.replace('\n', ' ').replace('\r', ' ')
-                        text = text.replace('\t', ' ')
-                        text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
-                        text_messages.append({
-                            "sender": nickname,
-                            "time": msg_time,
-                            "content": text.strip()
-                        })
+            try:
+                sender = msg.get("sender", {})
+                nickname = sender.get("nickname", "") or sender.get("card", "")
+                msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
+                
+                for content in msg.get("message", []):
+                    if content.get("type") == "text":
+                        text = content.get("data", {}).get("text", "").strip()
+                        if text and len(text) > 2 and not text.startswith("/"):
+                            # 清理消息内容
+                            text = text.replace('""', '"').replace('""', '"')
+                            text = text.replace(''', "'").replace(''', "'")
+                            text = text.replace('\n', ' ').replace('\r', ' ')
+                            text = text.replace('\t', ' ')
+                            text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+                            text_messages.append({
+                                "sender": nickname,
+                                "time": msg_time,
+                                "content": text.strip()
+                            })
+            except Exception as e:
+                logger.error(f"处理第 {i+1} 条消息时出错: {e}", exc_info=True)
+                continue
         
+        logger.debug(f"extract_text_messages 完成，提取到 {len(text_messages)} 条文本消息")
         return text_messages
     
     async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[SummaryTopic], TokenUsage]:
@@ -236,16 +276,28 @@ class TopicAnalyzer(BaseAnalyzer):
             (话题列表, Token使用统计)
         """
         try:
+            logger.debug(f"analyze_topics 开始处理，消息数量: {len(messages) if messages else 0}")
+            logger.debug(f"消息类型: {type(messages)}")
+            if messages:
+                logger.debug(f"第一条消息类型: {type(messages[0]) if messages else '无'}")
+                logger.debug(f"第一条消息内容: {messages[0] if messages else '无'}")
+            
             # 提取文本消息
             text_messages = self.extract_text_messages(messages)
+            logger.debug(f"提取到 {len(text_messages)} 条文本消息")
             
             if not text_messages:
                 logger.info("没有有效的文本消息，返回空结果")
                 return [], TokenUsage()
             
             logger.info(f"开始分析 {len(text_messages)} 条文本消息中的话题")
+            logger.debug(f"文本消息类型: {type(text_messages)}")
+            if text_messages:
+                logger.debug(f"第一条文本消息类型: {type(text_messages[0])}")
+                logger.debug(f"第一条文本消息内容: {text_messages[0]}")
+            
             return await self.analyze(text_messages, umo)
             
         except Exception as e:
-            logger.error(f"话题分析失败: {e}")
+            logger.error(f"话题分析失败: {e}", exc_info=True)
             return [], TokenUsage()
