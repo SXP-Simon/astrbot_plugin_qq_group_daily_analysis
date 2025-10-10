@@ -89,9 +89,34 @@ class PDFInstaller:
                 
                 # 尝试启动浏览器，这会触发自动下载
                 logger.info("启动 pyppeteer 浏览器以触发 Chromium 自动下载...")
+                
+                # 根据操作系统设置不同的参数
+                import platform
+                system = platform.system().lower()
+                
+                if system == "linux":
+                    # Linux 环境下需要更多参数来避免权限问题
+                    browser_args = [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-accelerated-2d-canvas',
+                        '--no-first-run',
+                        '--no-zygote',
+                        '--single-process',
+                        '--disable-gpu'
+                    ]
+                else:
+                    # Windows/macOS 环境下的标准参数
+                    browser_args = [
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-gpu'
+                    ]
+                
                 browser = await launch(
                     headless=True,
-                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                    args=browser_args
                 )
                 
                 # 获取 Chromium 路径
