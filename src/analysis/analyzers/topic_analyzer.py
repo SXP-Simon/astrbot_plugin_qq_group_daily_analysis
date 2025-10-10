@@ -52,6 +52,13 @@ class TopicAnalyzer(BaseAnalyzer):
             logger.error(f"build_prompt 期望列表，但收到: {type(messages)}")
             return ""
         
+        # 检查消息列表是否为空
+        if not messages:
+            logger.warning("build_prompt 收到空消息列表")
+            return ""
+        
+        logger.debug(f"build_prompt 第一条消息内容: {messages[0] if messages else '无'}")
+        
         # 提取文本消息
         text_messages = []
         for i, msg in enumerate(messages):
@@ -72,21 +79,61 @@ class TopicAnalyzer(BaseAnalyzer):
                 nickname = sender.get("nickname", "") or sender.get("card", "")
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
-                for content in msg.get("message", []):
-                    if content.get("type") == "text":
+                message_list = msg.get("message", [])
+                logger.debug(f"build_prompt 消息 {i+1} 的 message 字段类型: {type(message_list)}, 长度: {len(message_list) if hasattr(message_list, '__len__') else 'N/A'}")
+                
+                # 提取文本内容，可能分布在多个 content 中
+                text_parts = []
+                for j, content in enumerate(message_list):
+                    logger.debug(f"build_prompt 处理消息 {i+1} 的内容 {j+1}, 类型: {type(content)}")
+                    if not isinstance(content, dict):
+                        logger.warning(f"build_prompt 跳过非字典类型的内容: {type(content)} - {content}")
+                        continue
+                    
+                    content_type = content.get("type", "")
+                    logger.debug(f"build_prompt 内容类型: {content_type}")
+                    
+                    if content_type == "text":
                         text = content.get("data", {}).get("text", "").strip()
-                        if text and len(text) > 2 and not text.startswith("/"):
-                            # 清理消息内容
-                            text = text.replace('“', '"').replace('”', '"')
-                            text = text.replace('‘', "'").replace('’', "'")
-                            text = text.replace('\n', ' ').replace('\r', ' ')
-                            text = text.replace('\t', ' ')
-                            text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
-                            text_messages.append({
-                                "sender": nickname,
-                                "time": msg_time,
-                                "content": text.strip()
-                            })
+                        logger.debug(f"build_prompt 提取到的文本: '{text}' (长度: {len(text)})")
+                        if text:
+                            text_parts.append(text)
+                    elif content_type == "at":
+                        # 处理 @ 消息，转换为文本
+                        at_qq = content.get("data", {}).get("qq", "")
+                        if at_qq:
+                            at_text = f"@{at_qq}"
+                            text_parts.append(at_text)
+                            logger.debug(f"build_prompt 提取到@消息: {at_text}")
+                    elif content_type == "reply":
+                        # 处理回复消息，添加标记
+                        reply_id = content.get("data", {}).get("id", "")
+                        if reply_id:
+                            reply_text = f"[回复:{reply_id}]"
+                            text_parts.append(reply_text)
+                            logger.debug(f"build_prompt 提取到回复消息: {reply_text}")
+                
+                # 合并所有文本部分
+                combined_text = "".join(text_parts).strip()
+                logger.debug(f"build_prompt 合并后的文本: '{combined_text}' (长度: {len(combined_text)})")
+                
+                if combined_text and len(combined_text) > 2 and not combined_text.startswith("/"):
+                    # 清理消息内容
+                    cleaned_text = combined_text.replace('“', '"').replace('”', '"')
+                    cleaned_text = cleaned_text.replace('‘', "'").replace('’', "'")
+                    cleaned_text = cleaned_text.replace('\n', ' ').replace('\r', ' ')
+                    cleaned_text = cleaned_text.replace('\t', ' ')
+                    cleaned_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', cleaned_text)
+                    
+                    logger.debug(f"build_prompt 清理后的文本: '{cleaned_text}'")
+                    
+                    text_messages.append({
+                        "sender": nickname,
+                        "time": msg_time,
+                        "content": cleaned_text
+                    })
+                else:
+                    logger.debug(f"build_prompt 跳过文本: '{combined_text}' (长度不足或以/开头)")
             except Exception as e:
                 logger.error(f"build_prompt 处理第 {i+1} 条消息时出错: {e}", exc_info=True)
                 continue
@@ -94,7 +141,10 @@ class TopicAnalyzer(BaseAnalyzer):
         logger.debug(f"build_prompt 提取到 {len(text_messages)} 条文本消息")
         
         if not text_messages:
+            logger.warning("build_prompt 没有提取到有效的文本消息，返回空prompt")
             return ""
+        
+        logger.debug(f"build_prompt 第一条文本消息: {text_messages[0] if text_messages else '无'}")
         
         # 构建消息文本
         messages_text = "\n".join([
@@ -103,6 +153,10 @@ class TopicAnalyzer(BaseAnalyzer):
         ])
         
         max_topics = self.get_max_count()
+        
+        logger.debug(f"build_prompt 准备构建prompt，max_topics={max_topics}")
+        logger.debug(f"build_prompt messages_text 长度: {len(messages_text)}")
+        
         prompt = f"""
 你是一个帮我进行群聊信息总结的助手，生成总结内容时，你需要严格遵守下面的几个准则：
 请分析接下来提供的群聊记录，提取出最多{max_topics}个主要话题。
@@ -144,6 +198,8 @@ class TopicAnalyzer(BaseAnalyzer):
 
 注意：返回的内容必须是纯JSON，不要包含markdown代码块标记或其他格式
 """
+        logger.debug(f"build_prompt 构建的prompt长度: {len(prompt)}")
+        logger.debug(f"build_prompt prompt前100字符: {prompt[:100]}...")
         return prompt
     
     def extract_with_regex(self, result_text: str, max_topics: int) -> List[Dict]:
@@ -233,6 +289,12 @@ class TopicAnalyzer(BaseAnalyzer):
             提取的文本消息列表
         """
         logger.debug(f"extract_text_messages 开始处理，输入消息数量: {len(messages) if messages else 0}")
+        logger.debug(f"extract_text_messages 输入消息类型: {type(messages)}")
+        
+        if not messages:
+            logger.warning("extract_text_messages 收到空消息列表")
+            return []
+        
         text_messages = []
         
         for i, msg in enumerate(messages):
@@ -272,6 +334,8 @@ class TopicAnalyzer(BaseAnalyzer):
                 continue
         
         logger.debug(f"extract_text_messages 完成，提取到 {len(text_messages)} 条文本消息")
+        if text_messages:
+            logger.debug(f"extract_text_messages 第一条文本消息: {text_messages[0]}")
         return text_messages
     
     async def analyze_topics(self, messages: List[Dict], umo: str = None) -> Tuple[List[SummaryTopic], TokenUsage]:
@@ -292,7 +356,7 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.debug(f"第一条消息类型: {type(messages[0]) if messages else '无'}")
                 logger.debug(f"第一条消息内容: {messages[0] if messages else '无'}")
             
-            # 提取文本消息
+            # 检查是否有有效的文本消息
             text_messages = self.extract_text_messages(messages)
             logger.debug(f"提取到 {len(text_messages)} 条文本消息")
             
@@ -306,7 +370,8 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.debug(f"第一条文本消息类型: {type(text_messages[0])}")
                 logger.debug(f"第一条文本消息内容: {text_messages[0]}")
             
-            return await self.analyze(text_messages, umo)
+            # 直接传入原始消息，让 build_prompt 方法处理
+            return await self.analyze(messages, umo)
             
         except Exception as e:
             logger.error(f"话题分析失败: {e}", exc_info=True)

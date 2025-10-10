@@ -39,6 +39,14 @@ async def call_provider_with_retry(context, config_manager, prompt: str, max_tok
         try:
             if custom_api_key and custom_api_base and custom_model:
                 logger.info(f"使用自定义LLM提供商: {custom_api_base} model={custom_model}")
+                logger.debug(f"自定义LLM提供商 prompt 长度: {len(prompt) if prompt else 0}")
+                logger.debug(f"自定义LLM提供商 prompt 前100字符: {prompt[:100] if prompt else 'None'}...")
+                
+                # 检查 prompt 是否为空
+                if not prompt or not prompt.strip():
+                    logger.error("自定义LLM提供商: prompt 为空或只包含空白字符，无法发送请求")
+                    return None
+                
                 async with aiohttp.ClientSession() as session:
                     headers = {
                         "Authorization": f"Bearer {custom_api_key}",
@@ -98,6 +106,15 @@ async def call_provider_with_retry(context, config_manager, prompt: str, max_tok
                 if not provider:
                     logger.error("provider 为空，无法调用 text_chat，直接返回 None")
                     return None
+                
+                logger.debug(f"LLM provider prompt 长度: {len(prompt) if prompt else 0}")
+                logger.debug(f"LLM provider prompt 前100字符: {prompt[:100] if prompt else 'None'}...")
+                
+                # 检查 prompt 是否为空
+                if not prompt or not prompt.strip():
+                    logger.error("LLM provider: prompt 为空或只包含空白字符，无法调用 text_chat")
+                    return None
+                
                 coro = provider.text_chat(prompt=prompt, max_tokens=max_tokens, temperature=temperature)
                 return await asyncio.wait_for(coro, timeout=timeout)
         except asyncio.TimeoutError as e:

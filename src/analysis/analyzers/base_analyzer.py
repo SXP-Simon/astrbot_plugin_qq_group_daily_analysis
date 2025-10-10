@@ -102,15 +102,25 @@ class BaseAnalyzer(ABC):
         """
         try:
             # 1. 构建提示词
+            logger.debug(f"{self.get_data_type()}分析开始构建prompt，输入数据类型: {type(data)}")
+            logger.debug(f"{self.get_data_type()}分析输入数据长度: {len(data) if hasattr(data, '__len__') else 'N/A'}")
+            
             prompt = self.build_prompt(data)
             logger.info(f"开始{self.get_data_type()}分析，构建提示词完成")
+            logger.debug(f"{self.get_data_type()}分析prompt长度: {len(prompt) if prompt else 0}")
+            logger.debug(f"{self.get_data_type()}分析prompt前100字符: {prompt[:100] if prompt else 'None'}...")
+            
+            # 检查 prompt 是否为空
+            if not prompt or not prompt.strip():
+                logger.warning(f"{self.get_data_type()}分析: prompt 为空或只包含空白字符，跳过LLM调用")
+                return [], TokenUsage()
             
             # 2. 调用LLM
             max_tokens = self.get_max_tokens()
             temperature = self.get_temperature()
             
             response = await call_provider_with_retry(
-                self.context, self.config_manager, prompt, 
+                self.context, self.config_manager, prompt,
                 max_tokens, temperature, umo
             )
             
