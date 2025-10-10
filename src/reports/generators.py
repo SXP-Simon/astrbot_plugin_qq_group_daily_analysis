@@ -298,14 +298,14 @@ class ReportGenerator:
             # 尝试启动浏览器，如果 Chromium 不存在会自动下载
             logger.info("启动浏览器进行 PDF 转换")
 
-            # 配置浏览器启动参数，提高稳定性，避免意外关闭
+            # 配置浏览器启动参数，解决Docker环境中的沙盒问题
             launch_options = {
                 'headless': True,
                 'args': [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
+                    '--no-sandbox',  # Docker环境必需 - 禁用沙盒
+                    '--disable-setuid-sandbox',  # Docker环境必需 - 禁用setuid沙盒
+                    '--disable-dev-shm-usage',  # 避免共享内存问题
+                    '--disable-gpu',  # 禁用GPU加速
                     '--no-first-run',
                     '--disable-extensions',
                     '--disable-default-apps',
@@ -328,18 +328,6 @@ class ReportGenerator:
                     '--disable-web-security',
                     '--disable-features=VizDisplayCompositor',
                     '--disable-blink-features=AutomationControlled',  # 隐藏自动化特征
-                    '--memory-pressure-off',  # 禁用内存压力检测
-                    '--max_old_space_size=4096',  # 限制内存使用
-                    '--disable-background-mode',  # 禁用后台模式
-                    '--disable-ipc-flooding-protection',  # 禁用IPC洪水保护
-                    '--disable-logging',  # 禁用日志记录以减少资源使用
-                    '--disable-permissions-api',  # 禁用权限API
-                    '--disable-notifications',  # 禁用通知
-                    '--disable-web-bluetooth',  # 禁用蓝牙
-                    '--disable-web-usb',  # 禁用USB
-                    '--disable-webgl',  # 禁用WebGL
-                    '--disable-webgl2',  # 禁用WebGL2
-                    '--disable-webrtc',  # 禁用WebRTC
                 ]
             }
 
@@ -373,10 +361,8 @@ class ReportGenerator:
                 ]
 
             # 查找可用的浏览器
-            logger.info(f"正在检查 {len(chrome_paths)} 个可能的浏览器路径...")
             found_browser = False
             for chrome_path in chrome_paths:
-                logger.debug(f"检查浏览器路径: {chrome_path}")
                 if Path(chrome_path).exists():
                     launch_options['executablePath'] = chrome_path
                     logger.info(f"使用系统浏览器: {chrome_path}")
@@ -384,67 +370,15 @@ class ReportGenerator:
                     break
             
             if not found_browser:
-                logger.warning("未找到系统浏览器，将使用 pyppeteer 默认下载的 Chromium")
+                logger.info("未找到系统浏览器，将使用 pyppeteer 默认下载的 Chromium")
 
-            # 尝试启动浏览器，最多重试3次
-            max_retries = 3
-            browser = None
-            for attempt in range(max_retries):
-                try:
-                    logger.info(f"尝试启动浏览器 (第 {attempt + 1} 次)")
-                    # 添加更多内存友好的启动选项
-                    launch_options.update({
-                        'dumpio': True,  # 输出浏览器日志以便调试
-                        'autoClose': False,  # 防止自动关闭
-                        'handleSIGINT': False,
-                        'handleSIGTERM': False,
-                        'handleSIGHUP': False
-                    })
-                    browser = await launch(**launch_options)
-                    logger.info("浏览器启动成功")
-                    break
-                except Exception as e:
-                    logger.warning(f"第 {attempt + 1} 次启动浏览器失败: {e}", exc_info=True)
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(3)  # 增加等待时间到3秒
-                        # 尝试减少内存占用的启动选项
-                        launch_options['args'].extend([
-                            '--disable-images',
-                            '--disable-javascript',
-                            '--disable-plugins',
-                            '--disable-webgl',
-                            '--disable-threaded-animation',
-                            '--disable-threaded-scrolling',
-                            '--disable-sync',
-                            '--disable-default-apps',
-                            '--mute-audio',
-                            '--no-zygote',
-                            '--disable-gpu-sandbox',
-                            '--disable-software-rasterizer',
-                            '--disable-background-networking',
-                            '--disable-background-timer-throttling',
-                            '--disable-renderer-backgrounding',
-                            '--disable-client-side-phishing-detection',
-                            '--disable-component-extensions-with-background-pages',
-                            '--disable-default-apps',
-                            '--disable-extensions',
-                            '--disable-features=TranslateUI',
-                            '--disable-ipc-flooding-protection',
-                            '--disable-background-mode',
-                            '--disable-logging',
-                            '--disable-permissions-api',
-                            '--disable-web-bluetooth',
-                            '--disable-web-usb',
-                            '--disable-webrtc',
-                            '--max_old_space_size=1024',  # 进一步限制内存
-                            '--memory-pressure-off'
-                        ])
-                    else:
-                        logger.error(f"多次尝试后浏览器启动失败，无法生成 PDF， {e}", exc_info=True)
-                        return False
-
-            if not browser:
-                logger.error("浏览器启动失败，无法继续")
+            # 尝试启动浏览器
+            try:
+                logger.info("正在启动浏览器...")
+                browser = await launch(**launch_options)
+                logger.info("浏览器启动成功")
+            except Exception as e:
+                logger.error(f"浏览器启动失败: {e}", exc_info=True)
                 return False
 
             try:

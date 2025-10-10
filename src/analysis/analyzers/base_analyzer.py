@@ -153,7 +153,7 @@ class BaseAnalyzer(ABC):
                 return [], token_usage
                 
         except Exception as e:
-            logger.error(f"{self.get_data_type()}分析失败: {e}")
+            logger.error(f"{self.get_data_type()}分析失败: {e}", exc_info=True)
             return [], TokenUsage()
     
     def get_max_tokens(self) -> int:
