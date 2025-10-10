@@ -371,6 +371,20 @@ class ReportGenerator:
             
             if not found_browser:
                 logger.info("未找到系统浏览器，将使用 pyppeteer 默认下载的 Chromium")
+                # 先尝试确保 Chromium 已下载
+                try:
+                    from pyppeteer import connection, browser, launcher
+                    launcher_instance = launcher.Launcher(
+                        headless=True,
+                        args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                    )
+                    await launcher_instance._get_chromium_revision()
+                    await launcher_instance._download_chromium()
+                    chromium_path = pyppeteer.executablePath()
+                    launch_options['executablePath'] = chromium_path
+                    logger.info(f"使用 pyppeteer 下载的 Chromium: {chromium_path}")
+                except Exception as pre_download_err:
+                    logger.warning(f"预下载 Chromium 失败，继续尝试直接启动: {pre_download_err}")
 
             # 尝试启动浏览器
             try:
