@@ -47,6 +47,10 @@ class TopicAnalyzer(BaseAnalyzer):
         # 提取文本消息
         text_messages = []
         for msg in messages:
+            # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
+            if not isinstance(msg, dict):
+                continue
+                
             sender = msg.get("sender", {})
             nickname = sender.get("nickname", "") or sender.get("card", "")
             msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
@@ -189,6 +193,10 @@ class TopicAnalyzer(BaseAnalyzer):
         """
         text_messages = []
         for msg in messages:
+            # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
+            if not isinstance(msg, dict):
+                continue
+                
             sender = msg.get("sender", {})
             nickname = sender.get("nickname", "") or sender.get("card", "")
             msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
