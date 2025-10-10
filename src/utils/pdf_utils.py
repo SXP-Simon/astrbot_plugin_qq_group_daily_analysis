@@ -49,42 +49,87 @@ class PDFInstaller:
 
     @staticmethod
     async def install_system_deps():
-        """安装系统依赖（仅提供指导）"""
+        """通过 pyppeteer 自动安装 Chromium"""
         try:
-            logger.info("提供系统依赖安装指导...")
+            logger.info("正在通过 pyppeteer 自动安装 Chromium...")
             
-            if sys.platform.startswith('linux'):
-                return """💡 Linux 系统依赖安装指导:
-
-1. 安装 Chrome/Chromium 浏览器:
-   Ubuntu/Debian: sudo apt-get install chromium-browser
-   CentOS/RHEL: sudo yum install chromium
-   Arch Linux: sudo pacman -S chromium
-
-2. 安装完成后，重启 AstrBot
-
-3. 如果仍然有问题，请检查系统日志"""
+            # 直接通过 pyppeteer 下载 Chromium
+            success = await PDFInstaller._download_chromium_via_pyppeteer()
             
-            elif sys.platform.startswith('win'):
-                return """💡 Windows 系统依赖安装指导:
+            if success:
+                return """✅ Chromium 自动安装成功！
 
-1. 安装 Google Chrome 浏览器
-2. 重启 AstrBot
-3. 如果仍然有问题，请检查系统日志"""
-            
-            elif sys.platform.startswith('darwin'):
-                return """💡 macOS 系统依赖安装指导:
-
-1. 安装 Google Chrome 浏览器
-2. 重启 AstrBot
-3. 如果仍然有问题，请检查系统日志"""
-            
+系统依赖已自动配置完成。
+现在可以使用 PDF 功能了。"""
             else:
-                return "💡 请安装 Chrome 或 Chromium 浏览器，然后重启 AstrBot"
+                return """⚠️ 通过 pyppeteer 自动安装 Chromium 失败
+
+请尝试以下方法：
+1. 确保网络连接正常
+2. 检查是否有防火墙或代理限制
+3. 手动运行：path/to/your/actual/sys/executable/python -c "import pyppeteer; import asyncio; asyncio.run(pyppeteer.launch())"
+4. 或者手动安装 Chrome/Chromium 浏览器
+
+安装完成后，重启 AstrBot"""
 
         except Exception as e:
-            logger.error(f"提供系统依赖指导时出错: {e}")
-            return f"❌ 提供指导时出错: {str(e)}"
+            logger.error(f"通过 pyppeteer 安装 Chromium 时出错: {e}")
+            return f"❌ 通过 pyppeteer 安装 Chromium 时出错: {str(e)}"
+
+    @staticmethod
+    async def _download_chromium_via_pyppeteer():
+        """通过 pyppeteer 自动下载 Chromium"""
+        try:
+            logger.info("通过 pyppeteer 自动下载 Chromium...")
+            
+            # 导入 pyppeteer 并尝试下载
+            try:
+                import pyppeteer
+                from pyppeteer import launch
+                
+                # 尝试启动浏览器，这会触发自动下载
+                logger.info("启动 pyppeteer 浏览器以触发 Chromium 自动下载...")
+                browser = await launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-setuid-sandbox']
+                )
+                
+                # 获取 Chromium 路径
+                chromium_path = pyppeteer.executablePath()
+                logger.info(f"Chromium 自动下载完成，路径: {chromium_path}")
+                
+                await browser.close()
+                return True
+                
+            except Exception as e:
+                logger.error(f"通过 pyppeteer 自动下载 Chromium 失败: {e}", exc_info=True)
+                
+                # 备用方法：使用命令行触发下载
+                try:
+                    logger.info("尝试使用命令行触发 Chromium 自动下载...")
+                    process = await asyncio.create_subprocess_exec(
+                        sys.executable, "-c",
+                        "import pyppeteer; import asyncio; asyncio.run(pyppeteer.launch())",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    
+                    stdout, stderr = await process.communicate()
+                    
+                    if process.returncode == 0:
+                        logger.info("成功通过命令行触发 Chromium 自动下载")
+                        return True
+                    else:
+                        logger.error(f"命令行触发自动下载失败: {stderr.decode()}")
+                        return False
+                        
+                except Exception as e2:
+                    logger.error(f"命令行触发自动下载也失败: {e2}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"通过 pyppeteer 自动下载 Chromium 时出错: {e}", exc_info=True)
+            return False
 
     @staticmethod
     def get_pdf_status(config_manager) -> str:
