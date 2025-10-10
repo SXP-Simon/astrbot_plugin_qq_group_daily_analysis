@@ -327,8 +327,19 @@ class ReportGenerator:
                     '--export-tagged-pdf',
                     '--disable-web-security',
                     '--disable-features=VizDisplayCompositor',
-                    '--single-process',  # 单进程模式，提高稳定性
-                    '--disable-blink-features=AutomationControlled'  # 隐藏自动化特征
+                    '--disable-blink-features=AutomationControlled',  # 隐藏自动化特征
+                    '--memory-pressure-off',  # 禁用内存压力检测
+                    '--max_old_space_size=4096',  # 限制内存使用
+                    '--disable-background-mode',  # 禁用后台模式
+                    '--disable-ipc-flooding-protection',  # 禁用IPC洪水保护
+                    '--disable-logging',  # 禁用日志记录以减少资源使用
+                    '--disable-permissions-api',  # 禁用权限API
+                    '--disable-notifications',  # 禁用通知
+                    '--disable-web-bluetooth',  # 禁用蓝牙
+                    '--disable-web-usb',  # 禁用USB
+                    '--disable-webgl',  # 禁用WebGL
+                    '--disable-webgl2',  # 禁用WebGL2
+                    '--disable-webrtc',  # 禁用WebRTC
                 ]
             }
 
@@ -362,11 +373,18 @@ class ReportGenerator:
                 ]
 
             # 查找可用的浏览器
+            logger.info(f"正在检查 {len(chrome_paths)} 个可能的浏览器路径...")
+            found_browser = False
             for chrome_path in chrome_paths:
+                logger.debug(f"检查浏览器路径: {chrome_path}")
                 if Path(chrome_path).exists():
                     launch_options['executablePath'] = chrome_path
                     logger.info(f"使用系统浏览器: {chrome_path}")
+                    found_browser = True
                     break
+            
+            if not found_browser:
+                logger.warning("未找到系统浏览器，将使用 pyppeteer 默认下载的 Chromium")
 
             # 尝试启动浏览器，最多重试3次
             max_retries = 3
@@ -386,7 +404,7 @@ class ReportGenerator:
                     logger.info("浏览器启动成功")
                     break
                 except Exception as e:
-                    logger.warning(f"第 {attempt + 1} 次启动浏览器失败: {e}")
+                    logger.warning(f"第 {attempt + 1} 次启动浏览器失败: {e}", exc_info=True)
                     if attempt < max_retries - 1:
                         await asyncio.sleep(3)  # 增加等待时间到3秒
                         # 尝试减少内存占用的启动选项
@@ -398,15 +416,31 @@ class ReportGenerator:
                             '--disable-threaded-animation',
                             '--disable-threaded-scrolling',
                             '--disable-sync',
-                            '--disable-notifications',
                             '--disable-default-apps',
                             '--mute-audio',
                             '--no-zygote',
                             '--disable-gpu-sandbox',
-                            '--disable-software-rasterizer'
+                            '--disable-software-rasterizer',
+                            '--disable-background-networking',
+                            '--disable-background-timer-throttling',
+                            '--disable-renderer-backgrounding',
+                            '--disable-client-side-phishing-detection',
+                            '--disable-component-extensions-with-background-pages',
+                            '--disable-default-apps',
+                            '--disable-extensions',
+                            '--disable-features=TranslateUI',
+                            '--disable-ipc-flooding-protection',
+                            '--disable-background-mode',
+                            '--disable-logging',
+                            '--disable-permissions-api',
+                            '--disable-web-bluetooth',
+                            '--disable-web-usb',
+                            '--disable-webrtc',
+                            '--max_old_space_size=1024',  # 进一步限制内存
+                            '--memory-pressure-off'
                         ])
                     else:
-                        logger.error(f"多次尝试后浏览器启动失败，无法生成 PDF， {e}")
+                        logger.error(f"多次尝试后浏览器启动失败，无法生成 PDF， {e}", exc_info=True)
                         return False
 
             if not browser:
@@ -509,6 +543,10 @@ class ReportGenerator:
             elif "Browser closed unexpectedly" in error_msg:
                 logger.error("浏览器意外关闭，可能是由于内存不足或系统资源限制")
                 logger.info("💡 建议: 检查系统内存，或重启 AstrBot 后重试")
+                logger.info("💡 如果问题持续，可以尝试以下解决方案:")
+                logger.info("   1. 增加系统交换空间")
+                logger.info("   2. 使用更简单的浏览器启动参数")
+                logger.info("   3. 考虑使用其他 PDF 生成方案")
             else:
                 logger.error(f"HTML 转 PDF 失败: {e}")
                 logger.info("💡 可以尝试使用 /安装PDF 命令重新安装依赖，或检查系统日志获取更多信息")
