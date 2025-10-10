@@ -203,11 +203,11 @@ class QQGroupDailyAnalysis(Star):
                     yield result
                 else:
                     # 如果 PDF 生成失败，提供详细的错误信息和解决方案
-                    yield event.plain_result("❌ PDF 报告生成失败")
-                    yield event.plain_result("🔧 可能的解决方案：")
-                    yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
-                    yield event.plain_result("2. 检查网络连接是否正常")
-                    yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
+                    # yield event.plain_result("❌ PDF 报告生成失败")
+                    # yield event.plain_result("🔧 可能的解决方案：")
+                    # yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
+                    # yield event.plain_result("2. 检查网络连接是否正常")
+                    # yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
 
                     # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")
@@ -278,9 +278,13 @@ class QQGroupDailyAnalysis(Star):
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
         try:
-            # 使用模块化的PDF安装器
+            # 安装 pyppeteer
             result = await PDFInstaller.install_pyppeteer(config_manager)
             yield event.plain_result(result)
+            
+            # 提供系统依赖安装指导
+            system_deps_result = await PDFInstaller.install_system_deps()
+            yield event.plain_result(system_deps_result)
 
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
