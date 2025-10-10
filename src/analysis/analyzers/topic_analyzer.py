@@ -44,9 +44,6 @@ class TopicAnalyzer(BaseAnalyzer):
         Returns:
             提示词字符串
         """
-        logger.debug(f"build_prompt 开始处理，输入消息数量: {len(messages) if messages else 0}")
-        logger.debug(f"输入消息类型: {type(messages)}")
-        
         # 验证输入数据格式
         if not isinstance(messages, list):
             logger.error(f"build_prompt 期望列表，但收到: {type(messages)}")
@@ -56,8 +53,6 @@ class TopicAnalyzer(BaseAnalyzer):
         if not messages:
             logger.warning("build_prompt 收到空消息列表")
             return ""
-        
-        logger.debug(f"build_prompt 第一条消息内容: {messages[0] if messages else '无'}")
         
         # 提取文本消息
         text_messages = []
@@ -138,13 +133,9 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.error(f"build_prompt 处理第 {i+1} 条消息时出错: {e}", exc_info=True)
                 continue
         
-        logger.debug(f"build_prompt 提取到 {len(text_messages)} 条文本消息")
-        
         if not text_messages:
             logger.warning("build_prompt 没有提取到有效的文本消息，返回空prompt")
             return ""
-        
-        logger.debug(f"build_prompt 第一条文本消息: {text_messages[0] if text_messages else '无'}")
         
         # 构建消息文本
         messages_text = "\n".join([
@@ -153,9 +144,6 @@ class TopicAnalyzer(BaseAnalyzer):
         ])
         
         max_topics = self.get_max_count()
-        
-        logger.debug(f"build_prompt 准备构建prompt，max_topics={max_topics}")
-        logger.debug(f"build_prompt messages_text 长度: {len(messages_text)}")
         
         prompt = f"""
 你是一个帮我进行群聊信息总结的助手，生成总结内容时，你需要严格遵守下面的几个准则：
@@ -198,8 +186,6 @@ class TopicAnalyzer(BaseAnalyzer):
 
 注意：返回的内容必须是纯JSON，不要包含markdown代码块标记或其他格式
 """
-        logger.debug(f"build_prompt 构建的prompt长度: {len(prompt)}")
-        logger.debug(f"build_prompt prompt前100字符: {prompt[:100]}...")
         return prompt
     
     def extract_with_regex(self, result_text: str, max_topics: int) -> List[Dict]:
