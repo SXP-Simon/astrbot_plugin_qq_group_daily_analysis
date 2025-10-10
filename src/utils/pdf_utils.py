@@ -218,63 +218,14 @@ asyncio.run(download_chrome())
                         
                         # 最后的备用方案：手动下载
                         logger.info("尝试手动下载 Chromium...")
-                        return await PDFInstaller._manual_download_chromium()
+                        return False
                         
                 except Exception as e2:
                     logger.error(f"命令行触发自动下载也失败: {e2}")
-                    return await PDFInstaller._manual_download_chromium()
+                    return False
                     
         except Exception as e:
             logger.error(f"通过 pyppeteer 自动下载 Chromium 时出错: {e}", exc_info=True)
-            return False
-
-    @staticmethod
-    async def _manual_download_chromium():
-        """手动下载 Chromium 的备用方案"""
-        try:
-            logger.info("尝试手动下载 Chromium...")
-            
-            # 尝试使用 wget 或 curl 下载 Chromium
-            import platform
-            system = platform.system().lower()
-            
-            if system == "linux":
-                # 检查是否有 wget 或 curl
-                import shutil
-                download_cmd = None
-                
-                if shutil.which("wget"):
-                    download_cmd = [
-                        "wget", "-q", "-O", "/tmp/chromium.tar.gz",
-                        "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Linux_x64/1000003/chrome-linux.zip"
-                    ]
-                elif shutil.which("curl"):
-                    download_cmd = [
-                        "curl", "-s", "-o", "/tmp/chromium.tar.gz",
-                        "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Linux_x64/1000003/chrome-linux.zip"
-                    ]
-                
-                if download_cmd:
-                    logger.info("使用系统下载工具下载 Chromium...")
-                    process = await asyncio.create_subprocess_exec(
-                        *download_cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    
-                    stdout, stderr = await process.communicate()
-                    
-                    if process.returncode == 0:
-                        logger.info("Chromium 下载成功，请手动解压到合适位置")
-                        return True
-                    else:
-                        logger.error(f"下载失败: {stderr.decode()}")
-            
-            logger.warning("无法自动下载 Chromium，请手动安装 Chrome/Chromium")
-            return False
-            
-        except Exception as e:
-            logger.error(f"手动下载 Chromium 失败: {e}")
             return False
 
     @staticmethod
