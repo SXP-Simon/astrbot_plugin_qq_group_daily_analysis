@@ -203,11 +203,11 @@ class QQGroupDailyAnalysis(Star):
                     yield result
                 else:
                     # 如果 PDF 生成失败，提供详细的错误信息和解决方案
-                    yield event.plain_result("❌ PDF 报告生成失败")
-                    yield event.plain_result("🔧 可能的解决方案：")
-                    yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
-                    yield event.plain_result("2. 检查网络连接是否正常")
-                    yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
+                    # yield event.plain_result("❌ PDF 报告生成失败")
+                    # yield event.plain_result("🔧 可能的解决方案：")
+                    # yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
+                    # yield event.plain_result("2. 检查网络连接是否正常")
+                    # yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
 
                     # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")

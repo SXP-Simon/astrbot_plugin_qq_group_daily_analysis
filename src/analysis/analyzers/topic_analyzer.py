@@ -152,6 +152,11 @@ class TopicAnalyzer(BaseAnalyzer):
             max_topics = self.get_max_count()
             
             for topic_data in topics_data[:max_topics]:
+                # 确保topic_data是字典类型，避免'str' object has no attribute 'get'错误
+                if not isinstance(topic_data, dict):
+                    logger.warning(f"跳过非字典类型的话题数据: {type(topic_data)} - {topic_data}")
+                    continue
+                    
                 # 确保数据格式正确
                 topic_name = topic_data.get("topic", "").strip()
                 contributors = topic_data.get("contributors", [])
