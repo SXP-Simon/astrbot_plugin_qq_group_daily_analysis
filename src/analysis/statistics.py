@@ -6,6 +6,7 @@
 from datetime import datetime
 from typing import List, Dict
 from collections import defaultdict
+from ..utils import InfoUtils
 
 
 class UserAnalyzer:
@@ -28,7 +29,7 @@ class UserAnalyzer:
         for msg in messages:
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
-            nickname = sender.get("nickname", "") or sender.get("card", "")
+            nickname = InfoUtils.get_user_nickname(sender)
 
             user_stats[user_id]["message_count"] += 1
             user_stats[user_id]["nickname"] = nickname

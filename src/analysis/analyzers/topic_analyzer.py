@@ -10,6 +10,7 @@ from astrbot.api import logger
 from ...models.data_models import SummaryTopic, TokenUsage
 from .base_analyzer import BaseAnalyzer
 from ..utils.json_utils import extract_topics_with_regex
+from ...utils import InfoUtils
 
 
 class TopicAnalyzer(BaseAnalyzer):
@@ -71,7 +72,7 @@ class TopicAnalyzer(BaseAnalyzer):
                     logger.warning(f"build_prompt 跳过sender非字典类型的消息: {type(sender)} - {sender}")
                     continue
                     
-                nickname = sender.get("nickname", "") or sender.get("card", "")
+                nickname = InfoUtils.get_user_nickname(sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 message_list = msg.get("message", [])
@@ -297,7 +298,7 @@ class TopicAnalyzer(BaseAnalyzer):
                     logger.warning(f"extract_text_messages 跳过sender非字典类型的消息: {type(sender)} - {sender}")
                     continue
                     
-                nickname = sender.get("nickname", "") or sender.get("card", "")
+                nickname = InfoUtils.get_user_nickname(sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 for content in msg.get("message", []):
