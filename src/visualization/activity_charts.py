@@ -30,7 +30,7 @@ class ActivityVisualizer:
             # # 用户分析
             # sender = msg.get("sender", {})
             # user_id = str(sender.get("user_id", ""))
-            # nickname = sender.get("nickname", "") or sender.get("card", "")
+            # nickname = InfoUtils.get_user_nickname(sender)
 
             # 统计每小时消息数
             hourly_activity[hour] += 1
