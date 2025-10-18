@@ -29,7 +29,7 @@ class UserAnalyzer:
         for msg in messages:
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
-            nickname = InfoUtils.get_user_nickname(sender)
+            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
 
             user_stats[user_id]["message_count"] += 1
             user_stats[user_id]["nickname"] = nickname

@@ -148,7 +148,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             
             for msg in messages:
                 sender = msg.get("sender", {})
-                nickname = InfoUtils.get_user_nickname(sender)
+                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 for content in msg.get("message", []):

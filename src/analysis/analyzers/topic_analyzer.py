@@ -72,7 +72,7 @@ class TopicAnalyzer(BaseAnalyzer):
                     logger.warning(f"build_prompt 跳过sender非字典类型的消息: {type(sender)} - {sender}")
                     continue
                     
-                nickname = InfoUtils.get_user_nickname(sender)
+                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 message_list = msg.get("message", [])
@@ -298,7 +298,7 @@ class TopicAnalyzer(BaseAnalyzer):
                     logger.warning(f"extract_text_messages 跳过sender非字典类型的消息: {type(sender)} - {sender}")
                     continue
                     
-                nickname = InfoUtils.get_user_nickname(sender)
+                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 for content in msg.get("message", []):
