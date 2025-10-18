@@ -4,7 +4,7 @@ class InfoUtils:
         """
         获取用户昵称
 
-        优先使用nickname字段，如果为空则使用card（群名片）字段
+        优先使用nickname字段,如果为空则使用card(群名片)字段
         """
         enable_user_card = config_manager.get_enable_user_card()
         if enable_user_card:

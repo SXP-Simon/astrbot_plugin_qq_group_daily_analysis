@@ -17,6 +17,8 @@ from .llm_utils import (
     extract_response_text
 )
 
+from .info_utils import InfoUtils
+
 __all__ = [
     # JSON处理工具
     'fix_json',
@@ -28,5 +30,8 @@ __all__ = [
     # LLM工具
     'call_provider_with_retry',
     'extract_token_usage',
-    'extract_response_text'
+    'extract_response_text',
+    
+    # 信息工具
+    'InfoUtils'
 ]
