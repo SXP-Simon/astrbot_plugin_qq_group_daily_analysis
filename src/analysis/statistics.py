@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import List, Dict
 from collections import defaultdict
-from ..utils import InfoUtils
+from .utils import InfoUtils
 
 
 class UserAnalyzer:
