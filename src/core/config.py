@@ -197,6 +197,10 @@ class ConfigManager:
             self.config["enabled_groups"] = enabled_groups
             self.config.save_config()
 
+    def get_enable_user_card(self) -> bool:
+        """获取是否使用用户群名片"""
+        return self.config.get("enable_user_card", False)
+
     @property
     def pyppeteer_available(self) -> bool:
         """检查pyppeteer是否可用"""

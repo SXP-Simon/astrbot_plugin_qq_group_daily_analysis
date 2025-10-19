@@ -9,6 +9,7 @@ from astrbot.api import logger
 from ...models.data_models import GoldenQuote, TokenUsage
 from .base_analyzer import BaseAnalyzer
 from ..utils.json_utils import extract_golden_quotes_with_regex
+from ..utils import InfoUtils
 
 
 
@@ -147,7 +148,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             
             for msg in messages:
                 sender = msg.get("sender", {})
-                nickname = sender.get("nickname", "") or sender.get("card", "")
+                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
                 
                 for content in msg.get("message", []):
