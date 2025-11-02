@@ -75,15 +75,40 @@ class MessageHandler:
 
             while len(messages) < max_messages and query_rounds < max_rounds:
                 try:
+                    # 构造请求参数
                     payloads = {
-                        "group_id": group_id,
-                        "message_seq": message_seq,
+                        "group_id": int(group_id) if group_id.isdigit() else group_id,
                         "count": 200,
-                        "reverseOrder": True,
                     }
+                    
+                    # 添加 message_seq（如果不是第一轮）
+                    if message_seq:
+                        payloads["message_seq"] = message_seq
 
-
-                    result = await bot_instance.call_action("get_group_msg_history", **payloads)
+                    # 尝试调用 API
+                    result = None
+                    api_error = None
+                    
+                    if hasattr(bot_instance, 'call_action'):
+                        try:
+                            # aiocqhttp (CQHttp) 方式
+                            result = await bot_instance.call_action("get_group_msg_history", **payloads)
+                        except Exception as api_err:
+                            api_error = api_err
+                            logger.error(f"群 {group_id} API 调用失败: {api_err}")
+                            
+                            # 第一次失败就放弃（该 API 不支持）
+                            if query_rounds == 0:
+                                logger.error(f"群 {group_id} 当前 OneBot 实现不支持 get_group_msg_history API")
+                                return []
+                    elif hasattr(bot_instance, 'api'):
+                        # QQ官方 bot (botClient) 方式 - 官方API不支持历史消息
+                        logger.error(f"群 {group_id} 检测到 QQ 官方 Bot，官方 API 不支持获取历史消息")
+                        return []
+                    else:
+                        logger.error(f"群 {group_id} 未知的 bot_instance 类型，无法调用 API")
+                        logger.error(f"bot_instance 类型: {type(bot_instance)}")
+                        return []
 
                     if not result or "messages" not in result:
                         logger.warning(f"群 {group_id} API返回无效结果: {result}")
