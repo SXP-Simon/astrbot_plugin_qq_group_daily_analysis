@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v2.9.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.1.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -145,6 +145,10 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 ### v3.0.0
 - 解决自动分析器获取群聊消息失败的问题
+
+### v3.1.0
+- llm_analyser 串行执行三部分分析导致处理单次请求耗时太长，修改为异步网络请求
+
 
 ## 许可证
 
