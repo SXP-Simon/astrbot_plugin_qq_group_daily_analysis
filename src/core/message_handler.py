@@ -82,24 +82,8 @@ class MessageHandler:
                         "reverseOrder": True,
                     }
 
-                    # 诊断日志：检查bot_instance的属性
-                    logger.debug(f"bot_instance 类型: {type(bot_instance)}")
-                    logger.debug(f"bot_instance 是否有 'api' 属性: {hasattr(bot_instance, 'api')}")
-                    logger.debug(f"bot_instance 是否有 'call_action' 方法: {hasattr(bot_instance, 'call_action')}")
-                    logger.debug(f"bot_instance 的所有属性: {dir(bot_instance)}")
 
-                    # 尝试正确的API调用方式
-                    if hasattr(bot_instance, 'call_action'):
-                        # 直接调用 call_action 方法
-                        logger.info(f"使用 bot_instance.call_action 方式调用API")
-                        result = await bot_instance.call_action("get_group_msg_history", **payloads)
-                    elif hasattr(bot_instance, 'api') and hasattr(bot_instance.api, 'call_action'):
-                        # 通过 api 属性调用
-                        logger.info(f"使用 bot_instance.api.call_action 方式调用API")
-                        result = await bot_instance.api.call_action("get_group_msg_history", **payloads)
-                    else:
-                        logger.error(f"无法找到合适的API调用方法")
-                        raise AttributeError("Client对象缺少call_action方法或api.call_action方法")
+                    result = await bot_instance.call_action("get_group_msg_history", **payloads)
 
                     if not result or "messages" not in result:
                         logger.warning(f"群 {group_id} API返回无效结果: {result}")
