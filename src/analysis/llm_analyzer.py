@@ -3,6 +3,7 @@ LLM分析器模块
 负责协调各个分析器进行话题分析、用户称号分析和金句分析
 """
 
+import asyncio
 from typing import List, Dict, Tuple
 from astrbot.api import logger
 from ..models.data_models import SummaryTopic, UserTitle, GoldenQuote, TokenUsage
@@ -95,8 +96,68 @@ class LLMAnalyzer:
             logger.error(f"金句分析失败: {e}")
             return [], TokenUsage()
     
+    async def analyze_all_concurrent(self, messages: List[Dict], user_analysis: Dict, umo: str = None) -> Tuple[List[SummaryTopic], List[UserTitle], List[GoldenQuote], TokenUsage]:
+        """
+        并发执行所有分析任务（话题、用户称号、金句）
+        
+        Args:
+            messages: 群聊消息列表
+            user_analysis: 用户分析统计
+            umo: 模型唯一标识符
+            
+        Returns:
+            (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
+        """
+        try:
+            logger.info("开始并发执行所有分析任务")
+            
+            # 并发执行三个分析任务
+            results = await asyncio.gather(
+                self.topic_analyzer.analyze_topics(messages, umo),
+                self.user_title_analyzer.analyze_user_titles(messages, user_analysis, umo),
+                self.golden_quote_analyzer.analyze_golden_quotes(messages, umo),
+                return_exceptions=True
+            )
+            
+            # 处理结果
+            topics, topic_usage = [], TokenUsage()
+            user_titles, title_usage = [], TokenUsage()
+            golden_quotes, quote_usage = [], TokenUsage()
+            
+            # 话题分析结果
+            if isinstance(results[0], Exception):
+                logger.error(f"话题分析失败: {results[0]}")
+            else:
+                topics, topic_usage = results[0]
+            
+            # 用户称号分析结果
+            if isinstance(results[1], Exception):
+                logger.error(f"用户称号分析失败: {results[1]}")
+            else:
+                user_titles, title_usage = results[1]
+            
+            # 金句分析结果
+            if isinstance(results[2], Exception):
+                logger.error(f"金句分析失败: {results[2]}")
+            else:
+                golden_quotes, quote_usage = results[2]
+            
+            # 合并Token使用统计
+            total_usage = TokenUsage(
+                prompt_tokens=topic_usage.prompt_tokens + title_usage.prompt_tokens + quote_usage.prompt_tokens,
+                completion_tokens=topic_usage.completion_tokens + title_usage.completion_tokens + quote_usage.completion_tokens,
+                total_tokens=topic_usage.total_tokens + title_usage.total_tokens + quote_usage.total_tokens
+            )
+            
+            logger.info(f"并发分析完成 - 话题: {len(topics)}, 称号: {len(user_titles)}, 金句: {len(golden_quotes)}")
+            return topics, user_titles, golden_quotes, total_usage
+            
+        except Exception as e:
+            logger.error(f"并发分析失败: {e}")
+            return [], [], [], TokenUsage()
+    
     # 向后兼容的方法，保持原有调用方式
-    async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int, 
+    async def _call_provider_with_retry(self, provider, prompt: str, max_tokens: int,
                                       temperature: float, umo: str = None):
         """
         向后兼容的LLM调用方法

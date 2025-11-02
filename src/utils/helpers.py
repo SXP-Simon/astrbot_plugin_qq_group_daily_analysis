@@ -37,31 +37,42 @@ class MessageAnalyzer:
             # 用户分析
             user_analysis = self.user_analyzer.analyze_users(messages)
 
-            # LLM分析
+            # LLM分析 - 使用并发方式
             topics = []
             user_titles = []
             golden_quotes = []
             total_token_usage = TokenUsage()
 
-            # 话题分析
-            if self.config_manager.get_topic_analysis_enabled():
-                topics, topic_tokens = await self.llm_analyzer.analyze_topics(messages, umo=unified_msg_origin)
-                total_token_usage.prompt_tokens += topic_tokens.prompt_tokens
-                total_token_usage.completion_tokens += topic_tokens.completion_tokens
-                total_token_usage.total_tokens += topic_tokens.total_tokens
+            # 检查各个分析功能是否启用
+            topic_enabled = self.config_manager.get_topic_analysis_enabled()
+            user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+            golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
+            
+            # 如果三个分析都启用，使用并发执行
+            if topic_enabled and user_title_enabled and golden_quote_enabled:
+                # 并发执行所有三个分析任务
+                topics, user_titles, golden_quotes, total_token_usage = await self.llm_analyzer.analyze_all_concurrent(
+                    messages, user_analysis, umo=unified_msg_origin
+                )
+            else:
+                # 如果只启用部分分析，则按需执行
+                if topic_enabled:
+                    topics, topic_tokens = await self.llm_analyzer.analyze_topics(messages, umo=unified_msg_origin)
+                    total_token_usage.prompt_tokens += topic_tokens.prompt_tokens
+                    total_token_usage.completion_tokens += topic_tokens.completion_tokens
+                    total_token_usage.total_tokens += topic_tokens.total_tokens
 
-            # 用户称号分析
-            if self.config_manager.get_user_title_analysis_enabled():
-                user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(messages, user_analysis, umo=unified_msg_origin)
-                total_token_usage.prompt_tokens += title_tokens.prompt_tokens
-                total_token_usage.completion_tokens += title_tokens.completion_tokens
-                total_token_usage.total_tokens += title_tokens.total_tokens
+                if user_title_enabled:
+                    user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(messages, user_analysis, umo=unified_msg_origin)
+                    total_token_usage.prompt_tokens += title_tokens.prompt_tokens
+                    total_token_usage.completion_tokens += title_tokens.completion_tokens
+                    total_token_usage.total_tokens += title_tokens.total_tokens
 
-            # 金句分析
-            golden_quotes, quote_tokens = await self.llm_analyzer.analyze_golden_quotes(messages, umo=unified_msg_origin)
-            total_token_usage.prompt_tokens += quote_tokens.prompt_tokens
-            total_token_usage.completion_tokens += quote_tokens.completion_tokens
-            total_token_usage.total_tokens += quote_tokens.total_tokens
+                if golden_quote_enabled:
+                    golden_quotes, quote_tokens = await self.llm_analyzer.analyze_golden_quotes(messages, umo=unified_msg_origin)
+                    total_token_usage.prompt_tokens += quote_tokens.prompt_tokens
+                    total_token_usage.completion_tokens += quote_tokens.completion_tokens
+                    total_token_usage.total_tokens += quote_tokens.total_tokens
 
             # 更新统计数据
             statistics.golden_quotes = golden_quotes
