@@ -55,6 +55,10 @@ class ConfigManager:
         """获取是否启用用户称号分析"""
         return self.config.get("user_title_analysis_enabled", True)
 
+    def get_golden_quote_analysis_enabled(self) -> bool:
+        """获取是否启用金句分析"""
+        return self.config.get("golden_quote_analysis_enabled", True)
+
     def get_max_topics(self) -> int:
         """获取最大话题数量"""
         return self.config.get("max_topics", 5)
@@ -149,6 +153,11 @@ class ConfigManager:
     def set_user_title_analysis_enabled(self, enabled: bool):
         """设置是否启用用户称号分析"""
         self.config["user_title_analysis_enabled"] = enabled
+        self.config.save_config()
+
+    def set_golden_quote_analysis_enabled(self, enabled: bool):
+        """设置是否启用金句分析"""
+        self.config["golden_quote_analysis_enabled"] = enabled
         self.config.save_config()
 
     def set_max_topics(self, count: int):

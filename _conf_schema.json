@@ -69,6 +69,12 @@
         "default": true,
         "hint": "是否使用LLM进行用户称号分析"
     },
+    "golden_quote_analysis_enabled": {
+        "type": "bool",
+        "description": "启用金句分析",
+        "default": true,
+        "hint": "是否使用LLM进行金句分析"
+    },
     "max_topics": {
         "type": "int",
         "description": "最大话题数量",
