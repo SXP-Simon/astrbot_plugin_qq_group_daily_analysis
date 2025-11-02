@@ -82,7 +82,6 @@ class PDFInstaller:
 这可能需要几分钟时间，请稍候...
 下载过程不会阻塞 Bot 的正常运行。
 
-可以使用 /PDF状态 命令查看下载进度。
 如果下载超时（10分钟），将自动取消。"""
 
         except Exception as e:
