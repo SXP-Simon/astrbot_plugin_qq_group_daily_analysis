@@ -56,35 +56,24 @@ class UserTitleAnalyzer(BaseAnalyzer):
             for user in user_summaries
         ])
         
-        prompt = f"""
-请为以下群友分配合适的称号和MBTI类型。每个人只能有一个称号，每个称号只能给一个人。
-
-可选称号：
-- 龙王: 发言频繁但内容轻松的人
-- 技术专家: 经常讨论技术话题的人
-- 夜猫子: 经常在深夜发言的人
-- 表情包军火库: 经常发表情的人
-- 沉默终结者: 经常开启话题的人
-- 评论家: 平均发言长度很长的人
-- 阳角: 在群里很有影响力的人
-- 互动达人: 经常回复别人的人
-- ... (你可以自行进行拓展添加)
-
-用户数据：
-{users_text}
-
-请以JSON格式返回，格式如下：
-[
-  {{
-    "name": "用户名",
-    "qq": 123456789,
-    "title": "称号",
-    "mbti": "MBTI类型",
-    "reason": "获得此称号的原因"
-  }}
-]
-"""
-        return prompt
+        # 从配置读取 prompt 模板（默认使用 "default" 风格）
+        prompt_template = self.config_manager.get_user_title_analysis_prompt()
+        
+        if prompt_template:
+            # 使用配置中的 prompt 并替换变量
+            try:
+                prompt = prompt_template.format(
+                    users_text=users_text
+                )
+                logger.info("使用配置中的用户称号分析提示词")
+                return prompt
+            except KeyError as e:
+                logger.warning(f"用户称号分析提示词变量格式错误: {e}")
+            except Exception as e:
+                logger.warning(f"应用用户称号分析提示词失败: {e}")
+        
+        logger.warning("未找到有效的用户称号分析提示词配置，请检查配置文件")
+        return ""
     
     def extract_with_regex(self, result_text: str, max_count: int) -> List[Dict]:
         """

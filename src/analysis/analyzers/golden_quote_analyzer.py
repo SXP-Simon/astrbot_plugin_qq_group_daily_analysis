@@ -55,33 +55,26 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         ])
         
         max_golden_quotes = self.get_max_count()
-        prompt = f"""
-请从以下群聊记录中挑选出{max_golden_quotes}句最具冲击力、最令人惊叹的"金句"。这些金句需满足：
-- 核心标准：**逆天的神人发言**，即具备颠覆常识的脑洞、逻辑跳脱的表达或强烈反差感的原创内容
-- 典型特征：包含某些争议话题元素、夸张类比、反常规结论、一本正经的"胡说八道"或突破语境的清奇思路，并且具备一定的冲击力，让人印象深刻。
-
-对于每个金句，请提供：
-1. 原文内容（完整保留发言细节）
-2. 发言人昵称
-3. 选择理由（具体说明其"逆天"之处，如逻辑颠覆点/脑洞角度/反差感/争议话题元素）
-
-此外，我将对你进行严格约束：
-- 优先筛选 **逆天指数最高** 的内容：发情、性压抑话题 > 争议话题 > 元素级 > 颠覆认知级 > 逻辑跳脱级 > 趣味调侃级，剔除单纯玩梗或网络热词堆砌的普通发言
-- 重点标记包含极端类比、反常识论证或无厘头结论的内容，并且包含一定的争议话题元素。
-
-群聊记录：
-{messages_text}
-
-请以JSON格式返回，格式如下：
-[
-  {{
-    "content": "金句原文",
-    "sender": "发言人昵称",
-    "reason": "选择这句话的理由（需明确说明逆天特质）"
-  }}
-]
-"""
-        return prompt
+        
+        # 从配置读取 prompt 模板（默认使用 "default" 风格）
+        prompt_template = self.config_manager.get_golden_quote_analysis_prompt()
+        
+        if prompt_template:
+            # 使用配置中的 prompt 并替换变量
+            try:
+                prompt = prompt_template.format(
+                    max_golden_quotes=max_golden_quotes,
+                    messages_text=messages_text
+                )
+                logger.info("使用配置中的金句分析提示词")
+                return prompt
+            except KeyError as e:
+                logger.warning(f"金句分析提示词变量格式错误: {e}")
+            except Exception as e:
+                logger.warning(f"应用金句分析提示词失败: {e}")
+        
+        logger.warning("未找到有效的金句分析提示词配置，请检查配置文件")
+        return ""
     
     def extract_with_regex(self, result_text: str, max_count: int) -> List[Dict]:
         """
