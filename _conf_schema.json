@@ -10,9 +10,9 @@
     },
     "max_messages": {
         "type": "int",
-        "description": "最大分析消息数量",
+        "description": "单次分析的获取最大消息条数基准",
         "default": 1000,
-        "hint": "单次分析的最大消息条数，建议500-2000"
+        "hint": "单次分析的获取最大消息条数基准值，如果当天群聊消息过多，已经获取到足够的消息(达到 max_messages)，停止获取，获取到的消息数量是最新一次获取到的超过 max_messages 的消息数量，建议500-2000"
     },
     "analysis_days": {
         "type": "int",
@@ -95,9 +95,9 @@
     },
     "max_query_rounds": {
         "type": "int",
-        "description": "最大消息查询轮数",
-        "default": 35,
-        "hint": "⚠️ 警告：增加此值会导致大量Token消耗！默认值35轮（有一定消耗）。设置过高可能导致LLM费用激增"
+        "description": "最大消息平台历史消息查询轮数",
+        "default": 15,
+        "hint": "有时候平台接口返回的历史消息不完整，导致获取的消息数量不足，可以适当增加查询轮数以获取更多消息，但会增加请求时间和资源消耗。"
     },
     "llm_timeout": {
         "type": "int",
