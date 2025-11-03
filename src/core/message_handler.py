@@ -73,7 +73,7 @@ class MessageHandler:
             logger.info(f"开始获取群 {group_id} 近 {days} 天的消息记录")
             logger.info(f"时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 到 {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-            while len(messages) < max_messages and query_rounds < max_rounds:
+            while query_rounds < max_rounds:
                 try:
                     # 构造请求参数
                     payloads = {
@@ -156,6 +156,11 @@ class MessageHandler:
                         logger.warning(f"群 {group_id} 本轮未获取到有效消息")
                         break
 
+                    # 如果已经获取到足够的消息（达到 max_messages），停止获取
+                    if len(messages) >= max_messages:
+                        logger.info(f"群 {group_id} 已获取到足够的消息（{len(messages)} 条，限制 {max_messages} 条），停止获取")
+                        break
+
                     message_seq = round_messages[0]["message_id"]
                     query_rounds += 1
 
@@ -171,7 +176,7 @@ class MessageHandler:
                         break
                     await asyncio.sleep(1)
 
-            logger.info(f"群 {group_id} 消息获取完成，共获取 {len(messages)} 条消息，查询轮数: {query_rounds}")
+            logger.info(f"群 {group_id} 消息获取完成，共获取到 {len(messages)} 条有效消息（时间范围: 近{days}天），查询轮数: {query_rounds}")
             return messages
 
         except Exception as e:
