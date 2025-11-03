@@ -110,6 +110,75 @@ class ConfigManager:
         """获取PDF文件名格式"""
         return self.config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
 
+    def get_topic_analysis_prompt(self, style: str = "default") -> str:
+        """
+        获取话题分析提示词模板
+        
+        Args:
+            style: 提示词风格，默认为 "default"
+            
+        Returns:
+            提示词模板字符串
+        """
+        prompts = self.config.get("topic_analysis_prompts", {})
+        if isinstance(prompts, dict) and "items" in prompts:
+            items = prompts.get("items", {})
+            if style in items and isinstance(items[style], dict):
+                return items[style].get("default", "")
+        # 兼容旧配置
+        return self.config.get("topic_analysis_prompt", "")
+
+    def get_user_title_analysis_prompt(self, style: str = "default") -> str:
+        """
+        获取用户称号分析提示词模板
+        
+        Args:
+            style: 提示词风格，默认为 "default"
+            
+        Returns:
+            提示词模板字符串
+        """
+        prompts = self.config.get("user_title_analysis_prompts", {})
+        if isinstance(prompts, dict) and "items" in prompts:
+            items = prompts.get("items", {})
+            if style in items and isinstance(items[style], dict):
+                return items[style].get("default", "")
+        # 兼容旧配置
+        return self.config.get("user_title_analysis_prompt", "")
+
+    def get_golden_quote_analysis_prompt(self, style: str = "default") -> str:
+        """
+        获取金句分析提示词模板
+        
+        Args:
+            style: 提示词风格，默认为 "default"
+            
+        Returns:
+            提示词模板字符串
+        """
+        prompts = self.config.get("golden_quote_analysis_prompts", {})
+        if isinstance(prompts, dict) and "items" in prompts:
+            items = prompts.get("items", {})
+            if style in items and isinstance(items[style], dict):
+                return items[style].get("default", "")
+        # 兼容旧配置
+        return self.config.get("golden_quote_analysis_prompt", "")
+
+    def set_topic_analysis_prompt(self, prompt: str):
+        """设置话题分析提示词模板"""
+        self.config["topic_analysis_prompt"] = prompt
+        self.config.save_config()
+
+    def set_user_title_analysis_prompt(self, prompt: str):
+        """设置用户称号分析提示词模板"""
+        self.config["user_title_analysis_prompt"] = prompt
+        self.config.save_config()
+
+    def set_golden_quote_analysis_prompt(self, prompt: str):
+        """设置金句分析提示词模板"""
+        self.config["golden_quote_analysis_prompt"] = prompt
+        self.config.save_config()
+
     def set_output_format(self, format_type: str):
         """设置输出格式"""
         self.config["output_format"] = format_type

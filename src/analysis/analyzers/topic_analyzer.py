@@ -146,48 +146,25 @@ class TopicAnalyzer(BaseAnalyzer):
         
         max_topics = self.get_max_count()
         
-        prompt = f"""
-你是一个帮我进行群聊信息总结的助手，生成总结内容时，你需要严格遵守下面的几个准则：
-请分析接下来提供的群聊记录，提取出最多{max_topics}个主要话题。
-
-对于每个话题，请提供：
-1. 话题名称（突出主题内容，尽量简明扼要）
-2. 主要参与者（最多5人）
-3. 话题详细描述（包含关键信息和结论）
-
-注意：
-- 对于比较有价值的点，稍微用一两句话详细讲讲，比如不要生成 "Nolan 和 SOV 讨论了 galgame 中关于性符号的衍生情况" 这种宽泛的内容，而是生成更加具体的讨论内容，让其他人只看这个消息就能知道讨论中有价值的，有营养的信息。
-- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，是哪个群友做了什么事情，而不要直接生成和群友没有关系的语句。
-- 对于每一条总结，尽量讲清楚前因后果，以及话题的结论，是什么，为什么，怎么做，如果用户没有讲到细节，则可以不用这么做。
-
-群聊记录：
-{messages_text}
-
-重要：必须返回标准JSON格式，严格遵守以下规则：
-1. 只使用英文双引号 " 不要使用中文引号 " "
-2. 字符串内容中的引号必须转义为 \"
-3. 多个对象之间用逗号分隔
-4. 数组元素之间用逗号分隔
-5. 不要在JSON外添加任何文字说明
-6. 描述内容避免使用特殊符号，用普通文字表达
-
-请严格按照以下JSON格式返回，确保可以被标准JSON解析器解析：
-[
-  {{
-    "topic": "话题名称",
-    "contributors": ["用户1", "用户2"],
-    "detail": "话题描述内容"
-  }},
-  {{
-    "topic": "另一个话题",
-    "contributors": ["用户3", "用户4"],
-    "detail": "另一个话题的描述"
-  }}
-]
-
-注意：返回的内容必须是纯JSON，不要包含markdown代码块标记或其他格式
-"""
-        return prompt
+        # 从配置读取 prompt 模板（默认使用 "default" 风格）
+        prompt_template = self.config_manager.get_topic_analysis_prompt()
+        
+        if prompt_template:
+            # 使用配置中的 prompt 并替换变量
+            try:
+                prompt = prompt_template.format(
+                    max_topics=max_topics,
+                    messages_text=messages_text
+                )
+                logger.info("使用配置中的话题分析提示词")
+                return prompt
+            except KeyError as e:
+                logger.warning(f"话题分析提示词变量格式错误: {e}")
+            except Exception as e:
+                logger.warning(f"应用话题分析提示词失败: {e}")
+        
+        logger.warning("未找到有效的话题分析提示词配置，请检查配置文件")
+        return ""
     
     def extract_with_regex(self, result_text: str, max_topics: int) -> List[Dict]:
         """
