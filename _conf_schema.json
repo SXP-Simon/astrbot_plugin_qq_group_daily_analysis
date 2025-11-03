@@ -150,7 +150,7 @@
     "topic_analysis_prompts": {
         "description": "话题分析提示词模板",
         "type": "object",
-        "hint": "话题分析提示词模板，可自定义修改，保留变量 {max_topics} 和 {messages_text} 不要更改",
+        "hint": "话题分析提示词模板，可自定义修改，保留变量 {max_topics} 和 {messages_text} 不要更改，非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
             "default": {
                 "description": "默认话题分析提示词",
@@ -164,7 +164,7 @@
     "user_title_analysis_prompts": {
         "description": "用户称号分析提示词模板",
         "type": "object",
-        "hint": "用户称号分析提示词模板，可自定义修改，保留变量 {users_text} 不要更改",
+        "hint": "用户称号分析提示词模板，可自定义修改，保留变量 {users_text} 不要更改，非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
             "default": {
                 "description": "默认用户称号分析提示词",
@@ -178,7 +178,7 @@
     "golden_quote_analysis_prompts": {
         "description": "金句分析提示词模板",
         "type": "object",
-        "hint": "金句分析提示词模板，可自定义修改，保留变量 {max_golden_quotes} 和 {messages_text} 不要更改",
+        "hint": "金句分析提示词模板，可自定义修改，保留变量 {max_golden_quotes} 和 {messages_text} 不要更改，非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
             "default": {
                 "description": "默认金句分析提示词",
