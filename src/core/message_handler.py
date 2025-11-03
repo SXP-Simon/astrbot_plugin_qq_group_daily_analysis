@@ -129,11 +129,21 @@ class MessageHandler:
                     # 过滤时间范围内的消息
                     valid_messages_in_round = 0
                     oldest_msg_time = None
+                    has_out_of_range_message = False
 
                     for msg in round_messages:
                         try:
                             msg_time = datetime.fromtimestamp(msg.get("time", 0))
-                            oldest_msg_time = msg_time
+                            
+                            # 记录本轮最老的消息时间
+                            if oldest_msg_time is None or msg_time < oldest_msg_time:
+                                oldest_msg_time = msg_time
+                            
+                            # 检查是否已经超出时间范围
+                            if msg_time < start_time:
+                                has_out_of_range_message = True
+                                # 继续处理本轮剩余消息，但不再查询下一轮
+                                continue
 
                             # 过滤掉机器人自己的消息
                             sender_id = str(msg.get("sender", {}).get("user_id", ""))
@@ -147,18 +157,19 @@ class MessageHandler:
                             logger.warning(f"群 {group_id} 处理单条消息失败: {msg_error}")
                             continue
 
-                    # 如果最老的消息时间已经超出范围，停止获取
-                    if oldest_msg_time and oldest_msg_time < start_time:
-                        logger.info(f"群 {group_id} 已获取到时间范围外的消息，停止获取。共获取 {len(messages)} 条消息")
+                    # 如果本轮有消息已经超出时间范围，立即停止获取
+                    if has_out_of_range_message:
+                        logger.info(f"群 {group_id} 已获取到时间范围外的消息（最老消息时间: {oldest_msg_time.strftime('%Y-%m-%d %H:%M:%S')}），停止获取。共获取 {len(messages)} 条消息")
                         break
 
+                    # 如果本轮没有获取到任何有效消息，停止获取
                     if valid_messages_in_round == 0:
-                        logger.warning(f"群 {group_id} 本轮未获取到有效消息")
+                        logger.warning(f"群 {group_id} 本轮未获取到有效消息，停止获取")
                         break
 
                     # 如果已经获取到足够的消息（达到 max_messages），停止获取
                     if len(messages) >= max_messages:
-                        logger.info(f"群 {group_id} 已获取到足够的消息（{len(messages)} 条，限制 {max_messages} 条），停止获取")
+                        logger.info(f"群 {group_id} 已达到消息数量限制（{len(messages)} 条，限制 {max_messages} 条），停止获取")
                         break
 
                     message_seq = round_messages[0]["message_id"]
@@ -176,6 +187,26 @@ class MessageHandler:
                         break
                     await asyncio.sleep(1)
 
+            # ========== 最终清理步骤:严格过滤和限制 ==========
+            original_count = len(messages)
+            
+            # 1. 严格过滤时间范围外的消息
+            messages = [
+                msg for msg in messages
+                if start_time <= datetime.fromtimestamp(msg.get("time", 0)) <= end_time
+            ]
+            time_filtered_count = len(messages)
+            
+            # 2. 严格限制消息数量
+            if len(messages) > max_messages:
+                # 保留最新的消息(假设messages已按时间排序,从新到旧)
+                messages = messages[:max_messages]
+                logger.info(f"群 {group_id} 消息数量超过限制，已截断: {time_filtered_count} -> {max_messages} 条")
+            
+            # 记录清理结果
+            if original_count != len(messages):
+                logger.info(f"群 {group_id} 最终清理: 原始 {original_count} 条 -> 时间过滤 {time_filtered_count} 条 -> 最终 {len(messages)} 条")
+            
             logger.info(f"群 {group_id} 消息获取完成，共获取到 {len(messages)} 条有效消息（时间范围: 近{days}天），查询轮数: {query_rounds}")
             return messages
 
