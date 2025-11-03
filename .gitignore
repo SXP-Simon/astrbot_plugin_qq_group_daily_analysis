@@ -3,3 +3,5 @@
 .kiro/
 .vscode/
 src/analysis/ARCHITECTURE.md
+.serena/.gitignore
+.serena/project.yml
