@@ -120,11 +120,12 @@ class ConfigManager:
         Returns:
             提示词模板字符串
         """
-        prompts = self.config.get("topic_analysis_prompts", {})
-        if isinstance(prompts, dict) and "items" in prompts:
-            items = prompts.get("items", {})
-            if style in items and isinstance(items[style], dict):
-                return items[style].get("default", "")
+        # 直接从配置中获取 prompts 对象
+        prompts_config = self.config.get("topic_analysis_prompts", {})
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "default")
+        if prompt:
+            return prompt
         # 兼容旧配置
         return self.config.get("topic_analysis_prompt", "")
 
@@ -138,11 +139,12 @@ class ConfigManager:
         Returns:
             提示词模板字符串
         """
-        prompts = self.config.get("user_title_analysis_prompts", {})
-        if isinstance(prompts, dict) and "items" in prompts:
-            items = prompts.get("items", {})
-            if style in items and isinstance(items[style], dict):
-                return items[style].get("default", "")
+        # 直接从配置中获取 prompts 对象
+        prompts_config = self.config.get("user_title_analysis_prompts", {})
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "default")
+        if prompt:
+            return prompt
         # 兼容旧配置
         return self.config.get("user_title_analysis_prompt", "")
 
@@ -156,11 +158,12 @@ class ConfigManager:
         Returns:
             提示词模板字符串
         """
-        prompts = self.config.get("golden_quote_analysis_prompts", {})
-        if isinstance(prompts, dict) and "items" in prompts:
-            items = prompts.get("items", {})
-            if style in items and isinstance(items[style], dict):
-                return items[style].get("default", "")
+        # 直接从配置中获取 prompts 对象
+        prompts_config = self.config.get("golden_quote_analysis_prompts", {})
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "default")
+        if prompt:
+            return prompt
         # 兼容旧配置
         return self.config.get("golden_quote_analysis_prompt", "")
 
