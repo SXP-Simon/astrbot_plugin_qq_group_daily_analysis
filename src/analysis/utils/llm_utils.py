@@ -38,7 +38,7 @@ async def call_provider_with_retry(context, config_manager, prompt: str, max_tok
     for attempt in range(1, retries + 1):
         try:
             if custom_api_key and custom_api_base and custom_model:
-                logger.info(f"使用自定义LLM提供商: {custom_api_base} model={custom_model}")
+                logger.info(f"使用自定义LLM提供商: {custom_api_base} model={custom_model}, max_tokens={max_tokens}, temperature={temperature}")
                 logger.debug(f"自定义LLM提供商 prompt 长度: {len(prompt) if prompt else 0}")
                 logger.debug(f"自定义LLM提供商 prompt 前100字符: {prompt[:100] if prompt else 'None'}...")
                 
@@ -102,7 +102,7 @@ async def call_provider_with_retry(context, config_manager, prompt: str, max_tok
                 if not provider or provider_id == 'unknown':
                     logger.warning(f"获取的提供商不正确 (Provider ID: {provider_id})")
                 
-                logger.info(f"使用LLM provider: {provider}")
+                logger.info(f"使用LLM provider: {provider}, max_tokens={max_tokens}, temperature={temperature}")
                 if not provider:
                     logger.error("provider 为空，无法调用 text_chat，直接返回 None")
                     return None

@@ -57,7 +57,7 @@ class LLMAnalyzer:
             logger.error(f"话题分析失败: {e}")
             return [], TokenUsage()
     
-    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict, umo: str = None) -> Tuple[List[UserTitle], TokenUsage]:
+    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict, umo: str = None, top_users: List[Dict] = None) -> Tuple[List[UserTitle], TokenUsage]:
         """
         使用LLM分析用户称号
         保持原有接口，委托给专门的UserTitleAnalyzer处理
@@ -66,13 +66,14 @@ class LLMAnalyzer:
             messages: 群聊消息列表
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
+            top_users: 活跃用户列表(可选)
             
         Returns:
             (用户称号列表, Token使用统计)
         """
         try:
             logger.info("开始用户称号分析")
-            return await self.user_title_analyzer.analyze_user_titles(messages, user_analysis, umo)
+            return await self.user_title_analyzer.analyze_user_titles(messages, user_analysis, umo, top_users)
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
             return [], TokenUsage()
@@ -96,7 +97,7 @@ class LLMAnalyzer:
             logger.error(f"金句分析失败: {e}")
             return [], TokenUsage()
     
-    async def analyze_all_concurrent(self, messages: List[Dict], user_analysis: Dict, umo: str = None) -> Tuple[List[SummaryTopic], List[UserTitle], List[GoldenQuote], TokenUsage]:
+    async def analyze_all_concurrent(self, messages: List[Dict], user_analysis: Dict, umo: str = None, top_users: List[Dict] = None) -> Tuple[List[SummaryTopic], List[UserTitle], List[GoldenQuote], TokenUsage]:
         """
         并发执行所有分析任务（话题、用户称号、金句）
         
@@ -104,6 +105,7 @@ class LLMAnalyzer:
             messages: 群聊消息列表
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
+            top_users: 活跃用户列表(可选)
             
         Returns:
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
@@ -114,7 +116,7 @@ class LLMAnalyzer:
             # 并发执行三个分析任务
             results = await asyncio.gather(
                 self.topic_analyzer.analyze_topics(messages, umo),
-                self.user_title_analyzer.analyze_user_titles(messages, user_analysis, umo),
+                self.user_title_analyzer.analyze_user_titles(messages, user_analysis, umo, top_users),
                 self.golden_quote_analyzer.analyze_golden_quotes(messages, umo),
                 return_exceptions=True
             )
