@@ -8,7 +8,7 @@ from ...src.models.data_models import GroupStatistics, SummaryTopic, UserTitle, 
 from ...src.core.message_handler import MessageHandler
 from ...src.analysis.llm_analyzer import LLMAnalyzer
 from ...src.analysis.statistics import UserAnalyzer
-
+from astrbot.api import logger
 
 class MessageAnalyzer:
     """消息分析器 - 整合所有分析功能"""
@@ -36,6 +36,11 @@ class MessageAnalyzer:
 
             # 用户分析
             user_analysis = self.user_analyzer.analyze_users(messages)
+            
+            # 获取活跃用户列表 - 使用get_top_users方法,limit从配置中读取
+            max_user_titles = self.config_manager.get_max_user_titles()
+            top_users = self.user_analyzer.get_top_users(user_analysis, limit=max_user_titles)
+            logger.info(f"获取到 {len(top_users)} 个活跃用户用于称号分析(配置上限: {max_user_titles})")
 
             # LLM分析 - 使用并发方式
             topics = []
@@ -50,9 +55,9 @@ class MessageAnalyzer:
             
             # 如果三个分析都启用，使用并发执行
             if topic_enabled and user_title_enabled and golden_quote_enabled:
-                # 并发执行所有三个分析任务
+                # 并发执行所有三个分析任务，传入活跃用户列表
                 topics, user_titles, golden_quotes, total_token_usage = await self.llm_analyzer.analyze_all_concurrent(
-                    messages, user_analysis, umo=unified_msg_origin
+                    messages, user_analysis, umo=unified_msg_origin, top_users=top_users
                 )
             else:
                 # 如果只启用部分分析，则按需执行
@@ -63,7 +68,10 @@ class MessageAnalyzer:
                     total_token_usage.total_tokens += topic_tokens.total_tokens
 
                 if user_title_enabled:
-                    user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(messages, user_analysis, umo=unified_msg_origin)
+                    # 传入活跃用户列表
+                    user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(
+                        messages, user_analysis, umo=unified_msg_origin, top_users=top_users
+                    )
                     total_token_usage.prompt_tokens += title_tokens.prompt_tokens
                     total_token_usage.completion_tokens += title_tokens.completion_tokens
                     total_token_usage.total_tokens += title_tokens.total_tokens
@@ -86,6 +94,5 @@ class MessageAnalyzer:
             }
 
         except Exception as e:
-            from astrbot.api import logger
             logger.error(f"消息分析失败: {e}")
             return None

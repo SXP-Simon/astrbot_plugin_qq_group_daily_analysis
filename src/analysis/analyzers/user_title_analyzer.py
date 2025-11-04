@@ -26,7 +26,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
     
     def get_max_tokens(self) -> int:
         """获取最大token数"""
-        return 1500
+        return self.config_manager.get_user_title_max_tokens()
     
     def get_temperature(self) -> float:
         """获取温度参数"""
@@ -136,22 +136,42 @@ class UserTitleAnalyzer(BaseAnalyzer):
             logger.error(f"创建用户称号对象失败: {e}")
             return []
     
-    def prepare_user_data(self, messages: List[Dict], user_analysis: Dict) -> Dict:
+    def prepare_user_data(self, messages: List[Dict], user_analysis: Dict, top_users: List[Dict] = None) -> Dict:
         """
         准备用户数据
         
         Args:
             messages: 群聊消息列表
             user_analysis: 用户分析统计
+            top_users: 活跃用户列表(从get_top_users获取)
             
         Returns:
             准备好的用户数据字典
         """
         try:
+            # 获取机器人QQ号用于过滤
+            bot_qq_id = self.config_manager.get_bot_qq_id()
+            
             user_summaries = []
             
+            # 如果提供了top_users列表,只分析这些活跃用户
+            if top_users:
+                logger.info(f"使用get_top_users筛选出的 {len(top_users)} 个活跃用户进行称号分析")
+                target_user_ids = {str(user['user_id']) for user in top_users}
+            else:
+                # 兼容旧逻辑:如果没有提供top_users,则使用所有消息数>=5的用户
+                logger.info("未提供活跃用户列表,使用消息数>=5的用户")
+                target_user_ids = {user_id for user_id, stats in user_analysis.items()
+                                  if stats["message_count"] >= 5}
+            
             for user_id, stats in user_analysis.items():
-                if stats["message_count"] < 5:  # 过滤活跃度太低的用户
+                # 过滤机器人自己的消息
+                if bot_qq_id and str(user_id) == str(bot_qq_id):
+                    logger.debug(f"过滤掉机器人QQ号: {user_id}")
+                    continue
+                
+                # 只处理活跃用户
+                if user_id not in target_user_ids:
                     continue
                 
                 # 分析用户特征
@@ -164,18 +184,16 @@ class UserTitleAnalyzer(BaseAnalyzer):
                     "qq": int(user_id),
                     "message_count": stats["message_count"],
                     "avg_chars": round(avg_chars, 1),
-                    "emoji_ratio": round(stats["emoji_count"] / stats["message_count"], 2),
-                    "night_ratio": round(night_messages / stats["message_count"], 2),
-                    "reply_ratio": round(stats["reply_count"] / stats["message_count"], 2)
+                    "emoji_ratio": round(stats["emoji_count"] / stats["message_count"], 2) if stats["message_count"] > 0 else 0,
+                    "night_ratio": round(night_messages / stats["message_count"], 2) if stats["message_count"] > 0 else 0,
+                    "reply_ratio": round(stats["reply_count"] / stats["message_count"], 2) if stats["message_count"] > 0 else 0
                 })
             
             if not user_summaries:
                 return {"user_summaries": []}
             
-            # 按消息数量排序，取前N名
-            max_user_titles = self.get_max_count()
+            # 按消息数量排序
             user_summaries.sort(key=lambda x: x["message_count"], reverse=True)
-            user_summaries = user_summaries[:max_user_titles]
             
             return {"user_summaries": user_summaries}
             
@@ -183,7 +201,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
             logger.error(f"准备用户数据失败: {e}")
             return {"user_summaries": []}
     
-    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict, umo: str = None) -> Tuple[List[UserTitle], TokenUsage]:
+    async def analyze_user_titles(self, messages: List[Dict], user_analysis: Dict, umo: str = None, top_users: List[Dict] = None) -> Tuple[List[UserTitle], TokenUsage]:
         """
         分析用户称号
         
@@ -191,19 +209,20 @@ class UserTitleAnalyzer(BaseAnalyzer):
             messages: 群聊消息列表
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
+            top_users: 活跃用户列表(从get_top_users获取,可选)
             
         Returns:
             (用户称号列表, Token使用统计)
         """
         try:
-            # 准备用户数据
-            user_data = self.prepare_user_data(messages, user_analysis)
+            # 准备用户数据,传入活跃用户列表
+            user_data = self.prepare_user_data(messages, user_analysis, top_users)
             
             if not user_data["user_summaries"]:
                 logger.info("没有符合条件的用户，返回空结果")
                 return [], TokenUsage()
             
-            logger.info(f"开始分析 {len(user_data['user_summaries'])} 个用户的称号")
+            logger.info(f"开始分析 {len(user_data['user_summaries'])} 个活跃用户的称号")
             return await self.analyze(user_data, umo)
             
         except Exception as e:
