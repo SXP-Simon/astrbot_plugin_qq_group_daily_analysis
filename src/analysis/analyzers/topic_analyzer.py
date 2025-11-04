@@ -29,7 +29,7 @@ class TopicAnalyzer(BaseAnalyzer):
     
     def get_max_tokens(self) -> int:
         """获取最大token数"""
-        return 10000
+        return self.config_manager.get_topic_max_tokens()
     
     def get_temperature(self) -> float:
         """获取温度参数"""

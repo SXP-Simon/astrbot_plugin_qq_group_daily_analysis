@@ -26,7 +26,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
     
     def get_max_tokens(self) -> int:
         """获取最大token数"""
-        return 1500
+        return self.config_manager.get_user_title_max_tokens()
     
     def get_temperature(self) -> float:
         """获取温度参数"""
