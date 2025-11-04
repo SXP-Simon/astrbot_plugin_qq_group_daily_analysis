@@ -149,6 +149,9 @@ class UserTitleAnalyzer(BaseAnalyzer):
             准备好的用户数据字典
         """
         try:
+            # 获取机器人QQ号用于过滤
+            bot_qq_id = self.config_manager.get_bot_qq_id()
+            
             user_summaries = []
             
             # 如果提供了top_users列表,只分析这些活跃用户
@@ -162,6 +165,11 @@ class UserTitleAnalyzer(BaseAnalyzer):
                                   if stats["message_count"] >= 5}
             
             for user_id, stats in user_analysis.items():
+                # 过滤机器人自己的消息
+                if bot_qq_id and str(user_id) == str(bot_qq_id):
+                    logger.debug(f"过滤掉机器人QQ号: {user_id}")
+                    continue
+                
                 # 只处理活跃用户
                 if user_id not in target_user_ids:
                     continue
