@@ -77,8 +77,15 @@ class UserAnalyzer:
 
     def get_top_users(self, user_analysis: Dict[str, Dict], limit: int = 10) -> List[Dict]:
         """获取最活跃的用户"""
+        # 获取机器人QQ号用于过滤
+        bot_qq_id = self.config_manager.get_bot_qq_id()
+        
         users = []
         for user_id, stats in user_analysis.items():
+            # 过滤机器人自己
+            if bot_qq_id and str(user_id) == str(bot_qq_id):
+                continue
+                
             users.append({
                 "user_id": user_id,
                 "nickname": stats["nickname"],
