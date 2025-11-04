@@ -117,6 +117,24 @@
         "default": 2,
         "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
     },
+    "topic_max_tokens": {
+        "type": "int",
+        "description": "话题分析最大 Token 数",
+        "default": 12288,
+        "hint": "话题分析时 LLM 能生成的最大 token 数量。当分析内容较多或者分析提示词复杂时，建议适当调大此值以保证输出质量。"
+    },
+    "golden_quote_max_tokens": {
+        "type": "int",
+        "description": "金句分析最大 Token 数",
+        "default": 4096,
+        "hint": "金句分析时 LLM 能生成的最大 token 数量。当分析内容较多或者分析提示词复杂时，建议适当调大此值以保证输出质量。"
+    },
+    "user_title_max_tokens": {
+        "type": "int",
+        "description": "用户称号分析最大 Token 数",
+        "default": 4096,
+        "hint": "用户称号分析时 LLM 能生成的最大 token 数量。当分析内容较多或者分析提示词复杂时，建议适当调大此值以保证输出质量。"
+    },
     "custom_api_key": {
         "type": "string",
         "description": "自定义 LLM 服务 API Key (选填)",

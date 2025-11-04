@@ -87,6 +87,18 @@ class ConfigManager:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
         return self.config.get("llm_backoff", 2)
 
+    def get_topic_max_tokens(self) -> int:
+        """获取话题分析最大token数"""
+        return self.config.get("topic_max_tokens", 12288)
+
+    def get_golden_quote_max_tokens(self) -> int:
+        """获取金句分析最大token数"""
+        return self.config.get("golden_quote_max_tokens", 4096)
+
+    def get_user_title_max_tokens(self) -> int:
+        """获取用户称号分析最大token数"""
+        return self.config.get("user_title_max_tokens", 4096)
+
     def get_custom_api_key(self) -> str:
         """获取自定义 LLM 服务的 API Key"""
         return self.config.get("custom_api_key", "")
