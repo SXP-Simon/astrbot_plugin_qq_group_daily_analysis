@@ -17,6 +17,9 @@ class UserAnalyzer:
 
     def analyze_users(self, messages: List[Dict]) -> Dict[str, Dict]:
         """分析用户活跃度"""
+        # 获取机器人QQ号用于过滤
+        bot_qq_id = self.config_manager.get_bot_qq_id()
+        
         user_stats = defaultdict(lambda: {
             "message_count": 0,
             "char_count": 0,
@@ -29,6 +32,11 @@ class UserAnalyzer:
         for msg in messages:
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
+            
+            # 跳过机器人自己的消息，避免进入统计
+            if bot_qq_id and user_id == str(bot_qq_id):
+                continue
+            
             nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
 
             user_stats[user_id]["message_count"] += 1
