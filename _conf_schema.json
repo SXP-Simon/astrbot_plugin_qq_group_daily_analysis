@@ -152,7 +152,7 @@
         "type": "object",
         "hint": "话题分析提示词模板，可自定义修改，保留变量 {max_topics} 和 {messages_text} 写法不要更改，需要写 JSON 块请使用双花括号 {{ ... }} 兼容当前编辑存在的问题。非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
-            "default": {
+            "topic_prompt": {
                 "description": "默认话题分析提示词",
                 "type": "text",
                 "editor_mode": true,
@@ -166,7 +166,7 @@
         "type": "object",
         "hint": "用户称号分析提示词模板，可自定义修改，保留变量 {users_text} 写法不要更改，需要写 JSON 块请使用双花括号 {{ ... }} 兼容当前编辑存在的问题。非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
-            "default": {
+            "user_title_prompt": {
                 "description": "默认用户称号分析提示词",
                 "type": "text",
                 "editor_mode": true,
@@ -180,7 +180,7 @@
         "type": "object",
         "hint": "金句分析提示词模板，可自定义修改，保留变量 {max_golden_quotes} 和 {messages_text} 写法不要更改，需要写 JSON 块请使用双花括号 {{ ... }} 兼容当前编辑存在的问题。非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
         "items": {
-            "default": {
+            "golden_quote_prompt": {
                 "description": "默认金句分析提示词",
                 "type": "text",
                 "editor_mode": true,
