@@ -115,19 +115,15 @@ class ConfigManager:
         获取话题分析提示词模板
         
         Args:
-            style: 提示词条目名称，默认为 "topic_prompt"
+            style: 提示词风格，默认为 "topic_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 从配置中获取 topic_analysis_prompts 对象
+        # 直接从配置中获取 prompts 对象
         prompts_config = self.config.get("topic_analysis_prompts", {})
-        # 获取 items 对象
-        items = prompts_config.get("items", {})
-        # 从 items 中获取指定的 prompt 配置
-        prompt_config = items.get(style, {})
-        # 获取 default 字段的值
-        prompt = prompt_config.get("default", "")
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "topic_prompt")
         if prompt:
             return prompt
         # 兼容旧配置
@@ -138,19 +134,15 @@ class ConfigManager:
         获取用户称号分析提示词模板
         
         Args:
-            style: 提示词条目名称，默认为 "user_title_prompt"
+            style: 提示词风格，默认为 "user_title_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 从配置中获取 user_title_analysis_prompts 对象
+        # 直接从配置中获取 prompts 对象
         prompts_config = self.config.get("user_title_analysis_prompts", {})
-        # 获取 items 对象
-        items = prompts_config.get("items", {})
-        # 从 items 中获取指定的 prompt 配置
-        prompt_config = items.get(style, {})
-        # 获取 default 字段的值
-        prompt = prompt_config.get("default", "")
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "user_title_prompt")
         if prompt:
             return prompt
         # 兼容旧配置
@@ -161,19 +153,15 @@ class ConfigManager:
         获取金句分析提示词模板
         
         Args:
-            style: 提示词条目名称，默认为 "golden_quote_prompt"
+            style: 提示词风格，默认为 "golden_quote_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 从配置中获取 golden_quote_analysis_prompts 对象
+        # 直接从配置中获取 prompts 对象
         prompts_config = self.config.get("golden_quote_analysis_prompts", {})
-        # 获取 items 对象
-        items = prompts_config.get("items", {})
-        # 从 items 中获取指定的 prompt 配置
-        prompt_config = items.get(style, {})
-        # 获取 default 字段的值
-        prompt = prompt_config.get("default", "")
+        # 获取指定的 prompt
+        prompt = prompts_config.get(style, "golden_quote_prompt")
         if prompt:
             return prompt
         # 兼容旧配置
