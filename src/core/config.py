@@ -110,58 +110,70 @@ class ConfigManager:
         """获取PDF文件名格式"""
         return self.config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
 
-    def get_topic_analysis_prompt(self, style: str = "default") -> str:
+    def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
         """
         获取话题分析提示词模板
         
         Args:
-            style: 提示词风格，默认为 "default"
+            style: 提示词条目名称，默认为 "topic_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 直接从配置中获取 prompts 对象
+        # 从配置中获取 topic_analysis_prompts 对象
         prompts_config = self.config.get("topic_analysis_prompts", {})
-        # 获取指定的 prompt
-        prompt = prompts_config.get(style, "default")
+        # 获取 items 对象
+        items = prompts_config.get("items", {})
+        # 从 items 中获取指定的 prompt 配置
+        prompt_config = items.get(style, {})
+        # 获取 default 字段的值
+        prompt = prompt_config.get("default", "")
         if prompt:
             return prompt
         # 兼容旧配置
         return self.config.get("topic_analysis_prompt", "")
 
-    def get_user_title_analysis_prompt(self, style: str = "default") -> str:
+    def get_user_title_analysis_prompt(self, style: str = "user_title_prompt") -> str:
         """
         获取用户称号分析提示词模板
         
         Args:
-            style: 提示词风格，默认为 "default"
+            style: 提示词条目名称，默认为 "user_title_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 直接从配置中获取 prompts 对象
+        # 从配置中获取 user_title_analysis_prompts 对象
         prompts_config = self.config.get("user_title_analysis_prompts", {})
-        # 获取指定的 prompt
-        prompt = prompts_config.get(style, "default")
+        # 获取 items 对象
+        items = prompts_config.get("items", {})
+        # 从 items 中获取指定的 prompt 配置
+        prompt_config = items.get(style, {})
+        # 获取 default 字段的值
+        prompt = prompt_config.get("default", "")
         if prompt:
             return prompt
         # 兼容旧配置
         return self.config.get("user_title_analysis_prompt", "")
 
-    def get_golden_quote_analysis_prompt(self, style: str = "default") -> str:
+    def get_golden_quote_analysis_prompt(self, style: str = "golden_quote_prompt") -> str:
         """
         获取金句分析提示词模板
         
         Args:
-            style: 提示词风格，默认为 "default"
+            style: 提示词条目名称，默认为 "golden_quote_prompt"
             
         Returns:
             提示词模板字符串
         """
-        # 直接从配置中获取 prompts 对象
+        # 从配置中获取 golden_quote_analysis_prompts 对象
         prompts_config = self.config.get("golden_quote_analysis_prompts", {})
-        # 获取指定的 prompt
-        prompt = prompts_config.get(style, "default")
+        # 获取 items 对象
+        items = prompts_config.get("items", {})
+        # 从 items 中获取指定的 prompt 配置
+        prompt_config = items.get(style, {})
+        # 获取 default 字段的值
+        prompt = prompt_config.get("default", "")
         if prompt:
             return prompt
         # 兼容旧配置
