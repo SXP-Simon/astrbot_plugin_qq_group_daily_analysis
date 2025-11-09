@@ -6,7 +6,4 @@
 from .pdf_utils import PDFInstaller
 from .helpers import MessageAnalyzer
 
-__all__ = [
-    'PDFInstaller',
-    'MessageAnalyzer'
-]
+__all__ = ["PDFInstaller", "MessageAnalyzer"]

@@ -5,6 +5,4 @@
 
 from .auto_scheduler import AutoScheduler
 
-__all__ = [
-    'AutoScheduler'
-]
+__all__ = ["AutoScheduler"]

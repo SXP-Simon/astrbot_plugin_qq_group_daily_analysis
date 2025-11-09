@@ -6,7 +6,7 @@ HTML模板模块
 
 class HTMLTemplates:
     """HTML模板管理类"""
-    
+
     @staticmethod
     def get_image_template() -> str:
         """获取图片报告的HTML模板（使用{{ }}占位符）"""
@@ -594,7 +594,7 @@ class HTMLTemplates:
     </div>
 </body>
 </html>"""
-    
+
     @staticmethod
     def get_pdf_template() -> str:
         """获取PDF报告的HTML模板（使用{}占位符）"""
