@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.6.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.7.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -91,6 +91,19 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v3.7.0
+- feat(provider): 根据配置键获取 Provider，支持多级回退：
+
+    1. 尝试从配置获取指定的 provider_id（如 topic_provider_id）
+
+    2. 回退到主 LLM provider_id（llm_provider_id）
+
+    3. 回退到当前会话的 Provider（通过 umo）
+
+    4. 回退到第一个可用的 Provider
+
+
 
 ### v3.6.0
 - 由于 napcat 存在的问题 [NapNeko/NapCatQQ#441](https://github.com/NapNeko/NapCatQQ/issues/441) 选择取消分页拉取和多次轮询获取逻辑，解决获取消息数量异常的情况
