@@ -69,10 +69,6 @@ class ConfigManager:
         """获取最大金句数量"""
         return self.config.get("max_golden_quotes", 5)
 
-    def get_max_query_rounds(self) -> int:
-        """获取最大查询轮数"""
-        return self.config.get("max_query_rounds", 35)
-
     def get_llm_timeout(self) -> int:
         """获取LLM请求超时时间（秒）"""
         return self.config.get("llm_timeout", 30)
@@ -97,17 +93,21 @@ class ConfigManager:
         """获取用户称号分析最大token数"""
         return self.config.get("user_title_max_tokens", 4096)
 
-    def get_custom_api_key(self) -> str:
-        """获取自定义 LLM 服务的 API Key"""
-        return self.config.get("custom_api_key", "")
+    def get_llm_provider_id(self) -> str:
+        """获取主 LLM Provider ID"""
+        return self.config.get("llm_provider_id", "")
 
-    def get_custom_api_base_url(self) -> str:
-        """获取自定义 LLM 服务的 Base URL"""
-        return self.config.get("custom_api_base_url", "")
+    def get_topic_provider_id(self) -> str:
+        """获取话题分析专用 Provider ID"""
+        return self.config.get("topic_provider_id", "")
 
-    def get_custom_model_name(self) -> str:
-        """获取自定义 LLM 服务的模型名称"""
-        return self.config.get("custom_model_name", "")
+    def get_user_title_provider_id(self) -> str:
+        """获取用户称号分析专用 Provider ID"""
+        return self.config.get("user_title_provider_id", "")
+
+    def get_golden_quote_provider_id(self) -> str:
+        """获取金句分析专用 Provider ID"""
+        return self.config.get("golden_quote_provider_id", "")
 
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
@@ -262,11 +262,6 @@ class ConfigManager:
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
         self.config["max_golden_quotes"] = count
-        self.config.save_config()
-
-    def set_max_query_rounds(self, rounds: int):
-        """设置最大查询轮数"""
-        self.config["max_query_rounds"] = rounds
         self.config.save_config()
 
     def set_pdf_output_dir(self, directory: str):

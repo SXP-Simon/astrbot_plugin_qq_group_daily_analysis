@@ -412,7 +412,6 @@ class QQGroupDailyAnalysis(Star):
             pdf_status = PDFInstaller.get_pdf_status(config_manager)
             output_format = config_manager.get_output_format()
             min_threshold = config_manager.get_min_messages_threshold()
-            max_rounds = config_manager.get_max_query_rounds()
 
             yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status}

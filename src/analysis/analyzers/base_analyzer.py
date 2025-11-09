@@ -32,6 +32,16 @@ class BaseAnalyzer(ABC):
         self.context = context
         self.config_manager = config_manager
 
+    def get_provider_id_key(self) -> str:
+        """
+        获取 Provider ID 配置键名
+        子类可重写以指定特定的 provider，默认返回 None（使用主 LLM Provider）
+
+        Returns:
+            Provider ID 配置键名，如 'topic_provider_id'
+        """
+        return None
+
     @abstractmethod
     def get_data_type(self) -> str:
         """
@@ -128,12 +138,19 @@ class BaseAnalyzer(ABC):
                 )
                 return [], TokenUsage()
 
-            # 2. 调用LLM
+            # 2. 调用LLM（使用配置的 provider）
             max_tokens = self.get_max_tokens()
             temperature = self.get_temperature()
+            provider_id_key = self.get_provider_id_key()
 
             response = await call_provider_with_retry(
-                self.context, self.config_manager, prompt, max_tokens, temperature, umo
+                self.context,
+                self.config_manager,
+                prompt,
+                max_tokens,
+                temperature,
+                umo,
+                provider_id_key,
             )
 
             if response is None:

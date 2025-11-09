@@ -19,6 +19,10 @@ class TopicAnalyzer(BaseAnalyzer):
     专门处理群聊话题的提取和分析
     """
 
+    def get_provider_id_key(self) -> str:
+        """获取 Provider ID 配置键名"""
+        return "topic_provider_id"
+
     def get_data_type(self) -> str:
         """获取数据类型标识"""
         return "话题"

@@ -9,6 +9,171 @@ from astrbot.api import logger
 import aiohttp
 
 
+def _try_get_provider_by_id(
+    context, provider_id: str, description: str
+) -> Optional[Any]:
+    """
+    尝试通过 ID 获取 Provider 的辅助函数
+
+    Args:
+        context: AstrBot上下文对象
+        provider_id: Provider ID
+        description: 描述信息，用于日志
+
+    Returns:
+        Provider 实例或 None
+    """
+    if not provider_id or not isinstance(provider_id, str) or not provider_id.strip():
+        return None
+
+    provider_id = provider_id.strip()
+    logger.info(f"尝试使用{description}: {provider_id}")
+    try:
+        provider = context.get_provider_by_id(provider_id=provider_id)
+        if provider:
+            logger.info(f"✓ 使用{description}: {provider_id}")
+            return provider
+    except Exception as e:
+        logger.warning(f"无法找到{description} '{provider_id}': {e}")
+    return None
+
+
+def _try_get_session_provider(context, umo: str) -> Optional[Any]:
+    """
+    尝试获取会话 Provider 的辅助函数
+
+    Args:
+        context: AstrBot上下文对象
+        umo: unified_msg_origin
+
+    Returns:
+        Provider 实例或 None
+    """
+    try:
+        provider = context.get_using_provider(umo=umo)
+        if provider:
+            try:
+                meta = provider.meta()
+                provider_id = meta.id
+                logger.info(f"✓ 使用当前会话的 Provider: {provider_id}")
+            except Exception:
+                logger.info("✓ 使用当前会话的默认 Provider")
+            return provider
+    except Exception as e:
+        logger.warning(f"无法获取会话 Provider: {e}")
+    return None
+
+
+def _try_get_first_available_provider(context) -> Optional[Any]:
+    """
+    尝试获取第一个可用 Provider 的辅助函数
+
+    Args:
+        context: AstrBot上下文对象
+
+    Returns:
+        Provider 实例或 None
+    """
+    try:
+        all_providers = context.get_all_providers()
+        if all_providers and len(all_providers) > 0:
+            provider = all_providers[0]
+            logger.info(f"✓ 使用第一个可用 Provider: {type(provider).__name__}")
+            return provider
+    except Exception as e:
+        logger.warning(f"无法获取任何 Provider: {e}")
+    return None
+
+
+def get_provider_with_fallback(
+    context, config_manager, provider_id_key: str, umo: str = None
+) -> Optional[Any]:
+    """
+    根据配置键获取 Provider，支持多级回退
+
+    回退顺序：
+    1. 尝试从配置获取指定的 provider_id（如 topic_provider_id）
+    2. 回退到主 LLM provider_id（llm_provider_id）
+    3. 回退到当前会话的 Provider（通过 umo）
+    4. 回退到第一个可用的 Provider
+
+    Args:
+        context: AstrBot上下文对象
+        config_manager: 配置管理器
+        provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'）
+        umo: unified_msg_origin，用于获取会话默认 Provider
+
+    Returns:
+        Provider 实例或 None
+    """
+    try:
+        # 输出Provider选择开始日志
+        task_desc = provider_id_key if provider_id_key else "默认任务"
+        logger.info(f"[Provider 选择] 开始为 {task_desc} 选择 Provider...")
+
+        # 定义回退策略列表
+        strategies = []
+        strategy_names = []
+
+        # 1. 特定任务的 provider_id
+        if provider_id_key:
+            getter_method = f"get_{provider_id_key}"
+            if hasattr(config_manager, getter_method):
+                specific_provider_id = getattr(config_manager, getter_method)()
+                if specific_provider_id:
+                    strategies.append(
+                        lambda pid=specific_provider_id: _try_get_provider_by_id(
+                            context, pid, f"配置的 {provider_id_key}"
+                        )
+                    )
+                    strategy_names.append(f"1. 配置的 {provider_id_key}")
+
+        # 2. 主 LLM provider_id
+        main_provider_id = config_manager.get_llm_provider_id()
+        if main_provider_id:
+            strategies.append(
+                lambda pid=main_provider_id: _try_get_provider_by_id(
+                    context, pid, "主 LLM Provider"
+                )
+            )
+            strategy_names.append("2. 主 LLM Provider")
+
+        # 3. 当前会话的 Provider
+        strategies.append(lambda: _try_get_session_provider(context, umo))
+        strategy_names.append("3. 当前会话 Provider")
+
+        # 4. 第一个可用的 Provider
+        strategies.append(lambda: _try_get_first_available_provider(context))
+        strategy_names.append("4. 第一个可用 Provider")
+
+        # 输出回退策略列表
+        logger.info(f"[Provider 选择] 回退策略顺序：{' -> '.join(strategy_names)}")
+
+        # 依次尝试每个策略
+        for idx, strategy in enumerate(strategies):
+            provider = strategy()
+            if provider:
+                # 获取最终的 provider ID 用于日志
+                final_provider_id = "unknown"
+                try:
+                    meta = provider.meta()
+                    final_provider_id = meta.id
+                except Exception:
+                    final_provider_id = type(provider).__name__
+
+                logger.info(
+                    f"[Provider 选择] ✓ 成功！使用策略 #{idx + 1}，Provider ID: {final_provider_id}"
+                )
+                return provider
+
+        logger.error("[Provider 选择] ✗ 失败：所有回退策略均无法获取可用 Provider")
+        return None
+
+    except Exception as e:
+        logger.error(f"[Provider 选择] ✗ 异常：Provider 选择过程出错: {e}")
+        return None
+
+
 async def call_provider_with_retry(
     context,
     config_manager,
@@ -16,9 +181,10 @@ async def call_provider_with_retry(
     max_tokens: int,
     temperature: float,
     umo: str = None,
+    provider_id_key: str = None,
 ) -> Optional[Any]:
     """
-    调用LLM提供者，带超时、重试与退避。支持自定义服务商。
+    调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
 
     Args:
         context: AstrBot上下文对象
@@ -27,6 +193,7 @@ async def call_provider_with_retry(
         max_tokens: 最大生成token数
         temperature: 采样温度
         umo: 指定使用的模型唯一标识符
+        provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'），用于选择特定的 Provider
 
     Returns:
         LLM生成的结果，失败时返回None
@@ -35,129 +202,47 @@ async def call_provider_with_retry(
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
 
-    # 获取自定义服务商参数
-    custom_api_key = config_manager.get_custom_api_key()
-    custom_api_base = config_manager.get_custom_api_base_url()
-    custom_model = config_manager.get_custom_model_name()
-
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
-            if custom_api_key and custom_api_base and custom_model:
-                logger.info(
-                    f"使用自定义LLM提供商: {custom_api_base} model={custom_model}, max_tokens={max_tokens}, temperature={temperature}"
+            # 使用新的 provider 选择逻辑，支持配置化选择和多级回退
+            provider = get_provider_with_fallback(
+                context, config_manager, provider_id_key, umo
+            )
+
+            provider_id = "unknown"
+            if provider:
+                try:
+                    meta = provider.meta()
+                    provider_id = meta.id
+                except Exception as e:
+                    logger.debug(f"获取提供商ID失败: {e}")
+
+            if not provider:
+                logger.error("provider 为空，无法调用 text_chat，直接返回 None")
+                return None
+
+            logger.info(
+                f"[LLM 调用] 使用 Provider: {provider_id} | "
+                f"max_tokens={max_tokens} | temperature={temperature} | "
+                f"prompt长度={len(prompt) if prompt else 0}字符"
+            )
+
+            logger.debug(
+                f"[LLM 调用] Prompt 前100字符: {prompt[:100] if prompt else 'None'}..."
+            )
+
+            # 检查 prompt 是否为空
+            if not prompt or not prompt.strip():
+                logger.error(
+                    "LLM provider: prompt 为空或只包含空白字符，无法调用 text_chat"
                 )
-                logger.debug(
-                    f"自定义LLM提供商 prompt 长度: {len(prompt) if prompt else 0}"
-                )
-                logger.debug(
-                    f"自定义LLM提供商 prompt 前100字符: {prompt[:100] if prompt else 'None'}..."
-                )
+                return None
 
-                # 检查 prompt 是否为空
-                if not prompt or not prompt.strip():
-                    logger.error(
-                        "自定义LLM提供商: prompt 为空或只包含空白字符，无法发送请求"
-                    )
-                    return None
-
-                async with aiohttp.ClientSession() as session:
-                    headers = {
-                        "Authorization": f"Bearer {custom_api_key}",
-                        "Content-Type": "application/json",
-                    }
-                    payload = {
-                        "model": custom_model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    }
-                    aio_timeout = aiohttp.ClientTimeout(total=timeout)
-                    async with session.post(
-                        custom_api_base,
-                        json=payload,
-                        headers=headers,
-                        timeout=aio_timeout,
-                    ) as resp:
-                        if resp.status != 200:
-                            error_text = await resp.text()
-                            logger.error(
-                                f"自定义LLM服务商请求失败: HTTP {resp.status}, 内容: {error_text}"
-                            )
-                        try:
-                            response_json = await resp.json()
-                        except Exception as json_err:
-                            error_text = await resp.text()
-                            logger.error(
-                                f"自定义LLM服务商响应JSON解析失败: {json_err}, 内容: {error_text}"
-                            )
-                            return None
-                        # 兼容 OpenAI 格式，安全访问嵌套字段
-                        content = None
-                        try:
-                            choices = response_json.get("choices")
-                            if (
-                                choices
-                                and isinstance(choices, list)
-                                and len(choices) > 0
-                            ):
-                                message = choices[0].get("message")
-                                if message and isinstance(message, dict):
-                                    content = message.get("content")
-                            if content is None:
-                                logger.error(f"自定义LLM响应格式异常: {response_json}")
-                                return None
-                        except Exception as key_err:
-                            logger.error(
-                                f"自定义LLM响应结构解析失败: {key_err}, 响应内容: {response_json}"
-                            )
-                            return None
-
-                        # 构造一个兼容原有逻辑的对象
-                        class CustomResponse:
-                            completion_text = content
-                            raw_completion = response_json
-
-                        return CustomResponse()
-            else:
-                # 确保使用当前指定的模型
-                provider = context.get_using_provider(umo=umo)
-                provider_id = "unknown"
-                if provider:
-                    try:
-                        meta = provider.meta()
-                        provider_id = meta.id
-                    except Exception as e:
-                        logger.debug(f"获取提供商ID失败: {e}")
-                logger.info(f"获取到的 provider ID: {provider_id}")
-                if not provider or provider_id == "unknown":
-                    logger.warning(f"获取的提供商不正确 (Provider ID: {provider_id})")
-
-                logger.info(
-                    f"使用LLM provider: {provider}, max_tokens={max_tokens}, temperature={temperature}"
-                )
-                if not provider:
-                    logger.error("provider 为空，无法调用 text_chat，直接返回 None")
-                    return None
-
-                logger.debug(
-                    f"LLM provider prompt 长度: {len(prompt) if prompt else 0}"
-                )
-                logger.debug(
-                    f"LLM provider prompt 前100字符: {prompt[:100] if prompt else 'None'}..."
-                )
-
-                # 检查 prompt 是否为空
-                if not prompt or not prompt.strip():
-                    logger.error(
-                        "LLM provider: prompt 为空或只包含空白字符，无法调用 text_chat"
-                    )
-                    return None
-
-                coro = provider.text_chat(
-                    prompt=prompt, max_tokens=max_tokens, temperature=temperature
-                )
-                return await asyncio.wait_for(coro, timeout=timeout)
+            coro = provider.text_chat(
+                prompt=prompt, max_tokens=max_tokens, temperature=temperature
+            )
+            return await asyncio.wait_for(coro, timeout=timeout)
         except asyncio.TimeoutError as e:
             last_exc = e
             logger.warning(f"LLM请求超时: 第{attempt}次, timeout={timeout}s")

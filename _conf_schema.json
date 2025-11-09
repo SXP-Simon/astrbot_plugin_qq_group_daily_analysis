@@ -93,12 +93,6 @@
         "default": 5,
         "hint": "分析报告中显示的最大金句数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
     },
-    "max_query_rounds": {
-        "type": "int",
-        "description": "最大消息平台历史消息查询轮数",
-        "default": 15,
-        "hint": "有时候平台接口返回的历史消息不完整，导致获取的消息数量不足，可以适当增加查询轮数以获取更多消息，但会增加请求时间和资源消耗。"
-    },
     "llm_timeout": {
         "type": "int",
         "description": "LLM 请求超时时间（秒）",
@@ -135,23 +129,33 @@
         "default": 4096,
         "hint": "（兼容部分提供商，实测大部分模型调整后没有明显效果）用户称号分析时 LLM 能生成的最大 token 数量。当分析内容较多或者分析提示词复杂时，建议适当调大此值以保证输出质量。"
     },
-    "custom_api_key": {
+    "llm_provider_id": {
         "type": "string",
-        "description": "自定义 LLM 服务 API Key (选填)",
+        "description": "LLM Provider ID（用于所有分析任务）",
+        "_special": "select_provider",
         "default": "",
-        "hint": "若使用自建或第三方的 LLM 服务，可在此填写 API Key；留空则使用 Astrbot 统一内置提供商。"
+        "hint": "选择用于群聊分析的 LLM Provider。留空则使用当前会话的默认 Provider"
     },
-    "custom_api_base_url": {
+    "topic_provider_id": {
         "type": "string",
-        "description": "自定义 LLM 服务 Base URL (选填)",
+        "description": "话题分析专用 Provider ID",
+        "_special": "select_provider",
         "default": "",
-        "hint": "自定义 LLM 服务的基础请求地址，例如 https://openrouter.ai/api/v1/chat/completions 。留空则使用 Astrbot 统一内置提供商。"
+        "hint": "专门用于话题分析的 Provider。留空则使用主 LLM Provider"
     },
-    "custom_model_name": {
+    "user_title_provider_id": {
         "type": "string",
-        "description": "自定义 LLM 模型名称 (选填)",
+        "description": "用户称号分析专用 Provider ID",
+        "_special": "select_provider",
         "default": "",
-        "hint": "自定义服务所使用的模型名称，例如 gpt-4 、deepseek/deepseek-r1:free 或自定义模型标识，由于自定义情况复杂，无法给出有效的参数参考，需要根据实际情况例如日志报错判断。留空则使用 Astrbot 统一内置提供商。"
+        "hint": "专门用于用户称号分析的 Provider。留空则使用主 LLM Provider"
+    },
+    "golden_quote_provider_id": {
+        "type": "string",
+        "description": "金句分析专用 Provider ID",
+        "_special": "select_provider",
+        "default": "",
+        "hint": "专门用于金句分析的 Provider。留空则使用主 LLM Provider"
     },
     "pdf_output_dir": {
         "type": "string",

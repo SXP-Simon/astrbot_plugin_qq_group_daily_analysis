@@ -193,23 +193,31 @@ class LLMAnalyzer:
         max_tokens: int,
         temperature: float,
         umo: str = None,
+        provider_id_key: str = None,
     ):
         """
         向后兼容的LLM调用方法
         现在委托给llm_utils模块处理
 
         Args:
-            provider: LLM服务商实例或None
+            provider: LLM服务商实例或None（已弃用，现在使用 provider_id_key）
             prompt: 输入的提示语
             max_tokens: 最大生成token数
             temperature: 采样温度
             umo: 指定使用的模型唯一标识符
+            provider_id_key: 配置中的 provider_id 键名（可选）
 
         Returns:
             LLM生成的结果
         """
         return await call_provider_with_retry(
-            self.context, self.config_manager, prompt, max_tokens, temperature, umo
+            self.context,
+            self.config_manager,
+            prompt,
+            max_tokens,
+            temperature,
+            umo,
+            provider_id_key,
         )
 
     def _fix_json(self, text: str) -> str:
