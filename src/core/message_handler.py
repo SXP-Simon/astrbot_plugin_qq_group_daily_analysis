@@ -63,129 +63,62 @@ class MessageHandler:
             start_time = end_time - timedelta(days=days)
 
             messages = []
-            message_seq = 0
-            query_rounds = 0
-            max_rounds = self.config_manager.get_max_query_rounds()
+            # 一次性获取，移除分页与多轮查询
             max_messages = self.config_manager.get_max_messages()
-            consecutive_failures = 0
-            max_failures = 3
+            query_rounds = 0
 
             logger.info(f"开始获取群 {group_id} 近 {days} 天的消息记录")
             logger.info(f"时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 到 {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-            while query_rounds < max_rounds:
-                try:
-                    # 构造请求参数
-                    payloads = {
-                        "group_id": int(group_id) if group_id.isdigit() else group_id,
-                        "count": 200,
-                    }
-                    
-                    # 添加 message_seq（如果不是第一轮）
-                    if message_seq:
-                        payloads["message_seq"] = message_seq
+            # 单次请求，按配置的 max_messages 作为 count
+            try:
+                payloads = {
+                    "group_id": int(group_id) if group_id.isdigit() else group_id,
+                    "count": int(max_messages),
+                }
 
-                    # 尝试调用 API
-                    result = None
-                    api_error = None
-                    
-                    if hasattr(bot_instance, 'call_action'):
-                        try:
-                            # aiocqhttp (CQHttp) 方式
-                            result = await bot_instance.call_action("get_group_msg_history", **payloads)
-                        except Exception as api_err:
-                            api_error = api_err
-                            logger.error(f"群 {group_id} API 调用失败: {api_err}")
-                            
-                            # 第一次失败就放弃（该 API 不支持）
-                            if query_rounds == 0:
-                                logger.error(f"群 {group_id} 当前 OneBot 实现不支持 get_group_msg_history API")
-                                return []
-                    elif hasattr(bot_instance, 'api'):
-                        # QQ官方 bot (botClient) 方式 - 官方API不支持历史消息
-                        logger.error(f"群 {group_id} 检测到 QQ 官方 Bot，官方 API 不支持获取历史消息")
+                result = None
+                if hasattr(bot_instance, 'call_action'):
+                    try:
+                        # aiocqhttp (CQHttp) 方式
+                        result = await bot_instance.call_action("get_group_msg_history", **payloads)
+                        query_rounds = 1
+                    except Exception as api_err:
+                        logger.error(f"群 {group_id} API 调用失败: {api_err}")
+                        logger.error(f"群 {group_id} 当前 OneBot 实现可能不支持 get_group_msg_history API")
                         return []
-                    else:
-                        logger.error(f"群 {group_id} 未知的 bot_instance 类型，无法调用 API")
-                        logger.error(f"bot_instance 类型: {type(bot_instance)}")
-                        return []
+                elif hasattr(bot_instance, 'api'):
+                    # QQ 官方 bot (botClient) 不支持历史消息
+                    logger.error(f"群 {group_id} 检测到 QQ 官方 Bot，官方 API 不支持获取历史消息")
+                    return []
+                else:
+                    logger.error(f"群 {group_id} 未知的 bot_instance 类型，无法调用 API，类型: {type(bot_instance)}")
+                    return []
 
-                    if not result or "messages" not in result:
-                        logger.warning(f"群 {group_id} API返回无效结果: {result}")
-                        consecutive_failures += 1
-                        if consecutive_failures >= max_failures:
-                            break
-                        continue
+                if not result or "messages" not in result:
+                    logger.warning(f"群 {group_id} API返回无效结果: {result}")
+                    return []
 
-                    round_messages = result.get("messages", [])
-
-                    if not round_messages:
-                        logger.info(f"群 {group_id} 没有更多消息，结束获取")
-                        break
-
-                    # 重置失败计数
-                    consecutive_failures = 0
-
-                    # 过滤时间范围内的消息
-                    valid_messages_in_round = 0
-                    oldest_msg_time = None
-                    has_out_of_range_message = False
-
-                    for msg in round_messages:
-                        try:
-                            msg_time = datetime.fromtimestamp(msg.get("time", 0))
-                            
-                            # 记录本轮最老的消息时间
-                            if oldest_msg_time is None or msg_time < oldest_msg_time:
-                                oldest_msg_time = msg_time
-                            
-                            # 检查是否已经超出时间范围
-                            if msg_time < start_time:
-                                has_out_of_range_message = True
-                                # 继续处理本轮剩余消息，但不再查询下一轮
-                                continue
-
-                            # 过滤掉机器人自己的消息
-                            sender_id = str(msg.get("sender", {}).get("user_id", ""))
-                            if self.bot_manager and self.bot_manager.should_filter_bot_message(sender_id):
-                                continue
-
-                            if msg_time >= start_time and msg_time <= end_time:
-                                messages.append(msg)
-                                valid_messages_in_round += 1
-                        except Exception as msg_error:
-                            logger.warning(f"群 {group_id} 处理单条消息失败: {msg_error}")
+                round_messages = result.get("messages", [])
+                if not round_messages:
+                    logger.info(f"群 {group_id} 未获取到消息")
+                
+                # 过滤时间范围内的消息并过滤机器人自身消息
+                for msg in round_messages:
+                    try:
+                        msg_time = datetime.fromtimestamp(msg.get("time", 0))
+                        if not (start_time <= msg_time <= end_time):
                             continue
-
-                    # 如果本轮有消息已经超出时间范围，立即停止获取
-                    if has_out_of_range_message:
-                        logger.info(f"群 {group_id} 已获取到时间范围外的消息（最老消息时间: {oldest_msg_time.strftime('%Y-%m-%d %H:%M:%S')}），停止获取。共获取 {len(messages)} 条消息")
-                        break
-
-                    # 如果本轮没有获取到任何有效消息，停止获取
-                    if valid_messages_in_round == 0:
-                        logger.warning(f"群 {group_id} 本轮未获取到有效消息，停止获取")
-                        break
-
-                    # 如果已经获取到足够的消息（达到 max_messages），停止获取
-                    if len(messages) >= max_messages:
-                        logger.info(f"群 {group_id} 已达到消息数量限制（{len(messages)} 条，限制 {max_messages} 条），停止获取")
-                        break
-
-                    message_seq = round_messages[0]["message_id"]
-                    query_rounds += 1
-
-                    # 添加延迟避免请求过快
-                    if query_rounds % 5 == 0:
-                        await asyncio.sleep(0.5)
-
-                except Exception as e:
-                    logger.error(f"群 {group_id} 获取消息失败 (第{query_rounds+1}轮): {e}")
-                    consecutive_failures += 1
-                    if consecutive_failures >= max_failures:
-                        logger.error(f"群 {group_id} 连续失败 {max_failures} 次，停止获取")
-                        break
-                    await asyncio.sleep(1)
+                        sender_id = str(msg.get("sender", {}).get("user_id", ""))
+                        if self.bot_manager and self.bot_manager.should_filter_bot_message(sender_id):
+                            continue
+                        messages.append(msg)
+                    except Exception as msg_error:
+                        logger.warning(f"群 {group_id} 处理单条消息失败: {msg_error}")
+                        continue
+            except Exception as e:
+                logger.error(f"群 {group_id} 获取消息失败: {e}")
+                return []
 
             # ========== 最终清理步骤:严格过滤和限制 ==========
             original_count = len(messages)
