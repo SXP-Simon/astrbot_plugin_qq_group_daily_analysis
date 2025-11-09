@@ -42,13 +42,17 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 |--------|------|--------|
 | 启用自动分析 | 启用定时触发自动分析功能需要按照插件配置里面的说明填写相关的需要的字段；简略说明：打开自动分析功能，在群聊列表中添加群号或者使用 `/分析设置 enable` 启用当前群聊 | 默认关闭，需要填写机器人QQ号 |
 | PDF格式的报告 | 初次使用需要使用 `/安装PDF` 命令安装依赖，首次使用命令安装，最后出现提示告诉你需要重启生效，是对的，需要重启 astrbot，而不是热重载插件。 | 输出格式需要设置为 PDF |
-| 自定义LLM服务 | 通过配置文件设置自定义LLM服务的API Key、Base URL和模型名称，注意配置中的文字说明， Base URL 需要填写完整，例如 `https://openrouter.ai/api/v1/chat/completions` | 留空则使用 Astrbot 指定的当前提供商 |
+| 自定义LLM服务 | 插件配置中允许用户自行选取个人提供的 Astrbot 服务商列表中的大语言模型服务商 | 留空则回退到用户 Astrbot 现有服务商中第一个可用服务商 |
 
 > [!IMPORTANT]
 > **PDF 功能配置**：使用 `/安装PDF` 命令后，需要完全重启 AstrBot 才能生效，热重载插件无效！
 
 > [!TIP]
-> **自定义 LLM 服务**：Base URL 需要填写完整的 API 端点，例如 `https://openrouter.ai/api/v1/chat/completions`
+> **自定义 LLM 服务**：新版本弃用此前硬编码的 provider 提供方式，采用更符合 Astrbot 生态的更用户友好的配置方式，根据配置键选取 Provider，支持多级回退：
+>    1. 尝试从配置获取指定的 provider_id（如 topic_provider_id）
+>    2. 回退到主 LLM provider_id（llm_provider_id）
+>    3. 回退到当前会话的 Provider（通过 umo）
+>    4. 回退到第一个可用的 Provider
 
 ## 效果
 ![效果图](./demo.jpg)
