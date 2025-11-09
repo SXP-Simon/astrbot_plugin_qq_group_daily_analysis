@@ -4,8 +4,6 @@
 """
 
 import sys
-import importlib
-from pathlib import Path
 from typing import Optional, List
 from astrbot.api import logger, AstrBotConfig
 
@@ -110,25 +108,30 @@ class ConfigManager:
     def get_custom_model_name(self) -> str:
         """获取自定义 LLM 服务的模型名称"""
         return self.config.get("custom_model_name", "")
+
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
-        return self.config.get("pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports")
-    
+        return self.config.get(
+            "pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports"
+        )
+
     def get_bot_qq_id(self) -> str:
         """获取bot QQ号"""
         return str(self.config.get("bot_qq_id", ""))
 
     def get_pdf_filename_format(self) -> str:
         """获取PDF文件名格式"""
-        return self.config.get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
+        return self.config.get(
+            "pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf"
+        )
 
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
         """
         获取话题分析提示词模板
-        
+
         Args:
             style: 提示词风格，默认为 "topic_prompt"
-            
+
         Returns:
             提示词模板字符串
         """
@@ -144,10 +147,10 @@ class ConfigManager:
     def get_user_title_analysis_prompt(self, style: str = "user_title_prompt") -> str:
         """
         获取用户称号分析提示词模板
-        
+
         Args:
             style: 提示词风格，默认为 "user_title_prompt"
-            
+
         Returns:
             提示词模板字符串
         """
@@ -160,13 +163,15 @@ class ConfigManager:
         # 兼容旧配置
         return self.config.get("user_title_analysis_prompt", "")
 
-    def get_golden_quote_analysis_prompt(self, style: str = "golden_quote_prompt") -> str:
+    def get_golden_quote_analysis_prompt(
+        self, style: str = "golden_quote_prompt"
+    ) -> str:
         """
         获取金句分析提示词模板
-        
+
         Args:
             style: 提示词风格，默认为 "golden_quote_prompt"
-            
+
         Returns:
             提示词模板字符串
         """
@@ -308,7 +313,7 @@ class ConfigManager:
         """检查 pyppeteer 可用性"""
         try:
             import pyppeteer
-            from pyppeteer import launch
+
             self._pyppeteer_available = True
 
             # 检查版本
@@ -322,7 +327,9 @@ class ConfigManager:
         except ImportError:
             self._pyppeteer_available = False
             self._pyppeteer_version = None
-            logger.warning("pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+            logger.warning(
+                "pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
+            )
 
     def reload_pyppeteer(self) -> bool:
         """重新加载 pyppeteer 模块"""
@@ -330,7 +337,9 @@ class ConfigManager:
             logger.info("开始重新加载 pyppeteer 模块...")
 
             # 移除所有 pyppeteer 相关模块
-            modules_to_remove = [mod for mod in sys.modules.keys() if mod.startswith('pyppeteer')]
+            modules_to_remove = [
+                mod for mod in sys.modules.keys() if mod.startswith("pyppeteer")
+            ]
             logger.info(f"移除模块: {modules_to_remove}")
             for mod in modules_to_remove:
                 del sys.modules[mod]
@@ -338,28 +347,33 @@ class ConfigManager:
             # 强制重新导入
             try:
                 import pyppeteer
-                from pyppeteer import launch
 
                 # 更新全局变量
                 self._pyppeteer_available = True
                 try:
                     self._pyppeteer_version = pyppeteer.__version__
-                    logger.info(f"重新加载成功，pyppeteer 版本: {self._pyppeteer_version}")
+                    logger.info(
+                        f"重新加载成功，pyppeteer 版本: {self._pyppeteer_version}"
+                    )
                 except AttributeError:
                     self._pyppeteer_version = "unknown"
                     logger.info("重新加载成功，pyppeteer 版本未知")
 
                 return True
 
-            except ImportError as e:
-                logger.info(f"pyppeteer 重新导入需要重启 AstrBot 才能生效")
-                logger.info("💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能")
+            except ImportError:
+                logger.info("pyppeteer 重新导入需要重启 AstrBot 才能生效")
+                logger.info(
+                    "💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能"
+                )
                 self._pyppeteer_available = False
                 self._pyppeteer_version = None
                 return False
-            except Exception as e:
-                logger.info(f"pyppeteer 重新导入需要重启 AstrBot 才能生效")
-                logger.info("💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能")
+            except Exception:
+                logger.info("pyppeteer 重新导入需要重启 AstrBot 才能生效")
+                logger.info(
+                    "💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能"
+                )
                 self._pyppeteer_available = False
                 self._pyppeteer_version = None
                 return False

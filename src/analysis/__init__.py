@@ -6,7 +6,4 @@
 from .llm_analyzer import LLMAnalyzer
 from .statistics import UserAnalyzer
 
-__all__ = [
-    'LLMAnalyzer',
-    'UserAnalyzer'
-]
+__all__ = ["LLMAnalyzer", "UserAnalyzer"]
