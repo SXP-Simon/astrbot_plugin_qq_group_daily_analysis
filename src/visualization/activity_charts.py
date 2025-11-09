@@ -3,19 +3,21 @@
 参考 astrbot_plugin_github_analyzer 的实现方式
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List
 from ..models.data_models import ActivityVisualization
 
 
 class ActivityVisualizer:
     """活跃度可视化器"""
-    
+
     def __init__(self):
         pass
-    
-    def generate_activity_visualization(self, messages: List[Dict]) -> ActivityVisualization:
+
+    def generate_activity_visualization(
+        self, messages: List[Dict]
+    ) -> ActivityVisualization:
         """生成活跃度可视化数据 - 专注于小时级别分析"""
         hourly_activity = defaultdict(int)
         user_activity = defaultdict(int)
@@ -54,15 +56,19 @@ class ActivityVisualizer:
         # 生成用户活跃度排行
         user_ranking = []
         for user_id, data in user_activity.items():
-            user_ranking.append({
-                "user_id": user_id,
-                "nickname": data["nickname"],
-                "message_count": data["count"]
-            })
+            user_ranking.append(
+                {
+                    "user_id": user_id,
+                    "nickname": data["nickname"],
+                    "message_count": data["count"],
+                }
+            )
         user_ranking.sort(key=lambda x: x["message_count"], reverse=True)
 
         # 找出高峰时段（活跃度最高的3个小时）
-        peak_hours = sorted(hourly_activity.items(), key=lambda x: x[1], reverse=True)[:3]
+        peak_hours = sorted(hourly_activity.items(), key=lambda x: x[1], reverse=True)[
+            :3
+        ]
         peak_hours = [{"hour": hour, "count": count} for hour, count in peak_hours]
 
         return ActivityVisualization(
@@ -70,10 +76,14 @@ class ActivityVisualizer:
             daily_activity={},  # 不使用日期分析
             user_activity_ranking=user_ranking[:10],  # 前10名
             peak_hours=peak_hours,
-            activity_heatmap_data=self._generate_hourly_heatmap_data(hourly_activity, emoji_activity)
+            activity_heatmap_data=self._generate_hourly_heatmap_data(
+                hourly_activity, emoji_activity
+            ),
         )
-    
-    def _generate_hourly_heatmap_data(self, hourly_activity: dict, emoji_activity: dict) -> dict:
+
+    def _generate_hourly_heatmap_data(
+        self, hourly_activity: dict, emoji_activity: dict
+    ) -> dict:
         """生成小时级热力图数据"""
         # 计算活跃度等级
         max_hourly = max(hourly_activity.values()) if hourly_activity else 1
@@ -90,7 +100,7 @@ class ActivityVisualizer:
                 hour: (emoji_activity.get(hour, 0) / max_emoji) * 100
                 for hour in range(24)
             },
-            "activity_levels": self._calculate_activity_levels(hourly_activity)
+            "activity_levels": self._calculate_activity_levels(hourly_activity),
         }
 
     def _calculate_activity_levels(self, hourly_activity: dict) -> dict:
@@ -114,17 +124,17 @@ class ActivityVisualizer:
             levels[hour] = level
 
         return levels
-    
+
     def generate_hourly_chart_html(self, hourly_activity: dict) -> str:
         """生成每小时活动分布的HTML图表"""
         html_parts = []
         max_activity = max(hourly_activity.values()) if hourly_activity else 1
         threshold_percentage = 20  # 数值显示阈值
-        
+
         for hour in range(24):
             count = hourly_activity.get(hour, 0)
             percentage = (count / max_activity) * 100 if max_activity > 0 else 0
-            
+
             if count > 0 and percentage >= threshold_percentage:
                 # 活动数较多，数值显示在条形图内部
                 html_segment = f"""
@@ -159,7 +169,5 @@ class ActivityVisualizer:
                 </div>
                 """
             html_parts.append(html_segment)
-        
+
         return "".join(html_parts)
-
-

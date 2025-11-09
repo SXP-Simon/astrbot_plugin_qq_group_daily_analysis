@@ -1,4 +1,4 @@
-﻿"""
+"""
 QQ群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
@@ -7,12 +7,13 @@ QQ群日常分析插件
 
 import asyncio
 from typing import Optional
-from pathlib import Path
 
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.api import logger, AstrBotConfig
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+    AiocqhttpMessageEvent,
+)
 from astrbot.core.message.components import File
 from astrbot.core.star.filter.permission import PermissionType
 
@@ -39,7 +40,12 @@ class QQGroupDailyAnalysis(Star):
         self.config = config
 
         # 初始化模块化组件
-        global config_manager, bot_manager, message_analyzer, report_generator, auto_scheduler
+        global \
+            config_manager, \
+            bot_manager, \
+            message_analyzer, \
+            report_generator, \
+            auto_scheduler
 
         config_manager = ConfigManager(config)
         bot_manager = BotManager(config_manager)
@@ -52,7 +58,7 @@ class QQGroupDailyAnalysis(Star):
             message_analyzer,
             report_generator,
             bot_manager,
-            self.html_render  # 传入html_render函数
+            self.html_render,  # 传入html_render函数
         )
 
         # 延迟启动自动调度器，给系统时间初始化
@@ -85,45 +91,52 @@ class QQGroupDailyAnalysis(Star):
         """插件被卸载/停用时调用，清理资源"""
         try:
             logger.info("开始清理QQ群日常分析插件资源...")
-            
-            global auto_scheduler, bot_manager, message_analyzer, report_generator, config_manager
-            
+
+            global \
+                auto_scheduler, \
+                bot_manager, \
+                message_analyzer, \
+                report_generator, \
+                config_manager
+
             # 停止自动调度器
             if auto_scheduler:
                 logger.info("正在停止自动调度器...")
                 await auto_scheduler.stop_scheduler()
                 logger.info("自动调度器已停止")
-            
+
             # 清理bot管理器资源
             # if bot_manager:
             #     logger.info("正在清理bot管理器资源...")
             #     # 如果有其他需要清理的资源，可以在这里添加
-                
+
             # # 清理消息分析器资源
             # if message_analyzer:
             #     logger.info("正在清理消息分析器资源...")
             #     # 如果有其他需要清理的资源，可以在这里添加
-                
-            # # 清理报告生成器资源  
+
+            # # 清理报告生成器资源
             # if report_generator:
             #     logger.info("正在清理报告生成器资源...")
             #     # 如果有其他需要清理的资源，可以在这里添加
-                
+
             # 重置全局变量
             auto_scheduler = None
             bot_manager = None
             message_analyzer = None
             report_generator = None
             config_manager = None
-            
+
             logger.info("QQ群日常分析插件资源清理完成")
-            
+
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
 
     @filter.command("群分析")
     @filter.permission_type(PermissionType.ADMIN)
-    async def analyze_group_daily(self, event: AiocqhttpMessageEvent, days: Optional[int] = None):
+    async def analyze_group_daily(
+        self, event: AiocqhttpMessageEvent, days: Optional[int] = None
+    ):
         """
         分析群聊日常活动
         用法: /群分析 [天数]
@@ -147,7 +160,9 @@ class QQGroupDailyAnalysis(Star):
             return
 
         # 设置分析天数
-        analysis_days = days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
+        analysis_days = (
+            days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
+        )
 
         yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
 
@@ -156,21 +171,31 @@ class QQGroupDailyAnalysis(Star):
 
         try:
             # 获取群聊消息
-            messages = await message_analyzer.message_handler.fetch_group_messages(bot_manager.get_bot_instance(), group_id, analysis_days)
+            messages = await message_analyzer.message_handler.fetch_group_messages(
+                bot_manager.get_bot_instance(), group_id, analysis_days
+            )
             if not messages:
-                yield event.plain_result("❌ 未找到足够的群聊记录，请确保群内有足够的消息历史")
+                yield event.plain_result(
+                    "❌ 未找到足够的群聊记录，请确保群内有足够的消息历史"
+                )
                 return
 
             # 检查消息数量是否足够分析
             min_threshold = config_manager.get_min_messages_threshold()
             if len(messages) < min_threshold:
-                yield event.plain_result(f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析")
+                yield event.plain_result(
+                    f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析"
+                )
                 return
 
-            yield event.plain_result(f"📊 已获取{len(messages)}条消息，正在进行智能分析...")
+            yield event.plain_result(
+                f"📊 已获取{len(messages)}条消息，正在进行智能分析..."
+            )
 
             # 进行分析 - 传递 unified_msg_origin 以获取正确的 LLM 提供商
-            analysis_result = await message_analyzer.analyze_messages(messages, group_id, event.unified_msg_origin)
+            analysis_result = await message_analyzer.analyze_messages(
+                messages, group_id, event.unified_msg_origin
+            )
 
             # 检查分析结果
             if not analysis_result or not analysis_result.get("statistics"):
@@ -180,23 +205,32 @@ class QQGroupDailyAnalysis(Star):
             # 生成报告
             output_format = config_manager.get_output_format()
             if output_format == "image":
-                image_url = await report_generator.generate_image_report(analysis_result, group_id, self.html_render)
+                image_url = await report_generator.generate_image_report(
+                    analysis_result, group_id, self.html_render
+                )
                 if image_url:
                     yield event.image_result(image_url)
                 else:
                     # 如果图片生成失败，回退到文本报告
                     logger.warning("图片报告生成失败，回退到文本报告")
                     text_report = report_generator.generate_text_report(analysis_result)
-                    yield event.plain_result(f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}")
+                    yield event.plain_result(
+                        f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
+                    )
             elif output_format == "pdf":
                 if not config_manager.pyppeteer_available:
-                    yield event.plain_result("❌ PDF 功能不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+                    yield event.plain_result(
+                        "❌ PDF 功能不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
+                    )
                     return
 
-                pdf_path = await report_generator.generate_pdf_report(analysis_result, group_id)
+                pdf_path = await report_generator.generate_pdf_report(
+                    analysis_result, group_id
+                )
                 if pdf_path:
                     # 发送 PDF 文件
                     from pathlib import Path
+
                     pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
                     result = event.make_result()
                     result.chain.append(pdf_file)
@@ -212,20 +246,24 @@ class QQGroupDailyAnalysis(Star):
                     # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")
                     text_report = report_generator.generate_text_report(analysis_result)
-                    yield event.plain_result(f"\n📝 以下是文本版本的分析报告：\n\n{text_report}")
+                    yield event.plain_result(
+                        f"\n📝 以下是文本版本的分析报告：\n\n{text_report}"
+                    )
             else:
                 text_report = report_generator.generate_text_report(analysis_result)
                 yield event.plain_result(text_report)
 
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员")
-
-
+            yield event.plain_result(
+                f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
+            )
 
     @filter.command("设置格式")
     @filter.permission_type(PermissionType.ADMIN)
-    async def set_output_format(self, event: AiocqhttpMessageEvent, format_type: str = ""):
+    async def set_output_format(
+        self, event: AiocqhttpMessageEvent, format_type: str = ""
+    ):
         """
         设置分析报告输出格式
         用法: /设置格式 [image|text|pdf]
@@ -241,7 +279,9 @@ class QQGroupDailyAnalysis(Star):
 
         if not format_type:
             current_format = config_manager.get_output_format()
-            pdf_status = '✅' if config_manager.pyppeteer_available else '❌ (需安装 pyppeteer)'
+            pdf_status = (
+                "✅" if config_manager.pyppeteer_available else "❌ (需安装 pyppeteer)"
+            )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
 可用格式:
@@ -258,7 +298,9 @@ class QQGroupDailyAnalysis(Star):
             return
 
         if format_type == "pdf" and not config_manager.pyppeteer_available:
-            yield event.plain_result("❌ PDF 格式不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2")
+            yield event.plain_result(
+                "❌ PDF 格式不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
+            )
             return
 
         config_manager.set_output_format(format_type)
@@ -281,7 +323,7 @@ class QQGroupDailyAnalysis(Star):
             # 安装 pyppeteer
             result = await PDFInstaller.install_pyppeteer(config_manager)
             yield event.plain_result(result)
-            
+
             # 提供系统依赖安装指导
             system_deps_result = await PDFInstaller.install_system_deps()
             yield event.plain_result(system_deps_result)
@@ -292,7 +334,9 @@ class QQGroupDailyAnalysis(Star):
 
     @filter.command("分析设置")
     @filter.permission_type(PermissionType.ADMIN)
-    async def analysis_settings(self, event: AiocqhttpMessageEvent, action: str = "status"):
+    async def analysis_settings(
+        self, event: AiocqhttpMessageEvent, action: str = "status"
+    ):
         """
         管理分析设置
         用法: /分析设置 [enable|disable|status|reload|test]
@@ -360,7 +404,9 @@ class QQGroupDailyAnalysis(Star):
         else:  # status
             enabled_groups = config_manager.get_enabled_groups()
             status = "已启用" if group_id in enabled_groups else "未启用"
-            auto_status = "已启用" if config_manager.get_enable_auto_analysis() else "未启用"
+            auto_status = (
+                "已启用" if config_manager.get_enable_auto_analysis() else "未启用"
+            )
             auto_time = config_manager.get_auto_analysis_time()
 
             pdf_status = PDFInstaller.get_pdf_status(config_manager)
@@ -379,5 +425,3 @@ class QQGroupDailyAnalysis(Star):
 💡 可用命令: enable, disable, status, reload, test
 💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
 💡 其他命令: /设置格式, /安装PDF""")
-
-

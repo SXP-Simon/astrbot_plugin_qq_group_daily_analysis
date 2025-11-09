@@ -19,24 +19,26 @@ class UserAnalyzer:
         """分析用户活跃度"""
         # 获取机器人QQ号用于过滤
         bot_qq_id = self.config_manager.get_bot_qq_id()
-        
-        user_stats = defaultdict(lambda: {
-            "message_count": 0,
-            "char_count": 0,
-            "emoji_count": 0,
-            "nickname": "",
-            "hours": defaultdict(int),
-            "reply_count": 0
-        })
+
+        user_stats = defaultdict(
+            lambda: {
+                "message_count": 0,
+                "char_count": 0,
+                "emoji_count": 0,
+                "nickname": "",
+                "hours": defaultdict(int),
+                "reply_count": 0,
+            }
+        )
 
         for msg in messages:
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
-            
+
             # 跳过机器人自己的消息，避免进入统计
             if bot_qq_id and user_id == str(bot_qq_id):
                 continue
-            
+
             nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
 
             user_stats[user_id]["message_count"] += 1
@@ -75,31 +77,37 @@ class UserAnalyzer:
 
         return dict(user_stats)
 
-    def get_top_users(self, user_analysis: Dict[str, Dict], limit: int = 10) -> List[Dict]:
+    def get_top_users(
+        self, user_analysis: Dict[str, Dict], limit: int = 10
+    ) -> List[Dict]:
         """获取最活跃的用户"""
         # 获取机器人QQ号用于过滤
         bot_qq_id = self.config_manager.get_bot_qq_id()
-        
+
         users = []
         for user_id, stats in user_analysis.items():
             # 过滤机器人自己
             if bot_qq_id and str(user_id) == str(bot_qq_id):
                 continue
-                
-            users.append({
-                "user_id": user_id,
-                "nickname": stats["nickname"],
-                "message_count": stats["message_count"],
-                "char_count": stats["char_count"],
-                "emoji_count": stats["emoji_count"],
-                "reply_count": stats["reply_count"]
-            })
+
+            users.append(
+                {
+                    "user_id": user_id,
+                    "nickname": stats["nickname"],
+                    "message_count": stats["message_count"],
+                    "char_count": stats["char_count"],
+                    "emoji_count": stats["emoji_count"],
+                    "reply_count": stats["reply_count"],
+                }
+            )
 
         # 按消息数量排序
         users.sort(key=lambda x: x["message_count"], reverse=True)
         return users[:limit]
 
-    def get_user_activity_pattern(self, user_analysis: Dict[str, Dict], user_id: str) -> Dict:
+    def get_user_activity_pattern(
+        self, user_analysis: Dict[str, Dict], user_id: str
+    ) -> Dict:
         """获取用户活动模式"""
         if user_id not in user_analysis:
             return {}
@@ -112,11 +120,12 @@ class UserAnalyzer:
 
         # 计算夜间活跃度
         night_messages = sum(hours[h] for h in range(0, 6))
-        night_ratio = night_messages / stats["message_count"] if stats["message_count"] > 0 else 0
+        night_ratio = (
+            night_messages / stats["message_count"] if stats["message_count"] > 0 else 0
+        )
 
         return {
             "most_active_hour": most_active_hour,
             "night_ratio": night_ratio,
-            "hourly_distribution": dict(hours)
+            "hourly_distribution": dict(hours),
         }
-

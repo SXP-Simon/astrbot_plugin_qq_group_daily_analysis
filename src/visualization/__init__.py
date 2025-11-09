@@ -4,4 +4,4 @@
 
 from .activity_charts import ActivityVisualizer
 
-__all__ = ['ActivityVisualizer']
+__all__ = ["ActivityVisualizer"]
