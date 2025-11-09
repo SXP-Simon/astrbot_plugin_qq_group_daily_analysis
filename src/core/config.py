@@ -313,7 +313,6 @@ class ConfigManager:
         """检查 pyppeteer 可用性"""
         try:
             import pyppeteer
-            from pyppeteer import launch
 
             self._pyppeteer_available = True
 
@@ -348,7 +347,6 @@ class ConfigManager:
             # 强制重新导入
             try:
                 import pyppeteer
-                from pyppeteer import launch
 
                 # 更新全局变量
                 self._pyppeteer_available = True

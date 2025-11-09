@@ -485,8 +485,8 @@ class ReportGenerator:
                         for page in pages:
                             try:
                                 await page.close()
-                            except:
-                                pass
+                            except Exception as close_err:
+                                logger.debug(f"关闭页面时忽略的异常: {close_err}")
 
                         # 等待一小段时间让资源释放
                         await asyncio.sleep(0.5)
@@ -499,8 +499,8 @@ class ReportGenerator:
                         # 强制清理
                         try:
                             await browser.disconnect()
-                        except:
-                            pass
+                        except Exception as disc_err:
+                            logger.debug(f"断开浏览器连接时忽略的异常: {disc_err}")
 
         except Exception as e:
             error_msg = str(e)
