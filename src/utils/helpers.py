@@ -4,11 +4,12 @@
 """
 
 from typing import List, Dict
-from ...src.models.data_models import GroupStatistics, SummaryTopic, UserTitle, GoldenQuote, TokenUsage
+from ...src.models.data_models import TokenUsage
 from ...src.core.message_handler import MessageHandler
 from ...src.analysis.llm_analyzer import LLMAnalyzer
 from ...src.analysis.statistics import UserAnalyzer
 from astrbot.api import logger
+
 
 class MessageAnalyzer:
     """消息分析器 - 整合所有分析功能"""
@@ -28,7 +29,9 @@ class MessageAnalyzer:
         else:
             await self.message_handler.set_bot_qq_id(bot_instance)
 
-    async def analyze_messages(self, messages: List[Dict], group_id: str, unified_msg_origin: str = None) -> Dict:
+    async def analyze_messages(
+        self, messages: List[Dict], group_id: str, unified_msg_origin: str = None
+    ) -> Dict:
         """完整的消息分析流程"""
         try:
             # 基础统计
@@ -36,11 +39,15 @@ class MessageAnalyzer:
 
             # 用户分析
             user_analysis = self.user_analyzer.analyze_users(messages)
-            
+
             # 获取活跃用户列表 - 使用get_top_users方法,limit从配置中读取
             max_user_titles = self.config_manager.get_max_user_titles()
-            top_users = self.user_analyzer.get_top_users(user_analysis, limit=max_user_titles)
-            logger.info(f"获取到 {len(top_users)} 个活跃用户用于称号分析(配置上限: {max_user_titles})")
+            top_users = self.user_analyzer.get_top_users(
+                user_analysis, limit=max_user_titles
+            )
+            logger.info(
+                f"获取到 {len(top_users)} 个活跃用户用于称号分析(配置上限: {max_user_titles})"
+            )
 
             # LLM分析 - 使用并发方式
             topics = []
@@ -51,35 +58,61 @@ class MessageAnalyzer:
             # 检查各个分析功能是否启用
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
-            golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
-            
+            golden_quote_enabled = (
+                self.config_manager.get_golden_quote_analysis_enabled()
+            )
+
             # 如果三个分析都启用，使用并发执行
             if topic_enabled and user_title_enabled and golden_quote_enabled:
                 # 并发执行所有三个分析任务，传入活跃用户列表
-                topics, user_titles, golden_quotes, total_token_usage = await self.llm_analyzer.analyze_all_concurrent(
+                (
+                    topics,
+                    user_titles,
+                    golden_quotes,
+                    total_token_usage,
+                ) = await self.llm_analyzer.analyze_all_concurrent(
                     messages, user_analysis, umo=unified_msg_origin, top_users=top_users
                 )
             else:
                 # 如果只启用部分分析，则按需执行
                 if topic_enabled:
-                    topics, topic_tokens = await self.llm_analyzer.analyze_topics(messages, umo=unified_msg_origin)
+                    topics, topic_tokens = await self.llm_analyzer.analyze_topics(
+                        messages, umo=unified_msg_origin
+                    )
                     total_token_usage.prompt_tokens += topic_tokens.prompt_tokens
-                    total_token_usage.completion_tokens += topic_tokens.completion_tokens
+                    total_token_usage.completion_tokens += (
+                        topic_tokens.completion_tokens
+                    )
                     total_token_usage.total_tokens += topic_tokens.total_tokens
 
                 if user_title_enabled:
                     # 传入活跃用户列表
-                    user_titles, title_tokens = await self.llm_analyzer.analyze_user_titles(
-                        messages, user_analysis, umo=unified_msg_origin, top_users=top_users
+                    (
+                        user_titles,
+                        title_tokens,
+                    ) = await self.llm_analyzer.analyze_user_titles(
+                        messages,
+                        user_analysis,
+                        umo=unified_msg_origin,
+                        top_users=top_users,
                     )
                     total_token_usage.prompt_tokens += title_tokens.prompt_tokens
-                    total_token_usage.completion_tokens += title_tokens.completion_tokens
+                    total_token_usage.completion_tokens += (
+                        title_tokens.completion_tokens
+                    )
                     total_token_usage.total_tokens += title_tokens.total_tokens
 
                 if golden_quote_enabled:
-                    golden_quotes, quote_tokens = await self.llm_analyzer.analyze_golden_quotes(messages, umo=unified_msg_origin)
+                    (
+                        golden_quotes,
+                        quote_tokens,
+                    ) = await self.llm_analyzer.analyze_golden_quotes(
+                        messages, umo=unified_msg_origin
+                    )
                     total_token_usage.prompt_tokens += quote_tokens.prompt_tokens
-                    total_token_usage.completion_tokens += quote_tokens.completion_tokens
+                    total_token_usage.completion_tokens += (
+                        quote_tokens.completion_tokens
+                    )
                     total_token_usage.total_tokens += quote_tokens.total_tokens
 
             # 更新统计数据
@@ -90,7 +123,7 @@ class MessageAnalyzer:
                 "statistics": statistics,
                 "topics": topics,
                 "user_titles": user_titles,
-                "user_analysis": user_analysis
+                "user_analysis": user_analysis,
             }
 
         except Exception as e:

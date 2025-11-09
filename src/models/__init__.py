@@ -7,13 +7,7 @@ from .data_models import (
     UserTitle,
     GoldenQuote,
     TokenUsage,
-    GroupStatistics
+    GroupStatistics,
 )
 
-__all__ = [
-    'SummaryTopic',
-    'UserTitle',
-    'GoldenQuote',
-    'TokenUsage',
-    'GroupStatistics'
-]
+__all__ = ["SummaryTopic", "UserTitle", "GoldenQuote", "TokenUsage", "GroupStatistics"]
