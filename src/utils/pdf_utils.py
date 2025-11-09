@@ -170,7 +170,7 @@ class PDFInstaller:
                         )
 
                         # 只下载 Chromium
-                        chromium_revision = launcher._get_chromium_revision()
+                        launcher._get_chromium_revision()
                         await launcher._download_chromium()
 
                         logger.info("✅ Chromium 下载完成")
