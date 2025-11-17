@@ -33,10 +33,13 @@
         "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人QQ号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
     },
     "bot_qq_id": {
-        "type": "string", 
-        "description": "机器人QQ号",
-        "default": "",
-        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能"
+        "type": "list",
+        "description": "机器人QQ号列表",
+        "default": [],
+        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能。支持配置多个QQ号，用于多机器人场景",
+        "items": {
+            "type": "string"
+        }
     },
     "enable_user_card": {
         "type": "bool",

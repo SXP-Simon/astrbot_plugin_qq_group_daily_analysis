@@ -13,6 +13,7 @@ class BotManager:
         self.config_manager = config_manager
         self._bot_instance = None
         self._bot_qq_id = None
+        self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
         self._is_initialized = False
 
@@ -30,10 +31,15 @@ class BotManager:
                 if bot_qq_id:
                     self._bot_qq_id = str(bot_qq_id)
 
-    def set_bot_qq_id(self, bot_qq_id: str):
-        """设置bot QQ号"""
-        if bot_qq_id:
+    def set_bot_qq_id(self, bot_qq_id):
+        """设置bot QQ号（支持单个或列表）"""
+        if isinstance(bot_qq_id, list):
+            self._bot_qq_ids = [str(qq) for qq in bot_qq_id if qq]
+            if self._bot_qq_ids:
+                self._bot_qq_id = self._bot_qq_ids[0]  # 保持向后兼容
+        elif bot_qq_id:
             self._bot_qq_id = str(bot_qq_id)
+            self._bot_qq_ids = [str(bot_qq_id)]
 
     def get_bot_instance(self):
         """获取当前bot实例"""
@@ -45,7 +51,7 @@ class BotManager:
 
     def has_bot_qq_id(self) -> bool:
         """检查是否有配置的bot QQ号"""
-        return self._bot_qq_id is not None
+        return bool(self._bot_qq_ids) or self._bot_qq_id is not None
 
     def is_ready_for_auto_analysis(self) -> bool:
         """检查是否准备好进行自动分析"""
@@ -72,10 +78,10 @@ class BotManager:
 
     async def initialize_from_config(self):
         """从配置初始化bot管理器"""
-        # 设置配置的bot QQ号
-        bot_qq_id = self.config_manager.get_bot_qq_id()
-        if bot_qq_id:
-            self.set_bot_qq_id(bot_qq_id)
+        # 设置配置的bot QQ号列表
+        bot_qq_ids = self.config_manager.get_bot_qq_id()
+        if bot_qq_ids:
+            self.set_bot_qq_id(bot_qq_ids)
 
         # 自动发现bot实例
         await self.auto_discover_bot_instance()
@@ -110,7 +116,7 @@ class BotManager:
         return False
 
     def _extract_bot_qq_id(self, bot_instance):
-        """从bot实例中提取QQ号"""
+        """从bot实例中提取QQ号（单个）"""
         # 尝试多种方式获取bot QQ号
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
@@ -125,7 +131,15 @@ class BotManager:
         return self.has_bot_instance() and bool(group_id)
 
     def should_filter_bot_message(self, sender_id: str) -> bool:
-        """判断是否应该过滤bot自己的消息"""
-        if not self._bot_qq_id:
+        """判断是否应该过滤bot自己的消息（支持多个QQ号）"""
+        if not self._bot_qq_ids and not self._bot_qq_id:
             return False
-        return str(sender_id) == self._bot_qq_id
+        
+        sender_id_str = str(sender_id)
+        # 检查是否在QQ号列表中
+        if self._bot_qq_ids and sender_id_str in self._bot_qq_ids:
+            return True
+        # 向后兼容：检查单个QQ号
+        if self._bot_qq_id and sender_id_str == self._bot_qq_id:
+            return True
+        return False

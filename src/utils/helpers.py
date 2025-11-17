@@ -27,7 +27,11 @@ class MessageAnalyzer:
         if self.bot_manager:
             self.bot_manager.set_bot_instance(bot_instance)
         else:
-            await self.message_handler.set_bot_qq_id(bot_instance)
+            # 从bot实例提取QQ号并设置为列表
+            bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
+            if bot_qq_id:
+                # 将单个QQ号转换为列表，保持统一处理
+                await self.message_handler.set_bot_qq_id([bot_qq_id])
 
     async def analyze_messages(
         self, messages: List[Dict], group_id: str, unified_msg_origin: str = None
