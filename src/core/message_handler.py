@@ -19,11 +19,15 @@ class MessageHandler:
         self.activity_visualizer = ActivityVisualizer()
         self.bot_manager = bot_manager
 
-    async def set_bot_qq_id(self, bot_qq_id: str):
-        """设置机器人QQ号（保持向后兼容）"""
+    async def set_bot_qq_id(self, bot_qq_id):
+        """设置机器人QQ号（支持单个QQ号或QQ号列表）"""
         try:
             if self.bot_manager:
-                self.bot_manager.set_bot_qq_id(bot_qq_id)
+                # 确保传入的是列表，保持统一处理
+                if isinstance(bot_qq_id, list):
+                    self.bot_manager.set_bot_qq_id(bot_qq_id)
+                elif bot_qq_id:
+                    self.bot_manager.set_bot_qq_id([bot_qq_id])
             logger.info(f"设置机器人QQ号: {bot_qq_id}")
         except Exception as e:
             logger.error(f"设置机器人QQ号失败: {e}")
@@ -33,7 +37,7 @@ class MessageHandler:
         self.bot_manager = bot_manager
 
     def _extract_bot_qq_id_from_instance(self, bot_instance):
-        """从bot实例中提取QQ号"""
+        """从bot实例中提取QQ号（单个）"""
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
         elif hasattr(bot_instance, "qq") and bot_instance.qq:
@@ -52,12 +56,13 @@ class MessageHandler:
                 logger.error(f"群 {group_id} 参数无效")
                 return []
 
-            # 确保bot_manager有QQ号用于过滤
+            # 确保bot_manager有QQ号列表用于过滤
             if self.bot_manager and not self.bot_manager.has_bot_qq_id():
-                # 尝试从bot_instance提取QQ号
+                # 尝试从bot_instance提取QQ号并设置为列表
                 bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
                 if bot_qq_id:
-                    self.bot_manager.set_bot_qq_id(bot_qq_id)
+                    # 将单个QQ号转换为列表，保持统一处理
+                    self.bot_manager.set_bot_qq_id([bot_qq_id])
 
             # 计算时间范围
             end_time = datetime.now()

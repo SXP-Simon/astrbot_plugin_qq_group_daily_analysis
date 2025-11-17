@@ -33,9 +33,13 @@ class AutoScheduler:
         """设置bot实例（保持向后兼容）"""
         self.bot_manager.set_bot_instance(bot_instance)
 
-    def set_bot_qq_id(self, bot_qq_id: str):
-        """设置bot QQ号（保持向后兼容）"""
-        self.bot_manager.set_bot_qq_id(bot_qq_id)
+    def set_bot_qq_id(self, bot_qq_id):
+        """设置bot QQ号（支持单个QQ号或QQ号列表）"""
+        # 确保传入的是列表，保持统一处理
+        if isinstance(bot_qq_id, list):
+            self.bot_manager.set_bot_qq_id(bot_qq_id)
+        elif bot_qq_id:
+            self.bot_manager.set_bot_qq_id([bot_qq_id])
 
     def _get_platform_id(self):
         """获取平台ID"""

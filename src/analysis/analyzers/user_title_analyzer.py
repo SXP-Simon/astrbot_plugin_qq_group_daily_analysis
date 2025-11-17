@@ -119,7 +119,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                     logger.warning(f"用户称号数据格式不完整，跳过: {title_data}")
                     continue
 
-                # 验证QQ号格式
+                # 验证QQ号格式（单个用户QQ号）
                 try:
                     qq = int(qq)
                 except (ValueError, TypeError):
@@ -151,8 +151,8 @@ class UserTitleAnalyzer(BaseAnalyzer):
             准备好的用户数据字典
         """
         try:
-            # 获取机器人QQ号用于过滤
-            bot_qq_id = self.config_manager.get_bot_qq_id()
+            # 获取机器人QQ号列表用于过滤
+            bot_qq_ids = self.config_manager.get_bot_qq_id()
 
             user_summaries = []
 
@@ -173,7 +173,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
 
             for user_id, stats in user_analysis.items():
                 # 过滤机器人自己的消息
-                if bot_qq_id and str(user_id) == str(bot_qq_id):
+                if bot_qq_ids and str(user_id) in [str(qq) for qq in bot_qq_ids]:
                     logger.debug(f"过滤掉机器人QQ号: {user_id}")
                     continue
 

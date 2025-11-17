@@ -17,8 +17,8 @@ class UserAnalyzer:
 
     def analyze_users(self, messages: List[Dict]) -> Dict[str, Dict]:
         """分析用户活跃度"""
-        # 获取机器人QQ号用于过滤
-        bot_qq_id = self.config_manager.get_bot_qq_id()
+        # 获取机器人QQ号列表用于过滤
+        bot_qq_ids = self.config_manager.get_bot_qq_id()
 
         user_stats = defaultdict(
             lambda: {
@@ -36,7 +36,7 @@ class UserAnalyzer:
             user_id = str(sender.get("user_id", ""))
 
             # 跳过机器人自己的消息，避免进入统计
-            if bot_qq_id and user_id == str(bot_qq_id):
+            if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
                 continue
 
             nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
@@ -81,13 +81,13 @@ class UserAnalyzer:
         self, user_analysis: Dict[str, Dict], limit: int = 10
     ) -> List[Dict]:
         """获取最活跃的用户"""
-        # 获取机器人QQ号用于过滤
-        bot_qq_id = self.config_manager.get_bot_qq_id()
+        # 获取机器人QQ号列表用于过滤
+        bot_qq_ids = self.config_manager.get_bot_qq_id()
 
         users = []
         for user_id, stats in user_analysis.items():
             # 过滤机器人自己
-            if bot_qq_id and str(user_id) == str(bot_qq_id):
+            if bot_qq_ids and str(user_id) in [str(qq) for qq in bot_qq_ids]:
                 continue
 
             users.append(
