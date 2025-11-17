@@ -32,11 +32,11 @@
         "default": false,
         "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人QQ号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
     },
-    "bot_qq_id": {
+    "bot_qq_ids": {
         "type": "list",
-        "description": "机器人QQ号列表",
+        "description": "群分析时屏蔽的QQ号列表",
         "default": [],
-        "hint": "用于自动分析的机器人QQ号，填写后可启用自动分析功能。支持配置多个QQ号，用于多机器人场景",
+        "hint": "填写后可启用自动分析功能。可以填写用于自动分析的机器人QQ号、多消息平台QQ号、不希望出现于群分析中的其他人的机器人QQ号等，这种群聊中出现但是不希望分析的QQ号。",
         "items": {
             "type": "string"
         }

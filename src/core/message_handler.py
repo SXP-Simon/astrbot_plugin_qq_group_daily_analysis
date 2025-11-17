@@ -19,16 +19,16 @@ class MessageHandler:
         self.activity_visualizer = ActivityVisualizer()
         self.bot_manager = bot_manager
 
-    async def set_bot_qq_id(self, bot_qq_id):
+    async def set_bot_qq_ids(self, bot_qq_ids):
         """设置机器人QQ号（支持单个QQ号或QQ号列表）"""
         try:
             if self.bot_manager:
                 # 确保传入的是列表，保持统一处理
-                if isinstance(bot_qq_id, list):
-                    self.bot_manager.set_bot_qq_id(bot_qq_id)
-                elif bot_qq_id:
-                    self.bot_manager.set_bot_qq_id([bot_qq_id])
-            logger.info(f"设置机器人QQ号: {bot_qq_id}")
+                if isinstance(bot_qq_ids, list):
+                    self.bot_manager.set_bot_qq_ids(bot_qq_ids)
+                elif bot_qq_ids:
+                    self.bot_manager.set_bot_qq_ids([bot_qq_ids])
+            logger.info(f"设置机器人QQ号: {bot_qq_ids}")
         except Exception as e:
             logger.error(f"设置机器人QQ号失败: {e}")
 
@@ -62,7 +62,7 @@ class MessageHandler:
                 bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
                 if bot_qq_id:
                     # 将单个QQ号转换为列表，保持统一处理
-                    self.bot_manager.set_bot_qq_id([bot_qq_id])
+                    self.bot_manager.set_bot_qq_ids([bot_qq_id])
 
             # 计算时间范围
             end_time = datetime.now()

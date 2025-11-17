@@ -152,7 +152,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """
         try:
             # 获取机器人QQ号列表用于过滤
-            bot_qq_ids = self.config_manager.get_bot_qq_id()
+            bot_qq_ids = self.config_manager.get_bot_qq_ids()
 
             user_summaries = []
 
