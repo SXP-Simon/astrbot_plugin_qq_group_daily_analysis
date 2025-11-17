@@ -18,7 +18,7 @@ class UserAnalyzer:
     def analyze_users(self, messages: List[Dict]) -> Dict[str, Dict]:
         """分析用户活跃度"""
         # 获取机器人QQ号列表用于过滤
-        bot_qq_ids = self.config_manager.get_bot_qq_id()
+        bot_qq_ids = self.config_manager.get_bot_qq_ids()
 
         user_stats = defaultdict(
             lambda: {
@@ -82,7 +82,7 @@ class UserAnalyzer:
     ) -> List[Dict]:
         """获取最活跃的用户"""
         # 获取机器人QQ号列表用于过滤
-        bot_qq_ids = self.config_manager.get_bot_qq_id()
+        bot_qq_ids = self.config_manager.get_bot_qq_ids()
 
         users = []
         for user_id, stats in user_analysis.items():

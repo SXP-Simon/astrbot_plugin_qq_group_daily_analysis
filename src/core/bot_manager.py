@@ -31,15 +31,15 @@ class BotManager:
                 if bot_qq_id:
                     self._bot_qq_id = str(bot_qq_id)
 
-    def set_bot_qq_id(self, bot_qq_id):
-        """设置bot QQ号（支持单个或列表）"""
-        if isinstance(bot_qq_id, list):
-            self._bot_qq_ids = [str(qq) for qq in bot_qq_id if qq]
+    def set_bot_qq_ids(self, bot_qq_ids):
+        """设置bot QQ号（支持单个QQ号或QQ号列表）"""
+        if isinstance(bot_qq_ids, list):
+            self._bot_qq_ids = [str(qq) for qq in bot_qq_ids if qq]
             if self._bot_qq_ids:
                 self._bot_qq_id = self._bot_qq_ids[0]  # 保持向后兼容
-        elif bot_qq_id:
-            self._bot_qq_id = str(bot_qq_id)
-            self._bot_qq_ids = [str(bot_qq_id)]
+        elif bot_qq_ids:
+            self._bot_qq_id = str(bot_qq_ids)
+            self._bot_qq_ids = [str(bot_qq_ids)]
 
     def get_bot_instance(self):
         """获取当前bot实例"""
@@ -79,9 +79,9 @@ class BotManager:
     async def initialize_from_config(self):
         """从配置初始化bot管理器"""
         # 设置配置的bot QQ号列表
-        bot_qq_ids = self.config_manager.get_bot_qq_id()
+        bot_qq_ids = self.config_manager.get_bot_qq_ids()
         if bot_qq_ids:
-            self.set_bot_qq_id(bot_qq_ids)
+            self.set_bot_qq_ids(bot_qq_ids)
 
         # 自动发现bot实例
         await self.auto_discover_bot_instance()
@@ -106,12 +106,13 @@ class BotManager:
             # 每次都尝试从bot实例提取QQ号
             bot_qq_id = self._extract_bot_qq_id(event.bot)
             if bot_qq_id:
-                self.set_bot_qq_id(bot_qq_id)
+                # 将单个QQ号转换为列表，保持统一处理
+                self.set_bot_qq_ids([bot_qq_id])
             else:
-                # 如果bot实例没有QQ号，尝试使用配置的QQ号
-                config_qq_id = self.config_manager.get_bot_qq_id()
-                if config_qq_id:
-                    self.set_bot_qq_id(config_qq_id)
+                # 如果bot实例没有QQ号，尝试使用配置的QQ号列表
+                config_qq_ids = self.config_manager.get_bot_qq_ids()
+                if config_qq_ids:
+                    self.set_bot_qq_ids(config_qq_ids)
             return True
         return False
 

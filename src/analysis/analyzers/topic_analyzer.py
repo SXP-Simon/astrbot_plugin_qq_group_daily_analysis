@@ -82,7 +82,7 @@ class TopicAnalyzer(BaseAnalyzer):
 
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
-                bot_qq_ids = self.config_manager.get_bot_qq_id()
+                bot_qq_ids = self.config_manager.get_bot_qq_ids()
                 
                 # 跳过机器人自己的消息
                 if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
@@ -325,7 +325,7 @@ class TopicAnalyzer(BaseAnalyzer):
 
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
-                bot_qq_ids = self.config_manager.get_bot_qq_id()
+                bot_qq_ids = self.config_manager.get_bot_qq_ids()
                 
                 # 跳过机器人自己的消息
                 if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:

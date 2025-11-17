@@ -22,6 +22,16 @@ class MessageAnalyzer:
         self.llm_analyzer = LLMAnalyzer(context, config_manager)
         self.user_analyzer = UserAnalyzer(config_manager)
 
+    def _extract_bot_qq_id_from_instance(self, bot_instance):
+        """从bot实例中提取QQ号（单个）"""
+        if hasattr(bot_instance, "self_id") and bot_instance.self_id:
+            return str(bot_instance.self_id)
+        elif hasattr(bot_instance, "qq") and bot_instance.qq:
+            return str(bot_instance.qq)
+        elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
+            return str(bot_instance.user_id)
+        return None
+
     async def set_bot_instance(self, bot_instance):
         """设置bot实例（保持向后兼容）"""
         if self.bot_manager:
@@ -31,7 +41,7 @@ class MessageAnalyzer:
             bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
             if bot_qq_id:
                 # 将单个QQ号转换为列表，保持统一处理
-                await self.message_handler.set_bot_qq_id([bot_qq_id])
+                await self.message_handler.set_bot_qq_ids([bot_qq_id])
 
     async def analyze_messages(
         self, messages: List[Dict], group_id: str, unified_msg_origin: str = None
