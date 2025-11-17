@@ -80,6 +80,15 @@ class TopicAnalyzer(BaseAnalyzer):
                     )
                     continue
 
+                # 获取发送者ID并过滤机器人消息
+                user_id = str(sender.get("user_id", ""))
+                bot_qq_ids = self.config_manager.get_bot_qq_id()
+                
+                # 跳过机器人自己的消息
+                if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
+                    logger.debug(f"build_prompt 过滤掉机器人QQ号: {user_id}")
+                    continue
+
                 nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
 
@@ -312,6 +321,15 @@ class TopicAnalyzer(BaseAnalyzer):
                     logger.warning(
                         f"extract_text_messages 跳过sender非字典类型的消息: {type(sender)} - {sender}"
                     )
+                    continue
+
+                # 获取发送者ID并过滤机器人消息
+                user_id = str(sender.get("user_id", ""))
+                bot_qq_ids = self.config_manager.get_bot_qq_id()
+                
+                # 跳过机器人自己的消息
+                if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
+                    logger.debug(f"extract_text_messages 过滤掉机器人QQ号: {user_id}")
                     continue
 
                 nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
