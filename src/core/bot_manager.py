@@ -103,8 +103,8 @@ class BotManager:
         discovered = await self.auto_discover_bot_instances()
         self._is_initialized = True
 
-        # 返回是否成功初始化（至少有bot实例）
-        return bool(discovered)
+        # 返回发现的实例字典
+        return discovered
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取bot管理器状态信息"""
