@@ -1,0 +1,63 @@
+name: '✨ 提交新功能建议'
+title: '[Feature Request]'
+description: 提交您希望看到的新功能，帮助我们优化产品。
+labels: [ 'enhancement' ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您提出新功能建议！请详细描述您的需求，这将帮助我们更好地理解您的使用场景。
+
+  - type: textarea
+    attributes:
+      label: 功能描述
+      description: 简明扼要地描述您希望添加的新功能
+      placeholder: >
+        例如："希望增加一个实时统计用户交互数据的仪表盘"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 动机与需求背景
+      description: 说明为什么需要这个功能以及它能解决什么问题
+      placeholder: >
+        例如："当前需要手动导出数据才能分析用户行为，希望自动化生成可视化报告"
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 使用场景或示例
+      description: 描述该功能可能的使用场景或具体使用案例
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 优先级建议
+      description: 您认为这个功能的优先级如何？
+      multiple: false
+      options:
+        - '高优先级（直接影响核心功能）'
+        - '中优先级（提升使用体验）'
+        - '低优先级（优化性需求）'
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: 愿意参与开发吗？
+      description: |
+        如果您有技术能力，可以选择参与开发。我们将提供必要的指导和文档支持。
+      options:
+        - label: 是的，我愿意协助开发！
+        - label: 我可以提供详细使用反馈
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        **注意**：如果您有具体实现方案或技术建议，可以在下方补充说明。  
+        我们会根据需求紧迫性和技术可行性进行评估，感谢您的贡献！

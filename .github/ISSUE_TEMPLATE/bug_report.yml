@@ -1,0 +1,68 @@
+name: '🐛 报告 Bug'
+title: '[Bug]'
+description: 提交报告帮助我们改进。
+labels: [ 'bug' ]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢您抽出时间报告问题！请准确解释您的问题。如果可能，请提供一个可复现的片段（这有助于更快地解决问题）。
+  - type: textarea
+    attributes:
+      label: 发生了什么
+      description: 描述你遇到的异常
+      placeholder: >
+        一个清晰且具体的描述这个异常
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 如何复现？
+      description: >
+        复现该问题的步骤
+      placeholder: >
+        如: 1. 打开 '...'
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: AstrBot 版本、部署方式（如 Windows Docker Desktop 部署）、使用的消息平台适配器、Milvus部署方式、mnemosyne插件版本
+      description: >
+        请提供您的 AstrBot 版本和mnemosyne插件版本。
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 操作系统
+      description: |
+        你在哪个操作系统上遇到了这个问题？
+      multiple: false
+      options:
+        - 'Windows'
+        - 'macOS'
+        - 'Linux'
+        - 'Other'
+        - 'Not sure'
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 报错日志
+      description: >
+        如报错日志、截图等。请提供完整的 Debug 级别的日志！
+      placeholder: >
+        请提供完整的报错日志或截图。
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: 你愿意提交 PR 吗？
+      description: >
+        这不是必需的，但我们很乐意在贡献过程中为您提供指导特别是如果你已经很好地理解了如何实现修复。
+      options:
+        - label: 是的，我愿意提交 PR!

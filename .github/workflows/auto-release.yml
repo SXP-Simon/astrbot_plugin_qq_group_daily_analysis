@@ -1,0 +1,122 @@
+name: Auto Release on Version Update
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'metadata.yaml'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check.outputs.changed }}
+      new_version: ${{ steps.check.outputs.version }}
+      old_version: ${{ steps.check.outputs.old_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: check
+        run: |
+          # 获取当前版本
+          CURRENT_VERSION=$(grep '^version:' metadata.yaml | awk '{print $2}')
+          echo "Current version: $CURRENT_VERSION"
+          
+          # 获取上一次提交的版本
+          git checkout HEAD~1 -- metadata.yaml 2>/dev/null || echo "First commit"
+          if [ -f metadata.yaml ]; then
+            PREVIOUS_VERSION=$(grep '^version:' metadata.yaml | awk '{print $2}')
+            git checkout HEAD -- metadata.yaml
+          else
+            PREVIOUS_VERSION="none"
+          fi
+          echo "Previous version: $PREVIOUS_VERSION"
+          
+          # 比较版本
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "old_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No version change detected"
+          fi
+
+  create-release:
+    needs: check-version
+    if: needs.check-version.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          NEW_VERSION="${{ needs.check-version.outputs.new_version }}"
+          OLD_VERSION="${{ needs.check-version.outputs.old_version }}"
+          
+          echo "## 🎉 Release $NEW_VERSION" > changelog.md
+          echo "" >> changelog.md
+          
+          # 如果有上一个版本标签，生成两个版本之间的提交日志
+          if git rev-parse "$OLD_VERSION" >/dev/null 2>&1; then
+            echo "### 📝 Changes since $OLD_VERSION" >> changelog.md
+            echo "" >> changelog.md
+            
+            # 获取提交信息并分类
+            git log "$OLD_VERSION..HEAD" --pretty=format:"%s|||%h|||%an" --no-merges | while IFS='|||' read -r subject hash author; do
+              # 根据提交信息的前缀进行分类
+              if echo "$subject" | grep -qiE "^(feat|feature):"; then
+                echo "- ✨ **Feature**: ${subject#*: } (${hash})" >> changelog.md
+              elif echo "$subject" | grep -qiE "^fix:"; then
+                echo "- 🐛 **Fix**: ${subject#*: } (${hash})" >> changelog.md
+              elif echo "$subject" | grep -qiE "^docs:"; then
+                echo "- 📚 **Docs**: ${subject#*: } (${hash})" >> changelog.md
+              elif echo "$subject" | grep -qiE "^(refactor|style|perf|test|chore):"; then
+                prefix=$(echo "$subject" | cut -d: -f1)
+                echo "- 🔧 **${prefix^}**: ${subject#*: } (${hash})" >> changelog.md
+              else
+                echo "- 📌 $subject (${hash})" >> changelog.md
+              fi
+            done
+          else
+            echo "### 📝 Changes" >> changelog.md
+            echo "" >> changelog.md
+            echo "Initial release or no previous version tag found." >> changelog.md
+            echo "" >> changelog.md
+            echo "#### Recent commits:" >> changelog.md
+            git log -10 --pretty=format:"- %s (%h)" --no-merges >> changelog.md
+          fi
+          
+          echo "" >> changelog.md
+          echo "---" >> changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$OLD_VERSION...$NEW_VERSION" >> changelog.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-version.outputs.new_version }}
+          name: Release ${{ needs.check-version.outputs.new_version }}
+          body_path: changelog.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify release created
+        run: |
+          echo "✅ Release ${{ needs.check-version.outputs.new_version }} has been created successfully!"
+          echo "🔗 View release at: https://github.com/${{ github.repository }}/releases/tag/${{ needs.check-version.outputs.new_version }}"
