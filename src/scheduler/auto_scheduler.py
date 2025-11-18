@@ -41,8 +41,8 @@ class AutoScheduler:
         elif bot_qq_ids:
             self.bot_manager.set_bot_qq_ids([bot_qq_ids])
 
-    def _get_platform_id(self):
-        """获取平台ID"""
+    def _get_platform_id_for_group(self, group_id):
+        """根据群ID获取对应的平台ID"""
         try:
             if hasattr(self.bot_manager, "_context") and self.bot_manager._context:
                 context = self.bot_manager._context
@@ -51,11 +51,14 @@ class AutoScheduler:
                 ):
                     platforms = context.platform_manager.platform_insts
                     for platform in platforms:
-                        if hasattr(platform, "metadata") and hasattr(
-                            platform.metadata, "id"
-                        ):
-                            platform_id = platform.metadata.id
-                            return platform_id
+                        # 检查平台是否有群列表
+                        if hasattr(platform, "get_groups"):
+                            try:
+                                groups = platform.get_groups()
+                                if any(str(g.get("group_id", "")) == str(group_id) for g in groups):
+                                    return platform.metadata.id if hasattr(platform.metadata, "id") else "aiocqhttp"
+                            except:
+                                continue
             return "aiocqhttp"  # 默认值
         except Exception:
             return "aiocqhttp"  # 默认值
@@ -216,12 +219,18 @@ class AutoScheduler:
 
                 logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
 
+                # 获取该群对应的平台ID和bot实例
+                platform_id = self._get_platform_id_for_group(group_id)
+                bot_instance = self.bot_manager.get_bot_instance(platform_id)
+                
+                if not bot_instance:
+                    logger.warning(f"群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
+                    return
+
                 # 获取群聊消息
                 analysis_days = self.config_manager.get_analysis_days()
-                bot_instance = self.bot_manager.get_bot_instance()
-
                 messages = await self.message_handler.fetch_group_messages(
-                    bot_instance, group_id, analysis_days
+                    bot_instance, group_id, analysis_days, platform_id
                 )
 
                 if not messages:
@@ -239,7 +248,7 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 获取到 {len(messages)} 条消息，开始分析")
 
                 # 进行分析 - 构造正确的 unified_msg_origin
-                platform_id = self._get_platform_id()
+                platform_id = self._get_platform_id_for_group(group_id)
                 umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else None
                 analysis_result = await self.analyzer.analyze_messages(
                     messages, group_id, umo

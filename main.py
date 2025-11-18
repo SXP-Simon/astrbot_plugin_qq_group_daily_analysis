@@ -70,17 +70,21 @@ class QQGroupDailyAnalysis(Star):
     async def _delayed_start_scheduler(self):
         """延迟启动调度器，给系统时间初始化"""
         try:
-            # 等待10秒让系统完全初始化
-            await asyncio.sleep(10)
+            # 等待30秒让系统完全初始化
+            await asyncio.sleep(30)
 
-            # 初始化bot管理器
-            if await bot_manager.initialize_from_config():
-                logger.info("Bot管理器初始化成功，启用自动分析功能")
-
+            # 初始化所有bot实例
+            discovered = await bot_manager.initialize_from_config()
+            if discovered:
+                platform_count = len(discovered)
+                logger.info(f"Bot管理器初始化成功，发现 {platform_count} 个适配器")
+                for platform_id, bot_instance in discovered.items():
+                    logger.info(f"  - 平台 {platform_id}: {type(bot_instance).__name__}")
+                
                 # 启动调度器
                 await auto_scheduler.start_scheduler()
             else:
-                logger.warning("Bot管理器初始化失败，无法启用自动分析功能")
+                logger.warning("Bot管理器初始化失败，未发现任何适配器")
                 status = bot_manager.get_status_info()
                 logger.info(f"Bot管理器状态: {status}")
 

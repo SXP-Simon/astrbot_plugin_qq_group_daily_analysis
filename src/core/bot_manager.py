@@ -11,25 +11,27 @@ class BotManager:
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
-        self._bot_instance = None
-        self._bot_qq_id = None
+        self._bot_instances = {}  # 改为字典：{platform_id: bot_instance}
         self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
         self._is_initialized = False
+        self._default_platform = "aiocqhttp"  # 默认平台
 
     def set_context(self, context):
         """设置AstrBot上下文"""
         self._context = context
 
-    def set_bot_instance(self, bot_instance):
-        """设置bot实例"""
-        if bot_instance:
-            self._bot_instance = bot_instance
+    def set_bot_instance(self, bot_instance, platform_id=None):
+        """设置bot实例，支持指定平台ID"""
+        if not platform_id:
+            platform_id = self._get_platform_id_from_instance(bot_instance)
+        
+        if bot_instance and platform_id:
+            self._bot_instances[platform_id] = bot_instance
             # 自动提取QQ号
-            if not self._bot_qq_id:
-                bot_qq_id = self._extract_bot_qq_id(bot_instance)
-                if bot_qq_id:
-                    self._bot_qq_id = str(bot_qq_id)
+            bot_qq_id = self._extract_bot_qq_id(bot_instance)
+            if bot_qq_id and bot_qq_id not in self._bot_qq_ids:
+                self._bot_qq_ids.append(str(bot_qq_id))
 
     def set_bot_qq_ids(self, bot_qq_ids):
         """设置bot QQ号（支持单个QQ号或QQ号列表）"""
@@ -41,28 +43,40 @@ class BotManager:
             self._bot_qq_id = str(bot_qq_ids)
             self._bot_qq_ids = [str(bot_qq_ids)]
 
-    def get_bot_instance(self):
-        """获取当前bot实例"""
-        return self._bot_instance
+    def get_bot_instance(self, platform_id=None):
+        """获取指定平台的bot实例，如果不指定则返回默认平台的实例"""
+        if platform_id:
+            return self._bot_instances.get(platform_id)
+        
+        # 返回默认平台的实例
+        return self._bot_instances.get(self._default_platform)
 
     def has_bot_instance(self) -> bool:
         """检查是否有可用的bot实例"""
-        return self._bot_instance is not None
+        return bool(self._bot_instances)
 
     def has_bot_qq_id(self) -> bool:
         """检查是否有配置的bot QQ号"""
-        return bool(self._bot_qq_ids) or self._bot_qq_id is not None
+        return bool(self._bot_qq_ids)
 
     def is_ready_for_auto_analysis(self) -> bool:
         """检查是否准备好进行自动分析"""
         return self.has_bot_instance() and self.has_bot_qq_id()
 
-    async def auto_discover_bot_instance(self):
-        """自动发现可用的bot实例"""
+    def _get_platform_id_from_instance(self, bot_instance):
+        """从bot实例获取平台ID"""
+        if hasattr(bot_instance, "platform") and bot_instance.platform:
+            return bot_instance.platform
+        return self._default_platform
+
+    async def auto_discover_bot_instances(self):
+        """自动发现所有可用的bot实例"""
         if not self._context or not hasattr(self._context, "platform_manager"):
-            return None
+            return {}
 
         platforms = getattr(self._context.platform_manager, "platform_insts", [])
+        discovered = {}
+        
         for platform in platforms:
             # 获取bot实例
             bot_client = None
@@ -70,11 +84,13 @@ class BotManager:
                 bot_client = platform.get_client()
             elif hasattr(platform, "bot"):
                 bot_client = platform.bot
-
-            if bot_client:
-                self.set_bot_instance(bot_client)
-                return bot_client
-        return None
+            
+            if bot_client and hasattr(platform, "metadata") and hasattr(platform.metadata, "id"):
+                platform_id = platform.metadata.id
+                self.set_bot_instance(bot_client, platform_id)
+                discovered[platform_id] = bot_client
+        
+        return discovered
 
     async def initialize_from_config(self):
         """从配置初始化bot管理器"""
@@ -83,19 +99,21 @@ class BotManager:
         if bot_qq_ids:
             self.set_bot_qq_ids(bot_qq_ids)
 
-        # 自动发现bot实例
-        await self.auto_discover_bot_instance()
+        # 自动发现所有bot实例
+        discovered = await self.auto_discover_bot_instances()
         self._is_initialized = True
 
         # 返回是否成功初始化（至少有bot实例）
-        return self.has_bot_instance()
+        return bool(discovered)
 
     def get_status_info(self) -> Dict[str, Any]:
         """获取bot管理器状态信息"""
         return {
             "has_bot_instance": self.has_bot_instance(),
             "has_bot_qq_id": self.has_bot_qq_id(),
-            "bot_qq_id": self._bot_qq_id,
+            "bot_qq_ids": self._bot_qq_ids,
+            "platform_count": len(self._bot_instances),
+            "platforms": list(self._bot_instances.keys()),
             "ready_for_auto_analysis": self.is_ready_for_auto_analysis(),
         }
 
@@ -133,14 +151,9 @@ class BotManager:
 
     def should_filter_bot_message(self, sender_id: str) -> bool:
         """判断是否应该过滤bot自己的消息（支持多个QQ号）"""
-        if not self._bot_qq_ids and not self._bot_qq_id:
+        if not self._bot_qq_ids:
             return False
         
         sender_id_str = str(sender_id)
         # 检查是否在QQ号列表中
-        if self._bot_qq_ids and sender_id_str in self._bot_qq_ids:
-            return True
-        # 向后兼容：检查单个QQ号
-        if self._bot_qq_id and sender_id_str == self._bot_qq_id:
-            return True
-        return False
+        return sender_id_str in self._bot_qq_ids
