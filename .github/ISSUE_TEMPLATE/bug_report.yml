@@ -28,9 +28,9 @@ body:
 
   - type: textarea
     attributes:
-      label: AstrBot 版本、部署方式（如 Windows Docker Desktop 部署）、使用的消息平台适配器、Milvus部署方式、mnemosyne插件版本
+      label: AstrBot 版本、部署方式（如 Windows Docker Desktop 部署）、使用的消息平台适配器、群分析插件版本
       description: >
-        请提供您的 AstrBot 版本和mnemosyne插件版本。
+        请提供您的 AstrBot 版本和群分析插件版本。
     validations:
       required: true
 
