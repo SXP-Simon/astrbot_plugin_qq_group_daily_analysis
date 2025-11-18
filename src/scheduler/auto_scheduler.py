@@ -69,8 +69,12 @@ class AutoScheduler:
                         else:
                             logger.debug(f"平台 {platform_id} 的 bot 实例没有 call_action 方法")
                     except Exception as e:
-                        # 如果调用失败，继续尝试下一个
-                        logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息: {e}")
+                        # 检查是否是特定的错误码（1200表示不在该群）
+                        error_msg = str(e)
+                        if "retcode=1200" in error_msg or "消息undefined不存在" in error_msg:
+                            logger.debug(f"平台 {platform_id} 确认群 {group_id} 不存在: {e}")
+                        else:
+                            logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息: {e}")
                         continue
                 
                 # 如果所有适配器都尝试失败，记录警告并返回第一个
@@ -276,7 +280,7 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 获取到 {len(messages)} 条消息，开始分析")
 
                 # 进行分析 - 构造正确的 unified_msg_origin
-                platform_id = self._get_platform_id_for_group(group_id)
+                # platform_id 已经在前面获取，直接使用
                 umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else None
                 analysis_result = await self.analyzer.analyze_messages(
                     messages, group_id, umo
