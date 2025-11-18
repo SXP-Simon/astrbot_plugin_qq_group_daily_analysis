@@ -376,9 +376,12 @@ class AutoScheduler:
     async def _send_image_message(self, group_id: str, image_url: str):
         """发送图片消息到群"""
         try:
-            bot_instance = self.bot_manager.get_bot_instance()
+            # 获取该群对应的平台ID和bot实例
+            platform_id = self._get_platform_id_for_group(group_id)
+            bot_instance = self.bot_manager.get_bot_instance(platform_id)
+            
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送图片失败：缺少bot实例")
+                logger.error(f"群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送图片消息到群
@@ -398,9 +401,12 @@ class AutoScheduler:
     async def _send_text_message(self, group_id: str, text_content: str):
         """发送文本消息到群"""
         try:
-            bot_instance = self.bot_manager.get_bot_instance()
+            # 获取该群对应的平台ID和bot实例
+            platform_id = self._get_platform_id_for_group(group_id)
+            bot_instance = self.bot_manager.get_bot_instance(platform_id)
+            
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送文本失败：缺少bot实例")
+                logger.error(f"群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送文本消息到群
@@ -415,9 +421,12 @@ class AutoScheduler:
     async def _send_pdf_file(self, group_id: str, pdf_path: str):
         """发送PDF文件到群"""
         try:
-            bot_instance = self.bot_manager.get_bot_instance()
+            # 获取该群对应的平台ID和bot实例
+            platform_id = self._get_platform_id_for_group(group_id)
+            bot_instance = self.bot_manager.get_bot_instance(platform_id)
+            
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送PDF失败：缺少bot实例")
+                logger.error(f"群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送PDF文件到群
