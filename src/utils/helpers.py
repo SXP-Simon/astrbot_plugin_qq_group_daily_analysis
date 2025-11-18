@@ -32,10 +32,10 @@ class MessageAnalyzer:
             return str(bot_instance.user_id)
         return None
 
-    async def set_bot_instance(self, bot_instance):
+    async def set_bot_instance(self, bot_instance, platform_id=None):
         """设置bot实例（保持向后兼容）"""
         if self.bot_manager:
-            self.bot_manager.set_bot_instance(bot_instance)
+            self.bot_manager.set_bot_instance(bot_instance, platform_id)
         else:
             # 从bot实例提取QQ号并设置为列表
             bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)

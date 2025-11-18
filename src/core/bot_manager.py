@@ -120,7 +120,14 @@ class BotManager:
     def update_from_event(self, event):
         """从事件更新bot实例（用于手动命令）"""
         if hasattr(event, "bot") and event.bot:
-            self.set_bot_instance(event.bot)
+            # 从事件中获取平台ID
+            platform_id = None
+            if hasattr(event, "platform") and event.platform:
+                platform_id = event.platform
+            elif hasattr(event, "metadata") and hasattr(event.metadata, "platform"):
+                platform_id = event.metadata.platform
+            
+            self.set_bot_instance(event.bot, platform_id)
             # 每次都尝试从bot实例提取QQ号
             bot_qq_id = self._extract_bot_qq_id(event.bot)
             if bot_qq_id:

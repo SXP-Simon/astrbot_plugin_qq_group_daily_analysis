@@ -70,7 +70,7 @@ class QQGroupDailyAnalysis(Star):
     async def _delayed_start_scheduler(self):
         """延迟启动调度器，给系统时间初始化"""
         try:
-            # 等待30秒让系统完全初始化
+            # 等待10秒让系统完全初始化
             await asyncio.sleep(30)
 
             # 初始化所有bot实例
@@ -174,9 +174,17 @@ class QQGroupDailyAnalysis(Star):
         logger.info(f"当前输出格式配置: {config_manager.get_output_format()}")
 
         try:
+            # 获取该群对应的平台ID和bot实例
+            platform_id = auto_scheduler._get_platform_id_for_group(group_id)
+            bot_instance = bot_manager.get_bot_instance(platform_id)
+            
+            if not bot_instance:
+                yield event.plain_result(f"❌ 未找到群 {group_id} 对应的bot实例（平台: {platform_id}）")
+                return
+
             # 获取群聊消息
             messages = await message_analyzer.message_handler.fetch_group_messages(
-                bot_manager.get_bot_instance(), group_id, analysis_days
+                bot_instance, group_id, analysis_days, platform_id
             )
             if not messages:
                 yield event.plain_result(
