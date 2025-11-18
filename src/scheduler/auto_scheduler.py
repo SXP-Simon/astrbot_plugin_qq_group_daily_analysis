@@ -79,12 +79,12 @@ class AutoScheduler:
                 logger.warning(f"使用默认平台: {first_platform}")
                 return first_platform
             
-            # 回退到默认值
-            logger.warning(f"⚠️ 没有注册的bot实例，使用默认平台 'default'")
-            return "default"
+            # 没有任何bot实例，返回None
+            logger.error(f"❌ 没有注册的bot实例")
+            return None
         except Exception as e:
             logger.error(f"❌ 获取平台ID失败: {e}")
-            return "default"
+            return None
 
     async def start_scheduler(self):
         """启动定时任务调度器"""
