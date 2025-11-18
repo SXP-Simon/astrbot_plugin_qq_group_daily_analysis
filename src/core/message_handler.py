@@ -47,7 +47,7 @@ class MessageHandler:
         return None
 
     async def fetch_group_messages(
-        self, bot_instance, group_id: str, days: int
+        self, bot_instance, group_id: str, days: int, platform_id: str = None
     ) -> List[Dict]:
         """获取群聊消息记录"""
         try:
