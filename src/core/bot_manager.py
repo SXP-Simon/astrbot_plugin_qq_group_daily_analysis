@@ -4,7 +4,7 @@ Bot实例管理模块
 """
 
 from typing import Dict, Any
-
+from astrbot.api import logger
 
 class BotManager:
     """Bot实例管理器 - 统一管理所有bot相关操作"""
@@ -15,7 +15,7 @@ class BotManager:
         self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
         self._is_initialized = False
-        self._default_platform = "aiocqhttp"  # 默认平台
+        self._default_platform = "default"  # 默认平台
 
     def set_context(self, context):
         """设置AstrBot上下文"""
@@ -44,12 +44,38 @@ class BotManager:
             self._bot_qq_ids = [str(bot_qq_ids)]
 
     def get_bot_instance(self, platform_id=None):
-        """获取指定平台的bot实例，如果不指定则返回默认平台的实例"""
+        """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
         if platform_id:
-            return self._bot_instances.get(platform_id)
+            # 如果指定了平台ID，尝试获取
+            instance = self._bot_instances.get(platform_id)
+            if instance:
+                return instance
+            
+            # 如果指定的平台不存在，记录警告并尝试回退
+            if self._bot_instances:
+                first_platform = list(self._bot_instances.keys())[0]
+                logger.warning(
+                    f"平台 '{platform_id}' 不存在，回退到第一个可用平台 '{first_platform}'"
+                )
+                return self._bot_instances[first_platform]
+            
+            # 没有任何平台可用
+            logger.error(f"平台 '{platform_id}' 不存在，且没有任何可用的bot实例")
+            return None
         
-        # 返回默认平台的实例
-        return self._bot_instances.get(self._default_platform)
+        # 没有指定平台ID，返回第一个可用的实例
+        if self._bot_instances:
+            first_platform = list(self._bot_instances.keys())[0]
+            if len(self._bot_instances) > 1:
+                logger.debug(
+                    f"未指定平台，使用第一个可用平台 '{first_platform}' "
+                    f"(共有 {len(self._bot_instances)} 个平台: {list(self._bot_instances.keys())})"
+                )
+            return self._bot_instances[first_platform]
+        
+        # 没有任何平台可用
+        logger.error("没有任何可用的bot实例")
+        return None
 
     def has_bot_instance(self) -> bool:
         """检查是否有可用的bot实例"""
@@ -65,7 +91,7 @@ class BotManager:
 
     def _get_platform_id_from_instance(self, bot_instance):
         """从bot实例获取平台ID"""
-        if hasattr(bot_instance, "platform") and bot_instance.platform:
+        if hasattr(bot_instance, "platform") and isinstance(bot_instance.platform, str):
             return bot_instance.platform
         return self._default_platform
 
@@ -122,10 +148,10 @@ class BotManager:
         if hasattr(event, "bot") and event.bot:
             # 从事件中获取平台ID
             platform_id = None
-            if hasattr(event, "platform") and event.platform:
+            if hasattr(event, "platform") and isinstance(event.platform, str):
                 platform_id = event.platform
-            elif hasattr(event, "metadata") and hasattr(event.metadata, "platform"):
-                platform_id = event.metadata.platform
+            elif hasattr(event, "metadata") and hasattr(event.metadata, "id"):
+                platform_id = event.metadata.id
             
             self.set_bot_instance(event.bot, platform_id)
             # 每次都尝试从bot实例提取QQ号

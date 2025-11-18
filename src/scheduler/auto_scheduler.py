@@ -41,27 +41,50 @@ class AutoScheduler:
         elif bot_qq_ids:
             self.bot_manager.set_bot_qq_ids([bot_qq_ids])
 
-    def _get_platform_id_for_group(self, group_id):
+    async def _get_platform_id_for_group(self, group_id):
         """根据群ID获取对应的平台ID"""
         try:
-            if hasattr(self.bot_manager, "_context") and self.bot_manager._context:
-                context = self.bot_manager._context
-                if hasattr(context, "platform_manager") and hasattr(
-                    context.platform_manager, "platform_insts"
-                ):
-                    platforms = context.platform_manager.platform_insts
-                    for platform in platforms:
-                        # 检查平台是否有群列表
-                        if hasattr(platform, "get_groups"):
-                            try:
-                                groups = platform.get_groups()
-                                if any(str(g.get("group_id", "")) == str(group_id) for g in groups):
-                                    return platform.metadata.id if hasattr(platform.metadata, "id") else "aiocqhttp"
-                            except:
-                                continue
-            return "aiocqhttp"  # 默认值
-        except Exception:
-            return "aiocqhttp"  # 默认值
+            # 首先检查已注册的bot实例
+            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+                # 如果只有一个实例，直接返回
+                if len(self.bot_manager._bot_instances) == 1:
+                    platform_id = list(self.bot_manager._bot_instances.keys())[0]
+                    logger.debug(f"只有一个适配器，使用平台: {platform_id}")
+                    return platform_id
+                
+                # 如果有多个实例，尝试通过API检查群属于哪个适配器
+                logger.info(f"检测到多个适配器，正在验证群 {group_id} 属于哪个平台...")
+                for platform_id, bot_instance in self.bot_manager._bot_instances.items():
+                    try:
+                        # 尝试调用 get_group_info 来验证群是否存在
+                        if hasattr(bot_instance, "call_action"):
+                            result = await bot_instance.call_action(
+                                "get_group_info", group_id=int(group_id)
+                            )
+                            if result and result.get("group_id"):
+                                logger.info(f"✅ 群 {group_id} 属于平台 {platform_id}")
+                                return platform_id
+                            else:
+                                logger.debug(f"平台 {platform_id} 返回了无效结果: {result}")
+                        else:
+                            logger.debug(f"平台 {platform_id} 的 bot 实例没有 call_action 方法")
+                    except Exception as e:
+                        # 如果调用失败，继续尝试下一个
+                        logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息: {e}")
+                        continue
+                
+                # 如果所有适配器都尝试失败，记录警告并返回第一个
+                logger.warning(f"⚠️ 无法确定群 {group_id} 属于哪个平台，使用第一个适配器")
+                first_platform = list(self.bot_manager._bot_instances.keys())[0]
+                logger.warning(f"使用默认平台: {first_platform}")
+                return first_platform
+            
+            # 回退到默认值
+            logger.warning(f"⚠️ 没有注册的bot实例，使用默认平台 'default'")
+            return "default"
+        except Exception as e:
+            logger.error(f"❌ 获取平台ID失败: {e}")
+            return "default"
 
     async def start_scheduler(self):
         """启动定时任务调度器"""
@@ -220,11 +243,16 @@ class AutoScheduler:
                 logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
 
                 # 获取该群对应的平台ID和bot实例
-                platform_id = self._get_platform_id_for_group(group_id)
+                platform_id = await self._get_platform_id_for_group(group_id)
+                
+                if not platform_id:
+                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，跳过分析")
+                    return
+                
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
                 
                 if not bot_instance:
-                    logger.warning(f"群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
+                    logger.error(f"❌ 群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
                     return
 
                 # 获取群聊消息
@@ -377,11 +405,16 @@ class AutoScheduler:
         """发送图片消息到群"""
         try:
             # 获取该群对应的平台ID和bot实例
-            platform_id = self._get_platform_id_for_group(group_id)
+            platform_id = await self._get_platform_id_for_group(group_id)
+            
+            if not platform_id:
+                logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
+                return
+            
             bot_instance = self.bot_manager.get_bot_instance(platform_id)
             
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
+                logger.error(f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送图片消息到群
@@ -402,11 +435,16 @@ class AutoScheduler:
         """发送文本消息到群"""
         try:
             # 获取该群对应的平台ID和bot实例
-            platform_id = self._get_platform_id_for_group(group_id)
+            platform_id = await self._get_platform_id_for_group(group_id)
+            
+            if not platform_id:
+                logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送文本")
+                return
+            
             bot_instance = self.bot_manager.get_bot_instance(platform_id)
             
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）")
+                logger.error(f"❌ 群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送文本消息到群
@@ -422,11 +460,16 @@ class AutoScheduler:
         """发送PDF文件到群"""
         try:
             # 获取该群对应的平台ID和bot实例
-            platform_id = self._get_platform_id_for_group(group_id)
+            platform_id = await self._get_platform_id_for_group(group_id)
+            
+            if not platform_id:
+                logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送PDF")
+                return
+            
             bot_instance = self.bot_manager.get_bot_instance(platform_id)
             
             if not bot_instance:
-                logger.error(f"群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）")
+                logger.error(f"❌ 群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）")
                 return
 
             # 发送PDF文件到群
