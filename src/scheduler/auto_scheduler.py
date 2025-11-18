@@ -445,34 +445,74 @@ class AutoScheduler:
             logger.error(f"发送分析报告到群 {group_id} 失败: {e}")
 
     async def _send_image_message(self, group_id: str, image_url: str):
-        """发送图片消息到群"""
+        """发送图片消息到群 - 依次尝试所有可用平台"""
         try:
-            # 获取该群对应的平台ID和bot实例
-            platform_id = await self._get_platform_id_for_group(group_id)
-            
-            if not platform_id:
-                logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
-                return
-            
-            bot_instance = self.bot_manager.get_bot_instance(platform_id)
-            
-            if not bot_instance:
-                logger.error(f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
-                return
+            # 获取所有可用的平台，依次尝试发送
+            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+                available_platforms = list(self.bot_manager._bot_instances.items())
+                logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送图片...")
+                
+                for test_platform_id, test_bot_instance in available_platforms:
+                    try:
+                        logger.info(f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片...")
+                        
+                        # 发送图片消息到群
+                        await test_bot_instance.api.call_action(
+                            "send_group_msg",
+                            group_id=group_id,
+                            message=[
+                                {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                                {"type": "image", "data": {"url": image_url}},
+                            ],
+                        )
+                        logger.info(f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片")
+                        return True  # 成功发送，返回
+                        
+                    except Exception as e:
+                        error_msg = str(e)
+                        # 检查是否是特定的错误码
+                        if "retcode=1200" in error_msg:
+                            if "rich media transfer failed" in error_msg:
+                                logger.debug(f"平台 {test_platform_id} 图片发送失败：媒体传输失败，继续尝试下一个平台")
+                            else:
+                                logger.debug(f"平台 {test_platform_id} 图片发送失败：机器人可能不在此群中，继续尝试下一个平台")
+                        else:
+                            logger.debug(f"平台 {test_platform_id} 图片发送失败: {e}，继续尝试下一个平台")
+                        continue
+                
+                # 所有平台都尝试失败
+                logger.error(f"❌ 群 {group_id} 所有平台都尝试发送图片失败")
+                return False
+            else:
+                # 回退到原来的逻辑（单个平台）
+                logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
+                platform_id = await self._get_platform_id_for_group(group_id)
+                
+                if not platform_id:
+                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
+                    return False
+                
+                bot_instance = self.bot_manager.get_bot_instance(platform_id)
+                
+                if not bot_instance:
+                    logger.error(f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
+                    return False
 
-            # 发送图片消息到群
-            await bot_instance.api.call_action(
-                "send_group_msg",
-                group_id=group_id,
-                message=[
-                    {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
-                    {"type": "image", "data": {"url": image_url}},
-                ],
-            )
-            logger.info(f"群 {group_id} 图片消息发送成功")
+                # 发送图片消息到群
+                await bot_instance.api.call_action(
+                    "send_group_msg",
+                    group_id=group_id,
+                    message=[
+                        {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                        {"type": "image", "data": {"url": image_url}},
+                    ],
+                )
+                logger.info(f"群 {group_id} 图片消息发送成功")
+                return True
 
         except Exception as e:
             logger.error(f"发送图片消息到群 {group_id} 失败: {e}")
+            return False  # 返回失败标志
 
     async def _send_text_message(self, group_id: str, text_content: str):
         """发送文本消息到群 - 依次尝试所有可用平台"""
