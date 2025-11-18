@@ -94,11 +94,17 @@ class MessageHandler:
                         )
                         query_rounds = 1
                     except Exception as api_err:
-                        logger.error(f"群 {group_id} API 调用失败: {api_err}")
-                        logger.error(
-                            f"群 {group_id} 当前 OneBot 实现可能不支持 get_group_msg_history API"
-                        )
-                        return []
+                        error_msg = str(api_err)
+                        # 检查是否是特定的错误码（1200表示不在该群）
+                        if "retcode=1200" in error_msg or "消息undefined不存在" in error_msg:
+                            logger.warning(f"群 {group_id} 机器人不在此群中: {api_err}")
+                            return []
+                        else:
+                            logger.error(f"群 {group_id} API 调用失败: {api_err}")
+                            logger.error(
+                                f"群 {group_id} 当前 OneBot 实现可能不支持 get_group_msg_history API"
+                            )
+                            return []
                 elif hasattr(bot_instance, "api"):
                     # QQ 官方 bot (botClient) 不支持历史消息
                     logger.error(

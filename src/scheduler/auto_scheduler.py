@@ -246,28 +246,67 @@ class AutoScheduler:
 
                 logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
 
-                # 获取该群对应的平台ID和bot实例
-                platform_id = await self._get_platform_id_for_group(group_id)
+                # 获取所有可用的平台，依次尝试获取消息
+                messages = None
+                platform_id = None
+                bot_instance = None
                 
-                if not platform_id:
-                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，跳过分析")
-                    return
-                
-                bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                
-                if not bot_instance:
-                    logger.error(f"❌ 群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
-                    return
+                # 获取所有可用的平台ID和bot实例
+                if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+                    available_platforms = list(self.bot_manager._bot_instances.items())
+                    logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试...")
+                    
+                    for test_platform_id, test_bot_instance in available_platforms:
+                        try:
+                            logger.info(f"尝试使用平台 {test_platform_id} 获取群 {group_id} 的消息...")
+                            analysis_days = self.config_manager.get_analysis_days()
+                            test_messages = await self.message_handler.fetch_group_messages(
+                                test_bot_instance, group_id, analysis_days, test_platform_id
+                            )
+                            
+                            if test_messages and len(test_messages) > 0:
+                                # 成功获取到消息，使用这个平台
+                                messages = test_messages
+                                platform_id = test_platform_id
+                                bot_instance = test_bot_instance
+                                logger.info(f"✅ 群 {group_id} 成功通过平台 {platform_id} 获取到 {len(messages)} 条消息")
+                                break
+                            else:
+                                logger.debug(f"平台 {test_platform_id} 未获取到消息，继续尝试下一个平台")
+                        except Exception as e:
+                            logger.debug(f"平台 {test_platform_id} 获取消息失败: {e}，继续尝试下一个平台")
+                            continue
+                    
+                    if not messages:
+                        logger.warning(f"群 {group_id} 所有平台都尝试失败，未获取到足够的消息记录")
+                        return
+                else:
+                    # 回退到原来的逻辑（单个平台）
+                    logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
+                    platform_id = await self._get_platform_id_for_group(group_id)
+                    
+                    if not platform_id:
+                        logger.error(f"❌ 群 {group_id} 无法获取平台ID，跳过分析")
+                        return
+                    
+                    bot_instance = self.bot_manager.get_bot_instance(platform_id)
+                    
+                    if not bot_instance:
+                        logger.error(f"❌ 群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
+                        return
 
-                # 获取群聊消息
-                analysis_days = self.config_manager.get_analysis_days()
-                messages = await self.message_handler.fetch_group_messages(
-                    bot_instance, group_id, analysis_days, platform_id
-                )
+                    # 获取群聊消息
+                    analysis_days = self.config_manager.get_analysis_days()
+                    messages = await self.message_handler.fetch_group_messages(
+                        bot_instance, group_id, analysis_days, platform_id
+                    )
 
-                if not messages:
-                    logger.warning(f"群 {group_id} 未获取到足够的消息记录")
-                    return
+                    if messages is None:
+                        logger.warning(f"群 {group_id} 获取消息失败，跳过分析")
+                        return
+                    elif not messages:
+                        logger.warning(f"群 {group_id} 未获取到足够的消息记录")
+                        return
 
                 # 检查消息数量
                 min_threshold = self.config_manager.get_min_messages_threshold()
