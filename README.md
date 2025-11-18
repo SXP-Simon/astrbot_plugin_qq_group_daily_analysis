@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.8.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.8.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -98,7 +98,8 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 ### v3.8.0
 - feat(multi-qq-platforms): 尝试适配多个适配器实例，支持填入多个QQ账号；
-- 可以填写用于自动分析的机器人QQ号、多消息平台QQ号、不希望出现于群分析中的其他人的机器人QQ号等，这种群聊中出现但是不希望分析的QQ号
+- 可以填写用于自动分析的机器人QQ号、多消息平台QQ号、不希望出现于群分析中的其他人的机器人QQ号等，这种群聊中出现但是不希望分析的QQ号；
+- fix(多适配器支持): 处理 Bot 实例与平台 ID 之间的对应关系，确保在多适配器环境下正确获取消息和发送报告。
 
 ### v3.7.0
 - feat(provider): 根据配置键获取 Provider，支持多级回退：
