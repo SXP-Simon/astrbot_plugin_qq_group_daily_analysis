@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.8.6-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
@@ -95,6 +95,9 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v3.9.0
+- 感谢 lxfight，参考 [Mnemosyne-AstrBot长期记忆插件](https://github.com/lxfight/astrbot_plugin_mnemosyne) 实现自动发版和 Issue 模板
 
 ### v3.8.0
 - feat(multi-qq-platforms): 尝试适配多个适配器实例，支持填入多个QQ账号；
