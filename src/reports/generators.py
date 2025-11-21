@@ -19,6 +19,7 @@ class ReportGenerator:
     def __init__(self, config_manager):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
+        self.html_templates = HTMLTemplates()  # 实例化HTML模板管理器
 
     async def generate_image_report(
         self, analysis_result: dict, group_id: str, html_render_func
@@ -27,7 +28,20 @@ class ReportGenerator:
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(analysis_result)
-            # 使用AstrBot内置的HTML渲染服务（直接传递模板和数据）
+
+            # 先渲染HTML模板
+            html_content = self._render_html_template(
+                self.html_templates.get_image_template(), render_payload
+            )
+
+            # 检查HTML内容是否有效
+            if not html_content:
+                logger.error("图片报告HTML渲染失败：返回空内容")
+                return None
+
+            logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+
+            # 使用AstrBot内置的HTML渲染服务（传递渲染后的HTML）
             # 使用兼容的图片生成选项（基于NetworkRenderStrategy的默认设置）
             image_options = {
                 "full_page": True,
@@ -35,8 +49,8 @@ class ReportGenerator:
                 "quality": 95,  # 设置合理的质量
             }
             image_url = await html_render_func(
-                HTMLTemplates.get_image_template(),
-                render_payload,
+                html_content,  # 渲染后的HTML内容
+                {},  # 空数据字典，因为数据已包含在HTML中
                 True,  # return_url=True，返回URL而不是下载文件
                 image_options,
             )
@@ -55,8 +69,8 @@ class ReportGenerator:
                     "quality": 70,  # 降低质量以提高兼容性
                 }
                 image_url = await html_render_func(
-                    HTMLTemplates.get_image_template(),
-                    render_payload,
+                    html_content,  # 使用已渲染的HTML
+                    {},  # 空数据字典
                     True,
                     simple_options,
                 )
@@ -86,10 +100,16 @@ class ReportGenerator:
             render_data = await self._prepare_render_data(analysis_result)
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            # 生成 HTML 内容（PDF模板使用{}占位符）
+            # 生成 HTML 内容（PDF模板使用{{}}占位符）
             html_content = self._render_html_template(
-                HTMLTemplates.get_pdf_template(), render_data, use_jinja_style=False
+                self.html_templates.get_pdf_template(), render_data
             )
+
+            # 检查HTML内容是否有效
+            if not html_content:
+                logger.error("PDF报告HTML渲染失败：返回空内容")
+                return None
+
             logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
             # 转换为 PDF
@@ -152,69 +172,68 @@ class ReportGenerator:
         user_titles = analysis_result["user_titles"]
         activity_viz = stats.activity_visualization
 
-        # 构建话题HTML
-        topics_html = ""
+        # 使用Jinja2模板构建话题HTML（批量渲染）
         max_topics = self.config_manager.get_max_topics()
+        topics_list = []
         for i, topic in enumerate(topics[:max_topics], 1):
-            contributors_str = "、".join(topic.contributors)
-            topics_html += f"""
-            <div class="topic-item">
-                <div class="topic-header">
-                    <span class="topic-number">{i}</span>
-                    <span class="topic-title">{topic.topic}</span>
-                </div>
-                <div class="topic-contributors">参与者: {contributors_str}</div>
-                <div class="topic-detail">{topic.detail}</div>
-            </div>
-            """
+            topics_list.append(
+                {
+                    "index": i,
+                    "topic": topic,
+                    "contributors": "、".join(topic.contributors),
+                }
+            )
 
-        # 构建用户称号HTML（包含头像）
-        titles_html = ""
+        topics_html = self.html_templates.render_template(
+            "topic_item.html", topics=topics_list
+        )
+        logger.info(f"话题HTML生成完成，长度: {len(topics_html)}")
+
+        # 使用Jinja2模板构建用户称号HTML（批量渲染，包含头像）
         max_user_titles = self.config_manager.get_max_user_titles()
+        titles_list = []
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
             avatar_data = await self._get_user_avatar(str(title.qq))
-            avatar_html = (
-                f'<img src="{avatar_data}" class="user-avatar" alt="头像">'
-                if avatar_data
-                else '<div class="user-avatar-placeholder">👤</div>'
+            title_data = {
+                "name": title.name,
+                "title": title.title,
+                "mbti": title.mbti,
+                "reason": title.reason,
+                "avatar_data": avatar_data,
+            }
+            titles_list.append(title_data)
+
+        titles_html = self.html_templates.render_template(
+            "user_title_item.html", titles=titles_list
+        )
+        logger.info(f"用户称号HTML生成完成，长度: {len(titles_html)}")
+
+        # 使用Jinja2模板构建金句HTML（批量渲染）
+        max_golden_quotes = self.config_manager.get_max_golden_quotes()
+        quotes_list = []
+        for quote in stats.golden_quotes[:max_golden_quotes]:
+            quotes_list.append(
+                {
+                    "content": quote.content,
+                    "sender": quote.sender,
+                    "reason": quote.reason,
+                }
             )
 
-            titles_html += f"""
-            <div class="user-title">
-                <div class="user-info">
-                    {avatar_html}
-                    <div class="user-details">
-                        <div class="user-name">{title.name}</div>
-                        <div class="user-badges">
-                            <div class="user-title-badge">{title.title}</div>
-                            <div class="user-mbti">{title.mbti}</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="user-reason">{title.reason}</div>
-            </div>
-            """
-
-        # 构建金句HTML
-        quotes_html = ""
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for quote in stats.golden_quotes[:max_golden_quotes]:
-            quotes_html += f"""
-            <div class="quote-item">
-                <div class="quote-content">"{quote.content}"</div>
-                <div class="quote-author">—— {quote.sender}</div>
-                <div class="quote-reason">{quote.reason}</div>
-            </div>
-            """
+        quotes_html = self.html_templates.render_template(
+            "quote_item.html", quotes=quotes_list
+        )
+        logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
         # 生成活跃度可视化HTML
         hourly_chart_html = self.activity_visualizer.generate_hourly_chart_html(
             activity_viz.hourly_activity
         )
+        logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
-        # 返回扁平化的渲染数据
-        return {
+        # 准备最终渲染数据
+        render_data = {
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,
@@ -237,46 +256,30 @@ class ReportGenerator:
             else 0,
         }
 
-    def _render_html_template(
-        self, template: str, data: dict, use_jinja_style: bool = False
-    ) -> str:
-        """HTML模板渲染，支持两种占位符格式
+        logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
+        return render_data
+
+    def _render_html_template(self, template: str, data: dict) -> str:
+        """HTML模板渲染，使用 {{key}} 占位符格式
 
         Args:
             template: HTML模板字符串
-            data: 渲染数据
-            use_jinja_style: 是否使用Jinja2风格的{{ }}占位符，否则使用{}占位符
+            data: 渲染数据字典
         """
         result = template
 
-        # 调试：记录渲染数据
-        logger.info(
-            f"渲染数据键: {list(data.keys())}, 使用Jinja风格: {use_jinja_style}"
-        )
-
         for key, value in data.items():
-            if use_jinja_style:
-                # 图片模板使用{{ }}占位符
-                placeholder = f"{{{{ {key} }}}}"
-            else:
-                # PDF模板使用{}占位符
-                placeholder = f"{{{key}}}"
-
-            # 调试：记录替换过程
-            if placeholder in result:
-                logger.debug(f"替换 {placeholder} -> {str(value)[:100]}...")
+            # 统一使用双大括号格式 {{key}}
+            placeholder = "{{" + key + "}}"
             result = result.replace(placeholder, str(value))
 
         # 检查是否还有未替换的占位符
         import re
 
-        if use_jinja_style:
-            remaining_placeholders = re.findall(r"\{\{[^}]+\}\}", result)
-        else:
-            remaining_placeholders = re.findall(r"\{[^}]+\}", result)
-
-        if remaining_placeholders:
-            logger.warning(f"未替换的占位符: {remaining_placeholders[:10]}")
+        if remaining_placeholders := re.findall(r"\{\{[^}]+\}\}", result):
+            logger.warning(
+                f"未替换的占位符 ({len(remaining_placeholders)}个): {remaining_placeholders[:10]}"
+            )
 
         return result
 
