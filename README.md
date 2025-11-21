@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -96,6 +96,9 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v3.9.5
+- fix(report/template): 迁移到应该使用的 jinja2 模板引擎， HTML 文件方便调试和修改
 
 ### v3.9.0
 - 感谢 lxfight，参考 [Mnemosyne-AstrBot长期记忆插件](https://github.com/lxfight/astrbot_plugin_mnemosyne) 实现自动发版和 Issue 模板
