@@ -4,7 +4,6 @@
 """
 
 import sys
-from typing import Optional, List
 from astrbot.api import logger, AstrBotConfig
 
 
@@ -17,7 +16,7 @@ class ConfigManager:
         self._pyppeteer_version = None
         self._check_pyppeteer_availability()
 
-    def get_enabled_groups(self) -> List[str]:
+    def get_enabled_groups(self) -> list[str]:
         """获取启用的群组列表"""
         return self.config.get("enabled_groups", [])
 
@@ -204,7 +203,7 @@ class ConfigManager:
         self.config["output_format"] = format_type
         self.config.save_config()
 
-    def set_enabled_groups(self, groups: List[str]):
+    def set_enabled_groups(self, groups: list[str]):
         """设置启用的群组列表"""
         self.config["enabled_groups"] = groups
         self.config.save_config()
@@ -300,7 +299,7 @@ class ConfigManager:
         return self._pyppeteer_available
 
     @property
-    def pyppeteer_version(self) -> Optional[str]:
+    def pyppeteer_version(self) -> str | None:
         """获取pyppeteer版本"""
         return self._pyppeteer_version
 

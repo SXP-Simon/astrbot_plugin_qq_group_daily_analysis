@@ -4,7 +4,6 @@ LLM分析器模块
 """
 
 import asyncio
-from typing import List, Dict, Tuple
 from astrbot.api import logger
 from ..models.data_models import SummaryTopic, UserTitle, GoldenQuote, TokenUsage
 from .analyzers.topic_analyzer import TopicAnalyzer
@@ -38,8 +37,8 @@ class LLMAnalyzer:
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
 
     async def analyze_topics(
-        self, messages: List[Dict], umo: str = None
-    ) -> Tuple[List[SummaryTopic], TokenUsage]:
+        self, messages: list[dict], umo: str = None
+    ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         使用LLM分析话题
         保持原有接口，委托给专门的TopicAnalyzer处理
@@ -60,11 +59,11 @@ class LLMAnalyzer:
 
     async def analyze_user_titles(
         self,
-        messages: List[Dict],
-        user_analysis: Dict,
+        messages: list[dict],
+        user_analysis: dict,
         umo: str = None,
-        top_users: List[Dict] = None,
-    ) -> Tuple[List[UserTitle], TokenUsage]:
+        top_users: list[dict] = None,
+    ) -> tuple[list[UserTitle], TokenUsage]:
         """
         使用LLM分析用户称号
         保持原有接口，委托给专门的UserTitleAnalyzer处理
@@ -88,8 +87,8 @@ class LLMAnalyzer:
             return [], TokenUsage()
 
     async def analyze_golden_quotes(
-        self, messages: List[Dict], umo: str = None
-    ) -> Tuple[List[GoldenQuote], TokenUsage]:
+        self, messages: list[dict], umo: str = None
+    ) -> tuple[list[GoldenQuote], TokenUsage]:
         """
         使用LLM分析群聊金句
         保持原有接口，委托给专门的GoldenQuoteAnalyzer处理
@@ -110,11 +109,11 @@ class LLMAnalyzer:
 
     async def analyze_all_concurrent(
         self,
-        messages: List[Dict],
-        user_analysis: Dict,
+        messages: list[dict],
+        user_analysis: dict,
         umo: str = None,
-        top_users: List[Dict] = None,
-    ) -> Tuple[List[SummaryTopic], List[UserTitle], List[GoldenQuote], TokenUsage]:
+        top_users: list[dict] = None,
+    ) -> tuple[list[SummaryTopic], list[UserTitle], list[GoldenQuote], TokenUsage]:
         """
         并发执行所有分析任务（话题、用户称号、金句）
 

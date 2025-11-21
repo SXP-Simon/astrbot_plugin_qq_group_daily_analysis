@@ -3,7 +3,6 @@
 专门处理群聊话题分析
 """
 
-from typing import List, Dict, Tuple
 from datetime import datetime
 import re
 from astrbot.api import logger
@@ -39,7 +38,7 @@ class TopicAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.6
 
-    def build_prompt(self, messages: List[Dict]) -> str:
+    def build_prompt(self, messages: list[dict]) -> str:
         """
         构建话题分析提示词
 
@@ -83,7 +82,7 @@ class TopicAnalyzer(BaseAnalyzer):
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
                 bot_qq_ids = self.config_manager.get_bot_qq_ids()
-                
+
                 # 跳过机器人自己的消息
                 if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
                     logger.debug(f"build_prompt 过滤掉机器人QQ号: {user_id}")
@@ -200,7 +199,7 @@ class TopicAnalyzer(BaseAnalyzer):
         logger.warning("未找到有效的话题分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_topics: int) -> List[Dict]:
+    def extract_with_regex(self, result_text: str, max_topics: int) -> list[dict]:
         """
         使用正则表达式提取话题信息
 
@@ -213,7 +212,7 @@ class TopicAnalyzer(BaseAnalyzer):
         """
         return extract_topics_with_regex(result_text, max_topics)
 
-    def create_data_objects(self, topics_data: List[Dict]) -> List[SummaryTopic]:
+    def create_data_objects(self, topics_data: list[dict]) -> list[SummaryTopic]:
         """
         创建话题对象列表
 
@@ -286,7 +285,7 @@ class TopicAnalyzer(BaseAnalyzer):
             logger.error(f"创建话题对象失败: {e}", exc_info=True)
             return []
 
-    def extract_text_messages(self, messages: List[Dict]) -> List[Dict]:
+    def extract_text_messages(self, messages: list[dict]) -> list[dict]:
         """
         从群聊消息中提取文本消息
 
@@ -326,7 +325,7 @@ class TopicAnalyzer(BaseAnalyzer):
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
                 bot_qq_ids = self.config_manager.get_bot_qq_ids()
-                
+
                 # 跳过机器人自己的消息
                 if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
                     logger.debug(f"extract_text_messages 过滤掉机器人QQ号: {user_id}")
@@ -364,8 +363,8 @@ class TopicAnalyzer(BaseAnalyzer):
         return text_messages
 
     async def analyze_topics(
-        self, messages: List[Dict], umo: str = None
-    ) -> Tuple[List[SummaryTopic], TokenUsage]:
+        self, messages: list[dict], umo: str = None
+    ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         分析群聊话题
 

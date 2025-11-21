@@ -45,16 +45,22 @@ class AutoScheduler:
         """根据群ID获取对应的平台ID"""
         try:
             # 首先检查已注册的bot实例
-            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+            if (
+                hasattr(self.bot_manager, "_bot_instances")
+                and self.bot_manager._bot_instances
+            ):
                 # 如果只有一个实例，直接返回
                 if len(self.bot_manager._bot_instances) == 1:
                     platform_id = list(self.bot_manager._bot_instances.keys())[0]
                     logger.debug(f"只有一个适配器，使用平台: {platform_id}")
                     return platform_id
-                
+
                 # 如果有多个实例，尝试通过API检查群属于哪个适配器
                 logger.info(f"检测到多个适配器，正在验证群 {group_id} 属于哪个平台...")
-                for platform_id, bot_instance in self.bot_manager._bot_instances.items():
+                for (
+                    platform_id,
+                    bot_instance,
+                ) in self.bot_manager._bot_instances.items():
                     try:
                         # 尝试调用 get_group_info 来验证群是否存在
                         if hasattr(bot_instance, "call_action"):
@@ -65,26 +71,39 @@ class AutoScheduler:
                                 logger.info(f"✅ 群 {group_id} 属于平台 {platform_id}")
                                 return platform_id
                             else:
-                                logger.debug(f"平台 {platform_id} 返回了无效结果: {result}")
+                                logger.debug(
+                                    f"平台 {platform_id} 返回了无效结果: {result}"
+                                )
                         else:
-                            logger.debug(f"平台 {platform_id} 的 bot 实例没有 call_action 方法")
+                            logger.debug(
+                                f"平台 {platform_id} 的 bot 实例没有 call_action 方法"
+                            )
                     except Exception as e:
                         # 检查是否是特定的错误码（1200表示不在该群）
                         error_msg = str(e)
-                        if "retcode=1200" in error_msg or "消息undefined不存在" in error_msg:
-                            logger.debug(f"平台 {platform_id} 确认群 {group_id} 不存在: {e}")
+                        if (
+                            "retcode=1200" in error_msg
+                            or "消息undefined不存在" in error_msg
+                        ):
+                            logger.debug(
+                                f"平台 {platform_id} 确认群 {group_id} 不存在: {e}"
+                            )
                         else:
-                            logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息: {e}")
+                            logger.debug(
+                                f"平台 {platform_id} 无法获取群 {group_id} 信息: {e}"
+                            )
                         continue
-                
+
                 # 如果所有适配器都尝试失败，记录警告并返回第一个
-                logger.warning(f"⚠️ 无法确定群 {group_id} 属于哪个平台，使用第一个适配器")
+                logger.warning(
+                    f"⚠️ 无法确定群 {group_id} 属于哪个平台，使用第一个适配器"
+                )
                 first_platform = list(self.bot_manager._bot_instances.keys())[0]
                 logger.warning(f"使用默认平台: {first_platform}")
                 return first_platform
-            
+
             # 没有任何bot实例，返回None
-            logger.error(f"❌ 没有注册的bot实例")
+            logger.error("❌ 没有注册的bot实例")
             return None
         except Exception as e:
             logger.error(f"❌ 获取平台ID失败: {e}")
@@ -250,49 +269,71 @@ class AutoScheduler:
                 messages = None
                 platform_id = None
                 bot_instance = None
-                
+
                 # 获取所有可用的平台ID和bot实例
-                if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+                if (
+                    hasattr(self.bot_manager, "_bot_instances")
+                    and self.bot_manager._bot_instances
+                ):
                     available_platforms = list(self.bot_manager._bot_instances.items())
-                    logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试...")
-                    
+                    logger.info(
+                        f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试..."
+                    )
+
                     for test_platform_id, test_bot_instance in available_platforms:
                         try:
-                            logger.info(f"尝试使用平台 {test_platform_id} 获取群 {group_id} 的消息...")
-                            analysis_days = self.config_manager.get_analysis_days()
-                            test_messages = await self.message_handler.fetch_group_messages(
-                                test_bot_instance, group_id, analysis_days, test_platform_id
+                            logger.info(
+                                f"尝试使用平台 {test_platform_id} 获取群 {group_id} 的消息..."
                             )
-                            
+                            analysis_days = self.config_manager.get_analysis_days()
+                            test_messages = (
+                                await self.message_handler.fetch_group_messages(
+                                    test_bot_instance,
+                                    group_id,
+                                    analysis_days,
+                                    test_platform_id,
+                                )
+                            )
+
                             if test_messages and len(test_messages) > 0:
                                 # 成功获取到消息，使用这个平台
                                 messages = test_messages
                                 platform_id = test_platform_id
                                 bot_instance = test_bot_instance
-                                logger.info(f"✅ 群 {group_id} 成功通过平台 {platform_id} 获取到 {len(messages)} 条消息")
+                                logger.info(
+                                    f"✅ 群 {group_id} 成功通过平台 {platform_id} 获取到 {len(messages)} 条消息"
+                                )
                                 break
                             else:
-                                logger.debug(f"平台 {test_platform_id} 未获取到消息，继续尝试下一个平台")
+                                logger.debug(
+                                    f"平台 {test_platform_id} 未获取到消息，继续尝试下一个平台"
+                                )
                         except Exception as e:
-                            logger.debug(f"平台 {test_platform_id} 获取消息失败: {e}，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 获取消息失败: {e}，继续尝试下一个平台"
+                            )
                             continue
-                    
+
                     if not messages:
-                        logger.warning(f"群 {group_id} 所有平台都尝试失败，未获取到足够的消息记录")
+                        logger.warning(
+                            f"群 {group_id} 所有平台都尝试失败，未获取到足够的消息记录"
+                        )
                         return
                 else:
                     # 回退到原来的逻辑（单个平台）
                     logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
                     platform_id = await self._get_platform_id_for_group(group_id)
-                    
+
                     if not platform_id:
                         logger.error(f"❌ 群 {group_id} 无法获取平台ID，跳过分析")
                         return
-                    
+
                     bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                    
+
                     if not bot_instance:
-                        logger.error(f"❌ 群 {group_id} 未找到对应的bot实例（平台: {platform_id}）")
+                        logger.error(
+                            f"❌ 群 {group_id} 未找到对应的bot实例（平台: {platform_id}）"
+                        )
                         return
 
                     # 获取群聊消息
@@ -448,38 +489,56 @@ class AutoScheduler:
         """发送图片消息到群 - 依次尝试所有可用平台"""
         try:
             # 获取所有可用的平台，依次尝试发送
-            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+            if (
+                hasattr(self.bot_manager, "_bot_instances")
+                and self.bot_manager._bot_instances
+            ):
                 available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送图片...")
-                
+                logger.info(
+                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送图片..."
+                )
+
                 for test_platform_id, test_bot_instance in available_platforms:
                     try:
-                        logger.info(f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片...")
-                        
+                        logger.info(
+                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片..."
+                        )
+
                         # 发送图片消息到群
                         await test_bot_instance.api.call_action(
                             "send_group_msg",
                             group_id=group_id,
                             message=[
-                                {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                                {
+                                    "type": "text",
+                                    "data": {"text": "📊 每日群聊分析报告已生成："},
+                                },
                                 {"type": "image", "data": {"url": image_url}},
                             ],
                         )
-                        logger.info(f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片")
+                        logger.info(
+                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片"
+                        )
                         return True  # 成功发送，返回
-                        
+
                     except Exception as e:
                         error_msg = str(e)
                         # 检查是否是特定的错误码
                         if "retcode=1200" in error_msg:
                             if "rich media transfer failed" in error_msg:
-                                logger.debug(f"平台 {test_platform_id} 图片发送失败：媒体传输失败，继续尝试下一个平台")
+                                logger.debug(
+                                    f"平台 {test_platform_id} 图片发送失败：媒体传输失败，继续尝试下一个平台"
+                                )
                             else:
-                                logger.debug(f"平台 {test_platform_id} 图片发送失败：机器人可能不在此群中，继续尝试下一个平台")
+                                logger.debug(
+                                    f"平台 {test_platform_id} 图片发送失败：机器人可能不在此群中，继续尝试下一个平台"
+                                )
                         else:
-                            logger.debug(f"平台 {test_platform_id} 图片发送失败: {e}，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 图片发送失败: {e}，继续尝试下一个平台"
+                            )
                         continue
-                
+
                 # 所有平台都尝试失败
                 logger.error(f"❌ 群 {group_id} 所有平台都尝试发送图片失败")
                 return False
@@ -487,15 +546,17 @@ class AutoScheduler:
                 # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
                 platform_id = await self._get_platform_id_for_group(group_id)
-                
+
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
                     return False
-                
+
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                
+
                 if not bot_instance:
-                    logger.error(f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）")
+                    logger.error(
+                        f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）"
+                    )
                     return False
 
                 # 发送图片消息到群
@@ -503,7 +564,10 @@ class AutoScheduler:
                     "send_group_msg",
                     group_id=group_id,
                     message=[
-                        {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                        {
+                            "type": "text",
+                            "data": {"text": "📊 每日群聊分析报告已生成："},
+                        },
                         {"type": "image", "data": {"url": image_url}},
                     ],
                 )
@@ -518,30 +582,43 @@ class AutoScheduler:
         """发送文本消息到群 - 依次尝试所有可用平台"""
         try:
             # 获取所有可用的平台，依次尝试发送
-            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+            if (
+                hasattr(self.bot_manager, "_bot_instances")
+                and self.bot_manager._bot_instances
+            ):
                 available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送文本...")
-                
+                logger.info(
+                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送文本..."
+                )
+
                 for test_platform_id, test_bot_instance in available_platforms:
                     try:
-                        logger.info(f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送文本...")
-                        
+                        logger.info(
+                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送文本..."
+                        )
+
                         # 发送文本消息到群
                         await test_bot_instance.api.call_action(
                             "send_group_msg", group_id=group_id, message=text_content
                         )
-                        logger.info(f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送文本")
+                        logger.info(
+                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送文本"
+                        )
                         return True  # 成功发送，返回
-                        
+
                     except Exception as e:
                         error_msg = str(e)
                         # 检查是否是特定的错误码
                         if "retcode=1200" in error_msg:
-                            logger.debug(f"平台 {test_platform_id} 发送文本失败：机器人可能不在此群中，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 发送文本失败：机器人可能不在此群中，继续尝试下一个平台"
+                            )
                         else:
-                            logger.debug(f"平台 {test_platform_id} 发送文本失败: {e}，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 发送文本失败: {e}，继续尝试下一个平台"
+                            )
                         continue
-                
+
                 # 所有平台都尝试失败
                 logger.error(f"❌ 群 {group_id} 所有平台都尝试发送文本失败")
                 return False
@@ -549,15 +626,17 @@ class AutoScheduler:
                 # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
                 platform_id = await self._get_platform_id_for_group(group_id)
-                
+
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送文本")
                     return False
-                
+
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                
+
                 if not bot_instance:
-                    logger.error(f"❌ 群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）")
+                    logger.error(
+                        f"❌ 群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）"
+                    )
                     return False
 
                 # 发送文本消息到群
@@ -575,35 +654,51 @@ class AutoScheduler:
         """发送PDF文件到群 - 依次尝试所有可用平台"""
         try:
             # 获取所有可用的平台，依次尝试发送
-            if hasattr(self.bot_manager, "_bot_instances") and self.bot_manager._bot_instances:
+            if (
+                hasattr(self.bot_manager, "_bot_instances")
+                and self.bot_manager._bot_instances
+            ):
                 available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送PDF...")
-                
+                logger.info(
+                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送PDF..."
+                )
+
                 for test_platform_id, test_bot_instance in available_platforms:
                     try:
-                        logger.info(f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送PDF...")
-                        
+                        logger.info(
+                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送PDF..."
+                        )
+
                         # 发送PDF文件到群
                         await test_bot_instance.api.call_action(
                             "send_group_msg",
                             group_id=group_id,
                             message=[
-                                {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                                {
+                                    "type": "text",
+                                    "data": {"text": "📊 每日群聊分析报告已生成："},
+                                },
                                 {"type": "file", "data": {"file": pdf_path}},
                             ],
                         )
-                        logger.info(f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送PDF")
+                        logger.info(
+                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送PDF"
+                        )
                         return True  # 成功发送，返回
-                        
+
                     except Exception as e:
                         error_msg = str(e)
                         # 检查是否是特定的错误码
                         if "retcode=1200" in error_msg:
-                            logger.debug(f"平台 {test_platform_id} 发送PDF失败：机器人可能不在此群中，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 发送PDF失败：机器人可能不在此群中，继续尝试下一个平台"
+                            )
                         else:
-                            logger.debug(f"平台 {test_platform_id} 发送PDF失败: {e}，继续尝试下一个平台")
+                            logger.debug(
+                                f"平台 {test_platform_id} 发送PDF失败: {e}，继续尝试下一个平台"
+                            )
                         continue
-                
+
                 # 所有平台都尝试失败
                 logger.error(f"❌ 群 {group_id} 所有平台都尝试发送PDF失败")
                 return False
@@ -611,15 +706,17 @@ class AutoScheduler:
                 # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
                 platform_id = await self._get_platform_id_for_group(group_id)
-                
+
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送PDF")
                     return False
-                
+
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                
+
                 if not bot_instance:
-                    logger.error(f"❌ 群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）")
+                    logger.error(
+                        f"❌ 群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）"
+                    )
                     return False
 
                 # 发送PDF文件到群
@@ -627,7 +724,10 @@ class AutoScheduler:
                     "send_group_msg",
                     group_id=group_id,
                     message=[
-                        {"type": "text", "data": {"text": "📊 每日群聊分析报告已生成："}},
+                        {
+                            "type": "text",
+                            "data": {"text": "📊 每日群聊分析报告已生成："},
+                        },
                         {"type": "file", "data": {"file": pdf_path}},
                     ],
                 )

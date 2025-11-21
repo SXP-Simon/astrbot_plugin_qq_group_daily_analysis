@@ -3,7 +3,6 @@
 包含消息分析和其他通用功能
 """
 
-from typing import List, Dict
 from ...src.models.data_models import TokenUsage
 from ...src.core.message_handler import MessageHandler
 from ...src.analysis.llm_analyzer import LLMAnalyzer
@@ -44,8 +43,8 @@ class MessageAnalyzer:
                 await self.message_handler.set_bot_qq_ids([bot_qq_id])
 
     async def analyze_messages(
-        self, messages: List[Dict], group_id: str, unified_msg_origin: str = None
-    ) -> Dict:
+        self, messages: list[dict], group_id: str, unified_msg_origin: str = None
+    ) -> dict:
         """完整的消息分析流程"""
         try:
             # 基础统计
