@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.3-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -56,7 +56,7 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 >    4. 回退到第一个可用的 Provider
 
 ## 效果
-![效果图](./demo.jpg)
+![效果图](./assets/demo.jpg)
 
 ## 使用方法
 
@@ -215,7 +215,7 @@ MIT License
 
 <div align="center">
 
-![项目架构图](./structure-demo.jpg)
+![项目架构图](./assets/structure-demo.jpg)
 
 </div>
 
@@ -223,7 +223,7 @@ MIT License
 
 <div align="center">
 
-![贡献指南](./contribution-guide.jpg)
+![贡献指南](./assets/contribution-guide.jpg)
 
 </div>
 
