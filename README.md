@@ -223,7 +223,7 @@ MIT License
 
 <div align="center">
 
-![项目架构图](./contribution-guide.jpg)
+![贡献指南](./contribution-guide.jpg)
 
 </div>
 
