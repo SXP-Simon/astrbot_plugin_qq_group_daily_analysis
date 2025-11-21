@@ -4,7 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple, Any
+from typing import Any
 from astrbot.api import logger
 from ...models.data_models import TokenUsage
 from ..utils.json_utils import parse_json_response
@@ -76,7 +76,7 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def extract_with_regex(self, result_text: str, max_count: int) -> List[Dict]:
+    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
         使用正则表达式提取数据
 
@@ -90,7 +90,7 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def create_data_objects(self, data_list: List[Dict]) -> List[Any]:
+    def create_data_objects(self, data_list: list[dict]) -> list[Any]:
         """
         创建数据对象列表
 
@@ -102,7 +102,7 @@ class BaseAnalyzer(ABC):
         """
         pass
 
-    async def analyze(self, data: Any, umo: str = None) -> Tuple[List[Any], TokenUsage]:
+    async def analyze(self, data: Any, umo: str = None) -> tuple[list[Any], TokenUsage]:
         """
         统一的分析流程
 

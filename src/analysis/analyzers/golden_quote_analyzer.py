@@ -3,7 +3,6 @@
 专门处理群聊金句提取和分析
 """
 
-from typing import List, Dict, Tuple
 from datetime import datetime
 from astrbot.api import logger
 from ...models.data_models import GoldenQuote, TokenUsage
@@ -38,7 +37,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.7
 
-    def build_prompt(self, messages: List[Dict]) -> str:
+    def build_prompt(self, messages: list[dict]) -> str:
         """
         构建金句分析提示词
 
@@ -77,7 +76,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         logger.warning("未找到有效的金句分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> List[Dict]:
+    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
         使用正则表达式提取金句信息
 
@@ -90,7 +89,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         """
         return extract_golden_quotes_with_regex(result_text, max_count)
 
-    def create_data_objects(self, quotes_data: List[Dict]) -> List[GoldenQuote]:
+    def create_data_objects(self, quotes_data: list[dict]) -> list[GoldenQuote]:
         """
         创建金句对象列表
 
@@ -125,7 +124,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             logger.error(f"创建金句对象失败: {e}")
             return []
 
-    def extract_interesting_messages(self, messages: List[Dict]) -> List[Dict]:
+    def extract_interesting_messages(self, messages: list[dict]) -> list[dict]:
         """
         提取圣经的文本消息
 
@@ -161,8 +160,8 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             return []
 
     async def analyze_golden_quotes(
-        self, messages: List[Dict], umo: str = None
-    ) -> Tuple[List[GoldenQuote], TokenUsage]:
+        self, messages: list[dict], umo: str = None
+    ) -> tuple[list[GoldenQuote], TokenUsage]:
         """
         分析群聊金句
 

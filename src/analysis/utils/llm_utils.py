@@ -4,14 +4,11 @@ LLM API请求处理工具模块
 """
 
 import asyncio
-from typing import Optional, Any
+from typing import Any
 from astrbot.api import logger
-import aiohttp
 
 
-def _try_get_provider_by_id(
-    context, provider_id: str, description: str
-) -> Optional[Any]:
+def _try_get_provider_by_id(context, provider_id: str, description: str) -> Any | None:
     """
     尝试通过 ID 获取 Provider 的辅助函数
 
@@ -38,7 +35,7 @@ def _try_get_provider_by_id(
     return None
 
 
-def _try_get_session_provider(context, umo: str) -> Optional[Any]:
+def _try_get_session_provider(context, umo: str) -> Any | None:
     """
     尝试获取会话 Provider 的辅助函数
 
@@ -64,7 +61,7 @@ def _try_get_session_provider(context, umo: str) -> Optional[Any]:
     return None
 
 
-def _try_get_first_available_provider(context) -> Optional[Any]:
+def _try_get_first_available_provider(context) -> Any | None:
     """
     尝试获取第一个可用 Provider 的辅助函数
 
@@ -87,7 +84,7 @@ def _try_get_first_available_provider(context) -> Optional[Any]:
 
 def get_provider_with_fallback(
     context, config_manager, provider_id_key: str, umo: str = None
-) -> Optional[Any]:
+) -> Any | None:
     """
     根据配置键获取 Provider，支持多级回退
 
@@ -182,7 +179,7 @@ async def call_provider_with_retry(
     temperature: float,
     umo: str = None,
     provider_id_key: str = None,
-) -> Optional[Any]:
+) -> Any | None:
     """
     调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
 
@@ -258,7 +255,7 @@ async def call_provider_with_retry(
     return None
 
 
-def extract_token_usage(response) -> Optional[dict]:
+def extract_token_usage(response) -> dict | None:
     """
     从LLM响应中提取token使用统计
 

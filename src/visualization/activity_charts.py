@@ -5,7 +5,6 @@
 
 from datetime import datetime
 from collections import defaultdict
-from typing import Dict, List
 from ..models.data_models import ActivityVisualization
 
 
@@ -16,7 +15,7 @@ class ActivityVisualizer:
         pass
 
     def generate_activity_visualization(
-        self, messages: List[Dict]
+        self, messages: list[dict]
     ) -> ActivityVisualization:
         """生成活跃度可视化数据 - 专注于小时级别分析"""
         hourly_activity = defaultdict(int)

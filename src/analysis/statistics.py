@@ -4,7 +4,6 @@
 """
 
 from datetime import datetime
-from typing import List, Dict
 from collections import defaultdict
 from .utils import InfoUtils
 
@@ -15,7 +14,7 @@ class UserAnalyzer:
     def __init__(self, config_manager):
         self.config_manager = config_manager
 
-    def analyze_users(self, messages: List[Dict]) -> Dict[str, Dict]:
+    def analyze_users(self, messages: list[dict]) -> dict[str, dict]:
         """分析用户活跃度"""
         # 获取机器人QQ号列表用于过滤
         bot_qq_ids = self.config_manager.get_bot_qq_ids()
@@ -78,8 +77,8 @@ class UserAnalyzer:
         return dict(user_stats)
 
     def get_top_users(
-        self, user_analysis: Dict[str, Dict], limit: int = 10
-    ) -> List[Dict]:
+        self, user_analysis: dict[str, dict], limit: int = 10
+    ) -> list[dict]:
         """获取最活跃的用户"""
         # 获取机器人QQ号列表用于过滤
         bot_qq_ids = self.config_manager.get_bot_qq_ids()
@@ -106,8 +105,8 @@ class UserAnalyzer:
         return users[:limit]
 
     def get_user_activity_pattern(
-        self, user_analysis: Dict[str, Dict], user_id: str
-    ) -> Dict:
+        self, user_analysis: dict[str, dict], user_id: str
+    ) -> dict:
         """获取用户活动模式"""
         if user_id not in user_analysis:
             return {}

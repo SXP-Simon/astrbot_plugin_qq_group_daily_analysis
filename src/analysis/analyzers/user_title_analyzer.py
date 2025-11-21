@@ -3,7 +3,6 @@
 专门处理用户称号和MBTI类型分析
 """
 
-from typing import List, Dict, Tuple
 from astrbot.api import logger
 from ...models.data_models import UserTitle, TokenUsage
 from .base_analyzer import BaseAnalyzer
@@ -36,7 +35,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.5
 
-    def build_prompt(self, user_data: Dict) -> str:
+    def build_prompt(self, user_data: dict) -> str:
         """
         构建用户称号分析提示词
 
@@ -79,7 +78,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         logger.warning("未找到有效的用户称号分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_count: int) -> List[Dict]:
+    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
         使用正则表达式提取用户称号信息
 
@@ -92,7 +91,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """
         return extract_user_titles_with_regex(result_text, max_count)
 
-    def create_data_objects(self, titles_data: List[Dict]) -> List[UserTitle]:
+    def create_data_objects(self, titles_data: list[dict]) -> list[UserTitle]:
         """
         创建用户称号对象列表
 
@@ -137,8 +136,8 @@ class UserTitleAnalyzer(BaseAnalyzer):
             return []
 
     def prepare_user_data(
-        self, messages: List[Dict], user_analysis: Dict, top_users: List[Dict] = None
-    ) -> Dict:
+        self, messages: list[dict], user_analysis: dict, top_users: list[dict] = None
+    ) -> dict:
         """
         准备用户数据
 
@@ -225,11 +224,11 @@ class UserTitleAnalyzer(BaseAnalyzer):
 
     async def analyze_user_titles(
         self,
-        messages: List[Dict],
-        user_analysis: Dict,
+        messages: list[dict],
+        user_analysis: dict,
         umo: str = None,
-        top_users: List[Dict] = None,
-    ) -> Tuple[List[UserTitle], TokenUsage]:
+        top_users: list[dict] = None,
+    ) -> tuple[list[UserTitle], TokenUsage]:
         """
         分析用户称号
 

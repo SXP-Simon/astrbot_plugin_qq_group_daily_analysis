@@ -5,7 +5,6 @@ JSON处理工具模块
 
 import json
 import re
-from typing import List, Dict, Tuple, Optional
 from astrbot.api import logger
 
 
@@ -83,7 +82,7 @@ def fix_json(text: str) -> str:
 
 def parse_json_response(
     result_text: str, data_type: str
-) -> Tuple[bool, Optional[List[Dict]], Optional[str]]:
+) -> tuple[bool, list[dict] | None, str | None]:
     """
     统一的JSON解析方法
 
@@ -125,7 +124,7 @@ def parse_json_response(
         return False, None, error_msg
 
 
-def extract_topics_with_regex(result_text: str, max_topics: int) -> List[Dict]:
+def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
     """
     使用正则表达式提取话题信息
 
@@ -178,7 +177,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> List[Dict]:
         return []
 
 
-def extract_user_titles_with_regex(result_text: str, max_count: int) -> List[Dict]:
+def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dict]:
     """
     使用正则表达式提取用户称号信息
 
@@ -223,7 +222,7 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> List[Dic
         return []
 
 
-def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> List[Dict]:
+def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[dict]:
     """
     使用正则表达式提取金句信息
 

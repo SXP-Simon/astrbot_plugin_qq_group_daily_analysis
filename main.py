@@ -6,7 +6,6 @@ QQ群日常分析插件
 """
 
 import asyncio
-from typing import Optional
 
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
@@ -79,8 +78,10 @@ class QQGroupDailyAnalysis(Star):
                 platform_count = len(discovered)
                 logger.info(f"Bot管理器初始化成功，发现 {platform_count} 个适配器")
                 for platform_id, bot_instance in discovered.items():
-                    logger.info(f"  - 平台 {platform_id}: {type(bot_instance).__name__}")
-                
+                    logger.info(
+                        f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
+                    )
+
                 # 启动调度器
                 await auto_scheduler.start_scheduler()
             else:
@@ -139,7 +140,7 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("群分析")
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
-        self, event: AiocqhttpMessageEvent, days: Optional[int] = None
+        self, event: AiocqhttpMessageEvent, days: int | None = None
     ):
         """
         分析群聊日常活动
@@ -177,9 +178,11 @@ class QQGroupDailyAnalysis(Star):
             # 获取该群对应的平台ID和bot实例
             platform_id = auto_scheduler._get_platform_id_for_group(group_id)
             bot_instance = bot_manager.get_bot_instance(platform_id)
-            
+
             if not bot_instance:
-                yield event.plain_result(f"❌ 未找到群 {group_id} 对应的bot实例（平台: {platform_id}）")
+                yield event.plain_result(
+                    f"❌ 未找到群 {group_id} 对应的bot实例（平台: {platform_id}）"
+                )
                 return
 
             # 获取群聊消息
@@ -431,7 +434,6 @@ class QQGroupDailyAnalysis(Star):
 • 输出格式: {output_format}
 • PDF 功能: {pdf_status}
 • 最小消息数: {min_threshold}
-• 最大查询轮数: {max_rounds}
 
 💡 可用命令: enable, disable, status, reload, test
 💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)

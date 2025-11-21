@@ -6,7 +6,6 @@
 import base64
 import aiohttp
 from datetime import datetime
-from typing import Dict, Optional
 from pathlib import Path
 from astrbot.api import logger
 from .templates import HTMLTemplates
@@ -22,8 +21,8 @@ class ReportGenerator:
         self.activity_visualizer = ActivityVisualizer()
 
     async def generate_image_report(
-        self, analysis_result: Dict, group_id: str, html_render_func
-    ) -> Optional[str]:
+        self, analysis_result: dict, group_id: str, html_render_func
+    ) -> str | None:
         """生成图片格式的分析报告"""
         try:
             # 准备渲染数据
@@ -68,8 +67,8 @@ class ReportGenerator:
                 return None
 
     async def generate_pdf_report(
-        self, analysis_result: Dict, group_id: str
-    ) -> Optional[str]:
+        self, analysis_result: dict, group_id: str
+    ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
             # 确保输出目录存在
@@ -105,7 +104,7 @@ class ReportGenerator:
             logger.error(f"生成 PDF 报告失败: {e}")
             return None
 
-    def generate_text_report(self, analysis_result: Dict) -> str:
+    def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -146,7 +145,7 @@ class ReportGenerator:
 
         return report
 
-    async def _prepare_render_data(self, analysis_result: Dict) -> Dict:
+    async def _prepare_render_data(self, analysis_result: dict) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -239,7 +238,7 @@ class ReportGenerator:
         }
 
     def _render_html_template(
-        self, template: str, data: Dict, use_jinja_style: bool = False
+        self, template: str, data: dict, use_jinja_style: bool = False
     ) -> str:
         """HTML模板渲染，支持两种占位符格式
 
@@ -281,7 +280,7 @@ class ReportGenerator:
 
         return result
 
-    async def _get_user_avatar(self, user_id: str) -> Optional[str]:
+    async def _get_user_avatar(self, user_id: str) -> str | None:
         """获取用户头像的base64编码"""
         try:
             avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"

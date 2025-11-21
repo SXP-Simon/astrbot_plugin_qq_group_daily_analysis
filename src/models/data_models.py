@@ -4,7 +4,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -12,7 +11,7 @@ class SummaryTopic:
     """话题总结数据结构"""
 
     topic: str
-    contributors: List[str]
+    contributors: list[str]
     detail: str
 
 
@@ -87,7 +86,7 @@ class GroupStatistics:
     total_characters: int
     participant_count: int
     most_active_period: str
-    golden_quotes: List[GoldenQuote]
+    golden_quotes: list[GoldenQuote]
     emoji_count: int  # 保持向后兼容
     emoji_statistics: EmojiStatistics = field(default_factory=EmojiStatistics)
     activity_visualization: ActivityVisualization = field(

@@ -4,7 +4,6 @@
 """
 
 from datetime import datetime, timedelta
-from typing import List, Dict
 from collections import defaultdict
 from astrbot.api import logger
 from ...src.models.data_models import GroupStatistics, TokenUsage, EmojiStatistics
@@ -48,7 +47,7 @@ class MessageHandler:
 
     async def fetch_group_messages(
         self, bot_instance, group_id: str, days: int, platform_id: str = None
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """获取群聊消息记录"""
         try:
             # 验证参数
@@ -96,7 +95,10 @@ class MessageHandler:
                     except Exception as api_err:
                         error_msg = str(api_err)
                         # 检查是否是特定的错误码（1200表示不在该群）
-                        if "retcode=1200" in error_msg or "消息undefined不存在" in error_msg:
+                        if (
+                            "retcode=1200" in error_msg
+                            or "消息undefined不存在" in error_msg
+                        ):
                             logger.warning(f"群 {group_id} 机器人不在此群中: {api_err}")
                             return []
                         else:
@@ -179,7 +181,7 @@ class MessageHandler:
             logger.error(f"群 {group_id} 获取群聊消息记录失败: {e}", exc_info=True)
             return []
 
-    def calculate_statistics(self, messages: List[Dict]) -> GroupStatistics:
+    def calculate_statistics(self, messages: list[dict]) -> GroupStatistics:
         """计算基础统计数据"""
         total_chars = 0
         participants = set()
