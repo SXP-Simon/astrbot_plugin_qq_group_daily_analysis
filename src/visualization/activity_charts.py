@@ -125,48 +125,46 @@ class ActivityVisualizer:
         return levels
 
     def generate_hourly_chart_html(self, hourly_activity: dict) -> str:
-        """生成每小时活动分布的HTML图表"""
+        """生成每小时活动分布的HTML图表（手账风格）"""
         html_parts = []
         max_activity = max(hourly_activity.values()) if hourly_activity else 1
-        threshold_percentage = 20  # 数值显示阈值
+
+        # 定义颜色映射 - 根据活跃度等级使用不同颜色
+        color_vars = {
+            "high": "var(--accent-orange)",  # 高活跃度 - 橙色
+            "medium": "var(--color-green)",  # 中活跃度 - 绿色
+            "low": "var(--color-blue)",  # 低活跃度 - 蓝色
+            "inactive": "var(--color-purple)",  # 无活动 - 紫色
+        }
 
         for hour in range(24):
             count = hourly_activity.get(hour, 0)
             percentage = (count / max_activity) * 100 if max_activity > 0 else 0
 
-            if count > 0 and percentage >= threshold_percentage:
-                # 活动数较多，数值显示在条形图内部
-                html_segment = f"""
-                <div class="hour-bar-container">
-                    <span class="hour-label">{hour:02d}:00</span>
-                    <div class="bar-wrapper">
-                        <div class="bar" style="width: {percentage}%;">
-                            <span class="hourly-value-inside">({count})</span>
-                        </div>
-                    </div>
-                </div>
-                """
-            elif count > 0:
-                # 活动数较少，数值显示在条形图外部
-                html_segment = f"""
-                <div class="hour-bar-container">
-                    <span class="hour-label">{hour:02d}:00</span>
-                    <div class="bar-wrapper">
-                        <div class="bar" style="width: {percentage}%;"></div>
-                        <span class="hourly-value-outside">({count})</span>
-                    </div>
-                </div>
-                """
+            # 确定活跃度等级和颜色
+            if count == 0:
+                color = color_vars["inactive"]
+                width = "2%"  # 无活动时显示很细的线，避免占满整行
+            elif percentage >= 70:
+                color = color_vars["high"]
+                width = f"{percentage}%"
+            elif percentage >= 30:
+                color = color_vars["medium"]
+                width = f"{percentage}%"
             else:
-                # 无活动
-                html_segment = f"""
-                <div class="hour-bar-container">
-                    <span class="hour-label">{hour:02d}:00</span>
-                    <div class="bar-wrapper">
-                        <span class="hourly-value-outside">({count})</span>
-                    </div>
+                color = color_vars["low"]
+                width = f"{percentage}%"
+
+            # 生成手账风格的图表行
+            html_segment = f"""
+            <div class="hand-chart-row">
+                <div class="chart-label">{hour:02d}:00</div>
+                <div class="chart-bar-box">
+                    <div class="crayon-bar" style="width: {width}; background: {color};"></div>
                 </div>
-                """
+                <div style="margin-left: 10px; font-size: 0.7rem; font-family: var(--font-hand); color: var(--ink-secondary); min-width: 30px;">{count}</div>
+            </div>
+            """
             html_parts.append(html_segment)
 
         return "".join(html_parts)
