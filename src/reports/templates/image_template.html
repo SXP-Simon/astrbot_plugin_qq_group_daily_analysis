@@ -3,582 +3,518 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>群聊日常分析报告</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>五彩斑斓的一天，来看看群里发生了什么吧！ · {{current_date}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 引入手写字体和正文阅读字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&family=Indie+Flower&display=swap" rel="stylesheet">
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            /* 卡通手账调色板 */
+            --bg-paper: #fdfbf7;
+            --ink-primary: #5d4037;    /* 像铅笔/墨水的深褐色 */
+            --ink-secondary: #8d6e63;
+            
+            --color-yellow: #fff9c4;
+            --color-pink: #ffccbc;
+            --color-blue: #b3e5fc;
+            --color-green: #c8e6c9;
+            --color-purple: #e1bee7;
+            
+            --accent-orange: #ff7043;
+            
+            /* MBTI 专属高对比色 */
+            --mbti-bg: #ede7f6;
+            --mbti-border: #9575cd;
+            --mbti-text: #512da8;
+
+            /* 称号专属色 */
+            --title-bg: #fffde7;
+            --title-border: #ffb74d;
+            --title-text: #bf360c;
+            
+            --font-title: 'ZCOOL KuaiLe', cursive; /* 标题字体 */
+            --font-hand: 'Indie Flower', "KaiTi", "STKaiti", serif;      /* 手写体 */
+            --font-body: 'Noto Sans SC', sans-serif; /* 正文体 */
         }
 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'Noto Sans SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            font-family: var(--font-body);
+            color: var(--ink-primary);
+            background-color: var(--bg-paper);
+            /* 点阵纸背景纹理 */
+            background-image: radial-gradient(#ddd 2px, transparent 2px);
+            background-size: 20px 20px;
             min-height: 100vh;
-            padding: 30px;
+            padding: 40px 20px;
             line-height: 1.6;
-            color: #1a1a1a;
+        }
+
+        /* SVG 图标通用样式 */
+        .doodle {
+            width: 1em;
+            height: 1em;
+            fill: currentColor;
+            display: inline-block;
+            vertical-align: middle;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1000px;
             margin: 0 auto;
-            background: #ffffff;
-            border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-            overflow: hidden;
+            position: relative;
         }
 
+        /* ==================== 1. 头部设计 ==================== */
         .header {
-            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
-            color: #ffffff;
-            padding: 60px 50px;
             text-align: center;
-            border-radius: 30px 30px 0 0;
+            margin-bottom: 50px;
+            position: relative;
+            padding-top: 20px;
         }
 
-        .header h1 {
-            font-size: 3.2em;
-            font-weight: 300;
-            margin-bottom: 16px;
-            letter-spacing: -1px;
+        .title-sticker {
+            display: inline-block;
+            background: #fff;
+            padding: 20px 60px;
+            border: 3px dashed var(--ink-primary);
+            border-radius: 15px;
+            box-shadow: 5px 5px 0 var(--color-blue);
+            transform: rotate(-2deg);
+            position: relative;
         }
 
-        .header .date {
-            font-size: 1.2em;
+        .title-sticker h1 {
+            font-family: var(--font-title);
+            font-size: 3.2rem;
+            color: var(--accent-orange);
+            margin: 0;
+            -webkit-text-stroke: 1px var(--ink-primary);
+        }
+
+        .date-badge {
+            position: absolute;
+            bottom: -15px; right: -20px;
+            background: var(--color-yellow);
+            padding: 5px 15px;
+            font-family: var(--font-hand);
+            font-size: 1.2rem;
+            box-shadow: 2px 2px 3px rgba(0,0,0,0.1);
+            transform: rotate(5deg);
+            border: 1px solid var(--ink-primary);
+        }
+
+        .tape {
+            position: absolute;
+            top: -15px; left: 50%; transform: translateX(-50%);
+            width: 120px; height: 25px;
+            background: rgba(255, 171, 145, 0.7);
             opacity: 0.8;
-            font-weight: 300;
-            letter-spacing: 0.5px;
+            mask-image: radial-gradient(circle at 5px, transparent 4px, black 5px);
+            mask-size: 10px 100%; mask-repeat: repeat-x;
         }
 
-        .content {
-            padding: 40px;
-        }
-
-        .topics-grid,
-        .users-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 25px;
-            align-items: stretch;
-        }
-
-        .section {
-            margin-bottom: 0;
-        }
-
-        .full-width-section {
-            grid-column: 1 / -1;
+        /* ==================== 2. 统计邮票 ==================== */
+        .stats-row {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
             margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .stamp {
+            width: 150px;
+            background: #fff;
+            padding: 10px;
+            box-shadow: 3px 3px 8px rgba(0,0,0,0.05);
+            /* 邮票齿孔背景 */
+            background-image: radial-gradient(transparent 50%, #fff 51%);
+            background-size: 10px 10px;
+            background-position: -5px -5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.3s;
+            border: 1px solid #eee;
+        }
+        .stamp:hover { transform: scale(1.1) rotate(0deg) !important; z-index: 10; }
+
+        .stamp-inner {
+            border: 1px solid var(--ink-secondary);
+            width: 100%; padding: 15px 0;
+            display: flex; flex-direction: column; align-items: center;
+            background: radial-gradient(circle, #fff 50%, #fafafa 100%);
+        }
+
+        .stamp-num {
+            font-family: var(--font-title); font-size: 1.8rem;
+            color: var(--accent-orange); line-height: 1; margin: 5px 0;
+        }
+        .stamp-label {
+            font-family: var(--font-hand); font-size: 1rem; color: var(--ink-secondary);
+        }
+
+        /* ==================== 布局容器 ==================== */
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 30px;
         }
 
         .section-title {
-            font-size: 1.6em;
-            font-weight: 600;
-            margin-bottom: 25px;
-            color: #4a5568;
-            letter-spacing: -0.3px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 10px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 25px;
-            margin-bottom: 40px;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
-            padding: 40px 30px;
-            text-align: center;
-            border-radius: 25px;
-            border: 1px solid #e2e8f0;
-            transition: all 0.3s ease;
-        }
-
-        .stat-number {
-            font-size: 3.2em;
-            font-weight: 300;
-            color: #4299e1;
-            margin-bottom: 10px;
-            display: block;
-            letter-spacing: -1px;
-        }
-
-        .stat-label {
-            font-size: 1em;
-            color: #666666;
-            font-weight: 400;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .active-period {
-            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
-            color: #ffffff;
-            padding: 40px;
-            text-align: center;
-            margin: 60px 0;
-            border-radius: 25px;
-            box-shadow: 0 8px 24px rgba(66, 153, 225, 0.3);
-        }
-
-        .active-period .time {
-            font-size: 3.2em;
-            font-weight: 200;
-            margin-bottom: 10px;
-            letter-spacing: -1px;
-        }
-
-        .active-period .label {
-            font-size: 1em;
-            opacity: 0.8;
-            font-weight: 300;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .topic-item {
-            background: #ffffff;
-            padding: 25px;
-            margin-bottom: 0;
-            border-radius: 15px;
-            border: 1px solid #e5e5e5;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            box-sizing: border-box;
-        }
-
-        .topic-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .topic-number {
-            background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
-            color: #ffffff;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 500;
-            margin-right: 16px;
-            font-size: 1em;
-            box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3);
-        }
-
-        .topic-title {
-            font-weight: 600;
-            color: #2d3748;
-            font-size: 1.3em;
-            letter-spacing: -0.3px;
-        }
-
-        .topic-contributors {
-            color: #666666;
-            font-size: 1em;
-            margin-bottom: 16px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .topic-detail {
-            color: #333333;
-            line-height: 1.6;
-            font-size: 1em;
-            font-weight: 300;
-        }
-
-        .user-title {
-            background: #ffffff;
-            padding: 20px;
-            margin-bottom: 0;
-            border-radius: 15px;
-            border: 1px solid #e5e5e5;
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            transition: all 0.3s ease;
-            min-height: 100px;
-            height: 100%;
-            box-sizing: border-box;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            flex: 1;
-        }
-
-        .user-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            margin-right: 20px;
-            border: 2px solid #f0f0f0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .user-avatar-placeholder {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #f0f0f0 0%, #e2e8f0 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 20px;
-            font-size: 1.2em;
-            color: #999999;
-            border: 2px solid #e5e5e5;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .user-details {
-            flex: 1;
-        }
-
-        .user-name {
-            font-weight: 600;
-            color: #2d3748;
+            font-family: var(--font-title);
+            font-size: 1.5rem;
             margin-bottom: 15px;
-            font-size: 1.2em;
-            letter-spacing: -0.2px;
+            display: flex; align-items: center; gap: 8px;
         }
+        .section-title .doodle { color: var(--accent-orange); font-size: 1.3em; }
 
-        .user-badges {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-        }
-
-        .user-title-badge,
-        .user-mbti {
-            white-space: nowrap;
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .user-title-badge {
-            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-            color: #ffffff;
-            padding: 8px 20px;
-            border-radius: 25px;
-            font-size: 0.9em;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            box-shadow: 0 2px 8px rgba(66, 153, 225, 0.3);
-        }
-
-        .user-mbti {
-            background: linear-gradient(135deg, #667eea 0%, #5a67d8 100%);
-            color: #ffffff;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-weight: 500;
-            font-size: 0.9em;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-        }
-
-        .user-reason {
-            color: #666666;
-            font-size: 1em;
-            text-align: right;
-            line-height: 1.4;
-            font-weight: 300;
-            margin-left: 20px;
-            flex: 1;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        .quote-item {
-            background: #ffffff;
-            padding: 16px;
-            margin-bottom: 16px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
+        /* ==================== 3. 图表区 ==================== */
+        .chart-section {
+            grid-column: span 7;
+            background: #fff;
+            border: 2px solid var(--ink-primary);
+            border-radius: 5px 20px 20px 5px;
+            padding: 20px 20px 20px 40px;
             position: relative;
-            transition: all 0.3s ease;
+            box-shadow: 5px 5px 0 rgba(0,0,0,0.05);
+        }
+        
+        .coil {
+            position: absolute; left: 10px; top: 20px; bottom: 20px; width: 10px;
+            background: repeating-linear-gradient(to bottom, #ccc 0, #ccc 2px, transparent 2px, transparent 15px);
+            border-left: 2px solid #999;
         }
 
-        .quote-content {
-            font-size: 1.1em;
-            color: #2d3748;
-            font-weight: 500;
-            line-height: 1.6;
-            margin-bottom: 12px;
-            font-style: italic;
-            letter-spacing: 0.2px;
+        /* 手绘条形图模拟 */
+        .hand-chart-row {
+            display: flex; align-items: center; margin-bottom: 14px;
+        }
+        .chart-label { width: 50px; font-family: var(--font-hand); font-size: 1.1rem; }
+        .chart-bar-box { flex: 1; margin-left: 10px; }
+        .crayon-bar {
+            height: 14px; border-radius: 7px; border: 1px solid var(--ink-primary);
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 4L4 0' stroke='rgba(0,0,0,0.1)' stroke-width='1'/%3E%3C/svg%3E");
         }
 
-        .quote-author {
-            font-size: 0.9em;
-            color: #4299e1;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-align: right;
+        /* ==================== 4. 活跃时段 ==================== */
+        .highlight-section {
+            grid-column: span 5;
+            background: var(--color-yellow);
+            padding: 30px;
+            transform: rotate(2deg);
+            box-shadow: 3px 3px 5px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+            position: relative;
+        }
+        
+        .tape-top {
+            width: 60px; height: 20px; background: rgba(255,255,255,0.5);
+            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
         }
 
-        .quote-reason {
-            font-size: 0.8em;
-            color: #666666;
-            font-style: normal;
-            background: rgba(66, 153, 225, 0.1);
-            padding: 8px 12px;
+        .time-big {
+            font-family: var(--font-title); font-size: 2.5rem; color: var(--ink-primary); margin: 10px 0;
+        }
+        .time-desc { font-family: var(--font-hand); color: var(--ink-secondary); }
+
+        /* ==================== 5. 话题列表 ==================== */
+        .topic-section {
+            grid-column: span 12;
+            background: #fff;
+            padding: 30px 30px 30px 50px;
+            border: 1px solid #ddd;
+            background-image: repeating-linear-gradient(transparent, transparent 39px, #b2ebf2 39px, #b2ebf2 40px);
+            line-height: 40px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.03);
+            position: relative;
+        }
+        
+        .paper-holes {
+            position: absolute; left: 15px; top: 0; bottom: 0; width: 20px;
+            display: flex; flex-direction: column; justify-content: space-evenly;
+        }
+        .hole { width: 12px; height: 12px; background: var(--bg-paper); border-radius: 50%; box-shadow: inset 1px 1px 2px rgba(0,0,0,0.1); }
+
+        /* 话题项样式 - 确保在 image_template 中正确定义 */
+        .topic-item {
+            display: flex; align-items: flex-start; margin-bottom: 0; padding-top: 4px;
+        }
+
+        .check-box {
+            width: 20px; height: 20px; border: 2px solid var(--ink-primary);
+            margin-right: 15px; margin-top: 8px;
+            display: flex; align-items: center; justify-content: center; background: #fff; flex-shrink: 0;
+        }
+        .check-tick {
+            width: 14px; height: 14px; background: var(--accent-orange);
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+
+        .topic-content { line-height: 1.5; padding-top: 6px; flex: 1; }
+        .topic-title {
+            font-family: var(--font-title); font-size: 1.2rem; margin-right: 10px;
+            background: linear-gradient(transparent 60%, var(--color-pink) 60%);
+            display: inline-block;
+        }
+        .topic-detail {
+            font-family: var(--font-hand); color: #666; font-size: 1.5rem;
+            margin-top: 8px;
+        }
+
+        /* ==================== 6. 群友画像 ==================== */
+        .user-section { grid-column: span 12; margin-top: 20px; }
+        
+        .masonry-grid {
+            column-count: 2;
+            column-gap: 25px;
+        }
+        
+        .user-card {
+            break-inside: avoid;
+            background: #fff;
+            border: 2px solid #e0e0e0;
             border-radius: 12px;
-            border-left: 3px solid #4299e1;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.05);
+            position: relative;
+            display: flex; flex-direction: column;
+            transition: transform 0.2s;
+        }
+        .user-card:hover { transform: translateY(-3px); z-index: 5; border-color: var(--ink-primary); }
+
+        .card-tape {
+            position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+            width: 60px; height: 18px; background: var(--color-blue); opacity: 0.9;
+        }
+        .user-card:nth-child(2n) .card-tape { background: var(--color-pink); transform: rotate(2deg); }
+        .user-card:nth-child(3n) .card-tape { background: var(--color-green); transform: rotate(-2deg); }
+
+        .user-header {
+            display: flex; align-items: flex-start; gap: 15px; margin-bottom: 15px;
+            border-bottom: 2px dashed #f0f0f0; padding-bottom: 15px;
         }
 
-        .footer {
-            background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
-            color: #ffffff;
-            text-align: center;
-            padding: 40px;
-            font-size: 1em;
-            font-weight: 300;
+        .u-avatar {
+            width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--ink-primary);
+            background: #eee; flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; color: #aaa;
+        }
+        
+        .u-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+        .u-name { font-family: var(--font-title); font-size: 1.25rem; line-height: 1.2; }
+        
+        .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+        
+        .badge {
+            font-size: 0.85rem; padding: 2px 8px; border-radius: 6px; font-family: var(--font-hand);
+            white-space: nowrap; box-shadow: 1px 1px 0 rgba(0,0,0,0.1); display: flex; align-items: center;
+        }
+        
+        .badge.title { 
+            background: var(--title-bg); 
+            color: var(--title-text);
+            border: 1px solid var(--title-border);
+        }
+        
+        .badge.mbti { 
+            background: var(--mbti-bg); 
+            color: var(--mbti-text); 
+            border: 1px solid var(--mbti-border);
+            font-weight: bold;
             letter-spacing: 0.5px;
-            opacity: 0.9;
         }
 
-        /* 活跃度可视化样式 - 重新设计 */
-        .activity-section {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            padding: 50px;
-            border-radius: 25px;
-            margin: 50px 0;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        .u-reason {
+            font-family: var(--font-body); font-size: 0.95rem; color: #555; line-height: 1.6;
+            text-align: justify; background: #fafafa; padding: 12px; border-radius: 8px; position: relative;
         }
 
-        .activity-chart-container {
-            background: #ffffff;
-            padding: 40px;
-            border-radius: 20px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        /* ==================== 7. 每日回响 ==================== */
+        .quotes-section {
+            grid-column: span 12;
+            display: flex; flex-direction: column; gap: 35px; margin-top: 20px;
         }
 
-        .chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #f0f2f5;
+        .quote-wrapper {
+            display: flex; flex-direction: column; max-width: 85%; position: relative;
+        }
+        .quote-wrapper:nth-child(odd) { align-self: flex-start; }
+        .quote-wrapper:nth-child(even) { align-self: flex-end; align-items: flex-end; }
+
+        .q-bubble {
+            background: #fff; border: 2px solid var(--ink-primary); padding: 20px 25px;
+            border-radius: 20px; box-shadow: 5px 5px 0 var(--color-blue); position: relative; z-index: 2;
+        }
+        .quote-wrapper:nth-child(odd) .q-bubble { border-bottom-left-radius: 0; }
+        .quote-wrapper:nth-child(even) .q-bubble { 
+            border-bottom-right-radius: 0; background: var(--color-yellow); 
+            box-shadow: -5px 5px 0 var(--color-pink); text-align: right;
         }
 
-        .chart-title {
-            font-size: 1.6em;
-            font-weight: 600;
-            color: #2d3748;
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .q-content {
+            font-family: var(--font-title); font-size: 1.3rem; line-height: 1.4; margin-bottom: 10px; position: relative;
+        }
+        .q-quote-mark {
+            position: absolute; font-family: serif; font-size: 4rem; color: rgba(0,0,0,0.05);
+            top: -20px; left: -10px; pointer-events: none;
         }
 
-        .chart-subtitle {
-            color: #7f8c8d;
-            font-size: 1.1em;
-            font-weight: 400;
+        .q-author { font-family: var(--font-hand); font-weight: bold; color: var(--ink-secondary); font-size: 0.95rem; }
+
+        .q-analysis-note {
+            background: #fffde7; padding: 12px 15px; font-size: 0.9rem; color: #666; width: 95%;
+            margin-top: -8px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); border: 1px solid #ddd;
+            position: relative; z-index: 1; font-family: var(--font-body); line-height: 1.5;
+        }
+        .quote-wrapper:nth-child(odd) .q-analysis-note { transform: rotate(-1deg) translateX(10px); border-radius: 0 0 10px 10px; }
+        .quote-wrapper:nth-child(even) .q-analysis-note { 
+            transform: rotate(1deg) translateX(-10px); text-align: left; background: #f3e5f5; border-radius: 0 0 10px 10px;
         }
 
-        .hour-bar-container {
-            display: flex;
-            align-items: center;
-            margin: 12px 0;
-            height: 25px;
-            transition: all 0.2s ease;
-        }
+        .note-label { font-weight: bold; color: var(--accent-orange); display: block; margin-bottom: 4px; font-family: var(--font-title); }
 
-        .hour-label {
-            width: 65px;
-            text-align: left;
-            color: #4a5568;
-            font-size: 15px;
-            font-weight: 500;
-            flex-shrink: 0;
-        }
-
-        .bar-wrapper {
-            display: flex;
-            align-items: center;
-            flex-grow: 1;
-            gap: 15px;
-            min-width: 0;
-        }
-
-        .bar {
-            height: 12px;
-            background: linear-gradient(90deg, #4299e1 0%, #667eea 100%);
-            border-radius: 8px;
-            transition: all 0.3s ease-out;
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(66, 153, 225, 0.2);
-        }
-
-        .hourly-value-outside {
-            color: #4a5568;
-            font-size: 14px;
-            font-weight: 600;
-            flex-shrink: 0;
-            min-width: 35px;
-            text-align: right;
-        }
-
-        .hourly-value-inside {
-            color: white;
-            font-size: 13px;
-            padding: 0 10px;
-            font-weight: 600;
-            white-space: nowrap;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-        }
-
-        @media (min-width: 1400px) {
-            .container {
-                max-width: 1600px;
-            }
-
-            .topics-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-
-            .users-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
+        /* Footer */
+        .footer {
+            margin-top: 60px; text-align: center; font-family: var(--font-hand);
+            color: var(--ink-secondary); /* 使用更深的颜色提高可读性 */
+            border-top: 2px dashed var(--ink-secondary); /* 使用更深的边框颜色 */
+            padding-top: 20px; font-size: 0.7rem;
+            opacity: 0.8; /* 保持一点柔和感但确保可读 */
         }
 
         @media (max-width: 768px) {
-            body {
-                padding: 15px;
-            }
-
-            .container {
-                margin: 0;
-                max-width: 100%;
-            }
-
-            .header {
-                padding: 30px 25px;
-            }
-
-            .header h1 {
-                font-size: 2.2em;
-            }
-
-            .content {
-                padding: 25px;
-            }
-
-            .topics-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .users-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 15px;
-            }
-
-            .stat-card {
-                padding: 25px 20px;
-            }
-
-            .topic-item {
-                padding: 25px;
-            }
-
-            .user-title {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-                padding: 20px;
-                min-height: auto;
-            }
-
-            .user-info {
-                width: 100%;
-            }
-
-            .user-reason {
-                text-align: left;
-                max-width: none;
-                margin-left: 0;
-                margin-top: 10px;
-            }
+            .grid-layout { display: flex; flex-direction: column; }
+            .masonry-grid { column-count: 1; }
+            .stamp { width: 45%; }
+            .quote-wrapper { max-width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        
+        <!-- 1. 头部 -->
         <div class="header">
-            <h1>📊 群聊日常分析报告</h1>
-            <div class="date">{{current_date}}</div>
+            <div class="title-sticker">
+                <div class="tape"></div>
+                <h1>五彩斑斓的一天，来看看群里发生了什么吧！</h1>
+                <div class="date-badge">{{current_date}}</div>
+            </div>
         </div>
-        <div class="content">
-            <div class="section full-width-section">
-                <h2 class="section-title">📈 基础统计</h2>
-                <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-number">{{message_count}}</div><div class="stat-label">消息总数</div></div>
-                    <div class="stat-card"><div class="stat-number">{{participant_count}}</div><div class="stat-label">参与人数</div></div>
-                    <div class="stat-card"><div class="stat-number">{{total_characters}}</div><div class="stat-label">总字符数</div></div>
-                    <div class="stat-card"><div class="stat-number">{{emoji_count}}</div><div class="stat-label">表情数量</div></div>
-                </div>
-                <div class="active-period">
-                    <div class="time">{{most_active_period}}</div>
-                    <div class="label">最活跃时段</div>
+
+        <!-- 2. 统计邮票和活跃时段 -->
+        <div class="grid-layout" style="margin-bottom: 40px;">
+            <!-- 统计邮票 -->
+            <div class="stats-section" style="grid-column: span 8;">
+                <div class="stats-row">
+                    <div class="stamp" style="transform: rotate(-2deg);">
+                        <div class="stamp-inner">
+                            <!-- Chat Icon -->
+                            <svg class="doodle" style="font-size: 2.5rem; color: var(--accent-orange);" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+                            <div class="stamp-num">{{message_count}}</div>
+                            <div class="stamp-label">消息总数</div>
+                        </div>
+                    </div>
+                    <div class="stamp" style="transform: rotate(2deg); margin-top: 10px;">
+                        <div class="stamp-inner">
+                            <!-- Users Icon -->
+                            <svg class="doodle" style="font-size: 2.5rem; color: var(--color-green);" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                            <div class="stamp-num">{{participant_count}}</div>
+                            <div class="stamp-label">参与人数</div>
+                        </div>
+                    </div>
+                    <div class="stamp" style="transform: rotate(-1deg);">
+                        <div class="stamp-inner">
+                            <!-- Image Icon -->
+                            <svg class="doodle" style="font-size: 2.5rem; color: var(--color-blue);" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                            <div class="stamp-num">{{emoji_count}}</div>
+                            <div class="stamp-label">表情统计</div>
+                        </div>
+                    </div>
+                    <div class="stamp" style="transform: rotate(3deg); margin-top: 5px;">
+                        <div class="stamp-inner">
+                            <!-- Text Icon -->
+                            <svg class="doodle" style="font-size: 2.5rem; color: var(--color-purple);" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                            <div class="stamp-num">{{total_characters}}</div>
+                            <div class="stamp-label">总字符数</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- 活跃度可视化部分 - 重新设计 -->
-            <div class="activity-chart-container">
-                <div class="chart-header">
-                    <div>
-                        <div class="chart-title">⏱️ 24小时活跃度分布</div>
-                    </div>
+            <!-- 活跃时段 -->
+            <div class="highlight-section" style="grid-column: span 4;">
+                <div class="tape-top"></div>
+                <div style="font-family: var(--font-hand); color: var(--ink-secondary);">✨ Highlight Time</div>
+                <div class="time-big">{{most_active_period}}</div>
+                <div class="time-desc">（此刻，世界色彩斑斓）</div>
+            </div>
+        </div>
+
+        <div class="grid-layout">
+            
+            <!-- 3. 24小时活跃图表 -->
+            <div class="chart-section" style="grid-column: span 12;">
+                <div class="coil"></div>
+                <div class="section-title">
+                    <svg class="doodle" viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                    24H 活跃轨迹
                 </div>
-                {{hourly_chart_html}}
+                <div style="margin-top: 15px;">
+                    {{hourly_chart_html}}
+                </div>
             </div>
-            <div class="section">
-                <h2 class="section-title">💬 热门话题</h2>
-                <div class="topics-grid">{{topics_html}}</div>
+
+            <!-- 5. 话题记录 -->
+            <div class="topic-section">
+                <div class="paper-holes">
+                    <div class="hole"></div>
+                    <div class="hole"></div>
+                    <div class="hole"></div>
+                </div>
+                <div class="section-title">
+                    <svg class="doodle" viewBox="0 0 24 24"><path d="M14 17H4v2h10v-2zm6-8H4v2h16V9zM4 15h16v-2H4v2zM4 5v2h16V5H4z"/></svg>
+                    今日话题 Topics
+                </div>
+                {{topics_html}}
             </div>
-            <div class="section">
-                <h2 class="section-title">🏆 群友称号</h2>
-                <div class="users-grid">{{titles_html}}</div>
+
+            <!-- 6. 群友画像 -->
+            <div class="user-section">
+                <div class="section-title" style="justify-content: center;">
+                    <svg class="doodle" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    群友画像 Portraits
+                </div>
+                <div class="masonry-grid">
+                    {{titles_html}}
+                </div>
             </div>
-            <div class="section">
-                <h2 class="section-title">💬 群圣经</h2>
+
+            <!-- 7. 每日回响 -->
+            <div class="quotes-section">
+                <div class="section-title" style="justify-content: center;">
+                    <svg class="doodle" viewBox="0 0 24 24"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+                    群贤毕至 Bible Quotes
+                </div>
                 {{quotes_html}}
             </div>
+
         </div>
+
+        <!-- Footer -->
         <div class="footer">
-            由 AstrBot QQ群日常分析插件 生成 | {{current_datetime}} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
-            <small style="opacity: 0.8; font-size: 0.9em;">🤖 AI分析消耗：{{total_tokens}} tokens (输入: {{prompt_tokens}}, 输出: {{completion_tokens}})</small>
+            <p>Irotoridori no Sekai · {{current_datetime}}</p>
+            <p>Github: SXP-Simon/astrbot-qq-group-daily-analysis</p>
+            <p style="font-size: 0.8rem; margin-top: 5px;">
+                Tokens: {{total_tokens}} | Time: {{current_datetime}}
+            </p>
         </div>
+
     </div>
 </body>
 </html>

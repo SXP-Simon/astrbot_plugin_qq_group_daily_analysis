@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v3.9.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.0.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -97,6 +97,9 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
 
+### v4.0.0
+- feat(report/template): 全新设计的报告模板，采用卡通手账日记风格设计，灵感来源于 GalGame 《五彩斑斓的世界》女主二阶堂真红和男主悠马每天晚上写日记的场景
+
 ### v3.9.5
 - fix(report/template): 迁移到应该使用的 jinja2 模板引擎， HTML 文件方便调试和修改
 
@@ -118,8 +121,6 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
     3. 回退到当前会话的 Provider（通过 umo）
 
     4. 回退到第一个可用的 Provider
-
-
 
 ### v3.6.0
 - 由于 napcat 存在的问题 [NapNeko/NapCatQQ#441](https://github.com/NapNeko/NapCatQQ/issues/441) 选择取消分页拉取和多次轮询获取逻辑，解决获取消息数量异常的情况
