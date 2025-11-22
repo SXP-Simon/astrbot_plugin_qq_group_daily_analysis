@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- 引入手写字体和正文阅读字体 -->
-    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
     
     <style>
         :root {
@@ -35,7 +35,7 @@
             --title-text: #bf360c;
             
             --font-title: 'ZCOOL KuaiLe', cursive; /* 标题字体 */
-            --font-hand: 'Indie Flower', "KaiTi", "STKaiti", serif;      /* 手写体 */
+            --font-hand: 'Patrick Hand', "KaiTi", "STKaiti", serif;      /* 手写体 */
             --font-body: 'Noto Sans SC', sans-serif; /* 正文体 */
         }
 
@@ -220,7 +220,7 @@
         .time-big {
             font-family: var(--font-title); font-size: 2.5rem; color: var(--ink-primary); margin: 10px 0;
         }
-        .time-desc { font-family: var(--font-hand); color: var(--ink-secondary); }
+        .time-desc { font-family: var(--font-hand); color: var(--ink-secondary); font-size: 1.5rem;}
 
         /* ==================== 5. 话题列表 ==================== */
         .topic-section {
@@ -257,12 +257,12 @@
 
         .topic-content { line-height: 1.5; padding-top: 6px; flex: 1; }
         .topic-title {
-            font-family: var(--font-title); font-size: 1.2rem; margin-right: 10px;
+            font-family: var(--font-title); font-size: 1.5rem; margin-right: 10px;
             background: linear-gradient(transparent 60%, var(--color-pink) 60%);
             display: inline-block;
         }
         .topic-detail {
-            font-family: var(--font-hand); color: #666; font-size: 1.5rem;
+            font-family: var(--font-hand); color: #666; font-size: 1.2rem;
             margin-top: 8px;
         }
 
@@ -330,7 +330,7 @@
         }
 
         .u-reason {
-            font-family: var(--font-body); font-size: 0.95rem; color: #555; line-height: 1.6;
+            font-family: var(--font-hand); font-size: 0.95rem; color: #555; line-height: 1.6;
             text-align: justify; background: #fafafa; padding: 12px; border-radius: 8px; position: relative;
         }
 
@@ -383,7 +383,7 @@
             margin-top: 60px; text-align: center; font-family: var(--font-hand);
             color: var(--ink-secondary); /* 使用更深的颜色提高可读性 */
             border-top: 2px dashed var(--ink-secondary); /* 使用更深的边框颜色 */
-            padding-top: 20px; font-size: 0.7rem;
+            padding-top: 20px; font-size: 0.9rem;
             opacity: 0.8; /* 保持一点柔和感但确保可读 */
         }
 
@@ -450,7 +450,7 @@
             <!-- 活跃时段 -->
             <div class="highlight-section" style="grid-column: span 4;">
                 <div class="tape-top"></div>
-                <div style="font-family: var(--font-hand); color: var(--ink-secondary);">✨ Highlight Time</div>
+                <div style="font-family: var(--font-hand); font-size: 1.6rem; color: var(--ink-secondary);">✨ Highlight Time</div>
                 <div class="time-big">{{most_active_period}}</div>
                 <div class="time-desc">（此刻，世界色彩斑斓）</div>
             </div>
