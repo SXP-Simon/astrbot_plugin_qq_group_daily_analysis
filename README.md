@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.0.1-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.1.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -96,6 +96,10 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v4.1.0
+- 群黑白名单机制
+- 使用信号量（Semaphore）并发限制和弱引用字典（WeakValueDictionary）优化锁管理
 
 ### v4.0.0
 - feat(report/template): 全新设计的报告模板，采用卡通手账日记风格设计，灵感来源于 GalGame 《五彩斑斓的世界》女主二阶堂真红和男主悠马每天晚上写日记的场景

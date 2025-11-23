@@ -18,7 +18,7 @@
     "max_concurrent_tasks": {
         "type": "int",
         "description": "自动分析最大并发数",
-        "default": 5,
+        "default": 3,
         "hint": "同时进行的群聊分析任务数量，建议根据机器性能调整，过高可能导致LLM API RPM 超出限制，卡顿或被风控"
     },
     "max_messages": {
