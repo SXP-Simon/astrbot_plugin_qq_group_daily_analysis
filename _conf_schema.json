@@ -1,12 +1,25 @@
 {
-    "enabled_groups": {
+    "group_list_mode": {
+        "description": "群聊权限模式",
+        "type": "string",
+        "options": ["whitelist", "blacklist", "none"],
+        "default": "none",
+        "hint": "whitelist: 仅允许列表内群；blacklist: 拒绝列表内群；none: 不限制"
+    },
+    "group_list": {
         "type": "list",
-        "description": "启用分析功能的QQ群列表",
+        "description": "群组名单列表",
         "default": [],
-        "hint": "填入允许使用分析功能的QQ群号",
+        "hint": "黑白名单模式下使用的群号列表",
         "items": {
             "type": "string"
         }
+    },
+    "max_concurrent_tasks": {
+        "type": "int",
+        "description": "自动分析最大并发数",
+        "default": 5,
+        "hint": "同时进行的群聊分析任务数量，建议根据机器性能调整，过高可能导致LLM API RPM 超出限制，卡顿或被风控"
     },
     "max_messages": {
         "type": "int",

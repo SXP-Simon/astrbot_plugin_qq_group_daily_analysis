@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import weakref
 from datetime import datetime, timedelta
 from astrbot.api import logger
 
@@ -189,7 +190,22 @@ class AutoScheduler:
         try:
             logger.info("开始执行自动群聊分析（并发模式）")
 
-            enabled_groups = self.config_manager.get_enabled_groups()
+            # 根据配置确定需要分析的群组
+            group_list_mode = self.config_manager.get_group_list_mode()
+
+            # 始终获取所有群组并进行过滤
+            logger.info(f"自动分析使用 {group_list_mode} 模式，正在获取群列表...")
+            all_groups = await self._get_all_groups()
+            logger.info(f"共获取到 {len(all_groups)} 个群组: {all_groups}")
+            enabled_groups = []
+            for group_id in all_groups:
+                if self.config_manager.is_group_allowed(group_id):
+                    enabled_groups.append(group_id)
+
+            logger.info(
+                f"根据 {group_list_mode} 过滤后，共有 {len(enabled_groups)} 个群聊需要分析"
+            )
+
             if not enabled_groups:
                 logger.info("没有启用的群聊需要分析")
                 return
@@ -199,10 +215,21 @@ class AutoScheduler:
             )
 
             # 创建并发任务 - 为每个群聊创建独立的分析任务
+            # 限制最大并发数
+            max_concurrent = self.config_manager.get_max_concurrent_tasks()
+            logger.info(f"自动分析并发数限制: {max_concurrent}")
+            sem = asyncio.Semaphore(max_concurrent)
+
+            async def safe_perform_analysis(group_id):
+                async with sem:
+                    return await self._perform_auto_analysis_for_group_with_timeout(
+                        group_id
+                    )
+
             analysis_tasks = []
             for group_id in enabled_groups:
                 task = asyncio.create_task(
-                    self._perform_auto_analysis_for_group_with_timeout(group_id),
+                    safe_perform_analysis(group_id),
                     name=f"analysis_group_{group_id}",
                 )
                 analysis_tasks.append(task)
@@ -246,12 +273,16 @@ class AutoScheduler:
         # 为每个群聊使用独立的锁，避免全局锁导致串行化
         group_lock_key = f"analysis_{group_id}"
         if not hasattr(self, "_group_locks"):
-            self._group_locks = {}
+            self._group_locks = weakref.WeakValueDictionary()
 
-        if group_lock_key not in self._group_locks:
-            self._group_locks[group_lock_key] = asyncio.Lock()
+        # 从 WeakValueDictionary 获取锁，如果不存在则创建
+        # 注意：必须将锁赋值给局部变量以保持引用，否则可能会被回收
+        lock = self._group_locks.get(group_lock_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._group_locks[group_lock_key] = lock
 
-        async with self._group_locks[group_lock_key]:
+        async with lock:
             try:
                 start_time = asyncio.get_event_loop().time()
 
@@ -381,12 +412,71 @@ class AutoScheduler:
                 logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
 
             finally:
-                # 清理群聊锁资源（可选，防止内存泄漏）
-                if hasattr(self, "_group_locks") and len(self._group_locks) > 50:
-                    old_locks = list(self._group_locks.keys())[:10]
-                    for lock_key in old_locks:
-                        if not self._group_locks[lock_key].locked():
-                            del self._group_locks[lock_key]
+                # 锁资源由 WeakValueDictionary 自动管理，无需手动清理
+                logger.info(f"群 {group_id} 自动分析完成")
+
+    async def _get_all_groups(self) -> list[str]:
+        """获取所有bot实例所在的群列表"""
+        all_groups = set()
+
+        if (
+            not hasattr(self.bot_manager, "_bot_instances")
+            or not self.bot_manager._bot_instances
+        ):
+            return []
+
+        for platform_id, bot_instance in self.bot_manager._bot_instances.items():
+            try:
+                # 尝试使用 call_action 获取群列表
+                call_action_func = None
+                if hasattr(bot_instance, "call_action"):
+                    call_action_func = bot_instance.call_action
+                elif hasattr(bot_instance, "api") and hasattr(
+                    bot_instance.api, "call_action"
+                ):
+                    call_action_func = bot_instance.api.call_action
+
+                if call_action_func:
+                    # 尝试 OneBot v11 get_group_list
+                    try:
+                        result = await call_action_func("get_group_list")
+                        logger.debug(
+                            f"平台 {platform_id} get_group_list 返回类型: {type(result)}"
+                        )
+
+                        # 处理可能的字典返回 (e.g. {'data': [...], 'retcode': 0})
+                        if (
+                            isinstance(result, dict)
+                            and "data" in result
+                            and isinstance(result["data"], list)
+                        ):
+                            logger.debug("检测到字典格式返回，提取 data 字段")
+                            result = result["data"]
+
+                        if isinstance(result, list):
+                            for group in result:
+                                if isinstance(group, dict) and "group_id" in group:
+                                    all_groups.add(str(group["group_id"]))
+                            logger.info(
+                                f"平台 {platform_id} 成功获取 {len(result)} 个群组"
+                            )
+                        else:
+                            logger.warning(
+                                f"平台 {platform_id} get_group_list 返回格式非列表: {result}"
+                            )
+                    except Exception as e:
+                        logger.debug(
+                            f"平台 {platform_id} 获取群列表失败 (get_group_list): {e}"
+                        )
+
+                    # 如果需要，尝试其他方法（例如针对其他协议）
+                    # 目前专注于 OneBot v11，因为它是最常见的
+                else:
+                    logger.debug(f"平台 {platform_id} 的 bot 实例没有 call_action 方法")
+            except Exception as e:
+                logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
+
+        return list(all_groups)
 
     async def _send_analysis_report(self, group_id: str, analysis_result: dict):
         """发送分析报告到群"""

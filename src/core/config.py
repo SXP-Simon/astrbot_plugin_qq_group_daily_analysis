@@ -16,9 +16,37 @@ class ConfigManager:
         self._pyppeteer_version = None
         self._check_pyppeteer_availability()
 
-    def get_enabled_groups(self) -> list[str]:
-        """获取启用的群组列表"""
-        return self.config.get("enabled_groups", [])
+    def get_group_list_mode(self) -> str:
+        """获取群组列表模式 (whitelist/blacklist/none)"""
+        return self.config.get("group_list_mode", "none")
+
+    def get_group_list(self) -> list[str]:
+        """获取群组列表（用于黑白名单）"""
+        return self.config.get("group_list", [])
+
+    def is_group_allowed(self, group_id: str) -> bool:
+        """根据配置的白/黑名单判断是否允许在该群聊中使用"""
+        mode = self.get_group_list_mode().lower()
+        if mode not in ("whitelist", "blacklist", "none"):
+            mode = "none"
+
+        # none模式下，不进行黑白名单检查，由调用方决定（通常是回退到 enabled_groups）
+        if mode == "none":
+            return True
+
+        glist = [str(g) for g in self.get_group_list()]
+        group_id_str = str(group_id)
+
+        if mode == "whitelist":
+            return group_id_str in glist if glist else False
+        if mode == "blacklist":
+            return group_id_str not in glist if glist else True
+
+        return True
+
+    def get_max_concurrent_tasks(self) -> int:
+        """获取自动分析最大并发数"""
+        return self.config.get("max_concurrent_tasks", 5)
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""
@@ -203,9 +231,19 @@ class ConfigManager:
         self.config["output_format"] = format_type
         self.config.save_config()
 
-    def set_enabled_groups(self, groups: list[str]):
-        """设置启用的群组列表"""
-        self.config["enabled_groups"] = groups
+    def set_group_list_mode(self, mode: str):
+        """设置群组列表模式"""
+        self.config["group_list_mode"] = mode
+        self.config.save_config()
+
+    def set_group_list(self, groups: list[str]):
+        """设置群组列表"""
+        self.config["group_list"] = groups
+        self.config.save_config()
+
+    def set_max_concurrent_tasks(self, count: int):
+        """设置自动分析最大并发数"""
+        self.config["max_concurrent_tasks"] = count
         self.config.save_config()
 
     def set_max_messages(self, count: int):
@@ -272,22 +310,6 @@ class ConfigManager:
         """设置PDF文件名格式"""
         self.config["pdf_filename_format"] = format_str
         self.config.save_config()
-
-    def add_enabled_group(self, group_id: str):
-        """添加启用的群组"""
-        enabled_groups = self.get_enabled_groups()
-        if group_id not in enabled_groups:
-            enabled_groups.append(group_id)
-            self.config["enabled_groups"] = enabled_groups
-            self.config.save_config()
-
-    def remove_enabled_group(self, group_id: str):
-        """移除启用的群组"""
-        enabled_groups = self.get_enabled_groups()
-        if group_id in enabled_groups:
-            enabled_groups.remove(group_id)
-            self.config["enabled_groups"] = enabled_groups
-            self.config.save_config()
 
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
