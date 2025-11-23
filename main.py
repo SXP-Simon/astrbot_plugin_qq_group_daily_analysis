@@ -159,8 +159,7 @@ class QQGroupDailyAnalysis(Star):
         bot_manager.update_from_event(event)
 
         # 检查群组权限
-        enabled_groups = config_manager.get_enabled_groups()
-        if enabled_groups and group_id not in enabled_groups:
+        if not config_manager.is_group_allowed(group_id):
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
@@ -371,26 +370,56 @@ class QQGroupDailyAnalysis(Star):
             return
 
         if action == "enable":
-            enabled_groups = config_manager.get_enabled_groups()
-            if group_id not in enabled_groups:
-                config_manager.add_enabled_group(group_id)
-                yield event.plain_result("✅ 已为当前群启用日常分析功能")
-
-                # 重新启动定时任务
-                await auto_scheduler.restart_scheduler()
+            mode = config_manager.get_group_list_mode()
+            if mode == "whitelist":
+                glist = config_manager.get_group_list()
+                if group_id not in glist:
+                    glist.append(group_id)
+                    config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群加入白名单")
+                    # 重新启动定时任务
+                    await auto_scheduler.restart_scheduler()
+                else:
+                    yield event.plain_result("ℹ️ 当前群已在白名单中")
+            elif mode == "blacklist":
+                glist = config_manager.get_group_list()
+                if group_id in glist:
+                    glist.remove(group_id)
+                    config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群从黑名单移除")
+                    # 重新启动定时任务
+                    await auto_scheduler.restart_scheduler()
+                else:
+                    yield event.plain_result("ℹ️ 当前群不在黑名单中")
             else:
-                yield event.plain_result("ℹ️ 当前群已启用日常分析功能")
+                yield event.plain_result("ℹ️ 当前为无限制模式，所有群聊默认启用")
 
         elif action == "disable":
-            enabled_groups = config_manager.get_enabled_groups()
-            if group_id in enabled_groups:
-                config_manager.remove_enabled_group(group_id)
-                yield event.plain_result("✅ 已为当前群禁用日常分析功能")
-
-                # 重新启动定时任务
-                await auto_scheduler.restart_scheduler()
+            mode = config_manager.get_group_list_mode()
+            if mode == "whitelist":
+                glist = config_manager.get_group_list()
+                if group_id in glist:
+                    glist.remove(group_id)
+                    config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群从白名单移除")
+                    # 重新启动定时任务
+                    await auto_scheduler.restart_scheduler()
+                else:
+                    yield event.plain_result("ℹ️ 当前群不在白名单中")
+            elif mode == "blacklist":
+                glist = config_manager.get_group_list()
+                if group_id not in glist:
+                    glist.append(group_id)
+                    config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群加入黑名单")
+                    # 重新启动定时任务
+                    await auto_scheduler.restart_scheduler()
+                else:
+                    yield event.plain_result("ℹ️ 当前群已在黑名单中")
             else:
-                yield event.plain_result("ℹ️ 当前群未启用日常分析功能")
+                yield event.plain_result(
+                    "ℹ️ 当前为无限制模式，如需禁用请切换到黑名单模式"
+                )
 
         elif action == "reload":
             # 重新启动定时任务
@@ -399,8 +428,7 @@ class QQGroupDailyAnalysis(Star):
 
         elif action == "test":
             # 测试自动分析功能
-            enabled_groups = config_manager.get_enabled_groups()
-            if group_id not in enabled_groups:
+            if not config_manager.is_group_allowed(group_id):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
 
@@ -417,8 +445,10 @@ class QQGroupDailyAnalysis(Star):
                 yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
 
         else:  # status
-            enabled_groups = config_manager.get_enabled_groups()
-            status = "已启用" if group_id in enabled_groups else "未启用"
+            is_allowed = config_manager.is_group_allowed(group_id)
+            status = "已启用" if is_allowed else "未启用"
+            mode = config_manager.get_group_list_mode()
+
             auto_status = (
                 "已启用" if config_manager.get_enable_auto_analysis() else "未启用"
             )
@@ -429,7 +459,7 @@ class QQGroupDailyAnalysis(Star):
             min_threshold = config_manager.get_min_messages_threshold()
 
             yield event.plain_result(f"""📊 当前群分析功能状态:
-• 群分析功能: {status}
+• 群分析功能: {status} (模式: {mode})
 • 自动分析: {auto_status} ({auto_time})
 • 输出格式: {output_format}
 • PDF 功能: {pdf_status}
