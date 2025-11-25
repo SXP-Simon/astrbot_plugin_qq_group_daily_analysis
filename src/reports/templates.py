@@ -22,7 +22,7 @@ class HTMLTemplates:
     def _get_env(self) -> Environment:
         """获取当前配置的模板环境"""
         template_name = self.config_manager.get_report_template()
-        
+
         # 如果环境已缓存且配置未变（这里简单假设配置变了会重新获取，或者我们可以每次都检查）
         # 为了响应配置热更，我们每次都检查一下或者简单地按需创建
         if template_name in self._envs:

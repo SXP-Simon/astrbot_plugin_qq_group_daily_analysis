@@ -8,10 +8,12 @@ from typing import Any
 from astrbot.api import logger
 
 
-async def _try_get_provider_id_by_id(context, provider_id: str, description: str) -> str | None:
+async def _try_get_provider_id_by_id(
+    context, provider_id: str, description: str
+) -> str | None:
     """
     尝试通过 ID 获取 Provider ID 的辅助函数
-    
+
     Args:
         context: AstrBot上下文对象
         provider_id: Provider ID
@@ -226,13 +228,17 @@ async def call_provider_with_retry(
             # 注意：llm_generate 可能不直接支持 max_tokens 和 temperature 参数，
             # 取决于 AstrBot 版本和具体实现。如果支持 kwargs，可以传递。
             # 这里假设支持 kwargs 传递给底层 provider。
-            llm_resp = await context.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature
+            # 使用 asyncio.wait_for 包裹，继续遵守 timeout 参数并在超时时抛出 TimeoutError。
+            llm_resp = await asyncio.wait_for(
+                context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                ),
+                timeout=timeout,
             )
-            
+
             return llm_resp
 
         except asyncio.TimeoutError as e:
@@ -266,11 +272,13 @@ def extract_token_usage(response) -> dict | None:
         # 尝试从 LLMResponse 中提取 usage
         # 假设 LLMResponse 有 usage 属性或 raw_completion 属性
         if hasattr(response, "usage") and response.usage:
-             usage = response.usage
-             token_usage["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
-             token_usage["completion_tokens"] = getattr(usage, "completion_tokens", 0) or 0
-             token_usage["total_tokens"] = getattr(usage, "total_tokens", 0) or 0
-             return token_usage
+            usage = response.usage
+            token_usage["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
+            token_usage["completion_tokens"] = (
+                getattr(usage, "completion_tokens", 0) or 0
+            )
+            token_usage["total_tokens"] = getattr(usage, "total_tokens", 0) or 0
+            return token_usage
 
         # 兼容旧的提取方式 (如果 response 是旧的 ProviderResponse)
         if getattr(response, "raw_completion", None) is not None:
