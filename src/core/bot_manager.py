@@ -52,18 +52,6 @@ class BotManager:
             if instance:
                 return instance
 
-            # 如果指定的平台不存在，记录警告并尝试回退
-            if self._bot_instances:
-                first_platform = list(self._bot_instances.keys())[0]
-                logger.warning(
-                    f"平台 '{platform_id}' 不存在，回退到第一个可用平台 '{first_platform}'"
-                )
-                return self._bot_instances[first_platform]
-
-            # 没有任何平台可用
-            logger.error(f"平台 '{platform_id}' 不存在，且没有任何可用的bot实例")
-            return None
-
         # 没有指定平台ID，返回第一个可用的实例
         if self._bot_instances:
             first_platform = list(self._bot_instances.keys())[0]
