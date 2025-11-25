@@ -337,11 +337,19 @@ class QQGroupDailyAnalysis(Star):
             current_template = config_manager.get_report_template()
             # 列出可用的模板
             import os
-            template_dir = os.path.join(os.path.dirname(__file__), "src", "reports", "templates")
+
+            template_dir = os.path.join(
+                os.path.dirname(__file__), "src", "reports", "templates"
+            )
             available_templates = []
             if os.path.exists(template_dir):
-                available_templates = [d for d in os.listdir(template_dir) if os.path.isdir(os.path.join(template_dir, d)) and not d.startswith("__")]
-            
+                available_templates = [
+                    d
+                    for d in os.listdir(template_dir)
+                    if os.path.isdir(os.path.join(template_dir, d))
+                    and not d.startswith("__")
+                ]
+
             template_list_str = "\n".join([f"• {t}" for t in available_templates])
             yield event.plain_result(f"""🎨 当前报告模板: {current_template}
 
@@ -353,10 +361,13 @@ class QQGroupDailyAnalysis(Star):
 
         # 检查模板是否存在
         import os
-        template_dir = os.path.join(os.path.dirname(__file__), "src", "reports", "templates", template_name)
+
+        template_dir = os.path.join(
+            os.path.dirname(__file__), "src", "reports", "templates", template_name
+        )
         if not os.path.exists(template_dir):
-             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
-             return
+            yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
+            return
 
         config_manager.set_report_template(template_name)
         yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")

@@ -132,11 +132,9 @@ class ActivityVisualizer:
         for hour in range(24):
             count = hourly_activity.get(hour, 0)
             percentage = (count / max_activity) * 100 if max_activity > 0 else 0
-            
-            chart_data.append({
-                "hour": hour,
-                "count": count,
-                "percentage": round(percentage, 1)
-            })
+
+            chart_data.append(
+                {"hour": hour, "count": count, "percentage": round(percentage, 1)}
+            )
 
         return chart_data
