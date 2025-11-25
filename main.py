@@ -320,6 +320,47 @@ class QQGroupDailyAnalysis(Star):
         config_manager.set_output_format(format_type)
         yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
 
+    @filter.command("设置模板")
+    @filter.permission_type(PermissionType.ADMIN)
+    async def set_report_template(
+        self, event: AiocqhttpMessageEvent, template_name: str = ""
+    ):
+        """
+        设置分析报告模板
+        用法: /设置模板 [模板名称]
+        """
+        if not isinstance(event, AiocqhttpMessageEvent):
+            yield event.plain_result("❌ 此功能仅支持QQ群聊")
+            return
+
+        if not template_name:
+            current_template = config_manager.get_report_template()
+            # 列出可用的模板
+            import os
+            template_dir = os.path.join(os.path.dirname(__file__), "src", "reports", "templates")
+            available_templates = []
+            if os.path.exists(template_dir):
+                available_templates = [d for d in os.listdir(template_dir) if os.path.isdir(os.path.join(template_dir, d)) and not d.startswith("__")]
+            
+            template_list_str = "\n".join([f"• {t}" for t in available_templates])
+            yield event.plain_result(f"""🎨 当前报告模板: {current_template}
+
+可用模板:
+{template_list_str}
+
+用法: /设置模板 [模板名称]""")
+            return
+
+        # 检查模板是否存在
+        import os
+        template_dir = os.path.join(os.path.dirname(__file__), "src", "reports", "templates", template_name)
+        if not os.path.exists(template_dir):
+             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
+             return
+
+        config_manager.set_report_template(template_name)
+        yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")
+
     @filter.command("安装PDF")
     @filter.permission_type(PermissionType.ADMIN)
     async def install_pdf_deps(self, event: AiocqhttpMessageEvent):

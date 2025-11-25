@@ -1,0 +1,7 @@
+{% for quote in quotes %}
+<div class="quote-item">
+    <div class="quote-content">"{{ quote.content }}"</div>
+    <div class="quote-author">—— {{ quote.sender }}</div>
+    <div class="quote-reason">{{ quote.reason }}</div>
+</div>
+{% endfor %}

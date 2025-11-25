@@ -19,7 +19,7 @@ class ReportGenerator:
     def __init__(self, config_manager):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
-        self.html_templates = HTMLTemplates()  # 实例化HTML模板管理器
+        self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
 
     async def generate_image_report(
         self, analysis_result: dict, group_id: str, html_render_func

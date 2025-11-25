@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群聊日常分析报告</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'SimHei', sans-serif;
+            background: #ffffff;
+            color: #1a1a1a;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header .date {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #4a5568;
+            border-bottom: 2px solid #4299e1;
+            padding-bottom: 8px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #f8f9ff;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 600;
+            color: #4299e1;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666666;
+            text-transform: uppercase;
+        }
+
+        .active-period {
+            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
+            color: #ffffff;
+            padding: 25px;
+            text-align: center;
+            margin: 30px 0;
+            border-radius: 8px;
+        }
+
+        .active-period .time {
+            font-size: 28px;
+            font-weight: 300;
+            margin-bottom: 5px;
+        }
+
+        .active-period .label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .topic-item {
+            background: #ffffff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            page-break-inside: avoid;
+        }
+
+        .topic-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .topic-number {
+            background: #4299e1;
+            color: #ffffff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 12px;
+            font-size: 12px;
+        }
+
+        .topic-title {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 16px;
+        }
+
+        .topic-contributors {
+            color: #666666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .topic-detail {
+            color: #333333;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .user-title {
+            background: #ffffff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            page-break-inside: avoid;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .user-badges {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .user-title-badge {
+            background: #4299e1;
+            color: #ffffff;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .user-mbti {
+            background: #667eea;
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 12px;
+        }
+
+        .user-reason {
+            color: #666666;
+            font-size: 12px;
+            max-width: 200px;
+            text-align: right;
+            line-height: 1.4;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 15px;
+            border: 2px solid #e2e8f0;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .user-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 18px;
+            color: #666666;
+            flex-shrink: 0;
+        }
+
+        .quote-item {
+            background: #faf5ff;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            page-break-inside: avoid;
+        }
+
+        .quote-content {
+            font-size: 16px;
+            color: #2d3748;
+            font-weight: 500;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        .quote-author {
+            font-size: 14px;
+            color: #4299e1;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-align: right;
+        }
+
+        .quote-reason {
+            font-size: 12px;
+            color: #666666;
+            background: rgba(66, 153, 225, 0.1);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 3px solid #4299e1;
+        }
+
+        .footer {
+            background: #f8f9ff;
+            color: #666666;
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            border-radius: 8px;
+            margin-top: 40px;
+        }
+
+        /* PDF活跃度可视化样式 - 集成版本 */
+        .activity-chart-container {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            margin-top: 20px;
+            page-break-inside: avoid;
+        }
+
+        .chart-header {
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .hour-bar-container {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            height: 16px;
+        }
+
+        .hour-label {
+            width: 45px;
+            text-align: left;
+            color: #4a5568;
+            font-size: 11px;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+
+        .bar-wrapper {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .bar {
+            height: 6px;
+            background-color: #4299e1;
+            border-radius: 3px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .hourly-value-outside {
+            color: #4a5568;
+            font-size: 10px;
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 25px;
+            text-align: right;
+        }
+
+        .hourly-value-inside {
+            color: white;
+            font-size: 9px;
+            padding: 0 4px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        @media print {
+            body {
+                font-size: 12px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .section {
+                margin-bottom: 30px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 群聊日常分析报告</h1>
+            <div class="date">{{current_date}}</div>
+        </div>
+        <div class="section">
+            <h2 class="section-title">📈 基础统计</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{message_count}}</div>
+                    <div class="stat-label">消息总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{participant_count}}</div>
+                    <div class="stat-label">参与人数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{total_characters}}</div>
+                    <div class="stat-label">总字符数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">{{emoji_count}}</div>
+                    <div class="stat-label">表情数量</div>
+                </div>
+            </div>
+            <div class="active-period">
+                <div class="time">{{most_active_period}}</div>
+                <div class="label">最活跃时段</div>
+            </div>
+            <!-- 活跃度可视化部分 - 集成到基础统计 -->
+            <div class="activity-chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">⏱️ 活跃度分布</div>
+                </div>
+                {{hourly_chart_html}}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">💬 热门话题</h2>
+            {{topics_html}}
+        </div>
+        <div class="section">
+            <h2 class="section-title">🏆 群友称号</h2>
+            {{titles_html}}
+        </div>
+        <div class="section">
+            <h2 class="section-title">💬 群圣经</h2>
+            {{quotes_html}}
+        </div>
+        <div class="footer">
+            由 AstrBot QQ群日常分析插件 生成 | {{current_datetime}} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
+            <small style="opacity: 0.8; font-size: 0.9em;">🤖 AI分析消耗：{{total_tokens}} tokens (输入: {{prompt_tokens}}, 输出:
+                {{completion_tokens}})</small>
+        </div>
+    </div>
+</body>
+
+</html>
