@@ -1,10 +1,25 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>群聊日常分析报告</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
     <style>
+        :root {
+            --bg-body: #f2f2f2;
+            --bg-card: #ffffff;
+            --text-main: #111111;
+            --text-muted: #666666;
+            --accent: #222222;
+            --border: #e0e0e0;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+            --radius: 12px;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,53 +27,85 @@
         }
 
         body {
-            font-family: 'Microsoft YaHei', 'SimHei', sans-serif;
-            background: #ffffff;
-            color: #1a1a1a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
             line-height: 1.6;
-            font-size: 14px;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
         }
 
         .container {
             max-width: 800px;
+            /* Reverted to original width for better compatibility */
             margin: 0 auto;
-            padding: 20px;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
         }
 
+        /* Header - Editorial Style */
         .header {
-            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
-            color: #ffffff;
-            padding: 30px;
+            background: #ffffff;
+            color: var(--text-main);
+            padding: 50px 30px 30px;
             text-align: center;
-            border-radius: 12px;
-            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border);
         }
 
         .header h1 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 8px;
+            font-family: 'Noto Serif SC', serif;
+            font-size: 2.4em;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.03em;
+            color: var(--text-main);
         }
 
         .header .date {
-            font-size: 16px;
-            opacity: 0.9;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .content {
+            padding: 40px 30px;
         }
 
         .section {
-            margin-bottom: 40px;
-            page-break-inside: avoid;
+            margin-bottom: 50px;
+        }
+
+        .full-width-section {
+            grid-column: 1 / -1;
         }
 
         .section-title {
-            font-size: 20px;
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.5em;
             font-weight: 600;
-            margin-bottom: 20px;
-            color: #4a5568;
-            border-bottom: 2px solid #4299e1;
-            padding-bottom: 8px;
+            margin-bottom: 25px;
+            color: var(--text-main);
+            position: relative;
+            padding-left: 16px;
         }
 
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background-color: var(--accent);
+        }
+
+        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -67,63 +114,158 @@
         }
 
         .stat-card {
-            background: #f8f9ff;
-            padding: 20px;
+            background: #fafafa;
+            padding: 20px 10px;
             text-align: center;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            min-width: 0;
+            /* Prevent overflow */
         }
 
         .stat-number {
-            font-size: 24px;
+            font-family: 'Inter', sans-serif;
+            font-size: 1.8em;
             font-weight: 600;
-            color: #4299e1;
-            margin-bottom: 5px;
+            color: var(--text-main);
+            margin-bottom: 6px;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            word-break: break-all;
+            /* Ensure long numbers wrap if needed */
         }
 
         .stat-label {
-            font-size: 12px;
-            color: #666666;
+            font-size: 0.75em;
+            color: var(--text-muted);
+            font-weight: 500;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
+        /* Active Period */
         .active-period {
-            background: linear-gradient(135deg, #4299e1 0%, #667eea 100%);
+            background: var(--accent);
             color: #ffffff;
-            padding: 25px;
+            padding: 30px;
             text-align: center;
             margin: 30px 0;
-            border-radius: 8px;
+            border-radius: var(--radius);
         }
 
         .active-period .time {
-            font-size: 28px;
-            font-weight: 300;
-            margin-bottom: 5px;
+            font-family: 'Noto Serif SC', serif;
+            font-size: 2.2em;
+            font-weight: 400;
+            margin-bottom: 6px;
         }
 
         .active-period .label {
-            font-size: 14px;
-            opacity: 0.9;
+            font-size: 0.85em;
+            opacity: 0.8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
         }
 
-        .topic-item {
+        /* Activity Chart */
+        .activity-chart-container {
             background: #ffffff;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            page-break-inside: avoid;
+            padding: 0;
+            margin-bottom: 50px;
+        }
+
+        .chart-header {
+            margin-bottom: 25px;
+        }
+
+        .chart-title {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.3em;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        /* Chart Bars */
+        .hour-bar-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            height: 18px;
+        }
+
+        .hour-label {
+            width: 45px;
+            text-align: left;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            flex-shrink: 0;
+        }
+
+        .bar-wrapper {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            /* Important for flex child truncation */
+        }
+
+        .bar {
+            height: 8px;
+            background: var(--accent);
+            border-radius: 4px;
+            opacity: 0.8;
+        }
+
+        .hourly-value-outside {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            min-width: 25px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .hourly-value-inside {
+            color: white;
+            font-size: 10px;
+            padding: 0 5px;
+            font-weight: 600;
+        }
+
+        /* Grids */
+        .topics-grid,
+        .users-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            align-items: stretch;
+        }
+
+        /* Topic Item Styling */
+        .topic-item {
+            background: #fafafa;
+            padding: 25px;
+            border-radius: var(--radius);
+            height: 100%;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
         }
 
         .topic-header {
             display: flex;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
 
         .topic-number {
-            background: #4299e1;
+            background: var(--text-main);
             color: #ffffff;
             width: 24px;
             height: 24px;
@@ -133,125 +275,132 @@
             justify-content: center;
             font-weight: 600;
             margin-right: 12px;
-            font-size: 12px;
+            font-size: 0.8em;
+            flex-shrink: 0;
         }
 
         .topic-title {
+            font-family: 'Noto Serif SC', serif;
             font-weight: 600;
-            color: #2d3748;
-            font-size: 16px;
+            color: var(--text-main);
+            font-size: 1.1em;
+            line-height: 1.3;
         }
 
         .topic-contributors {
-            color: #666666;
-            font-size: 12px;
+            color: var(--text-muted);
+            font-size: 0.8em;
             margin-bottom: 10px;
+            padding-left: 36px;
+            font-style: italic;
         }
 
         .topic-detail {
-            color: #333333;
+            color: #444;
             line-height: 1.6;
-            font-size: 14px;
+            font-size: 0.9em;
+            padding-left: 36px;
         }
 
+        /* User Title Styling */
         .user-title {
-            background: #ffffff;
+            background: #fafafa;
             padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
+            border-radius: var(--radius);
             display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            page-break-inside: avoid;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid var(--border);
         }
 
         .user-info {
             display: flex;
             align-items: center;
-            flex: 1;
+            margin-bottom: 14px;
+        }
+
+        .user-avatar,
+        .user-avatar-placeholder {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            margin-right: 15px;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            color: #888;
+            object-fit: cover;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            flex-shrink: 0;
         }
 
         .user-details {
             flex: 1;
+            min-width: 0;
+            /* Allow text truncation */
         }
 
         .user-name {
             font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 8px;
-            font-size: 16px;
+            color: var(--text-main);
+            font-size: 1em;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .user-badges {
             display: flex;
-            align-items: center;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
         }
 
         .user-title-badge {
-            background: #4299e1;
-            color: #ffffff;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
+            background: #ffffff;
+            color: var(--text-main);
+            border: 1px solid var(--text-main);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
         }
 
         .user-mbti {
-            background: #667eea;
-            color: #ffffff;
-            padding: 4px 8px;
-            border-radius: 8px;
-            font-weight: 500;
-            font-size: 12px;
+            background: #e0e0e0;
+            color: var(--text-main);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: 600;
+            white-space: nowrap;
         }
 
         .user-reason {
-            color: #666666;
-            font-size: 12px;
-            max-width: 200px;
-            text-align: right;
-            line-height: 1.4;
+            color: var(--text-muted);
+            font-size: 0.85em;
+            line-height: 1.5;
+            padding-left: 59px;
         }
 
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            margin-right: 15px;
-            border: 2px solid #e2e8f0;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-
-        .user-avatar-placeholder {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-size: 18px;
-            color: #666666;
-            flex-shrink: 0;
-        }
-
+        /* Quote Item Styling */
         .quote-item {
-            background: #faf5ff;
-            padding: 20px;
+            background: #fafafa;
+            padding: 25px;
             margin-bottom: 15px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            page-break-inside: avoid;
+            border-radius: var(--radius);
+            border-left: 3px solid var(--text-main);
         }
 
         .quote-content {
-            font-size: 16px;
-            color: #2d3748;
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.1em;
+            color: var(--text-main);
             font-weight: 500;
             line-height: 1.6;
             margin-bottom: 10px;
@@ -259,124 +408,68 @@
         }
 
         .quote-author {
-            font-size: 14px;
-            color: #4299e1;
+            font-size: 0.85em;
+            color: var(--text-main);
             font-weight: 600;
-            margin-bottom: 8px;
             text-align: right;
+            margin-bottom: 6px;
         }
 
         .quote-reason {
-            font-size: 12px;
-            color: #666666;
-            background: rgba(66, 153, 225, 0.1);
-            padding: 8px 12px;
-            border-radius: 6px;
-            border-left: 3px solid #4299e1;
+            font-size: 0.75em;
+            color: var(--text-muted);
+            background: rgba(0, 0, 0, 0.03);
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            float: right;
+            clear: both;
         }
 
+        /* Footer */
         .footer {
-            background: #f8f9ff;
-            color: #666666;
+            background: #ffffff;
+            color: var(--text-muted);
             text-align: center;
-            padding: 20px;
-            font-size: 12px;
-            border-radius: 8px;
-            margin-top: 40px;
+            padding: 30px;
+            font-size: 0.8em;
+            border-top: 1px solid var(--border);
         }
 
-        /* PDF活跃度可视化样式 - 集成版本 */
-        .activity-chart-container {
-            background: #f8f9ff;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            margin-top: 20px;
-            page-break-inside: avoid;
-        }
-
-        .chart-header {
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .chart-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #2d3748;
-        }
-
-        .hour-bar-container {
-            display: flex;
-            align-items: center;
-            margin: 6px 0;
-            height: 16px;
-        }
-
-        .hour-label {
-            width: 45px;
-            text-align: left;
-            color: #4a5568;
-            font-size: 11px;
-            font-weight: 500;
-            flex-shrink: 0;
-        }
-
-        .bar-wrapper {
-            display: flex;
-            align-items: center;
-            flex-grow: 1;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .bar {
-            height: 6px;
-            background-color: #4299e1;
-            border-radius: 3px;
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            overflow: hidden;
-        }
-
-        .hourly-value-outside {
-            color: #4a5568;
-            font-size: 10px;
-            font-weight: 600;
-            flex-shrink: 0;
-            min-width: 25px;
-            text-align: right;
-        }
-
-        .hourly-value-inside {
-            color: white;
-            font-size: 9px;
-            padding: 0 4px;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        @media print {
+        /* Responsive */
+        @media (max-width: 600px) {
             body {
-                font-size: 12px;
+                padding: 15px;
             }
 
-            .container {
-                padding: 10px;
-            }
-
-            .header {
+            .content {
                 padding: 20px;
             }
 
-            .section {
-                margin-bottom: 30px;
+            .header {
+                padding: 40px 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
             }
 
             .stats-grid {
                 grid-template-columns: repeat(2, 1fr);
+            }
+
+            .topics-grid,
+            .users-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .user-reason {
+                padding-left: 0;
+                margin-top: 10px;
+            }
+
+            .stat-number {
+                font-size: 1.5em;
             }
         }
     </style>
@@ -385,58 +478,62 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 群聊日常分析报告</h1>
+            <h1>群聊日常分析报告</h1>
             <div class="date">{{current_date}}</div>
         </div>
-        <div class="section">
-            <h2 class="section-title">📈 基础统计</h2>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-number">{{message_count}}</div>
-                    <div class="stat-label">消息总数</div>
+        <div class="content">
+            <div class="section full-width-section">
+                <h2 class="section-title">基础统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">{{message_count}}</div>
+                        <div class="stat-label">消息总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{participant_count}}</div>
+                        <div class="stat-label">参与人数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{total_characters}}</div>
+                        <div class="stat-label">总字符数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{emoji_count}}</div>
+                        <div class="stat-label">表情数量</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number">{{participant_count}}</div>
-                    <div class="stat-label">参与人数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{{total_characters}}</div>
-                    <div class="stat-label">总字符数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number">{{emoji_count}}</div>
-                    <div class="stat-label">表情数量</div>
+                <div class="active-period">
+                    <div class="time">{{most_active_period}}</div>
+                    <div class="label">最活跃时段</div>
                 </div>
             </div>
-            <div class="active-period">
-                <div class="time">{{most_active_period}}</div>
-                <div class="label">最活跃时段</div>
-            </div>
-            <!-- 活跃度可视化部分 - 集成到基础统计 -->
+
             <div class="activity-chart-container">
                 <div class="chart-header">
-                    <div class="chart-title">⏱️ 活跃度分布</div>
+                    <div class="chart-title">24小时活跃度分布</div>
                 </div>
                 {{hourly_chart_html}}
             </div>
-        </div>
 
-        <div class="section">
-            <h2 class="section-title">💬 热门话题</h2>
-            {{topics_html}}
-        </div>
-        <div class="section">
-            <h2 class="section-title">🏆 群友称号</h2>
-            {{titles_html}}
-        </div>
-        <div class="section">
-            <h2 class="section-title">💬 群圣经</h2>
-            {{quotes_html}}
+            <div class="section">
+                <h2 class="section-title">热门话题</h2>
+                <div class="topics-grid">{{topics_html}}</div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">群友称号</h2>
+                <div class="users-grid">{{titles_html}}</div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">群圣经</h2>
+                {{quotes_html}}
+            </div>
         </div>
         <div class="footer">
             由 AstrBot QQ群日常分析插件 生成 | {{current_datetime}} | SXP-Simon/astrbot-qq-group-daily-analysis<br>
-            <small style="opacity: 0.8; font-size: 0.9em;">🤖 AI分析消耗：{{total_tokens}} tokens (输入: {{prompt_tokens}}, 输出:
-                {{completion_tokens}})</small>
+            <small style="opacity: 0.8; font-size: 0.9em; margin-top: 8px; display: block;">AI分析消耗：{{total_tokens}}
+                tokens (输入: {{prompt_tokens}}, 输出: {{completion_tokens}})</small>
         </div>
     </div>
 </body>
