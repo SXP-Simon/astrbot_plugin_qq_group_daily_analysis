@@ -7,23 +7,23 @@ QQ群日常分析插件
 
 import asyncio
 
+from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
-from astrbot.api import logger, AstrBotConfig
+from astrbot.core.message.components import File
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
-from astrbot.core.message.components import File
 from astrbot.core.star.filter.permission import PermissionType
+
+from .src.core.bot_manager import BotManager
 
 # 导入重构后的模块
 from .src.core.config import ConfigManager
-from .src.core.bot_manager import BotManager
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
-from .src.utils.pdf_utils import PDFInstaller
 from .src.utils.helpers import MessageAnalyzer
-
+from .src.utils.pdf_utils import PDFInstaller
 
 # 全局变量
 config_manager = None
@@ -175,7 +175,7 @@ class QQGroupDailyAnalysis(Star):
 
         try:
             # 获取该群对应的平台ID和bot实例
-            platform_id = auto_scheduler._get_platform_id_for_group(group_id)
+            platform_id = await auto_scheduler._get_platform_id_for_group(group_id)
             bot_instance = bot_manager.get_bot_instance(platform_id)
 
             if not bot_instance:

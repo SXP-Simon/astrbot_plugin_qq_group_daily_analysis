@@ -3,8 +3,9 @@
 参考 astrbot_plugin_github_analyzer 的实现方式
 """
 
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
+
 from ..models.data_models import ActivityVisualization
 
 
