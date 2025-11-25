@@ -36,8 +36,8 @@
         }
 
         .container {
-            max-width: 800px;
-            /* Reverted to original width for better compatibility */
+            width: 100%;
+            max-width: none;
             margin: 0 auto;
             background: var(--bg-card);
             border-radius: var(--radius);
@@ -384,8 +384,10 @@
         .user-reason {
             color: var(--text-muted);
             font-size: 0.85em;
-            line-height: 1.5;
-            padding-left: 59px;
+            font-weight: 500;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            font-style: italic;
         }
 
         /* Quote Item Styling */
@@ -395,6 +397,7 @@
             margin-bottom: 15px;
             border-radius: var(--radius);
             border-left: 3px solid var(--text-main);
+            overflow: hidden;
         }
 
         .quote-content {
