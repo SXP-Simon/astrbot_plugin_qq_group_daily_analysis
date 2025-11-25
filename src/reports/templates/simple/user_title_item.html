@@ -1,0 +1,9 @@
+<div style="margin-bottom: 10px; border: 1px solid #eee; padding: 5px;">
+    <div style="font-weight: bold;">{{ user.nickname }} ({{ user.user_id }})</div>
+    <div>称号:
+        {% for title in user.titles %}
+        <span style="background: #eee; padding: 2px 5px; border-radius: 3px;">{{ title }}</span>
+        {% endfor %}
+    </div>
+    <div style="font-size: 0.9em; color: #555;">{{ user.description }}</div>
+</div>
