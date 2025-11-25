@@ -227,8 +227,11 @@ class ReportGenerator:
         logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
         # 生成活跃度可视化HTML
-        hourly_chart_html = self.activity_visualizer.generate_hourly_chart_html(
+        chart_data = self.activity_visualizer.get_hourly_chart_data(
             activity_viz.hourly_activity
+        )
+        hourly_chart_html = self.html_templates.render_template(
+            "activity_chart.html", chart_data=chart_data
         )
         logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 

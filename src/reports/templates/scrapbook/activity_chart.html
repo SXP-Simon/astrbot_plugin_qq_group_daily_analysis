@@ -1,0 +1,28 @@
+{% for item in chart_data %}
+{% set color_var = 'var(--color-purple)' %}
+{% set width = '2%' %}
+
+{% if item.count == 0 %}
+{% set color_var = 'var(--color-purple)' %}
+{% set width = '2%' %}
+{% elif item.percentage >= 70 %}
+{% set color_var = 'var(--accent-orange)' %}
+{% set width = item.percentage ~ '%' %}
+{% elif item.percentage >= 30 %}
+{% set color_var = 'var(--color-green)' %}
+{% set width = item.percentage ~ '%' %}
+{% else %}
+{% set color_var = 'var(--color-blue)' %}
+{% set width = item.percentage ~ '%' %}
+{% endif %}
+
+<div class="hand-chart-row">
+    <div class="chart-label">{{ "%02d" | format(item.hour) }}:00</div>
+    <div class="chart-bar-box">
+        <div class="crayon-bar" style="width: {{ width }}; background: {{ color_var }};"></div>
+    </div>
+    <div
+        style="margin-left: 10px; font-size: 0.7rem; font-family: var(--font-hand); color: var(--ink-secondary); min-width: 30px;">
+        {{ item.count }}</div>
+</div>
+{% endfor %}
