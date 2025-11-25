@@ -14,6 +14,6 @@ help: |  # 插件的帮助信息
   命令：
   /群分析 [天数] - 分析群聊活动
   /分析设置 [操作] - 管理设置（enable/disable/status/test）
-version: v4.1.1 # 插件版本号。格式：v1.1.1 或者 v1.1
+version: v4.2.0 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: SXP-Simon # 作者
 repo: https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis # 插件的仓库地址
