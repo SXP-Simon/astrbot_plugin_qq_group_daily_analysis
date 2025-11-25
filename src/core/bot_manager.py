@@ -4,6 +4,7 @@ Bot实例管理模块
 """
 
 from typing import Any
+
 from astrbot.api import logger
 
 
@@ -48,19 +49,20 @@ class BotManager:
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
         if platform_id:
             # 如果指定了平台ID，尝试获取
-            instance = self._bot_instances.get(platform_id)
-            if instance:
-                return instance
+            return self._bot_instances.get(platform_id)
 
-        # 没有指定平台ID，返回第一个可用的实例
+        # 没有指定平台ID
         if self._bot_instances:
-            first_platform = list(self._bot_instances.keys())[0]
-            if len(self._bot_instances) > 1:
-                logger.debug(
-                    f"未指定平台，使用第一个可用平台 '{first_platform}' "
-                    f"(共有 {len(self._bot_instances)} 个平台: {list(self._bot_instances.keys())})"
-                )
-            return self._bot_instances[first_platform]
+            # 如果只有一个实例，直接返回
+            if len(self._bot_instances) == 1:
+                return list(self._bot_instances.values())[0]
+
+            # 如果有多个实例，必须指定 platform_id
+            logger.error(
+                f"存在多个Bot实例 {list(self._bot_instances.keys())} 但未指定 platform_id，"
+                "无法确定使用哪个实例。请明确指定 platform_id。"
+            )
+            return None
 
         # 没有任何平台可用
         logger.error("没有任何可用的bot实例")
@@ -85,14 +87,19 @@ class BotManager:
         return self._default_platform
 
     async def auto_discover_bot_instances(self):
-        """自动发现所有可用的bot实例"""
+        """自动发现所有可用的bot实例 (仅限 QQ/Aiocqhttp)"""
         if not self._context or not hasattr(self._context, "platform_manager"):
             return {}
 
-        platforms = getattr(self._context.platform_manager, "platform_insts", [])
+        # 使用新版 API 获取所有平台实例
+        platforms = self._context.platform_manager.get_insts()
         discovered = {}
 
         for platform in platforms:
+            # 严格过滤：只处理 AiocqhttpAdapter (QQ)
+            if platform.metadata.name != "aiocqhttp":
+                continue
+
             # 获取bot实例
             bot_client = None
             if hasattr(platform, "get_client"):
@@ -138,6 +145,13 @@ class BotManager:
 
     def update_from_event(self, event):
         """从事件更新bot实例（用于手动命令）"""
+        # 检查是否为 QQ 平台事件
+        if (
+            hasattr(event, "get_platform_name")
+            and event.get_platform_name() != "aiocqhttp"
+        ):
+            return False
+
         if hasattr(event, "bot") and event.bot:
             # 从事件中获取平台ID
             platform_id = None

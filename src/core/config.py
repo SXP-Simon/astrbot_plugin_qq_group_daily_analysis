@@ -4,7 +4,8 @@
 """
 
 import sys
-from astrbot.api import logger, AstrBotConfig
+
+from astrbot.api import AstrBotConfig, logger
 
 
 class ConfigManager:

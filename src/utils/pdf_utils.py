@@ -3,9 +3,10 @@ PDF工具模块
 负责PDF相关的安装和管理功能
 """
 
-import sys
 import asyncio
+import sys
 from concurrent.futures import ThreadPoolExecutor
+
 from astrbot.api import logger
 
 
