@@ -87,7 +87,7 @@ class BotManager:
         return self._default_platform
 
     async def auto_discover_bot_instances(self):
-        """自动发现所有可用的bot实例 (仅限 QQ/Aiocqhttp)"""
+        """自动发现所有可用的bot实例"""
         if not self._context or not hasattr(self._context, "platform_manager"):
             return {}
 
@@ -96,10 +96,6 @@ class BotManager:
         discovered = {}
 
         for platform in platforms:
-            # 严格过滤：只处理 AiocqhttpAdapter (QQ)
-            if platform.metadata.name != "aiocqhttp":
-                continue
-
             # 获取bot实例
             bot_client = None
             if hasattr(platform, "get_client"):
