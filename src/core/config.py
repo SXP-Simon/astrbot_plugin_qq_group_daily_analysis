@@ -311,6 +311,15 @@ class ConfigManager:
         self.config["pdf_filename_format"] = format_str
         self.config.save_config()
 
+    def get_report_template(self) -> str:
+        """获取报告模板名称"""
+        return self.config.get("report_template", "scrapbook")
+
+    def set_report_template(self, template_name: str):
+        """设置报告模板名称"""
+        self.config["report_template"] = template_name
+        self.config.save_config()
+
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
         return self.config.get("enable_user_card", False)

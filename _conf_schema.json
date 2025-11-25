@@ -66,6 +66,12 @@
         "default": "image",
         "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
     },
+    "report_template": {
+        "type": "string",
+        "description": "报告模板",
+        "default": "scrapbook",
+        "hint": "分析报告使用的HTML模板名称，使用 `/设置模板` 查看使用指南"
+    },
 
     "min_messages_threshold": {
         "type": "int",
