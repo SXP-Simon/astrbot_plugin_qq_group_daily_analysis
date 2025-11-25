@@ -225,9 +225,6 @@ _✨ 一个基于AstrBot的智能群聊分析插件，能够生成精美的群�
 
 **忽略**：如果只是偶尔出现（如回复久远消息），不影响机器人核心功能（收发消息），可以直接忽略。
 
-## 许可证
-
-MIT License
 
 ## 贡献
 
@@ -246,5 +243,62 @@ MIT License
 ![贡献指南](./assets/contribution-guide.jpg)
 
 </div>
+
+### 模板贡献指南
+
+<details>
+<summary>🎨 点击展开查看如何贡献你的自定义模板给更多人玩</summary>
+
+如果您想为插件贡献新的报告模板，请按照以下步骤操作：
+
+#### 1. 创建模板目录
+在 `src/reports/templates/` 目录下创建一个新的文件夹，例如 `my_theme`。
+
+#### 2. 必需文件结构
+您的模板目录需要包含以下文件：
+
+```text
+src/reports/templates/your_theme_name/
+├── image_template.html      # 图片报告主模板
+├── pdf_template.html        # PDF报告主模板
+├── activity_chart.html      # 活跃度图表组件
+├── topic_item.html          # 话题列表项组件
+├── user_title_item.html     # 用户称号项组件
+└── quote_item.html          # 金句项组件
+```
+
+#### 3. 模板变量说明
+
+**主模板 (`image_template.html` / `pdf_template.html`) 可用变量:**
+- `current_date`: 当前日期 (YYYY-MM-DD)
+- `current_datetime`: 当前时间 (YYYY-MM-DD HH:MM:SS)
+- `message_count`: 消息总数
+- `participant_count`: 参与人数
+- `total_characters`: 总字符数
+- `emoji_count`: 表情数量
+- `most_active_period`: 最活跃时段
+- `hourly_chart_html`: 渲染后的活跃度图表 HTML
+- `topics_html`: 渲染后的热门话题 HTML
+- `titles_html`: 渲染后的用户称号 HTML
+- `quotes_html`: 渲染后的金句 HTML
+- `total_tokens`: Token 消耗统计
+- `prompt_tokens`: 提示词 Token 消耗
+- `completion_tokens`: 生成内容 Token 消耗
+
+**组件模板可用变量:**
+- `activity_chart.html`: `chart_data` (包含 `hour`, `count`, `percentage` 的列表)
+- `topic_item.html`: `topic` (包含 `keyword`, `count`, `summary` 的对象), `loop.index` (序号)
+- `user_title_item.html`: `user` (包含 `nickname`, `user_id`, `titles` (列表), `description` 的对象)
+- `quote_item.html`: `quote` (包含 `content`, `sender_nickname`, `reason` 的对象)
+
+#### 4. 参考示例
+您可以参考 `src/reports/templates/simple/` 目录下的文件，这是一个最简化的模板实现，包含了所有必需的基本结构。
+
+</details>
+
+## 许可证
+
+MIT License
+
 
 欢迎提交Issue和Pull Request来改进这个插件！
