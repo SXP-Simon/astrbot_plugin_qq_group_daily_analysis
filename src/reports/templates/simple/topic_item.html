@@ -1,5 +1,7 @@
+{% for item in topics %}
 <div style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
-    <strong>#{{ loop.index }} {{ topic.keyword }}</strong>
-    <span style="color: #666; font-size: 0.8em;">(热度: {{ topic.count }})</span>
-    <p style="margin: 5px 0;">{{ topic.summary }}</p>
+    <strong>#{{ item.index }} {{ item.topic.topic }}</strong>
+    <span style="color: #666; font-size: 0.8em;">(参与者: {{ item.contributors }})</span>
+    <p style="margin: 5px 0;">{{ item.topic.detail }}</p>
 </div>
+{% endfor %}
