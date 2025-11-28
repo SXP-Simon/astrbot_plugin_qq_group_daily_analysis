@@ -1,24 +1,36 @@
-{% for title in titles %}
-<div class="user-card">
-    <div class="card-tape"></div>
-    <div class="user-header">
-        <div class="u-avatar">
-            {% if title.avatar_data %}
-            <img src="{{ title.avatar_data }}" alt="头像" style="width: 100%; height: 100%; object-fit: cover;">
-            {% else %}
-            <svg class="doodle" style="font-size: 2rem;" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            {% endif %}
-        </div>
-        <div class="u-info">
-            <div class="u-name">{{ title.name }}</div>
-            <div class="badges">
-                <span class="badge title">{{ title.title }}</span>
-                <span class="badge mbti">{{ title.mbti }}</span>
+{% if titles %}
+<div class="user-section">
+    <div class="section-title" style="justify-content: center;">
+        <svg class="doodle" viewBox="0 0 24 24">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+        </svg>
+        群友画像 Portraits
+    </div>
+    <div class="masonry-grid">
+        {% for title in titles %}
+        <div class="user-card">
+            <div class="card-tape"></div>
+            <div class="user-header">
+                <div class="u-avatar">
+                    {% if title.avatar_data %}
+                    <img src="{{ title.avatar_data }}" alt="头像" style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                    <svg class="doodle" style="font-size: 2rem;" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    {% endif %}
+                </div>
+                <div class="u-info">
+                    <div class="u-name">{{ title.name }}</div>
+                    <div class="badges">
+                        <span class="badge title">{{ title.title }}</span>
+                        <span class="badge mbti">{{ title.mbti }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="u-reason">
+                {{ title.reason }}
             </div>
         </div>
-    </div>
-    <div class="u-reason">
-        {{ title.reason }}
+        {% endfor %}
     </div>
 </div>
-{% endfor %}
+{% endif %}

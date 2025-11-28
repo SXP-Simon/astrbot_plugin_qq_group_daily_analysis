@@ -1,17 +1,32 @@
-{% for topic in topics %}
-<div class="topic-item">
-    <div class="check-box">
-        <div class="check-tick"></div>
+{% if topics %}
+<div class="topic-section">
+    <div class="paper-holes">
+        <div class="hole"></div>
+        <div class="hole"></div>
+        <div class="hole"></div>
     </div>
-    <div class="topic-content">
-        <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;">
-            <span class="topic-title">{{ topic.topic.topic }}</span>
-            <span style="font-size: 0.85em; color: #999; font-family: var(--font-body);">#{{ "%02d"|format(topic.index) }}</span>
-        </div>
-        <div style="font-family: var(--font-hand); font-size: 1.05em; color: var(--ink-secondary); margin-bottom: 8px;">
-            🙋‍♀️ 参与者： {{ topic.contributors }}
-        </div>
-        <div class="topic-detail">{{ topic.topic.detail }}</div>
+    <div class="section-title">
+        <svg class="doodle" viewBox="0 0 24 24">
+            <path d="M14 17H4v2h10v-2zm6-8H4v2h16V9zM4 15h16v-2H4v2zM4 5v2h16V5H4z" />
+        </svg>
+        今日话题 Topics
     </div>
+    {% for topic in topics %}
+    <div class="topic-item">
+        <div class="check-box">
+            <div class="check-tick"></div>
+        </div>
+        <div class="topic-content">
+            <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;">
+                <span class="topic-title">{{ topic.topic.topic }}</span>
+                <span style="font-size: 0.85em; color: #999; font-family: var(--font-body);">#{{ "%02d"|format(topic.index) }}</span>
+            </div>
+            <div style="font-family: var(--font-hand); font-size: 1.05em; color: var(--ink-secondary); margin-bottom: 8px;">
+                🙋‍♀️ 参与者： {{ topic.contributors }}
+            </div>
+            <div class="topic-detail">{{ topic.topic.detail }}</div>
+        </div>
+    </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endif %}

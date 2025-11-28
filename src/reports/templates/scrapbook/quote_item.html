@@ -1,13 +1,23 @@
-{% for quote in quotes %}
-<div class="quote-wrapper">
-    <div class="q-bubble">
-        <div class="q-quote-mark">"</div>
-        <div class="q-content">{{ quote.content }}</div>
-        <div class="q-author">— {{ quote.sender }}</div>
+{% if quotes %}
+<div class="quotes-section">
+    <div class="section-title" style="justify-content: center;">
+        <svg class="doodle" viewBox="0 0 24 24">
+            <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z" />
+        </svg>
+        群贤毕至 Bible Quotes
     </div>
-    <div class="q-analysis-note">
-        <span class="note-label">🤣👉 AI 锐评：</span>
-        {{ quote.reason }}
+    {% for quote in quotes %}
+    <div class="quote-wrapper">
+        <div class="q-bubble">
+            <div class="q-quote-mark">"</div>
+            <div class="q-content">{{ quote.content }}</div>
+            <div class="q-author">— {{ quote.sender }}</div>
+        </div>
+        <div class="q-analysis-note">
+            <span class="note-label">🤣👉 AI 锐评：</span>
+            {{ quote.reason }}
+        </div>
     </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endif %}
