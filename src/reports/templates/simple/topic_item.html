@@ -1,7 +1,12 @@
-{% for item in topics %}
-<div style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
-    <strong>#{{ item.index }} {{ item.topic.topic }}</strong>
-    <span style="color: #666; font-size: 0.8em;">(参与者: {{ item.contributors }})</span>
-    <p style="margin: 5px 0;">{{ item.topic.detail }}</p>
+{% if topics %}
+<div class="section">
+    <h2>热门话题</h2>
+    {% for item in topics %}
+    <div style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
+        <strong>#{{ item.index }} {{ item.topic.topic }}</strong>
+        <span style="color: #666; font-size: 0.8em;">(参与者: {{ item.contributors }})</span>
+        <p style="margin: 5px 0;">{{ item.topic.detail }}</p>
+    </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endif %}
