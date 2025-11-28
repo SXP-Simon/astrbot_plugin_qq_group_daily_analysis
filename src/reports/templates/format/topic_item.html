@@ -1,10 +1,17 @@
-{% for topic in topics %}
-<div class="topic-item">
-    <div class="topic-header">
-        <span class="topic-number">{{ topic.index }}</span>
-        <span class="topic-title">{{ topic.topic.topic }}</span>
+{% if topics %}
+<div class="section">
+    <h2 class="section-title">热门话题</h2>
+    <div class="topics-grid">
+        {% for topic in topics %}
+        <div class="topic-item">
+            <div class="topic-header">
+                <span class="topic-number">{{ topic.index }}</span>
+                <span class="topic-title">{{ topic.topic.topic }}</span>
+            </div>
+            <div class="topic-contributors">参与者: {{ topic.contributors }}</div>
+            <div class="topic-detail">{{ topic.topic.detail }}</div>
+        </div>
+        {% endfor %}
     </div>
-    <div class="topic-contributors">参与者: {{ topic.contributors }}</div>
-    <div class="topic-detail">{{ topic.topic.detail }}</div>
 </div>
-{% endfor %}
+{% endif %}

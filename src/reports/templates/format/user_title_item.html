@@ -1,19 +1,26 @@
-{% for title in titles %}
-<div class="user-title">
-    <div class="user-info">
-        {% if title.avatar_data %}
-        <img src="{{ title.avatar_data }}" class="user-avatar" alt="头像">
-        {% else %}
-        <div class="user-avatar-placeholder">👤</div>
-        {% endif %}
-        <div class="user-details">
-            <div class="user-name">{{ title.name }}</div>
-            <div class="user-badges">
-                <div class="user-title-badge">{{ title.title }}</div>
-                <div class="user-mbti">{{ title.mbti }}</div>
+{% if titles %}
+<div class="section">
+    <h2 class="section-title">群友称号</h2>
+    <div class="users-grid">
+        {% for title in titles %}
+        <div class="user-title">
+            <div class="user-info">
+                {% if title.avatar_data %}
+                <img src="{{ title.avatar_data }}" class="user-avatar" alt="头像">
+                {% else %}
+                <div class="user-avatar-placeholder">👤</div>
+                {% endif %}
+                <div class="user-details">
+                    <div class="user-name">{{ title.name }}</div>
+                    <div class="user-badges">
+                        <div class="user-title-badge">{{ title.title }}</div>
+                        <div class="user-mbti">{{ title.mbti }}</div>
+                    </div>
+                </div>
             </div>
+            <div class="user-reason">{{ title.reason }}</div>
         </div>
+        {% endfor %}
     </div>
-    <div class="user-reason">{{ title.reason }}</div>
 </div>
-{% endfor %}
+{% endif %}

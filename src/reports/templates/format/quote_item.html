@@ -1,7 +1,12 @@
-{% for quote in quotes %}
-<div class="quote-item">
-    <div class="quote-content">"{{ quote.content }}"</div>
-    <div class="quote-author">—— {{ quote.sender }}</div>
-    <div class="quote-reason">{{ quote.reason }}</div>
+{% if quotes %}
+<div class="section">
+    <h2 class="section-title">群圣经</h2>
+    {% for quote in quotes %}
+    <div class="quote-item">
+        <div class="quote-content">"{{ quote.content }}"</div>
+        <div class="quote-author">—— {{ quote.sender }}</div>
+        <div class="quote-reason">{{ quote.reason }}</div>
+    </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endif %}
