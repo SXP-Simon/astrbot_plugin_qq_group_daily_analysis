@@ -6,6 +6,11 @@
 import asyncio
 import weakref
 from datetime import datetime, timedelta
+import aiohttp
+import tempfile
+import os
+import base64
+
 
 from astrbot.api import logger
 
@@ -478,6 +483,14 @@ class AutoScheduler:
         return list(all_groups)
 
     async def _send_analysis_report(self, group_id: str, analysis_result: dict):
+        logger.info(
+            f"[DEBUG][SEND_REPORT] enter "
+            f"group_id={group_id}, "
+            f"analysis_result_keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)}"
+        )
+
+        
+        
         """发送分析报告到群"""
         try:
             output_format = self.config_manager.get_output_format()
@@ -490,20 +503,28 @@ class AutoScheduler:
                         image_url = await self.report_generator.generate_image_report(
                             analysis_result, group_id, self.html_render_func
                         )
+                        logger.info(
+                f"[DEBUG][SEND_REPORT] image ready "
+                f"group_id={group_id}, "
+                f"image_url={image_url}"
+            )
+
+                        
                         if image_url:
-                            await self._send_image_message(group_id, image_url)
-                            logger.info(f"群 {group_id} 图片报告发送成功")
-                        else:
-                            # 图片生成失败，回退到文本
-                            logger.warning(
-                                f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告"
-                            )
-                            text_report = self.report_generator.generate_text_report(
-                                analysis_result
-                            )
-                            await self._send_text_message(
-                                group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                            )
+                            success = await self._send_image_message(group_id, image_url)
+                            if success:
+                                logger.info(f"群 {group_id} 图片报告发送成功")
+                            else:
+                                # 图片生成失败，回退到文本
+                                logger.warning(
+                                    f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告"
+                                )
+                                text_report = self.report_generator.generate_text_report(
+                                    analysis_result
+                                )
+                                await self._send_text_message(
+                                    group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
+                                )
                     except Exception as img_e:
                         logger.error(
                             f"群 {group_id} 图片报告生成异常: {img_e}，回退到文本报告"
@@ -575,9 +596,11 @@ class AutoScheduler:
             logger.error(f"发送分析报告到群 {group_id} 失败: {e}")
 
     async def _send_image_message(self, group_id: str, image_url: str):
-        """发送图片消息到群 - 依次尝试所有可用平台"""
+        """发送图片消息到群（URL → base64 → 文本，保留提示文本）"""
         try:
-            # 获取所有可用的平台，依次尝试发送
+            prefix_text = "📊 每日群聊分析报告已生成："
+
+            # ===== 获取平台 =====
             if (
                 hasattr(self.bot_manager, "_bot_instances")
                 and self.bot_manager._bot_instances
@@ -586,86 +609,111 @@ class AutoScheduler:
                 logger.info(
                     f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送图片..."
                 )
-
-                for test_platform_id, test_bot_instance in available_platforms:
-                    try:
-                        logger.info(
-                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片..."
-                        )
-
-                        # 发送图片消息到群
-                        await test_bot_instance.api.call_action(
-                            "send_group_msg",
-                            group_id=group_id,
-                            message=[
-                                {
-                                    "type": "text",
-                                    "data": {"text": "📊 每日群聊分析报告已生成："},
-                                },
-                                {"type": "image", "data": {"url": image_url}},
-                            ],
-                        )
-                        logger.info(
-                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片"
-                        )
-                        return True  # 成功发送，返回
-
-                    except Exception as e:
-                        error_msg = str(e)
-                        # 检查是否是特定的错误码
-                        if "retcode=1200" in error_msg:
-                            if "rich media transfer failed" in error_msg:
-                                logger.debug(
-                                    f"平台 {test_platform_id} 图片发送失败：媒体传输失败，继续尝试下一个平台"
-                                )
-                            else:
-                                logger.debug(
-                                    f"平台 {test_platform_id} 图片发送失败：机器人可能不在此群中，继续尝试下一个平台"
-                                )
-                        else:
-                            logger.debug(
-                                f"平台 {test_platform_id} 图片发送失败: {e}，继续尝试下一个平台"
-                            )
-                        continue
-
-                # 所有平台都尝试失败
-                logger.error(f"❌ 群 {group_id} 所有平台都尝试发送图片失败")
-                return False
             else:
-                # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
                 platform_id = await self._get_platform_id_for_group(group_id)
-
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
                     return False
-
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
-
                 if not bot_instance:
                     logger.error(
                         f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）"
                     )
                     return False
+                available_platforms = [(platform_id, bot_instance)]
 
-                # 发送图片消息到群
-                await bot_instance.api.call_action(
-                    "send_group_msg",
-                    group_id=group_id,
-                    message=[
-                        {
-                            "type": "text",
-                            "data": {"text": "📊 每日群聊分析报告已生成："},
-                        },
-                        {"type": "image", "data": {"url": image_url}},
-                    ],
+            # =========================================================
+            # 1️⃣ URL 方式
+            # =========================================================
+            for test_platform_id, test_bot_instance in available_platforms:
+                try:
+                    logger.info(
+                        f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片（URL）..."
+                    )
+
+                    await test_bot_instance.api.call_action(
+                        "send_group_msg",
+                        group_id=group_id,
+                        message=[
+                            {"type": "text", "data": {"text": prefix_text}},
+                            {"type": "image", "data": {"url": image_url}},
+                        ],
+                    )
+
+                    logger.info(
+                        f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片（URL）"
+                    )
+                    return True
+
+                except Exception as e:
+                    logger.debug(
+                        f"平台 {test_platform_id} URL 图片发送失败: {e}"
+                    )
+
+            logger.warning(f"群 {group_id} URL 方式发送图片失败，尝试 base64")
+
+            # =========================================================
+            # 2️⃣ base64 方式
+            # =========================================================
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(image_url) as resp:
+                        if resp.status != 200:
+                            raise RuntimeError(f"status={resp.status}")
+                        image_bytes = await resp.read()
+            except Exception as e:
+                logger.error(f"群 {group_id} base64 下载图片失败: {e}")
+                image_bytes = None
+
+            if image_bytes:
+                image_b64 = base64.b64encode(image_bytes).decode()
+                logger.info(
+                    f"群 {group_id} 图片已转 base64，大小={len(image_bytes)} bytes"
                 )
-                logger.info(f"群 {group_id} 图片消息发送成功")
-                return True
+
+                for test_platform_id, test_bot_instance in available_platforms:
+                    try:
+                        logger.info(
+                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片（base64）..."
+                        )
+
+                        await test_bot_instance.api.call_action(
+                            "send_group_msg",
+                            group_id=group_id,
+                            message=[
+                                {"type": "text", "data": {"text": prefix_text}},
+                                {
+                                    "type": "image",
+                                    "data": {"file": f"base64://{image_b64}"},
+                                },
+                            ],
+                        )
+
+                        logger.info(
+                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片（base64）"
+                        )
+                        return True
+
+                    except Exception as e:
+                        logger.debug(
+                            f"平台 {test_platform_id} base64 图片发送失败: {e}"
+                        )
+
+            # =========================================================
+            # 3️⃣ 文本兜底
+            # =========================================================
+            logger.error(f"❌ 群 {group_id} 图片发送失败，回退到文本")
+
+            await self._send_text_message(
+                group_id,
+                f"{prefix_text}\n图片发送失败，请查看链接：\n{image_url}",
+            )
+            return False
 
         except Exception as e:
             logger.error(f"发送图片消息到群 {group_id} 失败: {e}")
-            return False  # 返回失败标志
+            return False
 
     async def _send_text_message(self, group_id: str, text_content: str):
         """发送文本消息到群 - 依次尝试所有可用平台"""
