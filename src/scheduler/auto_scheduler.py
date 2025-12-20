@@ -515,9 +515,9 @@ class AutoScheduler:
                             if success:
                                 logger.info(f"群 {group_id} 图片报告发送成功")
                             else:
-                                # 图片生成失败，回退到文本
+                                # 图片发送失败，回退到文本
                                 logger.warning(
-                                    f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告"
+                                    f"群 {group_id} 发送图片报告失败，回退到文本报告"
                                 )
                                 text_report = self.report_generator.generate_text_report(
                                     analysis_result
@@ -525,6 +525,17 @@ class AutoScheduler:
                                 await self._send_text_message(
                                     group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
                                 )
+                        else:
+                            # 图片生成失败（返回None），回退到文本
+                            logger.warning(
+                                f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告"
+                            )
+                            text_report = self.report_generator.generate_text_report(
+                                analysis_result
+                            )
+                            await self._send_text_message(
+                                group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
+                            )
                     except Exception as img_e:
                         logger.error(
                             f"群 {group_id} 图片报告生成异常: {img_e}，回退到文本报告"
@@ -657,11 +668,33 @@ class AutoScheduler:
             # 2️⃣ base64 方式
             # =========================================================
             try:
-                async with aiohttp.ClientSession() as session:
+                # 设置请求超时和响应大小限制，避免卡死或下载过大
+                timeout = aiohttp.ClientTimeout(total=10)  # 10 秒超时
+                async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(image_url) as resp:
                         if resp.status != 200:
-                            raise RuntimeError(f"status={resp.status}")
-                        image_bytes = await resp.read()
+                            logger.error(f"群 {group_id} base64 下载图片失败: status={resp.status}")
+                            image_bytes = None
+                        else:
+                            max_bytes = 5 * 1024 * 1024  # 5 MiB 安全限制
+                            downloaded = 0
+                            chunks = []
+                            is_too_large = False
+
+                            async for chunk in resp.content.iter_chunked(64 * 1024):
+                                downloaded += len(chunk)
+                                if downloaded > max_bytes:
+                                    logger.error(
+                                        f"群 {group_id} base64 下载图片失败: 图片响应太大，超过 {max_bytes} 字节"
+                                    )
+                                    is_too_large = True
+                                    break
+                                chunks.append(chunk)
+
+                            if is_too_large:
+                                image_bytes = None
+                            else:
+                                image_bytes = b"".join(chunks)
             except Exception as e:
                 logger.error(f"群 {group_id} base64 下载图片失败: {e}")
                 image_bytes = None
