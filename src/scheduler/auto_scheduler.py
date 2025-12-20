@@ -7,8 +7,6 @@ import asyncio
 import weakref
 from datetime import datetime, timedelta
 import aiohttp
-import tempfile
-import os
 import base64
 
 
@@ -489,8 +487,6 @@ class AutoScheduler:
             f"analysis_result_keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)}"
         )
 
-        
-        
         """发送分析报告到群"""
         try:
             output_format = self.config_manager.get_output_format()
@@ -503,15 +499,16 @@ class AutoScheduler:
                         image_url = await self.report_generator.generate_image_report(
                             analysis_result, group_id, self.html_render_func
                         )
-                        logger.info(
-                f"[DEBUG][SEND_REPORT] image ready "
-                f"group_id={group_id}, "
-                f"image_url={image_url}"
-            )
+                        logger.debug(
+                            f"[DEBUG][SEND_REPORT] 图片生成成功"
+                            f"group_id={group_id}, "
+                            f"image_url={image_url}"
+                        )
 
-                        
                         if image_url:
-                            success = await self._send_image_message(group_id, image_url)
+                            success = await self._send_image_message(
+                                group_id, image_url
+                            )
                             if success:
                                 logger.info(f"群 {group_id} 图片报告发送成功")
                             else:
@@ -519,8 +516,10 @@ class AutoScheduler:
                                 logger.warning(
                                     f"群 {group_id} 发送图片报告失败，回退到文本报告"
                                 )
-                                text_report = self.report_generator.generate_text_report(
-                                    analysis_result
+                                text_report = (
+                                    self.report_generator.generate_text_report(
+                                        analysis_result
+                                    )
                                 )
                                 await self._send_text_message(
                                     group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
@@ -658,9 +657,7 @@ class AutoScheduler:
                     return True
 
                 except Exception as e:
-                    logger.debug(
-                        f"平台 {test_platform_id} URL 图片发送失败: {e}"
-                    )
+                    logger.debug(f"平台 {test_platform_id} URL 图片发送失败: {e}")
 
             logger.warning(f"群 {group_id} URL 方式发送图片失败，尝试 base64")
 
@@ -673,7 +670,9 @@ class AutoScheduler:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(image_url) as resp:
                         if resp.status != 200:
-                            logger.error(f"群 {group_id} base64 下载图片失败: status={resp.status}")
+                            logger.error(
+                                f"群 {group_id} base64 下载图片失败: status={resp.status}"
+                            )
                             image_bytes = None
                         else:
                             max_bytes = 5 * 1024 * 1024  # 5 MiB 安全限制
