@@ -80,18 +80,15 @@
 
         /* Decorative Color Bar */
         .color-bar {
-            position: absolute;
-            top: 60px;
-            left: 0;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 0;
-            z-index: 10;
+            margin-bottom: 20px;
         }
 
         .c-block {
-            width: 40px;
-            height: 10px;
+            width: 70px;
+            height: 5px;
         }
 
         .cb-1 { background: var(--c-dec-1); }
@@ -126,6 +123,29 @@
 
         h1 .highlight {
             color: var(--c-accent);
+        }
+
+        .header-icons {
+            display: flex;
+            gap: 18px;
+            margin-top: 20px;
+            align-items: center;
+        }
+
+        .header-icon {
+            width: 38px;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--c-accent);
+            background: rgba(178, 101, 59, 0.08);
+        }
+
+        .header-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--c-text);
         }
 
         .header-brief {
@@ -607,16 +627,31 @@
     <div class="crt-overlay"></div>
 
     <div class="layout">
-        <!-- Decorative Bars -->
-        <div class="color-bar">
-            <div class="c-block cb-1"></div>
-            <div class="c-block cb-2"></div>
-            <div class="c-block cb-3"></div>
-        </div>
-
         <header>
+            <div class="color-bar">
+                <div class="c-block cb-1"></div>
+                <div class="c-block cb-2"></div>
+                <div class="c-block cb-3"></div>
+            </div>
             <div class="header-meta">System Report // {{current_date}}</div>
             <h1>Daily<br><span class="highlight">Analysis</span><br>Export</h1>
+            <div class="header-icons">
+                <div class="header-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <div class="header-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                    </svg>
+                </div>
+                <div class="header-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                    </svg>
+                </div>
+            </div>
             <p class="header-brief">
                 QQ群日常活动分析报告，基于消息统计与AI分析生成
             </p>
