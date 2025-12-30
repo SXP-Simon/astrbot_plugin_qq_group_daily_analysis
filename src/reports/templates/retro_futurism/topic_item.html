@@ -1,0 +1,12 @@
+{% if topics %}
+{% for topic in topics %}
+<article class="topic-item">
+    <div class="topic-index">{{ "%02d"|format(topic.index) }}</div>
+    <div>
+        <h3 class="topic-title">{{ topic.topic.topic }}</h3>
+        <p class="topic-meta">PARTICIPANTS: {{ topic.contributors }}</p>
+        <p class="topic-detail">{{ topic.topic.detail }}</p>
+    </div>
+</article>
+{% endfor %}
+{% endif %}

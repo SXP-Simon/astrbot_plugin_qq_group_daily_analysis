@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Retro Futurism Daily Export</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: "Oswald-Fallback";
+            src: local("Impact"), local("Arial Black"), local("Helvetica Neue Bold");
+            font-weight: 400 700;
+        }
+
+        @font-face {
+            font-family: "JetBrains-Fallback";
+            src: local("Consolas"), local("Monaco"), local("Courier New");
+            font-weight: 400 700;
+        }
+
+        @font-face {
+            font-family: "NotoSans-Fallback";
+            src: local("Microsoft YaHei"), local("PingFang SC"), local("Hiragino Sans GB"), local("SimHei");
+            font-weight: 400 700;
+        }
+
+        :root {
+            --c-main: #B2653B;
+            --c-bg: #F5EDDC;
+            --c-dark: #181818;
+            --c-grid: rgba(186, 133, 48, 0.2);
+            --c-accent-1: #5C7F71;
+            --c-accent-2: #802520;
+            --c-accent-3: #BA8530;
+            --font-display: "Oswald", "Oswald-Fallback", Impact, "Arial Black", sans-serif;
+            --font-body: "Noto Sans SC", "NotoSans-Fallback", "Microsoft YaHei", "PingFang SC", sans-serif;
+            --font-mono: "JetBrains Mono", "JetBrains-Fallback", Consolas, Monaco, "Courier New", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #f8f2e5, #efe1ca 65%, #fbf5ea);
+            font-family: var(--font-body);
+            color: var(--c-dark);
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--c-grid) 1px, transparent 1px),
+                linear-gradient(90deg, var(--c-grid) 1px, transparent 1px);
+            background-size: 72px 72px;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(circle at 12% 10%, rgba(92, 127, 113, 0.25), transparent 45%),
+                radial-gradient(circle at 80% 15%, rgba(128, 37, 32, 0.2), transparent 40%),
+                linear-gradient(90deg, rgba(178, 101, 59, 0.08), transparent 55%);
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image: linear-gradient(rgba(24, 24, 24, 0.08) 50%, transparent 50%);
+            background-size: 100% 5px;
+            mix-blend-mode: multiply;
+            opacity: 0.35;
+        }
+
+        .report-shell {
+            position: relative;
+            width: min(1100px, calc(100% - 48px));
+            margin: 48px auto 80px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(246, 232, 210, 0.98));
+            border-left: 16px solid var(--c-main);
+            border-right: 2px solid rgba(24, 24, 24, 0.08);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+            padding-bottom: 60px;
+        }
+
+        .report-shell::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: -50px;
+            width: 180px;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(24, 24, 24, 0), rgba(178, 101, 59, 0.1), rgba(24, 24, 24, 0));
+        }
+
+        .color-strip {
+            position: absolute;
+            top: 32px;
+            left: -40px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .color-strip span {
+            width: 120px;
+            height: 6px;
+        }
+
+        .strip-1 {
+            background: var(--c-accent-1);
+        }
+
+        .strip-2 {
+            background: var(--c-accent-2);
+        }
+
+        .strip-3 {
+            background: var(--c-accent-3);
+        }
+
+        header.hero {
+            display: grid;
+            grid-template-columns: 2.2fr 1fr;
+            gap: 40px;
+            padding: 80px 64px 40px 64px;
+        }
+
+        .hero-label {
+            font-family: var(--font-mono);
+            letter-spacing: 0.3rem;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            color: rgba(24, 24, 24, 0.65);
+            margin-bottom: 14px;
+        }
+
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(3rem, 6vw, 4.8rem);
+            text-transform: uppercase;
+            line-height: 0.9;
+            margin: 0 0 18px;
+            letter-spacing: 0.1rem;
+        }
+
+        .hero-title .accent {
+            color: var(--c-main);
+        }
+
+        .hero-brief {
+            max-width: 460px;
+            color: rgba(24, 24, 24, 0.7);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .hero-meta {
+            display: flex;
+            gap: 24px;
+            margin-top: 28px;
+            font-family: var(--font-mono);
+        }
+
+        .hero-meta .meta-block {
+            border-left: 4px solid var(--c-main);
+            padding-left: 14px;
+        }
+
+        .meta-label {
+            font-size: 0.72rem;
+            letter-spacing: 0.2rem;
+            text-transform: uppercase;
+            color: rgba(24, 24, 24, 0.5);
+        }
+
+        .meta-value {
+            display: block;
+            margin-top: 4px;
+            color: var(--c-dark);
+        }
+
+        .crt-console {
+            background: #181818;
+            color: var(--c-bg);
+            padding: 24px;
+            border-radius: 8px;
+            border: 1px solid rgba(245, 237, 220, 0.25);
+            box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.5);
+            min-height: 280px;
+            position: relative;
+        }
+
+        .crt-console::before {
+            content: "CRT CHANNEL";
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.22rem;
+            font-size: 0.68rem;
+            color: rgba(245, 237, 220, 0.6);
+        }
+
+        .crt-label {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.28rem;
+            text-transform: uppercase;
+            color: rgba(245, 237, 220, 0.7);
+        }
+
+        .crt-value {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            color: var(--c-main);
+            margin: 12px 0;
+        }
+
+        .crt-sub {
+            font-size: 0.9rem;
+            color: rgba(245, 237, 220, 0.8);
+            margin-bottom: 4px;
+        }
+
+        .section-shell {
+            padding: 0 64px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(24, 24, 24, 0.12);
+            padding: 20px;
+            box-shadow: inset 0 0 0 1px rgba(24, 24, 24, 0.05);
+            min-height: 140px;
+            position: relative;
+        }
+
+        .stat-card::after {
+            content: "";
+            position: absolute;
+            inset: 18px;
+            border: 1px dashed rgba(24, 24, 24, 0.08);
+            pointer-events: none;
+        }
+
+        .stat-label {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.2rem;
+            text-transform: uppercase;
+            color: rgba(24, 24, 24, 0.55);
+        }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 2.8rem;
+            line-height: 1;
+            color: var(--c-main);
+            margin: 16px 0 8px;
+        }
+
+        .stat-note {
+            font-size: 0.9rem;
+            color: rgba(24, 24, 24, 0.7);
+        }
+
+        .module {
+            margin: 36px 0;
+            padding: 32px 32px 40px;
+            border-left: 5px solid rgba(178, 101, 59, 0.6);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 237, 220, 0.85));
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+            position: relative;
+        }
+
+        .module::after {
+            content: "";
+            position: absolute;
+            inset: 16px;
+            border: 1px solid rgba(24, 24, 24, 0.06);
+            pointer-events: none;
+        }
+
+        .module-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: 18px;
+        }
+
+        .module-kicker {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.3rem;
+            text-transform: uppercase;
+            color: rgba(24, 24, 24, 0.55);
+            margin-bottom: 6px;
+        }
+
+        .module-title {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: 2.2rem;
+            letter-spacing: 0.1rem;
+        }
+
+        .module-tag {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.3rem;
+            background: var(--c-dark);
+            color: var(--c-bg);
+            padding: 6px 14px;
+            border-radius: 30px;
+        }
+
+        .activity-panel {
+            background: #fff5eb;
+            padding: 20px;
+            border: 1px solid rgba(24, 24, 24, 0.08);
+        }
+
+        .activity-board {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .activity-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 70px;
+            align-items: center;
+            gap: 12px;
+            font-family: var(--font-mono);
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        .activity-hour {
+            letter-spacing: 0.1rem;
+        }
+
+        .activity-meter {
+            background: rgba(24, 24, 24, 0.08);
+            height: 10px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(24, 24, 24, 0.1);
+        }
+
+        .activity-bar {
+            height: 100%;
+            width: var(--pct, 10%);
+            background: linear-gradient(90deg, rgba(178, 101, 59, 0.8), rgba(178, 101, 59, 0.3));
+            position: relative;
+        }
+
+        .activity-count {
+            text-align: right;
+        }
+
+        .topic-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            margin-top: 12px;
+        }
+
+        .topic-card {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            gap: 20px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid rgba(24, 24, 24, 0.08);
+        }
+
+        .topic-index {
+            font-family: var(--font-mono);
+            font-size: 1.2rem;
+            letter-spacing: 0.35rem;
+            color: rgba(24, 24, 24, 0.35);
+        }
+
+        .topic-title {
+            margin: 0;
+            font-size: 1.2rem;
+            letter-spacing: 0.04rem;
+            color: var(--c-dark);
+        }
+
+        .topic-meta {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            letter-spacing: 0.16rem;
+            color: rgba(24, 24, 24, 0.5);
+            margin: 6px 0;
+        }
+
+        .topic-detail {
+            color: rgba(24, 24, 24, 0.75);
+            line-height: 1.6;
+        }
+
+        .title-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+            margin-top: 20px;
+        }
+
+        .title-card {
+            display: grid;
+            grid-template-columns: 72px 1fr;
+            column-gap: 18px;
+            padding: 18px;
+            border: 1px solid rgba(24, 24, 24, 0.08);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 237, 220, 0.6));
+            position: relative;
+        }
+
+        .title-card::before,
+        .title-card::after {
+            content: "";
+            position: absolute;
+            top: 12px;
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        .title-card::before {
+            left: 12px;
+            width: 32px;
+            background: var(--c-accent-1);
+        }
+
+        .title-card::after {
+            left: 48px;
+            width: 32px;
+            background: var(--c-accent-2);
+        }
+
+        .title-avatar {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 1px solid rgba(24, 24, 24, 0.12);
+            background: rgba(24, 24, 24, 0.08);
+            grid-row: 1 / span 3;
+            align-self: center;
+        }
+
+        .title-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: grayscale(35%) contrast(110%);
+        }
+
+        .title-avatar-fallback {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.25rem;
+            color: rgba(24, 24, 24, 0.5);
+        }
+
+        .title-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            grid-column: 2;
+        }
+
+        .title-name {
+            font-weight: 600;
+        }
+
+        .title-mbti {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.18rem;
+            background: rgba(24, 24, 24, 0.08);
+            padding: 2px 10px;
+        }
+
+        .title-role {
+            grid-column: 2;
+            font-family: var(--font-mono);
+            letter-spacing: 0.3rem;
+            text-transform: uppercase;
+            color: var(--c-main);
+            margin: 8px 0;
+        }
+
+        .title-reason {
+            grid-column: 2;
+            margin: 0;
+            font-size: 0.92rem;
+            color: rgba(24, 24, 24, 0.75);
+            line-height: 1.5;
+        }
+
+        .quote-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            margin-top: 16px;
+        }
+
+        .quote-card {
+            padding: 24px;
+            border: 1px dashed rgba(24, 24, 24, 0.15);
+            background: #fff8ee;
+            position: relative;
+        }
+
+        .quote-card::after {
+            content: "";
+            position: absolute;
+            top: -6px;
+            right: 40px;
+            width: 90px;
+            height: 6px;
+            background: var(--c-dark);
+        }
+
+        .quote-glyph {
+            font-size: 2.5rem;
+            color: rgba(178, 101, 59, 0.4);
+            margin: 0;
+        }
+
+        .quote-content {
+            font-size: 1.05rem;
+            color: var(--c-dark);
+            margin: 12px 0;
+            line-height: 1.6;
+        }
+
+        .quote-author {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            letter-spacing: 0.2rem;
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        .quote-note {
+            font-size: 0.9rem;
+            color: rgba(24, 24, 24, 0.7);
+            margin-top: 10px;
+        }
+
+        .token-strip {
+            padding: 0 64px;
+            margin-top: 20px;
+        }
+
+        .token-panel {
+            border-top: 1px solid rgba(24, 24, 24, 0.15);
+            padding: 16px 0 8px;
+            display: flex;
+            gap: 30px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.15rem;
+        }
+
+        footer {
+            padding: 0 64px;
+            margin-top: 28px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.25rem;
+            display: flex;
+            justify-content: space-between;
+            color: rgba(24, 24, 24, 0.65);
+        }
+
+        @media (max-width: 900px) {
+            header.hero {
+                grid-template-columns: 1fr;
+            }
+
+            .report-shell {
+                width: calc(100% - 24px);
+                margin: 24px auto 60px;
+            }
+
+            .section-shell,
+            .token-strip {
+                padding: 0 32px;
+            }
+
+            .module {
+                padding: 24px;
+            }
+
+            .stat-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <main class="report-shell">
+        <div class="color-strip">
+            <span class="strip-1"></span>
+            <span class="strip-2"></span>
+            <span class="strip-3"></span>
+        </div>
+        <header class="hero">
+            <div>
+                <div class="hero-label">Instruction Catalogue // Retro Futurism Export</div>
+                <h1 class="hero-title">Left <span class="accent">Aligned</span><br>Daily Report</h1>
+                <p class="hero-brief">
+                    利用网格与留白塑造复古终端的秩序感，配合 #B2653B 主色的橙铜质感，
+                    打造一份兼容当代阅读体验的指令式日报。
+                </p>
+                <div class="hero-meta">
+                    <div class="meta-block">
+                        <div class="meta-label">Report Date</div>
+                        <span class="meta-value">{{current_date}}</span>
+                    </div>
+                    <div class="meta-block">
+                        <div class="meta-label">Generated At</div>
+                        <span class="meta-value">{{current_datetime}}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="crt-console">
+                <div class="crt-label">Peak Window</div>
+                <div class="crt-value">{{most_active_period}}</div>
+                <div class="crt-sub">活跃序列 SCAN</div>
+                <div class="crt-sub">消息流强度 {{message_count}}</div>
+            </div>
+        </header>
+
+        <section class="section-shell">
+            <div class="stat-grid">
+                <article class="stat-card">
+                    <div class="stat-label">Messages</div>
+                    <div class="stat-value">{{message_count}}</div>
+                    <div class="stat-note">累计消息数量</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">Participants</div>
+                    <div class="stat-value">{{participant_count}}</div>
+                    <div class="stat-note">参与者计数</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">Characters</div>
+                    <div class="stat-value">{{total_characters}}</div>
+                    <div class="stat-note">文本总字数</div>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-label">Emoji Count</div>
+                    <div class="stat-value">{{emoji_count}}</div>
+                    <div class="stat-note">表情符号统计</div>
+                </article>
+            </div>
+        </section>
+
+        <section class="section-shell module module-activity">
+            <div class="module-heading">
+                <div>
+                    <div class="module-kicker">Activity Spectrum</div>
+                    <h2 class="module-title">Hourly Broadcast</h2>
+                </div>
+                <div class="module-tag">GRID-01</div>
+            </div>
+                <div class="activity-panel">
+                    {{hourly_chart_html}}
+                </div>
+        </section>
+
+        <div class="section-shell">
+            {{topics_html}}
+            {{titles_html}}
+            {{quotes_html}}
+        </div>
+
+        <section class="token-strip">
+            <div class="module-kicker">Token Monitor</div>
+            <div class="token-panel">
+                <div>Total Tokens // {{total_tokens}}</div>
+                <div>Prompt Tokens // {{prompt_tokens}}</div>
+                <div>Completion Tokens // {{completion_tokens}}</div>
+            </div>
+        </section>
+
+        <footer>
+            <span>CRT EXPORT CHANNEL</span>
+            <span>END OF LINE</span>
+        </footer>
+    </main>
+</body>
+
+</html>

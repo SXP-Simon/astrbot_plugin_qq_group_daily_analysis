@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Retro Futurism Daily Export</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: "Oswald-Fallback";
+            src: local("Impact"), local("Arial Black"), local("Helvetica Neue Bold");
+            font-weight: 400 700;
+        }
+
+        @font-face {
+            font-family: "JetBrains-Fallback";
+            src: local("Consolas"), local("Monaco"), local("Courier New");
+            font-weight: 400 700;
+        }
+
+        @font-face {
+            font-family: "NotoSans-Fallback";
+            src: local("Microsoft YaHei"), local("PingFang SC"), local("Hiragino Sans GB"), local("SimHei");
+            font-weight: 400 700;
+        }
+
+        :root {
+            /* Palette */
+            --c-bg: #F5EDDC;
+            --c-text: #181818;
+            --c-accent: #B2653B;
+
+            --c-dec-1: #5C7F71;
+            --c-dec-2: #802520;
+            --c-dec-3: #BA8530;
+
+            --c-grid: rgba(24, 24, 24, 0.08);
+
+            /* Fonts */
+            --font-display: "Oswald", "Oswald-Fallback", Impact, "Arial Black", sans-serif;
+            --font-mono: "JetBrains Mono", "JetBrains-Fallback", Consolas, Monaco, "Courier New", monospace;
+            --font-body: "Noto Sans SC", "NotoSans-Fallback", "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--c-bg);
+            color: var(--c-text);
+            font-family: var(--font-body);
+            /* Grid Background */
+            background-image:
+                linear-gradient(var(--c-grid) 1px, transparent 1px),
+                linear-gradient(90deg, var(--c-grid) 1px, transparent 1px);
+            background-size: 40px 40px;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Layout Container */
+        .layout {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 40px;
+            position: relative;
+            border-left: 1px solid var(--c-text);
+            border-right: 1px solid var(--c-text);
+            background:
+                linear-gradient(90deg, transparent 0%, transparent 98%, var(--c-accent) 98%, var(--c-accent) 100%);
+            background-size: 100% 100%;
+            min-height: 100vh;
+        }
+
+        /* Decorative Color Bar */
+        .color-bar {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            z-index: 10;
+        }
+
+        .c-block {
+            width: 40px;
+            height: 10px;
+        }
+
+        .cb-1 { background: var(--c-dec-1); }
+        .cb-2 { background: var(--c-dec-2); }
+        .cb-3 { background: var(--c-dec-3); }
+
+        /* Header */
+        header {
+            margin-bottom: 60px;
+            position: relative;
+        }
+
+        .header-meta {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--c-text);
+            opacity: 0.65;
+            margin-bottom: 12px;
+            letter-spacing: 0.15rem;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-family: var(--font-display);
+            font-size: 4.5rem;
+            line-height: 0.9;
+            margin: 0 0 20px;
+            text-transform: uppercase;
+            letter-spacing: -0.1rem;
+            color: var(--c-text);
+        }
+
+        h1 .highlight {
+            color: var(--c-accent);
+        }
+
+        .header-brief {
+            max-width: 500px;
+            color: rgba(24, 24, 24, 0.7);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .header-meta-row {
+            display: flex;
+            gap: 30px;
+        }
+
+        .meta-block {
+            padding-left: 16px;
+            border-left: 3px solid var(--c-accent);
+        }
+
+        .meta-label {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.15rem;
+            text-transform: uppercase;
+            color: rgba(24, 24, 24, 0.5);
+        }
+
+        .meta-value {
+            display: block;
+            margin-top: 4px;
+            color: var(--c-text);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+
+        /* CRT Console */
+        .crt-console {
+            background: var(--c-text);
+            color: var(--c-bg);
+            padding: 20px 24px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            position: relative;
+            overflow: hidden;
+            grid-column: span 12;
+        }
+
+        .crt-console::before {
+            content: "CRT_CHANNEL // PEAK_ACTIVITY";
+            display: block;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+            color: var(--c-accent);
+            font-size: 0.65rem;
+            letter-spacing: 0.2rem;
+        }
+
+        .crt-label {
+            font-size: 0.7rem;
+            letter-spacing: 0.2rem;
+            text-transform: uppercase;
+            color: rgba(245, 237, 220, 0.7);
+        }
+
+        .crt-value {
+            font-family: var(--font-display);
+            font-size: 2.5rem;
+            color: var(--c-accent);
+            margin: 8px 0;
+        }
+
+        .crt-sub {
+            font-size: 0.8rem;
+            color: rgba(245, 237, 220, 0.8);
+        }
+
+        /* Grid System */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+            margin-bottom: 60px;
+        }
+
+        /* Section Labels */
+        .section-label {
+            grid-column: span 12;
+            font-family: var(--font-display);
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            border-bottom: 2px solid var(--c-text);
+            padding-bottom: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            letter-spacing: 0.1rem;
+        }
+
+        .section-label span {
+            background: var(--c-text);
+            color: var(--c-bg);
+            padding: 2px 10px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            vertical-align: middle;
+            letter-spacing: 0.15rem;
+        }
+
+        /* Stat Box */
+        .stat-box {
+            grid-column: span 3;
+            border: 1px solid var(--c-text);
+            padding: 20px;
+            position: relative;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: 4px;
+            bottom: 4px;
+            border: 1px solid var(--c-grid);
+            pointer-events: none;
+        }
+
+        .stat-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--c-dec-1);
+            margin-bottom: 10px;
+            display: block;
+            letter-spacing: 0.15rem;
+        }
+
+        .stat-value {
+            font-family: var(--font-display);
+            font-size: 3rem;
+            color: var(--c-accent);
+            line-height: 1;
+        }
+
+        .stat-note {
+            font-size: 0.8rem;
+            color: rgba(24, 24, 24, 0.6);
+            margin-top: 8px;
+        }
+
+        /* Content Box (for topics, titles, quotes) */
+        .content-box {
+            grid-column: span 12;
+            border: 1px solid var(--c-text);
+            padding: 24px;
+            background: #fff;
+            position: relative;
+        }
+
+        .content-box::before {
+            content: '';
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            right: 6px;
+            bottom: 6px;
+            border: 1px solid var(--c-grid);
+            pointer-events: none;
+        }
+
+        /* Activity Chart */
+        .activity-wrapper {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        .activity-row {
+            display: grid;
+            grid-template-columns: 60px 1fr 50px;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--c-grid);
+        }
+
+        .activity-row:last-child {
+            border-bottom: none;
+        }
+
+        .activity-hour {
+            letter-spacing: 0.1rem;
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        .activity-meter {
+            background: rgba(24, 24, 24, 0.08);
+            height: 8px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .activity-bar {
+            height: 100%;
+            width: var(--pct, 10%);
+            background: var(--c-accent);
+        }
+
+        .activity-count {
+            text-align: right;
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        /* Topic List */
+        .topic-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .topic-item {
+            display: grid;
+            grid-template-columns: 50px 1fr;
+            gap: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--c-grid);
+        }
+
+        .topic-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .topic-index {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            letter-spacing: 0.2rem;
+            color: rgba(24, 24, 24, 0.3);
+        }
+
+        .topic-title {
+            margin: 0 0 6px;
+            font-size: 1.1rem;
+            letter-spacing: 0.05rem;
+            color: var(--c-text);
+        }
+
+        .topic-meta {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.15rem;
+            color: rgba(24, 24, 24, 0.5);
+            margin-bottom: 8px;
+        }
+
+        .topic-detail {
+            color: rgba(24, 24, 24, 0.7);
+            line-height: 1.6;
+            font-size: 0.9rem;
+        }
+
+        /* User Title Grid */
+        .title-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .title-item {
+            border: 1px solid var(--c-text);
+            padding: 18px;
+            position: relative;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .title-item::before {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 24px;
+            height: 4px;
+            background: var(--c-dec-1);
+        }
+
+        .title-item::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 32px;
+            width: 24px;
+            height: 4px;
+            background: var(--c-dec-2);
+        }
+
+        .title-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 12px;
+        }
+
+        .title-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 1px solid var(--c-text);
+            background: rgba(24, 24, 24, 0.08);
+            flex-shrink: 0;
+        }
+
+        .title-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: grayscale(50%) contrast(110%);
+        }
+
+        .title-avatar-fallback {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.15rem;
+            color: rgba(24, 24, 24, 0.5);
+        }
+
+        .title-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .title-mbti {
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            letter-spacing: 0.15rem;
+            background: rgba(24, 24, 24, 0.08);
+            padding: 2px 8px;
+            margin-left: 8px;
+        }
+
+        .title-role {
+            font-family: var(--font-mono);
+            letter-spacing: 0.2rem;
+            text-transform: uppercase;
+            color: var(--c-accent);
+            margin: 8px 0;
+            font-size: 0.8rem;
+        }
+
+        .title-reason {
+            margin: 0;
+            font-size: 0.85rem;
+            color: rgba(24, 24, 24, 0.7);
+            line-height: 1.5;
+        }
+
+        /* Quote List */
+        .quote-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .quote-item {
+            border: 1px dashed var(--c-text);
+            padding: 20px;
+            position: relative;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .quote-item::before {
+            content: '"';
+            font-family: var(--font-display);
+            font-size: 2rem;
+            color: var(--c-accent);
+            opacity: 0.5;
+            line-height: 1;
+        }
+
+        .quote-content {
+            font-size: 1rem;
+            color: var(--c-text);
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+
+        .quote-author {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.15rem;
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        .quote-note {
+            font-size: 0.8rem;
+            color: rgba(24, 24, 24, 0.7);
+            margin-top: 8px;
+        }
+
+        /* Token Strip */
+        .token-strip {
+            grid-column: span 12;
+            border-top: 2px solid var(--c-text);
+            padding-top: 16px;
+            display: flex;
+            gap: 40px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            letter-spacing: 0.1rem;
+        }
+
+        .token-label {
+            color: rgba(24, 24, 24, 0.5);
+            text-transform: uppercase;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 60px;
+            border-top: 3px solid var(--c-text);
+            padding-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15rem;
+            color: rgba(24, 24, 24, 0.6);
+        }
+
+        /* CRT Overlay */
+        .crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.03) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .layout {
+                padding: 40px 24px;
+            }
+
+            h1 {
+                font-size: 3rem;
+            }
+
+            .stat-box {
+                grid-column: span 6;
+            }
+
+            .title-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-meta-row {
+                flex-direction: column;
+                gap: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="crt-overlay"></div>
+
+    <div class="layout">
+        <!-- Decorative Bars -->
+        <div class="color-bar">
+            <div class="c-block cb-1"></div>
+            <div class="c-block cb-2"></div>
+            <div class="c-block cb-3"></div>
+        </div>
+
+        <header>
+            <div class="header-meta">System Report // {{current_date}}</div>
+            <h1>Daily<br><span class="highlight">Analysis</span><br>Export</h1>
+            <p class="header-brief">
+                QQ群日常活动分析报告，基于消息统计与AI分析生成
+            </p>
+            <div class="header-meta-row">
+                <div class="meta-block">
+                    <div class="meta-label">Generated At</div>
+                    <span class="meta-value">{{current_datetime}}</span>
+                </div>
+                <div class="meta-block">
+                    <div class="meta-label">Peak Window</div>
+                    <span class="meta-value">{{most_active_period}}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="grid-container">
+            <div class="stat-box">
+                <span class="stat-label">Messages</span>
+                <div class="stat-value">{{message_count}}</div>
+                <div class="stat-note">累计消息数量</div>
+            </div>
+
+            <div class="stat-box">
+                <span class="stat-label">Participants</span>
+                <div class="stat-value">{{participant_count}}</div>
+                <div class="stat-note">参与者计数</div>
+            </div>
+
+            <div class="stat-box">
+                <span class="stat-label">Characters</span>
+                <div class="stat-value">{{total_characters}}</div>
+                <div class="stat-note">文本总字数</div>
+            </div>
+
+            <div class="stat-box">
+                <span class="stat-label">Emoji</span>
+                <div class="stat-value">{{emoji_count}}</div>
+                <div class="stat-note">表情符号统计</div>
+            </div>
+        </div>
+
+        <!-- CRT Console -->
+        <div class="grid-container">
+            <div class="crt-console">
+                <div class="crt-label">Peak Activity Window</div>
+                <div class="crt-value">{{most_active_period}}</div>
+                <div class="crt-sub">活跃序列 SCAN // 消息流强度 {{message_count}}</div>
+            </div>
+        </div>
+
+        <!-- Hourly Activity -->
+        <div class="section-label">
+            Hourly Broadcast <span>ACTIVITY_SPECTRUM</span>
+        </div>
+        <div class="grid-container">
+            <div class="content-box">
+                <div class="activity-wrapper">
+                    {{hourly_chart_html}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Topics -->
+        <div class="section-label">
+            Thread Matrix <span>TOPICS_MODULE</span>
+        </div>
+        <div class="grid-container">
+            <div class="content-box">
+                <div class="topic-list">
+                    {{topics_html}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Titles -->
+        <div class="section-label">
+            Operator Registry <span>TITLES_MODULE</span>
+        </div>
+        <div class="grid-container">
+            <div class="content-box">
+                <div class="title-grid">
+                    {{titles_html}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quotes -->
+        <div class="section-label">
+            Golden Lines <span>QUOTES_MODULE</span>
+        </div>
+        <div class="grid-container">
+            <div class="content-box">
+                <div class="quote-list">
+                    {{quotes_html}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Token Strip -->
+        <div class="grid-container">
+            <div class="token-strip">
+                <div><span class="token-label">Total Tokens //</span> {{total_tokens}}</div>
+                <div><span class="token-label">Prompt //</span> {{prompt_tokens}}</div>
+                <div><span class="token-label">Completion //</span> {{completion_tokens}}</div>
+            </div>
+        </div>
+
+        <footer>
+            <div>CRT_EXPORT_CHANNEL // QQ群日常分析</div>
+            <div>END_OF_LINE_</div>
+        </footer>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+{% if quotes %}
+{% for quote in quotes %}
+<article class="quote-item">
+    <div class="quote-glyph">"</div>
+    <p class="quote-content">{{ quote.content }}</p>
+    <div class="quote-author">— {{ quote.sender }}</div>
+    <p class="quote-note">{{ quote.reason }}</p>
+</article>
+{% endfor %}
+{% endif %}

@@ -1,0 +1,21 @@
+{% if titles %}
+{% for title in titles %}
+<article class="title-item">
+    <div class="title-header">
+        <div class="title-avatar">
+            {% if title.avatar_data %}
+            <img src="{{ title.avatar_data }}" alt="{{ title.name }}">
+            {% else %}
+            <div class="title-avatar-fallback">CRT</div>
+            {% endif %}
+        </div>
+        <div>
+            <span class="title-name">{{ title.name }}</span>
+            <span class="title-mbti">{{ title.mbti }}</span>
+        </div>
+    </div>
+    <div class="title-role">{{ title.title }}</div>
+    <p class="title-reason">{{ title.reason }}</p>
+</article>
+{% endfor %}
+{% endif %}
