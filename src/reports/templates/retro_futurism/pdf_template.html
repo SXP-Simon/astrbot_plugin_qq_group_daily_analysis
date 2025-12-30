@@ -228,15 +228,31 @@
             position: relative;
         }
 
-        .crt-console::before {
-            content: "CRT CHANNEL";
-            position: absolute;
-            top: 12px;
-            right: 16px;
+        .crt-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .crt-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .crt-btn-1 { background: var(--c-accent-1); }
+        .crt-btn-2 { background: var(--c-accent-2); }
+        .crt-btn-3 { background: var(--c-accent-3); }
+
+        .crt-title {
+            margin-left: 12px;
             font-family: var(--font-mono);
             letter-spacing: 0.22rem;
             font-size: 0.68rem;
-            color: rgba(245, 237, 220, 0.6);
+            color: var(--c-main);
+            text-transform: uppercase;
         }
 
         .crt-label {
@@ -290,7 +306,8 @@
 
         .stat-label {
             font-family: var(--font-mono);
-            font-size: 0.78rem;
+            font-size: 0.8rem;
+            font-weight: 500;
             letter-spacing: 0.2rem;
             text-transform: uppercase;
             color: rgba(24, 24, 24, 0.55);
@@ -305,8 +322,9 @@
         }
 
         .stat-note {
-            font-size: 0.9rem;
-            color: rgba(24, 24, 24, 0.7);
+            font-size: 0.95rem;
+            color: rgba(24, 24, 24, 0.75);
+            font-weight: 400;
         }
 
         .module {
@@ -406,43 +424,91 @@
         .topic-stack {
             display: flex;
             flex-direction: column;
-            gap: 18px;
-            margin-top: 12px;
+            gap: 16px;
         }
 
         .topic-card {
             display: grid;
-            grid-template-columns: 90px 1fr;
-            gap: 20px;
-            padding-bottom: 18px;
-            border-bottom: 1px solid rgba(24, 24, 24, 0.08);
+            grid-template-columns: 16px 1fr;
+            gap: 16px;
+            padding: 16px;
+            padding-left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(24, 24, 24, 0.12);
+            position: relative;
         }
 
-        .topic-index {
-            font-family: var(--font-mono);
-            font-size: 1.2rem;
-            letter-spacing: 0.35rem;
-            color: rgba(24, 24, 24, 0.35);
+        .topic-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-1);
+        }
+
+        .topic-card::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-2);
+        }
+
+        .topic-card .color-third {
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-3);
+        }
+
+        .topic-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .topic-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--c-main);
+        }
+
+        .topic-content {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .topic-title {
             margin: 0;
-            font-size: 1.2rem;
+            font-size: 1.15rem;
+            font-weight: 500;
             letter-spacing: 0.04rem;
             color: var(--c-dark);
         }
 
         .topic-meta {
             font-family: var(--font-mono);
-            font-size: 0.8rem;
+            font-size: 0.75rem;
+            font-weight: 500;
             letter-spacing: 0.16rem;
             color: rgba(24, 24, 24, 0.5);
-            margin: 6px 0;
+            text-transform: uppercase;
         }
 
         .topic-detail {
-            color: rgba(24, 24, 24, 0.75);
+            color: rgba(24, 24, 24, 0.8);
             line-height: 1.6;
+            font-size: 0.95rem;
+            font-weight: 400;
         }
 
         .title-grid {
@@ -457,30 +523,9 @@
             grid-template-columns: 72px 1fr;
             column-gap: 18px;
             padding: 18px;
-            border: 1px solid rgba(24, 24, 24, 0.08);
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 237, 220, 0.6));
+            border: 1px solid rgba(24, 24, 24, 0.12);
+            background: rgba(255, 255, 255, 0.9);
             position: relative;
-        }
-
-        .title-card::before,
-        .title-card::after {
-            content: "";
-            position: absolute;
-            top: 12px;
-            height: 4px;
-            border-radius: 2px;
-        }
-
-        .title-card::before {
-            left: 12px;
-            width: 32px;
-            background: var(--c-accent-1);
-        }
-
-        .title-card::after {
-            left: 48px;
-            width: 32px;
-            background: var(--c-accent-2);
         }
 
         .title-avatar {
@@ -515,102 +560,147 @@
 
         .title-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 14px;
+            margin-bottom: 12px;
             grid-column: 2;
+        }
+
+        .title-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .title-name {
             font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .title-badges {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
 
         .title-mbti {
             font-family: var(--font-mono);
             font-size: 0.75rem;
-            letter-spacing: 0.18rem;
+            font-weight: 600;
+            letter-spacing: 0.15rem;
             background: rgba(24, 24, 24, 0.08);
-            padding: 2px 10px;
+            padding: 3px 10px;
+            border-radius: 3px;
         }
 
         .title-role {
-            grid-column: 2;
             font-family: var(--font-mono);
-            letter-spacing: 0.3rem;
+            font-weight: 600;
+            letter-spacing: 0.15rem;
             text-transform: uppercase;
             color: var(--c-main);
-            margin: 8px 0;
+            background: rgba(178, 101, 59, 0.15);
+            padding: 3px 10px;
+            font-size: 0.75rem;
+            border-radius: 3px;
         }
 
         .title-reason {
             grid-column: 2;
-            margin: 0;
-            font-size: 0.92rem;
-            color: rgba(24, 24, 24, 0.75);
+            margin: 8px 0 0;
+            font-size: 0.95rem;
+            color: rgba(24, 24, 24, 0.8);
             line-height: 1.5;
+            font-weight: 400;
         }
 
         .quote-stack {
             display: flex;
             flex-direction: column;
-            gap: 18px;
-            margin-top: 16px;
+            gap: 16px;
         }
 
         .quote-card {
-            padding: 24px;
-            border: 1px dashed rgba(24, 24, 24, 0.15);
-            background: #fff8ee;
+            display: grid;
+            grid-template-columns: 16px 1fr;
+            gap: 16px;
+            padding: 16px;
+            padding-left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(24, 24, 24, 0.12);
             position: relative;
         }
 
-        .quote-card::after {
-            content: "";
+        .quote-card::before {
+            content: '';
             position: absolute;
-            top: -6px;
-            right: 40px;
-            width: 90px;
-            height: 6px;
-            background: var(--c-dark);
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-1);
         }
 
-        .quote-glyph {
-            font-size: 2.5rem;
-            color: rgba(178, 101, 59, 0.4);
-            margin: 0;
+        .quote-card::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-2);
+        }
+
+        .quote-card .color-third {
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-accent-3);
+        }
+
+        .quote-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quote-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--c-main);
         }
 
         .quote-content {
             font-size: 1.05rem;
             color: var(--c-dark);
-            margin: 12px 0;
+            margin: 0 0 8px;
             line-height: 1.6;
+            font-weight: 400;
         }
 
         .quote-author {
             font-family: var(--font-mono);
-            font-size: 0.85rem;
+            font-size: 0.75rem;
+            font-weight: 500;
             letter-spacing: 0.2rem;
-            color: rgba(24, 24, 24, 0.6);
+            color: rgba(24, 24, 24, 0.5);
+            text-transform: uppercase;
         }
 
         .quote-note {
             font-size: 0.9rem;
-            color: rgba(24, 24, 24, 0.7);
-            margin-top: 10px;
+            color: rgba(24, 24, 24, 0.75);
+            margin-top: 8px;
+            font-weight: 400;
         }
 
-        .token-strip {
-            padding: 0 64px;
-            margin-top: 20px;
-        }
-
-        .token-panel {
-            border-top: 1px solid rgba(24, 24, 24, 0.15);
-            padding: 16px 0 8px;
+        .footer-tokens {
             display: flex;
-            gap: 30px;
-            font-family: var(--font-mono);
-            letter-spacing: 0.15rem;
+            gap: 24px;
         }
 
         footer {
@@ -621,6 +711,9 @@
             letter-spacing: 0.25rem;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
             color: rgba(24, 24, 24, 0.65);
         }
 
@@ -634,8 +727,11 @@
                 margin: 24px auto 60px;
             }
 
-            .section-shell,
-            .token-strip {
+            .section-shell {
+                padding: 0 32px;
+            }
+
+            footer {
                 padding: 0 32px;
             }
 
@@ -695,6 +791,12 @@
                 </div>
             </div>
             <div class="crt-console">
+                <div class="crt-header">
+                    <span class="crt-btn crt-btn-1"></span>
+                    <span class="crt-btn crt-btn-2"></span>
+                    <span class="crt-btn crt-btn-3"></span>
+                    <span class="crt-title">CRT CHANNEL</span>
+                </div>
                 <div class="crt-label">Peak Window</div>
                 <div class="crt-value">{{most_active_period}}</div>
                 <div class="crt-sub">活跃序列 SCAN</div>
@@ -746,18 +848,14 @@
             {{quotes_html}}
         </div>
 
-        <section class="token-strip">
-            <div class="module-kicker">Token Monitor</div>
-            <div class="token-panel">
-                <div>Total Tokens // {{total_tokens}}</div>
-                <div>Prompt Tokens // {{prompt_tokens}}</div>
-                <div>Completion Tokens // {{completion_tokens}}</div>
-            </div>
-        </section>
-
         <footer>
-            <span>CRT EXPORT CHANNEL</span>
-            <span>END OF LINE</span>
+            <span>CRT_EXPORT_CHANNEL // QQ群日常分析</span>
+            <div class="footer-tokens">
+                <span>Total Tokens // {{total_tokens}}</span>
+                <span>Prompt // {{prompt_tokens}}</span>
+                <span>Completion // {{completion_tokens}}</span>
+            </div>
+            <span>END_OF_LINE_</span>
         </footer>
     </main>
 </body>

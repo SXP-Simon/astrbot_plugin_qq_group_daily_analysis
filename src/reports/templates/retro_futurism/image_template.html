@@ -150,9 +150,11 @@
 
         .header-brief {
             max-width: 500px;
-            color: rgba(24, 24, 24, 0.7);
+            color: rgba(24, 24, 24, 0.8);
             line-height: 1.6;
             margin-bottom: 24px;
+            font-size: 0.95rem;
+            font-weight: 400;
         }
 
         .header-meta-row {
@@ -167,7 +169,8 @@
 
         .meta-label {
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.75rem;
+            font-weight: 500;
             letter-spacing: 0.15rem;
             text-transform: uppercase;
             color: rgba(24, 24, 24, 0.5);
@@ -178,7 +181,8 @@
             margin-top: 4px;
             color: var(--c-text);
             font-family: var(--font-mono);
-            font-size: 0.85rem;
+            font-size: 0.9rem;
+            font-weight: 400;
         }
 
         /* CRT Console */
@@ -194,15 +198,30 @@
             grid-column: span 12;
         }
 
-        .crt-console::before {
-            content: "CRT_CHANNEL // PEAK_ACTIVITY";
-            display: block;
-            border-bottom: 1px solid #444;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
-            color: var(--c-accent);
+        .crt-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .crt-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .crt-btn-1 { background: var(--c-dec-1); }
+        .crt-btn-2 { background: var(--c-dec-2); }
+        .crt-btn-3 { background: var(--c-dec-3); }
+
+        .crt-title {
+            margin-left: 12px;
             font-size: 0.65rem;
             letter-spacing: 0.2rem;
+            color: var(--c-accent);
+            text-transform: uppercase;
         }
 
         .crt-label {
@@ -279,7 +298,8 @@
 
         .stat-label {
             font-family: var(--font-mono);
-            font-size: 0.75rem;
+            font-size: 0.8rem;
+            font-weight: 500;
             text-transform: uppercase;
             color: var(--c-dec-1);
             margin-bottom: 10px;
@@ -295,9 +315,10 @@
         }
 
         .stat-note {
-            font-size: 0.8rem;
-            color: rgba(24, 24, 24, 0.6);
+            font-size: 0.85rem;
+            color: rgba(24, 24, 24, 0.7);
             margin-top: 8px;
+            font-weight: 400;
         }
 
         /* Content Box (for topics, titles, quotes) */
@@ -305,7 +326,7 @@
             grid-column: span 12;
             border: 1px solid var(--c-text);
             padding: 24px;
-            background: #fff;
+            background: rgba(255, 255, 255, 0.5);
             position: relative;
         }
 
@@ -323,7 +344,7 @@
         /* Activity Chart */
         .activity-wrapper {
             font-family: var(--font-mono);
-            font-size: 0.8rem;
+            font-size: 0.85rem;
         }
 
         .activity-row {
@@ -331,7 +352,7 @@
             grid-template-columns: 60px 1fr 50px;
             align-items: center;
             gap: 12px;
-            padding: 6px 0;
+            padding: 8px 0;
             border-bottom: 1px solid var(--c-grid);
         }
 
@@ -366,48 +387,94 @@
         .topic-list {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 16px;
+            padding: 0;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
         .topic-item {
             display: grid;
-            grid-template-columns: 50px 1fr;
-            gap: 20px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--c-grid);
+            grid-template-columns: 16px 1fr;
+            gap: 16px;
+            padding: 16px;
+            padding-left: 20px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid var(--c-text);
+            position: relative;
         }
 
-        .topic-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
+        .topic-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-1);
         }
 
-        .topic-index {
-            font-family: var(--font-mono);
-            font-size: 1rem;
-            letter-spacing: 0.2rem;
-            color: rgba(24, 24, 24, 0.3);
+        .topic-item::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-2);
+        }
+
+        .topic-item .color-third {
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-3);
+        }
+
+        .topic-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .topic-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--c-accent);
+        }
+
+        .topic-content {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .topic-title {
-            margin: 0 0 6px;
-            font-size: 1.1rem;
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 500;
             letter-spacing: 0.05rem;
             color: var(--c-text);
         }
 
         .topic-meta {
             font-family: var(--font-mono);
-            font-size: 0.7rem;
+            font-size: 0.75rem;
+            font-weight: 500;
             letter-spacing: 0.15rem;
             color: rgba(24, 24, 24, 0.5);
-            margin-bottom: 8px;
+            text-transform: uppercase;
         }
 
         .topic-detail {
-            color: rgba(24, 24, 24, 0.7);
+            color: rgba(24, 24, 24, 0.8);
             line-height: 1.6;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
+            font-weight: 400;
         }
 
         /* User Title Grid */
@@ -424,31 +491,17 @@
             background: rgba(255, 255, 255, 0.5);
         }
 
-        .title-item::before {
-            content: '';
-            position: absolute;
-            top: 4px;
-            left: 4px;
-            width: 24px;
-            height: 4px;
-            background: var(--c-dec-1);
-        }
-
-        .title-item::after {
-            content: '';
-            position: absolute;
-            top: 4px;
-            left: 32px;
-            width: 24px;
-            height: 4px;
-            background: var(--c-dec-2);
-        }
-
         .title-header {
             display: flex;
             align-items: center;
             gap: 14px;
             margin-bottom: 12px;
+        }
+
+        .title-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .title-avatar {
@@ -482,32 +535,43 @@
 
         .title-name {
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .title-badges {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
 
         .title-mbti {
             font-family: var(--font-mono);
-            font-size: 0.65rem;
+            font-size: 0.75rem;
+            font-weight: 600;
             letter-spacing: 0.15rem;
             background: rgba(24, 24, 24, 0.08);
-            padding: 2px 8px;
-            margin-left: 8px;
+            padding: 3px 10px;
+            border-radius: 3px;
         }
 
         .title-role {
             font-family: var(--font-mono);
-            letter-spacing: 0.2rem;
+            font-weight: 600;
+            letter-spacing: 0.15rem;
             text-transform: uppercase;
             color: var(--c-accent);
-            margin: 8px 0;
-            font-size: 0.8rem;
+            background: rgba(178, 101, 59, 0.15);
+            padding: 3px 10px;
+            font-size: 0.75rem;
+            border-radius: 3px;
         }
 
         .title-reason {
-            margin: 0;
-            font-size: 0.85rem;
-            color: rgba(24, 24, 24, 0.7);
+            margin: 8px 0 0;
+            font-size: 0.95rem;
+            color: rgba(24, 24, 24, 0.8);
             line-height: 1.5;
+            font-weight: 400;
         }
 
         /* Quote List */
@@ -515,42 +579,87 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
+            padding: 0;
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
         .quote-item {
-            border: 1px dashed var(--c-text);
-            padding: 20px;
+            display: grid;
+            grid-template-columns: 16px 1fr;
+            gap: 16px;
+            padding: 16px;
+            padding-left: 20px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid var(--c-text);
             position: relative;
-            background: rgba(255, 255, 255, 0.3);
         }
 
         .quote-item::before {
-            content: '"';
-            font-family: var(--font-display);
-            font-size: 2rem;
-            color: var(--c-accent);
-            opacity: 0.5;
-            line-height: 1;
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-1);
+        }
+
+        .quote-item::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-2);
+        }
+
+        .quote-item .color-third {
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--c-dec-3);
+        }
+
+        .quote-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quote-icon svg {
+            width: 14px;
+            height: 14px;
+            fill: var(--c-accent);
         }
 
         .quote-content {
-            font-size: 1rem;
+            font-size: 1.05rem;
             color: var(--c-text);
-            margin: 8px 0;
+            margin: 0 0 8px;
             line-height: 1.6;
+            font-weight: 400;
         }
 
         .quote-author {
             font-family: var(--font-mono);
             font-size: 0.75rem;
+            font-weight: 500;
             letter-spacing: 0.15rem;
-            color: rgba(24, 24, 24, 0.6);
+            color: rgba(24, 24, 24, 0.5);
+            text-transform: uppercase;
         }
 
         .quote-note {
-            font-size: 0.8rem;
-            color: rgba(24, 24, 24, 0.7);
+            font-size: 0.9rem;
+            color: rgba(24, 24, 24, 0.75);
             margin-top: 8px;
+            font-weight: 400;
         }
 
         /* Token Strip */
@@ -577,11 +686,19 @@
             padding-top: 16px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
             font-family: var(--font-mono);
             font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.15rem;
             color: rgba(24, 24, 24, 0.6);
+        }
+
+        .footer-tokens {
+            display: flex;
+            gap: 24px;
         }
 
         /* CRT Overlay */
@@ -697,6 +814,12 @@
         <!-- CRT Console -->
         <div class="grid-container">
             <div class="crt-console">
+                <div class="crt-header">
+                    <span class="crt-btn crt-btn-1"></span>
+                    <span class="crt-btn crt-btn-2"></span>
+                    <span class="crt-btn crt-btn-3"></span>
+                    <span class="crt-title">CRT_CHANNEL // PEAK_ACTIVITY</span>
+                </div>
                 <div class="crt-label">Peak Activity Window</div>
                 <div class="crt-value">{{most_active_period}}</div>
                 <div class="crt-sub">活跃序列 SCAN // 消息流强度 {{message_count}}</div>
@@ -719,12 +842,8 @@
         <div class="section-label">
             Thread Matrix <span>TOPICS_MODULE</span>
         </div>
-        <div class="grid-container">
-            <div class="content-box">
-                <div class="topic-list">
-                    {{topics_html}}
-                </div>
-            </div>
+        <div class="topic-list">
+            {{topics_html}}
         </div>
 
         <!-- Titles -->
@@ -743,25 +862,17 @@
         <div class="section-label">
             Golden Lines <span>QUOTES_MODULE</span>
         </div>
-        <div class="grid-container">
-            <div class="content-box">
-                <div class="quote-list">
-                    {{quotes_html}}
-                </div>
-            </div>
-        </div>
-
-        <!-- Token Strip -->
-        <div class="grid-container">
-            <div class="token-strip">
-                <div><span class="token-label">Total Tokens //</span> {{total_tokens}}</div>
-                <div><span class="token-label">Prompt //</span> {{prompt_tokens}}</div>
-                <div><span class="token-label">Completion //</span> {{completion_tokens}}</div>
-            </div>
+        <div class="quote-list">
+            {{quotes_html}}
         </div>
 
         <footer>
             <div>CRT_EXPORT_CHANNEL // QQ群日常分析</div>
+            <div class="footer-tokens">
+                <span>Total Tokens // {{total_tokens}}</span>
+                <span>Prompt // {{prompt_tokens}}</span>
+                <span>Completion // {{completion_tokens}}</span>
+            </div>
             <div>END_OF_LINE_</div>
         </footer>
     </div>

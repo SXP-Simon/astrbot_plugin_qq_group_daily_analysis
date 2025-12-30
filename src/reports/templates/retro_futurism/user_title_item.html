@@ -9,12 +9,14 @@
             <div class="title-avatar-fallback">CRT</div>
             {% endif %}
         </div>
-        <div>
+        <div class="title-info">
             <span class="title-name">{{ title.name }}</span>
-            <span class="title-mbti">{{ title.mbti }}</span>
+            <div class="title-badges">
+                <span class="title-mbti">{{ title.mbti }}</span>
+                <span class="title-role">{{ title.title }}</span>
+            </div>
         </div>
     </div>
-    <div class="title-role">{{ title.title }}</div>
     <p class="title-reason">{{ title.reason }}</p>
 </article>
 {% endfor %}
