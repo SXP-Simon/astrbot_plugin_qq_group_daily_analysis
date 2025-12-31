@@ -67,6 +67,9 @@ format 模板效果图
 simple 模板效果图(用于展示贡献指南)
 ![simple效果图](./assets/simple-demo.jpg)
 
+retro_futurism 模板效果图
+![retro_futurism效果图](./assets/retro_futurism-demo.jpg)
+
 </details>
 
 ## 使用方法
