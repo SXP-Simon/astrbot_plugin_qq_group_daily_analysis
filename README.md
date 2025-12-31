@@ -108,6 +108,9 @@ simple 模板效果图(用于展示贡献指南)
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
 
+### v4.5.0
+- 添加新的模板主题 retro_futurism， 灵感来源明日方舟 孤星 未来复古主义主题；添加模板调试工具 scripts/debug_render.py，方便用户在不启动 AstrBot 的情况下调试模板效果 （@Saramanda9988）
+
 ### v4.4.0
 - 修复可能的图片生成成功但是发送失败的情况，增加 Fallback 的 BASE64 编码的图片发送方式（@Heximiao）
 
