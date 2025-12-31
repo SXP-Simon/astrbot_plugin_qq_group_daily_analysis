@@ -221,7 +221,7 @@
             background: #181818;
             color: var(--c-bg);
             padding: 24px;
-            border-radius: 8px;
+            border-radius: 6px;
             border: 1px solid rgba(245, 237, 220, 0.25);
             box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.5);
             min-height: 280px;
@@ -294,6 +294,7 @@
             box-shadow: inset 0 0 0 1px rgba(24, 24, 24, 0.05);
             min-height: 140px;
             position: relative;
+            border-radius: 6px;
         }
 
         .stat-card::after {
@@ -436,6 +437,7 @@
             background: rgba(255, 255, 255, 0.9);
             border: 1px solid rgba(24, 24, 24, 0.12);
             position: relative;
+            border-radius: 6px;
         }
 
         .topic-card::before {
@@ -446,6 +448,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-accent-1);
+            border-radius: 6px 0 0 6px;
         }
 
         .topic-card::after {
@@ -465,6 +468,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-accent-3);
+            border-radius: 0 6px 6px 0;
         }
 
         .topic-icon {
@@ -497,10 +501,10 @@
 
         .topic-meta {
             font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 500;
+            font-size: 0.8rem;
+            font-weight: 600;
             letter-spacing: 0.16rem;
-            color: rgba(24, 24, 24, 0.5);
+            color: rgba(24, 24, 24, 0.7);
             text-transform: uppercase;
         }
 
@@ -526,6 +530,7 @@
             border: 1px solid rgba(24, 24, 24, 0.12);
             background: rgba(255, 255, 255, 0.9);
             position: relative;
+            border-radius: 6px;
         }
 
         .title-avatar {
@@ -629,6 +634,7 @@
             background: rgba(255, 255, 255, 0.9);
             border: 1px solid rgba(24, 24, 24, 0.12);
             position: relative;
+            border-radius: 6px;
         }
 
         .quote-card::before {
@@ -639,6 +645,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-accent-1);
+            border-radius: 6px 0 0 6px;
         }
 
         .quote-card::after {
@@ -658,6 +665,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-accent-3);
+            border-radius: 0 6px 6px 0;
         }
 
         .quote-icon {
@@ -684,10 +692,10 @@
 
         .quote-author {
             font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 500;
+            font-size: 0.8rem;
+            font-weight: 600;
             letter-spacing: 0.2rem;
-            color: rgba(24, 24, 24, 0.5);
+            color: rgba(24, 24, 24, 0.7);
             text-transform: uppercase;
         }
 
@@ -701,6 +709,13 @@
         .footer-tokens {
             display: flex;
             gap: 24px;
+        }
+
+        .footer-author {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--c-main);
+            letter-spacing: 0.1rem;
         }
 
         footer {
@@ -855,6 +870,7 @@
                 <span>Prompt // {{prompt_tokens}}</span>
                 <span>Completion // {{completion_tokens}}</span>
             </div>
+            <span class="footer-author">SXP-Simon / astrbot-qq-group-daily-analysis</span>
             <span>END_OF_LINE_</span>
         </footer>
     </main>

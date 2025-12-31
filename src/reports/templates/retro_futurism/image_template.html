@@ -66,7 +66,8 @@
 
         /* Layout Container */
         .layout {
-            max-width: 1200px;
+            width: 100%;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 60px 40px;
             position: relative;
@@ -196,6 +197,7 @@
             position: relative;
             overflow: hidden;
             grid-column: span 12;
+            border-radius: 6px;
         }
 
         .crt-header {
@@ -283,6 +285,7 @@
             padding: 20px;
             position: relative;
             background: rgba(255, 255, 255, 0.5);
+            border-radius: 6px;
         }
 
         .stat-box::before {
@@ -328,6 +331,7 @@
             padding: 24px;
             background: rgba(255, 255, 255, 0.5);
             position: relative;
+            border-radius: 6px;
         }
 
         .content-box::before {
@@ -389,8 +393,7 @@
             flex-direction: column;
             gap: 16px;
             padding: 0;
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
         }
 
         .topic-item {
@@ -402,6 +405,7 @@
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid var(--c-text);
             position: relative;
+            border-radius: 6px;
         }
 
         .topic-item::before {
@@ -412,6 +416,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-dec-1);
+            border-radius: 6px 0 0 6px;
         }
 
         .topic-item::after {
@@ -431,6 +436,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-dec-3);
+            border-radius: 0 6px 6px 0;
         }
 
         .topic-icon {
@@ -463,10 +469,10 @@
 
         .topic-meta {
             font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 500;
+            font-size: 0.8rem;
+            font-weight: 600;
             letter-spacing: 0.15rem;
-            color: rgba(24, 24, 24, 0.5);
+            color: rgba(24, 24, 24, 0.7);
             text-transform: uppercase;
         }
 
@@ -489,6 +495,7 @@
             padding: 18px;
             position: relative;
             background: rgba(255, 255, 255, 0.5);
+            border-radius: 6px;
         }
 
         .title-header {
@@ -580,8 +587,7 @@
             flex-direction: column;
             gap: 16px;
             padding: 0;
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
         }
 
         .quote-item {
@@ -593,6 +599,7 @@
             background: rgba(255, 255, 255, 0.5);
             border: 1px solid var(--c-text);
             position: relative;
+            border-radius: 6px;
         }
 
         .quote-item::before {
@@ -603,6 +610,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-dec-1);
+            border-radius: 6px 0 0 6px;
         }
 
         .quote-item::after {
@@ -622,6 +630,7 @@
             bottom: 0;
             width: 4px;
             background: var(--c-dec-3);
+            border-radius: 0 6px 6px 0;
         }
 
         .quote-icon {
@@ -648,10 +657,10 @@
 
         .quote-author {
             font-family: var(--font-mono);
-            font-size: 0.75rem;
-            font-weight: 500;
+            font-size: 0.8rem;
+            font-weight: 600;
             letter-spacing: 0.15rem;
-            color: rgba(24, 24, 24, 0.5);
+            color: rgba(24, 24, 24, 0.7);
             text-transform: uppercase;
         }
 
@@ -699,6 +708,13 @@
         .footer-tokens {
             display: flex;
             gap: 24px;
+        }
+
+        .footer-author {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: var(--c-accent);
+            letter-spacing: 0.1rem;
         }
 
         /* CRT Overlay */
@@ -818,7 +834,6 @@
                     <span class="crt-btn crt-btn-1"></span>
                     <span class="crt-btn crt-btn-2"></span>
                     <span class="crt-btn crt-btn-3"></span>
-                    <span class="crt-title">CRT_CHANNEL // PEAK_ACTIVITY</span>
                 </div>
                 <div class="crt-label">Peak Activity Window</div>
                 <div class="crt-value">{{most_active_period}}</div>
@@ -867,12 +882,13 @@
         </div>
 
         <footer>
-            <div>CRT_EXPORT_CHANNEL // QQ群日常分析</div>
+            <div>CRT_EXPORT_CHANNEL // QQ群日常分析插件</div>
             <div class="footer-tokens">
                 <span>Total Tokens // {{total_tokens}}</span>
                 <span>Prompt // {{prompt_tokens}}</span>
                 <span>Completion // {{completion_tokens}}</span>
             </div>
+            <div class="footer-author">SXP-Simon / astrbot-qq-group-daily-analysis</div>
             <div>END_OF_LINE_</div>
         </footer>
     </div>
