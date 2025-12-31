@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Add src to path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__)))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Mock astrbot.api before importing our modules
 import types
@@ -21,29 +21,29 @@ sys.modules["astrbot.api"] = astrbot_api
 from src.reports.templates import HTMLTemplates
 from src.reports.generators import ReportGenerator
 from src.models.data_models import (
-    GroupStatistics, SummaryTopic, UserTitle, GoldenQuote, 
+    GroupStatistics, SummaryTopic, UserTitle, GoldenQuote,
     TokenUsage, EmojiStatistics, ActivityVisualization
 )
 
 class MockConfigManager:
     def __init__(self, template_name="format"):
         self.template_name = template_name
-    
+
     def get_report_template(self):
         return self.template_name
-    
+
     def get_max_topics(self):
         return 5
-    
+
     def get_max_user_titles(self):
         return 8
-    
+
     def get_max_golden_quotes(self):
         return 5
-    
+
     def get_pdf_output_dir(self):
         return "data/pdf"
-    
+
     def get_pdf_filename_format(self):
         return "report_{group_id}_{date}.pdf"
 
@@ -55,7 +55,7 @@ async def mock_get_user_avatar(user_id):
 async def debug_render(template_name: str, output_file: str = "debug_output.html"):
     # 1. Setup Mock Data
     config_manager = MockConfigManager(template_name)
-    
+
     # Mock Analysis Result
     stats = GroupStatistics(
         message_count=1250,
@@ -74,42 +74,42 @@ async def debug_render(template_name: str, output_file: str = "debug_output.html
         ),
         token_usage=TokenUsage(prompt_tokens=1500, completion_tokens=800, total_tokens=2300)
     )
-    
+
     topics = [
         SummaryTopic(topic="关于AstrBot插件开发的讨论", contributors=["张三", "李四", "王五"], detail="大家深入探讨了如何利用Jinja2模板渲染出精美的分析报告，并分享了调试技巧。"),
         SummaryTopic(topic="午餐吃什么的终极哲学问题", contributors=["赵六", "孙七"], detail="群友们就黄焖鸡米饭和螺蛳粉的优劣进行了长达一小时的辩论，最终未能达成共识。"),
         SummaryTopic(topic="新出的3A大作测评", contributors=["周八", "吴九"], detail="分享了最新游戏的通关体验，讨论了画面表现和剧情走向。")
     ]
-    
+
     user_titles = [
         UserTitle(name="张三", qq=123456789, title="代码收割机", mbti="INTJ", reason="在短短一小时内提交了10个PR，效率惊人。"),
         UserTitle(name="李四", qq=987654321, title="群聊气氛组", mbti="ENFP", reason="总能精准接住每一个冷笑话，让群里充满快活的气息。"),
         UserTitle(name="王五", qq=112233445, title="深夜潜水员", mbti="INFP", reason="总是在凌晨三点出没，留下几句深奥的话语后消失。")
     ]
-    
+
     analysis_result = {
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles
     }
-    
+
     # 2. Initialize Generator
     generator = ReportGenerator(config_manager)
-    
-    # Override _get_user_avatar to avoid real network calls if desired, 
+
+    # Override _get_user_avatar to avoid real network calls if desired,
     # but here we'll just let it use the mock URL
     generator._get_user_avatar = mock_get_user_avatar
-    
+
     # 3. Render Data
     render_payload = await generator._prepare_render_data(analysis_result)
-    
+
     # 4. Render Main Template
     # We'll test the image template
     html_templates = HTMLTemplates(config_manager)
     raw_template = html_templates.get_image_template()
-    
+
     final_html = generator._render_html_template(raw_template, render_payload)
-    
+
     # 5. Save to file
     output_path = Path(output_file)
     output_path.write_text(final_html, encoding="utf-8")
