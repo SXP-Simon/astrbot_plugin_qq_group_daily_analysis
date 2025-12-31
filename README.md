@@ -314,6 +314,43 @@ src/reports/templates/your_theme_name/
 #### 4. 参考示例
 您可以参考 `src/reports/templates/simple/` 目录下的文件，这是一个最简化的模板实现，包含了所有必需的基本结构。
 
+#### 5. 模板调试工具
+
+本项目提供了一个专门用于模板开发的调试工具 `scripts/debug_render.py`，可以在不启动完整 AstrBot 环境的情况下快速预览模板渲染效果。
+
+**使用方法：**
+
+```bash
+# 进入项目目录
+cd astrbot-qq-group-daily-analysis
+
+# 使用默认模板 (retro_futurism) 渲染
+python scripts/debug_render.py
+
+# 指定模板名称渲染
+python scripts/debug_render.py -t simple
+
+# 指定输出文件路径
+python scripts/debug_render.py -t retro_futurism -o my_output.html
+
+# 查看帮助信息
+python scripts/debug_render.py -h
+```
+
+**工具特性：**
+
+- 使用 Mock 数据模拟真实的群聊分析结果
+- 无需配置 LLM 服务或启动 AstrBot
+- 输出可使用live server打开 HTML 文件，并进行修改查看
+- 支持所有内置模板的快速切换预览
+
+**开发工作流推荐：**
+
+1. 修改模板文件
+2. 运行调试工具生成预览
+3. 在浏览器中打开生成的 HTML 文件查看效果
+4. 重复上述步骤直到满意
+
 </details>
 
 ## 许可证
