@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.4.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.5.2-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -110,6 +110,14 @@ retro_futurism 模板效果图
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v4.5.2
+- 新增 `/查看模板` 指令，可查看所有模板预览图
+- `/设置模板` 指令现支持通过序号设置模板
+- `/群分析` 指令现可在任意群使用，无需先启用该群
+
+### v4.5.1
+- BugFix
 
 ### v4.5.0
 - 添加新的模板主题 retro_futurism， 灵感来源明日方舟 孤星 未来复古主义主题；添加模板调试工具 scripts/debug_render.py，方便用户在不启动 AstrBot 的情况下调试模板效果 （@Saramanda9988）
