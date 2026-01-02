@@ -341,19 +341,21 @@ class QQGroupDailyAnalysis(Star):
         )
         available_templates = []
         if os.path.exists(template_base_dir):
-            available_templates = sorted([
-                d
-                for d in os.listdir(template_base_dir)
-                if os.path.isdir(os.path.join(template_base_dir, d))
-                and not d.startswith("__")
-            ])
+            available_templates = sorted(
+                [
+                    d
+                    for d in os.listdir(template_base_dir)
+                    if os.path.isdir(os.path.join(template_base_dir, d))
+                    and not d.startswith("__")
+                ]
+            )
 
         if not template_input:
             current_template = config_manager.get_report_template()
             # 列出可用的模板（带序号）
-            template_list_str = "\n".join([
-                f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)
-            ])
+            template_list_str = "\n".join(
+                [f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)]
+            )
             yield event.plain_result(f"""🎨 当前报告模板: {current_template}
 
 可用模板:
@@ -407,12 +409,14 @@ class QQGroupDailyAnalysis(Star):
         # 获取可用模板列表
         available_templates = []
         if os.path.exists(template_dir):
-            available_templates = sorted([
-                d
-                for d in os.listdir(template_dir)
-                if os.path.isdir(os.path.join(template_dir, d))
-                and not d.startswith("__")
-            ])
+            available_templates = sorted(
+                [
+                    d
+                    for d in os.listdir(template_dir)
+                    if os.path.isdir(os.path.join(template_dir, d))
+                    and not d.startswith("__")
+                ]
+            )
 
         if not available_templates:
             yield event.plain_result("❌ 未找到任何可用的报告模板")
@@ -433,7 +437,9 @@ class QQGroupDailyAnalysis(Star):
 
         # 添加标题节点
         header_content = [
-            Plain(f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换")
+            Plain(
+                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换"
+            )
         ]
         node_list.append(Node(uin=bot_id, name=bot_name, content=header_content))
 
@@ -443,7 +449,11 @@ class QQGroupDailyAnalysis(Star):
             current_mark = " ✅" if template_name == current_template else ""
 
             # 获取序号
-            num_label = circle_numbers[index] if index < len(circle_numbers) else f"({index + 1})"
+            num_label = (
+                circle_numbers[index]
+                if index < len(circle_numbers)
+                else f"({index + 1})"
+            )
 
             # 构建节点内容
             node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
