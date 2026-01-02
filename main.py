@@ -391,7 +391,7 @@ class QQGroupDailyAnalysis(Star):
             return
 
         import os
-        import astrbot.api.message_components as Comp
+        from astrbot.api.message_components import Node, Nodes, Plain, Image
 
         # 获取模板目录
         template_dir = os.path.join(
@@ -416,38 +416,42 @@ class QQGroupDailyAnalysis(Star):
         # 获取当前使用的模板
         current_template = config_manager.get_report_template()
 
-        # 构建消息链：标题 + 每个模板的序号、名称和预览图
-        chain = [
-            Comp.Plain(f"🎨 可用报告模板列表\n"),
-            Comp.Plain(f"📌 当前使用: {current_template}\n"),
-            Comp.Plain(f"━━━━━━━━━━━━━━━\n\n"),
-        ]
+        # 获取机器人信息用于合并转发消息
+        bot_id = event.get_self_id()
+        bot_name = "模板预览"
 
         # 圆圈数字序号
         circle_numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"]
 
+        # 构建合并转发消息节点列表
+        node_list = []
+
+        # 添加标题节点
+        header_content = [
+            Plain(f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换")
+        ]
+        node_list.append(Node(uin=bot_id, name=bot_name, content=header_content))
+
+        # 为每个模板创建一个节点
         for index, template_name in enumerate(available_templates):
             # 标记当前正在使用的模板
-            current_mark = " ✅ (当前)" if template_name == current_template else ""
+            current_mark = " ✅" if template_name == current_template else ""
 
-            # 获取序号（超过10个就用数字）
+            # 获取序号
             num_label = circle_numbers[index] if index < len(circle_numbers) else f"({index + 1})"
 
-            # 添加模板名称（带序号）
-            chain.append(Comp.Plain(f"{num_label} {template_name}{current_mark}\n"))
+            # 构建节点内容
+            node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
 
-            # 查找对应的预览图
+            # 添加预览图
             preview_image_path = os.path.join(assets_dir, f"{template_name}-demo.jpg")
             if os.path.exists(preview_image_path):
-                chain.append(Comp.Image.fromFileSystem(preview_image_path))
-            else:
-                chain.append(Comp.Plain("(无预览图)"))
-            chain.append(Comp.Plain("\n\n"))
+                node_content.append(Image.fromFileSystem(preview_image_path))
 
-        # 添加使用说明
-        chain.append(Comp.Plain("━━━━━━━━━━━━━━━\n"))
+            node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
 
-        yield event.chain_result(chain)
+        # 使用 Nodes 包装成一个合并转发消息
+        yield event.chain_result([Nodes(node_list)])
 
     @filter.command("安装PDF")
     @filter.permission_type(PermissionType.ADMIN)
