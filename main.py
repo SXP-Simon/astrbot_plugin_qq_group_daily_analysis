@@ -158,11 +158,6 @@ class QQGroupDailyAnalysis(Star):
         # 更新bot实例（用于手动命令）
         bot_manager.update_from_event(event)
 
-        # 检查群组权限
-        if not config_manager.is_group_allowed(group_id):
-            yield event.plain_result("❌ 此群未启用日常分析功能")
-            return
-
         # 设置分析天数
         analysis_days = (
             days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
@@ -323,54 +318,128 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("设置模板")
     @filter.permission_type(PermissionType.ADMIN)
     async def set_report_template(
-        self, event: AiocqhttpMessageEvent, template_name: str = ""
+        self, event: AiocqhttpMessageEvent, template_input: str = ""
     ):
         """
         设置分析报告模板
-        用法: /设置模板 [模板名称]
+        用法: /设置模板 [模板名称或序号]
         """
         if not isinstance(event, AiocqhttpMessageEvent):
             yield event.plain_result("❌ 此功能仅支持QQ群聊")
             return
 
-        if not template_name:
+        import os
+
+        # 获取模板目录和可用模板列表
+        template_base_dir = os.path.join(
+            os.path.dirname(__file__), "src", "reports", "templates"
+        )
+        available_templates = []
+        if os.path.exists(template_base_dir):
+            available_templates = sorted([
+                d
+                for d in os.listdir(template_base_dir)
+                if os.path.isdir(os.path.join(template_base_dir, d))
+                and not d.startswith("__")
+            ])
+
+        if not template_input:
             current_template = config_manager.get_report_template()
-            # 列出可用的模板
-            import os
-
-            template_dir = os.path.join(
-                os.path.dirname(__file__), "src", "reports", "templates"
-            )
-            available_templates = []
-            if os.path.exists(template_dir):
-                available_templates = [
-                    d
-                    for d in os.listdir(template_dir)
-                    if os.path.isdir(os.path.join(template_dir, d))
-                    and not d.startswith("__")
-                ]
-
-            template_list_str = "\n".join([f"• {t}" for t in available_templates])
+            # 列出可用的模板（带序号）
+            template_list_str = "\n".join([
+                f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)
+            ])
             yield event.plain_result(f"""🎨 当前报告模板: {current_template}
 
 可用模板:
 {template_list_str}
 
-用法: /设置模板 [模板名称]""")
+用法: /设置模板 [模板名称或序号]
+💡 使用 /查看模板 查看预览图""")
             return
 
-        # 检查模板是否存在
-        import os
+        # 判断输入是序号还是模板名称
+        template_name = template_input
+        if template_input.isdigit():
+            index = int(template_input)
+            if 1 <= index <= len(available_templates):
+                template_name = available_templates[index - 1]
+            else:
+                yield event.plain_result(
+                    f"❌ 无效的序号 '{template_input}'，有效范围: 1-{len(available_templates)}"
+                )
+                return
 
-        template_dir = os.path.join(
-            os.path.dirname(__file__), "src", "reports", "templates", template_name
-        )
+        # 检查模板是否存在
+        template_dir = os.path.join(template_base_dir, template_name)
         if not os.path.exists(template_dir):
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
             return
 
         config_manager.set_report_template(template_name)
         yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")
+
+    @filter.command("查看模板")
+    @filter.permission_type(PermissionType.ADMIN)
+    async def view_templates(self, event: AiocqhttpMessageEvent):
+        """
+        查看所有可用的报告模板及预览图
+        用法: /查看模板
+        """
+        if not isinstance(event, AiocqhttpMessageEvent):
+            yield event.plain_result("❌ 此功能仅支持QQ群聊")
+            return
+
+        import os
+        import astrbot.api.message_components as Comp
+
+        # 获取模板目录
+        template_dir = os.path.join(
+            os.path.dirname(__file__), "src", "reports", "templates"
+        )
+        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+
+        # 获取可用模板列表
+        available_templates = []
+        if os.path.exists(template_dir):
+            available_templates = sorted([
+                d
+                for d in os.listdir(template_dir)
+                if os.path.isdir(os.path.join(template_dir, d))
+                and not d.startswith("__")
+            ])
+
+        if not available_templates:
+            yield event.plain_result("❌ 未找到任何可用的报告模板")
+            return
+
+        # 获取当前使用的模板
+        current_template = config_manager.get_report_template()
+
+        # 构建消息链：标题 + 每个模板的序号、名称和预览图
+        chain = [
+            Comp.Plain(f"🎨 可用报告模板列表\n当前使用: {current_template}\n\n")
+        ]
+
+        for index, template_name in enumerate(available_templates, start=1):
+            # 标记当前正在使用的模板
+            current_mark = " ✅" if template_name == current_template else ""
+
+            # 添加模板名称（带序号）
+            chain.append(Comp.Plain(f"【{index}】{template_name}{current_mark}\n"))
+
+            # 查找对应的预览图
+            preview_image_path = os.path.join(assets_dir, f"{template_name}-demo.jpg")
+            if os.path.exists(preview_image_path):
+                chain.append(Comp.Image.fromFileSystem(preview_image_path))
+                chain.append(Comp.Plain("\n"))
+            else:
+                chain.append(Comp.Plain("(无预览图)\n"))
+
+        # 添加使用说明
+        chain.append(Comp.Plain("\n💡 使用 /设置模板 [模板名称] 来切换模板"))
+
+        yield event.chain_result(chain)
 
     @filter.command("安装PDF")
     @filter.permission_type(PermissionType.ADMIN)
