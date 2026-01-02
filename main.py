@@ -418,26 +418,34 @@ class QQGroupDailyAnalysis(Star):
 
         # 构建消息链：标题 + 每个模板的序号、名称和预览图
         chain = [
-            Comp.Plain(f"🎨 可用报告模板列表\n当前使用: {current_template}\n\n")
+            Comp.Plain(f"🎨 可用报告模板列表\n"),
+            Comp.Plain(f"📌 当前使用: {current_template}\n"),
+            Comp.Plain(f"━━━━━━━━━━━━━━━\n\n"),
         ]
 
-        for index, template_name in enumerate(available_templates, start=1):
+        # 圆圈数字序号
+        circle_numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"]
+
+        for index, template_name in enumerate(available_templates):
             # 标记当前正在使用的模板
-            current_mark = " ✅" if template_name == current_template else ""
+            current_mark = " ✅ (当前)" if template_name == current_template else ""
+
+            # 获取序号（超过10个就用数字）
+            num_label = circle_numbers[index] if index < len(circle_numbers) else f"({index + 1})"
 
             # 添加模板名称（带序号）
-            chain.append(Comp.Plain(f"【{index}】{template_name}{current_mark}\n"))
+            chain.append(Comp.Plain(f"{num_label} {template_name}{current_mark}\n"))
 
             # 查找对应的预览图
             preview_image_path = os.path.join(assets_dir, f"{template_name}-demo.jpg")
             if os.path.exists(preview_image_path):
                 chain.append(Comp.Image.fromFileSystem(preview_image_path))
-                chain.append(Comp.Plain("\n"))
             else:
-                chain.append(Comp.Plain("(无预览图)\n"))
+                chain.append(Comp.Plain("(无预览图)"))
+            chain.append(Comp.Plain("\n\n"))
 
         # 添加使用说明
-        chain.append(Comp.Plain("\n💡 使用 /设置模板 [模板名称] 来切换模板"))
+        chain.append(Comp.Plain("━━━━━━━━━━━━━━━\n"))
 
         yield event.chain_result(chain)
 
