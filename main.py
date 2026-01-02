@@ -158,6 +158,11 @@ class QQGroupDailyAnalysis(Star):
         # 更新bot实例（用于手动命令）
         bot_manager.update_from_event(event)
 
+        # 检查群组权限
+        if not config_manager.is_group_allowed(group_id):
+            yield event.plain_result("❌ 此群未启用日常分析功能")
+            return
+
         # 设置分析天数
         analysis_days = (
             days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
