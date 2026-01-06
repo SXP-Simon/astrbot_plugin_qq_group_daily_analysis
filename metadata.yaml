@@ -1,5 +1,5 @@
 name: astrbot_plugin_qq_group_daily_analysis # 这是你的插件的唯一识别名。
-desc: [aiocqhttp] QQ群日常分析总结插件 - 生成精美的群聊分析报告，支持话题分析、用户形象、群聊圣经等功能  # 插件简短描述
+desc: "[aiocqhttp] QQ群日常分析总结插件 - 生成精美的群聊分析报告，支持话题分析、用户形象、群聊圣经等功能"  # 插件简短描述
 display_name: QQ群分析总结插件 # 插件的显示名称
 help: |  # 插件的帮助信息
   智能分析群聊活动，生成精美的日常分析报告
