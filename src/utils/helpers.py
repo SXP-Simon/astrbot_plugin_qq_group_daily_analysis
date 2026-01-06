@@ -3,6 +3,7 @@
 包含消息分析和其他通用功能
 """
 
+import asyncio
 from astrbot.api import logger
 
 from ...src.analysis.llm_analyzer import LLMAnalyzer
@@ -49,10 +50,14 @@ class MessageAnalyzer:
         """完整的消息分析流程"""
         try:
             # 基础统计
-            statistics = self.message_handler.calculate_statistics(messages)
+            statistics = await asyncio.to_thread(
+                self.message_handler.calculate_statistics, messages
+            )
 
             # 用户分析
-            user_analysis = self.user_analyzer.analyze_users(messages)
+            user_analysis = await asyncio.to_thread(
+                self.user_analyzer.analyze_users, messages
+            )
 
             # 获取活跃用户列表 - 使用get_top_users方法,limit从配置中读取
             max_user_titles = self.config_manager.get_max_user_titles()
