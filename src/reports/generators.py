@@ -32,10 +32,9 @@ class ReportGenerator:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(analysis_result)
 
-            # 先渲染HTML模板
-            html_content = self._render_html_template(
-                self.html_templates.get_image_template(), render_payload
-            )
+            # 先渲染HTML模板（使用异步方法）
+            image_template = await self.html_templates.get_image_template_async()
+            html_content = self._render_html_template(image_template, render_payload)
 
             # 检查HTML内容是否有效
             if not html_content:
@@ -88,9 +87,9 @@ class ReportGenerator:
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
-            # 确保输出目录存在
+            # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
             output_dir = Path(self.config_manager.get_pdf_output_dir())
-            output_dir.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件名
             current_date = datetime.now().strftime("%Y%m%d")
@@ -103,10 +102,9 @@ class ReportGenerator:
             render_data = await self._prepare_render_data(analysis_result)
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            # 生成 HTML 内容（PDF模板使用{{}}占位符）
-            html_content = self._render_html_template(
-                self.html_templates.get_pdf_template(), render_data
-            )
+            # 生成 HTML 内容（使用异步方法）
+            pdf_template = await self.html_templates.get_pdf_template_async()
+            html_content = self._render_html_template(pdf_template, render_data)
 
             # 检查HTML内容是否有效
             if not html_content:
