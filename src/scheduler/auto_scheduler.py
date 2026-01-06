@@ -46,7 +46,7 @@ class AutoScheduler:
         elif bot_qq_ids:
             self.bot_manager.set_bot_qq_ids([bot_qq_ids])
 
-    async def _get_platform_id_for_group(self, group_id):
+    async def get_platform_id_for_group(self, group_id):
         """根据群ID获取对应的平台ID"""
         try:
             # 首先检查已注册的bot实例
@@ -355,7 +355,7 @@ class AutoScheduler:
                 else:
                     # 回退到原来的逻辑（单个平台）
                     logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                    platform_id = await self._get_platform_id_for_group(group_id)
+                    platform_id = await self.get_platform_id_for_group(group_id)
 
                     if not platform_id:
                         logger.error(f"❌ 群 {group_id} 无法获取平台ID，跳过分析")
@@ -621,7 +621,7 @@ class AutoScheduler:
                 )
             else:
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self._get_platform_id_for_group(group_id)
+                platform_id = await self.get_platform_id_for_group(group_id)
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
                     return False
@@ -794,7 +794,7 @@ class AutoScheduler:
             else:
                 # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self._get_platform_id_for_group(group_id)
+                platform_id = await self.get_platform_id_for_group(group_id)
 
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送文本")
@@ -874,7 +874,7 @@ class AutoScheduler:
             else:
                 # 回退到原来的逻辑（单个平台）
                 logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self._get_platform_id_for_group(group_id)
+                platform_id = await self.get_platform_id_for_group(group_id)
 
                 if not platform_id:
                     logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送PDF")
