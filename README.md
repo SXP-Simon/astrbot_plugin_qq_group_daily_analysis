@@ -93,6 +93,16 @@ retro_futurism 模板效果图
 - `status`: 查看当前群的启用状态
 - 例如：`/分析设置 enable`
 
+#### 模板设置
+```
+/查看模板
+/设置模板 [模板名称或序号]
+```
+- `/查看模板`: 查看所有可用模板及预览图
+- `/设置模板`: 查看当前模板和可用模板列表
+- `/设置模板 [序号]`: 切换到指定序号的模板
+- 例如：`/设置模板 1` 或 `/设置模板 scrapbook`
+
 ## 安装要求
 
 > [!CAUTION]
@@ -274,6 +284,27 @@ retro_futurism 模板效果图
 ![贡献指南](./assets/contribution-guide.jpg)
 
 </div>
+
+### 开发环境设置
+
+为了保持代码质量，本项目使用 [pre-commit](https://pre-commit.com/) 钩子进行代码规范检查和自动修复。所有的贡献代码都必须通过 pre-commit 检查。
+
+#### 1. 安装 pre-commit
+```bash
+pip install pre-commit
+```
+
+#### 2. 安装 git hook
+在项目根目录下运行，这将确保在每次提交时自动运行检查：
+```bash
+pre-commit install
+```
+
+#### 3. 手动运行检查
+如果需要手动触发所有文件的检查（推荐在提交前运行一次）：
+```bash
+pre-commit run --all-files
+```
 
 ### 模板贡献指南
 
