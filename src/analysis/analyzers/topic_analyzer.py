@@ -63,22 +63,14 @@ class TopicAnalyzer(BaseAnalyzer):
         # 提取文本消息
         text_messages = []
         for i, msg in enumerate(messages):
-            logger.debug(f"build_prompt 处理第 {i + 1} 条消息，类型: {type(msg)}")
-
             # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
             if not isinstance(msg, dict):
-                logger.warning(
-                    f"build_prompt 跳过非字典类型的消息: {type(msg)} - {msg}"
-                )
                 continue
 
             try:
                 sender = msg.get("sender", {})
                 # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
                 if not isinstance(sender, dict):
-                    logger.warning(
-                        f"build_prompt 跳过sender非字典类型的消息: {type(sender)} - {sender}"
-                    )
                     continue
 
                 # 获取发送者ID并过滤机器人消息
@@ -87,37 +79,23 @@ class TopicAnalyzer(BaseAnalyzer):
 
                 # 跳过机器人自己的消息
                 if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
-                    logger.debug(f"build_prompt 过滤掉机器人QQ号: {user_id}")
                     continue
 
                 nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
                 msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
 
                 message_list = msg.get("message", [])
-                logger.debug(
-                    f"build_prompt 消息 {i + 1} 的 message 字段类型: {type(message_list)}, 长度: {len(message_list) if hasattr(message_list, '__len__') else 'N/A'}"
-                )
 
                 # 提取文本内容，可能分布在多个 content 中
                 text_parts = []
                 for j, content in enumerate(message_list):
-                    logger.debug(
-                        f"build_prompt 处理消息 {i + 1} 的内容 {j + 1}, 类型: {type(content)}"
-                    )
                     if not isinstance(content, dict):
-                        logger.warning(
-                            f"build_prompt 跳过非字典类型的内容: {type(content)} - {content}"
-                        )
                         continue
 
                     content_type = content.get("type", "")
-                    logger.debug(f"build_prompt 内容类型: {content_type}")
 
                     if content_type == "text":
                         text = content.get("data", {}).get("text", "").strip()
-                        logger.debug(
-                            f"build_prompt 提取到的文本: '{text}' (长度: {len(text)})"
-                        )
                         if text:
                             text_parts.append(text)
                     elif content_type == "at":
@@ -126,20 +104,15 @@ class TopicAnalyzer(BaseAnalyzer):
                         if at_qq:
                             at_text = f"@{at_qq}"
                             text_parts.append(at_text)
-                            logger.debug(f"build_prompt 提取到@消息: {at_text}")
                     elif content_type == "reply":
                         # 处理回复消息，添加标记
                         reply_id = content.get("data", {}).get("id", "")
                         if reply_id:
                             reply_text = f"[回复:{reply_id}]"
                             text_parts.append(reply_text)
-                            logger.debug(f"build_prompt 提取到回复消息: {reply_text}")
 
                 # 合并所有文本部分
                 combined_text = "".join(text_parts).strip()
-                logger.debug(
-                    f"build_prompt 合并后的文本: '{combined_text}' (长度: {len(combined_text)})"
-                )
 
                 if (
                     combined_text
@@ -153,14 +126,8 @@ class TopicAnalyzer(BaseAnalyzer):
                     cleaned_text = cleaned_text.replace("\t", " ")
                     cleaned_text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", cleaned_text)
 
-                    logger.debug(f"build_prompt 清理后的文本: '{cleaned_text}'")
-
                     text_messages.append(
                         {"sender": nickname, "time": msg_time, "content": cleaned_text}
-                    )
-                else:
-                    logger.debug(
-                        f"build_prompt 跳过文本: '{combined_text}' (长度不足或以/开头)"
                     )
             except Exception as e:
                 logger.error(
