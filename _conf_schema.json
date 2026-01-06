@@ -70,7 +70,7 @@
         "type": "string",
         "description": "报告模板",
         "default": "scrapbook",
-        "hint": "分析报告使用的HTML模板名称，使用 `/设置模板` 查看使用指南，效果见 README（文档）"
+        "hint": "分析报告使用的HTML模板名称，使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果"
     },
 
     "min_messages_threshold": {
@@ -182,7 +182,7 @@
     "pdf_output_dir": {
         "type": "string",
         "description": "PDF输出目录",
-        "default": "data/plugins/astrbot-qq-group-daily-analysis/reports",
+        "default": "data/plugins/astrbot_qq_group_daily_analysis/reports",
         "hint": "PDF报告文件的保存目录"
     },
     "pdf_filename_format": {
