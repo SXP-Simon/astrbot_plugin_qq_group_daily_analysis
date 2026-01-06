@@ -6,6 +6,7 @@
 import sys
 
 from astrbot.api import AstrBotConfig, logger
+from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 
 class ConfigManager:
@@ -139,9 +140,17 @@ class ConfigManager:
 
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
-        return self.config.get(
-            "pdf_output_dir", "data/plugins/astrbot-qq-group-daily-analysis/reports"
-        )
+        try:
+            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
+            data_path = get_astrbot_data_path()
+            default_path = data_path / "plugin_data" / plugin_name / "reports"
+            return self.config.get("pdf_output_dir", str(default_path))
+        except Exception:
+            # Fallback for older versions or import errors
+            return self.config.get(
+                "pdf_output_dir",
+                "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
+            )
 
     def get_bot_qq_ids(self) -> list:
         """获取bot QQ号列表"""
