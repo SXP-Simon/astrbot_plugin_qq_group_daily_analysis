@@ -5,6 +5,7 @@ HTML模板模块
 
 import asyncio
 import os
+import threading
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -19,16 +20,19 @@ class HTMLTemplates:
         self.config_manager = config_manager
         # 设置模板根目录
         self.base_dir = os.path.join(os.path.dirname(__file__), "templates")
-        # 缓存不同模板的Jinja2环境
+        # 缓存不同模板的Jinja2环境（多线程安全）
         self._envs = {}
+        self._env_lock = threading.Lock()
 
     def _get_env_sync(self) -> Environment:
         """获取当前配置的模板环境（同步版本，供 asyncio.to_thread 调用）"""
         template_name = self.config_manager.get_report_template()
 
-        # 如果环境已缓存且配置未变
-        if template_name in self._envs:
-            return self._envs[template_name]
+        # 如果环境已缓存且配置未变（使用锁保证多线程安全）
+        with self._env_lock:
+            env = self._envs.get(template_name)
+            if env is not None:
+                return env
 
         template_dir = os.path.join(self.base_dir, template_name)
         if not os.path.exists(template_dir):
@@ -41,7 +45,14 @@ class HTMLTemplates:
             trim_blocks=True,
             lstrip_blocks=True,
         )
-        self._envs[template_name] = env
+
+        # 使用双重检查锁定，避免在高并发下重复创建相同 template_name 的 env
+        with self._env_lock:
+            existing = self._envs.get(template_name)
+            if existing is not None:
+                return existing
+            self._envs[template_name] = env
+
         return env
 
     async def _get_env_async(self) -> Environment:
