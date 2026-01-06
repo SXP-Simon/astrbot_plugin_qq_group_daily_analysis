@@ -3,7 +3,7 @@
 # QQ群日常分析插件
 
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.5.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.5.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
@@ -120,6 +120,14 @@ retro_futurism 模板效果图
 
 <details>
 <summary>📋 点击展开查看完整更新日志</summary>
+
+### v4.5.5
+- 修复 Jinja2 模板渲染线程安全问题
+- 性能优化，CPU 密集型计算（统计和分析）已卸载到各线程池，避免阻塞事件循环
+
+### v4.5.4
+- 更新插件 metadata 描述，为了使用户更容易搜索到此插件，重新在插件市场提交
+
 
 ### v4.5.2
 - 新增 `/查看模板` 指令，以合并转发消息形式查看所有模板预览图
