@@ -25,43 +25,31 @@ from .src.scheduler.auto_scheduler import AutoScheduler
 from .src.utils.helpers import MessageAnalyzer
 from .src.utils.pdf_utils import PDFInstaller
 
-# 全局变量
-config_manager = None
-bot_manager = None
-message_analyzer = None
-report_generator = None
-auto_scheduler = None
-
 
 class QQGroupDailyAnalysis(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
 
-        # 初始化模块化组件
-        global \
-            config_manager, \
-            bot_manager, \
-            message_analyzer, \
-            report_generator, \
-            auto_scheduler
-
-        config_manager = ConfigManager(config)
-        bot_manager = BotManager(config_manager)
-        bot_manager.set_context(context)
-        message_analyzer = MessageAnalyzer(context, config_manager, bot_manager)
-        report_generator = ReportGenerator(config_manager)
-        auto_scheduler = AutoScheduler(
-            config_manager,
-            message_analyzer.message_handler,
-            message_analyzer,
-            report_generator,
-            bot_manager,
+        # 初始化模块化组件（使用实例属性而非全局变量）
+        self.config_manager = ConfigManager(config)
+        self.bot_manager = BotManager(self.config_manager)
+        self.bot_manager.set_context(context)
+        self.message_analyzer = MessageAnalyzer(
+            context, self.config_manager, self.bot_manager
+        )
+        self.report_generator = ReportGenerator(self.config_manager)
+        self.auto_scheduler = AutoScheduler(
+            self.config_manager,
+            self.message_analyzer.message_handler,
+            self.message_analyzer,
+            self.report_generator,
+            self.bot_manager,
             self.html_render,  # 传入html_render函数
         )
 
         # 延迟启动自动调度器，给系统时间初始化
-        if config_manager.get_enable_auto_analysis():
+        if self.config_manager.get_enable_auto_analysis():
             asyncio.create_task(self._delayed_start_scheduler())
 
         logger.info("QQ群日常分析插件已初始化（模块化版本）")
@@ -69,11 +57,11 @@ class QQGroupDailyAnalysis(Star):
     async def _delayed_start_scheduler(self):
         """延迟启动调度器，给系统时间初始化"""
         try:
-            # 等待10秒让系统完全初始化
+            # 等待30秒让系统完全初始化
             await asyncio.sleep(30)
 
             # 初始化所有bot实例
-            discovered = await bot_manager.initialize_from_config()
+            discovered = await self.bot_manager.initialize_from_config()
             if discovered:
                 platform_count = len(discovered)
                 logger.info(f"Bot管理器初始化成功，发现 {platform_count} 个适配器")
@@ -83,10 +71,10 @@ class QQGroupDailyAnalysis(Star):
                     )
 
                 # 启动调度器
-                await auto_scheduler.start_scheduler()
+                await self.auto_scheduler.start_scheduler()
             else:
                 logger.warning("Bot管理器初始化失败，未发现任何适配器")
-                status = bot_manager.get_status_info()
+                status = self.bot_manager.get_status_info()
                 logger.info(f"Bot管理器状态: {status}")
 
         except Exception as e:
@@ -97,40 +85,18 @@ class QQGroupDailyAnalysis(Star):
         try:
             logger.info("开始清理QQ群日常分析插件资源...")
 
-            global \
-                auto_scheduler, \
-                bot_manager, \
-                message_analyzer, \
-                report_generator, \
-                config_manager
-
             # 停止自动调度器
-            if auto_scheduler:
+            if self.auto_scheduler:
                 logger.info("正在停止自动调度器...")
-                await auto_scheduler.stop_scheduler()
+                await self.auto_scheduler.stop_scheduler()
                 logger.info("自动调度器已停止")
 
-            # 清理bot管理器资源
-            # if bot_manager:
-            #     logger.info("正在清理bot管理器资源...")
-            #     # 如果有其他需要清理的资源，可以在这里添加
-
-            # # 清理消息分析器资源
-            # if message_analyzer:
-            #     logger.info("正在清理消息分析器资源...")
-            #     # 如果有其他需要清理的资源，可以在这里添加
-
-            # # 清理报告生成器资源
-            # if report_generator:
-            #     logger.info("正在清理报告生成器资源...")
-            #     # 如果有其他需要清理的资源，可以在这里添加
-
-            # 重置全局变量
-            auto_scheduler = None
-            bot_manager = None
-            message_analyzer = None
-            report_generator = None
-            config_manager = None
+            # 重置实例属性
+            self.auto_scheduler = None
+            self.bot_manager = None
+            self.message_analyzer = None
+            self.report_generator = None
+            self.config_manager = None
 
             logger.info("QQ群日常分析插件资源清理完成")
 
@@ -156,27 +122,27 @@ class QQGroupDailyAnalysis(Star):
             return
 
         # 更新bot实例（用于手动命令）
-        bot_manager.update_from_event(event)
+        self.bot_manager.update_from_event(event)
 
         # 检查群组权限
-        if not config_manager.is_group_allowed(group_id):
+        if not self.config_manager.is_group_allowed(group_id):
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
         # 设置分析天数
         analysis_days = (
-            days if days and 1 <= days <= 7 else config_manager.get_analysis_days()
+            days if days and 1 <= days <= 7 else self.config_manager.get_analysis_days()
         )
 
         yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
 
         # 调试：输出当前配置
-        logger.info(f"当前输出格式配置: {config_manager.get_output_format()}")
+        logger.info(f"当前输出格式配置: {self.config_manager.get_output_format()}")
 
         try:
             # 获取该群对应的平台ID和bot实例
-            platform_id = await auto_scheduler._get_platform_id_for_group(group_id)
-            bot_instance = bot_manager.get_bot_instance(platform_id)
+            platform_id = await self.auto_scheduler.get_platform_id_for_group(group_id)
+            bot_instance = self.bot_manager.get_bot_instance(platform_id)
 
             if not bot_instance:
                 yield event.plain_result(
@@ -185,7 +151,7 @@ class QQGroupDailyAnalysis(Star):
                 return
 
             # 获取群聊消息
-            messages = await message_analyzer.message_handler.fetch_group_messages(
+            messages = await self.message_analyzer.message_handler.fetch_group_messages(
                 bot_instance, group_id, analysis_days, platform_id
             )
             if not messages:
@@ -195,7 +161,7 @@ class QQGroupDailyAnalysis(Star):
                 return
 
             # 检查消息数量是否足够分析
-            min_threshold = config_manager.get_min_messages_threshold()
+            min_threshold = self.config_manager.get_min_messages_threshold()
             if len(messages) < min_threshold:
                 yield event.plain_result(
                     f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析"
@@ -207,7 +173,7 @@ class QQGroupDailyAnalysis(Star):
             )
 
             # 进行分析 - 传递 unified_msg_origin 以获取正确的 LLM 提供商
-            analysis_result = await message_analyzer.analyze_messages(
+            analysis_result = await self.message_analyzer.analyze_messages(
                 messages, group_id, event.unified_msg_origin
             )
 
@@ -217,9 +183,9 @@ class QQGroupDailyAnalysis(Star):
                 return
 
             # 生成报告
-            output_format = config_manager.get_output_format()
+            output_format = self.config_manager.get_output_format()
             if output_format == "image":
-                image_url = await report_generator.generate_image_report(
+                image_url = await self.report_generator.generate_image_report(
                     analysis_result, group_id, self.html_render
                 )
                 if image_url:
@@ -227,18 +193,20 @@ class QQGroupDailyAnalysis(Star):
                 else:
                     # 如果图片生成失败，回退到文本报告
                     logger.warning("图片报告生成失败，回退到文本报告")
-                    text_report = report_generator.generate_text_report(analysis_result)
+                    text_report = self.report_generator.generate_text_report(
+                        analysis_result
+                    )
                     yield event.plain_result(
                         f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
                     )
             elif output_format == "pdf":
-                if not config_manager.pyppeteer_available:
+                if not self.config_manager.pyppeteer_available:
                     yield event.plain_result(
                         "❌ PDF 功能不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
                     )
                     return
 
-                pdf_path = await report_generator.generate_pdf_report(
+                pdf_path = await self.report_generator.generate_pdf_report(
                     analysis_result, group_id
                 )
                 if pdf_path:
@@ -259,12 +227,16 @@ class QQGroupDailyAnalysis(Star):
 
                     # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")
-                    text_report = report_generator.generate_text_report(analysis_result)
+                    text_report = self.report_generator.generate_text_report(
+                        analysis_result
+                    )
                     yield event.plain_result(
                         f"\n📝 以下是文本版本的分析报告：\n\n{text_report}"
                     )
             else:
-                text_report = report_generator.generate_text_report(analysis_result)
+                text_report = self.report_generator.generate_text_report(
+                    analysis_result
+                )
                 yield event.plain_result(text_report)
 
         except Exception as e:
@@ -292,9 +264,11 @@ class QQGroupDailyAnalysis(Star):
             return
 
         if not format_type:
-            current_format = config_manager.get_output_format()
+            current_format = self.config_manager.get_output_format()
             pdf_status = (
-                "✅" if config_manager.pyppeteer_available else "❌ (需安装 pyppeteer)"
+                "✅"
+                if self.config_manager.pyppeteer_available
+                else "❌ (需安装 pyppeteer)"
             )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
@@ -311,13 +285,13 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
             return
 
-        if format_type == "pdf" and not config_manager.pyppeteer_available:
+        if format_type == "pdf" and not self.config_manager.pyppeteer_available:
             yield event.plain_result(
                 "❌ PDF 格式不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
             )
             return
 
-        config_manager.set_output_format(format_type)
+        self.config_manager.set_output_format(format_type)
         yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
 
     @filter.command("设置模板")
@@ -335,23 +309,27 @@ class QQGroupDailyAnalysis(Star):
 
         import os
 
-        # 获取模板目录和可用模板列表
+        # 获取模板目录和可用模板列表（使用 asyncio.to_thread 避免阻塞）
         template_base_dir = os.path.join(
             os.path.dirname(__file__), "src", "reports", "templates"
         )
-        available_templates = []
-        if os.path.exists(template_base_dir):
-            available_templates = sorted(
-                [
-                    d
-                    for d in os.listdir(template_base_dir)
-                    if os.path.isdir(os.path.join(template_base_dir, d))
-                    and not d.startswith("__")
-                ]
-            )
+
+        def _list_templates_sync():
+            if os.path.exists(template_base_dir):
+                return sorted(
+                    [
+                        d
+                        for d in os.listdir(template_base_dir)
+                        if os.path.isdir(os.path.join(template_base_dir, d))
+                        and not d.startswith("__")
+                    ]
+                )
+            return []
+
+        available_templates = await asyncio.to_thread(_list_templates_sync)
 
         if not template_input:
-            current_template = config_manager.get_report_template()
+            current_template = self.config_manager.get_report_template()
             # 列出可用的模板（带序号）
             template_list_str = "\n".join(
                 [f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)]
@@ -377,13 +355,14 @@ class QQGroupDailyAnalysis(Star):
                 )
                 return
 
-        # 检查模板是否存在
+        # 检查模板是否存在（使用 asyncio.to_thread 避免阻塞）
         template_dir = os.path.join(template_base_dir, template_name)
-        if not os.path.exists(template_dir):
+        template_exists = await asyncio.to_thread(os.path.exists, template_dir)
+        if not template_exists:
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
             return
 
-        config_manager.set_report_template(template_name)
+        self.config_manager.set_report_template(template_name)
         yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")
 
     @filter.command("查看模板")
@@ -406,24 +385,27 @@ class QQGroupDailyAnalysis(Star):
         )
         assets_dir = os.path.join(os.path.dirname(__file__), "assets")
 
-        # 获取可用模板列表
-        available_templates = []
-        if os.path.exists(template_dir):
-            available_templates = sorted(
-                [
-                    d
-                    for d in os.listdir(template_dir)
-                    if os.path.isdir(os.path.join(template_dir, d))
-                    and not d.startswith("__")
-                ]
-            )
+        # 获取可用模板列表（使用 asyncio.to_thread 避免阻塞）
+        def _list_templates_sync():
+            if os.path.exists(template_dir):
+                return sorted(
+                    [
+                        d
+                        for d in os.listdir(template_dir)
+                        if os.path.isdir(os.path.join(template_dir, d))
+                        and not d.startswith("__")
+                    ]
+                )
+            return []
+
+        available_templates = await asyncio.to_thread(_list_templates_sync)
 
         if not available_templates:
             yield event.plain_result("❌ 未找到任何可用的报告模板")
             return
 
         # 获取当前使用的模板
-        current_template = config_manager.get_report_template()
+        current_template = self.config_manager.get_report_template()
 
         # 获取机器人信息用于合并转发消息
         bot_id = event.get_self_id()
@@ -483,7 +465,7 @@ class QQGroupDailyAnalysis(Star):
 
         try:
             # 安装 pyppeteer
-            result = await PDFInstaller.install_pyppeteer(config_manager)
+            result = await PDFInstaller.install_pyppeteer(self.config_manager)
             yield event.plain_result(result)
 
             # 提供系统依赖安装指导
@@ -518,50 +500,50 @@ class QQGroupDailyAnalysis(Star):
             return
 
         if action == "enable":
-            mode = config_manager.get_group_list_mode()
+            mode = self.config_manager.get_group_list_mode()
             if mode == "whitelist":
-                glist = config_manager.get_group_list()
+                glist = self.config_manager.get_group_list()
                 if group_id not in glist:
                     glist.append(group_id)
-                    config_manager.set_group_list(glist)
+                    self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入白名单")
                     # 重新启动定时任务
-                    await auto_scheduler.restart_scheduler()
+                    await self.auto_scheduler.restart_scheduler()
                 else:
                     yield event.plain_result("ℹ️ 当前群已在白名单中")
             elif mode == "blacklist":
-                glist = config_manager.get_group_list()
+                glist = self.config_manager.get_group_list()
                 if group_id in glist:
                     glist.remove(group_id)
-                    config_manager.set_group_list(glist)
+                    self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从黑名单移除")
                     # 重新启动定时任务
-                    await auto_scheduler.restart_scheduler()
+                    await self.auto_scheduler.restart_scheduler()
                 else:
                     yield event.plain_result("ℹ️ 当前群不在黑名单中")
             else:
                 yield event.plain_result("ℹ️ 当前为无限制模式，所有群聊默认启用")
 
         elif action == "disable":
-            mode = config_manager.get_group_list_mode()
+            mode = self.config_manager.get_group_list_mode()
             if mode == "whitelist":
-                glist = config_manager.get_group_list()
+                glist = self.config_manager.get_group_list()
                 if group_id in glist:
                     glist.remove(group_id)
-                    config_manager.set_group_list(glist)
+                    self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从白名单移除")
                     # 重新启动定时任务
-                    await auto_scheduler.restart_scheduler()
+                    await self.auto_scheduler.restart_scheduler()
                 else:
                     yield event.plain_result("ℹ️ 当前群不在白名单中")
             elif mode == "blacklist":
-                glist = config_manager.get_group_list()
+                glist = self.config_manager.get_group_list()
                 if group_id not in glist:
                     glist.append(group_id)
-                    config_manager.set_group_list(glist)
+                    self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入黑名单")
                     # 重新启动定时任务
-                    await auto_scheduler.restart_scheduler()
+                    await self.auto_scheduler.restart_scheduler()
                 else:
                     yield event.plain_result("ℹ️ 当前群已在黑名单中")
             else:
@@ -571,40 +553,40 @@ class QQGroupDailyAnalysis(Star):
 
         elif action == "reload":
             # 重新启动定时任务
-            await auto_scheduler.restart_scheduler()
+            await self.auto_scheduler.restart_scheduler()
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
 
         elif action == "test":
             # 测试自动分析功能
-            if not config_manager.is_group_allowed(group_id):
+            if not self.config_manager.is_group_allowed(group_id):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
 
             yield event.plain_result("🧪 开始测试自动分析功能...")
 
             # 更新bot实例（用于测试）
-            bot_manager.update_from_event(event)
+            self.bot_manager.update_from_event(event)
 
             # 执行自动分析
             try:
-                await auto_scheduler._perform_auto_analysis_for_group(group_id)
+                await self.auto_scheduler._perform_auto_analysis_for_group(group_id)
                 yield event.plain_result("✅ 自动分析测试完成，请查看群消息")
             except Exception as e:
                 yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
 
         else:  # status
-            is_allowed = config_manager.is_group_allowed(group_id)
+            is_allowed = self.config_manager.is_group_allowed(group_id)
             status = "已启用" if is_allowed else "未启用"
-            mode = config_manager.get_group_list_mode()
+            mode = self.config_manager.get_group_list_mode()
 
             auto_status = (
-                "已启用" if config_manager.get_enable_auto_analysis() else "未启用"
+                "已启用" if self.config_manager.get_enable_auto_analysis() else "未启用"
             )
-            auto_time = config_manager.get_auto_analysis_time()
+            auto_time = self.config_manager.get_auto_analysis_time()
 
-            pdf_status = PDFInstaller.get_pdf_status(config_manager)
-            output_format = config_manager.get_output_format()
-            min_threshold = config_manager.get_min_messages_threshold()
+            pdf_status = PDFInstaller.get_pdf_status(self.config_manager)
+            output_format = self.config_manager.get_output_format()
+            min_threshold = self.config_manager.get_min_messages_threshold()
 
             yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status} (模式: {mode})
