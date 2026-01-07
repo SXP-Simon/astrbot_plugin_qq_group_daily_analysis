@@ -5,3 +5,11 @@
 src/analysis/ARCHITECTURE.md
 .serena/.gitignore
 .serena/project.yml
+debug_output.html
+src/models/__pycache__/__init__.cpython-312.pyc
+src/models/__pycache__/data_models.cpython-312.pyc
+src/reports/__pycache__/__init__.cpython-312.pyc
+src/reports/__pycache__/generators.cpython-312.pyc
+src/reports/__pycache__/templates.cpython-312.pyc
+src/visualization/__pycache__/__init__.cpython-312.pyc
+src/visualization/__pycache__/activity_charts.cpython-312.pyc
