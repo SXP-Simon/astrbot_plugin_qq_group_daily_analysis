@@ -152,7 +152,12 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
                             ("http", "www", "/")
                         ):
                             interesting_messages.append(
-                                {"sender": nickname, "time": msg_time, "content": text}
+                                {
+                                    "sender": nickname,
+                                    "time": msg_time,
+                                    "content": text,
+                                    "qq": sender.get("user_id", 0),
+                                }
                             )
 
             return interesting_messages
@@ -183,7 +188,22 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
                 return [], TokenUsage()
 
             logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
-            return await self.analyze(interesting_messages, umo)
+            logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
+            quotes, usage = await self.analyze(interesting_messages, umo)
+
+            # 回填QQ号
+            for quote in quotes:
+                for msg in interesting_messages:
+                    # 尝试匹配内容和发送者
+                    # 注意：LLM 可能会微调内容，这里使用包含匹配或精确匹配
+                    if (
+                        quote.content in msg["content"]
+                        or msg["content"] in quote.content
+                    ) and quote.sender == msg["sender"]:
+                        quote.qq = msg.get("qq", 0)
+                        break
+
+            return quotes, usage
 
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
