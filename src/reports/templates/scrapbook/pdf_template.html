@@ -603,8 +603,108 @@
         .quote-wrapper {
             display: flex;
             flex-direction: column;
-            max-width: 85%;
+            width: 100%;
+            /* Occupy full width to allow internal flex to handle sizing */
+            max-width: 90%;
+            /* Limit max width */
             position: relative;
+        }
+
+        .q-flex-container {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .q-user-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+            width: 70px;
+            /* Slightly narrower */
+        }
+
+        .q-avatar-box {
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        .q-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            background: #fff;
+            object-fit: cover;
+            /* Default base shadow */
+            box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        /* Left/Odd: Blue Shadow */
+        .quote-wrapper:nth-child(odd) .q-avatar {
+            box-shadow: 0 0 0 2px var(--color-blue);
+        }
+
+        /* Right/Even: Orange Shadow */
+        .quote-wrapper:nth-child(even) .q-avatar {
+            box-shadow: 0 0 0 2px var(--accent-orange);
+        }
+
+        .q-content-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            align-items: flex-start;
+            /* Default align left */
+        }
+
+        .q-sender-name {
+            font-family: 'Long Cang', cursive;
+            font-size: 1.4rem;
+            /* Larger size for cursive font */
+            color: var(--ink-primary);
+            margin-bottom: 2px;
+            /* Reduce margin as underline takes space */
+            margin-left: 10px;
+            line-height: 1.2;
+            position: relative;
+            display: inline-block;
+        }
+
+        /* Underline Element */
+        .q-sender-name::after {
+            content: "";
+            display: block;
+            width: 100%;
+            height: 4px;
+            background: var(--color-blue);
+            opacity: 0.4;
+            /* Marker pen feel */
+            border-radius: 2px;
+            margin-top: -6px;
+            /* Overlap with text bottom */
+        }
+
+        /* Right-aligned layout for even items */
+        .quote-wrapper:nth-child(even) .q-flex-container {
+            flex-direction: row-reverse;
+        }
+
+        .quote-wrapper:nth-child(even) .q-content-col {
+            align-items: flex-end;
+            /* Align right */
+        }
+
+        .quote-wrapper:nth-child(even) .q-sender-name {
+            margin-left: 0;
+            margin-right: 15px;
+            text-align: right;
+        }
+
+        .quote-wrapper:nth-child(even) .q-sender-name::after {
+            background: var(--accent-orange);
         }
 
         .quote-wrapper:nth-child(odd) {
@@ -619,62 +719,59 @@
         .q-bubble {
             background: #fff;
             border: 2px solid var(--ink-primary);
-            padding: 20px 25px;
+            padding: 15px 25px;
             border-radius: 20px;
-            box-shadow: 5px 5px 0 var(--color-blue);
+            box-shadow: 4px 4px 0 var(--color-blue);
             position: relative;
             z-index: 2;
+            width: fit-content;
+            /* Dynamic width */
+            max-width: 100%;
         }
 
         .quote-wrapper:nth-child(odd) .q-bubble {
-            border-bottom-left-radius: 0;
+            border-top-left-radius: 4px;
         }
 
         .quote-wrapper:nth-child(even) .q-bubble {
-            border-bottom-right-radius: 0;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 20px;
+            /* Reset bottom right */
             background: var(--color-yellow);
-            box-shadow: -5px 5px 0 var(--color-pink);
+            box-shadow: -4px 4px 0 var(--color-pink);
             text-align: right;
+            border-bottom-left-radius: 20px;
         }
 
         .q-content {
             font-family: var(--font-title);
             font-size: 1.3rem;
             line-height: 1.4;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             position: relative;
         }
 
         .q-quote-mark {
-            position: absolute;
-            font-family: serif;
-            font-size: 4rem;
-            color: rgba(0, 0, 0, 0.05);
-            top: -20px;
-            left: -10px;
-            pointer-events: none;
-        }
-
-        .q-author {
-            font-family: var(--font-hand);
-            font-weight: bold;
-            color: var(--ink-secondary);
-            font-size: 0.95rem;
+            display: none;
+            /* Hide quote mark for cleaner chat look */
         }
 
         .q-analysis-note {
             background: #fffde7;
-            padding: 12px 15px;
+            padding: 10px 15px;
             font-size: 0.9rem;
             color: #666;
-            width: 95%;
-            margin-top: -8px;
+            width: fit-content;
+            /* Fit content */
+            max-width: 100%;
+            margin-top: -5px;
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
             position: relative;
             z-index: 1;
             font-family: var(--font-body);
             line-height: 1.5;
+            border-radius: 0 0 10px 10px;
         }
 
         .quote-wrapper:nth-child(odd) .q-analysis-note {
