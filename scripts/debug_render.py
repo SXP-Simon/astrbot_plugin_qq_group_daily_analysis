@@ -135,7 +135,7 @@ async def debug_render(
             reason="总能精准接住每一个冷笑话，让群里充满快活的气息。",
         ),
         UserTitle(
-            name="王五",
+            name="https://www.example.com/very/long/url/that/might/overflow/the/container/if/word/break/is/not/set/correctly/and/it/keeps/going/and/going/forever",
             qq=112233445,
             title="深夜潜水员",
             mbti="INFP",
@@ -178,7 +178,7 @@ async def debug_render(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Debug render tool for astrbot-qq-group-daily-analysis report templates."
+        description="Debug render tool for astrbot_plugin_qq_group_daily_analysis report templates."
     )
     parser.add_argument(
         "-t",
