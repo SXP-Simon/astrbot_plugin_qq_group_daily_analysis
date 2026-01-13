@@ -214,11 +214,15 @@ class ReportGenerator:
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
         for quote in stats.golden_quotes[:max_golden_quotes]:
+            avatar_url = (
+                await self._get_user_avatar(str(quote.qq)) if quote.qq else None
+            )
             quotes_list.append(
                 {
                     "content": quote.content,
                     "sender": quote.sender,
                     "reason": quote.reason,
+                    "avatar_url": avatar_url,
                 }
             )
 

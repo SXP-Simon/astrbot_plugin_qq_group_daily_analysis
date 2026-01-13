@@ -8,14 +8,26 @@
     </div>
     {% for quote in quotes %}
     <div class="quote-wrapper">
-        <div class="q-bubble">
-            <div class="q-quote-mark">"</div>
-            <div class="q-content">{{ quote.content }}</div>
-            <div class="q-author">— {{ quote.sender }}</div>
-        </div>
-        <div class="q-analysis-note">
-            <span class="note-label">🤣👉 AI 锐评：</span>
-            {{ quote.reason }}
+        <div class="q-flex-container">
+            <div class="q-user-col">
+                {% if quote.avatar_url %}
+                <div class="q-avatar-box">
+                    <img src="{{ quote.avatar_url }}" class="q-avatar">
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="q-content-col">
+                <div class="q-sender-name">{{ quote.sender }}</div>
+                <div class="q-bubble">
+                    <div class="q-quote-mark">"</div>
+                    <div class="q-content">{{ quote.content }}</div>
+                </div>
+                <div class="q-analysis-note">
+                    <span class="note-label">🤣👉 AI 锐评：</span>
+                    {{ quote.reason }}
+                </div>
+            </div>
         </div>
     </div>
     {% endfor %}

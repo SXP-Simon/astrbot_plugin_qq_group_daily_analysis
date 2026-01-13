@@ -33,6 +33,7 @@ class GoldenQuote:
     content: str
     sender: str
     reason: str
+    qq: int = 0
 
 
 @dataclass
