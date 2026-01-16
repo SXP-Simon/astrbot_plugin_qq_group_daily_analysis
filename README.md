@@ -220,6 +220,14 @@ src/reports/templates/your_theme_name/
 
 #### 5. 模板调试工具
 
+PDF 调试模板命令 Docker 下：
+
+```
+docker exec -it astrbot python data/plugins/astrbot_plugin_qq_group_daily_analysis/scripts/mock_pdf_gen.py
+```
+
+Image 模板调试：
+
 本项目提供了一个专门用于模板开发的调试工具 `scripts/debug_render.py`，可以在不启动完整 AstrBot 环境的情况下快速预览模板渲染效果。
 
 **使用方法：**
