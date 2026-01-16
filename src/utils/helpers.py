@@ -4,6 +4,7 @@
 """
 
 import asyncio
+
 from astrbot.api import logger
 
 from ...src.analysis.llm_analyzer import LLMAnalyzer

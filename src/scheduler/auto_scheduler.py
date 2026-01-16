@@ -3,11 +3,13 @@
 负责定时任务和自动分析功能
 """
 
-import aiohttp
 import asyncio
 import base64
 import weakref
 from datetime import datetime, timedelta
+
+import aiohttp
+
 from astrbot.api import logger
 
 
