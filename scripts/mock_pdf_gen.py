@@ -17,7 +17,7 @@ sys.path.insert(0, project_root)
 print(f"Project Root: {project_root}")
 
 # Mock logger before importing anything that uses it
-from astrbot.api import logger
+from astrbot.api import logger  # noqa: E402
 
 logger.info = lambda msg, *args, **kwargs: print(f"[INFO] {msg}")
 logger.error = lambda msg, *args, **kwargs: print(f"[ERROR] {msg}")
