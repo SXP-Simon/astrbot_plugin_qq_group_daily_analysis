@@ -14,6 +14,7 @@ class BotManager:
     def __init__(self, config_manager):
         self.config_manager = config_manager
         self._bot_instances = {}  # 改为字典：{platform_id: bot_instance}
+        self._platforms = {}  # 存储平台对象以访问配置
         self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
         self._is_initialized = False
@@ -110,6 +111,7 @@ class BotManager:
             ):
                 platform_id = platform.metadata.id
                 self.set_bot_instance(bot_client, platform_id)
+                self._platforms[platform_id] = platform
                 discovered[platform_id] = bot_client
 
         return discovered
@@ -193,3 +195,24 @@ class BotManager:
         sender_id_str = str(sender_id)
         # 检查是否在QQ号列表中
         return sender_id_str in self._bot_qq_ids
+
+    def is_plugin_enabled(self, platform_id: str, plugin_name: str) -> bool:
+        """检查指定平台是否启用了该插件"""
+        if platform_id not in self._platforms:
+            # 如果找不到平台对象（例如是手动添加的），默认认为启用
+            # 或者可以返回 True，因为无法进行否定检查
+            return True
+
+        platform = self._platforms[platform_id]
+        if not hasattr(platform, "config") or not isinstance(platform.config, dict):
+            return True
+
+        plugin_set = platform.config.get("plugin_set", ["*"])
+
+        if plugin_set is None:
+            return False  # 如果明确为 None, 视为都不启用? 或者默认? Default is ["*"] usually.
+
+        if "*" in plugin_set:
+            return True
+
+        return plugin_name in plugin_set
