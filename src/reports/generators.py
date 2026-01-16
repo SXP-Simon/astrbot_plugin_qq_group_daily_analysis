@@ -302,12 +302,17 @@ class ReportGenerator:
         try:
             avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
             async with aiohttp.ClientSession() as client:
-                response = await client.get(avatar_url)
-                response.raise_for_status()
-                avatar_data = await response.read()
-                # 转换为base64编码
-                avatar_base64 = base64.b64encode(avatar_data).decode("utf-8")
-                return f"data:image/jpeg;base64,{avatar_base64}"
+                async with client.get(avatar_url) as response:
+                    response.raise_for_status()
+                    avatar_data = await response.read()
+
+                    if not isinstance(avatar_data, bytes):
+                        logger.warning(f"获取到的头像数据类型异常: {type(avatar_data)}")
+                        return None
+
+                    # 转换为base64编码
+                    avatar_base64 = base64.b64encode(avatar_data).decode("utf-8")
+                    return f"data:image/jpeg;base64,{avatar_base64}"
         except Exception as e:
             logger.error(f"获取用户头像失败 {user_id}: {e}")
             return None
