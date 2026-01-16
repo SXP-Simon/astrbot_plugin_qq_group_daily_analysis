@@ -12,16 +12,18 @@
         今日话题 Topics
     </div>
     {% for topic in topics %}
-    <div class="topic-item">
+    <div class="topic-item avoid-break">
         <div class="check-box">
             <div class="check-tick"></div>
         </div>
         <div class="topic-content">
             <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;">
                 <span class="topic-title">{{ topic.topic.topic }}</span>
-                <span style="font-size: 0.85em; color: #999; font-family: var(--font-body);">#{{ "%02d"|format(topic.index) }}</span>
+                <span style="font-size: 0.85em; color: #999; font-family: var(--font-body);">#{{
+                    "%02d"|format(topic.index) }}</span>
             </div>
-            <div style="font-family: var(--font-hand); font-size: 1.05em; color: var(--ink-secondary); margin-bottom: 8px;">
+            <div
+                style="font-family: var(--font-hand); font-size: 1.05em; color: var(--ink-secondary); margin-bottom: 8px;">
                 🙋‍♀️ 参与者： {{ topic.contributors }}
             </div>
             <div class="topic-detail">{{ topic.topic.detail }}</div>

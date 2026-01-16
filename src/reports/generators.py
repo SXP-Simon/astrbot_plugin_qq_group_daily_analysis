@@ -30,7 +30,9 @@ class ReportGenerator:
         """生成图片格式的分析报告"""
         try:
             # 准备渲染数据
-            render_payload = await self._prepare_render_data(analysis_result)
+            render_payload = await self._prepare_render_data(
+                analysis_result, chart_template="activity_chart.html"
+            )
 
             # 先渲染HTML模板（使用异步方法）
             image_template = await self.html_templates.get_image_template_async()
@@ -99,7 +101,9 @@ class ReportGenerator:
             pdf_path = output_dir / filename
 
             # 准备渲染数据
-            render_data = await self._prepare_render_data(analysis_result)
+            render_data = await self._prepare_render_data(
+                analysis_result, chart_template="activity_chart_pdf.html"
+            )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
             # 生成 HTML 内容（使用异步方法）
@@ -166,7 +170,9 @@ class ReportGenerator:
 
         return report
 
-    async def _prepare_render_data(self, analysis_result: dict) -> dict:
+    async def _prepare_render_data(
+        self, analysis_result: dict, chart_template: str = "activity_chart.html"
+    ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -236,7 +242,7 @@ class ReportGenerator:
             activity_viz.hourly_activity
         )
         hourly_chart_html = self.html_templates.render_template(
-            "activity_chart.html", chart_data=chart_data
+            chart_template, chart_data=chart_data
         )
         logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
@@ -294,7 +300,7 @@ class ReportGenerator:
     async def _get_user_avatar(self, user_id: str) -> str | None:
         """获取用户头像的base64编码"""
         try:
-            avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
+            avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
             async with aiohttp.ClientSession() as client:
                 response = await client.get(avatar_url)
                 response.raise_for_status()
@@ -350,7 +356,7 @@ class ReportGenerator:
                     "--enable-automation",
                     "--password-store=basic",
                     "--use-mock-keychain",
-                    "--export-tagged-pdf",
+                    # "--export-tagged-pdf", # Removed to reduce size
                     "--disable-web-security",
                     "--disable-features=VizDisplayCompositor",
                     "--disable-blink-features=AutomationControlled",  # 隐藏自动化特征
@@ -435,8 +441,8 @@ class ReportGenerator:
                 # 设置页面视口，减少内存占用
                 await page.setViewport(
                     {
-                        "width": 1024,
-                        "height": 768,
+                        "width": 800,  # Match A4 width approx (794px at 96PPI)
+                        "height": 1000,
                         "deviceScaleFactor": 1,
                         "isMobile": False,
                         "hasTouch": False,
@@ -457,7 +463,7 @@ class ReportGenerator:
 
                 # 确保CDN字体等资源加载完成
                 logger.info("等待资源加载(10s)...")
-                await asyncio.sleep(10)
+                await asyncio.sleep(5)
 
                 # 导出 PDF，使用更保守的设置
                 logger.info("开始生成PDF...")
@@ -471,7 +477,7 @@ class ReportGenerator:
                         "bottom": "10mm",
                         "left": "10mm",
                     },
-                    "scale": 0.8,
+                    "scale": 1.0,
                     "displayHeaderFooter": False,
                     "preferCSSPageSize": True,
                     "timeout": 60000,  # 增加PDF生成超时时间到60秒
