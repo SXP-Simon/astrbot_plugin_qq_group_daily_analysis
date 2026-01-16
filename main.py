@@ -377,7 +377,8 @@ class QQGroupDailyAnalysis(Star):
             return
 
         import os
-        from astrbot.api.message_components import Node, Nodes, Plain, Image
+
+        from astrbot.api.message_components import Image, Node, Nodes, Plain
 
         # 获取模板目录
         template_dir = os.path.join(

@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-import json
 from datetime import datetime
 
 # ==========================================
@@ -26,11 +25,11 @@ logger.warning = lambda msg, *args, **kwargs: print(f"[WARN] {msg}")
 
 # Now import plugin modules
 try:
-    from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.reports.generators import (
-        ReportGenerator,
-    )
     from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.core.config import (
         ConfigManager,
+    )
+    from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.reports.generators import (
+        ReportGenerator,
     )
 except ImportError as e:
     print(f"Import Error: {e}")

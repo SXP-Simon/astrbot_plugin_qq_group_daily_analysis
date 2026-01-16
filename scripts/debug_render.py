@@ -1,7 +1,7 @@
+import argparse
+import asyncio
 import os
 import sys
-import asyncio
-import argparse
 from pathlib import Path
 
 # Add src to path so we can import our modules
@@ -18,17 +18,17 @@ astrbot_api.logger.warning = lambda x, *args, **kwargs: print(f"[WARN] {x}")
 astrbot_api.AstrBotConfig = dict
 sys.modules["astrbot.api"] = astrbot_api
 
-from src.reports.templates import HTMLTemplates  # noqa: E402
-from src.reports.generators import ReportGenerator  # noqa: E402
 from src.models.data_models import (  # noqa: E402
+    ActivityVisualization,
+    EmojiStatistics,
+    GoldenQuote,
     GroupStatistics,
     SummaryTopic,
-    UserTitle,
-    GoldenQuote,
     TokenUsage,
-    EmojiStatistics,
-    ActivityVisualization,
+    UserTitle,
 )
+from src.reports.generators import ReportGenerator  # noqa: E402
+from src.reports.templates import HTMLTemplates  # noqa: E402
 
 
 class MockConfigManager:
