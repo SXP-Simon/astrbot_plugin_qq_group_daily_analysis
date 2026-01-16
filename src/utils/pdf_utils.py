@@ -169,6 +169,11 @@ class PDFInstaller:
                 "lsb-release",
                 "wget",
                 "xdg-utils",
+                # Chinese Fonts
+                "fonts-noto-cjk",
+                "fonts-wqy-zenhei",
+                # Emoji Fonts
+                "fonts-noto-color-emoji",
             ]
 
             # 使用 shell=True 来执行连接命令，但在 asyncio 中通常使用 shell wrap
@@ -226,12 +231,14 @@ class PDFInstaller:
                     PDFInstaller._download_status["completed"] = True
                     PDFInstaller._download_status["failed"] = False
                     logger.info("✅ Chromium 后台下载完成！")
+                    return "✅ Chromium 后台下载完成！"
                 else:
                     PDFInstaller._download_status["failed"] = True
                     PDFInstaller._download_status["error_message"] = (
                         "下载失败，请检查网络连接"
                     )
                     logger.error("❌ Chromium 下载失败")
+                    return "❌ Chromium 下载失败"
 
             except asyncio.TimeoutError:
                 PDFInstaller._download_status["failed"] = True
@@ -239,11 +246,13 @@ class PDFInstaller:
                     f"下载超时（{timeout_seconds}秒）"
                 )
                 logger.error(f"❌ Chromium 下载超时（{timeout_seconds}秒）")
+                return f"❌ Chromium 下载超时（{timeout_seconds}秒）"
 
         except Exception as e:
             PDFInstaller._download_status["failed"] = True
             PDFInstaller._download_status["error_message"] = str(e)
             logger.error(f"后台下载 Chromium 时出错: {e}", exc_info=True)
+            return f"❌ 后台下载 Chromium 时出错: {e}"
         finally:
             PDFInstaller._download_status["in_progress"] = False
 
