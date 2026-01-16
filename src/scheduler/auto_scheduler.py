@@ -4,10 +4,11 @@
 """
 
 import asyncio
+import base64
 import weakref
 from datetime import datetime, timedelta
+
 import aiohttp
-import base64
 
 
 from astrbot.api import logger
@@ -314,6 +315,13 @@ class AutoScheduler:
                     )
 
                     for test_platform_id, test_bot_instance in available_platforms:
+                        # 检查该平台是否启用了此插件
+                        if not self.bot_manager.is_plugin_enabled(
+                            test_platform_id, "astrbot_plugin_qq_group_daily_analysis"
+                        ):
+                            logger.debug(f"平台 {test_platform_id} 未启用此插件，跳过")
+                            continue
+
                         try:
                             logger.info(
                                 f"尝试使用平台 {test_platform_id} 获取群 {group_id} 的消息..."
@@ -428,6 +436,13 @@ class AutoScheduler:
             return []
 
         for platform_id, bot_instance in self.bot_manager._bot_instances.items():
+            # 检查该平台是否启用了此插件
+            if not self.bot_manager.is_plugin_enabled(
+                platform_id, "astrbot_plugin_qq_group_daily_analysis"
+            ):
+                logger.debug(f"平台 {platform_id} 未启用此插件，跳过获取群列表")
+                continue
+
             try:
                 # 尝试使用 call_action 获取群列表
                 call_action_func = None
