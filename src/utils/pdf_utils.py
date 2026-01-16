@@ -66,8 +66,17 @@ class PDFInstaller:
 
     @staticmethod
     async def install_system_deps():
-        """通过 pyppeteer 自动安装 Chromium（异步非阻塞方式）"""
+        """安装系统依赖（Linux下安装库，所有平台下载Chromium）"""
         try:
+            logger.info("开始安装 PDF 功能系统依赖...")
+
+            # 1. 如果是Linux，尝试安装系统库
+            if sys.platform.startswith("linux"):
+                linux_deps_result = await PDFInstaller._install_linux_deps()
+                if linux_deps_result:
+                    logger.info(f"Linux 依赖安装结果: {linux_deps_result}")
+
+            # 2. 也是原有的逻辑：自动下载 Chromium
             logger.info("正在通过 pyppeteer 自动安装 Chromium...")
 
             # 检查是否已经在下载中
@@ -83,7 +92,10 @@ class PDFInstaller:
             # 在后台线程中启动下载
             asyncio.create_task(PDFInstaller._background_chromium_download())
 
-            return """⏳ Chromium 下载已在后台启动
+            return """🚀 依赖安装任务已启动
+
+1. Linux 系统依赖正在尝试自动安装...
+2. Chromium 下载已在后台启动...
 
 这可能需要几分钟时间，请稍候...
 下载过程不会阻塞 Bot 的正常运行。
@@ -94,8 +106,105 @@ class PDFInstaller:
             PDFInstaller._download_status["in_progress"] = False
             PDFInstaller._download_status["failed"] = True
             PDFInstaller._download_status["error_message"] = str(e)
-            logger.error(f"启动 Chromium 下载时出错: {e}")
-            return f"❌ 启动 Chromium 下载时出错: {str(e)}"
+            logger.error(f"启动依赖安装时出错: {e}")
+            return f"❌ 启动依赖安装时出错: {str(e)}"
+
+    @staticmethod
+    async def _install_linux_deps():
+        """尝试在 Linux 下安装 Chromium 所需的依赖库"""
+        try:
+            # 检查是否是 Debian/Ubuntu 系列
+            try:
+                # 简单检查 apt-get 是否存在
+                process = await asyncio.create_subprocess_exec(
+                    "which",
+                    "apt-get",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await process.communicate()
+                if process.returncode != 0:
+                    return "非 Debian/Ubuntu 系统，跳过自动安装系统库"
+            except Exception:
+                return "无法检测包管理器，跳过自动安装系统库"
+
+            logger.info("检测到 Debian/Ubuntu 系统，开始安装依赖库...")
+
+            # 依赖列表
+            deps = [
+                "ca-certificates",
+                "fonts-liberation",
+                "libappindicator3-1",
+                "libasound2",
+                "libatk-bridge2.0-0",
+                "libatk1.0-0",
+                "libc6",
+                "libcairo2",
+                "libcups2",
+                "libdbus-1-3",
+                "libexpat1",
+                "libfontconfig1",
+                "libgbm1",
+                "libgcc1",
+                "libglib2.0-0",
+                "libgtk-3-0",
+                "libnspr4",
+                "libnss3",
+                "libpango-1.0-0",
+                "libpangocairo-1.0-0",
+                "libstdc++6",
+                "libx11-6",
+                "libx11-xcb1",
+                "libxcb1",
+                "libxcomposite1",
+                "libxcursor1",
+                "libxdamage1",
+                "libxext6",
+                "libxfixes3",
+                "libxi6",
+                "libxrandr2",
+                "libxrender1",
+                "libxss1",
+                "libxtst6",
+                "lsb-release",
+                "wget",
+                "xdg-utils",
+            ]
+
+            # 使用 shell=True 来执行连接命令，但在 asyncio 中通常使用 shell wrap
+            # 这里我们分两步执行
+
+            logger.info("执行: apt-get update")
+            proc_update = await asyncio.create_subprocess_shell(
+                "apt-get update",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc_update.communicate()
+            if proc_update.returncode != 0:
+                logger.error(f"apt-get update 失败: {stderr.decode()}")
+                return f"apt-get update 失败: {stderr.decode()[:100]}..."
+
+            logger.info("执行: apt-get install ...")
+            install_cmd = "apt-get install -y --no-install-recommends " + " ".join(deps)
+            proc_install = await asyncio.create_subprocess_shell(
+                install_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc_install.communicate()
+
+            if proc_install.returncode == 0:
+                logger.info("Linux 系统依赖库安装成功")
+                return "✅ Linux 系统依赖库安装成功"
+            else:
+                start_err = stderr.decode()[:200]
+                logger.error(f"Linux 系统依赖库安装失败: {stderr.decode()}")
+                return f"❌ Linux 系统依赖库安装失败: {start_err}..."
+
+        except Exception as e:
+            logger.error(f"Linux 依赖安装异常: {e}")
+            return f"❌ Linux 依赖安装异常: {e}"
 
     @staticmethod
     async def _background_chromium_download():
@@ -140,169 +249,61 @@ class PDFInstaller:
 
     @staticmethod
     async def _download_chromium_via_pyppeteer():
-        """通过 pyppeteer 自动下载 Chromium（带重试机制）"""
-        max_retries = 2
-        retry_count = 0
+        """通过 pyppeteer 自动下载 Chromium（不启动浏览器）"""
+        try:
+            logger.info("开始通过 pyppeteer 下载 Chromium...")
 
-        while retry_count <= max_retries:
+            # 尝试方法1：使用 pyppeteer-install 命令行工具
+            # 这是官方推荐的安装方式，会自动处理版本和路径
             try:
-                if retry_count > 0:
-                    logger.info(
-                        f"正在重试下载 Chromium（第 {retry_count}/{max_retries} 次）..."
-                    )
+                logger.info("方法1: 尝试调用 pyppeteer-install 命令...")
+                process = await asyncio.create_subprocess_exec(
+                    "pyppeteer-install",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await process.communicate()
+
+                if process.returncode == 0:
+                    logger.info(f"✅ pyppeteer-install 执行成功: {stdout.decode()}")
+                    return True
                 else:
-                    logger.info("通过 pyppeteer 自动下载 Chromium...")
+                    logger.warning(f"pyppeteer-install 执行失败: {stderr.decode()}")
+            except Exception as e:
+                logger.warning(f"无法调用 pyppeteer-install 命令: {e}")
 
-                # 导入 pyppeteer 并尝试下载
-                try:
-                    import pyppeteer
-                    from pyppeteer import launch
-                    from pyppeteer.errors import BrowserError
+            # 尝试方法2：直接调用内部下载函数
+            try:
+                logger.info("方法2: 尝试直接调用 pyppeteer.chromium_downloader...")
+                import pyppeteer.chromium_downloader
 
-                    # 方法1: 尝试直接下载 Chromium 而不启动浏览器
-                    logger.info("尝试直接下载 Chromium...")
-                    try:
-                        from pyppeteer.launcher import Launcher
-
-                        # 创建 Launcher 实例但不启动浏览器
-                        launcher = Launcher(
-                            headless=True,
-                            args=["--no-sandbox", "--disable-setuid-sandbox"],
-                        )
-
-                        # 只下载 Chromium
-                        launcher._get_chromium_revision()
-                        await launcher._download_chromium()
-
-                        logger.info("✅ Chromium 下载完成")
-                        return True
-
-                    except Exception as download_error:
-                        logger.warning(f"直接下载 Chromium 失败: {download_error}")
-                        logger.info("尝试通过启动浏览器来下载...")
-
-                    # 方法2: 通过启动浏览器触发自动下载
-                    import platform
-
-                    system = platform.system().lower()
-
-                    if system == "linux":
-                        browser_args = [
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox",
-                            "--disable-dev-shm-usage",
-                            "--disable-accelerated-2d-canvas",
-                            "--no-first-run",
-                            "--no-zygote",
-                            "--disable-gpu",
-                            "--disable-background-timer-throttling",
-                            "--disable-backgrounding-occluded-windows",
-                            "--disable-renderer-backgrounding",
-                            "--disable-features=TranslateUI",
-                            "--disable-ipc-flooding-protection",
-                        ]
-                    else:
-                        browser_args = [
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox",
-                            "--disable-gpu",
-                        ]
-
-                    logger.info("启动 pyppeteer 浏览器以触发 Chromium 自动下载...")
-                    browser = await launch(
-                        headless=True,
-                        args=browser_args,
-                        ignoreHTTPSErrors=True,
-                        dumpio=False,  # 关闭浏览器日志输出以减少干扰
-                    )
-
-                    # 获取 Chromium 路径
-                    chromium_path = pyppeteer.executablePath()
-                    logger.info(f"✅ Chromium 自动下载完成，路径: {chromium_path}")
-
-                    await browser.close()
+                # 检查是否已存在
+                if pyppeteer.chromium_downloader.check_chromium():
+                    logger.info("✅ Chromium 已存在，无需下载")
                     return True
 
-                except BrowserError as e:
-                    logger.error(f"浏览器错误: {e}")
+                logger.info("正在下载 Chromium...")
+                # download_chromium 是同步阻塞的，需要在线程池中运行
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None, pyppeteer.chromium_downloader.download_chromium
+                )
 
-                    # 方法3: 使用子进程命令行触发下载
-                    try:
-                        logger.info("尝试使用命令行触发 Chromium 自动下载...")
-
-                        import platform
-
-                        system = platform.system().lower()
-
-                        if system == "linux":
-                            cmd = [
-                                sys.executable,
-                                "-c",
-                                """
-import pyppeteer
-import asyncio
-
-async def download_chrome():
-    try:
-        browser = await pyppeteer.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--single-process'
-            ]
-        )
-        await browser.close()
-        print("Chromium 下载成功")
-    except Exception as e:
-        print(f"下载失败: {e}")
-        raise
-
-asyncio.run(download_chrome())
-                                """,
-                            ]
-                        else:
-                            cmd = [
-                                sys.executable,
-                                "-c",
-                                "import pyppeteer; import asyncio; asyncio.run(pyppeteer.launch())",
-                            ]
-
-                        process = await asyncio.create_subprocess_exec(
-                            *cmd,
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE,
-                        )
-
-                        stdout, stderr = await process.communicate()
-
-                        if process.returncode == 0:
-                            logger.info("✅ 成功通过命令行触发 Chromium 自动下载")
-                            return True
-                        else:
-                            logger.error(f"命令行触发自动下载失败: {stderr.decode()}")
-                            raise Exception(f"命令行下载失败: {stderr.decode()}")
-
-                    except Exception as e2:
-                        logger.error(f"命令行触发自动下载失败: {e2}")
-                        raise
-
-            except Exception as e:
-                retry_count += 1
-                if retry_count <= max_retries:
-                    wait_time = retry_count * 5  # 递增等待时间：5秒、10秒
-                    logger.warning(f"下载失败，{wait_time}秒后重试... 错误: {e}")
-                    await asyncio.sleep(wait_time)
+                if pyppeteer.chromium_downloader.check_chromium():
+                    logger.info("✅ Chromium 下载验证成功")
+                    return True
                 else:
-                    logger.error(
-                        f"通过 pyppeteer 自动下载 Chromium 失败（已重试{max_retries}次）: {e}",
-                        exc_info=True,
-                    )
+                    logger.error("❌ Chromium 下载函数执行完成但未发现可执行文件")
                     return False
 
-        return False
+            except Exception as e:
+                logger.error(f"直接调用下载函数失败: {e}")
+
+            return False
+
+        except Exception as e:
+            logger.error(f"下载过程发生未知错误: {e}")
+            return False
 
     @staticmethod
     def get_pdf_status(config_manager) -> str:

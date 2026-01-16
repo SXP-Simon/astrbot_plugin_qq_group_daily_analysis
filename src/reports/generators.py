@@ -446,9 +446,7 @@ class ReportGenerator:
 
                 # 设置页面内容，使用更安全的加载方式
                 logger.info("开始设置页面内容...")
-                await page.setContent(
-                    html_content, {"waitUntil": "domcontentloaded", "timeout": 30000}
-                )
+                await page.setContent(html_content)
 
                 # 等待页面基本加载完成，但不要太长时间
                 try:
