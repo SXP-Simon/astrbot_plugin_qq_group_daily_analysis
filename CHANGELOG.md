@@ -1,13 +1,18 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.6.0] - 通过 AstrBot 配置文件来判断账号启用插件
+## [v4.6.1] - Linux 下的 `/安装PDF` 指令简易修复，纠正头像获取的处理；PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
 
-*   **🐛 Bug 修复**: 检查该平台是否包含该插件的配置文件 plugin_set，通过 AstrBot 配置文件来判断账号启用插件。
+*   **🐛 Bug 修复**: 修复 generators.py 中 _get_user_avatar 的 TypeError。将 aiohttp 请求重构为异步上下文模式，确保 response.read() 被正确等待，并增加了网络连接失败处理。
+*   **🐛 Bug 修复**: Linux 环境下的安装 PDF 命令修复，调整 PDF 格式排版情况。PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.0] - 通过 AstrBot 配置文件来判断账号启用插件
+
+*   **🐛 Bug 修复**: 检查该平台是否包含该插件的配置文件 plugin_set，通过 AstrBot 配置文件来判断账号启用插件。
 
 
 ## [v4.5.8] - 群贤毕至添加头像
