@@ -455,8 +455,9 @@ class ReportGenerator:
                 except Exception:
                     logger.warning("等待页面加载超时，继续执行")
 
-                # 减少等待时间，避免内存累积
-                await asyncio.sleep(1)
+                # 确保CDN字体等资源加载完成
+                logger.info("等待资源加载(10s)...")
+                await asyncio.sleep(10)
 
                 # 导出 PDF，使用更保守的设置
                 logger.info("开始生成PDF...")
