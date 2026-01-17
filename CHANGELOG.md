@@ -1,14 +1,19 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.6.1] - Linux 下的 `/安装PDF` 指令简易修复，纠正头像获取的处理；PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
 
-*   **🐛 Bug 修复**: 修复 generators.py 中 _get_user_avatar 的 TypeError。将 aiohttp 请求重构为异步上下文模式，确保 response.read() 被正确等待，并增加了网络连接失败处理。
-*   **🐛 Bug 修复**: Linux 环境下的安装 PDF 命令修复，调整 PDF 格式排版情况。PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
+## [v4.6.2] - 新增图片报告重试机制并优化调度稳定性
+
+*   **✨ 新功能**: 新增图片报告重试机制并优化调度稳定性，实现延迟队列与死信队列，支持指数退避 + 随机抖动 (Jitter) 重试策略。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.1] - Linux 下的 `/安装PDF` 指令简易修复，纠正头像获取的处理；PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
+
+*   **🐛 Bug 修复**: 修复 generators.py 中 _get_user_avatar 的 TypeError。将 aiohttp 请求重构为异步上下文模式，确保 response.read() 被正确等待，并增加了网络连接失败处理。
+*   **🐛 Bug 修复**: Linux 环境下的安装 PDF 命令修复，调整 PDF 格式排版情况。PDF 格式在 Linux 环境下占用过大，原因还在排查中，暂时不推荐使用。
 
 ## [v4.6.0] - 通过 AstrBot 配置文件来判断账号启用插件
 

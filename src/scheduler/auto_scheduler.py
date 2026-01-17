@@ -565,7 +565,7 @@ class AutoScheduler:
                                     f"群 {group_id} 图片生成失败，已静默加入重试队列"
                                 )
                                 await self.retry_manager.add_task(
-                                    html_content, group_id, platform_id
+                                    html_content, analysis_result, group_id, platform_id
                                 )
                             else:
                                 logger.error(
