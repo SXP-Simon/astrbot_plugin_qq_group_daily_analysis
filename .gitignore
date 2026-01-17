@@ -42,3 +42,4 @@ src/utils/__pycache__/helpers.cpython-311.pyc
 src/utils/__pycache__/pdf_utils.cpython-311.pyc
 src/visualization/__pycache__/__init__.cpython-311.pyc
 src/visualization/__pycache__/activity_charts.cpython-311.pyc
+src/scheduler/__pycache__/retry.cpython-311.pyc

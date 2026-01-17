@@ -26,8 +26,16 @@ class ReportGenerator:
 
     async def generate_image_report(
         self, analysis_result: dict, group_id: str, html_render_func
-    ) -> str | None:
-        """生成图片格式的分析报告"""
+    ) -> tuple[str | None, str | None]:
+        """
+        生成图片格式的分析报告
+
+        Returns:
+            tuple[str | None, str | None]: (image_url, html_content)
+            - image_url: 生成的图片URL，如果生成失败则为None
+            - html_content: 生成的HTML内容，如果渲染失败但HTML生成成功，则返回此内容供重试
+        """
+        html_content = None
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(
@@ -41,7 +49,7 @@ class ReportGenerator:
             # 检查HTML内容是否有效
             if not html_content:
                 logger.error("图片报告HTML渲染失败：返回空内容")
-                return None
+                return None, None
 
             logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
 
@@ -59,30 +67,42 @@ class ReportGenerator:
                 image_options,
             )
 
-            logger.info(f"图片生成成功: {image_url}")
-            return image_url
+            if image_url:
+                logger.info(f"图片生成成功: {image_url}")
+                return image_url, html_content
+            else:
+                # 渲染服务返回None，可能是渲染失败
+                logger.warning("渲染服务返回空URL")
+                return None, html_content
 
         except Exception as e:
             logger.error(f"生成图片报告失败: {e}", exc_info=True)
             # 尝试使用更简单的选项作为后备方案
-            try:
-                logger.info("尝试使用低质量选项重新生成...")
-                simple_options = {
-                    "full_page": True,
-                    "type": "jpeg",
-                    "quality": 70,  # 降低质量以提高兼容性
-                }
-                image_url = await html_render_func(
-                    html_content,  # 使用已渲染的HTML
-                    {},  # 空数据字典
-                    True,
-                    simple_options,
-                )
-                logger.info(f"使用低质量选项生成成功: {image_url}")
-                return image_url
-            except Exception as fallback_e:
-                logger.error(f"后备低质量方案也失败: {fallback_e}")
-                return None
+            if html_content:
+                try:
+                    logger.info("尝试使用低质量选项重新生成...")
+                    simple_options = {
+                        "full_page": True,
+                        "type": "jpeg",
+                        "quality": 70,  # 降低质量以提高兼容性
+                    }
+                    image_url = await html_render_func(
+                        html_content,  # 使用已渲染的HTML
+                        {},  # 空数据字典
+                        True,
+                        simple_options,
+                    )
+                    if image_url:
+                        logger.info(f"使用低质量选项生成成功: {image_url}")
+                        return image_url, html_content
+                    else:
+                        logger.warning("低质量作为后备方案也返回空URL")
+                        return None, html_content
+                except Exception as fallback_e:
+                    logger.error(f"后备低质量方案也失败: {fallback_e}")
+                    return None, html_content
+
+            return None, html_content
 
     async def generate_pdf_report(
         self, analysis_result: dict, group_id: str

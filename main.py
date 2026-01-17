@@ -22,6 +22,7 @@ from .src.core.bot_manager import BotManager
 from .src.core.config import ConfigManager
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
+from .src.scheduler.retry import RetryManager
 from .src.utils.helpers import MessageAnalyzer
 from .src.utils.pdf_utils import PDFInstaller
 
@@ -39,12 +40,14 @@ class QQGroupDailyAnalysis(Star):
             context, self.config_manager, self.bot_manager
         )
         self.report_generator = ReportGenerator(self.config_manager)
+        self.retry_manager = RetryManager(self.bot_manager, self.html_render)
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.message_analyzer.message_handler,
             self.message_analyzer,
             self.report_generator,
             self.bot_manager,
+            self.retry_manager,
             self.html_render,  # 传入html_render函数
         )
 
@@ -77,6 +80,9 @@ class QQGroupDailyAnalysis(Star):
                 status = self.bot_manager.get_status_info()
                 logger.info(f"Bot管理器状态: {status}")
 
+            # 始终启动重试管理器，确保手动触发也能使用重试队列
+            await self.retry_manager.start()
+
         except Exception as e:
             logger.debug(f"延迟启动调度器失败，可能由于短时间内多次更新插件配置: {e}")
 
@@ -90,6 +96,9 @@ class QQGroupDailyAnalysis(Star):
                 logger.info("正在停止自动调度器...")
                 await self.auto_scheduler.stop_scheduler()
                 logger.info("自动调度器已停止")
+
+            if self.retry_manager:
+                await self.retry_manager.stop()
 
             # 重置实例属性
             self.auto_scheduler = None
@@ -185,19 +194,35 @@ class QQGroupDailyAnalysis(Star):
             # 生成报告
             output_format = self.config_manager.get_output_format()
             if output_format == "image":
-                image_url = await self.report_generator.generate_image_report(
+                (
+                    image_url,
+                    html_content,
+                ) = await self.report_generator.generate_image_report(
                     analysis_result, group_id, self.html_render
                 )
                 if image_url:
                     yield event.image_result(image_url)
+                elif html_content:
+                    # 生成失败但有HTML，加入重试队列
+                    logger.warning("图片报告生成失败，加入重试队列")
+                    yield event.plain_result(
+                        "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告暂无法生成，已加入重试队列，稍后将自动重试发送。"
+                    )
+                    # 获取 platform_id
+                    platform_id = await self.auto_scheduler.get_platform_id_for_group(
+                        group_id
+                    )
+                    await self.retry_manager.add_task(
+                        html_content, group_id, platform_id
+                    )
                 else:
-                    # 如果图片生成失败，回退到文本报告
-                    logger.warning("图片报告生成失败，回退到文本报告")
+                    # 如果图片生成失败且无HTML，回退到文本报告
+                    logger.warning("图片报告生成失败（无HTML），回退到文本报告")
                     text_report = self.report_generator.generate_text_report(
                         analysis_result
                     )
                     yield event.plain_result(
-                        f"⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
+                        f"[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
                     )
             elif output_format == "pdf":
                 if not self.config_manager.pyppeteer_available:
