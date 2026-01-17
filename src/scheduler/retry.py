@@ -1,8 +1,8 @@
 import asyncio
 import random
 import time
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from astrbot.api import logger
 
@@ -12,6 +12,7 @@ class RetryTask:
     """重试任务数据类"""
 
     html_content: str
+    analysis_result: dict  # 保存原始分析结果，用于文本回退
     group_id: str
     platform_id: str  # 需要保存 platform_id 以便找回 Bot
     retry_count: int = 0
@@ -34,9 +35,10 @@ class RetryManager:
     4. 超过最大重试次数放入死信队列
     """
 
-    def __init__(self, bot_manager, html_render_func: Callable):
+    def __init__(self, bot_manager, html_render_func: Callable, report_generator=None):
         self.bot_manager = bot_manager
         self.html_render_func = html_render_func
+        self.report_generator = report_generator  # 用于生成文本报告
         self.queue = asyncio.Queue()
         self.running = False
         self.worker_task = None
@@ -69,7 +71,9 @@ class RetryManager:
 
         logger.info("[RetryManager] 图片重试管理器已停止")
 
-    async def add_task(self, html_content: str, group_id: str, platform_id: str):
+    async def add_task(
+        self, html_content: str, analysis_result: dict, group_id: str, platform_id: str
+    ):
         """添加重试任务"""
         if not self.running:
             logger.warning(
@@ -79,6 +83,7 @@ class RetryManager:
 
         task = RetryTask(
             html_content=html_content,
+            analysis_result=analysis_result,
             group_id=group_id,
             platform_id=platform_id,
             created_at=time.time(),
@@ -115,10 +120,12 @@ class RetryManager:
                         self.queue.task_done()
                     else:
                         logger.error(
-                            f"[RetryManager] 群 {task.group_id} 超过最大重试次数，移入死信队列"
+                            f"[RetryManager] 群 {task.group_id} 超过最大重试次数，移入死信队列并尝试文本回退"
                         )
                         self._dlq.append(task)
                         self.queue.task_done()
+                        # 尝试发送文本回退
+                        await self._send_fallback_text(task)
                         await self._notify_failure(task)
 
             except asyncio.CancelledError:
@@ -189,7 +196,7 @@ class RetryManager:
                             return True
                         elif retcode == 1200:
                             logger.warning(
-                                f"[RetryManager] 发送失败 (retcode=1200): 可能是Bot被禁言或不在群内，稍后重试"
+                                "[RetryManager] 发送失败 (retcode=1200): 可能是Bot被禁言或不在群内，稍后重试"
                             )
                             return False
                         else:
@@ -224,15 +231,75 @@ class RetryManager:
             logger.error(f"[RetryManager] 处理任务时发生意外错误: {e}", exc_info=True)
             return False
 
-    async def _notify_failure(self, task: RetryTask):
-        """通知最终失败"""
-        try:
-            bot = self.bot_manager.get_bot_instance(task.platform_id)
-            if bot and hasattr(bot, "api") and hasattr(bot.api, "call_action"):
-                await bot.api.call_action(
-                    "send_group_msg",
-                    group_id=int(task.group_id),
-                    message=f"[AstrBot QQ群日常分析总结插件] 报告生成/发送多次失败 (Group: {task.group_id})，请检查服务器日志。",
-                )
         except Exception:
             pass
+
+    async def _send_fallback_text(self, task: RetryTask):
+        """发送文本回退报告（使用合并转发）"""
+        if not self.report_generator:
+            logger.warning("[RetryManager] 未配置 ReportGenerator，无法发送文本回退")
+            return
+
+        try:
+            logger.info(f"[RetryManager] 正在为群 {task.group_id} 生成文本回退报告...")
+            text_report = self.report_generator.generate_text_report(
+                task.analysis_result
+            )
+
+            bot = self.bot_manager.get_bot_instance(task.platform_id)
+            if not bot:
+                return
+
+            # 构造合并转发节点
+            # 注意：这里需要构造符合 OneBot v11 标准的节点列表
+            # 即使没有 self_id，我们也可以尝试发送
+
+            # 获取 bot self_id (如果能获取到)
+            bot_id = "10000"  # fallback id
+            if hasattr(bot, "self_id"):
+                bot_id = str(bot.self_id)
+
+            nickname = "AstrBot日常分析"
+
+            nodes = [
+                {
+                    "type": "node",
+                    "data": {
+                        "name": nickname,
+                        "uin": bot_id,
+                        "content": "⚠️ 图片报告多次生成失败，为您呈现文本版报告：",
+                    },
+                },
+                {
+                    "type": "node",
+                    "data": {"name": nickname, "uin": bot_id, "content": text_report},
+                },
+            ]
+
+            if hasattr(bot, "api") and hasattr(bot.api, "call_action"):
+                # 尝试发送群合并转发消息
+                # 一般使用 send_group_forward_msg 或 send_group_msg (带 nodes)
+                try:
+                    await bot.api.call_action(
+                        "send_group_forward_msg",
+                        group_id=int(task.group_id),
+                        messages=nodes,
+                    )
+                    logger.info(
+                        f"[RetryManager] 群 {task.group_id} 文本回退报告发送成功 (合并转发)"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[RetryManager] 合并转发失败，尝试直接发送文本: {e}"
+                    )
+                    # 回退到直接发送宽文本
+                    await bot.api.call_action(
+                        "send_group_msg",
+                        group_id=int(task.group_id),
+                        message=f"⚠️ 图片报告生成失败，文本报告：\n{text_report}"[
+                            :4500
+                        ],  # 截断防止过长
+                    )
+
+        except Exception as e:
+            logger.error(f"[RetryManager] 文本回退发送失败: {e}", exc_info=True)

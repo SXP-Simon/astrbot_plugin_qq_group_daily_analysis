@@ -40,7 +40,9 @@ class QQGroupDailyAnalysis(Star):
             context, self.config_manager, self.bot_manager
         )
         self.report_generator = ReportGenerator(self.config_manager)
-        self.retry_manager = RetryManager(self.bot_manager, self.html_render)
+        self.retry_manager = RetryManager(
+            self.bot_manager, self.html_render, self.report_generator
+        )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.message_analyzer.message_handler,
@@ -213,7 +215,7 @@ class QQGroupDailyAnalysis(Star):
                         group_id
                     )
                     await self.retry_manager.add_task(
-                        html_content, group_id, platform_id
+                        html_content, analysis_result, group_id, platform_id
                     )
                 else:
                     # 如果图片生成失败且无HTML，回退到文本报告
