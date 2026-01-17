@@ -23,6 +23,7 @@ class AutoScheduler:
         analyzer,
         report_generator,
         bot_manager,
+        retry_manager,  # 新增
         html_render_func=None,
     ):
         self.config_manager = config_manager
@@ -30,6 +31,7 @@ class AutoScheduler:
         self.analyzer = analyzer
         self.report_generator = report_generator
         self.bot_manager = bot_manager
+        self.retry_manager = retry_manager  # 保存引用
         self.html_render_func = html_render_func
         self.scheduler_task = None
         self.last_execution_date = None  # 记录上次执行日期，防止重复执行
@@ -410,7 +412,7 @@ class AutoScheduler:
                     return
 
                 # 生成并发送报告
-                await self._send_analysis_report(group_id, analysis_result)
+                await self._send_analysis_report(group_id, analysis_result, platform_id)
 
                 # 记录执行时间
                 end_time = asyncio.get_event_loop().time()
@@ -494,10 +496,13 @@ class AutoScheduler:
 
         return list(all_groups)
 
-    async def _send_analysis_report(self, group_id: str, analysis_result: dict):
+    async def _send_analysis_report(
+        self, group_id: str, analysis_result: dict, platform_id: str | None = None
+    ):
         logger.info(
             f"[DEBUG][SEND_REPORT] enter "
             f"group_id={group_id}, "
+            f"platform_id={platform_id}, "
             f"analysis_result_keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)}"
         )
 
@@ -510,13 +515,17 @@ class AutoScheduler:
                     # 使用图片格式
                     logger.info(f"群 {group_id} 自动分析使用图片报告格式")
                     try:
-                        image_url = await self.report_generator.generate_image_report(
+                        (
+                            image_url,
+                            html_content,
+                        ) = await self.report_generator.generate_image_report(
                             analysis_result, group_id, self.html_render_func
                         )
                         logger.debug(
-                            f"[DEBUG][SEND_REPORT] 图片生成成功"
+                            f"[DEBUG][SEND_REPORT] 图片生成结果 "
                             f"group_id={group_id}, "
-                            f"image_url={image_url}"
+                            f"image_url={'Success' if image_url else 'Fail'}, "
+                            f"html_content={'Available' if html_content else 'None'}"
                         )
 
                         if image_url:
@@ -538,6 +547,40 @@ class AutoScheduler:
                                 await self._send_text_message(
                                     group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
                                 )
+                        elif html_content:
+                            # 生成失败但有HTML，加入重试队列
+                            logger.warning(
+                                f"群 {group_id} 图片报告生成失败，加入重试队列"
+                            )
+
+                            # 尝试获取 platform_id (如果参数为None)
+                            if not platform_id:
+                                platform_id = await self.get_platform_id_for_group(
+                                    group_id
+                                )
+
+                            if platform_id:
+                                # 定时任务静默重试，不发送提示消息，只记录日志
+                                logger.info(
+                                    f"群 {group_id} 图片生成失败，已静默加入重试队列"
+                                )
+                                await self.retry_manager.add_task(
+                                    html_content, group_id, platform_id
+                                )
+                            else:
+                                logger.error(
+                                    f"群 {group_id} 无法获取平台ID，无法加入重试队列"
+                                )
+                                # Fallback to text
+                                text_report = (
+                                    self.report_generator.generate_text_report(
+                                        analysis_result
+                                    )
+                                )
+                                await self._send_text_message(
+                                    group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
+                                )
+
                         else:
                             # 图片生成失败（返回None），回退到文本
                             logger.warning(
