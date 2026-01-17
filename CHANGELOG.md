@@ -1,14 +1,19 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v4.6.3] - 默认模板 scrapbook 的 activity_chart 排版调整为横向
+## [v4.6.4] - 重试管理器优化和业务逻辑调整
 
-*   **🎨 样式优化**: activity_chart 排版调整为横向，减小没有实质内容的 activity_chart 对排版的空间占用。
+*   **🛠️ 健壮性增强**: 重试管理器直接从渲染器请求原始图像字节，QQ 客户端不再需要从本地服务器下载图片，从而绕过了导致超时的网络传输层。
+*   **🐛 Bug 修复**: 解决手动群分析命令在 NTQQ 内核尝试上传图片并将其推送到腾讯服务器时，超过了预设的时间限制（通常是 120 毫秒或更久），导致连接断开。的 aiocqhttp.exceptions.ActionFailed 问题
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.3] - 默认模板 scrapbook 的 activity_chart 排版调整为横向
+
+*   **🎨 样式优化**: activity_chart 排版调整为横向，减小没有实质内容的 activity_chart 对排版的空间占用。
 
 ## [v4.6.2] - 新增图片报告重试机制并优化调度稳定性
 
