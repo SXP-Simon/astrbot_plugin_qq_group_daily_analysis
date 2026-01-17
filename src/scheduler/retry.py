@@ -1,7 +1,7 @@
 import asyncio
+import base64
 import random
 import time
-import base64
 from collections.abc import Callable
 from dataclasses import dataclass
 
