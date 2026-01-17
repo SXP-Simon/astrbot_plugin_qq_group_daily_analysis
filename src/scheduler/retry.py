@@ -1,6 +1,7 @@
 import asyncio
 import random
 import time
+import base64
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -148,17 +149,31 @@ class RetryManager:
                 "quality": 85,
             }
             logger.debug(f"[RetryManager] 正在重新渲染群 {task.group_id} 的图片...")
-            image_url = await self.html_render_func(
+
+            # 修改：return_url=False 获取二进制数据而不是URL
+            # 这对于解决 NTQQ "Timeout" 错误至关重要，因为它避免了 QQ 客户端下载本地/内网 URL 的网络问题
+            image_data = await self.html_render_func(
                 task.html_content,
                 {},
-                True,  # 返回 URL
+                False,  # return_url=False, 获取 bytes
                 image_options,
             )
 
-            if not image_url:
+            if not image_data:
                 logger.warning(
-                    f"[RetryManager] 重新渲染失败（返回空 URL）{task.group_id}"
+                    f"[RetryManager] 重新渲染失败（返回空数据）{task.group_id}"
                 )
+                return False
+
+            # 将 bytes 转换为 base64 字符串
+            try:
+                base64_str = base64.b64encode(image_data).decode("utf-8")
+                image_file_str = f"base64://{base64_str}"
+                logger.debug(
+                    f"[RetryManager] 图片转Base64成功，长度: {len(base64_str)}"
+                )
+            except Exception as e:
+                logger.error(f"[RetryManager] Base64编码失败: {e}")
                 return False
 
             # 2. 获取 Bot 实例
@@ -170,7 +185,9 @@ class RetryManager:
                 return False  # 无法重试，因为 Bot 已离线
 
             # 3. 发送图片
-            logger.info(f"[RetryManager] 正在向群 {task.group_id} 发送重试图片...")
+            logger.info(
+                f"[RetryManager] 正在向群 {task.group_id} 发送重试图片 (Base64模式)..."
+            )
 
             # 使用 OneBot v11 标准 API
             if hasattr(bot, "api") and hasattr(bot.api, "call_action"):
@@ -182,7 +199,7 @@ class RetryManager:
                             "type": "text",
                             "data": {"text": "📊 每日群聊分析报告（重试发送）：\n"},
                         },
-                        {"type": "image", "data": {"file": image_url}},
+                        {"type": "image", "data": {"file": image_file_str}},
                     ]
 
                     result = await bot.api.call_action(
@@ -195,8 +212,9 @@ class RetryManager:
                         if retcode == 0:
                             return True
                         elif retcode == 1200:
+                            # 即使是 Base64 也可能超时，但概率小很多
                             logger.warning(
-                                "[RetryManager] 发送失败 (retcode=1200): 可能是Bot被禁言或不在群内，稍后重试"
+                                "[RetryManager] 发送失败 (retcode=1200): 消息可能过大或Bot连接不稳定"
                             )
                             return False
                         else:
@@ -215,7 +233,7 @@ class RetryManager:
             elif hasattr(bot, "send_msg"):  # 尝试 AstrBot 抽象接口
                 try:
                     # 尝试直接发送
-                    await bot.send_msg(image_url, group_id=task.group_id)
+                    await bot.send_msg(image_file_str, group_id=task.group_id)
                     return True
                 except Exception as e:
                     logger.error(f"[RetryManager] 抽象接口发送失败: {e}")
