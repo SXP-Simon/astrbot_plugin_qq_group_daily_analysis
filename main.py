@@ -203,7 +203,55 @@ class QQGroupDailyAnalysis(Star):
                     analysis_result, group_id, self.html_render
                 )
                 if image_url:
-                    yield event.image_result(image_url)
+                    # 尝试直接发送图片，而不是 yield result，以便捕获发送过程中的超时错误
+                    try:
+                        logger.info(f"正在尝试发送图片报告: {image_url}")
+
+                        # 构建消息链
+                        message_chain = [{"type": "image", "data": {"file": image_url}}]
+
+                        # 尝试通过 standardized API 发送
+                        if hasattr(bot_instance, "api") and hasattr(
+                            bot_instance.api, "call_action"
+                        ):
+                            await bot_instance.api.call_action(
+                                "send_group_msg",
+                                group_id=int(group_id),
+                                message=message_chain,
+                            )
+                        # 尝试通过 AstrBot 抽象接口发送
+                        elif hasattr(bot_instance, "send_msg"):
+                            await bot_instance.send_msg(image_url, group_id=group_id)
+                        else:
+                            # 无法手动发送，回退到 yield
+                            yield event.image_result(image_url)
+                            return
+
+                        # 发送成功，不做额外操作
+                        logger.info(f"图片报告发送成功: {group_id}")
+
+                    except Exception as send_err:
+                        logger.error(f"图片报告发送失败 (可能是网络超时): {send_err}")
+
+                        # 发送失败，加入重试队列
+                        if html_content:
+                            yield event.plain_result(
+                                "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告发送超时，已加入重试队列（将尝试Base64编码发送）。"
+                            )
+                            # 获取 platform_id
+                            platform_id = (
+                                await self.auto_scheduler.get_platform_id_for_group(
+                                    group_id
+                                )
+                            )
+                            await self.retry_manager.add_task(
+                                html_content, analysis_result, group_id, platform_id
+                            )
+                        else:
+                            yield event.plain_result(
+                                f"❌ 图片发送失败: {send_err}，且无法进行重试（无HTML内容）。"
+                            )
+
                 elif html_content:
                     # 生成失败但有HTML，加入重试队列
                     logger.warning("图片报告生成失败，加入重试队列")
