@@ -309,6 +309,57 @@
             background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 4L4 0' stroke='rgba(0,0,0,0.1)' stroke-width='1'/%3E%3C/svg%3E");
         }
 
+        /* ==================== Horizontal Chart Styles ==================== */
+        .chart-section-horizontal {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            height: 220px;
+            padding: 20px 10px 5px 10px;
+            margin-top: 15px;
+            position: relative;
+            border-bottom: 2px solid var(--ink-secondary);
+        }
+
+        .chart-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+            flex: 1;
+            margin: 0 2px;
+            position: relative;
+        }
+
+        .chart-bar-vertical {
+            width: 100%;
+            border-radius: 5px 5px 0 0;
+            min-height: 4px;
+            position: relative;
+            box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
+            transition: height 0.3s ease;
+        }
+
+        .chart-label-xaxis {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: var(--ink-secondary);
+            font-family: var(--font-hand);
+            text-align: center;
+        }
+
+        .chart-value-top {
+            position: absolute;
+            top: -20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: var(--ink-secondary);
+            font-family: var(--font-hand);
+            width: 100%;
+            text-align: center;
+        }
+
         /* ==================== 4. 活跃时段 ==================== */
         /* ==================== 4. 活跃时段 (新版) ==================== */
         .highlight-section {
