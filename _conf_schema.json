@@ -182,7 +182,7 @@
     "pdf_output_dir": {
         "type": "string",
         "description": "PDF输出目录",
-        "default": "data/plugins/astrbot_qq_group_daily_analysis/reports",
+        "default": "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
         "hint": "PDF报告文件的保存目录"
     },
     "pdf_filename_format": {
