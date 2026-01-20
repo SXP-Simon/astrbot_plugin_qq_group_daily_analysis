@@ -7,9 +7,10 @@
     <title>五彩斑斓的一天，来看看群里发生了什么吧！ · {{current_date}}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- 引入手写字体 (保留艺术字体，移除 Noto Sans SC 以减小体积) -->
-    <!-- 引入手写字体 (保留艺术字体，移除 Noto Sans SC 以减小体积) -->
-    <!-- <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&display=swap" rel="stylesheet"> -->
+    <!-- 引入手写字体和正文阅读字体 -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap"
+        rel="stylesheet">
 
     <style>
         :root {
@@ -37,10 +38,30 @@
             --title-border: #ffb74d;
             --title-text: #bf360c;
 
-            /* 使用系统字体替代在线字体 */
-            --font-title: "WenQuanYi Micro Hei", "WenQuanYi Zen Hei", "Microsoft YaHei", "SimHei", sans-serif;
-            --font-hand: "WenQuanYi Micro Hei", "KaiTi", "STKaiti", "FangSong", serif;
-            --font-body: "WenQuanYi Micro Hei", sans-serif;
+            /* 优先使用 Google Fonts，如果失败则回退到本地 LXGW WenKai，最后回退到系统自带字体 */
+            --font-title: 'ZCOOL KuaiLe',
+
+                "Microsoft YaHei",
+                "SimHei",
+                "WenQuanYi Micro Hei",
+                sans-serif;
+
+            --font-hand: 'Patrick Hand',
+                'Long Cang',
+
+
+                "KaiTi",
+                "STKaiti",
+                "STKaiti",
+                "WenQuanYi Micro Hei",
+                serif;
+
+            --font-body: 'Noto Sans SC',
+
+
+                "Microsoft YaHei",
+                "WenQuanYi Micro Hei",
+                sans-serif;
             /* Rely on browser default which should include emoji fallback */
         }
 

@@ -360,235 +360,167 @@ class ReportGenerator:
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
         try:
-            # 确保 pyppeteer 可用
-            if not self.config_manager.pyppeteer_available:
-                logger.error("pyppeteer 不可用，无法生成 PDF")
+            # 动态导入 playwright
+            try:
+                from playwright.async_api import async_playwright
+            except ImportError:
+                logger.error("playwright 未安装，无法生成 PDF")
+                logger.info("💡 请尝试运行: pip install playwright")
                 return False
 
-            # 动态导入 pyppeteer
             import os
             import sys
 
-            import pyppeteer
-            from pyppeteer import launch
+            logger.info("启动浏览器进行 PDF 转换 (使用 Playwright)")
 
-            # 尝试启动浏览器，如果 Chromium 不存在会自动下载
-            logger.info("启动浏览器进行 PDF 转换")
+            async with async_playwright() as p:
+                browser = None
 
-            # 配置浏览器启动参数，解决Docker环境中的沙盒问题
-            launch_options = {
-                "headless": True,
-                "args": [
-                    "--no-sandbox",  # Docker环境必需 - 禁用沙盒
-                    "--disable-setuid-sandbox",  # Docker环境必需 - 禁用setuid沙盒
-                    "--disable-dev-shm-usage",  # 避免共享内存问题
-                    "--disable-gpu",  # 禁用GPU加速
-                    "--no-first-run",
-                    "--disable-extensions",
-                    "--disable-default-apps",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-features=TranslateUI",
-                    "--disable-ipc-flooding-protection",
-                    "--disable-background-networking",
-                    "--enable-features=NetworkService,NetworkServiceInProcess",
-                    "--force-color-profile=srgb",
-                    "--metrics-recording-only",
-                    "--disable-breakpad",
-                    "--disable-component-extensions-with-background-pages",
-                    "--disable-features=Translate,BackForwardCache,AcceptCHFrame,AvoidUnnecessaryBeforeUnloadCheckSync",
-                    "--enable-automation",
-                    "--password-store=basic",
-                    "--use-mock-keychain",
-                    # "--export-tagged-pdf", # Removed to reduce size
-                    "--disable-web-security",
-                    "--disable-features=VizDisplayCompositor",
-                    "--disable-blink-features=AutomationControlled",  # 隐藏自动化特征
-                ],
-            }
+                executable_path = None
 
-            # 检测系统 Chrome/Chromium 路径
-            chrome_paths = []
+                # 0. 优先检查配置的自定义路径
+                custom_browser_path = self.config_manager.get_browser_path()
+                if custom_browser_path:
+                    if Path(custom_browser_path).exists():
+                        logger.info(
+                            f"使用配置的自定义浏览器路径: {custom_browser_path}"
+                        )
+                        executable_path = custom_browser_path
+                    else:
+                        logger.warning(
+                            f"配置的浏览器路径不存在: {custom_browser_path}，尝试自动检测..."
+                        )
 
-            if sys.platform.startswith("win"):
-                # Windows 系统 Chrome 安装路径
-                username = os.environ.get("USERNAME", "")
-                chrome_paths = [
-                    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                    rf"C:\Users\{username}\AppData\Local\Google\Chrome\Application\chrome.exe",
-                    r"C:\Program Files\Chromium\Application\chrome.exe",
-                ]
-            elif sys.platform.startswith("linux"):
-                # Linux 系统 Chrome/Chromium 路径
-                chrome_paths = [
-                    "/usr/bin/google-chrome",
-                    "/usr/bin/google-chrome-stable",
-                    "/usr/bin/chromium",
-                    "/usr/bin/chromium-browser",
-                    "/snap/bin/chromium",
-                    "/usr/bin/chromium-freeworld",
-                ]
-            elif sys.platform.startswith("darwin"):
-                # macOS 系统 Chrome 路径
-                chrome_paths = [
-                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-                ]
+                # 1. 如果没有自定义路径，尝试自动检测系统浏览器
+                if not executable_path:
+                    system_browser_paths = []
+                    if sys.platform.startswith("win"):
+                        username = os.environ.get("USERNAME", "")
+                        local_app_data = os.environ.get(
+                            "LOCALAPPDATA", rf"C:\Users\{username}\AppData\Local"
+                        )
+                        program_files = os.environ.get(
+                            "ProgramFiles", r"C:\Program Files"
+                        )
+                        program_files_x86 = os.environ.get(
+                            "ProgramFiles(x86)", r"C:\Program Files (x86)"
+                        )
 
-            # 查找可用的浏览器
-            found_browser = False
-            for chrome_path in chrome_paths:
-                if Path(chrome_path).exists():
-                    launch_options["executablePath"] = chrome_path
-                    logger.info(f"使用系统浏览器: {chrome_path}")
-                    found_browser = True
-                    break
+                        system_browser_paths = [
+                            os.path.join(
+                                program_files, r"Google\Chrome\Application\chrome.exe"
+                            ),
+                            os.path.join(
+                                program_files_x86,
+                                r"Google\Chrome\Application\chrome.exe",
+                            ),
+                            os.path.join(
+                                local_app_data, r"Google\Chrome\Application\chrome.exe"
+                            ),
+                            os.path.join(
+                                program_files_x86,
+                                r"Microsoft\Edge\Application\msedge.exe",
+                            ),
+                            os.path.join(
+                                program_files, r"Microsoft\Edge\Application\msedge.exe"
+                            ),
+                        ]
+                    elif sys.platform.startswith("linux"):
+                        system_browser_paths = [
+                            "/usr/bin/google-chrome",
+                            "/usr/bin/google-chrome-stable",
+                            "/usr/bin/chromium",
+                            "/usr/bin/chromium-browser",
+                            "/snap/bin/chromium",
+                        ]
+                    elif sys.platform.startswith("darwin"):
+                        system_browser_paths = [
+                            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                        ]
 
-            if not found_browser:
-                logger.info("未找到系统浏览器，将使用 pyppeteer 默认下载的 Chromium")
-                # 先尝试确保 Chromium 已下载
-                try:
-                    from pyppeteer import browser, launcher
+                    # 尝试找到可用的系统浏览器
+                    for path in system_browser_paths:
+                        if Path(path).exists():
+                            executable_path = path
+                            logger.info(f"使用系统浏览器: {path}")
+                            break
 
-                    launcher_instance = launcher.Launcher(
-                        headless=True,
-                        args=[
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox",
-                            "--disable-dev-shm-usage",
-                        ],
-                    )
-                    await launcher_instance._get_chromium_revision()
-                    await launcher_instance._download_chromium()
-                    chromium_path = pyppeteer.executablePath()
-                    launch_options["executablePath"] = chromium_path
-                    logger.info(f"使用 pyppeteer 下载的 Chromium: {chromium_path}")
-                except Exception as pre_download_err:
-                    logger.warning(
-                        f"预下载 Chromium 失败，继续尝试直接启动: {pre_download_err}"
-                    )
-
-            # 尝试启动浏览器
-            try:
-                logger.info("正在启动浏览器...")
-                browser = await launch(**launch_options)
-                logger.info("浏览器启动成功")
-            except Exception as e:
-                logger.error(f"浏览器启动失败: {e}", exc_info=True)
-                return False
-
-            try:
-                # 创建新页面，设置更合理的超时时间
-                page = await browser.newPage()
-
-                # 设置页面视口，减少内存占用
-                await page.setViewport(
-                    {
-                        "width": 800,  # Match A4 width approx (794px at 96PPI)
-                        "height": 1000,
-                        "deviceScaleFactor": 1,
-                        "isMobile": False,
-                        "hasTouch": False,
-                        "isLandscape": False,
-                    }
-                )
-
-                # 设置页面内容，使用更安全的加载方式
-                logger.info("开始设置页面内容...")
-                await page.setContent(html_content)
-
-                # 等待页面基本加载完成，但不要太长时间
-                try:
-                    await page.waitForSelector("body", {"timeout": 5000})
-                    logger.info("页面基本加载完成")
-                except Exception:
-                    logger.warning("等待页面加载超时，继续执行")
-
-                # 确保CDN字体等资源加载完成
-                logger.info("等待资源加载(10s)...")
-                await asyncio.sleep(5)
-
-                # 导出 PDF，使用更保守的设置
-                logger.info("开始生成PDF...")
-                pdf_options = {
-                    "path": output_path,
-                    "format": "A4",
-                    "printBackground": True,
-                    "margin": {
-                        "top": "10mm",
-                        "right": "10mm",
-                        "bottom": "10mm",
-                        "left": "10mm",
-                    },
-                    "scale": 1.0,
-                    "displayHeaderFooter": False,
-                    "preferCSSPageSize": True,
-                    "timeout": 60000,  # 增加PDF生成超时时间到60秒
+                # 定义默认启动参数
+                launch_kwargs = {
+                    "headless": True,
+                    "args": [
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--font-render-hinting=none",
+                    ],
                 }
 
-                await page.pdf(pdf_options)
-                logger.info(f"PDF 生成成功: {output_path}")
-                return True
+                if executable_path:
+                    launch_kwargs["executable_path"] = executable_path
+                    launch_kwargs["channel"] = (
+                        "chrome" if "chrome" in executable_path.lower() else "msedge"
+                    )
 
-            except Exception as e:
-                logger.error(f"PDF生成过程中出错: {e}")
-                return False
+                try:
+                    if executable_path:
+                        # 如果指定了路径，通常使用 chromium 启动
+                        browser = await p.chromium.launch(**launch_kwargs)
+                    else:
+                        # 尝试直接启动，依赖 playwright install
+                        logger.info("尝试启动 Playwright 托管的浏览器...")
+                        browser = await p.chromium.launch(
+                            headless=True, args=launch_kwargs["args"]
+                        )
 
-            finally:
-                # 确保浏览器被正确关闭
-                if browser:
-                    try:
-                        logger.info("正在关闭浏览器...")
-                        # 先关闭所有页面
-                        pages = await browser.pages()
-                        for page in pages:
-                            try:
-                                await page.close()
-                            except Exception as close_err:
-                                logger.debug(f"关闭页面时忽略的异常: {close_err}")
+                except Exception as e:
+                    logger.warning(f"浏览器启动失败: {e}")
+                    if "Executable doesn't exist" in str(e) or "executable at" in str(
+                        e
+                    ):
+                        logger.error("未找到可用的浏览器。")
+                        logger.info(
+                            "💡 请确保已安装 Playwright 浏览器: playwright install chromium"
+                        )
+                        logger.info("💡 或者安装 Google Chrome / Microsoft Edge")
+                    return False
 
-                        # 等待一小段时间让资源释放
-                        await asyncio.sleep(0.5)
+                if not browser:
+                    return False
 
-                        # 关闭浏览器
+                try:
+                    context = await browser.new_context(device_scale_factor=1)
+                    page = await context.new_page()
+
+                    # 设置页面内容
+                    await page.set_content(
+                        html_content, wait_until="networkidle", timeout=60000
+                    )
+
+                    # 生成 PDF
+                    logger.info("开始生成 PDF...")
+                    await page.pdf(
+                        path=output_path,
+                        format="A4",
+                        print_background=True,
+                        margin={
+                            "top": "10mm",
+                            "right": "10mm",
+                            "bottom": "10mm",
+                            "left": "10mm",
+                        },
+                    )
+                    logger.info(f"PDF 生成成功: {output_path}")
+                    return True
+
+                except Exception as e:
+                    logger.error(f"PDF 生成过程出错: {e}")
+                    return False
+                finally:
+                    if browser:
                         await browser.close()
-                        logger.info("浏览器已关闭")
-                    except Exception as e:
-                        logger.warning(f"关闭浏览器时出错: {e}")
-                        # 强制清理
-                        try:
-                            await browser.disconnect()
-                        except Exception as disc_err:
-                            logger.debug(f"断开浏览器连接时忽略的异常: {disc_err}")
 
         except Exception as e:
-            error_msg = str(e)
-            if "Chromium downloadable not found" in error_msg:
-                logger.error("Chromium 下载失败，建议安装系统 Chrome/Chromium")
-                logger.info(
-                    "💡 Linux 系统建议: sudo apt-get install chromium-browser 或 sudo yum install chromium"
-                )
-            elif "No usable sandbox" in error_msg:
-                logger.error("沙盒权限问题，已尝试禁用沙盒")
-            elif "Connection refused" in error_msg or "connect" in error_msg.lower():
-                logger.error("浏览器连接失败，请检查系统资源或尝试重启")
-            elif "executablePath" in error_msg and "not found" in error_msg:
-                logger.error("未找到系统浏览器，请安装 Chrome 或 Chromium")
-                logger.info(
-                    "💡 安装建议: sudo apt-get install chromium-browser (Ubuntu/Debian) 或 sudo yum install chromium (CentOS/RHEL)"
-                )
-            elif "Browser closed unexpectedly" in error_msg:
-                logger.error("浏览器意外关闭，可能是由于内存不足或系统资源限制")
-                logger.info("💡 建议: 检查系统内存，或重启 AstrBot 后重试")
-                logger.info("💡 如果问题持续，可以尝试以下解决方案:")
-                logger.info("   1. 增加系统交换空间")
-                logger.info("   2. 使用更简单的浏览器启动参数")
-                logger.info("   3. 考虑使用其他 PDF 生成方案")
-            else:
-                logger.error(f"HTML 转 PDF 失败: {e}")
-                logger.info(
-                    "💡 可以尝试使用 /安装PDF 命令重新安装依赖，或检查系统日志获取更多信息"
-                )
+            logger.error(f"Playwright 运行出错: {e}")
             return False

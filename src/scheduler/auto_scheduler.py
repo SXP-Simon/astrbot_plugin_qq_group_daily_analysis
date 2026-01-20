@@ -613,7 +613,7 @@ class AutoScheduler:
                     )
 
             elif output_format == "pdf":
-                if not self.config_manager.pyppeteer_available:
+                if not self.config_manager.playwright_available:
                     logger.warning(f"群 {group_id} PDF功能不可用，回退到文本报告")
                     text_report = self.report_generator.generate_text_report(
                         analysis_result
