@@ -275,9 +275,9 @@ class QQGroupDailyAnalysis(Star):
                         f"[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
                     )
             elif output_format == "pdf":
-                if not self.config_manager.pyppeteer_available:
+                if not self.config_manager.playwright_available:
                     yield event.plain_result(
-                        "❌ PDF 功能不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
+                        "❌ PDF 功能不可用，请使用 /安装PDF 命令安装依赖"
                     )
                     return
 
@@ -342,8 +342,8 @@ class QQGroupDailyAnalysis(Star):
             current_format = self.config_manager.get_output_format()
             pdf_status = (
                 "✅"
-                if self.config_manager.pyppeteer_available
-                else "❌ (需安装 pyppeteer)"
+                if self.config_manager.playwright_available
+                else "❌ (需安装 Playwright)"
             )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
@@ -360,10 +360,8 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
             return
 
-        if format_type == "pdf" and not self.config_manager.pyppeteer_available:
-            yield event.plain_result(
-                "❌ PDF 格式不可用，请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
-            )
+        if format_type == "pdf" and not self.config_manager.playwright_available:
+            yield event.plain_result("❌ PDF 格式不可用，请使用 /安装PDF 命令安装依赖")
             return
 
         self.config_manager.set_output_format(format_type)
@@ -540,13 +538,9 @@ class QQGroupDailyAnalysis(Star):
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
         try:
-            # 安装 pyppeteer
-            result = await PDFInstaller.install_pyppeteer(self.config_manager)
+            # 安装 playwright (内部已包含浏览器内核安装逻辑)
+            result = await PDFInstaller.install_playwright(self.config_manager)
             yield event.plain_result(result)
-
-            # 提供系统依赖安装指导
-            system_deps_result = await PDFInstaller.install_system_deps()
-            yield event.plain_result(system_deps_result)
 
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)

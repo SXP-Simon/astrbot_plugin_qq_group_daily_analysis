@@ -60,8 +60,11 @@ class MockConfig:
         return 5
 
     @property
-    def pyppeteer_available(self):
+    def playwright_available(self):
         return True
+
+    def get_browser_path(self):
+        return ""
 
 
 # ==========================================

@@ -185,6 +185,12 @@
         "default": "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
         "hint": "PDF报告文件的保存目录"
     },
+    "browser_path": {
+        "type": "string",
+        "description": "自定义浏览器路径",
+        "default": "",
+        "hint": "要填写的话请你清楚自己在干什么。自定义浏览器的可执行文件路径（如 Chrome 或 Edge 的 .exe 文件）。提示：如果是在网页后台设置，则直接输入普通路径即可（如 C:\\Program Files\\...）；如果是手动编辑 config.json 文件，请务必使用双反斜杠 '\\\\' 分隔路径。"
+    },
     "pdf_filename_format": {
         "type": "string",
         "description": "PDF文件名格式",

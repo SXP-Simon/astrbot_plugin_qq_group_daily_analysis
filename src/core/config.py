@@ -14,9 +14,9 @@ class ConfigManager:
 
     def __init__(self, config: AstrBotConfig):
         self.config = config
-        self._pyppeteer_available = False
-        self._pyppeteer_version = None
-        self._check_pyppeteer_availability()
+        self._playwright_available = False
+        self._playwright_version = None
+        self._check_playwright_availability()
 
     def get_group_list_mode(self) -> str:
         """获取群组列表模式 (whitelist/blacklist/none)"""
@@ -335,45 +335,61 @@ class ConfigManager:
         return self.config.get("enable_user_card", False)
 
     @property
-    def pyppeteer_available(self) -> bool:
-        """检查pyppeteer是否可用"""
-        return self._pyppeteer_available
+    def playwright_available(self) -> bool:
+        """检查playwright是否可用"""
+        return self._playwright_available
 
     @property
-    def pyppeteer_version(self) -> str | None:
-        """获取pyppeteer版本"""
-        return self._pyppeteer_version
+    def playwright_version(self) -> str | None:
+        """获取playwright版本"""
+        return self._playwright_version
 
-    def _check_pyppeteer_availability(self):
-        """检查 pyppeteer 可用性"""
+    def _check_playwright_availability(self):
+        """检查 playwright 可用性"""
         try:
-            import pyppeteer
+            import importlib.util
 
-            self._pyppeteer_available = True
+            if importlib.util.find_spec("playwright") is None:
+                raise ImportError
+
+            # 尝试导入以确保完整性
+            import playwright
+            from playwright.async_api import async_playwright  # noqa: F401
+
+            self._playwright_available = True
 
             # 检查版本
             try:
-                self._pyppeteer_version = pyppeteer.__version__
-                logger.info(f"使用 pyppeteer {self._pyppeteer_version} 作为 PDF 引擎")
+                self._playwright_version = playwright.__version__
+                logger.info(f"使用 playwright {self._playwright_version} 作为 PDF 引擎")
             except AttributeError:
-                self._pyppeteer_version = "unknown"
-                logger.info("使用 pyppeteer (版本未知) 作为 PDF 引擎")
+                self._playwright_version = "unknown"
+                logger.info("使用 playwright (版本未知) 作为 PDF 引擎")
 
         except ImportError:
-            self._pyppeteer_available = False
-            self._pyppeteer_version = None
+            self._playwright_available = False
+            self._playwright_version = None
             logger.warning(
-                "pyppeteer 未安装，PDF 功能将不可用。请使用 /安装PDF 命令安装 pyppeteer==1.0.2"
+                "playwright 未安装，PDF 功能将不可用。请使用 pip install playwright 安装，并运行 playwright install chromium"
             )
 
-    def reload_pyppeteer(self) -> bool:
-        """重新加载 pyppeteer 模块"""
-        try:
-            logger.info("开始重新加载 pyppeteer 模块...")
+    def get_browser_path(self) -> str:
+        """获取自定义浏览器路径"""
+        return self.config.get("browser_path", "")
 
-            # 移除所有 pyppeteer 相关模块
+    def set_browser_path(self, path: str):
+        """设置自定义浏览器路径"""
+        self.config["browser_path"] = path
+        self.config.save_config()
+
+    def reload_playwright(self) -> bool:
+        """重新加载 playwright 模块"""
+        try:
+            logger.info("开始重新加载 playwright 模块...")
+
+            # 移除所有 playwright 相关模块
             modules_to_remove = [
-                mod for mod in sys.modules.keys() if mod.startswith("pyppeteer")
+                mod for mod in sys.modules.keys() if mod.startswith("playwright")
             ]
             logger.info(f"移除模块: {modules_to_remove}")
             for mod in modules_to_remove:
@@ -381,40 +397,35 @@ class ConfigManager:
 
             # 强制重新导入
             try:
-                import pyppeteer
+                import playwright
+                from playwright.async_api import async_playwright
 
                 # 更新全局变量
-                self._pyppeteer_available = True
+                self._playwright_available = True
                 try:
-                    self._pyppeteer_version = pyppeteer.__version__
+                    self._playwright_version = playwright.__version__
                     logger.info(
-                        f"重新加载成功，pyppeteer 版本: {self._pyppeteer_version}"
+                        f"重新加载成功，playwright 版本: {self._playwright_version}"
                     )
                 except AttributeError:
-                    self._pyppeteer_version = "unknown"
-                    logger.info("重新加载成功，pyppeteer 版本未知")
+                    self._playwright_version = "unknown"
+                    logger.info("重新加载成功，playwright 版本未知")
 
                 return True
 
             except ImportError:
-                logger.info("pyppeteer 重新导入需要重启 AstrBot 才能生效")
-                logger.info(
-                    "💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能"
-                )
-                self._pyppeteer_available = False
-                self._pyppeteer_version = None
+                logger.info("playwright 重新导入可能需要重启 AstrBot")
+                self._playwright_available = False
+                self._playwright_version = None
                 return False
             except Exception:
-                logger.info("pyppeteer 重新导入需要重启 AstrBot 才能生效")
-                logger.info(
-                    "💡 提示：pyppeteer 安装成功，但需要重启 AstrBot 后才能使用 PDF 功能"
-                )
-                self._pyppeteer_available = False
-                self._pyppeteer_version = None
+                logger.info("playwright 重新导入失败")
+                self._playwright_available = False
+                self._playwright_version = None
                 return False
 
         except Exception as e:
-            logger.error(f"重新加载 pyppeteer 时出错: {e}")
+            logger.error(f"重新加载 playwright 时出错: {e}")
             return False
 
     def save_config(self):
