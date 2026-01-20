@@ -92,6 +92,10 @@ class ReportGenerator:
 
             for image_options in render_strategies:
                 try:
+                    # Cleanse options
+                    if image_options.get("type") == "png":
+                        image_options["quality"] = None
+
                     logger.info(f"尝试渲染策略: {image_options}")
                     image_url = await html_render_func(
                         html_content,  # 渲染后的HTML内容
