@@ -53,55 +53,71 @@ class ReportGenerator:
 
             logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
 
-            # 使用AstrBot内置的HTML渲染服务（传递渲染后的HTML）
-            # 使用兼容的图片生成选项（基于NetworkRenderStrategy的默认设置）
-            image_options = {
-                "full_page": True,
-                "type": "jpeg",  # 使用默认的jpeg格式提高兼容性
-                "quality": 95,  # 设置合理的质量
-            }
-            image_url = await html_render_func(
-                html_content,  # 渲染后的HTML内容
-                {},  # 空数据字典，因为数据已包含在HTML中
-                True,  # return_url=True，返回URL而不是下载文件
-                image_options,
-            )
+            # 定义渲染策略
+            render_strategies = [
+                # 1. 第一策略: PNG, Ultra quality, Device scale
+                {
+                    "full_page": True,
+                    "type": "png",
+                    "scale": "device",
+                    "device_scale_factor_level": "ultra",
+                },
+                # 2. 第二策略: JPEG, ultra, quality 100%, Device scale
+                {
+                    "full_page": True,
+                    "type": "jpeg",
+                    "quality": 100,
+                    "scale": "device",
+                    "device_scale_factor_level": "ultra",
+                },
+                # 3. 第三策略: JPEG, high, quality 80%, Device scale
+                {
+                    "full_page": True,
+                    "type": "jpeg",
+                    "quality": 95,
+                    "scale": "device",
+                    "device_scale_factor_level": "high",  # 尝试高分辨率
+                },
+                # 4. 第四策略: JPEG, normal quality, Device scale (后备)
+                {
+                    "full_page": True,
+                    "type": "jpeg",
+                    "quality": 80,
+                    "scale": "device",
+                    # normal quality
+                },
+            ]
 
-            if image_url:
-                logger.info(f"图片生成成功: {image_url}")
-                return image_url, html_content
-            else:
-                # 渲染服务返回None，可能是渲染失败
-                logger.warning("渲染服务返回空URL")
-                return None, html_content
+            last_exception = None
 
-        except Exception as e:
-            logger.error(f"生成图片报告失败: {e}", exc_info=True)
-            # 尝试使用更简单的选项作为后备方案
-            if html_content:
+            for image_options in render_strategies:
                 try:
-                    logger.info("尝试使用低质量选项重新生成...")
-                    simple_options = {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 70,  # 降低质量以提高兼容性
-                    }
+                    logger.info(f"尝试渲染策略: {image_options}")
                     image_url = await html_render_func(
-                        html_content,  # 使用已渲染的HTML
-                        {},  # 空数据字典
-                        True,
-                        simple_options,
+                        html_content,  # 渲染后的HTML内容
+                        {},  # 空数据字典，因为数据已包含在HTML中
+                        True,  # return_url=True，返回URL而不是下载文件
+                        image_options,
                     )
+
                     if image_url:
-                        logger.info(f"使用低质量选项生成成功: {image_url}")
+                        logger.info(f"图片生成成功 ({image_options}): {image_url}")
                         return image_url, html_content
                     else:
-                        logger.warning("低质量作为后备方案也返回空URL")
-                        return None, html_content
-                except Exception as fallback_e:
-                    logger.error(f"后备低质量方案也失败: {fallback_e}")
-                    return None, html_content
+                        logger.warning(f"渲染策略 {image_options} 返回空URL")
 
+                except Exception as e:
+                    logger.warning(f"渲染策略 {image_options} 失败: {e}")
+                    last_exception = e
+                    logger.warning("尝试下一个策略")
+                    continue
+
+            # 如果所有策略都失败
+            logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
+            return None, html_content
+
+        except Exception as e:
+            logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
             return None, html_content
 
     async def generate_pdf_report(
