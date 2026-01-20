@@ -398,7 +398,6 @@ class ConfigManager:
             # 强制重新导入
             try:
                 import playwright
-                from playwright.async_api import async_playwright
 
                 # 更新全局变量
                 self._playwright_available = True
