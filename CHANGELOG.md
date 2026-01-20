@@ -1,14 +1,18 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v4.6.5] - feat(ReportGenerator): 优化 t2i 参数
+## [v4.6.6] - fix(pdf): 迁移为 playwright
 
-*   **🛠️ 健壮性增强**: ReportGenerator 优化 t2i 参数，增加设备缩放因子。生成的报告图片更加清晰。
+*   **🛠️ 健壮性增强**: 使用更好用的 playwright 避免 pdf 生成期间无法预测的行为。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.5] - feat(ReportGenerator): 优化 t2i 参数
+
+*   **🛠️ 健壮性增强**: ReportGenerator 优化 t2i 参数，增加设备缩放因子。生成的报告图片更加清晰。
 
 ## [v4.6.4] - 重试管理器优化和业务逻辑调整
 
