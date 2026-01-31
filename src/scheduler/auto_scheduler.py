@@ -514,6 +514,8 @@ class AutoScheduler:
                 if self.html_render_func:
                     # 使用图片格式
                     logger.info(f"群 {group_id} 自动分析使用图片报告格式")
+                    image_report_sent = False
+
                     try:
                         (
                             image_url,
@@ -529,73 +531,53 @@ class AutoScheduler:
                         )
 
                         if image_url:
-                            success = await self._send_image_message(
+                            # 尝试发送图片
+                            image_report_sent = await self._send_image_message(
                                 group_id, image_url
                             )
-                            if success:
+                            if image_report_sent:
                                 logger.info(f"群 {group_id} 图片报告发送成功")
-                            else:
-                                # 图片发送失败，回退到文本
-                                logger.warning(
-                                    f"群 {group_id} 发送图片报告失败，回退到文本报告"
-                                )
-                                text_report = (
-                                    self.report_generator.generate_text_report(
-                                        analysis_result
-                                    )
-                                )
-                                await self._send_text_message(
-                                    group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                                )
-                        elif html_content:
-                            # 生成失败但有HTML，加入重试队列
+                    except Exception as img_e:
+                        logger.error(f"群 {group_id} 图片报告处理异常: {img_e}")
+                        image_report_sent = False
+                        # 确保 html_content 至少为 None (如果异常发生在解包之前)
+                        if "html_content" not in locals():
+                            html_content = None
+
+                    # 如果图片并未成功发送（无论是生成失败，还是发送失败）
+                    if not image_report_sent:
+                        if html_content:
+                            # 有 HTML 内容，尝试加入重试队列
                             logger.warning(
-                                f"群 {group_id} 图片报告生成失败，加入重试队列"
+                                f"群 {group_id} 图片报告未成功发送，尝试加入重试队列"
                             )
 
-                            # 尝试获取 platform_id (如果参数为None)
+                            # 尝试获取 platform_id
                             if not platform_id:
                                 platform_id = await self.get_platform_id_for_group(
                                     group_id
                                 )
 
                             if platform_id:
-                                # 定时任务静默重试，不发送提示消息，只记录日志
-                                logger.info(
-                                    f"群 {group_id} 图片生成失败，已静默加入重试队列"
-                                )
+                                logger.info(f"群 {group_id} 已加入重试队列")
                                 await self.retry_manager.add_task(
                                     html_content, analysis_result, group_id, platform_id
                                 )
+                                return  # 已加入队列，本次处理结束
+
                             else:
                                 logger.error(
                                     f"群 {group_id} 无法获取平台ID，无法加入重试队列"
                                 )
-                                # Fallback to text
-                                text_report = (
-                                    self.report_generator.generate_text_report(
-                                        analysis_result
-                                    )
-                                )
-                                await self._send_text_message(
-                                    group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                                )
 
                         else:
-                            # 图片生成失败（返回None），回退到文本
                             logger.warning(
-                                f"群 {group_id} 图片报告生成失败（返回None），回退到文本报告"
+                                f"群 {group_id} 图片生成失败且无HTML内容，无法重试"
                             )
-                            text_report = self.report_generator.generate_text_report(
-                                analysis_result
-                            )
-                            await self._send_text_message(
-                                group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                            )
-                    except Exception as img_e:
-                        logger.error(
-                            f"群 {group_id} 图片报告生成异常: {img_e}，回退到文本报告"
-                        )
+
+                        # 最终兜底：发送文本报告
+                        # (执行到这里说明：要么没HTML，要么没PlatformID，无法重试)
+                        logger.warning(f"群 {group_id} 回退到文本报告")
                         text_report = self.report_generator.generate_text_report(
                             analysis_result
                         )
@@ -790,14 +772,10 @@ class AutoScheduler:
                         )
 
             # =========================================================
-            # 3️⃣ 文本兜底
+            # 3️⃣ 失败
             # =========================================================
-            logger.error(f"❌ 群 {group_id} 图片发送失败，回退到文本")
-
-            await self._send_text_message(
-                group_id,
-                f"{prefix_text}\n图片发送失败，请查看链接：\n{image_url}",
-            )
+            logger.error(f"❌ 群 {group_id} 图片发送失败 (URL 和 Base64 均失败)")
+            return False
             return False
 
         except Exception as e:
