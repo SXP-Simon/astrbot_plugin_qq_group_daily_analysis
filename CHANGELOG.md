@@ -1,14 +1,19 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v4.6.6] - fix(pdf): 迁移为 playwright
+## [v4.6.7] - fix(scheduler): 修复定时分析发送后台不完全静默的 Bug，正确处理文本发送回退时机
 
-*   **🛠️ 健壮性增强**: 使用更好用的 playwright 避免 pdf 生成期间无法预测的行为。
+*   **🛠️ 健壮性增强**: 修复定时分析发送后台不完全静默的 Bug，正确处理文本发送回退时机。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.6] - fix(pdf): 迁移为 playwright
+
+*   **🛠️ 健壮性增强**: 使用更好用的 playwright 避免 pdf 生成期间无法预测的行为。
+
 
 ## [v4.6.5] - feat(ReportGenerator): 优化 t2i 参数
 
