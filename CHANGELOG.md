@@ -1,14 +1,18 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v4.6.8] - feat(auto_analysis_time): 将 auto_analysis_time 配置改为 list，满足支持配置每日多个时间点总结的需求
+## [v4.6.9] - fix(AutoScheduler): 增加友好提示，增强性处理，优化用户体验
 
-*   **✨ 新功能**: 支持配置每日多个时间点总结
+*   **🛠️ 健壮性增强**: 增加友好提示，增强性处理，优化用户体验
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.6.8] - feat(auto_analysis_time): 将 auto_analysis_time 配置改为 list，满足支持配置每日多个时间点总结的需求
+
+*   **✨ 新功能**: 支持配置每日多个时间点总结
 
 ## [v4.6.7] - fix(scheduler): 修复定时分析发送后台不完全静默的 Bug，正确处理文本发送回退时机
 
