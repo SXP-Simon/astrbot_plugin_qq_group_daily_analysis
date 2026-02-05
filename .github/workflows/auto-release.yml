@@ -61,55 +61,90 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate changelog
-        id: changelog
+      - name: Get current commit hash
+        id: get_commit
         run: |
-          NEW_VERSION="${{ needs.check-version.outputs.new_version }}"
+          COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "COMMIT_SHORT=$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ needs.check-version.outputs.new_version }}"
           OLD_VERSION="${{ needs.check-version.outputs.old_version }}"
           
-          echo "## 🎉 Release $NEW_VERSION" > changelog.md
-          echo "" >> changelog.md
-          
-          # 如果有上一个版本标签，生成两个版本之间的提交日志
-          if git rev-parse "$OLD_VERSION" >/dev/null 2>&1; then
-            echo "### 📝 Changes since $OLD_VERSION" >> changelog.md
-            echo "" >> changelog.md
-            
-            # 获取提交信息并分类
-            git log "$OLD_VERSION..HEAD" --pretty=format:"%s|||%h|||%an" --no-merges | while IFS='|||' read -r subject hash author; do
-              # 根据提交信息的前缀进行分类
-              if echo "$subject" | grep -qiE "^(feat|feature):"; then
-                echo "- ✨ **Feature**: ${subject#*: } (${hash})" >> changelog.md
-              elif echo "$subject" | grep -qiE "^fix:"; then
-                echo "- 🐛 **Fix**: ${subject#*: } (${hash})" >> changelog.md
-              elif echo "$subject" | grep -qiE "^docs:"; then
-                echo "- 📚 **Docs**: ${subject#*: } (${hash})" >> changelog.md
-              elif echo "$subject" | grep -qiE "^(refactor|style|perf|test|chore):"; then
-                prefix=$(echo "$subject" | cut -d: -f1)
-                echo "- 🔧 **${prefix^}**: ${subject#*: } (${hash})" >> changelog.md
-              else
-                echo "- 📌 $subject (${hash})" >> changelog.md
-              fi
-            done
-          else
-            echo "### 📝 Changes" >> changelog.md
-            echo "" >> changelog.md
-            echo "Initial release or no previous version tag found." >> changelog.md
-            echo "" >> changelog.md
-            echo "#### Recent commits:" >> changelog.md
-            git log -10 --pretty=format:"- %s (%h)" --no-merges >> changelog.md
+          # 1. 尝试提取 CHANGELOG.md
+          if [ -f "CHANGELOG.md" ]; then
+            awk -v ver="$VERSION" '
+              /^## \[?v?/ && index($0, ver) { flag=1 }
+              /^## \[?v?/ && !index($0, ver) { flag=0 }
+              flag
+            ' CHANGELOG.md > release_notes.md
           fi
           
-          echo "" >> changelog.md
-          echo "---" >> changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$OLD_VERSION...$NEW_VERSION" >> changelog.md
+          # 确保 release_notes.md 存在
+          touch release_notes.md
+          
+          # 2. 生成提交列表
+          echo "" >> release_notes.md
+          echo "### 🔍 Commits" >> release_notes.md
+          
+          process_log() {
+            local range="$1"
+            git log --pretty=format:"%s|%h|%H" "$range" > commits.txt
+            
+            # Helper to extract categories
+            print_category() {
+                local marker="$1"
+                local title="$2"
+                local pattern="$3"
+                local commits=$(grep -iE "$pattern" commits.txt)
+                if [ ! -z "$commits" ]; then
+                    echo "#### $marker $title" >> release_notes.md
+                    echo "$commits" | while IFS='|' read -r msg hash full_hash; do
+                        echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+                    done
+                    echo "" >> release_notes.md
+                fi
+            }
+            
+            print_category "✨" "Features" "^(feat|feature):"
+            print_category "🐛" "Fixes" "^fix:"
+            print_category "📚" "Documentation" "^docs:"
+            print_category "💄" "Style & Refactor" "^(style|refactor|perf):"
+            print_category "🔧" "Chore & Test" "^(chore|test|ci|build):"
+            
+            # Other changes (inverse grep)
+            local others=$(grep -ivE "^(feat|feature|fix|docs|style|refactor|perf|chore|test|ci|build):" commits.txt)
+            if [ ! -z "$others" ]; then
+                echo "#### 📌 Other Changes" >> release_notes.md
+                echo "$others" | while IFS='|' read -r msg hash full_hash; do
+                    echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+                done
+            fi
+            
+            rm commits.txt
+          }
+          
+          if [ "$OLD_VERSION" != "none" ] && git rev-parse "$OLD_VERSION" >/dev/null 2>&1; then
+             process_log "$OLD_VERSION..HEAD"
+             
+             echo "" >> release_notes.md
+             echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$OLD_VERSION...${{ github.ref_name }}" >> release_notes.md
+          else
+             echo "Initial release or previous version tag not found." >> release_notes.md
+             echo "#### 🆕 Initial Commits" >> release_notes.md
+             git log -10 --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" >> release_notes.md
+          fi
+          
+          cat release_notes.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.check-version.outputs.new_version }}
           name: Release ${{ needs.check-version.outputs.new_version }}
-          body_path: changelog.md
+          body_path: release_notes.md
           draft: false
           prerelease: false
           generate_release_notes: false
