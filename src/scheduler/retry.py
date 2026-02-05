@@ -127,7 +127,6 @@ class RetryManager:
                         self.queue.task_done()
                         # 尝试发送文本回退
                         await self._send_fallback_text(task)
-                        await self._notify_failure(task)
 
             except asyncio.CancelledError:
                 break
