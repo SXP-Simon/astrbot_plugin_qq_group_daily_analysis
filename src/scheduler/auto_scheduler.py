@@ -157,6 +157,9 @@ class AutoScheduler:
                 target_times = []
                 for t_str in time_config:
                     try:
+                        # 预处理：替换中文冒号，去除首尾空格
+                        t_str = str(t_str).replace("：", ":").strip()
+
                         t = datetime.strptime(t_str, "%H:%M").replace(
                             year=now.year,
                             month=now.month,
@@ -166,7 +169,9 @@ class AutoScheduler:
                         )
                         target_times.append(t)
                     except ValueError:
-                        logger.error(f"时间格式错误: {t_str}, 应为 HH:MM")
+                        logger.error(
+                            f"时间格式错误: {t_str}, 应为 HH:MM 格式，例如 23:00"
+                        )
                         continue
 
                 if not target_times:

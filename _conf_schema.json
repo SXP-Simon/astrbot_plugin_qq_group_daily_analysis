@@ -37,7 +37,7 @@
         "type": "list",
         "description": "自动分析时间列表",
         "default": ["09:00"],
-        "hint": "每日自动分析的时间点列表，格式HH:MM，支持多个时间点",
+        "hint": "每日自动分析的时间点列表，格式HH:MM（例如 23:00 ），支持多个时间点",
         "items": {
             "type": "string"
         }
