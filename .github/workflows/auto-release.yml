@@ -108,14 +108,14 @@ jobs:
                 fi
             }
             
-            print_category "✨" "Features" "^(feat|feature):"
-            print_category "🐛" "Fixes" "^fix:"
-            print_category "📚" "Documentation" "^docs:"
-            print_category "💄" "Style & Refactor" "^(style|refactor|perf):"
-            print_category "🔧" "Chore & Test" "^(chore|test|ci|build):"
+            print_category "✨" "Features" "^(feat|feature)(\(.*\))?:"
+            print_category "🐛" "Fixes" "^fix(\(.*\))?:"
+            print_category "📚" "Documentation" "^docs(\(.*\))?:"
+            print_category "💄" "Style & Refactor" "^(style|refactor|perf)(\(.*\))?:"
+            print_category "🔧" "Chore & Test" "^(chore|test|ci|build)(\(.*\))?:"
             
             # Other changes (inverse grep)
-            local others=$(grep -ivE "^(feat|feature|fix|docs|style|refactor|perf|chore|test|ci|build):" commits.txt)
+            local others=$(grep -ivE "^(feat|feature|fix|docs|style|refactor|perf|chore|test|ci|build)(\(.*\))?:" commits.txt)
             if [ ! -z "$others" ]; then
                 echo "#### 📌 Other Changes" >> release_notes.md
                 echo "$others" | while IFS='|' read -r msg hash full_hash; do
