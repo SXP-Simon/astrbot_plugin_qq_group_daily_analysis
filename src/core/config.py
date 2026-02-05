@@ -58,9 +58,13 @@ class ConfigManager:
         """获取分析天数"""
         return self.config.get("analysis_days", 1)
 
-    def get_auto_analysis_time(self) -> str:
-        """获取自动分析时间"""
-        return self.config.get("auto_analysis_time", "09:00")
+    def get_auto_analysis_time(self) -> list[str]:
+        """获取自动分析时间列表"""
+        val = self.config.get("auto_analysis_time", ["09:00"])
+        # 兼容旧版本字符串配置
+        if isinstance(val, str):
+            return [val]
+        return val if isinstance(val, list) else ["09:00"]
 
     def get_enable_auto_analysis(self) -> bool:
         """获取是否启用自动分析"""
@@ -266,9 +270,9 @@ class ConfigManager:
         self.config["analysis_days"] = days
         self.config.save_config()
 
-    def set_auto_analysis_time(self, time_str: str):
+    def set_auto_analysis_time(self, time_val: str | list[str]):
         """设置自动分析时间"""
-        self.config["auto_analysis_time"] = time_str
+        self.config["auto_analysis_time"] = time_val
         self.config.save_config()
 
     def set_enable_auto_analysis(self, enabled: bool):

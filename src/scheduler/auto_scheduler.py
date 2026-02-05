@@ -34,7 +34,7 @@ class AutoScheduler:
         self.retry_manager = retry_manager  # 保存引用
         self.html_render_func = html_render_func
         self.scheduler_task = None
-        self.last_execution_date = None  # 记录上次执行日期，防止重复执行
+        self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
 
     def set_bot_instance(self, bot_instance):
         """设置bot实例（保持向后兼容）"""
@@ -146,18 +146,55 @@ class AutoScheduler:
         while True:
             try:
                 now = datetime.now()
-                target_time = datetime.strptime(
-                    self.config_manager.get_auto_analysis_time(), "%H:%M"
-                ).replace(year=now.year, month=now.month, day=now.day)
 
-                # 如果今天的目标时间已过，设置为明天
-                if now >= target_time:
-                    target_time += timedelta(days=1)
+                # 获取时间配置列表
+                time_config = self.config_manager.get_auto_analysis_time()
+                # 兼容处理：确保是列表
+                if isinstance(time_config, str):
+                    time_config = [time_config]
+
+                # 解析所有时间点
+                target_times = []
+                for t_str in time_config:
+                    try:
+                        t = datetime.strptime(t_str, "%H:%M").replace(
+                            year=now.year,
+                            month=now.month,
+                            day=now.day,
+                            second=0,
+                            microsecond=0,
+                        )
+                        target_times.append(t)
+                    except ValueError:
+                        logger.error(f"时间格式错误: {t_str}, 应为 HH:MM")
+                        continue
+
+                if not target_times:
+                    logger.warning("未配置有效的时间点，使用默认 09:00")
+                    target_times = [
+                        datetime.now().replace(
+                            hour=9, minute=0, second=0, microsecond=0
+                        )
+                    ]
+
+                # 排序时间点
+                target_times.sort()
+
+                # 寻找下一个执行时间
+                next_target = None
+                for t in target_times:
+                    if t > now:
+                        next_target = t
+                        break
+
+                # 如果今天的时间点都过了，取明天的第一个时间点
+                if not next_target:
+                    next_target = target_times[0] + timedelta(days=1)
 
                 # 计算等待时间
-                wait_seconds = (target_time - now).total_seconds()
+                wait_seconds = (next_target - now).total_seconds()
                 logger.info(
-                    f"定时分析将在 {target_time.strftime('%Y-%m-%d %H:%M:%S')} 执行，等待 {wait_seconds:.0f} 秒"
+                    f"下一次自动分析将在 {next_target.strftime('%Y-%m-%d %H:%M:%S')} 执行，等待 {wait_seconds:.0f} 秒"
                 )
 
                 # 等待到目标时间
@@ -165,25 +202,33 @@ class AutoScheduler:
 
                 # 执行自动分析
                 if self.config_manager.get_enable_auto_analysis():
-                    # 检查今天是否已经执行过，防止重复执行
-                    if self.last_execution_date == target_time.date():
-                        logger.info(
-                            f"今天 {target_time.date()} 已经执行过自动分析，跳过执行"
-                        )
-                        # 等待到明天再检查
-                        await asyncio.sleep(3600)  # 等待1小时后再检查
+                    # 检查此具体时间点是否已执行过，防止重复执行
+                    # 使用精确到分钟的时间戳作为唯一标识
+                    target_key = next_target.strftime("%Y-%m-%d %H:%M")
+
+                    if self.last_executed_target == target_key:
+                        logger.info(f"时间点 {target_key} 已经执行过自动分析，跳过")
+                        # 等待一小段时间，避免紧接着的循环再次触发（虽然逻辑上应该取下一个时间了）
+                        await asyncio.sleep(60)
                         continue
 
-                    logger.info("开始执行定时分析")
+                    logger.info(f"开始执行定时分析 ({target_key})")
                     await self._run_auto_analysis()
-                    self.last_execution_date = target_time.date()  # 记录执行日期
+
+                    self.last_executed_target = target_key  # 记录执行的具体时间点
+
                     logger.info(
-                        f"定时分析执行完成，记录执行日期: {self.last_execution_date}"
+                        f"定时分析执行完成，记录执行时间点: {self.last_executed_target}"
                     )
                 else:
                     logger.info("自动分析已禁用，跳过执行")
-                    break
+                    # 禁用后虽然跳过执行，但也需要sleep避免死循环占用CPU，通常start/stop会控制task的存活
+                    # 这里sleep多久都行，因为会被stop_scheduler取消
+                    await asyncio.sleep(60)
 
+            except asyncio.CancelledError:
+                logger.info("定时任务调度器被取消")
+                break
             except Exception as e:
                 logger.error(f"定时任务调度器错误: {e}")
                 # 等待5分钟后重试
