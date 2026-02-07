@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from typing import Any
+
 from astrbot.api import logger
+
 from ..utils.trace_context import TraceContext
 
 

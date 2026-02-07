@@ -1,10 +1,9 @@
 import base64
-import logging
-import asyncio
+
 import aiohttp
-from typing import Optional, List, Dict, Any
 
 from astrbot.api import logger
+
 from ..utils.trace_context import TraceContext
 
 
@@ -20,7 +19,7 @@ class MessageSender:
         self.retry_manager = retry_manager
 
     async def send_text(
-        self, group_id: str, text: str, platform_id: Optional[str] = None
+        self, group_id: str, text: str, platform_id: str | None = None
     ) -> bool:
         """
         发送文本消息
@@ -53,7 +52,7 @@ class MessageSender:
         group_id: str,
         image_url: str,
         text_prefix: str = "",
-        platform_id: Optional[str] = None,
+        platform_id: str | None = None,
     ) -> bool:
         """
         发送图片 (URL 模式)
@@ -86,7 +85,7 @@ class MessageSender:
         group_id: str,
         image_url: str,
         text_prefix: str = "",
-        platform_id: Optional[str] = None,
+        platform_id: str | None = None,
     ) -> bool:
         """
         发送图片 (Base64 模式) - 需先下载图片
@@ -130,7 +129,7 @@ class MessageSender:
         group_id: str,
         image_url: str,
         text_prefix: str = "",
-        platform_id: Optional[str] = None,
+        platform_id: str | None = None,
     ) -> bool:
         """
         智能发送图片：先尝试 URL，失败则回退到 Base64
@@ -150,7 +149,7 @@ class MessageSender:
         group_id: str,
         pdf_path: str,
         text_prefix: str = "",
-        platform_id: Optional[str] = None,
+        platform_id: str | None = None,
     ) -> bool:
         """
         发送 PDF 文件
@@ -179,8 +178,8 @@ class MessageSender:
         return False
 
     def _get_available_platforms(
-        self, group_id: str, specific_platform_id: Optional[str] = None
-    ) -> List[tuple]:
+        self, group_id: str, specific_platform_id: str | None = None
+    ) -> list[tuple]:
         """
         获取可用的发送平台列表
         """
@@ -198,7 +197,7 @@ class MessageSender:
 
         return []
 
-    async def _download_image(self, url: str) -> Optional[bytes]:
+    async def _download_image(self, url: str) -> bytes | None:
         """下载图片 helper"""
         try:
             timeout = aiohttp.ClientTimeout(total=15)
