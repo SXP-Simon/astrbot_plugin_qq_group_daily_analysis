@@ -61,7 +61,7 @@ class QQGroupDailyAnalysis(Star):
         logger.info("QQ群日常分析插件已初始化（模块化版本）")
 
     @filter.on_platform_loaded()
-    async def on_platform_loaded(self, event):
+    async def on_platform_loaded(self):
         """平台加载完成后初始化"""
         try:
             # 初始化所有bot实例
@@ -576,8 +576,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.append(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入白名单")
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群加入白名单")
                     # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
@@ -586,8 +584,6 @@ class QQGroupDailyAnalysis(Star):
                 glist = self.config_manager.get_group_list()
                 if group_id in glist:
                     glist.remove(group_id)
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群从黑名单移除")
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从黑名单移除")
                     # 重新启动定时任务
@@ -605,8 +601,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.remove(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从白名单移除")
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群从白名单移除")
                     # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
@@ -615,8 +609,6 @@ class QQGroupDailyAnalysis(Star):
                 glist = self.config_manager.get_group_list()
                 if group_id not in glist:
                     glist.append(group_id)
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群加入黑名单")
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入黑名单")
                     # 重新启动定时任务
