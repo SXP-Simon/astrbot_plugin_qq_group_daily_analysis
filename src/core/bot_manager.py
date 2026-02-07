@@ -69,6 +69,10 @@ class BotManager:
         logger.error("没有任何可用的bot实例")
         return None
 
+    def get_all_bot_instances(self) -> dict:
+        """获取所有已加载的bot实例 {platform_id: bot_instance}"""
+        return self._bot_instances.copy()
+
     def has_bot_instance(self) -> bool:
         """检查是否有可用的bot实例"""
         return bool(self._bot_instances)
