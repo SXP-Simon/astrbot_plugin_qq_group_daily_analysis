@@ -53,18 +53,17 @@ class QQGroupDailyAnalysis(Star):
             self.html_render,  # 传入html_render函数
         )
 
-        # 延迟启动自动调度器，给系统时间初始化
-        if self.config_manager.get_enable_auto_analysis():
-            asyncio.create_task(self._delayed_start_scheduler())
+        # 注册日志过滤器
+        from .src.utils.trace_context import TraceLogFilter
+
+        logger.addFilter(TraceLogFilter())
 
         logger.info("QQ群日常分析插件已初始化（模块化版本）")
 
-    async def _delayed_start_scheduler(self):
-        """延迟启动调度器，给系统时间初始化"""
+    @filter.on_platform_loaded()
+    async def on_platform_loaded(self, event):
+        """平台加载完成后初始化"""
         try:
-            # 等待30秒让系统完全初始化
-            await asyncio.sleep(30)
-
             # 初始化所有bot实例
             discovered = await self.bot_manager.initialize_from_config()
             if discovered:
@@ -76,7 +75,7 @@ class QQGroupDailyAnalysis(Star):
                     )
 
                 # 启动调度器
-                await self.auto_scheduler.start_scheduler()
+                self.auto_scheduler.schedule_jobs(self.context)
             else:
                 logger.warning("Bot管理器初始化失败，未发现任何适配器")
                 status = self.bot_manager.get_status_info()
@@ -86,7 +85,7 @@ class QQGroupDailyAnalysis(Star):
             await self.retry_manager.start()
 
         except Exception as e:
-            logger.debug(f"延迟启动调度器失败，可能由于短时间内多次更新插件配置: {e}")
+            logger.error(f"平台加载事件处理失败: {e}", exc_info=True)
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
@@ -96,7 +95,7 @@ class QQGroupDailyAnalysis(Star):
             # 停止自动调度器
             if self.auto_scheduler:
                 logger.info("正在停止自动调度器...")
-                await self.auto_scheduler.stop_scheduler()
+                self.auto_scheduler.unschedule_jobs(self.context)
                 logger.info("自动调度器已停止")
 
             if self.retry_manager:
@@ -577,8 +576,10 @@ class QQGroupDailyAnalysis(Star):
                     glist.append(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入白名单")
+                    self.config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群加入白名单")
                     # 重新启动定时任务
-                    await self.auto_scheduler.restart_scheduler()
+                    self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在白名单中")
             elif mode == "blacklist":
@@ -587,8 +588,10 @@ class QQGroupDailyAnalysis(Star):
                     glist.remove(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从黑名单移除")
+                    self.config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群从黑名单移除")
                     # 重新启动定时任务
-                    await self.auto_scheduler.restart_scheduler()
+                    self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群不在黑名单中")
             else:
@@ -602,8 +605,10 @@ class QQGroupDailyAnalysis(Star):
                     glist.remove(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从白名单移除")
+                    self.config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群从白名单移除")
                     # 重新启动定时任务
-                    await self.auto_scheduler.restart_scheduler()
+                    self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群不在白名单中")
             elif mode == "blacklist":
@@ -612,8 +617,10 @@ class QQGroupDailyAnalysis(Star):
                     glist.append(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入黑名单")
+                    self.config_manager.set_group_list(glist)
+                    yield event.plain_result("✅ 已将当前群加入黑名单")
                     # 重新启动定时任务
-                    await self.auto_scheduler.restart_scheduler()
+                    self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在黑名单中")
             else:
@@ -623,7 +630,7 @@ class QQGroupDailyAnalysis(Star):
 
         elif action == "reload":
             # 重新启动定时任务
-            await self.auto_scheduler.restart_scheduler()
+            self.auto_scheduler.schedule_jobs(self.context)
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
 
         elif action == "test":
