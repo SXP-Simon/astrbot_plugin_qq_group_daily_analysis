@@ -4,13 +4,15 @@
 """
 
 import asyncio
-import base64
 import weakref
-from datetime import datetime, timedelta
 
-import aiohttp
+from apscheduler.triggers.cron import CronTrigger
 
 from astrbot.api import logger
+
+from ..core.message_sender import MessageSender
+from ..reports.dispatcher import ReportDispatcher
+from ..utils.trace_context import TraceContext
 
 
 class AutoScheduler:
@@ -33,7 +35,16 @@ class AutoScheduler:
         self.bot_manager = bot_manager
         self.retry_manager = retry_manager  # 保存引用
         self.html_render_func = html_render_func
-        self.scheduler_task = None
+
+        # Initialize Core Components
+        self.message_sender = MessageSender(bot_manager, config_manager, retry_manager)
+        self.report_dispatcher = ReportDispatcher(
+            config_manager, report_generator, self.message_sender, retry_manager
+        )
+        if html_render_func:
+            self.report_dispatcher.set_html_render(html_render_func)
+
+        self.scheduler_job_ids = []  # Store scheduled job IDs
         self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
 
     def set_bot_instance(self, bot_instance):
@@ -114,130 +125,58 @@ class AutoScheduler:
             logger.error(f"❌ 获取平台ID失败: {e}")
             return None
 
-    async def start_scheduler(self):
-        """启动定时任务调度器"""
+    def schedule_jobs(self, context):
+        """注册定时任务"""
+        # 先清理旧任务
+        self.unschedule_jobs(context)
+
         if not self.config_manager.get_enable_auto_analysis():
-            logger.info("自动分析功能未启用")
+            logger.info("自动分析功能未启用，不注册定时任务")
             return
 
-        # 延迟启动，给系统时间初始化
-        await asyncio.sleep(10)
+        time_config = self.config_manager.get_auto_analysis_time()
+        if isinstance(time_config, str):
+            time_config = [time_config]
 
-        logger.info(
-            f"启动定时任务调度器，自动分析时间: {self.config_manager.get_auto_analysis_time()}"
-        )
+        scheduler = context.cron_manager.scheduler
 
-        self.scheduler_task = asyncio.create_task(self._scheduler_loop())
-
-    async def stop_scheduler(self):
-        """停止定时任务调度器"""
-        if self.scheduler_task and not self.scheduler_task.done():
-            self.scheduler_task.cancel()
-            logger.info("已停止定时任务调度器")
-
-    async def restart_scheduler(self):
-        """重启定时任务调度器"""
-        await self.stop_scheduler()
-        if self.config_manager.get_enable_auto_analysis():
-            await self.start_scheduler()
-
-    async def _scheduler_loop(self):
-        """调度器主循环"""
-        while True:
+        for i, t_str in enumerate(time_config):
             try:
-                now = datetime.now()
+                # t_str format: "HH:MM"
+                t_str = str(t_str).replace("：", ":").strip()
+                hour, minute = t_str.split(":")
 
-                # 获取时间配置列表
-                time_config = self.config_manager.get_auto_analysis_time()
-                # 兼容处理：确保是列表
-                if isinstance(time_config, str):
-                    time_config = [time_config]
+                # Create CronTrigger
+                trigger = CronTrigger(hour=int(hour), minute=int(minute))
 
-                # 解析所有时间点
-                target_times = []
-                for t_str in time_config:
-                    try:
-                        # 预处理：替换中文冒号，去除首尾空格
-                        t_str = str(t_str).replace("：", ":").strip()
+                # Job ID
+                job_id = f"astrbot_plugin_qq_group_daily_analysis_trigger_{i}"
 
-                        t = datetime.strptime(t_str, "%H:%M").replace(
-                            year=now.year,
-                            month=now.month,
-                            day=now.day,
-                            second=0,
-                            microsecond=0,
-                        )
-                        target_times.append(t)
-                    except ValueError:
-                        logger.error(
-                            f"时间格式错误: {t_str}, 应为 HH:MM 格式，例如 23:00"
-                        )
-                        continue
-
-                if not target_times:
-                    logger.warning("未配置有效的时间点，使用默认 09:00")
-                    target_times = [
-                        datetime.now().replace(
-                            hour=9, minute=0, second=0, microsecond=0
-                        )
-                    ]
-
-                # 排序时间点
-                target_times.sort()
-
-                # 寻找下一个执行时间
-                next_target = None
-                for t in target_times:
-                    if t > now:
-                        next_target = t
-                        break
-
-                # 如果今天的时间点都过了，取明天的第一个时间点
-                if not next_target:
-                    next_target = target_times[0] + timedelta(days=1)
-
-                # 计算等待时间
-                wait_seconds = (next_target - now).total_seconds()
-                logger.info(
-                    f"下一次自动分析将在 {next_target.strftime('%Y-%m-%d %H:%M:%S')} 执行，等待 {wait_seconds:.0f} 秒"
+                # Add job
+                scheduler.add_job(
+                    self._run_auto_analysis,
+                    trigger=trigger,
+                    id=job_id,
+                    replace_existing=True,
+                    misfire_grace_time=60,
                 )
+                self.scheduler_job_ids.append(job_id)
+                logger.info(f"已注册定时自动分析任务: {t_str} (Job ID: {job_id})")
 
-                # 等待到目标时间
-                await asyncio.sleep(wait_seconds)
-
-                # 执行自动分析
-                if self.config_manager.get_enable_auto_analysis():
-                    # 检查此具体时间点是否已执行过，防止重复执行
-                    # 使用精确到分钟的时间戳作为唯一标识
-                    target_key = next_target.strftime("%Y-%m-%d %H:%M")
-
-                    if self.last_executed_target == target_key:
-                        logger.info(f"时间点 {target_key} 已经执行过自动分析，跳过")
-                        # 等待一小段时间，避免紧接着的循环再次触发（虽然逻辑上应该取下一个时间了）
-                        await asyncio.sleep(60)
-                        continue
-
-                    logger.info(f"开始执行定时分析 ({target_key})")
-                    await self._run_auto_analysis()
-
-                    self.last_executed_target = target_key  # 记录执行的具体时间点
-
-                    logger.info(
-                        f"定时分析执行完成，记录执行时间点: {self.last_executed_target}"
-                    )
-                else:
-                    logger.info("自动分析已禁用，跳过执行")
-                    # 禁用后虽然跳过执行，但也需要sleep避免死循环占用CPU，通常start/stop会控制task的存活
-                    # 这里sleep多久都行，因为会被stop_scheduler取消
-                    await asyncio.sleep(60)
-
-            except asyncio.CancelledError:
-                logger.info("定时任务调度器被取消")
-                break
             except Exception as e:
-                logger.error(f"定时任务调度器错误: {e}")
-                # 等待5分钟后重试
-                await asyncio.sleep(300)
+                logger.error(f"注册定时任务失败 ({t_str}): {e}")
+
+    def unschedule_jobs(self, context):
+        """取消定时任务"""
+        scheduler = context.cron_manager.scheduler
+        for job_id in self.scheduler_job_ids:
+            try:
+                if scheduler.get_job(job_id):
+                    scheduler.remove_job(job_id)
+                    logger.debug(f"已移除定时任务: {job_id}")
+            except Exception as e:
+                logger.warning(f"移除定时任务失败 ({job_id}): {e}")
+        self.scheduler_job_ids.clear()
 
     async def _run_auto_analysis(self):
         """执行自动分析 - 并发处理所有群聊"""
@@ -339,6 +278,11 @@ class AutoScheduler:
         async with lock:
             try:
                 start_time = asyncio.get_event_loop().time()
+
+                # 设置 TraceID
+                trace_id = TraceContext.generate(prefix=f"group_{group_id}")
+                TraceContext.set(trace_id)
+                logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
 
                 # 检查bot管理器状态
                 if not self.bot_manager.is_ready_for_auto_analysis():
@@ -462,7 +406,10 @@ class AutoScheduler:
                     return
 
                 # 生成并发送报告
-                await self._send_analysis_report(group_id, analysis_result, platform_id)
+                # await self._send_analysis_report(group_id, analysis_result, platform_id)
+                await self.report_dispatcher.dispatch(
+                    group_id, analysis_result, platform_id
+                )
 
                 # 记录执行时间
                 end_time = asyncio.get_event_loop().time()
@@ -545,458 +492,3 @@ class AutoScheduler:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
 
         return list(all_groups)
-
-    async def _send_analysis_report(
-        self, group_id: str, analysis_result: dict, platform_id: str | None = None
-    ):
-        logger.info(
-            f"[DEBUG][SEND_REPORT] enter "
-            f"group_id={group_id}, "
-            f"platform_id={platform_id}, "
-            f"analysis_result_keys={list(analysis_result.keys()) if isinstance(analysis_result, dict) else type(analysis_result)}"
-        )
-
-        """发送分析报告到群"""
-        try:
-            output_format = self.config_manager.get_output_format()
-
-            if output_format == "image":
-                if self.html_render_func:
-                    # 使用图片格式
-                    logger.info(f"群 {group_id} 自动分析使用图片报告格式")
-                    image_report_sent = False
-
-                    try:
-                        (
-                            image_url,
-                            html_content,
-                        ) = await self.report_generator.generate_image_report(
-                            analysis_result, group_id, self.html_render_func
-                        )
-                        logger.debug(
-                            f"[DEBUG][SEND_REPORT] 图片生成结果 "
-                            f"group_id={group_id}, "
-                            f"image_url={'Success' if image_url else 'Fail'}, "
-                            f"html_content={'Available' if html_content else 'None'}"
-                        )
-
-                        if image_url:
-                            # 尝试发送图片
-                            image_report_sent = await self._send_image_message(
-                                group_id, image_url
-                            )
-                            if image_report_sent:
-                                logger.info(f"群 {group_id} 图片报告发送成功")
-                    except Exception as img_e:
-                        logger.error(f"群 {group_id} 图片报告处理异常: {img_e}")
-                        image_report_sent = False
-                        # 确保 html_content 至少为 None (如果异常发生在解包之前)
-                        if "html_content" not in locals():
-                            html_content = None
-
-                    # 如果图片并未成功发送（无论是生成失败，还是发送失败）
-                    if not image_report_sent:
-                        if html_content:
-                            # 有 HTML 内容，尝试加入重试队列
-                            logger.warning(
-                                f"群 {group_id} 图片报告未成功发送，尝试加入重试队列"
-                            )
-
-                            # 尝试获取 platform_id
-                            if not platform_id:
-                                platform_id = await self.get_platform_id_for_group(
-                                    group_id
-                                )
-
-                            if platform_id:
-                                logger.info(f"群 {group_id} 已加入重试队列")
-                                await self.retry_manager.add_task(
-                                    html_content, analysis_result, group_id, platform_id
-                                )
-                                return  # 已加入队列，本次处理结束
-
-                            else:
-                                logger.error(
-                                    f"群 {group_id} 无法获取平台ID，无法加入重试队列"
-                                )
-
-                        else:
-                            logger.warning(
-                                f"群 {group_id} 图片生成失败且无HTML内容，无法重试"
-                            )
-
-                        # 最终兜底：发送文本报告
-                        # (执行到这里说明：要么没HTML，要么没PlatformID，无法重试)
-                        logger.warning(f"群 {group_id} 回退到文本报告")
-                        text_report = self.report_generator.generate_text_report(
-                            analysis_result
-                        )
-                        await self._send_text_message(
-                            group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                        )
-                else:
-                    # 没有html_render函数，回退到文本报告
-                    logger.warning(f"群 {group_id} 缺少html_render函数，回退到文本报告")
-                    text_report = self.report_generator.generate_text_report(
-                        analysis_result
-                    )
-                    await self._send_text_message(
-                        group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                    )
-
-            elif output_format == "pdf":
-                if not self.config_manager.playwright_available:
-                    logger.warning(f"群 {group_id} PDF功能不可用，回退到文本报告")
-                    text_report = self.report_generator.generate_text_report(
-                        analysis_result
-                    )
-                    await self._send_text_message(
-                        group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                    )
-                else:
-                    try:
-                        pdf_path = await self.report_generator.generate_pdf_report(
-                            analysis_result, group_id
-                        )
-                        if pdf_path:
-                            await self._send_pdf_file(group_id, pdf_path)
-                            logger.info(f"群 {group_id} 自动分析完成，已发送PDF报告")
-                        else:
-                            logger.error(
-                                f"群 {group_id} PDF报告生成失败（返回None），回退到文本报告"
-                            )
-                            text_report = self.report_generator.generate_text_report(
-                                analysis_result
-                            )
-                            await self._send_text_message(
-                                group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                            )
-                    except Exception as pdf_e:
-                        logger.error(
-                            f"群 {group_id} PDF报告生成异常: {pdf_e}，回退到文本报告"
-                        )
-                        text_report = self.report_generator.generate_text_report(
-                            analysis_result
-                        )
-                        await self._send_text_message(
-                            group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                        )
-            else:
-                text_report = self.report_generator.generate_text_report(
-                    analysis_result
-                )
-                await self._send_text_message(
-                    group_id, f"📊 每日群聊分析报告：\n\n{text_report}"
-                )
-
-            logger.info(f"群 {group_id} 自动分析完成，已发送报告")
-
-        except Exception as e:
-            logger.error(f"发送分析报告到群 {group_id} 失败: {e}")
-
-    async def _send_image_message(self, group_id: str, image_url: str):
-        """发送图片消息到群（URL → base64 → 文本，保留提示文本）"""
-        try:
-            prefix_text = "📊 每日群聊分析报告已生成："
-
-            # ===== 获取平台 =====
-            if (
-                hasattr(self.bot_manager, "_bot_instances")
-                and self.bot_manager._bot_instances
-            ):
-                available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(
-                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送图片..."
-                )
-            else:
-                logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self.get_platform_id_for_group(group_id)
-                if not platform_id:
-                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送图片")
-                    return False
-                bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                if not bot_instance:
-                    logger.error(
-                        f"❌ 群 {group_id} 发送图片失败：缺少bot实例（平台: {platform_id}）"
-                    )
-                    return False
-                available_platforms = [(platform_id, bot_instance)]
-
-            # =========================================================
-            # 1️⃣ URL 方式
-            # =========================================================
-            for test_platform_id, test_bot_instance in available_platforms:
-                try:
-                    logger.info(
-                        f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片（URL）..."
-                    )
-
-                    await test_bot_instance.api.call_action(
-                        "send_group_msg",
-                        group_id=group_id,
-                        message=[
-                            {"type": "text", "data": {"text": prefix_text}},
-                            {"type": "image", "data": {"url": image_url}},
-                        ],
-                    )
-
-                    logger.info(
-                        f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片（URL）"
-                    )
-                    return True
-
-                except Exception as e:
-                    logger.debug(f"平台 {test_platform_id} URL 图片发送失败: {e}")
-
-            logger.warning(f"群 {group_id} URL 方式发送图片失败，尝试 base64")
-
-            # =========================================================
-            # 2️⃣ base64 方式
-            # =========================================================
-            try:
-                # 设置请求超时和响应大小限制，避免卡死或下载过大
-                timeout = aiohttp.ClientTimeout(total=10)  # 10 秒超时
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(image_url) as resp:
-                        if resp.status != 200:
-                            logger.error(
-                                f"群 {group_id} base64 下载图片失败: status={resp.status}"
-                            )
-                            image_bytes = None
-                        else:
-                            max_bytes = 5 * 1024 * 1024  # 5 MiB 安全限制
-                            downloaded = 0
-                            chunks = []
-                            is_too_large = False
-
-                            async for chunk in resp.content.iter_chunked(64 * 1024):
-                                downloaded += len(chunk)
-                                if downloaded > max_bytes:
-                                    logger.error(
-                                        f"群 {group_id} base64 下载图片失败: 图片响应太大，超过 {max_bytes} 字节"
-                                    )
-                                    is_too_large = True
-                                    break
-                                chunks.append(chunk)
-
-                            if is_too_large:
-                                image_bytes = None
-                            else:
-                                image_bytes = b"".join(chunks)
-            except Exception as e:
-                logger.error(f"群 {group_id} base64 下载图片失败: {e}")
-                image_bytes = None
-
-            if image_bytes:
-                image_b64 = base64.b64encode(image_bytes).decode()
-                logger.info(
-                    f"群 {group_id} 图片已转 base64，大小={len(image_bytes)} bytes"
-                )
-
-                for test_platform_id, test_bot_instance in available_platforms:
-                    try:
-                        logger.info(
-                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送图片（base64）..."
-                        )
-
-                        await test_bot_instance.api.call_action(
-                            "send_group_msg",
-                            group_id=group_id,
-                            message=[
-                                {"type": "text", "data": {"text": prefix_text}},
-                                {
-                                    "type": "image",
-                                    "data": {"file": f"base64://{image_b64}"},
-                                },
-                            ],
-                        )
-
-                        logger.info(
-                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送图片（base64）"
-                        )
-                        return True
-
-                    except Exception as e:
-                        logger.debug(
-                            f"平台 {test_platform_id} base64 图片发送失败: {e}"
-                        )
-
-            # =========================================================
-            # 3️⃣ 失败
-            # =========================================================
-            logger.error(f"❌ 群 {group_id} 图片发送失败 (URL 和 Base64 均失败)")
-            return False
-            return False
-
-        except Exception as e:
-            logger.error(f"发送图片消息到群 {group_id} 失败: {e}")
-            return False
-
-    async def _send_text_message(self, group_id: str, text_content: str):
-        """发送文本消息到群 - 依次尝试所有可用平台"""
-        try:
-            # 获取所有可用的平台，依次尝试发送
-            if (
-                hasattr(self.bot_manager, "_bot_instances")
-                and self.bot_manager._bot_instances
-            ):
-                available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(
-                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送文本..."
-                )
-
-                for test_platform_id, test_bot_instance in available_platforms:
-                    try:
-                        logger.info(
-                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送文本..."
-                        )
-
-                        # 发送文本消息到群
-                        await test_bot_instance.api.call_action(
-                            "send_group_msg", group_id=group_id, message=text_content
-                        )
-                        logger.info(
-                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送文本"
-                        )
-                        return True  # 成功发送，返回
-
-                    except Exception as e:
-                        error_msg = str(e)
-                        # 检查是否是特定的错误码
-                        if "retcode=1200" in error_msg:
-                            logger.debug(
-                                f"平台 {test_platform_id} 发送文本失败：机器人可能不在此群中，继续尝试下一个平台"
-                            )
-                        else:
-                            logger.debug(
-                                f"平台 {test_platform_id} 发送文本失败: {e}，继续尝试下一个平台"
-                            )
-                        continue
-
-                # 所有平台都尝试失败
-                logger.error(f"❌ 群 {group_id} 所有平台都尝试发送文本失败")
-                return False
-            else:
-                # 回退到原来的逻辑（单个平台）
-                logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self.get_platform_id_for_group(group_id)
-
-                if not platform_id:
-                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送文本")
-                    return False
-
-                bot_instance = self.bot_manager.get_bot_instance(platform_id)
-
-                if not bot_instance:
-                    logger.error(
-                        f"❌ 群 {group_id} 发送文本失败：缺少bot实例（平台: {platform_id}）"
-                    )
-                    return False
-
-                # 发送文本消息到群
-                await bot_instance.api.call_action(
-                    "send_group_msg", group_id=group_id, message=text_content
-                )
-                logger.info(f"群 {group_id} 文本消息发送成功")
-                return True
-
-        except Exception as e:
-            logger.error(f"发送文本消息到群 {group_id} 失败: {e}")
-            return False
-
-    async def _send_pdf_file(self, group_id: str, pdf_path: str):
-        """发送PDF文件到群 - 依次尝试所有可用平台"""
-        try:
-            # 获取所有可用的平台，依次尝试发送
-            if (
-                hasattr(self.bot_manager, "_bot_instances")
-                and self.bot_manager._bot_instances
-            ):
-                available_platforms = list(self.bot_manager._bot_instances.items())
-                logger.info(
-                    f"群 {group_id} 检测到 {len(available_platforms)} 个可用平台，开始依次尝试发送PDF..."
-                )
-
-                for test_platform_id, test_bot_instance in available_platforms:
-                    try:
-                        logger.info(
-                            f"尝试使用平台 {test_platform_id} 向群 {group_id} 发送PDF..."
-                        )
-
-                        # 发送PDF文件到群
-                        await test_bot_instance.api.call_action(
-                            "send_group_msg",
-                            group_id=group_id,
-                            message=[
-                                {
-                                    "type": "text",
-                                    "data": {"text": "📊 每日群聊分析报告已生成："},
-                                },
-                                {"type": "file", "data": {"file": pdf_path}},
-                            ],
-                        )
-                        logger.info(
-                            f"✅ 群 {group_id} 成功通过平台 {test_platform_id} 发送PDF"
-                        )
-                        return True  # 成功发送，返回
-
-                    except Exception as e:
-                        error_msg = str(e)
-                        # 检查是否是特定的错误码
-                        if "retcode=1200" in error_msg:
-                            logger.debug(
-                                f"平台 {test_platform_id} 发送PDF失败：机器人可能不在此群中，继续尝试下一个平台"
-                            )
-                        else:
-                            logger.debug(
-                                f"平台 {test_platform_id} 发送PDF失败: {e}，继续尝试下一个平台"
-                            )
-                        continue
-
-                # 所有平台都尝试失败
-                logger.error(f"❌ 群 {group_id} 所有平台都尝试发送PDF失败")
-                return False
-            else:
-                # 回退到原来的逻辑（单个平台）
-                logger.warning(f"群 {group_id} 没有多个平台可用，使用回退逻辑")
-                platform_id = await self.get_platform_id_for_group(group_id)
-
-                if not platform_id:
-                    logger.error(f"❌ 群 {group_id} 无法获取平台ID，无法发送PDF")
-                    return False
-
-                bot_instance = self.bot_manager.get_bot_instance(platform_id)
-
-                if not bot_instance:
-                    logger.error(
-                        f"❌ 群 {group_id} 发送PDF失败：缺少bot实例（平台: {platform_id}）"
-                    )
-                    return False
-
-                # 发送PDF文件到群
-                await bot_instance.api.call_action(
-                    "send_group_msg",
-                    group_id=group_id,
-                    message=[
-                        {
-                            "type": "text",
-                            "data": {"text": "📊 每日群聊分析报告已生成："},
-                        },
-                        {"type": "file", "data": {"file": pdf_path}},
-                    ],
-                )
-                logger.info(f"群 {group_id} PDF文件发送成功")
-                return True
-
-        except Exception as e:
-            logger.error(f"发送PDF文件到群 {group_id} 失败: {e}")
-            # 发送失败提示
-            try:
-                await bot_instance.api.call_action(
-                    "send_group_msg",
-                    group_id=group_id,
-                    message=f"📊 每日群聊分析报告已生成，但发送PDF文件失败。PDF文件路径：{pdf_path}",
-                )
-            except Exception as e2:
-                logger.error(f"发送PDF失败提示到群 {group_id} 也失败: {e2}")
-            return False
