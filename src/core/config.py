@@ -102,10 +102,6 @@ class ConfigManager:
         """获取最大金句数量"""
         return self.config.get("max_golden_quotes", 5)
 
-    def get_llm_timeout(self) -> int:
-        """获取LLM请求超时时间（秒）"""
-        return self.config.get("llm_timeout", 30)
-
     def get_llm_retries(self) -> int:
         """获取LLM请求重试次数"""
         return self.config.get("llm_retries", 2)
