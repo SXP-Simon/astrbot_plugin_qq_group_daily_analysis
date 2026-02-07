@@ -1,16 +1,17 @@
 import contextvars
 import logging
-import uuid
 import time
+import uuid
 
 # 定义 ContextVar
 _trace_id_ctx = contextvars.ContextVar("trace_id", default="")
+
 
 class TraceContext:
     """
     链路追踪上下文管理器
     """
-    
+
     @staticmethod
     def set(trace_id: str):
         """设置当前上下文的 TraceID"""
@@ -20,7 +21,7 @@ class TraceContext:
     def get() -> str:
         """获取当前上下文的 TraceID"""
         return _trace_id_ctx.get()
-        
+
     @staticmethod
     def generate(prefix: str = "") -> str:
         """生成一个新的 TraceID (Prefix + Timestamp + UUID前8位)"""
@@ -35,10 +36,12 @@ class TraceContext:
         """清除当前上下文的 TraceID"""
         _trace_id_ctx.set("")
 
+
 class TraceLogFilter(logging.Filter):
     """
     日志过滤器，自动注入 TraceID
     """
+
     def filter(self, record):
         trace_id = _trace_id_ctx.get()
         if trace_id:
