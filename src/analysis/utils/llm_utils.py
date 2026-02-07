@@ -7,6 +7,15 @@ import asyncio
 from typing import Any
 
 from astrbot.api import logger
+from ...utils.resilience import CircuitBreaker, global_llm_rate_limiter
+
+_circuit_breakers = {}
+
+
+def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
+    if provider_id not in _circuit_breakers:
+        _circuit_breakers[provider_id] = CircuitBreaker(name=f"provider_{provider_id}")
+    return _circuit_breakers[provider_id]
 
 
 async def _try_get_provider_id_by_id(
@@ -192,7 +201,8 @@ async def call_provider_with_retry(
     Returns:
         LLM生成的结果，失败时返回None
     """
-    timeout = config_manager.get_llm_timeout()
+    # 注意: 超时由 AstrBot Provider 内部配置控制，不再使用插件层 asyncio.wait_for
+    # 用户可在 AstrBot WebUI 中为每个 Provider 配置 timeout 参数
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
 
@@ -225,26 +235,35 @@ async def call_provider_with_retry(
                 )
                 return None
 
-            # 使用新的 llm_generate API
-            # 注意：llm_generate 可能不直接支持 max_tokens 和 temperature 参数，
-            # 取决于 AstrBot 版本和具体实现。如果支持 kwargs，可以传递。
-            # 这里假设支持 kwargs 传递给底层 provider。
-            # 使用 asyncio.wait_for 包裹，继续遵守 timeout 参数并在超时时抛出 TimeoutError。
-            llm_resp = await asyncio.wait_for(
-                context.llm_generate(
-                    chat_provider_id=provider_id,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                ),
-                timeout=timeout,
-            )
+            # 获取熔断器
+            cb = _get_circuit_breaker(provider_id)
+            if not cb.allow_request():
+                logger.warning(f"Provider {provider_id} 熔断器已打开，跳过本次请求")
+                return None
 
-            return llm_resp
+            # 使用全局限流器 + 熔断器记录
+            # 超时由 Provider 内部控制，无需外层 wait_for
+            try:
+                async with global_llm_rate_limiter:
+                    llm_resp = await context.llm_generate(
+                        chat_provider_id=provider_id,
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+
+                # 成功记录
+                cb.record_success()
+                return llm_resp
+
+            except Exception as e:
+                # 失败记录
+                cb.record_failure()
+                raise e
 
         except asyncio.TimeoutError as e:
             last_exc = e
-            logger.warning(f"LLM请求超时: 第{attempt}次, timeout={timeout}s")
+            logger.warning(f"LLM请求超时: 第{attempt}次 (Provider 内部超时)")
         except Exception as e:
             last_exc = e
             logger.warning(f"LLM请求失败: 第{attempt}次, 错误: {last_exc}")
