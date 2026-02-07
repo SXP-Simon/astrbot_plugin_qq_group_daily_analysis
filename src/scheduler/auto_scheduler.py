@@ -25,7 +25,8 @@ class AutoScheduler:
         analyzer,
         report_generator,
         bot_manager,
-        retry_manager,  # 新增
+        retry_manager,
+        history_manager,
         html_render_func=None,
     ):
         self.config_manager = config_manager
@@ -34,6 +35,7 @@ class AutoScheduler:
         self.report_generator = report_generator
         self.bot_manager = bot_manager
         self.retry_manager = retry_manager  # 保存引用
+        self.history_manager = history_manager
         self.html_render_func = html_render_func
 
         # Initialize Core Components
@@ -282,6 +284,21 @@ class AutoScheduler:
                 # 设置 TraceID
                 trace_id = TraceContext.generate(prefix=f"group_{group_id}")
                 TraceContext.set(trace_id)
+
+                # 获取当前日期和时间槽 (HH-MM)
+                import datetime
+
+                now = datetime.datetime.now()
+                date_str = now.strftime("%Y-%m-%d")
+                time_str = now.strftime("%H-%M")
+
+                # 检查是否已有该时间段分析记录
+                if await self.history_manager.has_history(group_id, date_str, time_str):
+                    logger.info(
+                        f"群 {group_id} 在 {date_str} {time_str} 已有分析记录，跳过自动分析"
+                    )
+                    return
+
                 logger.info(f"开始为群 {group_id} 执行自动分析（并发任务）")
 
                 # 检查bot管理器状态
@@ -409,6 +426,11 @@ class AutoScheduler:
                 # await self._send_analysis_report(group_id, analysis_result, platform_id)
                 await self.report_dispatcher.dispatch(
                     group_id, analysis_result, platform_id
+                )
+
+                # 保存到历史记录
+                await self.history_manager.save_analysis(
+                    group_id, analysis_result, date_str, time_str
                 )
 
                 # 记录执行时间
