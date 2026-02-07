@@ -20,6 +20,7 @@ from .src.core.bot_manager import BotManager
 
 # 导入重构后的模块
 from .src.core.config import ConfigManager
+from .src.core.history_manager import HistoryManager
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
 from .src.scheduler.retry import RetryManager
@@ -40,6 +41,7 @@ class QQGroupDailyAnalysis(Star):
             context, self.config_manager, self.bot_manager
         )
         self.report_generator = ReportGenerator(self.config_manager)
+        self.history_manager = HistoryManager(self)
         self.retry_manager = RetryManager(
             self.bot_manager, self.html_render, self.report_generator
         )
@@ -50,6 +52,7 @@ class QQGroupDailyAnalysis(Star):
             self.report_generator,
             self.bot_manager,
             self.retry_manager,
+            self.history_manager,
             self.html_render,  # 传入html_render函数
         )
 
@@ -187,10 +190,12 @@ class QQGroupDailyAnalysis(Star):
                 messages, group_id, event.unified_msg_origin
             )
 
-            # 检查分析结果
             if not analysis_result or not analysis_result.get("statistics"):
                 yield event.plain_result("❌ 分析过程中出现错误，请稍后重试")
                 return
+
+            # 保存到历史记录
+            await self.history_manager.save_analysis(group_id, analysis_result)
 
             # 生成报告
             output_format = self.config_manager.get_output_format()
