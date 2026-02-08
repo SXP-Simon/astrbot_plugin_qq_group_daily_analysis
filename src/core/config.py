@@ -172,7 +172,7 @@ class ConfigManager:
             default_path = data_path / "plugin_data" / plugin_name / "reports"
             return self.config.get("pdf_output_dir", str(default_path))
         except Exception:
-            # Fallback for older versions or import errors
+            # 针对旧版本或导入错误的后备方案
             return self.config.get(
                 "pdf_output_dir",
                 "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
