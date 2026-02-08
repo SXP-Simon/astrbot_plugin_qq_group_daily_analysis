@@ -625,11 +625,20 @@ class DiscordAdapter(PlatformAdapter):
     ) -> Optional[str]:
         """获取 Discord 用户头像 URL"""
         if not discord:
+            logger.warning("[群分析插件 DiscordAdapter] py-cord 未安装")
             return None
 
         try:
+            logger.debug(f"[群分析插件 DiscordAdapter] 正在获取用户头像 {user_id}")
+            if not self._discord_client:
+                logger.warning("[群分析插件 DiscordAdapter] Discord 客户端未准备就绪")
+                return None
+
             user = self._discord_client.get_user(int(user_id))
             if not user:
+                logger.debug(
+                    f"[群分析插件 DiscordAdapter] 用户 {user_id} 不在缓存中，正在获取..."
+                )
                 user = await self._discord_client.fetch_user(int(user_id))
 
             if user:
@@ -637,10 +646,18 @@ class DiscordAdapter(PlatformAdapter):
                 allowed_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
 
-                # display_avatar 自动处理默认头像
-                return user.display_avatar.with_size(target_size).url
+                url = user.display_avatar.with_size(target_size).url
+                logger.debug(
+                    f"[群分析插件 DiscordAdapter] 获取用户头像 {user_id} 成功: {url}"
+                )
+                return url
+
+            logger.warning(f"[群分析插件 DiscordAdapter] 用户 {user_id} 未找到")
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(
+                f"[群分析插件 DiscordAdapter] 获取用户头像 {user_id} 失败: {e}"
+            )
             return None
 
     async def get_user_avatar_data(
