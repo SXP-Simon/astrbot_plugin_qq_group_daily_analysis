@@ -25,7 +25,7 @@ class BotManager:
         self._bot_instances = {}  # {platform_id: bot_instance}
         self._adapters = {}  # {platform_id: PlatformAdapter} - DDD 集成
         self._platforms = {}  # 存储平台对象以访问配置
-        self._bot_qq_ids = []  # 支持多个QQ号
+        self._bot_self_ids = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
         self._context = None
         self._is_initialized = False
         self._default_platform = "default"  # 默认平台
@@ -52,7 +52,8 @@ class BotManager:
             
             if platform_name and PlatformAdapterFactory.is_supported(platform_name):
                 adapter_config = {
-                    "bot_qq_ids": self._bot_qq_ids.copy(),
+                    "bot_self_ids": self._bot_self_ids.copy(),
+                    "bot_qq_ids": self._bot_self_ids.copy(), # 兼容旧适配器
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config
@@ -61,20 +62,21 @@ class BotManager:
                     self._adapters[platform_id] = adapter
                     logger.debug(f"已为 {platform_id} ({platform_name}) 创建 PlatformAdapter")
             
-            # 自动提取QQ号
-            bot_qq_id = self._extract_bot_qq_id(bot_instance)
-            if bot_qq_id and bot_qq_id not in self._bot_qq_ids:
-                self._bot_qq_ids.append(str(bot_qq_id))
+            # 自动提取机器人 ID
+            bot_self_id = self._extract_bot_self_id(bot_instance)
+            if bot_self_id and bot_self_id not in self._bot_self_ids:
+                self._bot_self_ids.append(str(bot_self_id))
+
+    def set_bot_self_ids(self, bot_self_ids):
+        """设置机器人 ID 列表（支持单个 ID 或 ID 列表）"""
+        if isinstance(bot_self_ids, list):
+            self._bot_self_ids = [str(uid) for uid in bot_self_ids if uid]
+        elif bot_self_ids:
+            self._bot_self_ids = [str(bot_self_ids)]
 
     def set_bot_qq_ids(self, bot_qq_ids):
-        """设置bot QQ号（支持单个QQ号或QQ号列表）"""
-        if isinstance(bot_qq_ids, list):
-            self._bot_qq_ids = [str(qq) for qq in bot_qq_ids if qq]
-            if self._bot_qq_ids:
-                self._bot_qq_id = self._bot_qq_ids[0]  # 保持向后兼容
-        elif bot_qq_ids:
-            self._bot_qq_id = str(bot_qq_ids)
-            self._bot_qq_ids = [str(bot_qq_ids)]
+        """设置bot QQ号（兼容旧方法，建议使用 set_bot_self_ids）"""
+        self.set_bot_self_ids(bot_qq_ids)
 
     def get_bot_instance(self, platform_id=None):
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
@@ -146,13 +148,17 @@ class BotManager:
         """检查是否有可用的bot实例"""
         return bool(self._bot_instances)
 
+    def has_bot_self_id(self) -> bool:
+        """检查是否有配置的机器人 ID"""
+        return bool(self._bot_self_ids)
+
     def has_bot_qq_id(self) -> bool:
-        """检查是否有配置的bot QQ号"""
-        return bool(self._bot_qq_ids)
+        """检查是否有配置的bot QQ号 (兼容旧方法)"""
+        return self.has_bot_self_id()
 
     def is_ready_for_auto_analysis(self) -> bool:
         """检查是否准备好进行自动分析"""
-        return self.has_bot_instance() and self.has_bot_qq_id()
+        return self.has_bot_instance() and self.has_bot_self_id()
 
     def _get_platform_id_from_instance(self, bot_instance):
         """从bot实例获取平台ID"""
@@ -337,10 +343,10 @@ class BotManager:
 
     async def initialize_from_config(self):
         """从配置初始化bot管理器"""
-        # 设置配置的bot QQ号列表
-        bot_qq_ids = self.config_manager.get_bot_qq_ids()
-        if bot_qq_ids:
-            self.set_bot_qq_ids(bot_qq_ids)
+        # 设置配置的bot ID 列表
+        bot_self_ids = self.config_manager.get_bot_self_ids()
+        if bot_self_ids:
+            self.set_bot_self_ids(bot_self_ids)
 
         # 自动发现所有bot实例
         discovered = await self.auto_discover_bot_instances()
@@ -362,8 +368,9 @@ class BotManager:
         
         return {
             "has_bot_instance": self.has_bot_instance(),
-            "has_bot_qq_id": self.has_bot_qq_id(),
-            "bot_qq_ids": self._bot_qq_ids,
+            "has_bot_qq_id": self.has_bot_self_id(),
+            "bot_qq_ids": self._bot_self_ids,
+            "bot_self_ids": self._bot_self_ids,
             "platform_count": len(self._bot_instances),
             "platforms": list(self._bot_instances.keys()),
             "adapters": adapter_info,  # DDD integration info
@@ -372,13 +379,9 @@ class BotManager:
 
     def update_from_event(self, event):
         """从事件更新bot实例（用于手动命令）"""
-        # 检查是否为 QQ 平台事件
-        if (
-            hasattr(event, "get_platform_name")
-            and event.get_platform_name() != "aiocqhttp"
-        ):
-            return False
-
+        # 检查是否为 QQ 平台事件 (兼容性检查)
+        # 注意: 非 aiocqhttp 平台也可以使用，只要适配器已注册
+        
         if hasattr(event, "bot") and event.bot:
             # 从事件中获取平台ID
             platform_id = None
@@ -388,22 +391,26 @@ class BotManager:
                 platform_id = event.metadata.id
 
             self.set_bot_instance(event.bot, platform_id)
-            # 每次都尝试从bot实例提取QQ号
-            bot_qq_id = self._extract_bot_qq_id(event.bot)
-            if bot_qq_id:
-                # 将单个QQ号转换为列表，保持统一处理
-                self.set_bot_qq_ids([bot_qq_id])
+            # 每次都尝试从bot实例提取ID
+            bot_self_id = self._extract_bot_self_id(event.bot)
+            if bot_self_id:
+                # 将单个ID转换为列表，保持统一处理
+                self.set_bot_self_ids([bot_self_id])
             else:
-                # 如果bot实例没有QQ号，尝试使用配置的QQ号列表
-                config_qq_ids = self.config_manager.get_bot_qq_ids()
-                if config_qq_ids:
-                    self.set_bot_qq_ids(config_qq_ids)
+                # 如果bot实例没有ID，尝试使用配置的ID列表
+                config_self_ids = self.config_manager.get_bot_self_ids()
+                if config_self_ids:
+                    self.set_bot_self_ids(config_self_ids)
             return True
         return False
 
+    def _extract_bot_self_id(self, bot_instance):
+        """从bot实例中提取自身ID（单个）"""
+        return self._extract_bot_qq_id(bot_instance)
+
     def _extract_bot_qq_id(self, bot_instance):
-        """从bot实例中提取QQ号（单个）"""
-        # 尝试多种方式获取bot QQ号
+        """从bot实例中提取QQ号（兼容旧方法名称）"""
+        # 尝试多种方式获取bot ID
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
         elif hasattr(bot_instance, "qq") and bot_instance.qq:
@@ -417,13 +424,13 @@ class BotManager:
         return self.has_bot_instance() and bool(group_id)
 
     def should_filter_bot_message(self, sender_id: str) -> bool:
-        """判断是否应该过滤bot自己的消息（支持多个QQ号）"""
-        if not self._bot_qq_ids:
+        """判断是否应该过滤bot自己的消息（支持多个ID）"""
+        if not self._bot_self_ids:
             return False
 
         sender_id_str = str(sender_id)
-        # 检查是否在QQ号列表中
-        return sender_id_str in self._bot_qq_ids
+        # 检查是否在ID列表中
+        return sender_id_str in self._bot_self_ids
 
     def is_plugin_enabled(self, platform_id: str, plugin_name: str) -> bool:
         """检查指定平台是否启用了该插件"""

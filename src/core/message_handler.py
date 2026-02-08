@@ -77,12 +77,12 @@ class MessageHandler:
                 return []
 
             # 确保bot_manager有QQ号列表用于过滤
-            if self.bot_manager and not self.bot_manager.has_bot_qq_id():
+            if self.bot_manager and not self.bot_manager.has_bot_self_id():
                 # 尝试从bot_instance提取QQ号并设置为列表
-                bot_qq_id = self._extract_bot_qq_id_from_instance(bot_instance)
-                if bot_qq_id:
+                bot_self_id = self._extract_bot_qq_id_from_instance(bot_instance)
+                if bot_self_id:
                     # 将单个QQ号转换为列表，保持统一处理
-                    self.bot_manager.set_bot_qq_ids([bot_qq_id])
+                    self.bot_manager.set_bot_self_ids([bot_self_id])
 
             # 计算时间范围
             end_time = datetime.now()
