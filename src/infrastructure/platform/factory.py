@@ -69,6 +69,12 @@ def _register_adapters():
         PlatformAdapterFactory.register("onebot", OneBotAdapter)
     except ImportError:
         pass
+    
+    try:
+        from .adapters.discord_adapter import DiscordAdapter
+        PlatformAdapterFactory.register("discord", DiscordAdapter)
+    except ImportError:
+        pass
 
 
 _register_adapters()
