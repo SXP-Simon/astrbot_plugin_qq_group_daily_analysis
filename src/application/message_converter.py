@@ -154,16 +154,22 @@ class MessageConverter:
             elif content.type == MessageContentType.VIDEO:
                 message_chain.append({"type": "video", "data": {"url": content.url}})
 
+        # Ensure sender fields are populated, even if missing in original
+        sender_data = {
+            "user_id": unified.sender_id,
+            "nickname": unified.sender_name,
+            "card": unified.sender_card or "",
+        }
+
         return {
             "message_id": unified.message_id,
-            "sender": {
-                "user_id": unified.sender_id,
-                "nickname": unified.sender_name,
-                "card": unified.sender_card or "",
-            },
+            "sender": sender_data,
             "group_id": unified.group_id,
             "message": message_chain,
             "time": unified.timestamp,
+            # Add these helper fields for old analyzers that might expect them directly
+            "raw_message": unified.text_content, 
+            "user_id": unified.sender_id, 
         }
 
     @staticmethod
