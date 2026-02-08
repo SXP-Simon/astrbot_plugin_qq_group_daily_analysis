@@ -67,6 +67,20 @@ class QQGroupDailyAnalysis(Star):
     async def on_platform_loaded(self):
         """平台加载完成后初始化"""
         try:
+            # 检查插件是否被启用 (Fix for empty plugin_set issue)
+            # 如果 plugin_set 为空列表，会导致所有插件不响应消息
+            if self.context:
+                # 获取配置对象
+                config = self.context.get_config()
+                plugin_set = config.get("plugin_set")
+                
+                if isinstance(plugin_set, list) and not plugin_set:
+                    logger.warning("检测到 plugin_set 为空，自动修正以启用插件")
+                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
+                elif isinstance(plugin_set, list) and "*" not in plugin_set and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set:
+                    logger.warning("检测到当前插件未在 plugin_set 中，自动添加")
+                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
+
             # 初始化所有bot实例
             discovered = await self.bot_manager.initialize_from_config()
             if discovered:
