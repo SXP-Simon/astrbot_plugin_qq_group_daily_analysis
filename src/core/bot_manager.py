@@ -1,19 +1,29 @@
 """
 Bot实例管理模块
 统一管理bot实例的获取、设置和使用
+
+Refactored to integrate with DDD PlatformAdapter architecture.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from astrbot.api import logger
 
+from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
+
 
 class BotManager:
-    """Bot实例管理器 - 统一管理所有bot相关操作"""
+    """
+    Bot实例管理器 - 统一管理所有bot相关操作
+    
+    Integrates with DDD architecture by creating PlatformAdapter instances
+    alongside raw bot instances for cross-platform support.
+    """
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
-        self._bot_instances = {}  # 改为字典：{platform_id: bot_instance}
+        self._bot_instances = {}  # {platform_id: bot_instance}
+        self._adapters = {}  # {platform_id: PlatformAdapter} - DDD integration
         self._platforms = {}  # 存储平台对象以访问配置
         self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
@@ -24,13 +34,33 @@ class BotManager:
         """设置AstrBot上下文"""
         self._context = context
 
-    def set_bot_instance(self, bot_instance, platform_id=None):
-        """设置bot实例，支持指定平台ID"""
+    def set_bot_instance(self, bot_instance, platform_id=None, platform_name=None):
+        """
+        设置bot实例，支持指定平台ID
+        
+        Also creates a PlatformAdapter if the platform is supported.
+        """
         if not platform_id:
             platform_id = self._get_platform_id_from_instance(bot_instance)
 
         if bot_instance and platform_id:
             self._bot_instances[platform_id] = bot_instance
+            
+            # Create PlatformAdapter for DDD integration
+            if platform_name is None:
+                platform_name = self._detect_platform_name(bot_instance)
+            
+            if platform_name and PlatformAdapterFactory.is_supported(platform_name):
+                adapter_config = {
+                    "bot_qq_ids": self._bot_qq_ids.copy(),
+                }
+                adapter = PlatformAdapterFactory.create(
+                    platform_name, bot_instance, adapter_config
+                )
+                if adapter:
+                    self._adapters[platform_id] = adapter
+                    logger.debug(f"Created PlatformAdapter for {platform_id} ({platform_name})")
+            
             # 自动提取QQ号
             bot_qq_id = self._extract_bot_qq_id(bot_instance)
             if bot_qq_id and bot_qq_id not in self._bot_qq_ids:
@@ -91,8 +121,79 @@ class BotManager:
             return bot_instance.platform
         return self._default_platform
 
+    def _detect_platform_name(self, bot_instance) -> Optional[str]:
+        """
+        Detect platform name from bot instance for adapter creation.
+        
+        Returns platform name like 'aiocqhttp', 'telegram', etc.
+        """
+        # Check for aiocqhttp/OneBot
+        if hasattr(bot_instance, "call_action"):
+            return "aiocqhttp"
+        
+        # Check for platform attribute
+        if hasattr(bot_instance, "platform"):
+            platform = bot_instance.platform
+            if isinstance(platform, str):
+                return platform
+        
+        # Check class name patterns
+        class_name = type(bot_instance).__name__.lower()
+        if "cqhttp" in class_name or "onebot" in class_name:
+            return "aiocqhttp"
+        if "telegram" in class_name:
+            return "telegram"
+        if "discord" in class_name:
+            return "discord"
+        
+        return None
+
+    # ==================== DDD Integration Methods ====================
+
+    def get_adapter(self, platform_id: str = None) -> Optional[PlatformAdapter]:
+        """
+        Get PlatformAdapter for the specified platform.
+        
+        This is the primary method for DDD-based operations.
+        """
+        if platform_id:
+            return self._adapters.get(platform_id)
+        
+        if self._adapters:
+            if len(self._adapters) == 1:
+                return list(self._adapters.values())[0]
+            
+            logger.error(
+                f"Multiple adapters exist {list(self._adapters.keys())} "
+                "but no platform_id specified."
+            )
+            return None
+        
+        return None
+
+    def get_all_adapters(self) -> dict:
+        """Get all PlatformAdapter instances {platform_id: adapter}"""
+        return self._adapters.copy()
+
+    def has_adapter(self, platform_id: str = None) -> bool:
+        """Check if adapter exists for the platform"""
+        if platform_id:
+            return platform_id in self._adapters
+        return bool(self._adapters)
+
+    def can_analyze(self, platform_id: str = None) -> bool:
+        """Check if the platform supports analysis using DDD capabilities"""
+        adapter = self.get_adapter(platform_id)
+        if adapter:
+            return adapter.get_capabilities().can_analyze()
+        return False
+
     async def auto_discover_bot_instances(self):
-        """自动发现所有可用的bot实例"""
+        """
+        自动发现所有可用的bot实例
+        
+        Also creates PlatformAdapter for each discovered bot.
+        """
         if not self._context or not hasattr(self._context, "platform_manager"):
             return {}
 
@@ -114,9 +215,24 @@ class BotManager:
                 and hasattr(platform.metadata, "id")
             ):
                 platform_id = platform.metadata.id
-                self.set_bot_instance(bot_client, platform_id)
+                
+                # Detect platform name from metadata
+                platform_name = None
+                if hasattr(platform.metadata, "name"):
+                    platform_name = platform.metadata.name
+                elif hasattr(platform.metadata, "type"):
+                    platform_name = platform.metadata.type
+                
+                self.set_bot_instance(bot_client, platform_id, platform_name)
                 self._platforms[platform_id] = platform
                 discovered[platform_id] = bot_client
+
+        # Log adapter creation results
+        if self._adapters:
+            logger.info(
+                f"Created {len(self._adapters)} PlatformAdapter(s): "
+                f"{list(self._adapters.keys())}"
+            )
 
         return discovered
 
@@ -136,12 +252,22 @@ class BotManager:
 
     def get_status_info(self) -> dict[str, Any]:
         """获取bot管理器状态信息"""
+        adapter_info = {}
+        for pid, adapter in self._adapters.items():
+            caps = adapter.get_capabilities()
+            adapter_info[pid] = {
+                "platform_name": caps.platform_name,
+                "can_analyze": caps.can_analyze(),
+                "supports_image": caps.supports_image_message,
+            }
+        
         return {
             "has_bot_instance": self.has_bot_instance(),
             "has_bot_qq_id": self.has_bot_qq_id(),
             "bot_qq_ids": self._bot_qq_ids,
             "platform_count": len(self._bot_instances),
             "platforms": list(self._bot_instances.keys()),
+            "adapters": adapter_info,  # DDD integration info
             "ready_for_auto_analysis": self.is_ready_for_auto_analysis(),
         }
 
