@@ -265,25 +265,29 @@ class BotManager:
             ):
                 platform_id = platform.metadata.id
                 
-                # Detect platform name from metadata
+                # 尝试获取平台名称
                 platform_name = None
                 if hasattr(platform.metadata, "name"):
                     platform_name = platform.metadata.name
                 elif hasattr(platform.metadata, "type"):
                     platform_name = platform.metadata.type
                 
-                # Store platform instance regardless of bot_client state
+                logger.debug(f"Discovered platform: {platform_id} ({platform_name}), client ready: {bool(bot_client)}")
+
+                # 无论 bot_client 状态如何，都存储平台实例
                 self._platforms[platform_id] = platform
                 
                 if bot_client:
                     self.set_bot_instance(bot_client, platform_id, platform_name)
                     discovered[platform_id] = bot_client
                 else:
-                    # Try to set adapter even without bot_instance (if possible) or just mark for lazy load
-                    # For now, just log that we found a platform but no client yet
-                    logger.debug(f"Found platform {platform_id} ({platform_name}) but client is not ready yet.")
+                    # 懒加载场景：找到平台但客户端尚未准备好。
+                    # 将其添加到 discovered，以便 main.py 知道我们找到了某些东西。
+                    # 使用平台对象作为日志记录的占位符。
+                    logger.info(f"Platform {platform_id} found but client is not ready. Will lazy load.")
+                    discovered[platform_id] = platform
 
-        # Log adapter creation results
+        # 记录适配器创建结果
         if self._adapters:
             logger.info(
                 f"已创建 {len(self._adapters)} 个 PlatformAdapter: "
