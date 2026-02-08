@@ -88,9 +88,21 @@ class QQGroupDailyAnalysis(Star):
             return event.platform_meta.id
         return None
 
+    def _get_platform_name_from_event(self, event: AstrMessageEvent) -> str | None:
+        """从事件中提取平台名称（如 discord, aiocqhttp 等）"""
+        # 使用正确的 AstrMessageEvent API
+        if hasattr(event, "get_platform_name"):
+            return event.get_platform_name()
+        if hasattr(event, "platform_meta") and hasattr(event.platform_meta, "name"):
+            return event.platform_meta.name
+        return None
+
     def _get_orchestrator(
-        self, platform_id: str, bot_instance: Any = None
-    ) -> Optional[AnalysisOrchestrator]:
+        self,
+        platform_id: str,
+        platform_name: str | None = None,
+        bot_instance: Any = None,
+    ) -> AnalysisOrchestrator | None:
         """获取或创建分析编排器"""
         if platform_id in self.orchestrators:
             return self.orchestrators[platform_id]
@@ -102,8 +114,9 @@ class QQGroupDailyAnalysis(Star):
         if not bot_instance:
             return None
 
-        # 检测平台名称
-        platform_name = self.bot_manager._detect_platform_name(bot_instance)
+        # 检测平台名称（优先使用传入的 platform_name）
+        if not platform_name:
+            platform_name = self.bot_manager._detect_platform_name(bot_instance)
         if not platform_name:
             return None
 
@@ -211,9 +224,10 @@ class QQGroupDailyAnalysis(Star):
         分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
-        # 1. 获取 group_id 和 platform_id
+        # 1. 获取 group_id, platform_id 和 platform_name
         group_id = self._get_group_id_from_event(event)
         platform_id = self._get_platform_id_from_event(event)
+        platform_name = self._get_platform_name_from_event(event)
 
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -235,21 +249,23 @@ class QQGroupDailyAnalysis(Star):
 
         yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
         logger.info(
-            f"收到分析请求: group_id={group_id}, platform_id={platform_id}, days={analysis_days}"
+            f"收到分析请求: group_id={group_id}, platform_id={platform_id}, platform_name={platform_name}, days={analysis_days}"
         )
 
         try:
             # 4. 获取编排器
-            orchestrator = self._get_orchestrator(platform_id)
+            orchestrator = self._get_orchestrator(platform_id, platform_name)
             if not orchestrator:
                 # 尝试使用 bot_manager 获取 bot 实例再创建
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
                 if bot_instance:
-                    orchestrator = self._get_orchestrator(platform_id, bot_instance)
+                    orchestrator = self._get_orchestrator(
+                        platform_id, platform_name, bot_instance
+                    )
 
             if not orchestrator:
                 yield event.plain_result(
-                    f"❌ 未找到平台 {platform_id} 的分析编排器，请检查配置或联系开发者"
+                    f"❌ 未找到平台 {platform_name or platform_id} 的分析编排器，请检查配置或联系开发者"
                 )
                 return
 
