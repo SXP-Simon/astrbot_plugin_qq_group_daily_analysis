@@ -7,7 +7,7 @@ Bot实例管理模块
 
 from typing import Any, Optional
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
 

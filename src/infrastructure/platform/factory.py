@@ -2,7 +2,9 @@
 平台适配器工厂
 """
 
-from typing import Optional, Any, Dict, Type
+from typing import Any, Dict, List, Optional, Type
+
+from ...utils.logger import logger
 
 from .base import PlatformAdapter
 
@@ -10,7 +12,7 @@ from .base import PlatformAdapter
 class PlatformAdapterFactory:
     """
     平台适配器工厂
-    
+
     根据平台名称创建适配器实例。
     使用注册表模式便于扩展。
     """
@@ -31,12 +33,12 @@ class PlatformAdapterFactory:
     ) -> Optional[PlatformAdapter]:
         """
         创建平台适配器
-        
+
         参数:
             platform_name: 平台名称（如 "aiocqhttp"、"telegram"）
             bot_instance: AstrBot 机器人实例
             config: 配置字典
-            
+
         返回:
             平台适配器实例，如果不支持则返回 None
         """
@@ -49,8 +51,7 @@ class PlatformAdapterFactory:
             return adapter_class(bot_instance, config)
         except Exception:
             # 记录异常，但不崩溃
-            import logging
-            logging.getLogger(__name__).error(f"为 {platform_name} 创建适配器时出错", exc_info=True)
+            logger.error(f"为 {platform_name} 创建适配器时出错", exc_info=True)
             return None
 
     @classmethod
@@ -68,15 +69,17 @@ class PlatformAdapterFactory:
 def _register_adapters():
     try:
         from .adapters.onebot_adapter import OneBotAdapter
+
         PlatformAdapterFactory.register("aiocqhttp", OneBotAdapter)
         PlatformAdapterFactory.register("onebot", OneBotAdapter)
     except ImportError:
         pass
-    
+
     try:
         from .adapters.discord_adapter import DiscordAdapter
+
         PlatformAdapterFactory.register("discord", DiscordAdapter)
-        PlatformAdapterFactory.register("discord_bot", DiscordAdapter) # 添加别名
+        PlatformAdapterFactory.register("discord_bot", DiscordAdapter)  # 添加别名
     except ImportError:
         pass
 

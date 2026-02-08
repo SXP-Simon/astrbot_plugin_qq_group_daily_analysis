@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from astrbot.api import logger
+from .logger import logger
 
 
 class CircuitBreaker:

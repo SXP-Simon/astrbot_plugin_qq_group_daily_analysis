@@ -5,7 +5,7 @@
 
 import asyncio
 
-from astrbot.api import logger
+from .logger import logger
 
 from ..analysis.llm_analyzer import LLMAnalyzer
 from ..analysis.statistics import UserAnalyzer

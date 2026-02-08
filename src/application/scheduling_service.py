@@ -9,10 +9,14 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..infrastructure.config import ConfigManager
-from ..shared.constants import TASK_STATE_PENDING, TASK_STATE_RUNNING, TASK_STATE_COMPLETED
+from ..shared.constants import (
+    TASK_STATE_PENDING,
+    TASK_STATE_RUNNING,
+    TASK_STATE_COMPLETED,
+)
 
 
 class ScheduledTask:

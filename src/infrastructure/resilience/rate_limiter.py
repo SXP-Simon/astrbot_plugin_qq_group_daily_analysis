@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 
 @dataclass

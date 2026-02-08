@@ -6,7 +6,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
 from ..visualization.activity_charts import ActivityVisualizer
