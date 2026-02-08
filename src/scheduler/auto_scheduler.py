@@ -8,6 +8,7 @@ import weakref
 
 from apscheduler.triggers.cron import CronTrigger
 
+from ..infrastructure.platform.factory import PlatformAdapterFactory
 from ..utils.logger import logger
 
 from ..core.message_sender import MessageSender
@@ -520,27 +521,21 @@ class AutoScheduler:
         from ..infrastructure.platform.factory import PlatformAdapterFactory
 
         # 强制刷新一次 Bot 实例，确保最新的 Bot 被发现
-        # 这对于 AutoScheduler 这种定时任务很重要，因为 BotManager 可能懒加载
         if hasattr(self.bot_manager, "auto_discover_bot_instances"):
             try:
-                # 注意：这里需要在 async 上下文中调用，且 auto_discover_bot_instances 是 async 的
-                # 但我们不想在这里阻塞太久或引发循环调用问题。
-                # 鉴于 _get_all_groups 是 async 的，直接 await 是安全的。
                 await self.bot_manager.auto_discover_bot_instances()
             except Exception as e:
                 logger.warning(f"[AutoScheduler] Auto-discovery failed: {e}")
 
-        logger.info(
-            f"[AutoScheduler] Bot instances: {list(self.bot_manager._bot_instances.keys())}"
-        )
-        logger.info(
-            f"[AutoScheduler] Adapters: {list(self.bot_manager._adapters.keys())}"
+        bot_ids = list(self.bot_manager._bot_instances.keys())
+        adapter_ids = list(self.bot_manager._adapters.keys())
+
+        # 调试模式下记录详细信息，INFO级别仅显示概览
+        logger.debug(
+            f"[AutoScheduler] Bot instances: {bot_ids}, Adapters: {adapter_ids}"
         )
 
-        if (
-            not hasattr(self.bot_manager, "_bot_instances")
-            or not self.bot_manager._bot_instances
-        ):
+        if not bot_ids:
             logger.warning("[AutoScheduler] No bot instances found after discovery.")
             return []
 
@@ -576,13 +571,19 @@ class AutoScheduler:
                         for group_id in groups:
                             all_groups.add((platform_id, str(group_id)))
 
-                        p_name = getattr(
-                            adapter, "platform_name", platform_name or "unknown"
-                        )
+                        # 获取可读的平台名称
+                        p_name = getattr(adapter, "platform_name", None)
+                        if not p_name:
+                            p_name = (
+                                self.bot_manager._detect_platform_name(bot_instance)
+                                or "unknown"
+                            )
+
                         logger.info(
                             f"平台 {platform_id} ({p_name}) 成功获取 {len(groups)} 个群组"
                         )
                         continue
+
                     except Exception as e:
                         logger.warning(f"适配器 {platform_id} 获取群列表失败: {e}")
 

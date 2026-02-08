@@ -1,9 +1,14 @@
 # 更新日志 (CHANGELOG)
 
 
+## [v4.7.0] - fix(AutoScheduler): 修复多平台环境下群列表获取异常，优化 Discord 权限说明
+
+*   **🛠️ 健壮性增强**: 优化 `AutoScheduler` 启动逻辑，强制进行 Bot 实例自动发现，确保冷启动时能正确获取群列表。
+*   **🔌 平台优化**: 修复多平台（如 Discord）下适配器识别不稳定的问题，优先使用 `BotManager` 缓存的适配器。
+*   **📕 文档更新**: 在 `README.md` 中补充了 Discord 平台必需的 “查看消息历史记录” (Read Message History) 权限说明。
+
 ## [v4.6.9] - fix(AutoScheduler): 增加友好提示，增强性处理，优化用户体验
 
-*   **🛠️ 健壮性增强**: 增加友好提示，增强性处理，优化用户体验
 
 ---
 
