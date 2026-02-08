@@ -3,7 +3,7 @@
 专门处理用户称号和MBTI类型分析
 """
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 from ...models.data_models import TokenUsage, UserTitle
 from ..utils.json_utils import extract_user_titles_with_regex

@@ -6,7 +6,7 @@ import aiohttp
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 
 @dataclass

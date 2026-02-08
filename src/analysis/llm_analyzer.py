@@ -5,7 +5,7 @@ LLM分析器模块
 
 import asyncio
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..models.data_models import GoldenQuote, SummaryTopic, TokenUsage, UserTitle
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer

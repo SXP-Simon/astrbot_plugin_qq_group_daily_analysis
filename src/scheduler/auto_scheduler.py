@@ -8,7 +8,7 @@ import weakref
 
 from apscheduler.triggers.cron import CronTrigger
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..core.message_sender import MessageSender
 from ..reports.dispatcher import ReportDispatcher

@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 
 class HistoryRepository:
@@ -121,9 +121,7 @@ class HistoryRepository:
         history = self.load_group_history(group_id)
         return history.get("daily", {}).get(date_str)
 
-    def get_recent_results(
-        self, group_id: str, limit: int = 7
-    ) -> List[Dict[str, Any]]:
+    def get_recent_results(self, group_id: str, limit: int = 7) -> List[Dict[str, Any]]:
         """
         获取最近的分析结果。
 

@@ -7,7 +7,7 @@
 import datetime
 from typing import Any
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 
 class HistoryManager:
