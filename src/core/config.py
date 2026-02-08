@@ -144,6 +144,10 @@ class ConfigManager:
         """获取用户称号分析最大token数"""
         return self.config.get("user_title_max_tokens", 4096)
 
+    def get_debug_mode(self) -> bool:
+        """获取是否启用调试模式"""
+        return self.config.get("debug_mode", False)
+
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
         return self.config.get("llm_provider_id", "")

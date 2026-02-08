@@ -39,7 +39,7 @@ class LLMAnalyzer:
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
 
     async def analyze_topics(
-        self, messages: list[dict], umo: str = None
+        self, messages: list[dict], umo: str = None, session_id: str = None
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         使用LLM分析话题
@@ -48,13 +48,25 @@ class LLMAnalyzer:
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (话题列表, Token使用统计)
         """
         try:
-            logger.info("开始话题分析")
-            return await self.topic_analyzer.analyze_topics(messages, umo)
+            if not session_id:
+                from datetime import datetime
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                if umo:
+                    # Sanitize umo for filename (replace : with _)
+                    safe_umo = umo.replace(":", "_")
+                    session_id = f"{timestamp}_{safe_umo}"
+                else:
+                    session_id = timestamp
+
+            logger.info(f"开始话题分析, session_id: {session_id}")
+            return await self.topic_analyzer.analyze_topics(messages, umo, session_id)
         except Exception as e:
             logger.error(f"话题分析失败: {e}")
             return [], TokenUsage()
@@ -65,6 +77,7 @@ class LLMAnalyzer:
         user_analysis: dict,
         umo: str = None,
         top_users: list[dict] = None,
+        session_id: str = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """
         使用LLM分析用户称号
@@ -75,21 +88,32 @@ class LLMAnalyzer:
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(可选)
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (用户称号列表, Token使用统计)
         """
         try:
-            logger.info("开始用户称号分析")
+            if not session_id:
+                from datetime import datetime
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                if umo:
+                    safe_umo = umo.replace(":", "_")
+                    session_id = f"{timestamp}_{safe_umo}"
+                else:
+                    session_id = timestamp
+
+            logger.info(f"开始用户称号分析, session_id: {session_id}")
             return await self.user_title_analyzer.analyze_user_titles(
-                messages, user_analysis, umo, top_users
+                messages, user_analysis, umo, top_users, session_id
             )
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
             return [], TokenUsage()
 
     async def analyze_golden_quotes(
-        self, messages: list[dict], umo: str = None
+        self, messages: list[dict], umo: str = None, session_id: str = None
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """
         使用LLM分析群聊金句
@@ -98,13 +122,26 @@ class LLMAnalyzer:
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (金句列表, Token使用统计)
         """
         try:
-            logger.info("开始金句分析")
-            return await self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
+            if not session_id:
+                from datetime import datetime
+
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                if umo:
+                    safe_umo = umo.replace(":", "_")
+                    session_id = f"{timestamp}_{safe_umo}"
+                else:
+                    session_id = timestamp
+
+            logger.info(f"开始金句分析, session_id: {session_id}")
+            return await self.golden_quote_analyzer.analyze_golden_quotes(
+                messages, umo, session_id
+            )
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
             return [], TokenUsage()
@@ -129,15 +166,50 @@ class LLMAnalyzer:
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
         """
         try:
-            logger.info("开始并发执行所有分析任务")
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if umo:
+                safe_umo = umo.replace(":", "_")
+                session_id = f"{timestamp}_{safe_umo}"
+            else:
+                session_id = timestamp
+
+            logger.info(f"开始并发执行所有分析任务，会话ID: {session_id}")
+
+            # 保存原始消息数据 (Debug Mode)
+            if self.config_manager.get_debug_mode():
+                try:
+                    import json
+                    from astrbot.core.utils.astrbot_path import (
+                        get_astrbot_plugin_data_path,
+                    )
+                    from pathlib import Path
+
+                    plugin_name = "astrbot_plugin_qq_group_daily_analysis"
+                    base_data_path = get_astrbot_plugin_data_path()
+                    if isinstance(base_data_path, str):
+                        base_data_path = Path(base_data_path)
+
+                    debug_dir = base_data_path / plugin_name / "debug_data"
+                    debug_dir.mkdir(parents=True, exist_ok=True)
+
+                    msg_file_path = debug_dir / f"{session_id}_messages.json"
+                    with open(msg_file_path, "w", encoding="utf-8") as f:
+                        json.dump(messages, f, ensure_ascii=False, indent=2)
+                    logger.info(f"已保存原始消息数据到: {msg_file_path}")
+                except Exception as e:
+                    logger.error(f"保存原始消息数据失败: {e}", exc_info=True)
 
             # 并发执行三个分析任务
             results = await asyncio.gather(
-                self.topic_analyzer.analyze_topics(messages, umo),
+                self.topic_analyzer.analyze_topics(messages, umo, session_id),
                 self.user_title_analyzer.analyze_user_titles(
-                    messages, user_analysis, umo, top_users
+                    messages, user_analysis, umo, top_users, session_id
                 ),
-                self.golden_quote_analyzer.analyze_golden_quotes(messages, umo),
+                self.golden_quote_analyzer.analyze_golden_quotes(
+                    messages, umo, session_id
+                ),
                 return_exceptions=True,
             )
 
