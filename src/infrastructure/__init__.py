@@ -1,22 +1,26 @@
-# Infrastructure Layer
-from .platform import PlatformAdapter, PlatformAdapterFactory, OneBotAdapter
-from .persistence import HistoryRepository
-from .llm import LLMClient
-from .config import ConfigManager
-from .resilience import CircuitBreaker, RateLimiter, retry_async, RetryConfig
+# 基础设施层
+from . import platform
+# 持久化
+from . import persistence
+# LLM
+from . import llm
+# 配置
+from . import config
+# 弹性/容错
+from . import resilience
 
 __all__ = [
-    # Platform
+    # 平台
     "PlatformAdapter",
     "PlatformAdapterFactory",
     "OneBotAdapter",
-    # Persistence
+    # 持久化
     "HistoryRepository",
     # LLM
     "LLMClient",
-    # Config
+    # 配置
     "ConfigManager",
-    # Resilience
+    # 弹性
     "CircuitBreaker",
     "RateLimiter",
     "retry_async",
