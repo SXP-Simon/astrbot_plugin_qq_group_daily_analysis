@@ -108,7 +108,9 @@ retro_futurism 模板效果图
 > [!CAUTION]
 > **必需条件**：
 > - 已配置 LLM 提供商（用于智能分析）
-> - QQ 平台适配器
+> - 平台适配器（OneBot, Discord, Telegram 等）
+> - **Discord 平台特别说明**：机器人需要在频道中拥有 **“读取消息历史记录” (Read Message History)** 权限，否则分析将失败。
+
 
 ## 注意事项
 
