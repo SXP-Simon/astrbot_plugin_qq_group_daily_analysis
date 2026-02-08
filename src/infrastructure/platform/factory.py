@@ -48,6 +48,9 @@ class PlatformAdapterFactory:
         try:
             return adapter_class(bot_instance, config)
         except Exception:
+            # 记录异常，但不崩溃
+            import logging
+            logging.getLogger(__name__).error(f"Error creating adapter for {platform_name}", exc_info=True)
             return None
 
     @classmethod
@@ -73,6 +76,7 @@ def _register_adapters():
     try:
         from .adapters.discord_adapter import DiscordAdapter
         PlatformAdapterFactory.register("discord", DiscordAdapter)
+        PlatformAdapterFactory.register("discord_bot", DiscordAdapter) # Add alias
     except ImportError:
         pass
 

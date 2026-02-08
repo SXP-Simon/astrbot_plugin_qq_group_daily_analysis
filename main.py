@@ -10,11 +10,10 @@ import os
 from typing import Any, Optional
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import filter
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
-from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.star.filter.permission import PermissionType
 
 from .src.application.analysis_orchestrator import AnalysisOrchestrator, AnalysisConfig
 from .src.infrastructure.platform.factory import PlatformAdapterFactory
@@ -206,8 +205,7 @@ class QQGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
 
-    @filter.command("群分析")
-    @filter.command("group_analysis")
+    @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
         self, event: AstrMessageEvent, days: int | None = None
@@ -374,8 +372,7 @@ class QQGroupDailyAnalysis(Star):
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
 
-    @filter.command("设置格式")
-    @filter.command("set_format")
+    @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
     async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
         """
@@ -417,8 +414,7 @@ class QQGroupDailyAnalysis(Star):
         self.config_manager.set_output_format(format_type)
         yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
 
-    @filter.command("设置模板")
-    @filter.command("set_template")
+    @filter.command("设置模板", alias={"set_template"})
     @filter.permission_type(PermissionType.ADMIN)
     async def set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
@@ -482,8 +478,7 @@ class QQGroupDailyAnalysis(Star):
         self.config_manager.set_report_template(template_name)
         yield event.plain_result(f"✅ 报告模板已设置为: {template_name}")
 
-    @filter.command("查看模板")
-    @filter.command("view_templates")
+    @filter.command("查看模板", alias={"view_templates"})
     @filter.permission_type(PermissionType.ADMIN)
     async def view_templates(self, event: AstrMessageEvent):
         """
@@ -557,8 +552,7 @@ class QQGroupDailyAnalysis(Star):
         # 使用 Nodes 包装成一个合并转发消息
         yield event.chain_result([Nodes(node_list)])
 
-    @filter.command("安装PDF")
-    @filter.command("install_pdf")
+    @filter.command("安装PDF", alias={"install_pdf"})
     @filter.permission_type(PermissionType.ADMIN)
     async def install_pdf_deps(self, event: AstrMessageEvent):
         """
@@ -575,8 +569,7 @@ class QQGroupDailyAnalysis(Star):
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
             yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
 
-    @filter.command("分析设置")
-    @filter.command("analysis_settings")
+    @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analysis_settings(self, event: AstrMessageEvent, action: str = "status"):
         """
