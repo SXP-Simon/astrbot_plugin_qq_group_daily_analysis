@@ -20,25 +20,8 @@ class MessageHandler:
         self.activity_visualizer = ActivityVisualizer()
         self.bot_manager = bot_manager
 
-    async def set_bot_qq_ids(self, bot_qq_ids):
-        """设置机器人QQ号（支持单个QQ号或QQ号列表）"""
-        try:
-            if self.bot_manager:
-                # 确保传入的是列表，保持统一处理
-                if isinstance(bot_qq_ids, list):
-                    self.bot_manager.set_bot_qq_ids(bot_qq_ids)
-                elif bot_qq_ids:
-                    self.bot_manager.set_bot_qq_ids([bot_qq_ids])
-            logger.info(f"设置机器人QQ号: {bot_qq_ids}")
-        except Exception as e:
-            logger.error(f"设置机器人QQ号失败: {e}")
-
-    def set_bot_manager(self, bot_manager):
-        """设置bot管理器"""
-        self.bot_manager = bot_manager
-
-    def _extract_bot_qq_id_from_instance(self, bot_instance):
-        """从bot实例中提取QQ号（单个）"""
+    def _extract_bot_self_id_from_instance(self, bot_instance):
+        """从bot实例中提取ID（单个）"""
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
         elif hasattr(bot_instance, "qq") and bot_instance.qq:
@@ -46,6 +29,10 @@ class MessageHandler:
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
         return None
+
+    def _extract_bot_qq_id_from_instance(self, bot_instance):
+        """从bot实例中提取QQ号（已弃用）"""
+        return self._extract_bot_self_id_from_instance(bot_instance)
 
     async def fetch_group_messages(
         self, bot_instance, group_id: str, days: int, platform_id: str = None
@@ -61,12 +48,14 @@ class MessageHandler:
             if self.bot_manager and platform_id:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if adapter:
-                    logger.info(f"使用适配器获取群 {group_id} 消息 (平台: {platform_id})")
+                    logger.info(
+                        f"使用适配器获取群 {group_id} 消息 (平台: {platform_id})"
+                    )
                     # 使用 adapter 获取统一消息列表
                     unified_messages = await adapter.fetch_messages(
                         group_id=str(group_id),
                         days=days,
-                        max_count=self.config_manager.get_max_messages()
+                        max_count=self.config_manager.get_max_messages(),
                     )
                     # 转换为原始格式以兼容后续处理 (后续应迁移到统一格式处理)
                     return adapter.convert_to_raw_format(unified_messages)
