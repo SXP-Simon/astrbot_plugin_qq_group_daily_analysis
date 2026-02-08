@@ -182,8 +182,8 @@ class ConfigManager:
         """获取机器人自身的 ID 列表 (兼容 bot_qq_ids)"""
         ids = self.config.get("bot_self_ids", [])
         if not ids:
-             # 向后兼容 bot_qq_ids
-             ids = self.config.get("bot_qq_ids", [])
+            # 向后兼容 bot_qq_ids
+            ids = self.config.get("bot_qq_ids", [])
         return ids
 
     def get_bot_qq_ids(self) -> list:
@@ -284,6 +284,10 @@ class ConfigManager:
         """设置群组列表"""
         self.config["group_list"] = groups
         self.config.save_config()
+
+    def get_max_concurrent_tasks(self) -> int:
+        """获取自动分析最大并发数"""
+        return self.config.get("max_concurrent_tasks", 3)
 
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
@@ -391,7 +395,7 @@ class ConfigManager:
             from playwright.async_api import async_playwright  # noqa: F401
 
             self._playwright_available = True
-            
+
             # 检查版本
             try:
                 self._playwright_version = playwright.__version__
