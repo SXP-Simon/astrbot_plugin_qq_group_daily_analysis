@@ -516,14 +516,33 @@ class AutoScheduler:
         """
         all_groups = set()
 
+        # 延迟导入以避免循环依赖
+        from ..infrastructure.platform.factory import PlatformAdapterFactory
+
+        # 强制刷新一次 Bot 实例，确保最新的 Bot 被发现
+        # 这对于 AutoScheduler 这种定时任务很重要，因为 BotManager 可能懒加载
+        if hasattr(self.bot_manager, "auto_discover_bot_instances"):
+            try:
+                # 注意：这里需要在 async 上下文中调用，且 auto_discover_bot_instances 是 async 的
+                # 但我们不想在这里阻塞太久或引发循环调用问题。
+                # 鉴于 _get_all_groups 是 async 的，直接 await 是安全的。
+                await self.bot_manager.auto_discover_bot_instances()
+            except Exception as e:
+                logger.warning(f"[AutoScheduler] Auto-discovery failed: {e}")
+
+        logger.info(
+            f"[AutoScheduler] Bot instances: {list(self.bot_manager._bot_instances.keys())}"
+        )
+        logger.info(
+            f"[AutoScheduler] Adapters: {list(self.bot_manager._adapters.keys())}"
+        )
+
         if (
             not hasattr(self.bot_manager, "_bot_instances")
             or not self.bot_manager._bot_instances
         ):
+            logger.warning("[AutoScheduler] No bot instances found after discovery.")
             return []
-
-        # 延迟导入以避免循环依赖
-        from ..infrastructure.platform.factory import PlatformAdapterFactory
 
         for platform_id, bot_instance in self.bot_manager._bot_instances.items():
             # 检查该平台是否启用了此插件
@@ -534,32 +553,38 @@ class AutoScheduler:
                 continue
 
             try:
-                # 1. 尝试检测平台名称
-                platform_name = self.bot_manager._detect_platform_name(bot_instance)
+                # 1. 优先从 BotManager 获取已创建的适配器
+                adapter = self.bot_manager.get_adapter(platform_id)
 
-                # 2. 创建适配器
-                adapter = None
-                if platform_name:
-                    adapter = PlatformAdapterFactory.create(
-                        platform_name,
-                        bot_instance,
-                        config={
-                            "bot_self_ids": self.config_manager.get_bot_self_ids(),
-                        },
-                    )
+                # 2. 如果没有，尝试临时创建 (Legacy fallback)
+                platform_name = None
+                if not adapter:
+                    platform_name = self.bot_manager._detect_platform_name(bot_instance)
+                    if platform_name:
+                        adapter = PlatformAdapterFactory.create(
+                            platform_name,
+                            bot_instance,
+                            config={
+                                "bot_self_ids": self.config_manager.get_bot_self_ids(),
+                            },
+                        )
 
-                # 3. 如果适配器创建成功，使用通用接口获取群列表
+                # 3. 使用适配器获取群列表
                 if adapter:
                     try:
                         groups = await adapter.get_group_list()
                         for group_id in groups:
                             all_groups.add((platform_id, str(group_id)))
-                        logger.info(
-                            f"平台 {platform_id} ({platform_name}) 成功获取 {len(groups)} 个群组"
+
+                        p_name = getattr(
+                            adapter, "platform_name", platform_name or "unknown"
                         )
-                        continue  # 成功则跳过后续尝试
+                        logger.info(
+                            f"平台 {platform_id} ({p_name}) 成功获取 {len(groups)} 个群组"
+                        )
+                        continue
                     except Exception as e:
-                        logger.warning(f"适配器 {platform_name} 获取群列表失败: {e}")
+                        logger.warning(f"适配器 {platform_id} 获取群列表失败: {e}")
 
                 # 4. (可选) 保留降级逻辑，或者直接依赖适配器
                 # 鉴于我们已经确认 OneBot 和 Discord 都有适配器，这里可以简化
