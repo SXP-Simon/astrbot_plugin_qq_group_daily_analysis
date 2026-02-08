@@ -1,8 +1,8 @@
 """
-Topic Value Object - Platform-agnostic topic representation
+话题值对象 - 平台无关的话题表示
 
-This value object represents a discussion topic extracted from group chat messages.
-It is immutable and contains no platform-specific logic.
+该值对象表示从群聊消息中提取的讨论话题。
+它是不可变的，不包含任何平台特定的逻辑。
 """
 
 from dataclasses import dataclass, field
@@ -12,15 +12,15 @@ from typing import List
 @dataclass(frozen=True)
 class Topic:
     """
-    Topic value object for group chat analysis.
+    群聊分析的话题值对象。
 
-    Represents a discussion topic with contributors and details.
-    Immutable by design (frozen=True).
+    表示一个包含参与者和详情的讨论话题。
+    设计上不可变 (frozen=True)。
 
-    Attributes:
-        name: Topic title/name
-        contributors: List of usernames who participated in this topic
-        detail: Detailed description or summary of the topic discussion
+    属性:
+        name: 话题标题/名称
+        contributors: 参与该话题讨论的用户名列表
+        detail: 话题讨论的详细描述或摘要
     """
 
     name: str
@@ -28,24 +28,24 @@ class Topic:
     detail: str = ""
 
     def __post_init__(self):
-        """Validate topic data after initialization."""
+        """初始化后验证话题数据。"""
         if not self.name or not self.name.strip():
-            object.__setattr__(self, "name", "Unknown Topic")
+            object.__setattr__(self, "name", "未知话题")
 
-        # Ensure contributors is a tuple for immutability
+        # 确保 contributors 是元组以保证不可变性
         if isinstance(self.contributors, list):
             object.__setattr__(self, "contributors", tuple(self.contributors))
 
     @classmethod
     def from_dict(cls, data: dict) -> "Topic":
         """
-        Create Topic from dictionary data.
+        从字典数据创建 Topic。
 
-        Args:
-            data: Dictionary with topic data
+        参数:
+            data: 包含话题数据的字典
 
-        Returns:
-            Topic instance
+        返回:
+            Topic 实例
         """
         contributors = data.get("contributors", [])
         if isinstance(contributors, list):
@@ -59,10 +59,10 @@ class Topic:
 
     def to_dict(self) -> dict:
         """
-        Convert Topic to dictionary.
+        将 Topic 转换为字典。
 
-        Returns:
-            Dictionary representation
+        返回:
+            字典表示
         """
         return {
             "topic": self.name,
@@ -72,37 +72,37 @@ class Topic:
 
     @property
     def contributor_count(self) -> int:
-        """Get the number of contributors."""
+        """获取参与者数量。"""
         return len(self.contributors)
 
     @property
     def is_valid(self) -> bool:
-        """Check if topic has valid data."""
+        """检查话题是否有有效数据。"""
         return bool(self.name and self.name.strip() and self.detail and self.detail.strip())
 
 
 @dataclass
 class TopicCollection:
     """
-    Collection of topics with utility methods.
+    带有实用方法的话题集合。
 
-    This is mutable to allow building up a collection of topics.
+    这是可变的，以便逐步构建话题集合。
     """
 
     topics: List[Topic] = field(default_factory=list)
 
     def add(self, topic: Topic) -> None:
-        """Add a topic to the collection."""
+        """添加话题到集合。"""
         if topic.is_valid:
             self.topics.append(topic)
 
     def add_from_dict(self, data: dict) -> None:
-        """Add a topic from dictionary data."""
+        """从字典数据添加话题。"""
         topic = Topic.from_dict(data)
         self.add(topic)
 
     def to_list(self) -> List[dict]:
-        """Convert all topics to list of dictionaries."""
+        """将所有话题转换为字典列表。"""
         return [t.to_dict() for t in self.topics]
 
     def __len__(self) -> int:

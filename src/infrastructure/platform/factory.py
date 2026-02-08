@@ -1,5 +1,5 @@
 """
-Platform Adapter Factory
+平台适配器工厂
 """
 
 from typing import Optional, Any, Dict, Type
@@ -9,17 +9,17 @@ from .base import PlatformAdapter
 
 class PlatformAdapterFactory:
     """
-    Platform adapter factory
+    平台适配器工厂
     
-    Creates adapter instances based on platform name.
-    Uses registry pattern for easy extension.
+    根据平台名称创建适配器实例。
+    使用注册表模式便于扩展。
     """
 
     _adapters: Dict[str, Type[PlatformAdapter]] = {}
 
     @classmethod
     def register(cls, platform_name: str, adapter_class: Type[PlatformAdapter]):
-        """Register a new adapter"""
+        """注册新适配器"""
         cls._adapters[platform_name.lower()] = adapter_class
 
     @classmethod
@@ -30,15 +30,15 @@ class PlatformAdapterFactory:
         config: dict = None,
     ) -> Optional[PlatformAdapter]:
         """
-        Create platform adapter
+        创建平台适配器
         
-        Args:
-            platform_name: Platform name (e.g., "aiocqhttp", "telegram")
-            bot_instance: AstrBot bot instance
-            config: Configuration dict
+        参数:
+            platform_name: 平台名称（如 "aiocqhttp"、"telegram"）
+            bot_instance: AstrBot 机器人实例
+            config: 配置字典
             
-        Returns:
-            Platform adapter instance, or None if unsupported
+        返回:
+            平台适配器实例，如果不支持则返回 None
         """
         adapter_class = cls._adapters.get(platform_name.lower())
 
@@ -52,16 +52,16 @@ class PlatformAdapterFactory:
 
     @classmethod
     def get_supported_platforms(cls) -> list[str]:
-        """Get all supported platform names"""
+        """获取所有支持的平台名称"""
         return list(cls._adapters.keys())
 
     @classmethod
     def is_supported(cls, platform_name: str) -> bool:
-        """Check if platform is supported"""
+        """检查平台是否被支持"""
         return platform_name.lower() in cls._adapters
 
 
-# Import adapters to register them
+# 导入适配器以注册它们
 def _register_adapters():
     try:
         from .adapters.onebot_adapter import OneBotAdapter

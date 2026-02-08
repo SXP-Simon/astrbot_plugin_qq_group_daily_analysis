@@ -1,5 +1,5 @@
 """
-Analysis Task Entity - Aggregate Root
+分析任务实体 - 聚合根
 """
 
 from dataclasses import dataclass, field
@@ -23,7 +23,7 @@ class TaskStatus(Enum):
 
 @dataclass
 class AnalysisTask:
-    """Analysis task entity - Aggregate root"""
+    """分析任务实体 - 聚合根"""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     group_id: str = ""
     platform_name: str = ""
@@ -37,34 +37,34 @@ class AnalysisTask:
     error_message: Optional[str] = None
 
     def start(self, can_analyze: bool) -> bool:
-        """Start task, validate platform capability"""
+        """启动任务，验证平台能力"""
         if not can_analyze:
             self.status = TaskStatus.UNSUPPORTED_PLATFORM
-            self.error_message = f"Platform {self.platform_name} does not support analysis"
+            self.error_message = f"平台 {self.platform_name} 不支持分析"
             return False
         self.status = TaskStatus.FETCHING_MESSAGES
         self.started_at = time.time()
         return True
 
     def advance_to(self, status: TaskStatus):
-        """Advance to next status"""
+        """推进到下一个状态"""
         self.status = status
 
     def complete(self, result_id: str):
-        """Mark task as completed"""
+        """标记任务为已完成"""
         self.status = TaskStatus.COMPLETED
         self.result_id = result_id
         self.completed_at = time.time()
 
     def fail(self, error: str):
-        """Mark task as failed"""
+        """标记任务为失败"""
         self.status = TaskStatus.FAILED
         self.error_message = error
         self.completed_at = time.time()
 
     @property
     def duration(self) -> Optional[float]:
-        """Get task duration in seconds"""
+        """获取任务持续时间（秒）"""
         if self.started_at and self.completed_at:
             return self.completed_at - self.started_at
         return None

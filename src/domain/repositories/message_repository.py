@@ -1,5 +1,5 @@
 """
-Message Repository Interfaces - Platform-agnostic abstractions
+消息仓储接口 - 平台无关的抽象
 """
 
 from abc import ABC, abstractmethod
@@ -12,10 +12,10 @@ from ..value_objects.unified_group import UnifiedGroup, UnifiedMember
 
 class IMessageRepository(ABC):
     """
-    Message repository interface
+    消息仓储接口
     
-    Each platform adapter must implement this interface.
-    All methods return unified format, hiding platform differences.
+    每个平台适配器必须实现此接口。
+    所有方法返回统一格式，隐藏平台差异。
     """
 
     @abstractmethod
@@ -27,32 +27,32 @@ class IMessageRepository(ABC):
         before_id: Optional[str] = None,
     ) -> List[UnifiedMessage]:
         """
-        Fetch group message history
+        获取群组消息历史
         
-        Args:
-            group_id: Group ID
-            days: Fetch messages from last N days
-            max_count: Maximum message count
-            before_id: Fetch messages before this ID (for pagination)
+        参数:
+            group_id: 群组 ID
+            days: 获取最近 N 天的消息
+            max_count: 最大消息数量
+            before_id: 获取此 ID 之前的消息（用于分页）
             
-        Returns:
-            List of unified messages, sorted by time ascending
+        返回:
+            统一消息列表，按时间升序排列
         """
         pass
 
     @abstractmethod
     def get_capabilities(self) -> PlatformCapabilities:
-        """Get platform capabilities"""
+        """获取平台能力"""
         pass
 
     @abstractmethod
     def get_platform_name(self) -> str:
-        """Get platform name"""
+        """获取平台名称"""
         pass
 
 
 class IMessageSender(ABC):
-    """Message sender interface"""
+    """消息发送接口"""
 
     @abstractmethod
     async def send_text(
@@ -61,7 +61,7 @@ class IMessageSender(ABC):
         text: str,
         reply_to: Optional[str] = None,
     ) -> bool:
-        """Send text message"""
+        """发送文本消息"""
         pass
 
     @abstractmethod
@@ -71,7 +71,7 @@ class IMessageSender(ABC):
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """Send image message"""
+        """发送图片消息"""
         pass
 
     @abstractmethod
@@ -81,26 +81,26 @@ class IMessageSender(ABC):
         file_path: str,
         filename: Optional[str] = None,
     ) -> bool:
-        """Send file"""
+        """发送文件"""
         pass
 
 
 class IGroupInfoRepository(ABC):
-    """Group info repository interface"""
+    """群组信息仓储接口"""
 
     @abstractmethod
     async def get_group_info(self, group_id: str) -> Optional[UnifiedGroup]:
-        """Get group information"""
+        """获取群组信息"""
         pass
 
     @abstractmethod
     async def get_group_list(self) -> List[str]:
-        """Get all group IDs the bot is in"""
+        """获取机器人所在的所有群组 ID"""
         pass
 
     @abstractmethod
     async def get_member_list(self, group_id: str) -> List[UnifiedMember]:
-        """Get group member list"""
+        """获取群组成员列表"""
         pass
 
     @abstractmethod
@@ -109,5 +109,5 @@ class IGroupInfoRepository(ABC):
         group_id: str,
         user_id: str,
     ) -> Optional[UnifiedMember]:
-        """Get specific member info"""
+        """获取指定成员信息"""
         pass

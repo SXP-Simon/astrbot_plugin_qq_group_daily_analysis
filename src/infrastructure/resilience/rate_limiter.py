@@ -1,7 +1,7 @@
 """
-Rate Limiter - Controls request rates
+速率限制器 - 控制请求速率
 
-Implements token bucket rate limiting to prevent overwhelming services.
+实现令牌桶速率限制，防止服务过载。
 """
 
 import asyncio
@@ -15,27 +15,27 @@ from astrbot.api import logger
 @dataclass
 class RateLimiter:
     """
-    Token bucket rate limiter.
+    令牌桶速率限制器。
 
-    Controls the rate of operations by using a token bucket algorithm.
+    使用令牌桶算法控制操作速率。
     """
 
     name: str
-    rate: float  # Tokens per second
-    burst: int  # Maximum burst size (bucket capacity)
+    rate: float  # 每秒令牌数
+    burst: int  # 最大突发大小（桶容量）
 
-    # Internal state
+    # 内部状态
     _tokens: float = field(default=0, init=False)
     _last_update: float = field(default=0, init=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
     def __post_init__(self):
-        """Initialize the token bucket."""
+        """初始化令牌桶。"""
         self._tokens = float(self.burst)
         self._last_update = time.time()
 
     def _refill(self) -> None:
-        """Refill tokens based on elapsed time."""
+        """根据经过的时间补充令牌。"""
         now = time.time()
         elapsed = now - self._last_update
         self._tokens = min(self.burst, self._tokens + elapsed * self.rate)
@@ -43,14 +43,14 @@ class RateLimiter:
 
     async def acquire(self, tokens: int = 1, timeout: Optional[float] = None) -> bool:
         """
-        Acquire tokens from the bucket.
+        从桶中获取令牌。
 
-        Args:
-            tokens: Number of tokens to acquire
-            timeout: Maximum time to wait (None = wait forever)
+        参数:
+            tokens: 要获取的令牌数
+            timeout: 最大等待时间（None = 无限等待）
 
-        Returns:
-            True if tokens acquired, False if timeout
+        返回:
+            如果获取到令牌返回 True，超时返回 False
         """
         start_time = time.time()
 
@@ -67,7 +67,7 @@ class RateLimiter:
                     if elapsed >= timeout:
                         return False
 
-                # Calculate wait time for enough tokens
+                # 计算获取足够令牌的等待时间
                 tokens_needed = tokens - self._tokens
                 wait_time = tokens_needed / self.rate
 
@@ -80,13 +80,13 @@ class RateLimiter:
 
     def try_acquire(self, tokens: int = 1) -> bool:
         """
-        Try to acquire tokens without waiting.
+        尝试获取令牌而不等待。
 
-        Args:
-            tokens: Number of tokens to acquire
+        参数:
+            tokens: 要获取的令牌数
 
-        Returns:
-            True if tokens acquired, False otherwise
+        返回:
+            如果获取到令牌返回 True，否则返回 False
         """
         self._refill()
 
@@ -97,19 +97,19 @@ class RateLimiter:
 
     @property
     def available_tokens(self) -> float:
-        """Get current available tokens."""
+        """获取当前可用令牌数。"""
         self._refill()
         return self._tokens
 
     def reset(self) -> None:
-        """Reset the rate limiter to full capacity."""
+        """重置速率限制器到满容量。"""
         self._tokens = float(self.burst)
         self._last_update = time.time()
 
 
 class RateLimiterGroup:
     """
-    Group of rate limiters for different operations.
+    不同操作的速率限制器组。
     """
 
     def __init__(self):
@@ -122,21 +122,21 @@ class RateLimiterGroup:
         burst: int = 5,
     ) -> RateLimiter:
         """
-        Get or create a rate limiter.
+        获取或创建速率限制器。
 
-        Args:
-            name: Limiter name
-            rate: Tokens per second
-            burst: Maximum burst size
+        参数:
+            name: 限制器名称
+            rate: 每秒令牌数
+            burst: 最大突发大小
 
-        Returns:
-            RateLimiter instance
+        返回:
+            RateLimiter 实例
         """
         if name not in self._limiters:
             self._limiters[name] = RateLimiter(name=name, rate=rate, burst=burst)
         return self._limiters[name]
 
     def reset_all(self) -> None:
-        """Reset all rate limiters."""
+        """重置所有速率限制器。"""
         for limiter in self._limiters.values():
             limiter.reset()

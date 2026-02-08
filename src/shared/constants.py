@@ -1,12 +1,12 @@
 """
-Constants - Shared constants used across the plugin
+常量 - 插件中使用的共享常量
 """
 
-# Plugin metadata
+# 插件元数据
 PLUGIN_NAME = "astrbot_plugin_qq_group_daily_analysis"
 PLUGIN_VERSION = "2.0.0"
 
-# Platform identifiers
+# 平台标识符
 PLATFORM_ONEBOT = "onebot"
 PLATFORM_TELEGRAM = "telegram"
 PLATFORM_DISCORD = "discord"
@@ -15,21 +15,21 @@ PLATFORM_LARK = "lark"
 
 SUPPORTED_PLATFORMS = [
     PLATFORM_ONEBOT,
-    # Future platforms
+    # 未来平台
     # PLATFORM_TELEGRAM,
     # PLATFORM_DISCORD,
     # PLATFORM_SLACK,
     # PLATFORM_LARK,
 ]
 
-# Analysis defaults
+# 分析默认值
 DEFAULT_MAX_TOPICS = 5
 DEFAULT_MAX_USER_TITLES = 10
 DEFAULT_MAX_GOLDEN_QUOTES = 5
 DEFAULT_MIN_MESSAGES = 50
 DEFAULT_MAX_TOKENS = 2000
 
-# Time periods
+# 时间段
 HOUR_RANGES = {
     "morning": (6, 12),
     "afternoon": (12, 18),
@@ -37,13 +37,13 @@ HOUR_RANGES = {
     "night": (0, 6),
 }
 
-# Report formats
+# 报告格式
 REPORT_FORMAT_TEXT = "text"
 REPORT_FORMAT_MARKDOWN = "markdown"
 REPORT_FORMAT_IMAGE = "image"
 REPORT_FORMAT_HTML = "html"
 
-# Message content types
+# 消息内容类型
 CONTENT_TYPE_TEXT = "text"
 CONTENT_TYPE_IMAGE = "image"
 CONTENT_TYPE_EMOJI = "emoji"
@@ -55,37 +55,37 @@ CONTENT_TYPE_REPLY = "reply"
 CONTENT_TYPE_AT = "at"
 CONTENT_TYPE_UNKNOWN = "unknown"
 
-# Analysis task states
+# 分析任务状态
 TASK_STATE_PENDING = "pending"
 TASK_STATE_RUNNING = "running"
 TASK_STATE_COMPLETED = "completed"
 TASK_STATE_FAILED = "failed"
 TASK_STATE_CANCELLED = "cancelled"
 
-# Error codes
+# 错误代码
 ERROR_INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
 ERROR_LLM_FAILED = "LLM_FAILED"
 ERROR_PLATFORM_ERROR = "PLATFORM_ERROR"
 ERROR_CONFIG_ERROR = "CONFIG_ERROR"
 ERROR_TIMEOUT = "TIMEOUT"
 
-# Cache TTL (in seconds)
-CACHE_TTL_SHORT = 60  # 1 minute
-CACHE_TTL_MEDIUM = 300  # 5 minutes
-CACHE_TTL_LONG = 3600  # 1 hour
-CACHE_TTL_DAY = 86400  # 24 hours
+# 缓存 TTL（秒）
+CACHE_TTL_SHORT = 60  # 1 分钟
+CACHE_TTL_MEDIUM = 300  # 5 分钟
+CACHE_TTL_LONG = 3600  # 1 小时
+CACHE_TTL_DAY = 86400  # 24 小时
 
-# Rate limiting defaults
-RATE_LIMIT_LLM_CALLS = 10  # calls per minute
-RATE_LIMIT_API_CALLS = 60  # calls per minute
-RATE_LIMIT_BURST = 5  # burst size
+# 速率限制默认值
+RATE_LIMIT_LLM_CALLS = 10  # 每分钟调用次数
+RATE_LIMIT_API_CALLS = 60  # 每分钟调用次数
+RATE_LIMIT_BURST = 5  # 突发大小
 
-# Retry defaults
+# 重试默认值
 RETRY_MAX_ATTEMPTS = 3
 RETRY_BASE_DELAY = 1.0
 RETRY_MAX_DELAY = 30.0
 
-# File paths
+# 文件路径
 HISTORY_DIR = "history"
 CACHE_DIR = "cache"
 TEMP_DIR = "temp"

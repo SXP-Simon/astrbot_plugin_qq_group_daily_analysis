@@ -1,7 +1,7 @@
 """
-Unified Message Value Object - Cross-platform core abstraction
+统一消息值对象 - 跨平台核心抽象
 
-All platform messages are converted to this format for analysis.
+所有平台消息都转换为此格式进行分析。
 """
 
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ from datetime import datetime
 
 
 class MessageContentType(Enum):
-    """Message content type enumeration"""
+    """消息内容类型枚举"""
     TEXT = "text"
     IMAGE = "image"
     FILE = "file"
@@ -28,9 +28,9 @@ class MessageContentType(Enum):
 @dataclass(frozen=True)
 class MessageContent:
     """
-    Message content segment value object
+    消息内容段值对象
     
-    Immutable, used to compose message chains
+    不可变，用于组成消息链
     """
     type: MessageContentType
     text: str = ""
@@ -50,60 +50,60 @@ class MessageContent:
 @dataclass(frozen=True)
 class UnifiedMessage:
     """
-    Unified message format - Cross-platform core value object
+    统一消息格式 - 跨平台核心值对象
     
-    Design principles:
-    1. Only keep fields needed for analysis
-    2. Use platform-agnostic types
-    3. Immutable (frozen=True) - thread-safe
-    4. All IDs are strings - avoid platform differences
+    设计原则：
+    1. 只保留分析所需的字段
+    2. 使用平台无关的类型
+    3. 不可变 (frozen=True) - 线程安全
+    4. 所有 ID 使用字符串 - 避免平台差异
     """
-    # Basic identification
+    # 基础标识
     message_id: str
     sender_id: str
     sender_name: str
     group_id: str
     
-    # Message content
-    text_content: str  # Extracted plain text for LLM analysis
+    # 消息内容
+    text_content: str  # 提取的纯文本用于 LLM 分析
     contents: Tuple[MessageContent, ...] = field(default_factory=tuple)
     
-    # Time information
-    timestamp: int = 0  # Unix timestamp
+    # 时间信息
+    timestamp: int = 0  # Unix 时间戳
     
-    # Platform information
+    # 平台信息
     platform: str = "unknown"
     
-    # Optional information
+    # 可选信息
     reply_to_id: Optional[str] = None
-    sender_card: Optional[str] = None  # Group card/nickname
+    sender_card: Optional[str] = None  # 群名片/昵称
     
-    # Analysis helper methods
+    # 分析辅助方法
     def has_text(self) -> bool:
-        """Whether has text content"""
+        """是否有文本内容"""
         return bool(self.text_content.strip())
 
     def get_display_name(self) -> str:
-        """Get display name, prefer group card"""
+        """获取显示名称，优先使用群名片"""
         return self.sender_card or self.sender_name or self.sender_id
 
     def get_emoji_count(self) -> int:
-        """Get emoji count"""
+        """获取表情数量"""
         return sum(1 for c in self.contents if c.is_emoji())
 
     def get_text_length(self) -> int:
-        """Get text length"""
+        """获取文本长度"""
         return len(self.text_content)
 
     def get_datetime(self) -> datetime:
-        """Get message datetime"""
+        """获取消息时间"""
         return datetime.fromtimestamp(self.timestamp)
 
     def to_analysis_format(self) -> str:
-        """Convert to analysis format (for LLM)"""
+        """转换为分析格式（供 LLM 使用）"""
         name = self.get_display_name()
         return f"[{name}]: {self.text_content}"
 
 
-# Type alias
+# 类型别名
 MessageList = list[UnifiedMessage]

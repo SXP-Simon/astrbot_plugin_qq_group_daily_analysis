@@ -1,5 +1,5 @@
 """
-Group Analysis Result Entity
+群聊分析结果实体
 """
 
 from dataclasses import dataclass, field
@@ -10,7 +10,7 @@ import time
 
 @dataclass
 class SummaryTopic:
-    """Topic summary"""
+    """话题摘要"""
     topic: str
     contributors: List[str]
     detail: str
@@ -18,7 +18,7 @@ class SummaryTopic:
 
 @dataclass
 class UserTitle:
-    """User title/portrait"""
+    """用户称号/画像"""
     name: str
     user_id: str
     title: str
@@ -30,7 +30,7 @@ class UserTitle:
 
 @dataclass
 class GoldenQuote:
-    """Golden quote"""
+    """金句"""
     content: str
     sender: str
     reason: str
@@ -40,7 +40,7 @@ class GoldenQuote:
 
 @dataclass
 class TokenUsage:
-    """Token usage statistics"""
+    """令牌使用统计"""
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -48,7 +48,7 @@ class TokenUsage:
 
 @dataclass
 class EmojiStatistics:
-    """Emoji statistics"""
+    """表情统计"""
     face_count: int = 0
     mface_count: int = 0
     bface_count: int = 0
@@ -69,7 +69,7 @@ class EmojiStatistics:
 
 @dataclass
 class ActivityVisualization:
-    """Activity visualization data"""
+    """活动可视化数据"""
     hourly_activity: dict = field(default_factory=dict)
     daily_activity: dict = field(default_factory=dict)
     user_activity_ranking: list = field(default_factory=list)
@@ -79,7 +79,7 @@ class ActivityVisualization:
 
 @dataclass
 class GroupStatistics:
-    """Group statistics"""
+    """群组统计"""
     message_count: int = 0
     total_characters: int = 0
     participant_count: int = 0
@@ -91,25 +91,25 @@ class GroupStatistics:
 
 @dataclass
 class GroupAnalysisResult:
-    """Group analysis result entity"""
+    """群聊分析结果实体"""
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     group_id: str = ""
     group_name: str = ""
     trace_id: str = ""
     platform: str = ""
     
-    # Analysis results
+    # 分析结果
     message_count: int = 0
     statistics: GroupStatistics = field(default_factory=GroupStatistics)
     topics: List[SummaryTopic] = field(default_factory=list)
     user_titles: List[UserTitle] = field(default_factory=list)
     golden_quotes: List[GoldenQuote] = field(default_factory=list)
     
-    # Metadata
+    # 元数据
     token_usage: TokenUsage = field(default_factory=TokenUsage)
     analysis_date: str = ""
     created_at: float = field(default_factory=time.time)
     
     def has_content(self) -> bool:
-        """Check if result has any analysis content"""
+        """检查结果是否有分析内容"""
         return bool(self.topics or self.user_titles or self.golden_quotes)
