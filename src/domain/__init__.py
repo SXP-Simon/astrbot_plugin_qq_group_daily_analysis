@@ -1,1 +1,1 @@
-# Domain Layer - Platform-agnostic business logic
+# 领域层 - 与平台无关的业务逻辑
