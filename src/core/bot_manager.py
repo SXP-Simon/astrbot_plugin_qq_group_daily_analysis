@@ -15,7 +15,7 @@ from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
 class BotManager:
     """
     Bot实例管理器 - 统一管理所有bot相关操作
-    
+
     与 DDD 架构集成，为每个 bot 实例创建对应的 PlatformAdapter，
     实现跨平台支持。
     """
@@ -37,7 +37,7 @@ class BotManager:
     def set_bot_instance(self, bot_instance, platform_id=None, platform_name=None):
         """
         设置bot实例，支持指定平台ID
-        
+
         同时会创建对应的 PlatformAdapter（如果平台被支持）。
         """
         if not platform_id:
@@ -45,23 +45,25 @@ class BotManager:
 
         if bot_instance and platform_id:
             self._bot_instances[platform_id] = bot_instance
-            
+
             # 为 DDD 集成创建 PlatformAdapter
             if platform_name is None:
                 platform_name = self._detect_platform_name(bot_instance)
-            
+
             if platform_name and PlatformAdapterFactory.is_supported(platform_name):
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
-                    "bot_qq_ids": self._bot_self_ids.copy(), # 兼容旧适配器
+                    "bot_qq_ids": self._bot_self_ids.copy(),  # 兼容旧适配器
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config
                 )
                 if adapter:
                     self._adapters[platform_id] = adapter
-                    logger.debug(f"已为 {platform_id} ({platform_name}) 创建 PlatformAdapter")
-            
+                    logger.debug(
+                        f"已为 {platform_id} ({platform_name}) 创建 PlatformAdapter"
+                    )
+
             # 自动提取机器人 ID
             bot_self_id = self._extract_bot_self_id(bot_instance)
             if bot_self_id and bot_self_id not in self._bot_self_ids:
@@ -90,7 +92,7 @@ class BotManager:
 
         # 没有指定平台ID
         if not self._bot_instances and self._platforms:
-             self._refresh_from_stored_platforms()
+            self._refresh_from_stored_platforms()
 
         if self._bot_instances:
             # 如果只有一个实例，直接返回
@@ -113,7 +115,7 @@ class BotManager:
         for platform_id, platform in self._platforms.items():
             if platform_id in self._bot_instances:
                 continue
-                
+
             bot_client = None
             if hasattr(platform, "get_client"):
                 bot_client = platform.get_client()
@@ -121,7 +123,7 @@ class BotManager:
                 bot_client = platform.bot
             elif hasattr(platform, "client"):
                 bot_client = platform.client
-            
+
             if bot_client:
                 platform_name = None
                 if hasattr(platform, "metadata"):
@@ -130,9 +132,11 @@ class BotManager:
                         platform_name = platform.metadata.type
                     elif hasattr(platform.metadata, "name"):
                         platform_name = platform.metadata.name
-                
+
                 # 后备检测：如果不支持名称
-                if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))):
+                if not platform_name or not PlatformAdapterFactory.is_supported(
+                    str(platform_name)
+                ):
                     detected = self._detect_platform_name(bot_client)
                     if detected:
                         platform_name = detected
@@ -169,9 +173,9 @@ class BotManager:
     def _detect_platform_name(self, bot_instance) -> Optional[str]:
         """
         从 bot 实例检测平台名称，用于创建适配器。
-        
+
         返回平台名称如 'aiocqhttp', 'discord' 等。
-        
+
         检测优先级:
         1. bot 实例的 platform 属性
         2. 已知的 API 特征检测
@@ -182,18 +186,18 @@ class BotManager:
             platform = bot_instance.platform
             if isinstance(platform, str):
                 return platform
-        
+
         # 检查已知的 API 特征（平台无关的方式）
         # OneBot/aiocqhttp 特征: 有 call_action 方法
         if hasattr(bot_instance, "call_action"):
             return "aiocqhttp"
-        
+
         # 使用工厂的已注册平台列表进行类名匹配
         class_name = type(bot_instance).__name__.lower()
         for platform_name in PlatformAdapterFactory.get_supported_platforms():
             if platform_name in class_name:
                 return platform_name
-        
+
         # 通用类名模式匹配（用于尚未注册的平台）
         known_patterns = {
             "cqhttp": "aiocqhttp",
@@ -202,7 +206,7 @@ class BotManager:
         for pattern, platform in known_patterns.items():
             if pattern in class_name:
                 return platform
-        
+
         return None
 
     # ==================== DDD 集成方法 ====================
@@ -210,22 +214,21 @@ class BotManager:
     def get_adapter(self, platform_id: str = None) -> Optional[PlatformAdapter]:
         """
         获取指定平台的 PlatformAdapter。
-        
+
         这是 DDD 架构操作的主要方法。
         """
         if platform_id:
             return self._adapters.get(platform_id)
-        
+
         if self._adapters:
             if len(self._adapters) == 1:
                 return list(self._adapters.values())[0]
-            
+
             logger.error(
-                f"存在多个适配器 {list(self._adapters.keys())}，"
-                "但未指定 platform_id。"
+                f"存在多个适配器 {list(self._adapters.keys())}，但未指定 platform_id。"
             )
             return None
-        
+
         return None
 
     def get_all_adapters(self) -> dict:
@@ -248,7 +251,7 @@ class BotManager:
     async def auto_discover_bot_instances(self):
         """
         自动发现所有可用的bot实例
-        
+
         同时为每个发现的 bot 创建对应的 PlatformAdapter。
         """
         if not self._context or not hasattr(self._context, "platform_manager"):
@@ -257,8 +260,10 @@ class BotManager:
         # 使用新版 API 获取所有平台实例
         platforms = self._context.platform_manager.get_insts()
         discovered = {}
-        
-        logger.info(f"auto_discover_bot_instances: 在管理器中发现 {len(platforms)} 个平台。")
+
+        logger.info(
+            f"auto_discover_bot_instances: 在管理器中发现 {len(platforms)} 个平台。"
+        )
         for p in platforms:
             p_id = p.metadata.id if hasattr(p, "metadata") else "unknown"
             logger.info(f" - 正在检查平台: {p_id}, 类型: {type(p).__name__}")
@@ -280,7 +285,7 @@ class BotManager:
                     metadata = platform.meta()
                 except Exception:
                     pass
-            
+
             # 检查是否有有效的元数据和ID
             platform_id = None
             if metadata:
@@ -288,7 +293,7 @@ class BotManager:
                     platform_id = metadata.id
                 elif isinstance(metadata, dict):
                     platform_id = metadata.get("id")
-            
+
             if platform_id:
                 # 从元数据检测平台名称
                 platform_name = None
@@ -301,23 +306,30 @@ class BotManager:
                     platform_name = metadata.name
                 elif isinstance(metadata, dict) and "name" in metadata:
                     platform_name = metadata["name"]
-                
+
                 # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
-                if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))) and bot_client:
-                     detected = self._detect_platform_name(bot_client)
-                     if detected:
-                         platform_name = detected
-                
-                logger.debug(f"发现平台: {platform_id} ({platform_name}), 客户端就绪: {bool(bot_client)}")
+                if (
+                    not platform_name
+                    or not PlatformAdapterFactory.is_supported(str(platform_name))
+                ) and bot_client:
+                    detected = self._detect_platform_name(bot_client)
+                    if detected:
+                        platform_name = detected
+
+                logger.debug(
+                    f"发现平台: {platform_id} ({platform_name}), 客户端就绪: {bool(bot_client)}"
+                )
 
                 # 无论bot客户端状态如何，都存储平台实例
                 self._platforms[platform_id] = platform
-                
+
                 if bot_client:
                     self.set_bot_instance(bot_client, platform_id, platform_name)
                     discovered[platform_id] = bot_client
                 else:
-                    logger.info(f"发现平台 {platform_id} 但客户端未就绪。将进行懒加载。")
+                    logger.info(
+                        f"发现平台 {platform_id} 但客户端未就绪。将进行懒加载。"
+                    )
                     discovered[platform_id] = platform
             else:
                 # 后备方案：如果元数据丢失/损坏但我们有客户端，尝试使用它
@@ -326,8 +338,10 @@ class BotManager:
                     if platform_name:
                         # 生成临时ID或使用名称
                         platform_id = platform_name
-                        logger.warning(f"平台元数据丢失，使用检测到的类型 '{platform_name}' 作为 ID。")
-                        
+                        logger.warning(
+                            f"平台元数据丢失，使用检测到的类型 '{platform_name}' 作为 ID。"
+                        )
+
                         self._platforms[platform_id] = platform
                         self.set_bot_instance(bot_client, platform_id, platform_name)
                         discovered[platform_id] = bot_client
@@ -365,7 +379,7 @@ class BotManager:
                 "can_analyze": caps.can_analyze(),
                 "supports_image": caps.supports_image_message,
             }
-        
+
         return {
             "has_bot_instance": self.has_bot_instance(),
             "has_bot_qq_id": self.has_bot_self_id(),
@@ -381,7 +395,7 @@ class BotManager:
         """从事件更新bot实例（用于手动命令）"""
         # 检查是否为 QQ 平台事件 (兼容性检查)
         # 注意: 非 aiocqhttp 平台也可以使用，只要适配器已注册
-        
+
         if hasattr(event, "bot") and event.bot:
             # 从事件中获取平台ID
             platform_id = None
@@ -406,10 +420,10 @@ class BotManager:
 
     def _extract_bot_self_id(self, bot_instance):
         """从bot实例中提取自身ID（单个）"""
-        return self._extract_bot_qq_id(bot_instance)
+        return self._extract_bot_self_id_impl(bot_instance)
 
-    def _extract_bot_qq_id(self, bot_instance):
-        """从bot实例中提取QQ号（兼容旧方法名称）"""
+    def _extract_bot_self_id_impl(self, bot_instance):
+        """从bot实例中提取ID（通用实现）"""
         # 尝试多种方式获取bot ID
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
@@ -418,6 +432,10 @@ class BotManager:
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
         return None
+
+    def _extract_bot_qq_id(self, bot_instance):
+        """从bot实例中提取QQ号（兼容旧方法名称）"""
+        return self._extract_bot_self_id_impl(bot_instance)
 
     def validate_for_message_fetching(self, group_id: str) -> bool:
         """验证是否可以进行消息获取"""
