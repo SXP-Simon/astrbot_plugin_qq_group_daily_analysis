@@ -254,7 +254,16 @@ class QQGroupDailyAnalysis(Star):
 
         try:
             # 4. 获取编排器
-            orchestrator = self._get_orchestrator(platform_id, platform_name)
+            # 首先尝试从 event 直接提取 bot 客户端
+            bot_from_event = None
+            if hasattr(event, "client"):  # Discord 平台有 client 属性
+                bot_from_event = event.client
+            elif hasattr(event, "bot"):  # 其他平台可能有 bot 属性
+                bot_from_event = event.bot
+
+            orchestrator = self._get_orchestrator(
+                platform_id, platform_name, bot_from_event
+            )
             if not orchestrator:
                 # 尝试使用 bot_manager 获取 bot 实例再创建
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
