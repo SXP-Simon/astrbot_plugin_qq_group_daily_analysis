@@ -2,7 +2,7 @@
 Bot实例管理模块
 统一管理bot实例的获取、设置和使用
 
-Refactored to integrate with DDD PlatformAdapter architecture.
+已重构以集成 DDD PlatformAdapter 架构，支持多平台扩展。
 """
 
 from typing import Any, Optional
@@ -16,14 +16,14 @@ class BotManager:
     """
     Bot实例管理器 - 统一管理所有bot相关操作
     
-    Integrates with DDD architecture by creating PlatformAdapter instances
-    alongside raw bot instances for cross-platform support.
+    与 DDD 架构集成，为每个 bot 实例创建对应的 PlatformAdapter，
+    实现跨平台支持。
     """
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
         self._bot_instances = {}  # {platform_id: bot_instance}
-        self._adapters = {}  # {platform_id: PlatformAdapter} - DDD integration
+        self._adapters = {}  # {platform_id: PlatformAdapter} - DDD 集成
         self._platforms = {}  # 存储平台对象以访问配置
         self._bot_qq_ids = []  # 支持多个QQ号
         self._context = None
@@ -38,7 +38,7 @@ class BotManager:
         """
         设置bot实例，支持指定平台ID
         
-        Also creates a PlatformAdapter if the platform is supported.
+        同时会创建对应的 PlatformAdapter（如果平台被支持）。
         """
         if not platform_id:
             platform_id = self._get_platform_id_from_instance(bot_instance)
@@ -46,7 +46,7 @@ class BotManager:
         if bot_instance and platform_id:
             self._bot_instances[platform_id] = bot_instance
             
-            # Create PlatformAdapter for DDD integration
+            # 为 DDD 集成创建 PlatformAdapter
             if platform_name is None:
                 platform_name = self._detect_platform_name(bot_instance)
             
@@ -59,7 +59,7 @@ class BotManager:
                 )
                 if adapter:
                     self._adapters[platform_id] = adapter
-                    logger.debug(f"Created PlatformAdapter for {platform_id} ({platform_name})")
+                    logger.debug(f"已为 {platform_id} ({platform_name}) 创建 PlatformAdapter")
             
             # 自动提取QQ号
             bot_qq_id = self._extract_bot_qq_id(bot_instance)
@@ -123,38 +123,50 @@ class BotManager:
 
     def _detect_platform_name(self, bot_instance) -> Optional[str]:
         """
-        Detect platform name from bot instance for adapter creation.
+        从 bot 实例检测平台名称，用于创建适配器。
         
-        Returns platform name like 'aiocqhttp', 'telegram', etc.
+        返回平台名称如 'aiocqhttp', 'discord' 等。
+        
+        检测优先级:
+        1. bot 实例的 platform 属性
+        2. 已知的 API 特征检测
+        3. 类名模式匹配（作为后备方案）
         """
-        # Check for aiocqhttp/OneBot
-        if hasattr(bot_instance, "call_action"):
-            return "aiocqhttp"
-        
-        # Check for platform attribute
+        # 优先使用 platform 属性
         if hasattr(bot_instance, "platform"):
             platform = bot_instance.platform
             if isinstance(platform, str):
                 return platform
         
-        # Check class name patterns
-        class_name = type(bot_instance).__name__.lower()
-        if "cqhttp" in class_name or "onebot" in class_name:
+        # 检查已知的 API 特征（平台无关的方式）
+        # OneBot/aiocqhttp 特征: 有 call_action 方法
+        if hasattr(bot_instance, "call_action"):
             return "aiocqhttp"
-        if "telegram" in class_name:
-            return "telegram"
-        if "discord" in class_name:
-            return "discord"
+        
+        # 使用工厂的已注册平台列表进行类名匹配
+        class_name = type(bot_instance).__name__.lower()
+        for platform_name in PlatformAdapterFactory.get_supported_platforms():
+            if platform_name in class_name:
+                return platform_name
+        
+        # 通用类名模式匹配（用于尚未注册的平台）
+        known_patterns = {
+            "cqhttp": "aiocqhttp",
+            "onebot": "aiocqhttp",
+        }
+        for pattern, platform in known_patterns.items():
+            if pattern in class_name:
+                return platform
         
         return None
 
-    # ==================== DDD Integration Methods ====================
+    # ==================== DDD 集成方法 ====================
 
     def get_adapter(self, platform_id: str = None) -> Optional[PlatformAdapter]:
         """
-        Get PlatformAdapter for the specified platform.
+        获取指定平台的 PlatformAdapter。
         
-        This is the primary method for DDD-based operations.
+        这是 DDD 架构操作的主要方法。
         """
         if platform_id:
             return self._adapters.get(platform_id)
@@ -164,25 +176,25 @@ class BotManager:
                 return list(self._adapters.values())[0]
             
             logger.error(
-                f"Multiple adapters exist {list(self._adapters.keys())} "
-                "but no platform_id specified."
+                f"存在多个适配器 {list(self._adapters.keys())}，"
+                "但未指定 platform_id。"
             )
             return None
         
         return None
 
     def get_all_adapters(self) -> dict:
-        """Get all PlatformAdapter instances {platform_id: adapter}"""
+        """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
         return self._adapters.copy()
 
     def has_adapter(self, platform_id: str = None) -> bool:
-        """Check if adapter exists for the platform"""
+        """检查指定平台是否有适配器"""
         if platform_id:
             return platform_id in self._adapters
         return bool(self._adapters)
 
     def can_analyze(self, platform_id: str = None) -> bool:
-        """Check if the platform supports analysis using DDD capabilities"""
+        """使用 DDD 能力检查平台是否支持分析"""
         adapter = self.get_adapter(platform_id)
         if adapter:
             return adapter.get_capabilities().can_analyze()
@@ -192,7 +204,7 @@ class BotManager:
         """
         自动发现所有可用的bot实例
         
-        Also creates PlatformAdapter for each discovered bot.
+        同时为每个发现的 bot 创建对应的 PlatformAdapter。
         """
         if not self._context or not hasattr(self._context, "platform_manager"):
             return {}
@@ -216,7 +228,7 @@ class BotManager:
             ):
                 platform_id = platform.metadata.id
                 
-                # Detect platform name from metadata
+                # 从元数据检测平台名称
                 platform_name = None
                 if hasattr(platform.metadata, "name"):
                     platform_name = platform.metadata.name
@@ -227,10 +239,10 @@ class BotManager:
                 self._platforms[platform_id] = platform
                 discovered[platform_id] = bot_client
 
-        # Log adapter creation results
+        # 记录适配器创建结果
         if self._adapters:
             logger.info(
-                f"Created {len(self._adapters)} PlatformAdapter(s): "
+                f"已创建 {len(self._adapters)} 个 PlatformAdapter: "
                 f"{list(self._adapters.keys())}"
             )
 
