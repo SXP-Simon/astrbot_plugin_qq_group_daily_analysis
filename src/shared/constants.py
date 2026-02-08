@@ -2,6 +2,50 @@
 常量 - 插件中使用的共享常量
 """
 
+from enum import Enum
+
+
+class Platform(str, Enum):
+    """平台枚举类"""
+    ONEBOT = "onebot"
+    AIOCQHTTP = "aiocqhttp"
+    TELEGRAM = "telegram"
+    DISCORD = "discord"
+    SLACK = "slack"
+    LARK = "lark"
+
+
+class TaskStatus(str, Enum):
+    """任务状态枚举类"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ContentType(str, Enum):
+    """消息内容类型枚举类"""
+    TEXT = "text"
+    IMAGE = "image"
+    EMOJI = "emoji"
+    STICKER = "sticker"
+    FILE = "file"
+    AUDIO = "audio"
+    VIDEO = "video"
+    REPLY = "reply"
+    AT = "at"
+    UNKNOWN = "unknown"
+
+
+class ReportFormat(str, Enum):
+    """报告格式枚举类"""
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    IMAGE = "image"
+    HTML = "html"
+
+
 # 插件元数据
 PLUGIN_NAME = "astrbot_plugin_qq_group_daily_analysis"
 PLUGIN_VERSION = "2.0.0"
