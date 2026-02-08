@@ -20,10 +20,18 @@ class UserTitle:
     """用户称号数据结构"""
 
     name: str
-    qq: int
+    user_id: str  # 原 qq 字段
     title: str
     mbti: str
     reason: str
+
+    @property
+    def qq(self) -> int:
+        """兼容旧字段"""
+        try:
+            return int(self.user_id) if self.user_id else 0
+        except ValueError:
+            return 0
 
 
 @dataclass
@@ -33,7 +41,15 @@ class GoldenQuote:
     content: str
     sender: str
     reason: str
-    qq: int = 0
+    user_id: str = ""  # 原 qq 字段
+
+    @property
+    def qq(self) -> int:
+        """兼容旧字段"""
+        try:
+            return int(self.user_id) if self.user_id else 0
+        except ValueError:
+            return 0
 
 
 @dataclass
