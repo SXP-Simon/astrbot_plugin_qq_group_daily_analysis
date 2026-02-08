@@ -1,13 +1,12 @@
 """
-Analysis Orchestrator - Application layer coordinator
+分析编排器 - 应用层协调器
 
-This orchestrator bridges the new DDD architecture with the existing
-analysis logic, providing a gradual migration path.
+此编排器连接新的 DDD 架构与现有的分析逻辑，提供渐进式迁移路径。
 
-Architecture Decision:
-- The orchestrator uses PlatformAdapter for message fetching (new DDD way)
-- But delegates to existing analyzers for LLM analysis (preserving working code)
-- MessageConverter provides bidirectional conversion for compatibility
+架构决策：
+- 编排器使用 PlatformAdapter 获取消息（新的 DDD 方式）
+- 但将 LLM 分析委托给现有分析器（保留已工作的代码）
+- MessageConverter 提供双向转换以保持兼容性
 """
 
 from typing import Optional, List, Dict, Any
@@ -23,7 +22,7 @@ from .message_converter import MessageConverter
 
 @dataclass
 class AnalysisConfig:
-    """Configuration for analysis operation"""
+    """分析操作配置"""
     days: int = 1
     max_messages: int = 1000
     min_messages_threshold: int = 10
@@ -32,17 +31,17 @@ class AnalysisConfig:
 
 class AnalysisOrchestrator:
     """
-    Analysis orchestrator - coordinates the analysis workflow.
+    分析编排器 - 协调分析工作流。
     
-    Responsibilities:
-    1. Use PlatformAdapter to fetch messages (DDD approach)
-    2. Convert messages for compatibility with existing analyzers
-    3. Coordinate analysis flow
-    4. Provide platform capability checks
+    职责：
+    1. 使用 PlatformAdapter 获取消息（DDD 方式）
+    2. 转换消息以兼容现有分析器
+    3. 协调分析流程
+    4. 提供平台能力检查
     
-    This class serves as the bridge between:
-    - New DDD infrastructure (PlatformAdapter, UnifiedMessage)
-    - Existing analysis logic (MessageHandler, LLMAnalyzer, etc.)
+    此类作为以下组件之间的桥梁：
+    - 新的 DDD 基础设施（PlatformAdapter, UnifiedMessage）
+    - 现有分析逻辑（MessageHandler, LLMAnalyzer 等）
     """
 
     def __init__(
@@ -51,11 +50,11 @@ class AnalysisOrchestrator:
         config: AnalysisConfig = None,
     ):
         """
-        Initialize the orchestrator.
+        初始化编排器。
         
-        Args:
-            adapter: Platform adapter for message operations
-            config: Analysis configuration
+        参数：
+            adapter: 用于消息操作的平台适配器
+            config: 分析配置
         """
         self.adapter = adapter
         self.config = config or AnalysisConfig()
@@ -69,34 +68,34 @@ class AnalysisOrchestrator:
         analysis_config: AnalysisConfig = None,
     ) -> Optional["AnalysisOrchestrator"]:
         """
-        Factory method to create orchestrator for a specific platform.
+        工厂方法 - 为特定平台创建编排器。
         
-        Args:
-            platform_name: Platform name (e.g., "aiocqhttp", "telegram")
-            bot_instance: Bot instance from AstrBot
-            config: Platform-specific config
-            analysis_config: Analysis configuration
+        参数：
+            platform_name: 平台名称（如 "aiocqhttp", "telegram"）
+            bot_instance: 来自 AstrBot 的 bot 实例
+            config: 平台特定配置
+            analysis_config: 分析配置
             
-        Returns:
-            AnalysisOrchestrator or None if platform not supported
+        返回：
+            AnalysisOrchestrator 或 None（如果平台不支持）
         """
         adapter = PlatformAdapterFactory.create(platform_name, bot_instance, config)
         if adapter is None:
-            logger.warning(f"Platform '{platform_name}' not supported for analysis")
+            logger.warning(f"平台 '{platform_name}' 不支持分析功能")
             return None
         
         return cls(adapter, analysis_config)
 
     def get_capabilities(self) -> PlatformCapabilities:
-        """Get platform capabilities."""
+        """获取平台能力。"""
         return self.adapter.get_capabilities()
 
     def can_analyze(self) -> bool:
-        """Check if the platform supports analysis."""
+        """检查平台是否支持分析。"""
         return self.adapter.get_capabilities().can_analyze()
 
     def can_send_report(self, format: str = "image") -> bool:
-        """Check if the platform can send reports in the specified format."""
+        """检查平台是否能发送指定格式的报告。"""
         return self.adapter.get_capabilities().can_send_report(format)
 
     async def fetch_messages(
@@ -106,28 +105,28 @@ class AnalysisOrchestrator:
         max_count: int = None,
     ) -> List[UnifiedMessage]:
         """
-        Fetch messages using the platform adapter.
+        使用平台适配器获取消息。
         
-        Args:
-            group_id: Group ID to fetch messages from
-            days: Number of days (defaults to config)
-            max_count: Maximum message count (defaults to config)
+        参数：
+            group_id: 要获取消息的群组 ID
+            days: 天数（默认使用配置值）
+            max_count: 最大消息数量（默认使用配置值）
             
-        Returns:
-            List of UnifiedMessage
+        返回：
+            UnifiedMessage 列表
         """
         days = days or self.config.days
         max_count = max_count or self.config.max_messages
         
-        # Apply platform capability limits
+        # 应用平台能力限制
         caps = self.adapter.get_capabilities()
         effective_days = caps.get_effective_days(days)
         effective_count = caps.get_effective_count(max_count)
         
         if effective_days < days:
             logger.info(
-                f"Platform limits: requested {days} days, "
-                f"using {effective_days} days"
+                f"平台限制：请求 {days} 天，"
+                f"实际使用 {effective_days} 天"
             )
         
         return await self.adapter.fetch_messages(
@@ -143,24 +142,25 @@ class AnalysisOrchestrator:
         max_count: int = None,
     ) -> List[dict]:
         """
-        Fetch messages and convert to raw dict format.
+        获取消息并转换为原始字典格式。
         
-        This provides backward compatibility with existing analyzers
-        that expect raw dict messages.
+        此方法提供与现有分析器的向后兼容性，
+        这些分析器期望原始字典格式的消息。
         
-        Args:
-            group_id: Group ID to fetch messages from
-            days: Number of days
-            max_count: Maximum message count
+        参数：
+            group_id: 要获取消息的群组 ID
+            days: 天数
+            max_count: 最大消息数量
             
-        Returns:
-            List of raw message dicts (OneBot format)
+        返回：
+            原始消息字典列表（通用格式，由适配器决定具体格式）
         """
         unified_messages = await self.fetch_messages(group_id, days, max_count)
-        return MessageConverter.batch_to_onebot(unified_messages)
+        # 使用适配器的原生格式转换，而非硬编码 OneBot 格式
+        return self.adapter.convert_to_raw_format(unified_messages)
 
     async def get_group_info(self, group_id: str):
-        """Get group information."""
+        """获取群组信息。"""
         return await self.adapter.get_group_info(group_id)
 
     async def get_member_avatars(
@@ -169,19 +169,19 @@ class AnalysisOrchestrator:
         size: int = 100,
     ) -> Dict[str, Optional[str]]:
         """
-        Batch get user avatar URLs.
+        批量获取用户头像 URL。
         
-        Args:
-            user_ids: List of user IDs
-            size: Avatar size
+        参数：
+            user_ids: 用户 ID 列表
+            size: 头像尺寸
             
-        Returns:
-            Dict mapping user_id to avatar URL (or None)
+        返回：
+            用户 ID 到头像 URL 的映射字典（URL 可能为 None）
         """
         return await self.adapter.batch_get_avatar_urls(user_ids, size)
 
     async def send_text(self, group_id: str, text: str) -> bool:
-        """Send text message to group."""
+        """发送文本消息到群组。"""
         return await self.adapter.send_text(group_id, text)
 
     async def send_image(
@@ -190,7 +190,7 @@ class AnalysisOrchestrator:
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """Send image to group."""
+        """发送图片到群组。"""
         return await self.adapter.send_image(group_id, image_path, caption)
 
     async def send_file(
@@ -199,29 +199,29 @@ class AnalysisOrchestrator:
         file_path: str,
         filename: str = None,
     ) -> bool:
-        """Send file to group."""
+        """发送文件到群组。"""
         return await self.adapter.send_file(group_id, file_path, filename)
 
     def validate_message_count(self, messages: List[UnifiedMessage]) -> bool:
         """
-        Check if message count meets minimum threshold.
+        检查消息数量是否达到最小阈值。
         
-        Args:
-            messages: List of messages
+        参数：
+            messages: 消息列表
             
-        Returns:
-            True if count is sufficient
+        返回：
+            如果数量足够返回 True
         """
         return len(messages) >= self.config.min_messages_threshold
 
     def get_analysis_text(self, messages: List[UnifiedMessage]) -> str:
         """
-        Convert messages to analysis text format for LLM.
+        将消息转换为 LLM 分析文本格式。
         
-        Args:
-            messages: List of UnifiedMessage
+        参数：
+            messages: UnifiedMessage 列表
             
-        Returns:
-            Formatted text for LLM analysis
+        返回：
+            格式化的 LLM 分析文本
         """
         return MessageConverter.unified_to_analysis_text(messages)
