@@ -237,6 +237,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         user_analysis: dict,
         umo: str = None,
         top_users: list[dict] = None,
+        session_id: str = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """
         分析用户称号
@@ -246,6 +247,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(从get_top_users获取,可选)
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (用户称号列表, Token使用统计)
@@ -259,7 +261,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                 return [], TokenUsage()
 
             logger.info(f"开始分析 {len(user_data['user_summaries'])} 个活跃用户的称号")
-            return await self.analyze(user_data, umo)
+            return await self.analyze(user_data, umo, session_id)
 
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")

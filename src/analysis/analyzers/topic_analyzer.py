@@ -338,7 +338,7 @@ class TopicAnalyzer(BaseAnalyzer):
         return text_messages
 
     async def analyze_topics(
-        self, messages: list[dict], umo: str = None
+        self, messages: list[dict], umo: str = None, session_id: str = None
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         分析群聊话题
@@ -346,6 +346,7 @@ class TopicAnalyzer(BaseAnalyzer):
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (话题列表, Token使用统计)
@@ -376,7 +377,7 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.debug(f"第一条文本消息内容: {text_messages[0]}")
 
             # 直接传入原始消息，让 build_prompt 方法处理
-            return await self.analyze(messages, umo)
+            return await self.analyze(messages, umo, session_id)
 
         except Exception as e:
             logger.error(f"话题分析失败: {e}", exc_info=True)

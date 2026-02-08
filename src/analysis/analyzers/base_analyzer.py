@@ -104,13 +104,48 @@ class BaseAnalyzer(ABC):
         """
         pass
 
-    async def analyze(self, data: Any, umo: str = None) -> tuple[list[Any], TokenUsage]:
+    def _save_debug_data(self, prompt: str, session_id: str):
+        """
+        保存调试数据到文件
+
+        Args:
+            prompt: 提示词内容
+            session_id: 会话ID
+        """
+        try:
+            from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+            from pathlib import Path
+
+            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
+            base_data_path = get_astrbot_plugin_data_path()
+            if isinstance(base_data_path, str):
+                base_data_path = Path(base_data_path)
+
+            data_path = base_data_path / plugin_name / "debug_data"
+            data_path.mkdir(parents=True, exist_ok=True)
+
+            file_name = f"{session_id}_{self.get_data_type()}.txt"
+            file_path = data_path / file_name
+
+            logger.info(f"正在保存调试数据到: {file_path}")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(prompt)
+
+            logger.info(f"已保存 {self.get_data_type()} 分析 Prompt 到 {file_path}")
+
+        except Exception as e:
+            logger.error(f"保存调试数据失败: {e}", exc_info=True)
+
+    async def analyze(
+        self, data: Any, umo: str = None, session_id: str = None
+    ) -> tuple[list[Any], TokenUsage]:
         """
         统一的分析流程
 
         Args:
             data: 输入数据
             umo: 模型唯一标识符
+            session_id: 会话ID (用于调试模式)
 
         Returns:
             (分析结果列表, Token使用统计)
@@ -132,6 +167,17 @@ class BaseAnalyzer(ABC):
             logger.debug(
                 f"{self.get_data_type()}分析prompt前100字符: {prompt[:100] if prompt else 'None'}..."
             )
+
+            # 保存调试数据
+            debug_mode = self.config_manager.get_debug_mode()
+            logger.info(
+                f"[Debug] debug_mode={debug_mode}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
+            )  # Added log
+
+            if debug_mode and session_id and prompt:
+                self._save_debug_data(prompt, session_id)
+            elif debug_mode and not session_id:
+                logger.warning("[Debug] Debug mode enabled but no session_id provided")
 
             # 检查 prompt 是否为空
             if not prompt or not prompt.strip():
