@@ -2,6 +2,7 @@ import asyncio
 import base64
 import random
 import time
+import aiohttp
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -157,6 +158,23 @@ class RetryManager:
                 False,  # return_url=False, 获取 bytes
                 image_options,
             )
+
+            # Fix: html_render might return URL (str) even if return_url=False in some implementations
+            if isinstance(image_data, str) and image_data.startswith(
+                ("http://", "https://")
+            ):
+                logger.warning(
+                    f"[RetryManager] html_render 返回了 URL 而不是 bytes，尝试下载: {image_data}"
+                )
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(image_data) as resp:
+                        if resp.status == 200:
+                            image_data = await resp.read()
+                        else:
+                            logger.error(
+                                f"[RetryManager] 下载重试图片失败: {resp.status}"
+                            )
+                            image_data = None
 
             if not image_data:
                 logger.warning(
