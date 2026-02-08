@@ -1,8 +1,8 @@
 """
-LLM Client - Wrapper for AstrBot's LLM provider system
+LLM 客户端 - 包装 AstrBot 的 LLM 提供商系统
 
-This module provides a clean interface to AstrBot's LLM capabilities,
-abstracting away the provider management details.
+该模块提供了一个访问 AstrBot LLM 功能的清晰接口，
+抽象了提供商管理的细节。
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,34 +15,34 @@ from ...domain.exceptions import LLMException, LLMRateLimitException
 
 class LLMClient:
     """
-    Client for interacting with LLM providers.
+    用于与 LLM 提供商交互的客户端。
 
-    This class wraps AstrBot's provider system and provides
-    a clean interface for making LLM calls.
+    该类包装了 AstrBot 的提供商系统，并提供了一个
+    清晰的接口来进行 LLM 调用。
     """
 
     def __init__(self, context: Any):
         """
-        Initialize the LLM client.
+        初始化 LLM 客户端。
 
         Args:
-            context: AstrBot plugin context with provider access
+            context: 具有提供商访问权限的 AstrBot 插件上下文
         """
         self.context = context
         self._provider_cache: Dict[str, Any] = {}
 
     def get_provider(self, provider_id: Optional[str] = None) -> Any:
         """
-        Get an LLM provider by ID.
+        通过 ID 获取 LLM 提供商。
 
         Args:
-            provider_id: Specific provider ID, or None for default
+            provider_id: 特定的提供商 ID，None 表示默认
 
         Returns:
-            Provider instance
+            提供商实例
 
         Raises:
-            LLMException: If provider not found
+            LLMException: 如果未找到提供商
         """
         try:
             if provider_id and provider_id in self._provider_cache:
@@ -51,10 +51,10 @@ class LLMClient:
             if provider_id:
                 provider = self.context.get_provider_by_id(provider_id)
             else:
-                # Get default provider
+                # 获取默认提供商
                 providers = self.context.get_all_providers()
                 if not providers:
-                    raise LLMException("No LLM providers available")
+                    raise LLMException("无可用 LLM 提供商")
                 provider = providers[0]
 
             if provider:
@@ -63,7 +63,7 @@ class LLMClient:
             return provider
 
         except Exception as e:
-            raise LLMException(f"Failed to get provider: {e}")
+            raise LLMException(f"获取提供商失败: {e}")
 
     async def chat_completion(
         self,
@@ -74,39 +74,39 @@ class LLMClient:
         system_prompt: Optional[str] = None,
     ) -> Tuple[str, TokenUsage]:
         """
-        Make a chat completion request.
+        发起聊天完成请求。
 
         Args:
-            prompt: The user prompt
-            provider_id: Specific provider ID (optional)
-            max_tokens: Maximum tokens in response
-            temperature: Sampling temperature
-            system_prompt: Optional system prompt
+            prompt: 用户提示词
+            provider_id: 特定的提供商 ID (可选)
+            max_tokens: 响应中的最大 token 数
+            temperature: 采样温度
+            system_prompt: 可选的系统提示词
 
         Returns:
-            Tuple of (response_text, token_usage)
+            (response_text, token_usage) 元组
 
         Raises:
-            LLMException: If the request fails
+            LLMException: 如果请求失败
         """
         try:
             provider = self.get_provider(provider_id)
             if not provider:
-                raise LLMException("No provider available", provider_id or "default")
+                raise LLMException("无可用提供商", provider_id or "default")
 
-            # Build messages
+            # 构建消息
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
-            # Make the request
+            # 发起请求
             response = await provider.text_chat(
-                prompt=prompt,
-                session_id=None,  # Stateless
+                messages=messages,
+                session_id=None,  # 无状态
             )
 
-            # Extract response text
+            # 提取响应文本
             if hasattr(response, "completion_text"):
                 response_text = response.completion_text
             elif isinstance(response, dict):
@@ -114,7 +114,7 @@ class LLMClient:
             else:
                 response_text = str(response)
 
-            # Extract token usage
+            # 提取 token 使用情况
             token_usage = TokenUsage()
             if hasattr(response, "usage"):
                 usage = response.usage
@@ -131,7 +131,7 @@ class LLMClient:
             error_msg = str(e).lower()
             if "rate limit" in error_msg or "429" in error_msg:
                 raise LLMRateLimitException(str(e), provider_id or "default")
-            raise LLMException(f"Chat completion failed: {e}", provider_id or "default")
+            raise LLMException(f"聊天完成请求失败: {e}", provider_id or "default")
 
     async def analyze_with_json_output(
         self,
@@ -141,18 +141,18 @@ class LLMClient:
         temperature: float = 0.7,
     ) -> Tuple[str, TokenUsage]:
         """
-        Make a completion request expecting JSON output.
+        发起期望 JSON 输出的完成请求。
 
         Args:
-            prompt: The analysis prompt
-            provider_id: Specific provider ID (optional)
-            max_tokens: Maximum tokens in response
-            temperature: Sampling temperature
+            prompt: 分析提示词
+            provider_id: 特定的提供商 ID (可选)
+            max_tokens: 响应中的最大 token 数
+            temperature: 采样温度
 
         Returns:
-            Tuple of (response_text, token_usage)
+            (response_text, token_usage) 元组
         """
-        # Add JSON instruction to prompt if not present
+        # 如果提示词中没有 JSON 指令，则添加
         json_instruction = "\nRespond with valid JSON only."
         if "json" not in prompt.lower():
             prompt = prompt + json_instruction
@@ -166,10 +166,10 @@ class LLMClient:
 
     def list_available_providers(self) -> List[Dict[str, str]]:
         """
-        List all available LLM providers.
+        列出所有可用的 LLM 提供商。
 
         Returns:
-            List of provider info dictionaries
+            提供商信息字典列表
         """
         try:
             providers = self.context.get_all_providers()
@@ -182,5 +182,5 @@ class LLMClient:
                 for i, p in enumerate(providers)
             ]
         except Exception as e:
-            logger.error(f"Failed to list providers: {e}")
+            logger.error(f"列出提供商失败: {e}")
             return []
