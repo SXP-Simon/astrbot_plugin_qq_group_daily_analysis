@@ -11,14 +11,14 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class TokenUsage:
     """
-    LLM API 调用的令牌使用统计。
+    值对象：LLM 令牌消耗统计
 
-    设计上不可变 (frozen=True)。
+    记录分析过程中消耗的 Prompt 和 Completion Token。
 
-    属性:
-        prompt_tokens: 提示词中的令牌数
-        completion_tokens: 补全中的令牌数
-        total_tokens: 使用的总令牌数
+    Attributes:
+        prompt_tokens (int): 提示词 Token 数
+        completion_tokens (int): 回答 Token 数
+        total_tokens (int): 总计 Token 数
     """
 
     prompt_tokens: int = 0
@@ -27,7 +27,7 @@ class TokenUsage:
 
     @classmethod
     def from_dict(cls, data: dict) -> "TokenUsage":
-        """从字典创建 TokenUsage。"""
+        """从字典还原 TokenUsage 对象。"""
         return cls(
             prompt_tokens=data.get("prompt_tokens", 0),
             completion_tokens=data.get("completion_tokens", 0),
@@ -35,15 +35,15 @@ class TokenUsage:
         )
 
     def to_dict(self) -> dict:
-        """转换为字典。"""
+        """转换为字典格式，用于序列化。"""
         return {
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
         }
 
-    def __add__(self, other: "TokenUsage") -> "TokenUsage":
-        """将两个 TokenUsage 对象相加。"""
+    def __add__(self, other: object) -> "TokenUsage":
+        """支持 TokenUsage 对象的加法运算。"""
         if not isinstance(other, TokenUsage):
             return NotImplemented
         return TokenUsage(
@@ -56,18 +56,17 @@ class TokenUsage:
 @dataclass(frozen=True)
 class EmojiStatistics:
     """
-    表情使用统计。
+    值对象：表情符号统计
 
-    消息中表情使用的平台无关表示。
-    设计上不可变 (frozen=True)。
+    汇总消息链中不同类别的表情使用情况。
 
-    属性:
-        standard_emoji_count: 标准 Unicode 表情数量
-        custom_emoji_count: 平台特定自定义表情数量
-        animated_emoji_count: 动态表情数量
-        sticker_count: 贴纸数量
-        other_emoji_count: 其他表情类型数量
-        emoji_details: 按表情 ID/名称的详细分类
+    Attributes:
+        standard_emoji_count (int): 标准 Unicode 表情数
+        custom_emoji_count (int): 平台自定义表情数
+        animated_emoji_count (int): 动态表情数
+        sticker_count (int): 贴纸/大表情数
+        other_emoji_count (int): 其他未知类型
+        emoji_details (tuple[tuple[str, int], ...]): 表情 ID 与次数的详细列表
     """
 
     standard_emoji_count: int = 0
@@ -75,11 +74,11 @@ class EmojiStatistics:
     animated_emoji_count: int = 0
     sticker_count: int = 0
     other_emoji_count: int = 0
-    emoji_details: tuple = field(default_factory=tuple)
+    emoji_details: tuple[tuple[str, int], ...] = field(default_factory=tuple)
 
     @property
     def total_count(self) -> int:
-        """获取表情总数。"""
+        """获取所有表情的总数。"""
         return (
             self.standard_emoji_count
             + self.custom_emoji_count
@@ -90,7 +89,7 @@ class EmojiStatistics:
 
     @classmethod
     def from_dict(cls, data: dict) -> "EmojiStatistics":
-        """从字典创建 EmojiStatistics。"""
+        """从持久化字典构建统计对象。"""
         details = data.get("face_details", data.get("emoji_details", {}))
         if isinstance(details, dict):
             details = tuple(details.items())
@@ -111,7 +110,7 @@ class EmojiStatistics:
         )
 
     def to_dict(self) -> dict:
-        """转换为字典。"""
+        """转换为持久化字典，包含向后兼容字段。"""
         return {
             "standard_emoji_count": self.standard_emoji_count,
             "custom_emoji_count": self.custom_emoji_count,
@@ -131,28 +130,27 @@ class EmojiStatistics:
 @dataclass(frozen=True)
 class ActivityVisualization:
     """
-    活动可视化数据。
+    值对象：活动可视化数据
 
-    聊天活动模式的平台无关表示。
-    设计上不可变 (frozen=True)。
+    存储用于生成图表的各种活跃度指标。
 
-    属性:
-        hourly_activity: 按小时统计的消息数 (0-23)
-        daily_activity: 按日期统计的消息数
-        user_activity_ranking: 用户活跃度排名列表
-        peak_hours: 活动高峰时段列表
-        heatmap_data: 活动热力图可视化数据
+    Attributes:
+        hourly_activity (tuple[tuple[int, int], ...]): 24 小时活跃分布
+        daily_activity (tuple[tuple[str, int], ...]): 每日消息数分布
+        user_activity_ranking (tuple[dict, ...]): 用户活跃排名数据
+        peak_hours (tuple[int, ...]): 高峰小时 ID
+        heatmap_data (tuple[Any, ...]): 热力图原始数据
     """
 
-    hourly_activity: tuple = field(default_factory=tuple)
-    daily_activity: tuple = field(default_factory=tuple)
-    user_activity_ranking: tuple = field(default_factory=tuple)
-    peak_hours: tuple = field(default_factory=tuple)
+    hourly_activity: tuple[tuple[int, int], ...] = field(default_factory=tuple)
+    daily_activity: tuple[tuple[str, int], ...] = field(default_factory=tuple)
+    user_activity_ranking: tuple[dict, ...] = field(default_factory=tuple)
+    peak_hours: tuple[int, ...] = field(default_factory=tuple)
     heatmap_data: tuple = field(default_factory=tuple)
 
     @classmethod
     def from_dict(cls, data: dict) -> "ActivityVisualization":
-        """从字典创建 ActivityVisualization。"""
+        """从字典反序列话可视化数据。"""
         hourly = data.get("hourly_activity", {})
         daily = data.get("daily_activity", {})
         ranking = data.get("user_activity_ranking", [])
@@ -187,19 +185,16 @@ class ActivityVisualization:
 @dataclass(frozen=True)
 class GroupStatistics:
     """
-    综合群聊统计。
+    值对象：综合群聊统计
 
-    群聊统计数据的平台无关表示。
-    设计上不可变 (frozen=True)。
-
-    属性:
-        message_count: 消息总数
-        total_characters: 所有消息的总字符数
-        participant_count: 唯一参与者数量
-        most_active_period: 最活跃时间段描述
-        emoji_statistics: 表情使用统计
-        activity_visualization: 活动模式数据
-        token_usage: 分析使用的 LLM 令牌
+    Attributes:
+        message_count (int): 消息总数
+        total_characters (int): 字符总数
+        participant_count (int): 活跃人数
+        most_active_period (str): 描述性的最活跃时段
+        emoji_statistics (EmojiStatistics): 表情分类统计
+        activity_visualization (ActivityVisualization): 可视化元数据
+        token_usage (TokenUsage): LLM 消耗记录
     """
 
     message_count: int = 0
@@ -214,22 +209,22 @@ class GroupStatistics:
 
     @property
     def average_message_length(self) -> float:
-        """计算平均消息长度。"""
+        """计算平均每条消息的字符长度。"""
         if self.message_count == 0:
             return 0.0
         return self.total_characters / self.message_count
 
     @property
     def emoji_count(self) -> int:
-        """获取表情总数以保持向后兼容。"""
+        """返回表情总数（向后兼容）。"""
         return self.emoji_statistics.total_count
 
     @classmethod
     def from_dict(cls, data: dict) -> "GroupStatistics":
-        """从字典创建 GroupStatistics。"""
+        """由字典数据构建完整的统计模型。"""
         emoji_data = data.get("emoji_statistics", {})
         if not emoji_data:
-            # 向后兼容：从扁平字段构建
+            # 向后兼容：从旧版本扁平字段中恢复
             emoji_data = {
                 "face_count": data.get("emoji_count", 0),
             }
@@ -248,13 +243,13 @@ class GroupStatistics:
         )
 
     def to_dict(self) -> dict:
-        """转换为字典。"""
+        """转换为可进行 JSON 序列化的字典。"""
         return {
             "message_count": self.message_count,
             "total_characters": self.total_characters,
             "participant_count": self.participant_count,
             "most_active_period": self.most_active_period,
-            "emoji_count": self.emoji_count,  # 向后兼容
+            "emoji_count": self.emoji_count,  # 导出时也包含此字段以支持旧版阅读器
             "emoji_statistics": self.emoji_statistics.to_dict(),
             "activity_visualization": self.activity_visualization.to_dict(),
             "token_usage": self.token_usage.to_dict(),
@@ -264,16 +259,18 @@ class GroupStatistics:
 @dataclass
 class UserStatistics:
     """
-    单用户统计（可变以便在分析期间累积）。
+    可变模型：单个用户的行为分析
 
-    属性:
-        user_id: 平台无关的用户标识符
-        nickname: 用户显示名称
-        message_count: 发送的消息数
-        char_count: 发送的总字符数
-        emoji_count: 使用的表情数
-        reply_count: 回复次数
-        hours: 按小时统计的消息数 (0-23)
+    用于在统计计算过程中作为状态累加器。
+
+    Attributes:
+        user_id (str): 用户唯一标示
+        nickname (str): 用户名
+        message_count (int): 消息条数
+        char_count (int): 字符总数
+        emoji_count (int): 表情总数
+        reply_count (int): 被回复或回复的次数
+        hours (dict[int, int]): 小时活跃频次 (0-23)
     """
 
     user_id: str
@@ -286,21 +283,21 @@ class UserStatistics:
 
     @property
     def average_chars(self) -> float:
-        """计算每条消息的平均字符数。"""
+        """平均每条消息的字符数。"""
         if self.message_count == 0:
             return 0.0
         return self.char_count / self.message_count
 
     @property
     def emoji_ratio(self) -> float:
-        """计算每条消息的表情比率。"""
+        """平均每条消息包含的表情数。"""
         if self.message_count == 0:
             return 0.0
         return self.emoji_count / self.message_count
 
     @property
     def night_ratio(self) -> float:
-        """计算夜间活动比率 (0-6 点)。"""
+        """深夜活跃占比（凌晨 0 点至 6 点）。"""
         if self.message_count == 0:
             return 0.0
         night_messages = sum(self.hours.get(h, 0) for h in range(6))
@@ -308,13 +305,13 @@ class UserStatistics:
 
     @property
     def reply_ratio(self) -> float:
-        """计算回复比率。"""
+        """回复行为占比。"""
         if self.message_count == 0:
             return 0.0
         return self.reply_count / self.message_count
 
     def to_dict(self) -> dict:
-        """转换为字典。"""
+        """返回详细的用户行为分析字典。"""
         return {
             "user_id": self.user_id,
             "nickname": self.nickname,

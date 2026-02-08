@@ -52,7 +52,6 @@ class BotManager:
             if platform_name and PlatformAdapterFactory.is_supported(platform_name):
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
-                    "bot_qq_ids": self._bot_self_ids.copy(),  # 兼容旧适配器
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config
@@ -74,10 +73,6 @@ class BotManager:
             self._bot_self_ids = [str(uid) for uid in bot_self_ids if uid]
         elif bot_self_ids:
             self._bot_self_ids = [str(bot_self_ids)]
-
-    def set_bot_qq_ids(self, bot_qq_ids):
-        """设置bot QQ号（兼容旧方法，建议使用 set_bot_self_ids）"""
-        self.set_bot_self_ids(bot_qq_ids)
 
     def get_bot_instance(self, platform_id=None):
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
@@ -158,10 +153,6 @@ class BotManager:
     def has_bot_self_id(self) -> bool:
         """检查是否有配置的机器人 ID"""
         return bool(self._bot_self_ids)
-
-    def has_bot_qq_id(self) -> bool:
-        """检查是否有配置的bot QQ号 (兼容旧方法)"""
-        return self.has_bot_self_id()
 
     def is_ready_for_auto_analysis(self) -> bool:
         """检查是否准备好进行自动分析"""
@@ -392,8 +383,6 @@ class BotManager:
 
         return {
             "has_bot_instance": self.has_bot_instance(),
-            "has_bot_qq_id": self.has_bot_self_id(),
-            "bot_qq_ids": self._bot_self_ids,
             "bot_self_ids": self._bot_self_ids,
             "platform_count": len(self._bot_instances),
             "platforms": list(self._bot_instances.keys()),
@@ -437,18 +426,12 @@ class BotManager:
         # 尝试多种方式获取bot ID
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
-        elif hasattr(bot_instance, "qq") and bot_instance.qq:
-            return str(bot_instance.qq)
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
         # Discord.py style: client.user.id
         elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
             return str(bot_instance.user.id)
         return None
-
-    def _extract_bot_qq_id(self, bot_instance):
-        """从bot实例中提取QQ号（兼容旧方法名称）"""
-        return self._extract_bot_self_id_impl(bot_instance)
 
     def validate_for_message_fetching(self, group_id: str) -> bool:
         """验证是否可以进行消息获取"""

@@ -20,37 +20,56 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
+from ....utils.logger import logger
 from ..base import PlatformAdapter
 
 
 class OneBotAdapter(PlatformAdapter):
+    """
+    具体实现：OneBot v11 平台适配器
+
+    支持 NapCat, go-cqhttp, Lagrange 等遵循 OneBot v11 协议的 QQ 机器人框架。
+    实现了消息获取、发送、群组管理及头像解析等全套功能。
+
+    Attributes:
+        platform_name (str): 平台硬编码标识 'onebot'
+        bot_self_ids (list[str]): 机器人自身的 QQ 号列表，用于消息过滤
+    """
+
     platform_name = "onebot"
 
-    """OneBot v11 协议适配器"""
-
-    # QQ 头像 URL 模板
+    # QQ 头像服务 URL 模板
     USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
     USER_AVATAR_HD_TEMPLATE = (
         "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
     )
     GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
 
-    AVAILABLE_SIZES = [40, 100, 140, 160, 640]
+    # OneBot 服务支持的头像尺寸像素
+    AVAILABLE_SIZES = (40, 100, 140, 160, 640)
 
-    def __init__(self, bot_instance: Any, config: dict = None):
+    def __init__(self, bot_instance: Any, config: dict | None = None):
+        """
+        初始化 OneBot 适配器。
+
+        Args:
+            bot_instance (Any): 外部传入的机器人对象
+            config (dict, optional): 插件配置，用于提取机器人自身的 QQ 号供过滤用
+        """
         super().__init__(bot_instance, config)
         self.bot_self_ids = (
             [str(id) for id in config.get("bot_qq_ids", [])] if config else []
         )
 
     def _init_capabilities(self) -> PlatformCapabilities:
+        """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
 
     def _get_nearest_size(self, requested_size: int) -> int:
-        """获取最接近的可用尺寸"""
+        """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
         return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
 
-    # ==================== IMessageRepository ====================
+    # ==================== IMessageRepository 实现 ====================
 
     async def fetch_messages(
         self,
@@ -59,12 +78,23 @@ class OneBotAdapter(PlatformAdapter):
         max_count: int = 1000,
         before_id: str | None = None,
     ) -> list[UnifiedMessage]:
-        """获取群组消息历史"""
+        """
+        从 OneBot 后端拉取群组历史消息。
 
+        Args:
+            group_id (str): 群号
+            days (int): 拉取过去几天的消息
+            max_count (int): 最大拉取条数
+            before_id (str, optional): 锚点消息 ID（部分后端支持）
+
+        Returns:
+            list[UnifiedMessage]: 统一格式的消息列表
+        """
         if not hasattr(self.bot, "call_action"):
             return []
 
         try:
+            # 调用 OneBot 标准 API: get_group_msg_history
             result = await self.bot.call_action(
                 "get_group_msg_history",
                 group_id=int(group_id),
@@ -80,9 +110,11 @@ class OneBotAdapter(PlatformAdapter):
             messages = []
             for raw_msg in result.get("messages", []):
                 msg_time = datetime.fromtimestamp(raw_msg.get("time", 0))
+                # 时间范围过滤
                 if not (start_time <= msg_time <= end_time):
                     continue
 
+                # 身份过滤（排除机器人自己）
                 sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
                 if sender_id in self.bot_self_ids:
                     continue
@@ -91,18 +123,21 @@ class OneBotAdapter(PlatformAdapter):
                 if unified:
                     messages.append(unified)
 
+            # 确保按时间顺序排列
             messages.sort(key=lambda m: m.timestamp)
             return messages
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"OneBot 获取消息失败: {e}")
             return []
 
     def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
-        """将 OneBot 消息转换为统一格式"""
+        """内部方法：将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象。"""
         try:
             sender = raw_msg.get("sender", {})
             message_chain = raw_msg.get("message", [])
 
+            # 兼容性处理：如果是字符串格式的 message，转换为列表格式
             if isinstance(message_chain, str):
                 message_chain = [{"type": "text", "data": {"text": message_chain}}]
 
@@ -181,6 +216,7 @@ class OneBotAdapter(PlatformAdapter):
                         MessageContent(type=MessageContentType.UNKNOWN, raw_data=seg)
                     )
 
+            # 提取回复 ID
             reply_to = None
             for c in contents:
                 if c.type == MessageContentType.REPLY and c.raw_data:
@@ -200,18 +236,24 @@ class OneBotAdapter(PlatformAdapter):
                 reply_to_id=reply_to,
             )
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"OneBot _convert_message 错误: {e}")
             return None
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
         """
-        将统一消息格式转换为 OneBot 原生格式。
+        将统一格式转换回 OneBot v11 原生字典格式。
 
-        用于与现有分析器的向后兼容。
+        使现有业务逻辑逻辑无需重构即可使用新流水。
+
+        Args:
+            messages (list[UnifiedMessage]): 统一消息列表
+
+        Returns:
+            list[dict]: OneBot 格式的消息字典列表
         """
         raw_messages = []
         for msg in messages:
-            # 重建 OneBot 消息格式
             message_chain = []
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
@@ -265,14 +307,14 @@ class OneBotAdapter(PlatformAdapter):
                 },
                 "message": message_chain,
                 "group_id": msg.group_id,
-                "raw_message": msg.text_content,  # 添加 raw_message 兼容字段
-                "user_id": msg.sender_id,  # 添加 user_id 兼容字段
+                "raw_message": msg.text_content,
+                "user_id": msg.sender_id,
             }
             raw_messages.append(raw_msg)
 
         return raw_messages
 
-    # ==================== IMessageSender ====================
+    # ==================== IMessageSender 实现 ====================
 
     async def send_text(
         self,
@@ -280,7 +322,17 @@ class OneBotAdapter(PlatformAdapter):
         text: str,
         reply_to: str | None = None,
     ) -> bool:
-        """发送文本消息"""
+        """
+        向群组发送文本消息。
+
+        Args:
+            group_id (str): 目标群号
+            text (str): 消息内容
+            reply_to (str, optional): 引用回复的消息 ID
+
+        Returns:
+            bool: 是否发送成功
+        """
         try:
             message = [{"type": "text", "data": {"text": text}}]
 
@@ -293,7 +345,8 @@ class OneBotAdapter(PlatformAdapter):
                 message=message,
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"OneBot 文本发送失败: {e}")
             return False
 
     async def send_image(
@@ -302,7 +355,17 @@ class OneBotAdapter(PlatformAdapter):
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """发送图片消息"""
+        """
+        向群组发送图片。
+
+        Args:
+            group_id (str): 目标群号
+            image_path (str): 本地文件路径或远程 URL
+            caption (str): 图片下方可选的文字说明
+
+        Returns:
+            bool: 是否成功
+        """
         try:
             message = []
 
@@ -322,7 +385,8 @@ class OneBotAdapter(PlatformAdapter):
                 message=message,
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"OneBot 图片发送失败: {e}")
             return False
 
     async def send_file(
@@ -331,22 +395,33 @@ class OneBotAdapter(PlatformAdapter):
         file_path: str,
         filename: str | None = None,
     ) -> bool:
-        """发送文件"""
+        """
+        通过群文件功能上传并发送文件。
+
+        Args:
+            group_id (str): 目标群号
+            file_path (str): 本地文件绝对路径
+            filename (str, optional): 显示的文件名，默认为路径尾部
+
+        Returns:
+            bool: 上传任务启动是否成功
+        """
         try:
             await self.bot.call_action(
                 "upload_group_file",
                 group_id=int(group_id),
                 file=file_path,
-                name=filename or file_path.split("/")[-1],
+                name=filename or file_path.replace("\\", "/").split("/")[-1],
             )
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"OneBot 文件发送失败: {e}")
             return False
 
-    # ==================== IGroupInfoRepository ====================
+    # ==================== IGroupInfoRepository 实现 ====================
 
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
-        """获取群组信息"""
+        """获取指定群组的基础元数据。"""
         try:
             result = await self.bot.call_action(
                 "get_group_info",
@@ -368,7 +443,7 @@ class OneBotAdapter(PlatformAdapter):
             return None
 
     async def get_group_list(self) -> list[str]:
-        """获取机器人所在的所有群组 ID"""
+        """获取当前机器人已加入的所有群组 ID 列表。"""
         try:
             result = await self.bot.call_action("get_group_list")
             return [str(g.get("group_id", "")) for g in result or []]
@@ -376,7 +451,7 @@ class OneBotAdapter(PlatformAdapter):
             return []
 
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
-        """获取群组成员列表"""
+        """拉取整个群组成员列表。"""
         try:
             result = await self.bot.call_action(
                 "get_group_member_list",
@@ -403,7 +478,7 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         user_id: str,
     ) -> UnifiedMember | None:
-        """获取特定成员信息"""
+        """拉取特定群成员的详细名片及角色信息。"""
         try:
             result = await self.bot.call_action(
                 "get_group_member_info",
@@ -424,15 +499,25 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return None
 
-    # ==================== IAvatarRepository ====================
+    # ==================== IAvatarRepository 实现 ====================
 
     async def get_user_avatar_url(
         self,
         user_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 QQ 用户头像 URL"""
+        """
+        拼凑 QQ 官方服务地址获取用户头像。
+
+        Args:
+            user_id (str): QQ 号
+            size (int): 期望像素大小
+
+        Returns:
+            str: 格式化后的 URL
+        """
         actual_size = self._get_nearest_size(size)
+        # 640 使用 HD 接口更清晰
         if actual_size >= 640:
             return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
         return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
@@ -442,7 +527,9 @@ class OneBotAdapter(PlatformAdapter):
         user_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 QQ 用户头像 Base64 数据"""
+        """
+        通过网络下载头像并转换为 Base64 格式，适用于前端模板直接渲染。
+        """
         url = await self.get_user_avatar_url(user_id, size)
         if not url:
             return None
@@ -457,8 +544,8 @@ class OneBotAdapter(PlatformAdapter):
                         b64 = base64.b64encode(data).decode("utf-8")
                         content_type = resp.headers.get("Content-Type", "image/png")
                         return f"data:{content_type};base64,{b64}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"OneBot 头像下载失败: {e}")
         return None
 
     async def get_group_avatar_url(
@@ -466,7 +553,7 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 QQ 群头像 URL"""
+        """获取 QQ 群头像地址。"""
         actual_size = self._get_nearest_size(size)
         return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
 
@@ -475,7 +562,7 @@ class OneBotAdapter(PlatformAdapter):
         user_ids: list[str],
         size: int = 100,
     ) -> dict[str, str | None]:
-        """批量获取 QQ 用户头像 URL（无需 API 调用）"""
+        """批量映射 QQ 号到其头像 URL 地址。"""
         return {
             user_id: await self.get_user_avatar_url(user_id, size)
             for user_id in user_ids

@@ -95,7 +95,9 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
             GoldenQuote(
                 content=q.content,
                 sender_name=q.sender,
-                sender_id=str(q.qq) if hasattr(q, "qq") and q.qq else None,
+                sender_id=str(q.user_id)
+                if hasattr(q, "user_id") and q.user_id
+                else None,
                 reason=q.reason,
             )
             for q in legacy_quotes

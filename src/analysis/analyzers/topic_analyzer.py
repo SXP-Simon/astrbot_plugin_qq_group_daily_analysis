@@ -101,11 +101,7 @@ class TopicAnalyzer(BaseAnalyzer):
                         # 处理 @ 消息，转换为文本
                         at_data = content.get("data", {})
                         # 兼容不同平台的 ID 字段
-                        at_id = (
-                            at_data.get("qq")
-                            or at_data.get("id")
-                            or at_data.get("user_id")
-                        )
+                        at_id = at_data.get("id") or at_data.get("user_id")
                         if at_id:
                             at_text = f"@{at_id}"
                             text_parts.append(at_text)

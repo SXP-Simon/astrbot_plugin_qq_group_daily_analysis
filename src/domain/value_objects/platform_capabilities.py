@@ -11,12 +11,35 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class PlatformCapabilities:
     """
-    平台能力描述
+    值对象：平台能力描述
 
-    设计原则：
-    1. 所有字段都有默认值（最保守假设）
-    2. 不可变
-    3. 提供便捷的检查方法
+    用于在运行时判断当前平台支持哪些具体操作，实现防御性编程和多平台兼容。
+
+    Attributes:
+        platform_name (str): 平台标识（如 discord, onebot）
+        platform_version (str): 版本号
+        supports_message_history (bool): 是否支持拉取历史消息
+        max_message_history_days (int): 最大历史穿透天数
+        max_message_count (int): 单次拉取最大消息数
+        supports_message_search (bool): 是否支持消息搜索（扩展用）
+        supports_group_list (bool): 是否支持列出所有群组
+        supports_group_info (bool): 是否支持获取群元数据
+        supports_member_list (bool): 是否支持获取成员列表
+        supports_member_info (bool): 是否支持获取单成员详情
+        supports_text_message (bool): 是否能发送文本
+        supports_image_message (bool): 是否能发送图片
+        supports_file_message (bool): 是否能发送文件/PDF
+        supports_forward_message (bool): 是否支持转发链（合并转发）
+        supports_reply_message (bool): 是否支持回复引用
+        max_text_length (int): 单条回复最大文本长度
+        max_image_size_mb (float): 最大图片上传限制 (MB)
+        supports_at_all (bool): 是否能 @全员
+        supports_recall (bool): 是否支持撤回
+        supports_edit (bool): 是否支持编辑已发消息
+        supports_user_avatar (bool): 是否有用户头像 API
+        supports_group_avatar (bool): 是否有群头像 API
+        avatar_needs_api_call (bool): 获取头像是否需要额外异步请求
+        avatar_sizes (tuple[int, ...]): 平台支持的头像尺寸像素值
     """
 
     # 平台标识
@@ -53,11 +76,16 @@ class PlatformCapabilities:
     supports_user_avatar: bool = True
     supports_group_avatar: bool = False
     avatar_needs_api_call: bool = False
-    avatar_sizes: tuple = (100,)
+    avatar_sizes: tuple[int, ...] = (100,)
 
     # 检查方法
     def can_analyze(self) -> bool:
-        """是否支持群聊分析（核心能力）"""
+        """
+        判断是否具备进行群聊分析的核心能力。
+
+        Returns:
+            bool: 核心能力齐全则返回 True
+        """
         return (
             self.supports_message_history
             and self.max_message_history_days > 0
@@ -65,7 +93,15 @@ class PlatformCapabilities:
         )
 
     def can_send_report(self, format: str = "image") -> bool:
-        """是否能发送报告"""
+        """
+        判断是否能以指定格式发送报告。
+
+        Args:
+            format (str): 报告格式 ('text', 'image', 'pdf')
+
+        Returns:
+            bool: 支持该格式则返回 True
+        """
         if format == "text":
             return self.supports_text_message
         elif format == "image":
@@ -75,15 +111,32 @@ class PlatformCapabilities:
         return False
 
     def get_effective_days(self, requested_days: int) -> int:
-        """获取实际可用天数"""
+        """
+        获取实际生效的历史拉取天数。
+
+        Args:
+            requested_days (int): 请求的天数
+
+        Returns:
+            int: 平台受限后的实际天数
+        """
         return min(requested_days, self.max_message_history_days)
 
     def get_effective_count(self, requested_count: int) -> int:
-        """获取实际可用消息数"""
+        """
+        获取实际生效的历史消息拉取条数。
+
+        Args:
+            requested_count (int): 请求的消息条数
+
+        Returns:
+            int: 平台受限后的实际条数
+        """
         return min(requested_count, self.max_message_count)
 
 
 # 预定义的平台能力
+# OneBot v11 (如 NapCat, LLOneBot 等)
 ONEBOT_V11_CAPABILITIES = PlatformCapabilities(
     platform_name="onebot",
     platform_version="v11",
@@ -108,6 +161,7 @@ ONEBOT_V11_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(40, 100, 140, 160, 640),
 )
 
+# Telegram Bot API
 TELEGRAM_CAPABILITIES = PlatformCapabilities(
     platform_name="telegram",
     platform_version="bot_api_7.x",
@@ -130,6 +184,7 @@ TELEGRAM_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(160, 320, 640),
 )
 
+# Discord API
 DISCORD_CAPABILITIES = PlatformCapabilities(
     platform_name="discord",
     platform_version="api_v10",
@@ -152,6 +207,7 @@ DISCORD_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(16, 32, 64, 128, 256, 512, 1024, 2048, 4096),
 )
 
+# Slack Web API
 SLACK_CAPABILITIES = PlatformCapabilities(
     platform_name="slack",
     platform_version="web_api",
@@ -173,8 +229,8 @@ SLACK_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(24, 32, 48, 72, 192, 512, 1024),
 )
 
-# 能力查找表
-PLATFORM_CAPABILITIES = {
+# 能力查找表（映射平台标识到能力对象）
+PLATFORM_CAPABILITIES: dict[str, PlatformCapabilities] = {
     "aiocqhttp": ONEBOT_V11_CAPABILITIES,
     "onebot": ONEBOT_V11_CAPABILITIES,
     "telegram": TELEGRAM_CAPABILITIES,
@@ -184,5 +240,13 @@ PLATFORM_CAPABILITIES = {
 
 
 def get_capabilities(platform_name: str) -> PlatformCapabilities | None:
-    """根据平台名称获取能力"""
+    """
+    根据平台名称查找其支持的能力。
+
+    Args:
+        platform_name (str): 平台名称
+
+    Returns:
+        Optional[PlatformCapabilities]: 对应的能力对象或 None
+    """
     return PLATFORM_CAPABILITIES.get(platform_name.lower())

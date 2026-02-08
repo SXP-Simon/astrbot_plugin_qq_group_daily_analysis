@@ -105,7 +105,7 @@ class ReportGenerator:
                     if image_options.get("type") == "png":
                         image_options["quality"] = None
 
-                    logger.info(f"尝试渲染策略: {image_options}")
+                    logger.info(f"正在尝试渲染策略: {image_options}")
                     image_url = await html_render_func(
                         html_content,  # 渲染后的HTML内容
                         {},  # 空数据字典，因为数据已包含在HTML中
@@ -117,7 +117,7 @@ class ReportGenerator:
                         logger.info(f"图片生成成功 ({image_options}): {image_url}")
                         return image_url, html_content
                     else:
-                        logger.warning(f"渲染策略 {image_options} 返回空URL")
+                        logger.warning(f"渲染策略 {image_options} 返回空 URL")
 
                 except Exception as e:
                     logger.warning(f"渲染策略 {image_options} 失败: {e}")
@@ -371,17 +371,20 @@ class ReportGenerator:
                 except Exception as e:
                     logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
 
-            # 2. 如果没有 avatar_getter 或获取失败，使用默认 QQ 头像逻辑（仅当 user_id 看起来像 QQ 号时？）
-            # 为保持兼容性，如果 avatar_url 仍为 None，且不强制禁用 QQ 默认，则使用 QQ 逻辑
+            # 2. 如果没有 avatar_getter 或获取失败，使用默认头像逻辑
+            # 为保持兼容性，如果 avatar_url 仍为 None，则尝试常见的头像服务
             if not avatar_url:
                 if (
                     user_id.isdigit() and 5 <= len(user_id) <= 12
-                ):  # 简单判断是否可能是 QQ 号
+                ):  # 简单判断是否可能是数字 ID
+                    # 对于数字 ID，使用通用的头像服务作为后备
                     avatar_url = (
                         f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
                     )
                 else:
-                    return None  # 非 QQ 号且无 avatar_getter，返回 None 使用默认占位符
+                    return (
+                        None  # 非数字 ID 且无 avatar_getter，返回 None 使用默认占位符
+                    )
 
             if not avatar_url:
                 return None

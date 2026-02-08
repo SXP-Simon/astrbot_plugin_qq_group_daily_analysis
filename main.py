@@ -129,7 +129,7 @@ class QQGroupDailyAnalysis(Star):
         orchestrator = AnalysisOrchestrator.create_for_platform(
             platform_name,
             bot_instance,
-            config={"bot_qq_ids": self.config_manager.get_bot_qq_ids()},
+            config={"bot_self_ids": self.config_manager.get_bot_self_ids()},
             analysis_config=analysis_config,
         )
 
