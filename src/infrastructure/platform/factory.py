@@ -50,7 +50,7 @@ class PlatformAdapterFactory:
         except Exception:
             # 记录异常，但不崩溃
             import logging
-            logging.getLogger(__name__).error(f"Error creating adapter for {platform_name}", exc_info=True)
+            logging.getLogger(__name__).error(f"为 {platform_name} 创建适配器时出错", exc_info=True)
             return None
 
     @classmethod
