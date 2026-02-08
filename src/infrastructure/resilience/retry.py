@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Callable, Optional, Tuple, Type, Union
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 
 @dataclass

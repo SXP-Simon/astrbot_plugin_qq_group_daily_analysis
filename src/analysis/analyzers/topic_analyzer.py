@@ -6,7 +6,7 @@
 import re
 from datetime import datetime
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 from ...models.data_models import SummaryTopic, TokenUsage
 from ..utils import InfoUtils

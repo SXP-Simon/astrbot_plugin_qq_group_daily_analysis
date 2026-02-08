@@ -6,7 +6,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 from ...models.data_models import TokenUsage
 from ..utils.json_utils import parse_json_response

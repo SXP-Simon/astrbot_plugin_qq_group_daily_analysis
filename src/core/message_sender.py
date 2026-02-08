@@ -2,7 +2,7 @@ import base64
 
 import aiohttp
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..utils.trace_context import TraceContext
 

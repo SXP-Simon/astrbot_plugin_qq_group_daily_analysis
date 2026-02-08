@@ -7,7 +7,7 @@ import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from astrbot.api import logger
+from .logger import logger
 
 
 class PDFInstaller:

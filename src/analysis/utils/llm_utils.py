@@ -6,7 +6,7 @@ LLM API请求处理工具模块
 import asyncio
 from typing import Any
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 from ...utils.resilience import CircuitBreaker, global_llm_rate_limiter
 

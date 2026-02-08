@@ -7,7 +7,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 
 class ConfigManager:

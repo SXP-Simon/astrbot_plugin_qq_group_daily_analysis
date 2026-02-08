@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from astrbot.api import logger
+from ..utils.logger import logger
 
 from ..domain.services import ReportGenerator
 from ..domain.value_objects.topic import Topic
@@ -78,7 +78,9 @@ class ReportingService:
             statistics=statistics,
             topics=topics if self.config.get_include_topics() else [],
             user_titles=user_titles if self.config.get_include_user_titles() else [],
-            golden_quotes=golden_quotes if self.config.get_include_golden_quotes() else [],
+            golden_quotes=golden_quotes
+            if self.config.get_include_golden_quotes()
+            else [],
             include_header=True,
             include_footer=True,
         )

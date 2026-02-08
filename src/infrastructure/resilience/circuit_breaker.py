@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Optional
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 
 class CircuitState(Enum):

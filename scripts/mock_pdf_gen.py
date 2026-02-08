@@ -17,11 +17,16 @@ sys.path.insert(0, project_root)
 print(f"Project Root: {project_root}")
 
 # Mock logger before importing anything that uses it
-from astrbot.api import logger  # noqa: E402
+# Mock logger
+from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.utils import (
+    logger as plugin_logger_module,
+)
 
-logger.info = lambda msg, *args, **kwargs: print(f"[INFO] {msg}")
-logger.error = lambda msg, *args, **kwargs: print(f"[ERROR] {msg}")
-logger.warning = lambda msg, *args, **kwargs: print(f"[WARN] {msg}")
+plugin_logger_module.logger.info = lambda msg, *args, **kwargs: print(f"[INFO] {msg}")
+plugin_logger_module.logger.error = lambda msg, *args, **kwargs: print(f"[ERROR] {msg}")
+plugin_logger_module.logger.warning = lambda msg, *args, **kwargs: print(
+    f"[WARN] {msg}"
+)
 
 # Now import plugin modules
 try:

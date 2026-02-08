@@ -7,7 +7,7 @@ LLM 客户端 - 包装 AstrBot 的 LLM 提供商系统
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from astrbot.api import logger
+from ...utils.logger import logger
 
 from ...domain.value_objects.statistics import TokenUsage
 from ...domain.exceptions import LLMException, LLMRateLimitException
@@ -110,7 +110,9 @@ class LLMClient:
             if hasattr(response, "completion_text"):
                 response_text = response.completion_text
             elif isinstance(response, dict):
-                response_text = response.get("completion_text", response.get("text", ""))
+                response_text = response.get(
+                    "completion_text", response.get("text", "")
+                )
             else:
                 response_text = str(response)
 
