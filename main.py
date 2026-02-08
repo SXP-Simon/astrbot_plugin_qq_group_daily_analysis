@@ -68,28 +68,25 @@ class QQGroupDailyAnalysis(Star):
 
         logger.info("QQ群日常分析插件已初始化（模块化版本）")
 
-    def _get_group_id_from_event(self, event: AstrMessageEvent) -> Optional[str]:
+    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从事件中提取群组ID（跨平台兼容）"""
-        group_id = None
+        # 使用正确的 AstrMessageEvent API
         if hasattr(event, "get_group_id"):
             group_id = event.get_group_id()
-        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
+            return str(group_id) if group_id else None
+        if hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
             group_id = event.message_obj.group_id
-        return str(group_id) if group_id else None
+            return str(group_id) if group_id else None
+        return None
 
-    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> Optional[str]:
+    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从事件中提取平台ID（跨平台兼容）"""
-        platform_id = None
-        # 尝试从 platform 属性获取
-        if hasattr(event, "platform") and isinstance(event.platform, str):
-            platform_id = event.platform
-        # 尝试从 metadata 获取
-        elif hasattr(event, "metadata") and hasattr(event.metadata, "id"):
-            platform_id = event.metadata.id
-        # 尝试从 bot_manager 推断
-        if not platform_id and hasattr(event, "bot"):
-            platform_id = self.bot_manager._get_platform_id_from_instance(event.bot)
-        return platform_id
+        # 使用正确的 AstrMessageEvent API
+        if hasattr(event, "get_platform_id"):
+            return event.get_platform_id()
+        if hasattr(event, "platform_meta") and hasattr(event.platform_meta, "id"):
+            return event.platform_meta.id
+        return None
 
     def _get_orchestrator(
         self, platform_id: str, bot_instance: Any = None
