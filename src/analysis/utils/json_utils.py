@@ -105,19 +105,29 @@ def parse_json_response(
         json_text = json_match.group()
         logger.debug(f"{data_type}分析JSON原文: {json_text[:500]}...")
 
-        # 2. 修复JSON
-        json_text = fix_json(json_text)
-        logger.debug(f"{data_type}修复后的JSON: {json_text[:300]}...")
+        # 2. 尝试直接解析
+        try:
+            data = json.loads(json_text)
+            logger.info(f"{data_type}直接解析成功，解析到 {len(data)} 条数据")
+            return True, data, None
+        except json.JSONDecodeError:
+            logger.debug(f"{data_type}直接解析失败，尝试修复JSON...")
 
-        # 3. 解析JSON
-        data = json.loads(json_text)
-        logger.info(f"{data_type}分析成功，解析到 {len(data)} 条数据")
+        # 3. 修复JSON
+        fixed_json_text = fix_json(json_text)
+        logger.debug(f"{data_type}修复后的JSON: {fixed_json_text[:300]}...")
+
+        # 4. 解析修复后的JSON
+        data = json.loads(fixed_json_text)
+        logger.info(f"{data_type}修复后解析成功，解析到 {len(data)} 条数据")
         return True, data, None
 
     except json.JSONDecodeError as e:
         error_msg = f"{data_type}JSON解析失败: {e}"
         logger.warning(error_msg)
-        logger.debug(f"修复后的JSON: {json_text if 'json_text' in locals() else 'N/A'}")
+        logger.debug(
+            f"修复后的JSON: {fixed_json_text if 'fixed_json_text' in locals() else 'N/A'}"
+        )
         return False, None, error_msg
     except Exception as e:
         error_msg = f"{data_type}解析异常: {e}"
