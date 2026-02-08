@@ -1,7 +1,7 @@
 """
-OneBot v11 Platform Adapter
+OneBot v11 平台适配器
 
-Supports NapCat, go-cqhttp, Lagrange, and other OneBot implementations.
+支持 NapCat、go-cqhttp、Lagrange 及其他 OneBot 实现。
 """
 
 from datetime import datetime, timedelta
@@ -23,9 +23,9 @@ from ..base import PlatformAdapter
 
 
 class OneBotAdapter(PlatformAdapter):
-    """OneBot v11 protocol adapter"""
+    """OneBot v11 协议适配器"""
 
-    # QQ Avatar URL templates
+    # QQ 头像 URL 模板
     USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
     USER_AVATAR_HD_TEMPLATE = "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
     GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
@@ -40,7 +40,7 @@ class OneBotAdapter(PlatformAdapter):
         return ONEBOT_V11_CAPABILITIES
 
     def _get_nearest_size(self, requested_size: int) -> int:
-        """Get nearest available size"""
+        """获取最接近的可用尺寸"""
         return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
 
     # ==================== IMessageRepository ====================
@@ -52,7 +52,7 @@ class OneBotAdapter(PlatformAdapter):
         max_count: int = 1000,
         before_id: Optional[str] = None,
     ) -> List[UnifiedMessage]:
-        """Fetch group message history"""
+        """获取群组消息历史"""
 
         if not hasattr(self.bot, "call_action"):
             return []
@@ -91,7 +91,7 @@ class OneBotAdapter(PlatformAdapter):
             return []
 
     def _convert_message(self, raw_msg: dict, group_id: str) -> Optional[UnifiedMessage]:
-        """Convert OneBot message to unified format"""
+        """将 OneBot 消息转换为统一格式"""
         try:
             sender = raw_msg.get("sender", {})
             message_chain = raw_msg.get("message", [])
@@ -182,6 +182,53 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return None
 
+    def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
+        """
+        将统一消息格式转换为 OneBot 原生格式。
+        
+        用于与现有分析器的向后兼容。
+        """
+        raw_messages = []
+        for msg in messages:
+            # 重建 OneBot 消息格式
+            message_chain = []
+            for content in msg.contents:
+                if content.type == MessageContentType.TEXT:
+                    message_chain.append({"type": "text", "data": {"text": content.text or ""}})
+                elif content.type == MessageContentType.IMAGE:
+                    message_chain.append({"type": "image", "data": {"url": content.url or ""}})
+                elif content.type == MessageContentType.AT:
+                    message_chain.append({"type": "at", "data": {"qq": content.at_user_id or ""}})
+                elif content.type == MessageContentType.EMOJI:
+                    face_type = content.raw_data.get("face_type", "face") if content.raw_data else "face"
+                    message_chain.append({"type": face_type, "data": {"id": content.emoji_id or ""}})
+                elif content.type == MessageContentType.REPLY:
+                    reply_id = content.raw_data.get("reply_id", "") if content.raw_data else ""
+                    message_chain.append({"type": "reply", "data": {"id": reply_id}})
+                elif content.type == MessageContentType.FORWARD:
+                    message_chain.append({"type": "forward", "data": content.raw_data or {}})
+                elif content.type == MessageContentType.VOICE:
+                    message_chain.append({"type": "record", "data": {"url": content.url or ""}})
+                elif content.type == MessageContentType.VIDEO:
+                    message_chain.append({"type": "video", "data": {"url": content.url or ""}})
+                elif content.type == MessageContentType.UNKNOWN and content.raw_data:
+                    message_chain.append(content.raw_data)
+            
+            raw_msg = {
+                "message_id": msg.message_id,
+                "time": msg.timestamp,
+                "sender": {
+                    "user_id": msg.sender_id,
+                    "nickname": msg.sender_name,
+                    "card": msg.sender_card or "",
+                },
+                "message": message_chain,
+                "group_id": msg.group_id,
+            }
+            raw_messages.append(raw_msg)
+        
+        return raw_messages
+
     # ==================== IMessageSender ====================
 
     async def send_text(
@@ -190,7 +237,7 @@ class OneBotAdapter(PlatformAdapter):
         text: str,
         reply_to: Optional[str] = None,
     ) -> bool:
-        """Send text message"""
+        """发送文本消息"""
         try:
             message = [{"type": "text", "data": {"text": text}}]
 
@@ -212,7 +259,7 @@ class OneBotAdapter(PlatformAdapter):
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """Send image message"""
+        """发送图片消息"""
         try:
             message = []
 
@@ -241,7 +288,7 @@ class OneBotAdapter(PlatformAdapter):
         file_path: str,
         filename: Optional[str] = None,
     ) -> bool:
-        """Send file"""
+        """发送文件"""
         try:
             await self.bot.call_action(
                 "upload_group_file",
@@ -256,7 +303,7 @@ class OneBotAdapter(PlatformAdapter):
     # ==================== IGroupInfoRepository ====================
 
     async def get_group_info(self, group_id: str) -> Optional[UnifiedGroup]:
-        """Get group information"""
+        """获取群组信息"""
         try:
             result = await self.bot.call_action(
                 "get_group_info",
@@ -278,7 +325,7 @@ class OneBotAdapter(PlatformAdapter):
             return None
 
     async def get_group_list(self) -> List[str]:
-        """Get all group IDs the bot is in"""
+        """获取机器人所在的所有群组 ID"""
         try:
             result = await self.bot.call_action("get_group_list")
             return [str(g.get("group_id", "")) for g in result or []]
@@ -286,7 +333,7 @@ class OneBotAdapter(PlatformAdapter):
             return []
 
     async def get_member_list(self, group_id: str) -> List[UnifiedMember]:
-        """Get group member list"""
+        """获取群组成员列表"""
         try:
             result = await self.bot.call_action(
                 "get_group_member_list",
@@ -311,7 +358,7 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         user_id: str,
     ) -> Optional[UnifiedMember]:
-        """Get specific member info"""
+        """获取特定成员信息"""
         try:
             result = await self.bot.call_action(
                 "get_group_member_info",
@@ -339,7 +386,7 @@ class OneBotAdapter(PlatformAdapter):
         user_id: str,
         size: int = 100,
     ) -> Optional[str]:
-        """Get QQ user avatar URL"""
+        """获取 QQ 用户头像 URL"""
         actual_size = self._get_nearest_size(size)
         if actual_size >= 640:
             return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
@@ -350,7 +397,7 @@ class OneBotAdapter(PlatformAdapter):
         user_id: str,
         size: int = 100,
     ) -> Optional[str]:
-        """Get QQ user avatar as Base64 data"""
+        """获取 QQ 用户头像 Base64 数据"""
         url = await self.get_user_avatar_url(user_id, size)
         if not url:
             return None
@@ -372,7 +419,7 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         size: int = 100,
     ) -> Optional[str]:
-        """Get QQ group avatar URL"""
+        """获取 QQ 群头像 URL"""
         actual_size = self._get_nearest_size(size)
         return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
 
@@ -381,7 +428,7 @@ class OneBotAdapter(PlatformAdapter):
         user_ids: List[str],
         size: int = 100,
     ) -> Dict[str, Optional[str]]:
-        """Batch get QQ user avatar URLs (no API call needed)"""
+        """批量获取 QQ 用户头像 URL（无需 API 调用）"""
         return {
             user_id: await self.get_user_avatar_url(user_id, size)
             for user_id in user_ids
