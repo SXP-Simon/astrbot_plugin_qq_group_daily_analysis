@@ -83,7 +83,7 @@ class PlatformCapabilities:
         return min(requested_count, self.max_message_count)
 
 
-# Predefined platform capabilities
+# 预定义的平台能力
 ONEBOT_V11_CAPABILITIES = PlatformCapabilities(
     platform_name="onebot",
     platform_version="v11",
