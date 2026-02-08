@@ -80,9 +80,16 @@ class BotManager:
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
         if platform_id:
             # 如果指定了平台ID，尝试获取
-            return self._bot_instances.get(platform_id)
+            instance = self._bot_instances.get(platform_id)
+            if not instance and platform_id in self._platforms:
+                self._refresh_from_stored_platforms()
+                instance = self._bot_instances.get(platform_id)
+            return instance
 
         # 没有指定平台ID
+        if not self._bot_instances and self._platforms:
+             self._refresh_from_stored_platforms()
+
         if self._bot_instances:
             # 如果只有一个实例，直接返回
             if len(self._bot_instances) == 1:
@@ -98,6 +105,35 @@ class BotManager:
         # 没有任何平台可用
         logger.error("没有任何可用的bot实例")
         return None
+
+    def _refresh_from_stored_platforms(self):
+        """尝试从已存储的平台对象中刷新 bot 实例 (Lazy Load)"""
+        for platform_id, platform in self._platforms.items():
+            if platform_id in self._bot_instances:
+                continue
+                
+            bot_client = None
+            if hasattr(platform, "get_client"):
+                bot_client = platform.get_client()
+            elif hasattr(platform, "bot"):
+                bot_client = platform.bot
+            elif hasattr(platform, "client"):
+                bot_client = platform.client
+            
+            if bot_client:
+                platform_name = None
+                if hasattr(platform, "metadata"):
+                    if hasattr(platform.metadata, "name"):
+                        platform_name = platform.metadata.name
+                    elif hasattr(platform.metadata, "type"):
+                        platform_name = platform.metadata.type
+                
+                # fallback detection
+                if not platform_name:
+                    platform_name = self._detect_platform_name(bot_client)
+
+                self.set_bot_instance(bot_client, platform_id, platform_name)
+                logger.info(f"Lazy discovered bot instance for {platform_id}")
 
     def get_all_bot_instances(self) -> dict:
         """获取所有已加载的bot实例 {platform_id: bot_instance}"""
@@ -220,26 +256,34 @@ class BotManager:
                 bot_client = platform.get_client()
             elif hasattr(platform, "bot"):
                 bot_client = platform.bot
+            elif hasattr(platform, "client"):
+                bot_client = platform.client
 
             if (
-                bot_client
-                and hasattr(platform, "metadata")
+                hasattr(platform, "metadata")
                 and hasattr(platform.metadata, "id")
             ):
                 platform_id = platform.metadata.id
                 
-                # 从元数据检测平台名称
+                # Detect platform name from metadata
                 platform_name = None
                 if hasattr(platform.metadata, "name"):
                     platform_name = platform.metadata.name
                 elif hasattr(platform.metadata, "type"):
                     platform_name = platform.metadata.type
                 
-                self.set_bot_instance(bot_client, platform_id, platform_name)
+                # Store platform instance regardless of bot_client state
                 self._platforms[platform_id] = platform
-                discovered[platform_id] = bot_client
+                
+                if bot_client:
+                    self.set_bot_instance(bot_client, platform_id, platform_name)
+                    discovered[platform_id] = bot_client
+                else:
+                    # Try to set adapter even without bot_instance (if possible) or just mark for lazy load
+                    # For now, just log that we found a platform but no client yet
+                    logger.debug(f"Found platform {platform_id} ({platform_name}) but client is not ready yet.")
 
-        # 记录适配器创建结果
+        # Log adapter creation results
         if self._adapters:
             logger.info(
                 f"已创建 {len(self._adapters)} 个 PlatformAdapter: "
