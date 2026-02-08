@@ -19,47 +19,73 @@ class PlatformAdapter(
     IMessageRepository, IMessageSender, IGroupInfoRepository, IAvatarRepository, ABC
 ):
     """
-    平台适配器基类
+    基础设施：平台适配器基类
 
-    组合消息仓储、消息发送、群组信息和头像接口。
-    每个平台适配器继承此类并实现所有方法。
+    继承自多个领域接口（仓储、发送器、群组信息、头像），
+    充当领域层与具体聊天平台（如 OneBot, Discord）之间的中转站。
+
+    Attributes:
+        bot (Any): 平台对应的机器人 SDK 实例
+        config (dict): 针对该平台的特定配置
     """
 
-    def __init__(self, bot_instance: Any, config: dict = None):
+    def __init__(self, bot_instance: Any, config: dict | None = None):
+        """
+        初始化平台适配器。
+
+        Args:
+            bot_instance (Any): 后端机器人实例
+            config (dict, optional): 平台特定配置项
+        """
         self.bot = bot_instance
         self.config = config or {}
         self._capabilities: PlatformCapabilities | None = None
 
     @property
     def capabilities(self) -> PlatformCapabilities:
-        """平台能力（延迟初始化）"""
+        """
+        获取当前平台的能力描述对象。
+
+        采用延迟加载机制，在首次访问时调用 `_init_capabilities`。
+
+        Returns:
+            PlatformCapabilities: 平台能力对象
+        """
         if self._capabilities is None:
             self._capabilities = self._init_capabilities()
         return self._capabilities
 
     @abstractmethod
     def _init_capabilities(self) -> PlatformCapabilities:
-        """初始化平台能力，子类必须实现"""
+        """
+        初始化并返回当前平台的能力定义。
+
+        子类必须实现此方法以声明其对历史记录、图片发送等功能的支持情况。
+
+        Returns:
+            PlatformCapabilities: 初始化后的能力对象
+        """
         raise NotImplementedError
 
     def get_capabilities(self) -> PlatformCapabilities:
+        """获取平台能力的便捷入口。"""
         return self.capabilities
 
     def get_platform_name(self) -> str:
+        """获取当前适配器的平台标识名称。"""
         return self.capabilities.platform_name
 
     @abstractmethod
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
         """
-        将统一消息格式转换为平台原生格式。
+        将平台无关的统一消息列表转换回当前平台的原生字典格式。
 
-        此方法由各平台适配器实现，返回该平台的原生消息格式。
-        用于与现有分析器的向后兼容。
+        此方法主要用于向后兼容，使新的统一接口能与依赖原生数据结构的旧版分析逻辑协同工作。
 
-        参数：
-            messages: UnifiedMessage 列表
+        Args:
+            messages (list[UnifiedMessage]): 待转换的统一消息列表
 
-        返回：
-            平台原生格式的消息字典列表
+        Returns:
+            list[dict]: 转换后的平台原生消息字典列表
         """
         raise NotImplementedError

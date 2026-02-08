@@ -6,7 +6,11 @@ from enum import Enum
 
 
 class Platform(str, Enum):
-    """平台枚举类"""
+    """
+    支持的聊天平台枚举
+
+    定义了插件适配的所有基础通讯平台标识。
+    """
 
     ONEBOT = "onebot"
     AIOCQHTTP = "aiocqhttp"
@@ -17,7 +21,11 @@ class Platform(str, Enum):
 
 
 class TaskStatus(str, Enum):
-    """任务状态枚举类"""
+    """
+    分析任务执行状态枚举
+
+    用于在异步处理流水线中标记分析任务的生命阶段。
+    """
 
     PENDING = "pending"
     RUNNING = "running"
@@ -27,7 +35,11 @@ class TaskStatus(str, Enum):
 
 
 class ContentType(str, Enum):
-    """消息内容类型枚举类"""
+    """
+    统一消息内容类型枚举
+
+    将不同平台（OneBot, Discord 等）的消息片段抽象为统一的类型体系。
+    """
 
     TEXT = "text"
     IMAGE = "image"
@@ -42,7 +54,11 @@ class ContentType(str, Enum):
 
 
 class ReportFormat(str, Enum):
-    """报告格式枚举类"""
+    """
+    分析报告导出格式枚举
+
+    控制最终呈现给用户的报告呈现形式。
+    """
 
     TEXT = "text"
     MARKDOWN = "markdown"

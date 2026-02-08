@@ -33,38 +33,47 @@ from ..base import PlatformAdapter
 
 class DiscordAdapter(PlatformAdapter):
     """
-    Discord 平台适配器
+    具体实现：Discord 平台适配器
 
-    实现 PlatformAdapter 接口，提供 Discord 平台的消息操作。
+    利用 Discord API 为群组（频道）提供消息获取、发送及基础元数据查询功能。
+    由于 Discord 的高度异步特性和复杂的权限模型，该适配器集成了懒加载客户端和多级频道查询机制。
 
-    使用方式：
-    1. 通过 PlatformAdapterFactory.create("discord", bot_instance, config) 创建
-    2. 或直接实例化：DiscordAdapter(bot_instance, config)
-
-    配置参数：
-    - bot_user_id: 机器人的 Discord 用户 ID（用于过滤自己的消息）
+    Attributes:
+        bot_user_id (str): 机器人自身的 Discord 用户 ID
     """
 
-    def __init__(self, bot_instance: Any, config: dict = None):
+    def __init__(self, bot_instance: Any, config: dict | None = None):
+        """
+        初始化 Discord 适配器。
+
+        Args:
+            bot_instance (Any): 宿主机器人实例
+            config (dict, optional): 配置项，用于提取机器人自身的 Discord ID
+        """
         super().__init__(bot_instance, config)
-        # 机器人自己的用户 ID，用于过滤消息
+        # 机器人自己的用户 ID，用于消息过滤（避免分析博取回复）
         self.bot_user_id = str(config.get("bot_user_id", "")) if config else ""
 
-        # 缓存 Discord 客户端（懒加载）
+        # 缓存 Discord 客户端（Lazy Loading）
         self._cached_client = None
 
     @property
     def _discord_client(self) -> Any:
         """
-        获取实际的 Discord 客户端实例 (Lazy Load)
+        内部属性：获取实际的 Discord 客户端实例。
+
+        具备懒加载和自动身份嗅探功能。
+
+        Returns:
+            Any: Discord Client 对象
         """
         if self._cached_client:
             return self._cached_client
 
-        # 尝试获取客户端
+        # 执行路径探测逻辑，兼容不同版本的 AstrBot 宿主结构
         self._cached_client = self._get_discord_client()
 
-        # 尝试从 Discord 客户端获取 ID (如果之前没获取到)
+        # 兜底：尝试从客户端连接状态中补全机器人 ID
         if not self.bot_user_id and self._cached_client:
             if hasattr(self._cached_client, "user") and self._cached_client.user:
                 self.bot_user_id = str(self._cached_client.user.id)
@@ -72,31 +81,27 @@ class DiscordAdapter(PlatformAdapter):
         return self._cached_client
 
     def _get_discord_client(self) -> Any:
-        """
-        获取实际的 Discord 客户端实例
-
-        AstrBot 的 DiscordPlatformAdapter 将 Discord 客户端存储在 self.client 中
-        """
-        # 如果 bot 本身就是 Discord client (有 get_channel 方法)
+        """内部方法：通过多级探测从 bot_instance 中提取 Discord SDK 客户端。"""
+        # 路径 A：bot 本身就是 Client (如小型集成)
         if hasattr(self.bot, "get_channel"):
             return self.bot
-        # 如果 bot 是 DiscordPlatformAdapter，client 在 self.bot.client 中
+        # 路径 B：bot 是包装器，client 在标准成员变量中
         if hasattr(self.bot, "client"):
             return self.bot.client
-        # 尝试其他可能的属性名
-        for attr in ["_client", "discord_client", "_discord_client"]:
+        # 路径 C：其他常见私有属性名
+        for attr in ("_client", "discord_client", "_discord_client"):
             if hasattr(self.bot, attr):
                 client = getattr(self.bot, attr)
                 if hasattr(client, "get_channel"):
                     return client
-        logger.warning(f"无法从 {type(self.bot).__name__} 获取 Discord 客户端")
+        logger.warning(f"无法从 {type(self.bot).__name__} 中提取 Discord 客户端实例")
         return None
 
     def _init_capabilities(self) -> PlatformCapabilities:
-        """初始化 Discord 平台能力"""
+        """返回预定义的 Discord 平台能力集。"""
         return DISCORD_CAPABILITIES
 
-    # ==================== IMessageRepository ====================
+    # ==================== IMessageRepository 实现 ====================
 
     async def fetch_messages(
         self,
@@ -106,35 +111,36 @@ class DiscordAdapter(PlatformAdapter):
         before_id: str | None = None,
     ) -> list[UnifiedMessage]:
         """
-        获取 Discord 频道消息历史
+        从 Discord 频道异步拉取历史消息记录。
 
-        参数：
-            group_id: Discord 频道 ID
-            days: 获取多少天内的消息
-            max_count: 最大消息数量
-            before_id: 从此消息 ID 之前开始获取（用于分页）
+        Args:
+            group_id (str): Discord 频道 (Channel) ID
+            days (int): 查询天数范围
+            max_count (int): 最大拉取消息数量上限
+            before_id (str, optional): 锚点消息 ID，从此之前开始拉取
 
-        返回：
-            UnifiedMessage 列表
+        Returns:
+            list[UnifiedMessage]: 统一格式的消息对象列表
         """
         if not discord:
-            logger.error("未安装 py-cord 库，无法使用 Discord 适配器")
+            logger.error("Discord module (py-cord) not found. Cannot fetch messages.")
             return []
 
         try:
             channel_id = int(group_id)
+            # 先从缓存尝试获取频道
             channel = self._discord_client.get_channel(channel_id)
             if not channel:
-                # 尝试 fetch (API调用)
+                # 缓存未命中则通过网络 fetch
                 try:
                     channel = await self._discord_client.fetch_channel(channel_id)
-                except Exception:
-                    logger.warning(f"无法找到频道 ID: {group_id}")
+                except Exception as e:
+                    logger.debug(f"拉取 Discord 频道 {group_id} 失败: {e}")
                     return []
 
-            # 检查频道是否支持历史记录
+            # 验证权限：确保支持历史消息流
             if not hasattr(channel, "history"):
-                logger.warning(f"频道 {group_id} 不支持历史消息获取")
+                logger.warning(f"频道 {group_id} 不支持历史消息访问。")
                 return []
 
             end_time = datetime.now()
@@ -142,18 +148,18 @@ class DiscordAdapter(PlatformAdapter):
 
             messages = []
 
-            # 构建 history 参数
+            # 构建 Discord SDK 的 history 查询参数
             history_kwargs = {"limit": max_count, "after": start_time}
             if before_id:
                 try:
-                    # before 可以接受 Message 对象或 ID (int)
+                    # 使用 Snowflake ID 指向特定消息
                     history_kwargs["before"] = discord.Object(id=int(before_id))
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
 
-            # 获取消息
+            # 消息迭代处理
             async for msg in channel.history(**history_kwargs):
-                # 过滤机器人自己的消息（如果配置了 ID）
+                # 排除机器人自身发布的消息
                 if self.bot_user_id and str(msg.author.id) == self.bot_user_id:
                     continue
 
@@ -161,35 +167,26 @@ class DiscordAdapter(PlatformAdapter):
                 if unified:
                     messages.append(unified)
 
-            # 按时间升序排序
+            # 排序回升序（SDK 通常返回降序）
             messages.sort(key=lambda m: m.timestamp)
             return messages
 
         except Exception as e:
-            logger.error(f"获取 Discord 消息失败: {e}", exc_info=True)
+            logger.error(f"Discord fetch_messages failed: {e}", exc_info=True)
             return []
 
     def _convert_message(self, raw_msg: Any, group_id: str) -> UnifiedMessage | None:
-        """
-        将 Discord 消息转换为统一格式
-
-        参数：
-            raw_msg: Discord 原始消息对象 (discord.Message)
-            group_id: 频道 ID
-
-        返回：
-            UnifiedMessage 或 None
-        """
+        """内部方法：将 `discord.Message` 对象转换为统一的 `UnifiedMessage`。"""
         try:
             contents = []
 
-            # 1. 文本内容
+            # 1. 基础文本
             if raw_msg.content:
                 contents.append(
                     MessageContent(type=MessageContentType.TEXT, text=raw_msg.content)
                 )
 
-            # 2. 附件处理
+            # 2. 附件处理 (图片/视频/语音/普通文件)
             for attachment in raw_msg.attachments:
                 content_type = attachment.content_type or ""
                 if content_type.startswith("image/"):
@@ -222,7 +219,7 @@ class DiscordAdapter(PlatformAdapter):
                         )
                     )
 
-            # 3. 嵌入内容 (Embeds) - 通常是富文本或图片
+            # 3. 嵌入内容处理 (部分 Embed 可能包含富文本描述)
             for embed in raw_msg.embeds:
                 if embed.image:
                     contents.append(
@@ -230,7 +227,6 @@ class DiscordAdapter(PlatformAdapter):
                             type=MessageContentType.IMAGE, url=embed.image.url
                         )
                     )
-                # 其他 embed 内容暂作为未知类型或文本处理
                 if embed.description:
                     contents.append(
                         MessageContent(
@@ -239,12 +235,12 @@ class DiscordAdapter(PlatformAdapter):
                         )
                     )
 
-            # 4. 贴纸 (Stickers)
+            # 4. 贴纸处理 (Stickers)
             if raw_msg.stickers:
                 for sticker in raw_msg.stickers:
                     contents.append(
                         MessageContent(
-                            type=MessageContentType.IMAGE,  # 贴纸视为图片
+                            type=MessageContentType.IMAGE,  # 贴纸在逻辑上按图片处理
                             url=sticker.url,
                             raw_data={
                                 "sticker_id": str(sticker.id),
@@ -253,7 +249,7 @@ class DiscordAdapter(PlatformAdapter):
                         )
                     )
 
-            # 发送者名片 (昵称)
+            # 确定发送者的显示名称（服务器昵称 > 全局名称 > 用户名）
             sender_card = None
             if hasattr(raw_msg.author, "nick") and raw_msg.author.nick:
                 sender_card = raw_msg.author.nick
@@ -263,8 +259,8 @@ class DiscordAdapter(PlatformAdapter):
             return UnifiedMessage(
                 message_id=str(raw_msg.id),
                 sender_id=str(raw_msg.author.id),
-                sender_name=raw_msg.author.name,  # 用户名
-                sender_card=sender_card,  # 服务器昵称
+                sender_name=raw_msg.author.name,
+                sender_card=sender_card,
                 group_id=group_id,
                 text_content=raw_msg.content,
                 contents=tuple(contents),
@@ -275,16 +271,13 @@ class DiscordAdapter(PlatformAdapter):
                 else None,
             )
         except Exception as e:
-            logger.error(f"转换 Discord 消息失败: {e}")
+            logger.debug(f"Discord 消息转换错误: {e}")
             return None
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """
-        将统一消息格式转换为 OneBot 兼容格式 (用于兼容 MessageHandler)
-        """
+        """将统一格式降级转换为 OneBot 风格的字典，以适配下游组件。"""
         raw_messages = []
         for msg in messages:
-            # 构造 OneBot 风格的消息字典
             raw_msg = {
                 "message_id": msg.message_id,
                 "group_id": msg.group_id,
@@ -295,13 +288,13 @@ class DiscordAdapter(PlatformAdapter):
                     "card": msg.sender_card,
                 },
                 "message": [],
+                "user_id": msg.sender_id,  # 后向兼容
             }
 
-            # 构造消息链
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
                     raw_msg["message"].append(
-                        {"type": "text", "data": {"text": content.text}}
+                        {"type": "text", "data": {"text": content.text or ""}}
                     )
                 elif content.type == MessageContentType.IMAGE:
                     raw_msg["message"].append(
@@ -322,13 +315,11 @@ class DiscordAdapter(PlatformAdapter):
                                 "data": {"id": content.raw_data["reply_id"]},
                             }
                         )
-                # 其他类型暂忽略或作为未知
 
             raw_messages.append(raw_msg)
-
         return raw_messages
 
-    # ==================== IMessageSender ====================
+    # ==================== IMessageSender 实现 ====================
 
     async def send_text(
         self,
@@ -336,7 +327,17 @@ class DiscordAdapter(PlatformAdapter):
         text: str,
         reply_to: str | None = None,
     ) -> bool:
-        """发送文本消息到 Discord 频道"""
+        """
+        向 Discord 频道发送文本消息。
+
+        Args:
+            group_id (str): 频道 ID
+            text (str): 文本内容
+            reply_to (str, optional): 引用的消息 ID
+
+        Returns:
+            bool: 是否发送成功
+        """
         if not discord:
             return False
 
@@ -352,17 +353,16 @@ class DiscordAdapter(PlatformAdapter):
             reference = None
             if reply_to:
                 try:
-                    # 创建 MessageReference
                     reference = discord.MessageReference(
                         message_id=int(reply_to), channel_id=channel_id
                     )
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
 
             await channel.send(content=text, reference=reference)
             return True
         except Exception as e:
-            logger.error(f"Discord 发送文本失败: {e}")
+            logger.error(f"Discord 文本发送失败: {e}")
             return False
 
     async def send_image(
@@ -371,7 +371,19 @@ class DiscordAdapter(PlatformAdapter):
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """发送图片到 Discord 频道"""
+        """
+        向 Discord 频道异步发送图片。
+
+        对于远程 URL，会先下载到内存再通过 Discord API 发送。
+
+        Args:
+            group_id (str): 频道 ID
+            image_path (str): 本地路径或 http URL
+            caption (str): 可选说明文字
+
+        Returns:
+            bool: 是否发送成功
+        """
         if not discord:
             return False
 
@@ -384,11 +396,9 @@ class DiscordAdapter(PlatformAdapter):
             if not hasattr(channel, "send"):
                 return False
 
-            # 处理本地文件或 URL
             file_to_send = None
             if image_path.startswith(("http://", "https://")):
-                # URL 方式，需要下载图片后作为文件发送
-                # 因为 Discord 无法访问内部 URL
+                # 远程图片：下载 -> 内存 Object -> Discord
                 from io import BytesIO
 
                 import aiohttp
@@ -397,23 +407,21 @@ class DiscordAdapter(PlatformAdapter):
                     async with aiohttp.ClientSession() as session:
                         async with session.get(
                             image_path, timeout=aiohttp.ClientTimeout(total=30)
-                        ) as response:
-                            if response.status == 200:
-                                image_data = await response.read()
-                                # 从 URL 提取文件名
+                        ) as resp:
+                            if resp.status == 200:
+                                data = await resp.read()
+                                # 尽量保留原始后缀
                                 filename = image_path.split("/")[-1].split("?")[0]
                                 if not filename.lower().endswith(
                                     (".png", ".jpg", ".jpeg", ".gif", ".webp")
                                 ):
-                                    filename = "report.png"
+                                    filename = "daily_report_image.png"
+
                                 file_to_send = discord.File(
-                                    BytesIO(image_data), filename=filename
+                                    BytesIO(data), filename=filename
                                 )
                             else:
-                                logger.warning(
-                                    f"Discord 下载图片失败，状态码: {response.status}"
-                                )
-                                # 降级：直接发送 URL
+                                # 兜底：如果下载失败，直接发 URL 给 Discord 尝试自动解析
                                 content = (
                                     f"{caption}\n{image_path}"
                                     if caption
@@ -421,24 +429,23 @@ class DiscordAdapter(PlatformAdapter):
                                 )
                                 await channel.send(content=content)
                                 return True
-                except Exception as download_error:
-                    logger.warning(f"Discord 下载图片异常: {download_error}")
-                    # 降级：直接发送 URL
+                except Exception as de:
+                    logger.warning(
+                        f"Discord 远程图片下载失败: {de}，将回退为发送 URL。"
+                    )
                     content = f"{caption}\n{image_path}" if caption else image_path
                     await channel.send(content=content)
                     return True
             else:
-                # 本地文件
+                # 本地图片
                 file_to_send = discord.File(image_path)
 
             if file_to_send:
-                await channel.send(
-                    content=caption if caption else None, file=file_to_send
-                )
+                await channel.send(content=caption or None, file=file_to_send)
             return True
 
         except Exception as e:
-            logger.error(f"Discord 发送图片失败: {e}")
+            logger.error(f"Discord 图片发送失败: {e}")
             return False
 
     async def send_file(
@@ -447,7 +454,7 @@ class DiscordAdapter(PlatformAdapter):
         file_path: str,
         filename: str | None = None,
     ) -> bool:
-        """发送文件到 Discord 频道"""
+        """向 Discord 频道上传任意文件。"""
         if not discord:
             return False
 
@@ -464,13 +471,13 @@ class DiscordAdapter(PlatformAdapter):
             await channel.send(file=file_to_send)
             return True
         except Exception as e:
-            logger.error(f"Discord 发送文件失败: {e}")
+            logger.error(f"Discord 文件发送失败: {e}")
             return False
 
-    # ==================== IGroupInfoRepository ====================
+    # ==================== IGroupInfoRepository 实现 ====================
 
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
-        """获取 Discord 频道信息"""
+        """解析 Discord 频道及所属服务器的基本信息。"""
         if not discord:
             return None
 
@@ -480,17 +487,16 @@ class DiscordAdapter(PlatformAdapter):
             if not channel:
                 channel = await self.bot.fetch_channel(channel_id)
 
-            # 尝试获取 Guild 信息
             guild = getattr(channel, "guild", None)
-
             group_name = getattr(channel, "name", str(channel.id))
+
             if guild:
-                # 如果是公会频道，可以用 Guild 信息补充
+                # 群聊（服务器频道）
                 member_count = guild.member_count
                 owner_id = str(guild.owner_id)
             else:
-                # 私信或群组私信
-                member_count = len(getattr(channel, "recipients", [])) + 1  # +1 for bot
+                # 私人对话（DM）
+                member_count = len(getattr(channel, "recipients", [])) + 1
                 owner_id = str(getattr(channel, "owner_id", ""))
 
             return UnifiedGroup(
@@ -502,27 +508,29 @@ class DiscordAdapter(PlatformAdapter):
                 platform="discord",
             )
         except Exception as e:
-            logger.error(f"Discord 获取群组信息失败: {e}")
+            logger.debug(f"Discord 获取群组信息错误: {e}")
             return None
 
     async def get_group_list(self) -> list[str]:
-        """获取机器人所在的所有频道 ID (仅列出 TextChannel)"""
+        """列出机器人所在服务器中所有可访问的文本频道 ID。"""
         if not discord:
             return []
 
         try:
-            # 遍历所有 Guilds 和 Channels
             channel_ids = []
             for guild in self._discord_client.guilds:
                 for channel in guild.text_channels:
                     channel_ids.append(str(channel.id))
             return channel_ids
-        except Exception as e:
-            logger.error(f"Discord 获取群组列表失败: {e}")
+        except Exception:
             return []
 
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
-        """获取 Discord 服务器成员列表"""
+        """
+        获取频道对应的成员列表。
+
+        注意：对于大型服务器，建议启用 GUILD_MEMBERS 意图以保证列表完整性。
+        """
         if not discord:
             return []
 
@@ -534,24 +542,18 @@ class DiscordAdapter(PlatformAdapter):
 
             guild = getattr(channel, "guild", None)
             if not guild:
-                # 非公会频道（如 DM），返回收件人
-                members = []
-                for user in getattr(channel, "recipients", []):
-                    members.append(
-                        UnifiedMember(
-                            user_id=str(user.id),
-                            nickname=user.display_name,
-                            card=None,
-                            role="member",
-                            join_time=None,
-                        )
+                # 私聊收件人
+                return [
+                    UnifiedMember(
+                        user_id=str(u.id),
+                        nickname=u.name,
+                        card=u.display_name,
+                        role="member",
                     )
-                return members
+                    for u in getattr(channel, "recipients", [])
+                ]
 
-            # 公会频道
             members = []
-            # 注意：如果 member_count 很大，members 可能不全（取决于 intent 和 cache）
-            # 需要启用 GUILD_MEMBERS intent
             for member in guild.members:
                 role = "member"
                 if member.id == guild.owner_id:
@@ -563,7 +565,7 @@ class DiscordAdapter(PlatformAdapter):
                     UnifiedMember(
                         user_id=str(member.id),
                         nickname=member.name,
-                        card=member.nick or member.global_name,  # 优先显示服务器昵称
+                        card=member.nick or member.global_name,
                         role=role,
                         join_time=int(member.joined_at.timestamp())
                         if member.joined_at
@@ -571,8 +573,7 @@ class DiscordAdapter(PlatformAdapter):
                     )
                 )
             return members
-        except Exception as e:
-            logger.error(f"Discord 获取成员列表失败: {e}")
+        except Exception:
             return []
 
     async def get_member_info(
@@ -580,11 +581,12 @@ class DiscordAdapter(PlatformAdapter):
         group_id: str,
         user_id: str,
     ) -> UnifiedMember | None:
-        """获取特定成员信息"""
+        """获取并解析特定 Discord 用户的身份信息。"""
         if not discord:
             return None
 
         try:
+            uid = int(user_id)
             channel_id = int(group_id)
             channel = self.bot.get_channel(channel_id)
             if not channel:
@@ -592,28 +594,21 @@ class DiscordAdapter(PlatformAdapter):
 
             guild = getattr(channel, "guild", None)
             if not guild:
-                # 私信，尝试 fetch user
-                user = await self.bot.fetch_user(int(user_id))
+                # 跨频道/私聊探测
+                user = await self.bot.fetch_user(uid)
                 return UnifiedMember(
-                    user_id=str(user.id),
-                    nickname=user.name,
-                    card=user.display_name,
-                    role="member",
-                    join_time=None,
+                    user_id=str(user.id), nickname=user.name, card=user.display_name
                 )
 
-            member = guild.get_member(int(user_id))
-            if not member:
-                member = await guild.fetch_member(int(user_id))
-
+            member = guild.get_member(uid) or await guild.fetch_member(uid)
             if not member:
                 return None
 
-            role = "member"
-            if member.id == guild.owner_id:
-                role = "owner"
-            elif member.guild_permissions.administrator:
-                role = "admin"
+            role = (
+                "owner"
+                if member.id == guild.owner_id
+                else ("admin" if member.guild_permissions.administrator else "member")
+            )
 
             return UnifiedMember(
                 user_id=str(member.id),
@@ -624,52 +619,35 @@ class DiscordAdapter(PlatformAdapter):
                 if member.joined_at
                 else None,
             )
-        except Exception as e:
-            logger.error(f"Discord 获取成员信息失败: {e}")
+        except Exception:
             return None
 
-    # ==================== IAvatarRepository ====================
+    # ==================== IAvatarRepository 实现 ====================
 
     async def get_user_avatar_url(
         self,
         user_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 Discord 用户头像 URL"""
-        if not discord:
-            logger.warning("[群分析插件 DiscordAdapter] py-cord 未安装")
+        """根据 Discord 用户 ID 动态解析其头像 CDN 地址。"""
+        if not discord or not self._discord_client:
             return None
 
         try:
-            logger.debug(f"[群分析插件 DiscordAdapter] 正在获取用户头像 {user_id}")
-            if not self._discord_client:
-                logger.warning("[群分析插件 DiscordAdapter] Discord 客户端未准备就绪")
-                return None
-
-            user = self._discord_client.get_user(int(user_id))
-            if not user:
-                logger.debug(
-                    f"[群分析插件 DiscordAdapter] 用户 {user_id} 不在缓存中，正在获取..."
-                )
-                user = await self._discord_client.fetch_user(int(user_id))
+            uid = int(user_id)
+            user = self._discord_client.get_user(
+                uid
+            ) or await self._discord_client.fetch_user(uid)
 
             if user:
-                # 调整 size 到最接近的 2 的幂次方
-                allowed_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+                # 自动对齐 Discord 支持的尺寸 (2的幂)
+                allowed_sizes = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
+                return user.display_avatar.with_size(target_size).url
 
-                url = user.display_avatar.with_size(target_size).url
-                logger.debug(
-                    f"[群分析插件 DiscordAdapter] 获取用户头像 {user_id} 成功: {url}"
-                )
-                return url
-
-            logger.warning(f"[群分析插件 DiscordAdapter] 用户 {user_id} 未找到")
             return None
         except Exception as e:
-            logger.error(
-                f"[群分析插件 DiscordAdapter] 获取用户头像 {user_id} 失败: {e}"
-            )
+            logger.debug(f"Discord 获取用户头像 URL 错误: {e}")
             return None
 
     async def get_user_avatar_data(
@@ -677,8 +655,7 @@ class DiscordAdapter(PlatformAdapter):
         user_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 Discord 用户头像 Base64 数据"""
-        # 暂时只返回 None，让上层使用 URL
+        """暂不提供 Base64 转换服务，优先使用 CDN 链接。"""
         return None
 
     async def get_group_avatar_url(
@@ -686,19 +663,17 @@ class DiscordAdapter(PlatformAdapter):
         group_id: str,
         size: int = 100,
     ) -> str | None:
-        """获取 Discord 服务器图标 URL"""
+        """获取 Discord 服务器（Guild）的图标地址。"""
         if not discord:
             return None
 
         try:
-            channel_id = int(group_id)
-            channel = self.bot.get_channel(channel_id)
-            if not channel:
-                channel = await self.bot.fetch_channel(channel_id)
-
+            channel = self.bot.get_channel(
+                int(group_id)
+            ) or await self.bot.fetch_channel(int(group_id))
             guild = getattr(channel, "guild", None)
             if guild and guild.icon:
-                allowed_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
+                allowed_sizes = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
                 return guild.icon.with_size(target_size).url
             return None
@@ -710,8 +685,5 @@ class DiscordAdapter(PlatformAdapter):
         user_ids: list[str],
         size: int = 100,
     ) -> dict[str, str | None]:
-        """批量获取 Discord 用户头像 URL"""
-        return {
-            user_id: await self.get_user_avatar_url(user_id, size)
-            for user_id in user_ids
-        }
+        """批量获取头像的最佳实践。"""
+        return {uid: await self.get_user_avatar_url(uid, size) for uid in user_ids}

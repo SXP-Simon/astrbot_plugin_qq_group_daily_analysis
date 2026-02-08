@@ -25,14 +25,6 @@ class UserTitle:
     mbti: str
     reason: str
 
-    @property
-    def qq(self) -> int:
-        """兼容旧字段"""
-        try:
-            return int(self.user_id) if self.user_id else 0
-        except ValueError:
-            return 0
-
 
 @dataclass
 class GoldenQuote:
@@ -42,14 +34,6 @@ class GoldenQuote:
     sender: str
     reason: str
     user_id: str = ""  # 原 qq 字段
-
-    @property
-    def qq(self) -> int:
-        """兼容旧字段"""
-        try:
-            return int(self.user_id) if self.user_id else 0
-        except ValueError:
-            return 0
 
 
 @dataclass

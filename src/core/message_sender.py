@@ -24,21 +24,21 @@ class MessageSender:
         发送文本消息
         """
         trace_id = TraceContext.get()
-        logger.info(f"[{trace_id}] Start sending text to group {group_id}")
+        logger.info(f"[{trace_id}] 开始发送文本消息到群 {group_id}")
 
         platforms = self._get_available_platforms(group_id, platform_id)
         if not platforms:
-            logger.error(f"[{trace_id}] No available platforms for group {group_id}")
+            logger.error(f"[{trace_id}] 群 {group_id} 无可用发送平台")
             return False
 
         for pid, adapter in platforms:
             try:
-                logger.info(f"[{trace_id}] Trying platform {pid}...")
+                logger.info(f"[{trace_id}] 正在尝试平台 {pid}...")
 
                 # 优先使用 Adapter 接口
                 if hasattr(adapter, "send_text"):
                     if await adapter.send_text(group_id, text):
-                        logger.info(f"[{trace_id}] Successfully sent text via {pid}")
+                        logger.info(f"[{trace_id}] 成功通过 {pid} 发送文本")
                         return True
 
                 # Fallback to OneBot API (for backward compatibility or if adapter wrapping failed)
@@ -46,14 +46,14 @@ class MessageSender:
                     await adapter.api.call_action(
                         "send_group_msg", group_id=group_id, message=text
                     )
-                    logger.info(f"[{trace_id}] Successfully sent text via {pid} (API)")
+                    logger.info(f"[{trace_id}] 成功通过 {pid} 发送文本 (API)")
                     return True
 
             except Exception as e:
                 self._log_send_error(pid, group_id, "text", e)
                 continue
 
-        logger.error(f"[{trace_id}] Failed to send text via all platforms")
+        logger.error(f"[{trace_id}] 所有平台均发送文本失败")
         return False
 
     async def send_image_url(
@@ -73,16 +73,14 @@ class MessageSender:
 
         for pid, adapter in platforms:
             try:
-                logger.info(f"[{trace_id}] Trying sending image (URL) via {pid}...")
+                logger.info(f"[{trace_id}] 正在通过 {pid} 发送图片 (URL 模式)...")
 
                 # 优先使用 Adapter 接口
                 if hasattr(adapter, "send_image"):
                     if await adapter.send_image(
                         group_id, image_url, caption=text_prefix
                     ):
-                        logger.info(
-                            f"[{trace_id}] Successfully sent image (URL) via {pid}"
-                        )
+                        logger.info(f"[{trace_id}] 成功通过 {pid} 发送图片 (URL 模式)")
                         return True
 
                 # Fallback to OneBot API
@@ -98,7 +96,7 @@ class MessageSender:
                         "send_group_msg", group_id=group_id, message=message_chain
                     )
                     logger.info(
-                        f"[{trace_id}] Successfully sent image (URL) via {pid} (API)"
+                        f"[{trace_id}] 成功通过 {pid} 发送图片 (URL 模式) (API)"
                     )
                     return True
             except Exception as e:
@@ -117,11 +115,11 @@ class MessageSender:
         发送图片 (Base64 模式) - 需先下载图片
         """
         trace_id = TraceContext.get()
-        logger.info(f"[{trace_id}] Downloading image for Base64 fallback...")
+        logger.info(f"[{trace_id}] 正在下载图片以进行 Base64 回退发送...")
 
         image_bytes = await self._download_image(image_url)
         if not image_bytes:
-            logger.error(f"[{trace_id}] Failed to download image for Base64 conversion")
+            logger.error(f"[{trace_id}] 下载图片进行 Base64 转换失败")
             return False
 
         image_b64 = base64.b64encode(image_bytes).decode()
@@ -134,7 +132,7 @@ class MessageSender:
 
         for pid, adapter in platforms:
             try:
-                logger.info(f"[{trace_id}] Trying sending image (Base64) via {pid}...")
+                logger.info(f"[{trace_id}] 正在通过 {pid} 发送图片 (Base64 模式)...")
 
                 # 优先使用 Adapter 接口 (注意 Adapter 接口通常接受 path/url，这里我们传 base64 uri 它是支持的吗？)
                 # 大多数 Adapter 的 send_image 如果识别 base64:// 应该能处理
@@ -148,7 +146,7 @@ class MessageSender:
                         group_id, base64_uri, caption=text_prefix
                     ):
                         logger.info(
-                            f"[{trace_id}] Successfully sent image (Base64) via {pid}"
+                            f"[{trace_id}] 成功通过 {pid} 发送图片 (Base64 模式)"
                         )
                         return True
 
@@ -167,7 +165,7 @@ class MessageSender:
                         "send_group_msg", group_id=group_id, message=message_chain
                     )
                     logger.info(
-                        f"[{trace_id}] Successfully sent image (Base64) via {pid} (API)"
+                        f"[{trace_id}] 成功通过 {pid} 发送图片 (Base64 模式) (API)"
                     )
                     return True
             except Exception as e:
@@ -189,7 +187,7 @@ class MessageSender:
             return True
 
         logger.warning(
-            f"[{TraceContext.get()}] URL send failed, falling back to Base64..."
+            f"[{TraceContext.get()}] URL 发送失败，正在回退至 Base64 模式..."
         )
         return await self.send_image_base64(
             group_id, image_url, text_prefix, platform_id
@@ -212,11 +210,11 @@ class MessageSender:
 
         for pid, adapter in platforms:
             try:
-                logger.info(f"[{trace_id}] Trying sending PDF via {pid}...")
+                logger.info(f"[{trace_id}] 正在通过 {pid} 发送 PDF...")
 
                 if hasattr(adapter, "send_file"):
                     if await adapter.send_file(group_id, pdf_path):
-                        logger.info(f"[{trace_id}] Successfully sent PDF via {pid}")
+                        logger.info(f"[{trace_id}] 成功通过 {pid} 发送 PDF")
                         return True
 
                 # Fallback to OneBot API
@@ -231,7 +229,7 @@ class MessageSender:
                     await adapter.api.call_action(
                         "send_group_msg", group_id=group_id, message=message_chain
                     )
-                    logger.info(f"[{trace_id}] Successfully sent PDF via {pid} (API)")
+                    logger.info(f"[{trace_id}] 成功通过 {pid} 发送 PDF (API)")
                     return True
 
             except Exception as e:
@@ -255,7 +253,7 @@ class MessageSender:
             if bot:
                 instances.append((specific_platform_id, bot))
             else:
-                logger.warning(f"Specified platform {specific_platform_id} not found")
+                logger.warning(f"找不到指定的平台 {specific_platform_id}")
         else:
             # 获取所有已发现的平台
             all_instances = self.bot_manager.get_all_bot_instances()
@@ -291,7 +289,7 @@ class MessageSender:
                     # Fallback: return raw bot
                     adapters.append((pid, bot))
             except Exception as e:
-                logger.warning(f"Failed to create adapter for {pid}: {e}")
+                logger.warning(f"为 {pid} 创建适配器失败: {e}")
                 adapters.append((pid, bot))
 
         return adapters
@@ -306,7 +304,7 @@ class MessageSender:
                         return None
                     return await resp.read()
         except Exception as e:
-            logger.error(f"Image download failed: {e}")
+            logger.error(f"图片下载失败: {e}")
             return None
 
     def _log_send_error(
@@ -314,5 +312,5 @@ class MessageSender:
     ):
         """统一错误日志"""
         logger.debug(
-            f"[{TraceContext.get()}] Failed to send {msg_type} via {platform_id} to {group_id}: {error}"
+            f"[{TraceContext.get()}] 通过 {platform_id} 向 {group_id} 发送 {msg_type} 失败: {error}"
         )

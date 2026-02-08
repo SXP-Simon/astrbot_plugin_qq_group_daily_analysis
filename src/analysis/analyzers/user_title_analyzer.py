@@ -108,8 +108,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
             for title_data in titles_data[:max_titles]:
                 # 确保数据格式正确
                 name = title_data.get("name", "").strip()
-                # 兼容 LLM 返回 qq 或 user_id 的情况
-                user_id = title_data.get("user_id") or title_data.get("qq")
+                user_id = title_data.get("user_id")
                 title = title_data.get("title", "").strip()
                 mbti = title_data.get("mbti", "").strip()
                 reason = title_data.get("reason", "").strip()
@@ -123,7 +122,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                 if user_id is not None:
                     user_id = str(user_id)
                 else:
-                    logger.warning(f"未找到用户ID (user_id/qq)，跳过: {title_data}")
+                    logger.warning(f"未找到用户ID (user_id)，跳过: {title_data}")
                     continue
 
                 titles.append(
@@ -157,8 +156,8 @@ class UserTitleAnalyzer(BaseAnalyzer):
             准备好的用户数据字典
         """
         try:
-            # 获取机器人QQ号列表用于过滤
-            bot_qq_ids = self.config_manager.get_bot_qq_ids()
+            # 获取机器人 ID 列表用于过滤
+            bot_self_ids = self.config_manager.get_bot_self_ids()
 
             user_summaries = []
 
@@ -180,7 +179,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
             for user_id, stats in user_analysis.items():
                 user_id_str = str(user_id)
                 # 过滤机器人自己的消息
-                if bot_qq_ids and user_id_str in [str(qq) for qq in bot_qq_ids]:
+                if bot_self_ids and user_id_str in [str(uid) for uid in bot_self_ids]:
                     logger.debug(f"过滤掉机器人ID: {user_id}")
                     continue
 
