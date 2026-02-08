@@ -455,7 +455,7 @@ class AutoScheduler:
 
     async def _get_all_groups(self) -> list[tuple[str, str]]:
         """
-        获取所有bot实例所在的群列表
+        获取所有bot实例所在的群列表 (使用 PlatformAdapter)
         Returns:
             list[tuple[str, str]]: [(platform_id, group_id), ...]
         """
@@ -467,6 +467,9 @@ class AutoScheduler:
         ):
             return []
 
+        # 延迟导入以避免循环依赖
+        from ..infrastructure.platform.factory import PlatformAdapterFactory
+
         for platform_id, bot_instance in self.bot_manager._bot_instances.items():
             # 检查该平台是否启用了此插件
             if not self.bot_manager.is_plugin_enabled(
@@ -476,68 +479,35 @@ class AutoScheduler:
                 continue
 
             try:
-                # 尝试使用 call_action 获取群列表
-                call_action_func = None
-                if hasattr(bot_instance, "call_action"):
-                    call_action_func = bot_instance.call_action
-                elif hasattr(bot_instance, "api") and hasattr(
-                    bot_instance.api, "call_action"
-                ):
-                    call_action_func = bot_instance.api.call_action
+                # 1. 尝试检测平台名称
+                platform_name = self.bot_manager._detect_platform_name(bot_instance)
 
-                # 特别处理 Discord 适配器 (如果有专门的方法)
-                if hasattr(bot_instance, "get_group_list"):
+                # 2. 创建适配器
+                adapter = None
+                if platform_name:
+                    adapter = PlatformAdapterFactory.create(
+                        platform_name,
+                        bot_instance,
+                        config={"bot_qq_ids": self.config_manager.get_bot_qq_ids()},
+                    )
+
+                # 3. 如果适配器创建成功，使用通用接口获取群列表
+                if adapter:
                     try:
-                        result = await bot_instance.get_group_list()
-                        if result:
-                            for group_id in result:
-                                all_groups.add((platform_id, str(group_id)))
-                            logger.info(
-                                f"平台 {platform_id} (Adapter) 成功获取 {len(result)} 个群组"
-                            )
-                            continue
-                    except Exception as e:
-                        logger.debug(f"平台 {platform_id} get_group_list 失败: {e}")
-
-                if call_action_func:
-                    # 尝试 OneBot v11 get_group_list
-                    try:
-                        result = await call_action_func("get_group_list")
-                        logger.debug(
-                            f"平台 {platform_id} get_group_list 返回类型: {type(result)}"
+                        groups = await adapter.get_group_list()
+                        for group_id in groups:
+                            all_groups.add((platform_id, str(group_id)))
+                        logger.info(
+                            f"平台 {platform_id} ({platform_name}) 成功获取 {len(groups)} 个群组"
                         )
-
-                        # 处理可能的字典返回 (e.g. {'data': [...], 'retcode': 0})
-                        if (
-                            isinstance(result, dict)
-                            and "data" in result
-                            and isinstance(result["data"], list)
-                        ):
-                            logger.debug("检测到字典格式返回，提取 data 字段")
-                            result = result["data"]
-
-                        if isinstance(result, list):
-                            for group in result:
-                                if isinstance(group, dict) and "group_id" in group:
-                                    all_groups.add(
-                                        (platform_id, str(group["group_id"]))
-                                    )
-                            logger.info(
-                                f"平台 {platform_id} 成功获取 {len(result)} 个群组"
-                            )
-                        else:
-                            logger.warning(
-                                f"平台 {platform_id} get_group_list 返回格式非列表: {result}"
-                            )
+                        continue  # 成功则跳过后续尝试
                     except Exception as e:
-                        logger.debug(
-                            f"平台 {platform_id} 获取群列表失败 (get_group_list): {e}"
-                        )
+                        logger.warning(f"适配器 {platform_name} 获取群列表失败: {e}")
 
-                    # 如果需要，尝试其他方法（例如针对其他协议）
-                    # 目前专注于 OneBot v11，因为它是最常见的
-                else:
-                    logger.debug(f"平台 {platform_id} 的 bot 实例没有 call_action 方法")
+                # 4. (可选) 保留降级逻辑，或者直接依赖适配器
+                # 鉴于我们已经确认 OneBot 和 Discord 都有适配器，这里可以简化
+                logger.debug(f"平台 {platform_id} 无法通过适配器获取群列表")
+
             except Exception as e:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
 
