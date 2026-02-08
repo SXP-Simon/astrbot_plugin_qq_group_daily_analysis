@@ -60,42 +60,48 @@ class TestPlatformArchitecture(unittest.TestCase):
         adapter = PlatformAdapterFactory.create("discord", MagicMock(), {})
         self.assertIsInstance(adapter, DiscordAdapter)
 
-    def test_orchestrator_raw_conversion(self):
-        """测试编排器的原始格式转换 (验证硬编码移除)"""
-        # Mock adapter
-        mock_adapter = MagicMock(spec=PlatformAdapter)
-        mock_adapter.get_capabilities.return_value = DISCORD_CAPABILITIES
+    def test_discord_fetch_messages(self):
+        """测试 Discord 消息获取逻辑 (Mocked)"""
+        # Mock bot instance
+        mock_bot = MagicMock()
+        mock_channel = MagicMock()
+        mock_bot.get_channel.return_value = mock_channel
         
-        # Mock fetch_messages return
-        mock_msg = UnifiedMessage(
-            message_id="1", sender_id="u1", sender_name="User", 
-            group_id="g1", text_content="test", contents=[], 
-            timestamp=1234567890, platform="discord"
-        )
-        mock_adapter.fetch_messages = AsyncMock(return_value=[mock_msg])
+        # Mock message history
+        # Create a mock message that mimics discord.Message
+        mock_msg = MagicMock()
+        mock_msg.id = 12345
+        mock_msg.content = "test message"
+        mock_msg.author.id = 999
+        mock_msg.author.name = "User"
+        mock_msg.created_at.timestamp.return_value = 1600000000
+        mock_msg.attachments = []
+        mock_msg.embeds = []
+        mock_msg.stickers = []
+        mock_msg.reference = None
         
-        # Mock convert_to_raw_format
-        mock_adapter.convert_to_raw_format.return_value = [{"id": "1", "content": "raw"}]
+        # history returns an async iterator
+        async def async_iter():
+            yield mock_msg
+            
+        mock_channel.history.return_value = async_iter()
         
-        # Create orchestrator
-        orchestrator = AnalysisOrchestrator(adapter=mock_adapter)
+        # Initialize adapter
+        adapter = DiscordAdapter(bot_instance=mock_bot, config={"bot_user_id": "123"})
         
-        # Run sync wrapper for async method (simplified for unit test structure)
+        # Run async test
         import asyncio
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        # Call fetch_messages_as_raw
-        raw_msgs = loop.run_until_complete(
-            orchestrator.fetch_messages_as_raw("g1")
+        messages = loop.run_until_complete(
+            adapter.fetch_messages("1001", days=1)
         )
         
-        # Verify result
-        self.assertEqual(len(raw_msgs), 1)
-        self.assertEqual(raw_msgs[0]["content"], "raw")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].text_content, "test message")
+        self.assertEqual(messages[0].platform, "discord")
         
-        # Verify adapter method was called (PROVING adapter pattern is used)
-        mock_adapter.convert_to_raw_format.assert_called_once()
         loop.close()
 
 if __name__ == "__main__":
