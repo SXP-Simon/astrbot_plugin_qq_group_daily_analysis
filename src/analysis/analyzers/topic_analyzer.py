@@ -100,9 +100,15 @@ class TopicAnalyzer(BaseAnalyzer):
                             text_parts.append(text)
                     elif content_type == "at":
                         # 处理 @ 消息，转换为文本
-                        at_qq = content.get("data", {}).get("qq", "")
-                        if at_qq:
-                            at_text = f"@{at_qq}"
+                        at_data = content.get("data", {})
+                        # 兼容不同平台的 ID 字段
+                        at_id = (
+                            at_data.get("qq")
+                            or at_data.get("id")
+                            or at_data.get("user_id")
+                        )
+                        if at_id:
+                            at_text = f"@{at_id}"
                             text_parts.append(at_text)
                     elif content_type == "reply":
                         # 处理回复消息，添加标记

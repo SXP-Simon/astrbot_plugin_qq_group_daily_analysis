@@ -54,7 +54,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         # 构建用户数据文本
         users_text = "\n".join(
             [
-                f"- {user['name']} (QQ:{user['qq']}): "
+                f"- {user['name']} (ID:{user['user_id']}): "
                 f"发言{user['message_count']}条, 平均{user['avg_chars']}字, "
                 f"表情比例{user['emoji_ratio']}, 夜间发言比例{user['night_ratio']}, "
                 f"回复比例{user['reply_ratio']}"
@@ -109,7 +109,8 @@ class UserTitleAnalyzer(BaseAnalyzer):
             for title_data in titles_data[:max_titles]:
                 # 确保数据格式正确
                 name = title_data.get("name", "").strip()
-                qq = title_data.get("qq")
+                # 兼容 LLM 返回 qq 或 user_id 的情况
+                user_id = title_data.get("user_id") or title_data.get("qq")
                 title = title_data.get("title", "").strip()
                 mbti = title_data.get("mbti", "").strip()
                 reason = title_data.get("reason", "").strip()
@@ -119,15 +120,21 @@ class UserTitleAnalyzer(BaseAnalyzer):
                     logger.warning(f"用户称号数据格式不完整，跳过: {title_data}")
                     continue
 
-                # 验证QQ号格式（单个用户QQ号）
-                try:
-                    qq = int(qq)
-                except (ValueError, TypeError):
-                    logger.warning(f"QQ号格式无效，跳过: {qq}")
+                # 确保 user_id 是字符串
+                if user_id is not None:
+                    user_id = str(user_id)
+                else:
+                    logger.warning(f"未找到用户ID (user_id/qq)，跳过: {title_data}")
                     continue
 
                 titles.append(
-                    UserTitle(name=name, qq=qq, title=title, mbti=mbti, reason=reason)
+                    UserTitle(
+                        name=name,
+                        user_id=user_id,
+                        title=title,
+                        mbti=mbti,
+                        reason=reason,
+                    )
                 )
 
             return titles
@@ -172,13 +179,14 @@ class UserTitleAnalyzer(BaseAnalyzer):
                 }
 
             for user_id, stats in user_analysis.items():
+                user_id_str = str(user_id)
                 # 过滤机器人自己的消息
-                if bot_qq_ids and str(user_id) in [str(qq) for qq in bot_qq_ids]:
-                    logger.debug(f"过滤掉机器人QQ号: {user_id}")
+                if bot_qq_ids and user_id_str in [str(qq) for qq in bot_qq_ids]:
+                    logger.debug(f"过滤掉机器人ID: {user_id}")
                     continue
 
                 # 只处理活跃用户
-                if user_id not in target_user_ids:
+                if user_id_str not in target_user_ids:
                     continue
 
                 # 分析用户特征
@@ -192,7 +200,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                 user_summaries.append(
                     {
                         "name": stats["nickname"],
-                        "qq": int(user_id),
+                        "user_id": user_id_str,  # 使用 user_id
                         "message_count": stats["message_count"],
                         "avg_chars": round(avg_chars, 1),
                         "emoji_ratio": round(
