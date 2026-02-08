@@ -25,21 +25,31 @@ class ReportGenerator:
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
 
     async def generate_image_report(
-        self, analysis_result: dict, group_id: str, html_render_func
+        self,
+        analysis_result: dict,
+        group_id: str,
+        html_render_func,
+        avatar_getter=None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
 
+        Args:
+            analysis_result: 分析结果字典
+            group_id: 群组ID
+            html_render_func: HTML渲染函数
+            avatar_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+
         Returns:
             tuple[str | None, str | None]: (image_url, html_content)
-            - image_url: 生成的图片URL，如果生成失败则为None
-            - html_content: 生成的HTML内容，如果渲染失败但HTML生成成功，则返回此内容供重试
         """
         html_content = None
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(
-                analysis_result, chart_template="activity_chart.html"
+                analysis_result,
+                chart_template="activity_chart.html",
+                avatar_getter=avatar_getter,
             )
 
             # 先渲染HTML模板（使用异步方法）
@@ -125,7 +135,7 @@ class ReportGenerator:
             return None, html_content
 
     async def generate_pdf_report(
-        self, analysis_result: dict, group_id: str
+        self, analysis_result: dict, group_id: str, avatar_getter=None
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
@@ -142,7 +152,9 @@ class ReportGenerator:
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
-                analysis_result, chart_template="activity_chart_pdf.html"
+                analysis_result,
+                chart_template="activity_chart_pdf.html",
+                avatar_getter=avatar_getter,
             )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -211,7 +223,10 @@ class ReportGenerator:
         return report
 
     async def _prepare_render_data(
-        self, analysis_result: dict, chart_template: str = "activity_chart.html"
+        self,
+        analysis_result: dict,
+        chart_template: str = "activity_chart.html",
+        avatar_getter=None,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -241,7 +256,7 @@ class ReportGenerator:
         titles_list = []
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
-            avatar_data = await self._get_user_avatar(str(title.qq))
+            avatar_data = await self._get_user_avatar(str(title.qq), avatar_getter)
             title_data = {
                 "name": title.name,
                 "title": title.title,
@@ -261,7 +276,9 @@ class ReportGenerator:
         quotes_list = []
         for quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.qq)) if quote.qq else None
+                await self._get_user_avatar(str(quote.qq), avatar_getter)
+                if quote.qq
+                else None
             )
             quotes_list.append(
                 {
@@ -337,13 +354,45 @@ class ReportGenerator:
 
         return result
 
-    async def _get_user_avatar(self, user_id: str) -> str | None:
+    async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str | None:
         """获取用户头像的base64编码"""
         try:
-            avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
+            # 1. 如果提供了 avatar_getter，优先使用它获取 avatar_url
+            avatar_url = None
+            if avatar_getter:
+                try:
+                    # avatar_getter 可能返回 URL 或直接返回 base64
+                    # 假定它返回 img URL，后续我们自己下载转 base64
+                    # 或者如果它返回 data:image 格式（base64），则直接使用
+                    result = await avatar_getter(user_id)
+                    if result:
+                        if result.startswith("data:image"):
+                            return result
+                        avatar_url = result
+                except Exception as e:
+                    logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
+
+            # 2. 如果没有 avatar_getter 或获取失败，使用默认 QQ 头像逻辑（仅当 user_id 看起来像 QQ 号时？）
+            # 为保持兼容性，如果 avatar_url 仍为 None，且不强制禁用 QQ 默认，则使用 QQ 逻辑
+            if not avatar_url:
+                if (
+                    user_id.isdigit() and 5 <= len(user_id) <= 12
+                ):  # 简单判断是否可能是 QQ 号
+                    avatar_url = (
+                        f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
+                    )
+                else:
+                    return None  # 非 QQ 号且无 avatar_getter，返回 None 使用默认占位符
+
+            if not avatar_url:
+                return None
+
             async with aiohttp.ClientSession() as client:
-                async with client.get(avatar_url) as response:
-                    response.raise_for_status()
+                async with client.get(avatar_url, timeout=10) as response:
+                    if response.status != 200:
+                        logger.warning(f"下载头像失败 {avatar_url}: {response.status}")
+                        return None
+
                     avatar_data = await response.read()
 
                     if not isinstance(avatar_data, bytes):
