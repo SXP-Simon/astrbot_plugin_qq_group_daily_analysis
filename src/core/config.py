@@ -178,9 +178,17 @@ class ConfigManager:
                 "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
             )
 
+    def get_bot_self_ids(self) -> list:
+        """获取机器人自身的 ID 列表 (兼容 bot_qq_ids)"""
+        ids = self.config.get("bot_self_ids", [])
+        if not ids:
+             # 向后兼容 bot_qq_ids
+             ids = self.config.get("bot_qq_ids", [])
+        return ids
+
     def get_bot_qq_ids(self) -> list:
-        """获取bot QQ号列表"""
-        return self.config.get("bot_qq_ids", [])
+        """获取bot QQ号列表 (已弃用，建议使用 get_bot_self_ids)"""
+        return self.get_bot_self_ids()
 
     def get_pdf_filename_format(self) -> str:
         """获取PDF文件名格式"""
