@@ -23,18 +23,24 @@ from ..base import PlatformAdapter
 
 
 class OneBotAdapter(PlatformAdapter):
+    platform_name = "onebot"
+
     """OneBot v11 协议适配器"""
 
     # QQ 头像 URL 模板
     USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
-    USER_AVATAR_HD_TEMPLATE = "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
+    USER_AVATAR_HD_TEMPLATE = (
+        "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
+    )
     GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
-    
+
     AVAILABLE_SIZES = [40, 100, 140, 160, 640]
 
     def __init__(self, bot_instance: Any, config: dict = None):
         super().__init__(bot_instance, config)
-        self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])] if config else []
+        self.bot_self_ids = (
+            [str(id) for id in config.get("bot_qq_ids", [])] if config else []
+        )
 
     def _init_capabilities(self) -> PlatformCapabilities:
         return ONEBOT_V11_CAPABILITIES
@@ -90,7 +96,9 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return []
 
-    def _convert_message(self, raw_msg: dict, group_id: str) -> Optional[UnifiedMessage]:
+    def _convert_message(
+        self, raw_msg: dict, group_id: str
+    ) -> Optional[UnifiedMessage]:
         """将 OneBot 消息转换为统一格式"""
         try:
             sender = raw_msg.get("sender", {})
@@ -109,56 +117,70 @@ class OneBotAdapter(PlatformAdapter):
                 if seg_type == "text":
                     text = seg_data.get("text", "")
                     text_parts.append(text)
-                    contents.append(MessageContent(type=MessageContentType.TEXT, text=text))
+                    contents.append(
+                        MessageContent(type=MessageContentType.TEXT, text=text)
+                    )
 
                 elif seg_type == "image":
-                    contents.append(MessageContent(
-                        type=MessageContentType.IMAGE,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.IMAGE,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 elif seg_type == "at":
-                    contents.append(MessageContent(
-                        type=MessageContentType.AT,
-                        at_user_id=str(seg_data.get("qq", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.AT,
+                            at_user_id=str(seg_data.get("qq", "")),
+                        )
+                    )
 
                 elif seg_type in ("face", "mface", "bface", "sface"):
-                    contents.append(MessageContent(
-                        type=MessageContentType.EMOJI,
-                        emoji_id=str(seg_data.get("id", "")),
-                        raw_data={"face_type": seg_type}
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.EMOJI,
+                            emoji_id=str(seg_data.get("id", "")),
+                            raw_data={"face_type": seg_type},
+                        )
+                    )
 
                 elif seg_type == "reply":
-                    contents.append(MessageContent(
-                        type=MessageContentType.REPLY,
-                        raw_data={"reply_id": seg_data.get("id", "")}
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.REPLY,
+                            raw_data={"reply_id": seg_data.get("id", "")},
+                        )
+                    )
 
                 elif seg_type == "forward":
-                    contents.append(MessageContent(
-                        type=MessageContentType.FORWARD,
-                        raw_data=seg_data
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.FORWARD, raw_data=seg_data
+                        )
+                    )
 
                 elif seg_type == "record":
-                    contents.append(MessageContent(
-                        type=MessageContentType.VOICE,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.VOICE,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 elif seg_type == "video":
-                    contents.append(MessageContent(
-                        type=MessageContentType.VIDEO,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.VIDEO,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 else:
-                    contents.append(MessageContent(
-                        type=MessageContentType.UNKNOWN,
-                        raw_data=seg
-                    ))
+                    contents.append(
+                        MessageContent(type=MessageContentType.UNKNOWN, raw_data=seg)
+                    )
 
             reply_to = None
             for c in contents:
@@ -185,7 +207,7 @@ class OneBotAdapter(PlatformAdapter):
     def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
         """
         将统一消息格式转换为 OneBot 原生格式。
-        
+
         用于与现有分析器的向后兼容。
         """
         raw_messages = []
@@ -194,26 +216,46 @@ class OneBotAdapter(PlatformAdapter):
             message_chain = []
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
-                    message_chain.append({"type": "text", "data": {"text": content.text or ""}})
+                    message_chain.append(
+                        {"type": "text", "data": {"text": content.text or ""}}
+                    )
                 elif content.type == MessageContentType.IMAGE:
-                    message_chain.append({"type": "image", "data": {"url": content.url or ""}})
+                    message_chain.append(
+                        {"type": "image", "data": {"url": content.url or ""}}
+                    )
                 elif content.type == MessageContentType.AT:
-                    message_chain.append({"type": "at", "data": {"qq": content.at_user_id or ""}})
+                    message_chain.append(
+                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
+                    )
                 elif content.type == MessageContentType.EMOJI:
-                    face_type = content.raw_data.get("face_type", "face") if content.raw_data else "face"
-                    message_chain.append({"type": face_type, "data": {"id": content.emoji_id or ""}})
+                    face_type = (
+                        content.raw_data.get("face_type", "face")
+                        if content.raw_data
+                        else "face"
+                    )
+                    message_chain.append(
+                        {"type": face_type, "data": {"id": content.emoji_id or ""}}
+                    )
                 elif content.type == MessageContentType.REPLY:
-                    reply_id = content.raw_data.get("reply_id", "") if content.raw_data else ""
+                    reply_id = (
+                        content.raw_data.get("reply_id", "") if content.raw_data else ""
+                    )
                     message_chain.append({"type": "reply", "data": {"id": reply_id}})
                 elif content.type == MessageContentType.FORWARD:
-                    message_chain.append({"type": "forward", "data": content.raw_data or {}})
+                    message_chain.append(
+                        {"type": "forward", "data": content.raw_data or {}}
+                    )
                 elif content.type == MessageContentType.VOICE:
-                    message_chain.append({"type": "record", "data": {"url": content.url or ""}})
+                    message_chain.append(
+                        {"type": "record", "data": {"url": content.url or ""}}
+                    )
                 elif content.type == MessageContentType.VIDEO:
-                    message_chain.append({"type": "video", "data": {"url": content.url or ""}})
+                    message_chain.append(
+                        {"type": "video", "data": {"url": content.url or ""}}
+                    )
                 elif content.type == MessageContentType.UNKNOWN and content.raw_data:
                     message_chain.append(content.raw_data)
-            
+
             raw_msg = {
                 "message_id": msg.message_id,
                 "time": msg.timestamp,
@@ -224,11 +266,11 @@ class OneBotAdapter(PlatformAdapter):
                 },
                 "message": message_chain,
                 "group_id": msg.group_id,
-                "raw_message": msg.text_content, # 添加 raw_message 兼容字段
-                "user_id": msg.sender_id, # 添加 user_id 兼容字段
+                "raw_message": msg.text_content,  # 添加 raw_message 兼容字段
+                "user_id": msg.sender_id,  # 添加 user_id 兼容字段
             }
             raw_messages.append(raw_msg)
-        
+
         return raw_messages
 
     # ==================== IMessageSender ====================
@@ -344,13 +386,15 @@ class OneBotAdapter(PlatformAdapter):
 
             members = []
             for m in result or []:
-                members.append(UnifiedMember(
-                    user_id=str(m.get("user_id", "")),
-                    nickname=m.get("nickname", ""),
-                    card=m.get("card", "") or None,
-                    role=m.get("role", "member"),
-                    join_time=m.get("join_time"),
-                ))
+                members.append(
+                    UnifiedMember(
+                        user_id=str(m.get("user_id", "")),
+                        nickname=m.get("nickname", ""),
+                        card=m.get("card", "") or None,
+                        role=m.get("role", "member"),
+                        join_time=m.get("join_time"),
+                    )
+                )
             return members
         except Exception:
             return []
@@ -406,11 +450,13 @@ class OneBotAdapter(PlatformAdapter):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.read()
-                        b64 = base64.b64encode(data).decode('utf-8')
-                        content_type = resp.headers.get('Content-Type', 'image/png')
+                        b64 = base64.b64encode(data).decode("utf-8")
+                        content_type = resp.headers.get("Content-Type", "image/png")
                         return f"data:{content_type};base64,{b64}"
         except Exception:
             pass
