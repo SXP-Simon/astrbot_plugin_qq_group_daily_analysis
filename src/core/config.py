@@ -63,7 +63,15 @@ class ConfigManager:
         val = self.config.get("auto_analysis_time", ["09:00"])
         # 兼容旧版本字符串配置
         if isinstance(val, str):
-            return [val]
+            val_list = [val]
+            # 自动修复配置格式
+            try:
+                self.config["auto_analysis_time"] = val_list
+                self.config.save_config()
+                logger.info(f"自动修复配置格式 auto_analysis_time: {val} -> {val_list}")
+            except Exception as e:
+                logger.warning(f"修复配置格式失败: {e}")
+            return val_list
         return val if isinstance(val, list) else ["09:00"]
 
     def get_enable_auto_analysis(self) -> bool:
