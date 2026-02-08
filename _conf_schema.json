@@ -52,9 +52,9 @@
         "type": "bool",
         "description": "启用定时自动分析",
         "default": false,
-        "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人QQ号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
+        "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人ID号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
     },
-    "bot_qq_ids": {
+    "bot_self_ids": {
         "type": "list",
         "description": "群分析时屏蔽的用户ID列表",
         "default": [],
