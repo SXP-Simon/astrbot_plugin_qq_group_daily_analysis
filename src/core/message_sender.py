@@ -32,14 +32,24 @@ class MessageSender:
             logger.error(f"[{trace_id}] No available platforms for group {group_id}")
             return False
 
-        for pid, bot in platforms:
+        for pid, adapter in platforms:
             try:
                 logger.info(f"[{trace_id}] Trying platform {pid}...")
-                await bot.api.call_action(
-                    "send_group_msg", group_id=group_id, message=text
-                )
-                logger.info(f"[{trace_id}] Successfully sent text via {pid}")
-                return True
+
+                # 优先使用 Adapter 接口
+                if hasattr(adapter, "send_text"):
+                    if await adapter.send_text(group_id, text):
+                        logger.info(f"[{trace_id}] Successfully sent text via {pid}")
+                        return True
+
+                # Fallback to OneBot API (for backward compatibility or if adapter wrapping failed)
+                if hasattr(adapter, "api") and hasattr(adapter.api, "call_action"):
+                    await adapter.api.call_action(
+                        "send_group_msg", group_id=group_id, message=text
+                    )
+                    logger.info(f"[{trace_id}] Successfully sent text via {pid} (API)")
+                    return True
+
             except Exception as e:
                 self._log_send_error(pid, group_id, "text", e)
                 continue
@@ -62,19 +72,36 @@ class MessageSender:
         if not platforms:
             return False
 
-        message_chain = []
-        if text_prefix:
-            message_chain.append({"type": "text", "data": {"text": text_prefix}})
-        message_chain.append({"type": "image", "data": {"url": image_url}})
-
-        for pid, bot in platforms:
+        for pid, adapter in platforms:
             try:
                 logger.info(f"[{trace_id}] Trying sending image (URL) via {pid}...")
-                await bot.api.call_action(
-                    "send_group_msg", group_id=group_id, message=message_chain
-                )
-                logger.info(f"[{trace_id}] Successfully sent image (URL) via {pid}")
-                return True
+
+                # 优先使用 Adapter 接口
+                if hasattr(adapter, "send_image"):
+                    if await adapter.send_image(
+                        group_id, image_url, caption=text_prefix
+                    ):
+                        logger.info(
+                            f"[{trace_id}] Successfully sent image (URL) via {pid}"
+                        )
+                        return True
+
+                # Fallback to OneBot API
+                if hasattr(adapter, "api") and hasattr(adapter.api, "call_action"):
+                    message_chain = []
+                    if text_prefix:
+                        message_chain.append(
+                            {"type": "text", "data": {"text": text_prefix}}
+                        )
+                    message_chain.append({"type": "image", "data": {"url": image_url}})
+
+                    await adapter.api.call_action(
+                        "send_group_msg", group_id=group_id, message=message_chain
+                    )
+                    logger.info(
+                        f"[{trace_id}] Successfully sent image (URL) via {pid} (API)"
+                    )
+                    return True
             except Exception as e:
                 self._log_send_error(pid, group_id, "image_url", e)
                 continue
@@ -99,26 +126,51 @@ class MessageSender:
             return False
 
         image_b64 = base64.b64encode(image_bytes).decode()
+        # file URI for Base64 (OneBot style)
+        base64_uri = f"base64://{image_b64}"
 
         platforms = self._get_available_platforms(group_id, platform_id)
         if not platforms:
             return False
 
-        message_chain = []
-        if text_prefix:
-            message_chain.append({"type": "text", "data": {"text": text_prefix}})
-        message_chain.append(
-            {"type": "image", "data": {"file": f"base64://{image_b64}"}}
-        )
-
-        for pid, bot in platforms:
+        for pid, adapter in platforms:
             try:
                 logger.info(f"[{trace_id}] Trying sending image (Base64) via {pid}...")
-                await bot.api.call_action(
-                    "send_group_msg", group_id=group_id, message=message_chain
-                )
-                logger.info(f"[{trace_id}] Successfully sent image (Base64) via {pid}")
-                return True
+
+                # 优先使用 Adapter 接口 (注意 Adapter 接口通常接受 path/url，这里我们传 base64 uri 它是支持的吗？)
+                # 大多数 Adapter 的 send_image 如果识别 base64:// 应该能处理
+                # 如果是 DiscordAdapter, 它需要特殊处理 local file.
+                # 但这里是 Base64 string.
+                # 为了稳妥，我们可以先尝试 Adapter，如果 Adapter 明确支持 base64://
+
+                if hasattr(adapter, "send_image"):
+                    # 尝试发送 base64 URI
+                    if await adapter.send_image(
+                        group_id, base64_uri, caption=text_prefix
+                    ):
+                        logger.info(
+                            f"[{trace_id}] Successfully sent image (Base64) via {pid}"
+                        )
+                        return True
+
+                # Fallback to OneBot API
+                if hasattr(adapter, "api") and hasattr(adapter.api, "call_action"):
+                    message_chain = []
+                    if text_prefix:
+                        message_chain.append(
+                            {"type": "text", "data": {"text": text_prefix}}
+                        )
+                    message_chain.append(
+                        {"type": "image", "data": {"file": base64_uri}}
+                    )
+
+                    await adapter.api.call_action(
+                        "send_group_msg", group_id=group_id, message=message_chain
+                    )
+                    logger.info(
+                        f"[{trace_id}] Successfully sent image (Base64) via {pid} (API)"
+                    )
+                    return True
             except Exception as e:
                 self._log_send_error(pid, group_id, "image_base64", e)
                 continue
@@ -159,19 +211,30 @@ class MessageSender:
         if not platforms:
             return False
 
-        message_chain = []
-        if text_prefix:
-            message_chain.append({"type": "text", "data": {"text": text_prefix}})
-        message_chain.append({"type": "file", "data": {"file": pdf_path}})
-
-        for pid, bot in platforms:
+        for pid, adapter in platforms:
             try:
                 logger.info(f"[{trace_id}] Trying sending PDF via {pid}...")
-                await bot.api.call_action(
-                    "send_group_msg", group_id=group_id, message=message_chain
-                )
-                logger.info(f"[{trace_id}] Successfully sent PDF via {pid}")
-                return True
+
+                if hasattr(adapter, "send_file"):
+                    if await adapter.send_file(group_id, pdf_path):
+                        logger.info(f"[{trace_id}] Successfully sent PDF via {pid}")
+                        return True
+
+                # Fallback to OneBot API
+                if hasattr(adapter, "api") and hasattr(adapter.api, "call_action"):
+                    message_chain = []
+                    if text_prefix:
+                        message_chain.append(
+                            {"type": "text", "data": {"text": text_prefix}}
+                        )
+                    message_chain.append({"type": "file", "data": {"file": pdf_path}})
+
+                    await adapter.api.call_action(
+                        "send_group_msg", group_id=group_id, message=message_chain
+                    )
+                    logger.info(f"[{trace_id}] Successfully sent PDF via {pid} (API)")
+                    return True
+
             except Exception as e:
                 self._log_send_error(pid, group_id, "pdf", e)
                 continue
@@ -181,21 +244,58 @@ class MessageSender:
         self, group_id: str, specific_platform_id: str | None = None
     ) -> list[tuple]:
         """
-        获取可用的发送平台列表
+        获取可用的发送平台列表 (返回 Adapter 实例)
         """
+        from ..infrastructure.platform.factory import PlatformAdapterFactory
+        from ..infrastructure.platform.base import PlatformAdapter
+
+        instances = []
+
         if specific_platform_id:
             bot = self.bot_manager.get_bot_instance(specific_platform_id)
             if bot:
-                return [(specific_platform_id, bot)]
-            logger.warning(f"Specified platform {specific_platform_id} not found")
+                instances.append((specific_platform_id, bot))
+            else:
+                logger.warning(f"Specified platform {specific_platform_id} not found")
+        else:
+            # 获取所有已发现的平台
+            all_instances = self.bot_manager.get_all_bot_instances()
+            if all_instances:
+                instances = list(all_instances.items())
 
-        # 获取所有已发现的平台
-        all_instances = self.bot_manager.get_all_bot_instances()
-        if all_instances:
-            # 这里可以加入逻辑判断哪些平台在该群中，目前简单返回所有
-            return list(all_instances.items())
+        # Wrap instances with Adapters if needed
+        adapters = []
+        for pid, bot in instances:
+            # Check if it's already an adapter
+            if isinstance(bot, PlatformAdapter):
+                adapters.append((pid, bot))
+                continue
 
-        return []
+            # If not, try to create an adapter
+            # We need to detect platform name first
+            platform_name = self.bot_manager._detect_platform_name(bot)
+            if not platform_name:
+                # If cannot detect, assume it's a OneBot raw object if it has api
+                if hasattr(bot, "api"):
+                    adapters.append((pid, bot))  # Return raw bot for backward compat
+                continue
+
+            # Create adapter
+            try:
+                # We need config for adapter, here we use empty config or try to fetch from somewhere
+                # Ideally config_manager should provide it but it's complex.
+                # Passing empty config is fine for basic sending tasks as long as bot instance is valid.
+                adapter = PlatformAdapterFactory.create(platform_name, bot, config={})
+                if adapter:
+                    adapters.append((pid, adapter))
+                else:
+                    # Fallback: return raw bot
+                    adapters.append((pid, bot))
+            except Exception as e:
+                logger.warning(f"Failed to create adapter for {pid}: {e}")
+                adapters.append((pid, bot))
+
+        return adapters
 
     async def _download_image(self, url: str) -> bytes | None:
         """下载图片 helper"""

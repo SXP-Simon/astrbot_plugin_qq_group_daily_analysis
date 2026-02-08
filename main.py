@@ -174,7 +174,7 @@ class QQGroupDailyAnalysis(Star):
                         f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
                     )
                     # 预先创建编排器
-                    self._get_orchestrator(platform_id, bot_instance)
+                    self._get_orchestrator(platform_id, bot_instance=bot_instance)
 
                 # 启动调度器
                 self.auto_scheduler.schedule_jobs(self.context)

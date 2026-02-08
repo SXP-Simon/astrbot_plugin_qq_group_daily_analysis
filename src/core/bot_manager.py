@@ -117,11 +117,15 @@ class BotManager:
                 continue
 
             bot_client = None
+            # 优先尝试 get_client()
             if hasattr(platform, "get_client"):
                 bot_client = platform.get_client()
-            elif hasattr(platform, "bot"):
+
+            # 如果 get_client() 返回 None，尝试直接访问属性
+            if not bot_client and hasattr(platform, "bot"):
                 bot_client = platform.bot
-            elif hasattr(platform, "client"):
+            if not bot_client and hasattr(platform, "client"):
+                # AstrBot v4.14.4 DiscordPlatformAdapter uses 'client' attribute
                 bot_client = platform.client
 
             if bot_client:
@@ -264,18 +268,16 @@ class BotManager:
         logger.info(
             f"auto_discover_bot_instances: 在管理器中发现 {len(platforms)} 个平台。"
         )
-        for p in platforms:
-            p_id = p.metadata.id if hasattr(p, "metadata") else "unknown"
-            logger.info(f" - 正在检查平台: {p_id}, 类型: {type(p).__name__}")
 
         for platform in platforms:
             # 获取bot实例
             bot_client = None
             if hasattr(platform, "get_client"):
                 bot_client = platform.get_client()
-            elif hasattr(platform, "bot"):
+
+            if not bot_client and hasattr(platform, "bot"):
                 bot_client = platform.bot
-            elif hasattr(platform, "client"):
+            if not bot_client and hasattr(platform, "client"):
                 bot_client = platform.client
 
             # 健壮地获取元数据
@@ -295,6 +297,11 @@ class BotManager:
                     platform_id = metadata.get("id")
 
             if platform_id:
+                # KNOWLEDGE DISCOVERY: Log metadata for debugging custom IDs
+                logger.info(
+                    f"[群分析插件 BotManager]: Log metadata for debugging custom IDs ,Platform: {platform_id}, Metadata Type: {getattr(metadata, 'type', 'N/A')}, Metadata Name: {getattr(metadata, 'name', 'N/A')}"
+                )
+
                 # 从元数据检测平台名称
                 platform_name = None
                 # 优先使用 type
@@ -306,6 +313,10 @@ class BotManager:
                     platform_name = metadata.name
                 elif isinstance(metadata, dict) and "name" in metadata:
                     platform_name = metadata["name"]
+
+                logger.info(
+                    f"[群分析插件 BotManager] Initial platform_name detection: {platform_name}"
+                )
 
                 # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
                 if (
@@ -431,6 +442,9 @@ class BotManager:
             return str(bot_instance.qq)
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
+        # Discord.py style: client.user.id
+        elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
+            return str(bot_instance.user.id)
         return None
 
     def _extract_bot_qq_id(self, bot_instance):
