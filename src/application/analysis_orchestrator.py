@@ -155,8 +155,35 @@ class AnalysisOrchestrator:
         返回：
             原始消息字典列表（通用格式，由适配器决定具体格式）
         """
+        # unified_messages = await self.fetch_messages(group_id, days, max_count)
+        # 
+        # # 如果适配器实现了 convert_to_raw_format，则使用它
+        # if hasattr(self.adapter, "convert_to_raw_format"):
+        #     return self.adapter.convert_to_raw_format(unified_messages)
+        #     
+        # # 默认回退逻辑：手动转换
+        # # 这可能不完美，但能保证基本的向后兼容性
+        # return [
+        #     {
+        #         "message_id": msg.message_id,
+        #         "group_id": msg.group_id,
+        #         "sender": {
+        #             "user_id": msg.sender_id,
+        #             "nickname": msg.sender_name,
+        #             "card": msg.sender_card
+        #         },
+        #         "time": msg.timestamp,
+        #         "message": msg.text_content, # 简化处理
+        #         "raw_message": msg.text_content
+        #     }
+        #     for msg in unified_messages
+        # ]
+        
+        # 暂时直接使用适配器获取 raw 格式，如果适配器支持
+        # 这是为了确保现有逻辑完全兼容，因为 convert_to_raw_format 可能有损
+        # 但我们希望尽可能使用新的 fetch_messages
+        
         unified_messages = await self.fetch_messages(group_id, days, max_count)
-        # 使用适配器的原生格式转换，而非硬编码 OneBot 格式
         return self.adapter.convert_to_raw_format(unified_messages)
 
     async def get_group_info(self, group_id: str):
