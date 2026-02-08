@@ -1,4 +1,4 @@
-# Repository Interfaces
+# 仓储接口
 from .message_repository import IMessageRepository, IMessageSender, IGroupInfoRepository
 from .avatar_repository import IAvatarRepository
 

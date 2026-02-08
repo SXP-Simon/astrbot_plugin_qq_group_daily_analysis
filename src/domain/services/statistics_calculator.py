@@ -1,8 +1,8 @@
 """
-Statistics Calculator - Domain service for computing chat statistics
+统计计算器 - 计算聊天统计的领域服务
 
-This service calculates various statistics from unified messages.
-It is platform-agnostic and works with the domain value objects.
+该服务从统一消息计算各种统计数据。
+它是平台无关的，与领域值对象配合使用。
 """
 
 from datetime import datetime
@@ -20,18 +20,18 @@ from ..value_objects.statistics import (
 
 class StatisticsCalculator:
     """
-    Domain service for calculating group chat statistics.
+    计算群聊统计的领域服务。
 
-    This service processes UnifiedMessage objects and produces
-    platform-agnostic statistics.
+    该服务处理 UnifiedMessage 对象并生成
+    平台无关的统计数据。
     """
 
     def __init__(self, bot_user_ids: Optional[List[str]] = None):
         """
-        Initialize the statistics calculator.
+        初始化统计计算器。
 
-        Args:
-            bot_user_ids: List of bot user IDs to filter out from statistics
+        参数:
+            bot_user_ids: 要从统计中过滤的机器人用户 ID 列表
         """
         self.bot_user_ids = set(bot_user_ids or [])
 
@@ -41,19 +41,19 @@ class StatisticsCalculator:
         token_usage: Optional[TokenUsage] = None,
     ) -> GroupStatistics:
         """
-        Calculate comprehensive group statistics from messages.
+        从消息计算综合群组统计。
 
-        Args:
-            messages: List of unified messages to analyze
-            token_usage: Optional token usage from LLM analysis
+        参数:
+            messages: 要分析的统一消息列表
+            token_usage: LLM 分析的可选令牌使用量
 
-        Returns:
-            GroupStatistics object with computed statistics
+        返回:
+            包含计算统计的 GroupStatistics 对象
         """
         if not messages:
             return GroupStatistics()
 
-        # Filter out bot messages
+        # 过滤机器人消息
         filtered_messages = [
             msg for msg in messages if msg.sender_id not in self.bot_user_ids
         ]
@@ -61,19 +61,19 @@ class StatisticsCalculator:
         if not filtered_messages:
             return GroupStatistics()
 
-        # Calculate basic statistics
+        # 计算基本统计
         message_count = len(filtered_messages)
         total_characters = sum(len(msg.text_content) for msg in filtered_messages)
         unique_senders = set(msg.sender_id for msg in filtered_messages)
         participant_count = len(unique_senders)
 
-        # Calculate emoji statistics
+        # 计算表情统计
         emoji_stats = self._calculate_emoji_statistics(filtered_messages)
 
-        # Calculate activity visualization
+        # 计算活动可视化
         activity_viz = self._calculate_activity_visualization(filtered_messages)
 
-        # Determine most active period
+        # 确定最活跃时段
         most_active_period = self._determine_most_active_period(activity_viz)
 
         return GroupStatistics(
@@ -90,18 +90,18 @@ class StatisticsCalculator:
         self, messages: List[UnifiedMessage]
     ) -> Dict[str, UserStatistics]:
         """
-        Calculate per-user statistics from messages.
+        从消息计算单用户统计。
 
-        Args:
-            messages: List of unified messages to analyze
+        参数:
+            messages: 要分析的统一消息列表
 
-        Returns:
-            Dictionary mapping user_id to UserStatistics
+        返回:
+            user_id 到 UserStatistics 的映射字典
         """
         user_stats: Dict[str, UserStatistics] = {}
 
         for msg in messages:
-            # Skip bot messages
+            # 跳过机器人消息
             if msg.sender_id in self.bot_user_ids:
                 continue
 
@@ -118,11 +118,11 @@ class StatisticsCalculator:
             stats.char_count += len(msg.text_content)
             stats.emoji_count += msg.emoji_count
 
-            # Count replies
+            # 计算回复数
             if msg.reply_to_id:
                 stats.reply_count += 1
 
-            # Track hourly activity
+            # 跟踪每小时活动
             hour = msg.timestamp.hour
             stats.hours[hour] = stats.hours.get(hour, 0) + 1
 
@@ -135,15 +135,15 @@ class StatisticsCalculator:
         min_messages: int = 5,
     ) -> List[Dict]:
         """
-        Get top users by message count.
+        按消息数获取活跃用户排行。
 
-        Args:
-            user_stats: Dictionary of user statistics
-            limit: Maximum number of users to return
-            min_messages: Minimum messages required to be included
+        参数:
+            user_stats: 用户统计字典
+            limit: 返回的最大用户数
+            min_messages: 被包含所需的最少消息数
 
-        Returns:
-            List of top user dictionaries sorted by message count
+        返回:
+            按消息数排序的活跃用户字典列表
         """
         eligible_users = [
             stats for stats in user_stats.values() if stats.message_count >= min_messages
@@ -157,7 +157,7 @@ class StatisticsCalculator:
             {
                 "user_id": u.user_id,
                 "nickname": u.nickname,
-                "name": u.nickname,  # Backward compatibility
+                "name": u.nickname,  # 向后兼容
                 "message_count": u.message_count,
                 "avg_chars": round(u.average_chars, 1),
                 "emoji_ratio": round(u.emoji_ratio, 2),
@@ -170,7 +170,7 @@ class StatisticsCalculator:
     def _calculate_emoji_statistics(
         self, messages: List[UnifiedMessage]
     ) -> EmojiStatistics:
-        """Calculate emoji usage statistics from messages."""
+        """从消息计算表情使用统计。"""
         standard_count = 0
         custom_count = 0
         animated_count = 0
@@ -208,28 +208,28 @@ class StatisticsCalculator:
     def _calculate_activity_visualization(
         self, messages: List[UnifiedMessage]
     ) -> ActivityVisualization:
-        """Calculate activity visualization data from messages."""
+        """从消息计算活动可视化数据。"""
         hourly: Dict[int, int] = {h: 0 for h in range(24)}
         daily: Dict[str, int] = {}
         user_counts: Dict[str, int] = {}
 
         for msg in messages:
-            # Hourly activity
+            # 每小时活动
             hour = msg.timestamp.hour
             hourly[hour] += 1
 
-            # Daily activity
+            # 每日活动
             date_str = msg.timestamp.strftime("%Y-%m-%d")
             daily[date_str] = daily.get(date_str, 0) + 1
 
-            # User activity
+            # 用户活动
             user_counts[msg.sender_id] = user_counts.get(msg.sender_id, 0) + 1
 
-        # Calculate peak hours (top 3)
+        # 计算高峰时段（前 3 名）
         sorted_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)
         peak_hours = [h for h, _ in sorted_hours[:3]]
 
-        # User activity ranking
+        # 用户活跃度排名
         sorted_users = sorted(user_counts.items(), key=lambda x: x[1], reverse=True)
         user_ranking = [
             {"user_id": uid, "count": count} for uid, count in sorted_users[:20]
@@ -240,27 +240,27 @@ class StatisticsCalculator:
             daily_activity=tuple(daily.items()),
             user_activity_ranking=tuple(user_ranking),
             peak_hours=tuple(peak_hours),
-            heatmap_data=tuple(),  # Can be extended for heatmap visualization
+            heatmap_data=tuple(),  # 可扩展用于热力图可视化
         )
 
     def _determine_most_active_period(
         self, activity: ActivityVisualization
     ) -> str:
-        """Determine the most active time period description."""
+        """确定最活跃时间段描述。"""
         hourly = dict(activity.hourly_activity)
 
         if not hourly:
-            return "Unknown"
+            return "未知"
 
-        # Find peak hour
+        # 找到高峰时段
         peak_hour = max(hourly, key=hourly.get)
 
-        # Categorize time periods
+        # 分类时间段
         if 6 <= peak_hour < 12:
-            return "Morning (6:00-12:00)"
+            return "上午 (6:00-12:00)"
         elif 12 <= peak_hour < 18:
-            return "Afternoon (12:00-18:00)"
+            return "下午 (12:00-18:00)"
         elif 18 <= peak_hour < 24:
-            return "Evening (18:00-24:00)"
+            return "晚间 (18:00-24:00)"
         else:
-            return "Late Night (0:00-6:00)"
+            return "深夜 (0:00-6:00)"
