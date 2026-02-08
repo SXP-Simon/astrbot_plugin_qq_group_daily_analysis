@@ -11,7 +11,7 @@ Discord 平台适配器
 from datetime import datetime, timedelta
 from typing import List, Optional, Any, Dict
 import asyncio
-import logging
+from ....utils.logger import logger
 
 try:
     import discord
@@ -29,8 +29,6 @@ from ....domain.value_objects.platform_capabilities import (
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
 from ..base import PlatformAdapter
-
-logger = logging.getLogger(__name__)
 
 
 class DiscordAdapter(PlatformAdapter):
@@ -52,13 +50,26 @@ class DiscordAdapter(PlatformAdapter):
         # 机器人自己的用户 ID，用于过滤消息
         self.bot_user_id = str(config.get("bot_user_id", "")) if config else ""
 
-        # 获取实际的 Discord 客户端
-        self._discord_client = self._get_discord_client()
+        # 缓存 Discord 客户端（懒加载）
+        self._cached_client = None
 
-        # 尝试从 Discord 客户端获取 ID
-        if not self.bot_user_id and self._discord_client:
-            if hasattr(self._discord_client, "user") and self._discord_client.user:
-                self.bot_user_id = str(self._discord_client.user.id)
+    @property
+    def _discord_client(self) -> Any:
+        """
+        获取实际的 Discord 客户端实例 (Lazy Load)
+        """
+        if self._cached_client:
+            return self._cached_client
+
+        # 尝试获取客户端
+        self._cached_client = self._get_discord_client()
+
+        # 尝试从 Discord 客户端获取 ID (如果之前没获取到)
+        if not self.bot_user_id and self._cached_client:
+            if hasattr(self._cached_client, "user") and self._cached_client.user:
+                self.bot_user_id = str(self._cached_client.user.id)
+
+        return self._cached_client
 
     def _get_discord_client(self) -> Any:
         """
