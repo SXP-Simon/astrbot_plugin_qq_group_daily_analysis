@@ -124,6 +124,7 @@ class QQGroupDailyAnalysis(Star):
         analysis_config = AnalysisConfig(
             days=self.config_manager.get_analysis_days(),
             min_messages_threshold=self.config_manager.get_min_messages_threshold(),
+            max_messages=self.config_manager.get_max_messages(),
             output_format=self.config_manager.get_output_format(),
         )
 
