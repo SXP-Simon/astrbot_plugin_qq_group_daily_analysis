@@ -103,6 +103,19 @@ class AutoScheduler:
                         logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
                         continue
 
+                        # 回退到原始逻辑 (Legacy)
+                        bot_instance = self.bot_manager.get_bot_instance(platform_id)
+                        if hasattr(bot_instance, "call_action"):
+                            result = await bot_instance.call_action(
+                                "get_group_info", group_id=int(group_id)
+                            )
+                            if result and result.get("group_id"):
+                                logger.info(f"✅ 群 {group_id} 属于平台 {platform_id}")
+                                return platform_id
+                    except Exception as e:
+                        logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
+                        continue
+
                 # 如果所有适配器都尝试失败，记录错误并返回 None
                 logger.error(
                     f"❌ 无法确定群 {group_id} 属于哪个平台 (已尝试: {list(self.bot_manager._bot_instances.keys())})"
