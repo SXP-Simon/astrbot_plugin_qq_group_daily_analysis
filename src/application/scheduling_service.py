@@ -1,8 +1,8 @@
 """
-Scheduling Service - Application service for scheduled analysis
+调度服务 - 计划分析的应用服务
 
-This service manages scheduled analysis tasks and coordinates
-with the analysis orchestrator.
+该服务管理计划的分析任务并与
+分析编排器协调。
 """
 
 import asyncio
@@ -16,13 +16,13 @@ from ..shared.constants import TASK_STATE_PENDING, TASK_STATE_RUNNING, TASK_STAT
 
 
 class ScheduledTask:
-    """Represents a scheduled analysis task."""
+    """表示一个计划的分析任务。"""
 
     def __init__(
         self,
         task_id: str,
         group_id: str,
-        scheduled_time: str,  # HH:MM format
+        scheduled_time: str,  # HH:MM 格式
         callback: Callable,
         enabled: bool = True,
     ):
@@ -36,7 +36,7 @@ class ScheduledTask:
         self._calculate_next_run()
 
     def _calculate_next_run(self) -> None:
-        """Calculate the next run time."""
+        """计算下一次运行时间。"""
         if not self.enabled:
             self.next_run = None
             return
@@ -46,50 +46,50 @@ class ScheduledTask:
             now = datetime.now()
             next_run = now.replace(hour=hours, minute=minutes, second=0, microsecond=0)
 
-            # If the time has passed today, schedule for tomorrow
+            # 如果今天的时间已过，计划明天运行
             if next_run <= now:
                 next_run += timedelta(days=1)
 
             self.next_run = next_run
         except ValueError:
-            logger.error(f"Invalid scheduled time format: {self.scheduled_time}")
+            logger.error(f"无效的计划时间格式: {self.scheduled_time}")
             self.next_run = None
 
     def should_run(self) -> bool:
-        """Check if the task should run now."""
+        """检查任务现在是否应该运行。"""
         if not self.enabled or not self.next_run:
             return False
 
         now = datetime.now()
 
-        # Check if we're within the execution window (5 minute tolerance)
+        # 检查我们是否在执行窗口内（5分钟容差）
         if self.next_run <= now <= self.next_run + timedelta(minutes=5):
-            # Check if we haven't run today
+            # 检查我们今天是否还没有运行
             if self.last_run is None or self.last_run.date() != now.date():
                 return True
 
         return False
 
     def mark_completed(self) -> None:
-        """Mark the task as completed and schedule next run."""
+        """将任务标记为完成并计划下一次运行。"""
         self.last_run = datetime.now()
         self._calculate_next_run()
 
 
 class SchedulingService:
     """
-    Application service for managing scheduled analysis tasks.
+    管理计划分析任务的应用服务。
 
-    This service runs a background loop that checks for and
-    executes scheduled tasks.
+    该服务运行一个后台循环，检查并
+    执行计划的任务。
     """
 
     def __init__(self, config: ConfigManager):
         """
-        Initialize the scheduling service.
+        初始化调度服务。
 
         Args:
-            config: Configuration manager
+            config: 配置管理器
         """
         self.config = config
         self._tasks: Dict[str, ScheduledTask] = {}
@@ -99,11 +99,11 @@ class SchedulingService:
 
     def register_callback(self, name: str, callback: Callable) -> None:
         """
-        Register a callback for scheduled tasks.
+        为计划任务注册回调。
 
         Args:
-            name: Callback name
-            callback: Async callback function
+            name: 回调名称
+            callback: 异步回调函数
         """
         self._callbacks[name] = callback
 
@@ -114,22 +114,22 @@ class SchedulingService:
         callback_name: str = "analyze",
     ) -> str:
         """
-        Add a scheduled task for a group.
+        为群组添加计划任务。
 
         Args:
-            group_id: Group identifier
-            scheduled_time: Time in HH:MM format (uses config default if not provided)
-            callback_name: Name of registered callback to use
+            group_id: 群组标识符
+            scheduled_time: HH:MM 格式的时间（如果未提供，则使用配置默认值）
+            callback_name: 要使用的注册回调的名称
 
         Returns:
-            Task ID
+            任务 ID
         """
         scheduled_time = scheduled_time or self.config.get_analysis_time()
         task_id = f"task_{group_id}"
 
         callback = self._callbacks.get(callback_name)
         if not callback:
-            logger.warning(f"Callback '{callback_name}' not registered")
+            logger.warning(f"回调 '{callback_name}' 未注册")
             return task_id
 
         task = ScheduledTask(
@@ -141,28 +141,28 @@ class SchedulingService:
         )
 
         self._tasks[task_id] = task
-        logger.info(f"Added scheduled task {task_id} for {scheduled_time}")
+        logger.info(f"为 {scheduled_time} 添加了计划任务 {task_id}")
 
         return task_id
 
     def remove_task(self, task_id: str) -> bool:
         """
-        Remove a scheduled task.
+        移除计划任务。
 
         Args:
-            task_id: Task identifier
+            task_id: 任务标识符
 
         Returns:
-            True if task was removed
+            如果任务被移除则返回 True
         """
         if task_id in self._tasks:
             del self._tasks[task_id]
-            logger.info(f"Removed scheduled task {task_id}")
+            logger.info(f"移除了计划任务 {task_id}")
             return True
         return False
 
     def enable_task(self, task_id: str) -> bool:
-        """Enable a scheduled task."""
+        """启用计划任务。"""
         if task_id in self._tasks:
             self._tasks[task_id].enabled = True
             self._tasks[task_id]._calculate_next_run()
@@ -170,7 +170,7 @@ class SchedulingService:
         return False
 
     def disable_task(self, task_id: str) -> bool:
-        """Disable a scheduled task."""
+        """禁用计划任务。"""
         if task_id in self._tasks:
             self._tasks[task_id].enabled = False
             self._tasks[task_id].next_run = None
@@ -179,13 +179,13 @@ class SchedulingService:
 
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """
-        Get status of a scheduled task.
+        获取计划任务的状态。
 
         Args:
-            task_id: Task identifier
+            task_id: 任务标识符
 
         Returns:
-            Task status dictionary or None
+            任务状态字典或 None
         """
         task = self._tasks.get(task_id)
         if not task:
@@ -201,20 +201,20 @@ class SchedulingService:
         }
 
     def list_tasks(self) -> List[Dict[str, Any]]:
-        """List all scheduled tasks."""
+        """列出所有计划任务。"""
         return [self.get_task_status(tid) for tid in self._tasks.keys()]
 
     async def start(self) -> None:
-        """Start the scheduling service."""
+        """启动调度服务。"""
         if self._running:
             return
 
         self._running = True
         self._task = asyncio.create_task(self._run_loop())
-        logger.info("Scheduling service started")
+        logger.info("调度服务已启动")
 
     async def stop(self) -> None:
-        """Stop the scheduling service."""
+        """停止调度服务。"""
         self._running = False
         if self._task:
             self._task.cancel()
@@ -222,37 +222,37 @@ class SchedulingService:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        logger.info("Scheduling service stopped")
+        logger.info("调度服务已停止")
 
     async def _run_loop(self) -> None:
-        """Main scheduling loop."""
+        """主调度循环。"""
         while self._running:
             try:
                 await self._check_and_run_tasks()
-                # Check every minute
+                # 每分钟检查一次
                 await asyncio.sleep(60)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in scheduling loop: {e}")
+                logger.error(f"调度循环出错: {e}")
                 await asyncio.sleep(60)
 
     async def _check_and_run_tasks(self) -> None:
-        """Check for and execute due tasks."""
+        """检查并执行到期任务。"""
         for task in list(self._tasks.values()):
             if task.should_run():
                 try:
-                    logger.info(f"Executing scheduled task {task.task_id}")
+                    logger.info(f"正在执行计划任务 {task.task_id}")
                     await task.callback(task.group_id)
                     task.mark_completed()
-                    logger.info(f"Completed scheduled task {task.task_id}")
+                    logger.info(f"计划任务 {task.task_id} 已完成")
                 except Exception as e:
-                    logger.error(f"Failed to execute task {task.task_id}: {e}")
+                    logger.error(f"执行任务 {task.task_id} 失败: {e}")
 
     def setup_from_config(self) -> None:
-        """Set up scheduled tasks from configuration."""
+        """根据配置设置计划任务。"""
         if not self.config.get_auto_analysis_enabled():
-            logger.info("Auto analysis is disabled")
+            logger.info("自动分析已禁用")
             return
 
         enabled_groups = self.config.get_enabled_groups()
@@ -261,4 +261,4 @@ class SchedulingService:
         for group_id in enabled_groups:
             self.add_task(group_id, analysis_time)
 
-        logger.info(f"Set up {len(enabled_groups)} scheduled tasks")
+        logger.info(f"设置了 {len(enabled_groups)} 个计划任务")

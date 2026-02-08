@@ -1,8 +1,8 @@
 """
-Message Converter - Bridges raw platform messages to UnifiedMessage
+消息转换器 - 连接原始平台消息和 UnifiedMessage
 
-This module provides backward compatibility by converting between
-raw platform message formats and the new UnifiedMessage format.
+该模块通过在原始平台消息格式和新的 UnifiedMessage 格式之间进行转换，
+提供向后兼容性。
 """
 
 from typing import List, Dict, Any, Optional
@@ -17,29 +17,29 @@ from ..domain.value_objects.unified_message import (
 
 class MessageConverter:
     """
-    Converts between raw platform messages and UnifiedMessage format.
+    在原始平台消息和 UnifiedMessage 格式之间进行转换。
     
-    This provides a migration path: existing code can continue using
-    raw dicts while new code uses UnifiedMessage.
+    这提供了一个迁移路径：现有代码可以继续使用原始字典，
+    而新代码使用 UnifiedMessage。
     """
 
     @staticmethod
     def from_onebot_message(raw_msg: dict, group_id: str) -> Optional[UnifiedMessage]:
         """
-        Convert OneBot v11 raw message to UnifiedMessage.
+        将 OneBot v11 原始消息转换为 UnifiedMessage。
         
         Args:
-            raw_msg: Raw message dict from OneBot API
-            group_id: Group ID
+            raw_msg: 来自 OneBot API 的原始消息字典
+            group_id: 群组 ID
             
         Returns:
-            UnifiedMessage or None if conversion fails
+            UnifiedMessage 或 None（如果转换失败）
         """
         try:
             sender = raw_msg.get("sender", {})
             message_chain = raw_msg.get("message", [])
 
-            # Handle string message format
+            # 处理字符串消息格式
             if isinstance(message_chain, str):
                 message_chain = [{"type": "text", "data": {"text": message_chain}}]
 
@@ -104,7 +104,7 @@ class MessageConverter:
                         raw_data=seg
                     ))
 
-            # Extract reply_to from contents
+            # 从内容中提取 reply_to
             reply_to = None
             for c in contents:
                 if c.type == MessageContentType.REPLY and c.raw_data:
@@ -130,9 +130,9 @@ class MessageConverter:
     @staticmethod
     def to_onebot_message(unified: UnifiedMessage) -> dict:
         """
-        Convert UnifiedMessage back to OneBot v11 raw format.
+        将 UnifiedMessage 转换回 OneBot v11 原始格式。
         
-        For backward compatibility with existing code that expects raw dicts.
+        用于与期望原始字典的现有代码向后兼容。
         """
         message_chain = []
         
@@ -154,7 +154,7 @@ class MessageConverter:
             elif content.type == MessageContentType.VIDEO:
                 message_chain.append({"type": "video", "data": {"url": content.url}})
 
-        # Ensure sender fields are populated, even if missing in original
+        # 确保填充发送者字段，即使原始数据中缺失
         sender_data = {
             "user_id": unified.sender_id,
             "nickname": unified.sender_name,
@@ -167,14 +167,14 @@ class MessageConverter:
             "group_id": unified.group_id,
             "message": message_chain,
             "time": unified.timestamp,
-            # Add these helper fields for old analyzers that might expect them directly
+            # 添加这些辅助字段，以便旧分析器可以直接使用
             "raw_message": unified.text_content, 
             "user_id": unified.sender_id, 
         }
 
     @staticmethod
     def batch_from_onebot(raw_messages: List[dict], group_id: str) -> List[UnifiedMessage]:
-        """Convert a batch of OneBot messages to UnifiedMessage list."""
+        """将一批 OneBot 消息转换为 UnifiedMessage 列表。"""
         result = []
         for raw_msg in raw_messages:
             unified = MessageConverter.from_onebot_message(raw_msg, group_id)
@@ -184,15 +184,15 @@ class MessageConverter:
 
     @staticmethod
     def batch_to_onebot(unified_messages: List[UnifiedMessage]) -> List[dict]:
-        """Convert a batch of UnifiedMessage to OneBot raw format."""
+        """将一批 UnifiedMessage 转换为 OneBot 原始格式。"""
         return [MessageConverter.to_onebot_message(msg) for msg in unified_messages]
 
     @staticmethod
     def unified_to_analysis_text(messages: List[UnifiedMessage]) -> str:
         """
-        Convert UnifiedMessage list to analysis text format for LLM.
+        将 UnifiedMessage 列表转换为 LLM 分析文本格式。
         
-        This is the format expected by the existing LLM analyzers.
+        这是现有 LLM 分析器期望的格式。
         """
         lines = []
         for msg in messages:
