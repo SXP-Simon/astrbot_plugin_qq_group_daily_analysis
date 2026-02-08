@@ -2,10 +2,11 @@
 QQ群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
-重构版本 - 使用模块化架构
+重构版本 - 使用模块化架构，支持跨平台
 """
 
 import asyncio
+import os
 from typing import Any, Optional
 
 from astrbot.api import AstrBotConfig, logger
@@ -13,9 +14,6 @@ from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
-from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
-    AiocqhttpMessageEvent,
-)
 from astrbot.core.star.filter.permission import PermissionType
 
 from .src.application.analysis_orchestrator import AnalysisOrchestrator, AnalysisConfig
@@ -30,7 +28,10 @@ from .src.utils.helpers import MessageAnalyzer
 from .src.utils.pdf_utils import PDFInstaller
 from .src.domain.value_objects.unified_message import UnifiedMessage
 
+
 class QQGroupDailyAnalysis(Star):
+    """QQ群日常分析插件主类"""
+
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -57,9 +58,9 @@ class QQGroupDailyAnalysis(Star):
             self.history_manager,
             self.html_render,  # 传入html_render函数
         )
-        
+
         # 注册分析编排器缓存
-        self.orchestrators = {} # {platform_id: AnalysisOrchestrator}
+        self.orchestrators = {}  # {platform_id: AnalysisOrchestrator}
 
         # 注册日志过滤器
         from .src.utils.trace_context import TraceLogFilter
@@ -68,40 +69,65 @@ class QQGroupDailyAnalysis(Star):
 
         logger.info("QQ群日常分析插件已初始化（模块化版本）")
 
-    def _get_orchestrator(self, platform_id: str, bot_instance: Any = None) -> Optional[AnalysisOrchestrator]:
+    def _get_group_id_from_event(self, event: AstrMessageEvent) -> Optional[str]:
+        """从事件中提取群组ID（跨平台兼容）"""
+        group_id = None
+        if hasattr(event, "get_group_id"):
+            group_id = event.get_group_id()
+        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
+            group_id = event.message_obj.group_id
+        return str(group_id) if group_id else None
+
+    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> Optional[str]:
+        """从事件中提取平台ID（跨平台兼容）"""
+        platform_id = None
+        # 尝试从 platform 属性获取
+        if hasattr(event, "platform") and isinstance(event.platform, str):
+            platform_id = event.platform
+        # 尝试从 metadata 获取
+        elif hasattr(event, "metadata") and hasattr(event.metadata, "id"):
+            platform_id = event.metadata.id
+        # 尝试从 bot_manager 推断
+        if not platform_id and hasattr(event, "bot"):
+            platform_id = self.bot_manager._get_platform_id_from_instance(event.bot)
+        return platform_id
+
+    def _get_orchestrator(
+        self, platform_id: str, bot_instance: Any = None
+    ) -> Optional[AnalysisOrchestrator]:
         """获取或创建分析编排器"""
         if platform_id in self.orchestrators:
             return self.orchestrators[platform_id]
-        
+
         # 如果缓存中没有，尝试创建
         if not bot_instance:
             bot_instance = self.bot_manager.get_bot_instance(platform_id)
-            
+
         if not bot_instance:
             return None
-            
+
         # 检测平台名称
         platform_name = self.bot_manager._detect_platform_name(bot_instance)
         if not platform_name:
             return None
-            
+
         # 创建编排器
         analysis_config = AnalysisConfig(
             days=self.config_manager.get_analysis_days(),
             min_messages_threshold=self.config_manager.get_min_messages_threshold(),
-            output_format=self.config_manager.get_output_format()
+            output_format=self.config_manager.get_output_format(),
         )
-        
+
         orchestrator = AnalysisOrchestrator.create_for_platform(
-            platform_name, 
-            bot_instance, 
+            platform_name,
+            bot_instance,
             config={"bot_qq_ids": self.config_manager.get_bot_qq_ids()},
-            analysis_config=analysis_config
+            analysis_config=analysis_config,
         )
-        
+
         if orchestrator:
             self.orchestrators[platform_id] = orchestrator
-            
+
         return orchestrator
 
     @filter.on_platform_loaded()
@@ -109,18 +135,24 @@ class QQGroupDailyAnalysis(Star):
         """平台加载完成后初始化"""
         try:
             # 检查插件是否被启用 (Fix for empty plugin_set issue)
-            # 如果 plugin_set 为空列表，会导致所有插件不响应消息
             if self.context:
-                # 获取配置对象
                 config = self.context.get_config()
                 plugin_set = config.get("plugin_set")
-                
+
                 if isinstance(plugin_set, list) and not plugin_set:
                     logger.warning("检测到 plugin_set 为空，自动修正以启用插件")
-                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
-                elif isinstance(plugin_set, list) and "*" not in plugin_set and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set:
+                    config["plugin_set"].append(
+                        "astrbot_plugin_qq_group_daily_analysis"
+                    )
+                elif (
+                    isinstance(plugin_set, list)
+                    and "*" not in plugin_set
+                    and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set
+                ):
                     logger.warning("检测到当前插件未在 plugin_set 中，自动添加")
-                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
+                    config["plugin_set"].append(
+                        "astrbot_plugin_qq_group_daily_analysis"
+                    )
 
             # 初始化所有bot实例
             discovered = await self.bot_manager.initialize_from_config()
@@ -141,7 +173,7 @@ class QQGroupDailyAnalysis(Star):
                 status = self.bot_manager.get_status_info()
                 logger.info(f"Bot管理器状态: {status}")
 
-            # 始终启动重试管理器，确保手动触发也能使用重试队列
+            # 始终启动重试管理器
             await self.retry_manager.start()
 
         except Exception as e:
@@ -181,25 +213,12 @@ class QQGroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, days: int | None = None
     ):
         """
-        分析群聊日常活动
+        分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
         # 1. 获取 group_id 和 platform_id
-        group_id = None
-        platform_id = None
-        
-        if hasattr(event, "message_obj"):
-            group_id = getattr(event.message_obj, "group_id", None)
-            
-        # 尝试从 metadata 获取 platform_id
-        if hasattr(event, "platform") and isinstance(event.platform, str):
-             platform_id = event.platform
-        elif hasattr(event, "metadata") and hasattr(event.metadata, "id"):
-             platform_id = event.metadata.id
-             
-        # 如果无法获取，尝试从 bot_manager 推断
-        if not platform_id and hasattr(event, "bot"):
-             platform_id = self.bot_manager._get_platform_id_from_instance(event.bot)
+        group_id = self._get_group_id_from_event(event)
+        platform_id = self._get_platform_id_from_event(event)
 
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -208,7 +227,7 @@ class QQGroupDailyAnalysis(Star):
         # 更新bot实例（用于手动命令）
         if hasattr(event, "bot"):
             self.bot_manager.update_from_event(event)
-            
+
         # 2. 检查群组权限
         if not self.config_manager.is_group_allowed(group_id):
             yield event.plain_result("❌ 此群未启用日常分析功能")
@@ -220,7 +239,9 @@ class QQGroupDailyAnalysis(Star):
         )
 
         yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
-        logger.info(f"收到分析请求: group_id={group_id}, platform_id={platform_id}, days={analysis_days}")
+        logger.info(
+            f"收到分析请求: group_id={group_id}, platform_id={platform_id}, days={analysis_days}"
+        )
 
         try:
             # 4. 获取编排器
@@ -230,23 +251,18 @@ class QQGroupDailyAnalysis(Star):
                 bot_instance = self.bot_manager.get_bot_instance(platform_id)
                 if bot_instance:
                     orchestrator = self._get_orchestrator(platform_id, bot_instance)
-            
+
             if not orchestrator:
                 yield event.plain_result(
                     f"❌ 未找到平台 {platform_id} 的分析编排器，请检查配置或联系开发者"
                 )
                 return
 
-            # 5. 获取群聊消息 (使用编排器，支持 DDD)
-            # 使用 fetch_messages_as_raw 保持向后兼容性，或者重构 message_analyzer 支持 UnifiedMessage
-            # 这里我们尝试重构为使用 UnifiedMessage，但为了稳健性，我们暂时获取 raw 格式
-            # 实际上，AnalysisOrchestrator 提供了 fetch_messages_as_raw 方法
-            
+            # 5. 获取群聊消息 (使用编排器)
             messages = await orchestrator.fetch_messages_as_raw(
-                group_id=group_id, 
-                days=analysis_days
+                group_id=group_id, days=analysis_days
             )
-            
+
             if not messages:
                 yield event.plain_result(
                     "❌ 未找到足够的群聊记录，请确保群内有足够的消息历史"
@@ -266,7 +282,6 @@ class QQGroupDailyAnalysis(Star):
             )
 
             # 6. 进行分析
-            # 传递 unified_msg_origin 以获取正确的 LLM 提供商
             analysis_result = await self.message_analyzer.analyze_messages(
                 messages, group_id, event.unified_msg_origin
             )
@@ -280,23 +295,24 @@ class QQGroupDailyAnalysis(Star):
 
             # 8. 生成并发送报告
             output_format = self.config_manager.get_output_format()
-            
+
             if output_format == "image":
-                # 生成图片报告
-                (image_url, html_content) = await self.report_generator.generate_image_report(
+                (
+                    image_url,
+                    html_content,
+                ) = await self.report_generator.generate_image_report(
                     analysis_result, group_id, self.html_render
                 )
-                
+
                 if image_url:
                     # 使用编排器发送图片
                     if await orchestrator.send_image(group_id, image_url):
                         logger.info(f"图片报告发送成功: {group_id}")
                     else:
-                        # 发送失败，尝试 yield
                         yield event.image_result(image_url)
-                        
+
                 elif html_content:
-                     # 生成失败但有HTML，加入重试队列
+                    # 生成失败但有HTML，加入重试队列
                     logger.warning("图片报告生成失败，加入重试队列")
                     yield event.plain_result(
                         "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告暂无法生成，已加入重试队列，稍后将自动重试发送。"
@@ -307,309 +323,13 @@ class QQGroupDailyAnalysis(Star):
                 else:
                     # 回退到文本报告
                     logger.warning("图片报告生成失败（无HTML），回退到文本报告")
-                    text_report = self.report_generator.generate_text_report(analysis_result)
-                    yield event.plain_result(
-                         f"[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告生成失败，以下是文本版本：\\n\\n{text_report}"
-                    )
-                    
-            elif output_format == "pdf":
-                if not self.config_manager.playwright_available:
-                     yield event.plain_result("❌ PDF 功能不可用，请使用 /安装PDF 命令安装依赖")
-                     return
-
-                pdf_path = await self.report_generator.generate_pdf_report(
-                    analysis_result, group_id
-                )
-                
-                if pdf_path:
-                    # 使用编排器发送文件
-                    if await orchestrator.send_file(group_id, pdf_path):
-                         pass # 发送成功
-                    else:
-                         # 回退 yield
-                        from pathlib import Path
-                        pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
-                        result = event.make_result()
-                        result.chain.append(pdf_file)
-                        yield result
-                else:
-                     logger.warning("PDF 报告生成失败，回退到文本报告")
-                     text_report = self.report_generator.generate_text_report(analysis_result)
-                     yield event.plain_result(
-                        f"\\n📝 以下是文本版本的分析报告：\\n\\n{text_report}"
-                     )
-            else:
-                # 文本报告
-                text_report = self.report_generator.generate_text_report(analysis_result)
-                # 使用编排器发送文本
-                if not await orchestrator.send_text(group_id, text_report):
-                     yield event.plain_result(text_report)
-
-        except Exception as e:
-            logger.error(f"群分析失败: {e}", exc_info=True)
-            yield event.plain_result(
-                f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
-            )
-        self.report_generator = ReportGenerator(self.config_manager)
-        self.history_manager = HistoryManager(self)
-        self.retry_manager = RetryManager(
-            self.bot_manager, self.html_render, self.report_generator
-        )
-        self.auto_scheduler = AutoScheduler(
-            self.config_manager,
-            self.message_analyzer.message_handler,
-            self.message_analyzer,
-            self.report_generator,
-            self.bot_manager,
-            self.retry_manager,
-            self.history_manager,
-            self.html_render,  # 传入html_render函数
-        )
-
-        # 注册日志过滤器
-        from .src.utils.trace_context import TraceLogFilter
-
-        logger.addFilter(TraceLogFilter())
-
-        logger.info("QQ群日常分析插件已初始化（模块化版本）")
-
-    @filter.on_platform_loaded()
-    async def on_platform_loaded(self):
-        """平台加载完成后初始化"""
-        try:
-            # 检查插件是否被启用 (Fix for empty plugin_set issue)
-            # 如果 plugin_set 为空列表，会导致所有插件不响应消息
-            if self.context:
-                # 获取配置对象
-                config = self.context.get_config()
-                plugin_set = config.get("plugin_set")
-                
-                if isinstance(plugin_set, list) and not plugin_set:
-                    logger.warning("检测到 plugin_set 为空，自动修正以启用插件")
-                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
-                elif isinstance(plugin_set, list) and "*" not in plugin_set and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set:
-                    logger.warning("检测到当前插件未在 plugin_set 中，自动添加")
-                    config["plugin_set"].append("astrbot_plugin_qq_group_daily_analysis")
-
-            # 初始化所有bot实例
-            discovered = await self.bot_manager.initialize_from_config()
-            if discovered:
-                platform_count = len(discovered)
-                logger.info(f"Bot管理器初始化成功，发现 {platform_count} 个适配器")
-                for platform_id, bot_instance in discovered.items():
-                    logger.info(
-                        f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
-                    )
-
-                # 启动调度器
-                self.auto_scheduler.schedule_jobs(self.context)
-            else:
-                logger.warning("Bot管理器初始化失败，未发现任何适配器")
-                status = self.bot_manager.get_status_info()
-                logger.info(f"Bot管理器状态: {status}")
-
-            # 始终启动重试管理器，确保手动触发也能使用重试队列
-            await self.retry_manager.start()
-
-        except Exception as e:
-            logger.error(f"平台加载事件处理失败: {e}", exc_info=True)
-
-    async def terminate(self):
-        """插件被卸载/停用时调用，清理资源"""
-        try:
-            logger.info("开始清理QQ群日常分析插件资源...")
-
-            # 停止自动调度器
-            if self.auto_scheduler:
-                logger.info("正在停止自动调度器...")
-                self.auto_scheduler.unschedule_jobs(self.context)
-                logger.info("自动调度器已停止")
-
-            if self.retry_manager:
-                await self.retry_manager.stop()
-
-            # 重置实例属性
-            self.auto_scheduler = None
-            self.bot_manager = None
-            self.message_analyzer = None
-            self.report_generator = None
-            self.config_manager = None
-
-            logger.info("QQ群日常分析插件资源清理完成")
-
-        except Exception as e:
-            logger.error(f"插件资源清理失败: {e}")
-
-    @filter.command("群分析")
-    @filter.command("group_analysis")
-    @filter.permission_type(PermissionType.ADMIN)
-    async def analyze_group_daily(
-        self, event: AiocqhttpMessageEvent, days: int | None = None
-    ):
-        """
-        分析群聊日常活动
-        用法: /群分析 [天数]
-        """
-        # 兼容多平台，移除特定事件类型检查
-        # if not isinstance(event, AiocqhttpMessageEvent):
-        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
-        #     return
-
-        # 尝试获取 group_id，不同平台可能实现不同，但通常 AstrMessageEvent 有 get_group_id 或 message_obj.group_id
-        group_id = None
-        if hasattr(event, "get_group_id"):
-            group_id = event.get_group_id()
-        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
-            group_id = event.message_obj.group_id
-            
-        if not group_id:
-            yield event.plain_result("❌ 请在群聊中使用此命令")
-            return
-
-        # 更新bot实例（用于手动命令）
-        self.bot_manager.update_from_event(event)
-
-        # 检查群组权限
-        if not self.config_manager.is_group_allowed(group_id):
-            yield event.plain_result("❌ 此群未启用日常分析功能")
-            return
-
-        # 设置分析天数
-        analysis_days = (
-            days if days and 1 <= days <= 7 else self.config_manager.get_analysis_days()
-        )
-
-        yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
-
-        # 调试：输出当前配置
-        logger.info(f"当前输出格式配置: {self.config_manager.get_output_format()}")
-
-        try:
-            # 获取该群对应的平台ID和bot实例
-            platform_id = await self.auto_scheduler.get_platform_id_for_group(group_id)
-            bot_instance = self.bot_manager.get_bot_instance(platform_id)
-
-            if not bot_instance:
-                yield event.plain_result(
-                    f"❌ 未找到群 {group_id} 对应的bot实例（平台: {platform_id}）"
-                )
-                return
-
-            # 获取群聊消息
-            messages = await self.message_analyzer.message_handler.fetch_group_messages(
-                bot_instance, group_id, analysis_days, platform_id
-            )
-            if not messages:
-                yield event.plain_result(
-                    "❌ 未找到足够的群聊记录，请确保群内有足够的消息历史"
-                )
-                return
-
-            # 检查消息数量是否足够分析
-            min_threshold = self.config_manager.get_min_messages_threshold()
-            if len(messages) < min_threshold:
-                yield event.plain_result(
-                    f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析"
-                )
-                return
-
-            yield event.plain_result(
-                f"📊 已获取{len(messages)}条消息，正在进行智能分析..."
-            )
-
-            # 进行分析 - 传递 unified_msg_origin 以获取正确的 LLM 提供商
-            analysis_result = await self.message_analyzer.analyze_messages(
-                messages, group_id, event.unified_msg_origin
-            )
-
-            if not analysis_result or not analysis_result.get("statistics"):
-                yield event.plain_result("❌ 分析过程中出现错误，请稍后重试")
-                return
-
-            # 保存到历史记录
-            await self.history_manager.save_analysis(group_id, analysis_result)
-
-            # 生成报告
-            output_format = self.config_manager.get_output_format()
-            if output_format == "image":
-                (
-                    image_url,
-                    html_content,
-                ) = await self.report_generator.generate_image_report(
-                    analysis_result, group_id, self.html_render
-                )
-                if image_url:
-                    # 尝试直接发送图片，而不是 yield result，以便捕获发送过程中的超时错误
-                    try:
-                        logger.info(f"正在尝试发送图片报告: {image_url}")
-
-                        # 构建消息链
-                        message_chain = [{"type": "image", "data": {"file": image_url}}]
-
-                        # 尝试通过 standardized API 发送
-                        if hasattr(bot_instance, "api") and hasattr(
-                            bot_instance.api, "call_action"
-                        ):
-                            await bot_instance.api.call_action(
-                                "send_group_msg",
-                                group_id=int(group_id),
-                                message=message_chain,
-                            )
-                        # 尝试通过 AstrBot 抽象接口发送
-                        elif hasattr(bot_instance, "send_msg"):
-                            await bot_instance.send_msg(image_url, group_id=group_id)
-                        else:
-                            # 无法手动发送，回退到 yield
-                            yield event.image_result(image_url)
-                            return
-
-                        # 发送成功，不做额外操作
-                        logger.info(f"图片报告发送成功: {group_id}")
-
-                    except Exception as send_err:
-                        logger.error(f"图片报告发送失败 (可能是网络超时): {send_err}")
-
-                        # 发送失败，加入重试队列
-                        if html_content:
-                            yield event.plain_result(
-                                "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告发送超时，已加入重试队列（将尝试Base64编码发送）。"
-                            )
-                            # 获取 platform_id
-                            platform_id = (
-                                await self.auto_scheduler.get_platform_id_for_group(
-                                    group_id
-                                )
-                            )
-                            await self.retry_manager.add_task(
-                                html_content, analysis_result, group_id, platform_id
-                            )
-                        else:
-                            yield event.plain_result(
-                                f"❌ 图片发送失败: {send_err}，且无法进行重试（无HTML内容）。"
-                            )
-
-                elif html_content:
-                    # 生成失败但有HTML，加入重试队列
-                    logger.warning("图片报告生成失败，加入重试队列")
-                    yield event.plain_result(
-                        "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告暂无法生成，已加入重试队列，稍后将自动重试发送。"
-                    )
-                    # 获取 platform_id
-                    platform_id = await self.auto_scheduler.get_platform_id_for_group(
-                        group_id
-                    )
-                    await self.retry_manager.add_task(
-                        html_content, analysis_result, group_id, platform_id
-                    )
-                else:
-                    # 如果图片生成失败且无HTML，回退到文本报告
-                    logger.warning("图片报告生成失败（无HTML），回退到文本报告")
                     text_report = self.report_generator.generate_text_report(
                         analysis_result
                     )
                     yield event.plain_result(
                         f"[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
                     )
+
             elif output_format == "pdf":
                 if not self.config_manager.playwright_available:
                     yield event.plain_result(
@@ -620,23 +340,19 @@ class QQGroupDailyAnalysis(Star):
                 pdf_path = await self.report_generator.generate_pdf_report(
                     analysis_result, group_id
                 )
+
                 if pdf_path:
-                    # 发送 PDF 文件
-                    from pathlib import Path
+                    # 使用编排器发送文件
+                    if await orchestrator.send_file(group_id, pdf_path):
+                        pass  # 发送成功
+                    else:
+                        from pathlib import Path
 
-                    pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
-                    result = event.make_result()
-                    result.chain.append(pdf_file)
-                    yield result
+                        pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
+                        result = event.make_result()
+                        result.chain.append(pdf_file)
+                        yield result
                 else:
-                    # 如果 PDF 生成失败，提供详细的错误信息和解决方案
-                    # yield event.plain_result("❌ PDF 报告生成失败")
-                    # yield event.plain_result("🔧 可能的解决方案：")
-                    # yield event.plain_result("1. 使用 /安装PDF 命令重新安装依赖")
-                    # yield event.plain_result("2. 检查网络连接是否正常")
-                    # yield event.plain_result("3. 暂时使用图片格式：/设置格式 image")
-
-                    # 回退到文本报告
                     logger.warning("PDF 报告生成失败，回退到文本报告")
                     text_report = self.report_generator.generate_text_report(
                         analysis_result
@@ -645,10 +361,12 @@ class QQGroupDailyAnalysis(Star):
                         f"\n📝 以下是文本版本的分析报告：\n\n{text_report}"
                     )
             else:
+                # 文本报告
                 text_report = self.report_generator.generate_text_report(
                     analysis_result
                 )
-                yield event.plain_result(text_report)
+                if not await orchestrator.send_text(group_id, text_report):
+                    yield event.plain_result(text_report)
 
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
@@ -659,19 +377,12 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("设置格式")
     @filter.command("set_format")
     @filter.permission_type(PermissionType.ADMIN)
-    async def set_output_format(
-        self, event: AiocqhttpMessageEvent, format_type: str = ""
-    ):
+    async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
         """
-        设置分析报告输出格式
+        设置分析报告输出格式（跨平台支持）
         用法: /设置格式 [image|text|pdf]
         """
-        # 兼容多平台
-        group_id = None
-        if hasattr(event, "get_group_id"):
-            group_id = event.get_group_id()
-        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
-            group_id = event.message_obj.group_id
+        group_id = self._get_group_id_from_event(event)
 
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -710,23 +421,13 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("set_template")
     @filter.permission_type(PermissionType.ADMIN)
     async def set_report_template(
-        self, event: AiocqhttpMessageEvent, template_input: str = ""
+        self, event: AstrMessageEvent, template_input: str = ""
     ):
         """
-        设置分析报告模板
+        设置分析报告模板（跨平台支持）
         用法: /设置模板 [模板名称或序号]
         """
-        # 兼容多平台
-        # if not isinstance(event, AiocqhttpMessageEvent):
-        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
-        #     return
-        
-        # 某些命令可能不需要 group_id，但这里保持一致
-        pass # 继续执行
-
-        import os
-
-        # 获取模板目录和可用模板列表（使用 asyncio.to_thread 避免阻塞）
+        # 获取模板目录和可用模板列表
         template_base_dir = os.path.join(
             os.path.dirname(__file__), "src", "reports", "templates"
         )
@@ -747,7 +448,6 @@ class QQGroupDailyAnalysis(Star):
 
         if not template_input:
             current_template = self.config_manager.get_report_template()
-            # 列出可用的模板（带序号）
             template_list_str = "\n".join(
                 [f"【{i}】{t}" for i, t in enumerate(available_templates, start=1)]
             )
@@ -772,7 +472,7 @@ class QQGroupDailyAnalysis(Star):
                 )
                 return
 
-        # 检查模板是否存在（使用 asyncio.to_thread 避免阻塞）
+        # 检查模板是否存在
         template_dir = os.path.join(template_base_dir, template_name)
         template_exists = await asyncio.to_thread(os.path.exists, template_dir)
         if not template_exists:
@@ -785,19 +485,11 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("查看模板")
     @filter.command("view_templates")
     @filter.permission_type(PermissionType.ADMIN)
-    async def view_templates(self, event: AiocqhttpMessageEvent):
+    async def view_templates(self, event: AstrMessageEvent):
         """
-        查看所有可用的报告模板及预览图
+        查看所有可用的报告模板及预览图（跨平台支持）
         用法: /查看模板
         """
-        # 兼容多平台
-        # if not isinstance(event, AiocqhttpMessageEvent):
-        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
-        #     return
-        pass # 继续执行
-
-        import os
-
         from astrbot.api.message_components import Image, Node, Nodes, Plain
 
         # 获取模板目录
@@ -806,7 +498,6 @@ class QQGroupDailyAnalysis(Star):
         )
         assets_dir = os.path.join(os.path.dirname(__file__), "assets")
 
-        # 获取可用模板列表（使用 asyncio.to_thread 避免阻塞）
         def _list_templates_sync():
             if os.path.exists(template_dir):
                 return sorted(
@@ -825,7 +516,6 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 未找到任何可用的报告模板")
             return
 
-        # 获取当前使用的模板
         current_template = self.config_manager.get_report_template()
 
         # 获取机器人信息用于合并转发消息
@@ -848,17 +538,13 @@ class QQGroupDailyAnalysis(Star):
 
         # 为每个模板创建一个节点
         for index, template_name in enumerate(available_templates):
-            # 标记当前正在使用的模板
             current_mark = " ✅" if template_name == current_template else ""
-
-            # 获取序号
             num_label = (
                 circle_numbers[index]
                 if index < len(circle_numbers)
                 else f"({index + 1})"
             )
 
-            # 构建节点内容
             node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
 
             # 添加预览图
@@ -874,21 +560,14 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("安装PDF")
     @filter.command("install_pdf")
     @filter.permission_type(PermissionType.ADMIN)
-    async def install_pdf_deps(self, event: AiocqhttpMessageEvent):
+    async def install_pdf_deps(self, event: AstrMessageEvent):
         """
-        安装 PDF 功能依赖
+        安装 PDF 功能依赖（跨平台支持）
         用法: /安装PDF
         """
-        # 兼容多平台
-        # if not isinstance(event, AiocqhttpMessageEvent):
-        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
-        #     return
-        pass # 继续执行
-
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
         try:
-            # 安装 playwright (内部已包含浏览器内核安装逻辑)
             result = await PDFInstaller.install_playwright(self.config_manager)
             yield event.plain_result(result)
 
@@ -899,11 +578,9 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("分析设置")
     @filter.command("analysis_settings")
     @filter.permission_type(PermissionType.ADMIN)
-    async def analysis_settings(
-        self, event: AiocqhttpMessageEvent, action: str = "status"
-    ):
+    async def analysis_settings(self, event: AstrMessageEvent, action: str = "status"):
         """
-        管理分析设置
+        管理分析设置（跨平台支持）
         用法: /分析设置 [enable|disable|status|reload|test]
         - enable: 启用当前群的分析功能
         - disable: 禁用当前群的分析功能
@@ -911,12 +588,7 @@ class QQGroupDailyAnalysis(Star):
         - reload: 重新加载配置并重启定时任务
         - test: 测试自动分析功能
         """
-        # 兼容多平台
-        group_id = None
-        if hasattr(event, "get_group_id"):
-            group_id = event.get_group_id()
-        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
-            group_id = event.message_obj.group_id
+        group_id = self._get_group_id_from_event(event)
 
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -930,7 +602,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.append(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入白名单")
-                    # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在白名单中")
@@ -940,7 +611,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.remove(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从黑名单移除")
-                    # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群不在黑名单中")
@@ -955,7 +625,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.remove(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从白名单移除")
-                    # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群不在白名单中")
@@ -965,7 +634,6 @@ class QQGroupDailyAnalysis(Star):
                     glist.append(group_id)
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群加入黑名单")
-                    # 重新启动定时任务
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在黑名单中")
@@ -975,12 +643,10 @@ class QQGroupDailyAnalysis(Star):
                 )
 
         elif action == "reload":
-            # 重新启动定时任务
             self.auto_scheduler.schedule_jobs(self.context)
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
 
         elif action == "test":
-            # 测试自动分析功能
             if not self.config_manager.is_group_allowed(group_id):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
@@ -990,7 +656,6 @@ class QQGroupDailyAnalysis(Star):
             # 更新bot实例（用于测试）
             self.bot_manager.update_from_event(event)
 
-            # 执行自动分析
             try:
                 await self.auto_scheduler._perform_auto_analysis_for_group(group_id)
                 yield event.plain_result("✅ 自动分析测试完成，请查看群消息")
