@@ -76,7 +76,7 @@ def _register_adapters():
     try:
         from .adapters.discord_adapter import DiscordAdapter
         PlatformAdapterFactory.register("discord", DiscordAdapter)
-        PlatformAdapterFactory.register("discord_bot", DiscordAdapter) # Add alias
+        PlatformAdapterFactory.register("discord_bot", DiscordAdapter) # 添加别名
     except ImportError:
         pass
 
