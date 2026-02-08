@@ -1,8 +1,8 @@
 """
-Config Manager - Centralized configuration management
+配置管理器 - 集中化配置管理
 
-This module provides a unified interface for accessing plugin configuration,
-wrapping the existing config module with additional validation and defaults.
+该模块提供了一个访问插件配置的统一接口，
+封装了现有的配置模块，并增加了验证和默认值功能。
 """
 
 from typing import Any, Dict, List, Optional
@@ -12,31 +12,30 @@ from astrbot.api import logger
 
 class ConfigManager:
     """
-    Centralized configuration manager for the plugin.
+    插件的集中配置管理器。
 
-    Provides typed access to configuration values with defaults
-    and validation.
+    提供带有默认值和验证的配置值类型化访问。
     """
 
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize the configuration manager.
+        初始化配置管理器。
 
         Args:
-            config: Raw configuration dictionary
+            config: 原始配置字典
         """
         self._config = config or {}
 
     def get(self, key: str, default: Any = None) -> Any:
         """
-        Get a configuration value.
+        获取配置值。
 
         Args:
-            key: Configuration key (supports dot notation)
-            default: Default value if key not found
+            key: 配置键（支持点号表示法）
+            default: 如果键未找到则返回默认值
 
         Returns:
-            Configuration value or default
+            配置值或默认值
         """
         try:
             keys = key.split(".")
@@ -54,11 +53,11 @@ class ConfigManager:
 
     def set(self, key: str, value: Any) -> None:
         """
-        Set a configuration value.
+        设置配置值。
 
         Args:
-            key: Configuration key
-            value: Value to set
+            key: 配置键
+            value: 要设置的值
         """
         keys = key.split(".")
         config = self._config
@@ -69,171 +68,169 @@ class ConfigManager:
         config[keys[-1]] = value
 
     # ========================================================================
-    # Group Configuration
+    # 群组配置
     # ========================================================================
 
     def get_enabled_groups(self) -> List[str]:
-        """Get list of enabled group IDs."""
+        """获取启用的群组 ID 列表。"""
         groups = self.get("enabled_groups", [])
         return [str(g) for g in groups] if groups else []
 
     def is_group_enabled(self, group_id: str) -> bool:
-        """Check if a group is enabled for analysis."""
+        """检查群组是否启用了分析。"""
         enabled = self.get_enabled_groups()
-        return str(group_id) in enabled or not enabled  # Empty means all enabled
+        return str(group_id) in enabled or not enabled  # 空列表意味着全部启用
 
     def get_bot_qq_ids(self) -> List[str]:
-        """Get list of bot QQ IDs to filter out."""
+        """获取要过滤掉的机器人 QQ ID 列表。"""
         ids = self.get("bot_qq_ids", [])
         return [str(i) for i in ids] if ids else []
 
     # ========================================================================
-    # Analysis Configuration
+    # 分析配置
     # ========================================================================
 
     def get_max_topics(self) -> int:
-        """Get maximum number of topics to extract."""
+        """获取要提取的最大话题数。"""
         return int(self.get("max_topics", 5))
 
     def get_max_user_titles(self) -> int:
-        """Get maximum number of user titles to generate."""
+        """获取要生成的最大用户称号数。"""
         return int(self.get("max_user_titles", 10))
 
     def get_max_golden_quotes(self) -> int:
-        """Get maximum number of golden quotes to extract."""
+        """获取要提取的最大金句数。"""
         return int(self.get("max_golden_quotes", 5))
 
     def get_min_messages_for_analysis(self) -> int:
-        """Get minimum messages required for analysis."""
+        """获取分析所需的最小消息数。"""
         return int(self.get("min_messages", 50))
 
     # ========================================================================
-    # LLM Configuration
-    # ========================================================================
-
+    # LLM 配置
     def get_topic_provider_id(self) -> Optional[str]:
-        """Get provider ID for topic analysis."""
+        """获取话题分析的提供商 ID"""
         return self.get("topic_provider_id")
 
     def get_user_title_provider_id(self) -> Optional[str]:
-        """Get provider ID for user title analysis."""
+        """获取用户称号分析的提供商 ID"""
         return self.get("user_title_provider_id")
 
     def get_golden_quote_provider_id(self) -> Optional[str]:
-        """Get provider ID for golden quote analysis."""
+        """获取金句分析的提供商 ID"""
         return self.get("golden_quote_provider_id")
 
     def get_topic_max_tokens(self) -> int:
-        """Get max tokens for topic analysis."""
+        """获取话题分析的最大 token 数"""
         return int(self.get("topic_max_tokens", 2000))
 
     def get_user_title_max_tokens(self) -> int:
-        """Get max tokens for user title analysis."""
+        """获取用户称号分析的最大 token 数"""
         return int(self.get("user_title_max_tokens", 2000))
 
     def get_golden_quote_max_tokens(self) -> int:
-        """Get max tokens for golden quote analysis."""
+        """获取金句分析的最大 token 数"""
         return int(self.get("golden_quote_max_tokens", 1500))
 
     # ========================================================================
-    # Prompt Configuration
+    # 提示词配置
     # ========================================================================
 
     def get_topic_analysis_prompt(self) -> Optional[str]:
-        """Get custom prompt template for topic analysis."""
+        """获取话题分析的自定义提示词模板"""
         return self.get("prompts.topic_analysis")
 
     def get_user_title_analysis_prompt(self) -> Optional[str]:
-        """Get custom prompt template for user title analysis."""
+        """获取用户称号分析的自定义提示词模板"""
         return self.get("prompts.user_title_analysis")
 
     def get_golden_quote_analysis_prompt(self) -> Optional[str]:
-        """Get custom prompt template for golden quote analysis."""
+        """获取金句分析的自定义提示词模板"""
         return self.get("prompts.golden_quote_analysis")
 
     # ========================================================================
-    # Scheduling Configuration
+    # 调度配置
     # ========================================================================
 
     def get_auto_analysis_enabled(self) -> bool:
-        """Check if auto analysis is enabled."""
+        """检查是否启用了自动分析"""
         return bool(self.get("auto_analysis_enabled", False))
 
     def get_analysis_time(self) -> str:
-        """Get scheduled analysis time (HH:MM format)."""
+        """获取计划分析时间 (HH:MM 格式)"""
         return str(self.get("analysis_time", "23:00"))
 
     def get_analysis_timezone(self) -> str:
-        """Get timezone for scheduled analysis."""
+        """获取计划分析的时区"""
         return str(self.get("timezone", "Asia/Shanghai"))
 
     # ========================================================================
-    # Report Configuration
+    # 报告配置
     # ========================================================================
 
     def get_report_format(self) -> str:
-        """Get report format (text, markdown, image)."""
+        """获取报告格式 (text, markdown, image)"""
         return str(self.get("report_format", "text"))
 
     def get_include_statistics(self) -> bool:
-        """Check if statistics should be included in reports."""
+        """检查是否在报告中包含统计信息"""
         return bool(self.get("include_statistics", True))
 
     def get_include_topics(self) -> bool:
-        """Check if topics should be included in reports."""
+        """检查是否在报告中包含话题"""
         return bool(self.get("include_topics", True))
 
     def get_include_user_titles(self) -> bool:
-        """Check if user titles should be included in reports."""
+        """检查是否在报告中包含用户称号"""
         return bool(self.get("include_user_titles", True))
 
     def get_include_golden_quotes(self) -> bool:
-        """Check if golden quotes should be included in reports."""
+        """检查是否在报告中包含金句"""
         return bool(self.get("include_golden_quotes", True))
 
     # ========================================================================
-    # Utility Methods
+    # 工具方法
     # ========================================================================
 
     def to_dict(self) -> Dict[str, Any]:
-        """Get the raw configuration dictionary."""
+        """获取原始配置字典"""
         return self._config.copy()
 
     def update(self, updates: Dict[str, Any]) -> None:
         """
-        Update configuration with new values.
+        使用新值更新配置
 
         Args:
-            updates: Dictionary of updates to apply
+            updates: 要应用的更新字典
         """
         self._config.update(updates)
 
     def validate(self) -> List[str]:
         """
-        Validate the configuration.
+        验证配置
 
         Returns:
-            List of validation error messages (empty if valid)
+            验证错误消息列表（如果有效则为空）
         """
         errors = []
 
-        # Validate numeric ranges
+        # 验证数值范围
         if self.get_max_topics() < 1 or self.get_max_topics() > 20:
-            errors.append("max_topics must be between 1 and 20")
+            errors.append("max_topics 必须在 1 到 20 之间")
 
         if self.get_max_user_titles() < 1 or self.get_max_user_titles() > 50:
-            errors.append("max_user_titles must be between 1 and 50")
+            errors.append("max_user_titles 必须在 1 到 50 之间")
 
         if self.get_max_golden_quotes() < 1 or self.get_max_golden_quotes() > 20:
-            errors.append("max_golden_quotes must be between 1 and 20")
+            errors.append("max_golden_quotes 必须在 1 到 20 之间")
 
-        # Validate time format
+        # 验证时间格式
         time_str = self.get_analysis_time()
         try:
             hours, minutes = time_str.split(":")
             if not (0 <= int(hours) <= 23 and 0 <= int(minutes) <= 59):
-                errors.append("analysis_time must be in HH:MM format (00:00-23:59)")
+                errors.append("analysis_time 必须是 HH:MM 格式 (00:00-23:59)")
         except ValueError:
-            errors.append("analysis_time must be in HH:MM format")
+            errors.append("analysis_time 必须是 HH:MM 格式")
 
         return errors
