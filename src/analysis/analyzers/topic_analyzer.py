@@ -75,10 +75,10 @@ class TopicAnalyzer(BaseAnalyzer):
 
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
-                bot_qq_ids = self.config_manager.get_bot_qq_ids()
+                bot_self_ids = self.config_manager.get_bot_self_ids()
 
                 # 跳过机器人自己的消息
-                if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
+                if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
                     continue
 
                 nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
@@ -299,10 +299,10 @@ class TopicAnalyzer(BaseAnalyzer):
 
                 # 获取发送者ID并过滤机器人消息
                 user_id = str(sender.get("user_id", ""))
-                bot_qq_ids = self.config_manager.get_bot_qq_ids()
+                bot_self_ids = self.config_manager.get_bot_self_ids()
 
                 # 跳过机器人自己的消息
-                if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
+                if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
                     logger.debug(f"extract_text_messages 过滤掉机器人QQ号: {user_id}")
                     continue
 
