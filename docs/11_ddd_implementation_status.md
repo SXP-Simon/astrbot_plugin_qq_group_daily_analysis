@@ -1,8 +1,8 @@
 # 11. DDD 重构实施状态文档 (DDD Refactoring Implementation Status)
 
 > **文档日期**: 2026-02-08
-> **版本**: v2.0
-> **状态**: Phase 2 完成 (~90%)
+> **版本**: v2.1
+> **状态**: Phase 2 完成 (100%)
 
 ---
 
@@ -39,7 +39,7 @@
 ```
 src/domain/
 ├── __init__.py
-├── exceptions.py              # 领域异常层次结构 ✅ NEW
+├── exceptions.py              # 领域异常层次结构
 ├── entities/
 │   ├── __init__.py
 │   ├── analysis_task.py       # 分析任务聚合根
@@ -49,14 +49,17 @@ src/domain/
 │   ├── unified_message.py     # 统一消息格式 (核心)
 │   ├── platform_capabilities.py  # 平台能力声明
 │   ├── unified_group.py       # 统一群组/成员信息
-│   ├── topic.py               # 话题值对象 ✅ NEW
-│   ├── user_title.py          # 用户称号值对象 ✅ NEW
-│   ├── golden_quote.py        # 金句值对象 ✅ NEW
-│   └── statistics.py          # 统计数据值对象 ✅ NEW
-├── services/                   # ✅ NEW
+│   ├── topic.py               # 话题值对象
+│   ├── user_title.py          # 用户称号值对象
+│   ├── golden_quote.py        # 金句值对象
+│   └── statistics.py          # 统计数据值对象
+├── services/                   # ✅ 完整实现
 │   ├── __init__.py
 │   ├── statistics_calculator.py  # 统计计算服务
-│   └── report_generator.py    # 报告生成服务
+│   ├── report_generator.py    # 报告生成服务
+│   ├── topic_analyzer.py      # 话题分析服务接口与适配器 ✅ NEW
+│   ├── user_title_analyzer.py # 用户称号分析服务接口与适配器 ✅ NEW
+│   └── golden_quote_analyzer.py # 金句分析服务接口与适配器 ✅ NEW
 └── repositories/
     ├── __init__.py
     ├── message_repository.py  # IMessageRepository, IMessageSender, IGroupInfoRepository
@@ -72,6 +75,9 @@ src/domain/
 **新增领域服务**:
 - `StatisticsCalculator`: 从 UnifiedMessage 计算群聊统计
 - `ReportGenerator`: 生成平台无关的分析报告
+- `ITopicAnalyzer` + `TopicAnalyzerAdapter`: 话题分析服务接口与适配器
+- `IUserTitleAnalyzer` + `UserTitleAnalyzerAdapter`: 用户称号分析服务接口与适配器
+- `IGoldenQuoteAnalyzer` + `GoldenQuoteAnalyzerAdapter`: 金句分析服务接口与适配器
 
 **新增领域异常**:
 - `DomainException` 基类
@@ -272,6 +278,7 @@ if orchestrator.can_analyze():
 | `62a91a9` | refactor: integrate PlatformAdapterFactory into BotManager |
 | `8f18783` | docs: update DDD implementation status to Phase 1 complete |
 | `7ef58f9` | feat: complete DDD Phase 2 - domain services, infrastructure layers, shared |
+| `39cc318` | feat: 完善 DDD 架构 - 添加领域分析器服务适配层 |
 
 ---
 
@@ -283,7 +290,28 @@ if orchestrator.can_analyze():
 4. ✅ ~~添加 infrastructure 子模块 (persistence, llm, config, resilience)~~
 5. ✅ ~~添加 application 服务 (SchedulingService, ReportingService)~~
 6. ✅ ~~添加 shared 组件 (constants, TraceContext)~~
-7. 🔲 添加更多平台适配器 (Telegram, Discord)
-8. 🔲 编写单元测试覆盖 DDD 层
-9. 🔲 端到端测试完整分析流程
-10. 🔲 逐步迁移现有分析器到 UnifiedMessage 格式
+7. ✅ ~~添加 domain/services 分析器服务接口与适配器~~
+8. 🔲 添加更多平台适配器 (Telegram, Discord) - 按需实现
+9. 🔲 编写单元测试覆盖 DDD 层
+10. 🔲 端到端测试完整分析流程
+11. 🔲 逐步迁移现有分析器到 UnifiedMessage 格式
+
+---
+
+## 8. 架构验证
+
+### 8.1 Docker 容器内验证通过 ✅
+
+```bash
+docker exec astrbot python -c "
+from src.domain.value_objects import UnifiedMessage, PlatformCapabilities, Topic, UserTitle, GoldenQuote
+from src.domain.services import StatisticsCalculator, ReportGenerator, ITopicAnalyzer, IUserTitleAnalyzer, IGoldenQuoteAnalyzer
+from src.domain.repositories import IMessageRepository, IMessageSender, IGroupInfoRepository
+from src.domain.entities import AnalysisTask, AnalysisResult, GroupAnalysisResult
+from src.infrastructure.platform import PlatformAdapterFactory
+from src.infrastructure.resilience import CircuitBreaker, RateLimiter
+from src.application import AnalysisOrchestrator, MessageConverter
+from src.shared.constants import Platform, TaskStatus, ContentType, ReportFormat
+print('✅ 所有 DDD 层导入成功!')
+"
+```
