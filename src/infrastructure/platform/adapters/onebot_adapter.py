@@ -224,6 +224,8 @@ class OneBotAdapter(PlatformAdapter):
                 },
                 "message": message_chain,
                 "group_id": msg.group_id,
+                "raw_message": msg.text_content, # 添加 raw_message 兼容字段
+                "user_id": msg.sender_id, # 添加 user_id 兼容字段
             }
             raw_messages.append(raw_msg)
         
