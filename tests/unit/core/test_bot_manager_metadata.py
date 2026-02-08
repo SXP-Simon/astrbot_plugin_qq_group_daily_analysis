@@ -41,13 +41,19 @@ class TestBotManagerMetadata(unittest.TestCase):
         # Setup get_insts
         self.platform_manager.get_insts.return_value = [mock_platform]
         
-        # Override auto_discover_bot_instances to use the NEW logic we want to test
-        # We can't easily override the method on the instance without monkeypatching or just modifying the source file.
-        # But here we are testing the SOURCE file which I'm about to modify.
-        # So I will modify the source file FIRST, then run this test.
-        # Wait, if I write the test now, it will fail (or not test the new logic) until I apply the fix.
+        # Run auto_discover
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
-        pass
+        discovered = loop.run_until_complete(self.bot_manager.auto_discover_bot_instances())
+        
+        # Verify it was discovered
+        self.assertIn("discord_instance_1", discovered)
+        # It should be in _platforms
+        self.assertIn("discord_instance_1", self.bot_manager._platforms)
+        
+        loop.close()
 
 if __name__ == "__main__":
     unittest.main()
