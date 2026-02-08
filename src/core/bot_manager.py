@@ -123,14 +123,17 @@ class BotManager:
             if bot_client:
                 platform_name = None
                 if hasattr(platform, "metadata"):
-                    if hasattr(platform.metadata, "name"):
-                        platform_name = platform.metadata.name
-                    elif hasattr(platform.metadata, "type"):
+                    # 优先使用 type
+                    if hasattr(platform.metadata, "type"):
                         platform_name = platform.metadata.type
+                    elif hasattr(platform.metadata, "name"):
+                        platform_name = platform.metadata.name
                 
-                # fallback detection
-                if not platform_name:
-                    platform_name = self._detect_platform_name(bot_client)
+                # fallback detection if name not supported
+                if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))):
+                    detected = self._detect_platform_name(bot_client)
+                    if detected:
+                        platform_name = detected
 
                 self.set_bot_instance(bot_client, platform_id, platform_name)
                 logger.info(f"Lazy discovered bot instance for {platform_id}")
@@ -248,6 +251,11 @@ class BotManager:
         # 使用新版 API 获取所有平台实例
         platforms = self._context.platform_manager.get_insts()
         discovered = {}
+        
+        logger.info(f"auto_discover_bot_instances: Found {len(platforms)} platforms in manager.")
+        for p in platforms:
+            p_id = p.metadata.id if hasattr(p, "metadata") else "unknown"
+            logger.info(f" - Inspecting platform: {p_id}, type: {type(p).__name__}")
 
         for platform in platforms:
             # 获取bot实例
@@ -267,10 +275,17 @@ class BotManager:
                 
                 # 尝试获取平台名称
                 platform_name = None
-                if hasattr(platform.metadata, "name"):
-                    platform_name = platform.metadata.name
-                elif hasattr(platform.metadata, "type"):
+                # 优先使用 type (通常是协议名, e.g. discord, aiocqhttp)
+                if hasattr(platform.metadata, "type"):
                     platform_name = platform.metadata.type
+                elif hasattr(platform.metadata, "name"):
+                    platform_name = platform.metadata.name
+                
+                # 验证平台名称是否支持，如果不支持且有 client，尝试检测
+                if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))) and bot_client:
+                    detected = self._detect_platform_name(bot_client)
+                    if detected:
+                        platform_name = detected
                 
                 logger.debug(f"Discovered platform: {platform_id} ({platform_name}), client ready: {bool(bot_client)}")
 
