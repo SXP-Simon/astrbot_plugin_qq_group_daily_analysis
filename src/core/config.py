@@ -26,8 +26,11 @@ class ConfigManager:
         """获取群组列表（用于黑白名单）"""
         return self.config.get("group_list", [])
 
-    def is_group_allowed(self, group_id: str) -> bool:
-        """根据配置的白/黑名单判断是否允许在该群聊中使用"""
+    def is_group_allowed(self, group_id_or_umo: str) -> bool:
+        """
+        根据配置的白/黑名单判断是否允许在该群聊中使用
+        支持传入 simple group_id 或 UMO (Unified Message Origin)
+        """
         mode = self.get_group_list_mode().lower()
         if mode not in ("whitelist", "blacklist", "none"):
             mode = "none"
@@ -37,18 +40,29 @@ class ConfigManager:
             return True
 
         glist = [str(g) for g in self.get_group_list()]
-        group_id_str = str(group_id)
+        target = str(group_id_or_umo)
+
+        # 解析目标 ID（如果是 UMO，提取最后一部分作为 ID）
+        # UMO 格式通常为: platform_id:GroupMessage:group_id
+        target_simple_id = target.split(":")[-1] if ":" in target else target
+
+        def _is_match(item: str, target: str, target_simple_id: str) -> bool:
+            # 1. 配置项是 UMO (包含 :) -> 必须精确匹配目标 UMO
+            if ":" in item:
+                return item == target
+
+            # 2. 配置项是 Simple ID (不含 :) -> 匹配目标的 Simple ID
+            # 这意味着 Simple ID 配置对所有平台生效 (向后兼容)
+            return item == target_simple_id
+
+        is_in_list = any(_is_match(item, target, target_simple_id) for item in glist)
 
         if mode == "whitelist":
-            return group_id_str in glist if glist else False
+            return is_in_list
         if mode == "blacklist":
-            return group_id_str not in glist if glist else True
+            return not is_in_list
 
         return True
-
-    def get_max_concurrent_tasks(self) -> int:
-        """获取自动分析最大并发数"""
-        return self.config.get("max_concurrent_tasks", 5)
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""

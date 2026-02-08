@@ -87,7 +87,9 @@ class AutoScheduler:
                                 logger.info(f"✅ 群 {group_id} 属于平台 {platform_id}")
                                 return platform_id
                             else:
-                                logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息 (返回None)")
+                                logger.debug(
+                                    f"平台 {platform_id} 无法获取群 {group_id} 信息 (返回None)"
+                                )
                             continue
 
                         # 回退到原始逻辑 (Legacy)
@@ -193,10 +195,14 @@ class AutoScheduler:
             # 始终获取所有群组并进行过滤
             logger.info(f"自动分析使用 {group_list_mode} 模式，正在获取群列表...")
             all_groups = await self._get_all_groups()
-            logger.info(f"共获取到 {len(all_groups)} 个群组: {all_groups}")
+            logger.info(f"共获取到 {len(all_groups)} 个群组")
             enabled_groups = []
-            for group_id in all_groups:
-                if self.config_manager.is_group_allowed(group_id):
+
+            for platform_id, group_id in all_groups:
+                # 构造 UMO 进行检查
+                umo = f"{platform_id}:GroupMessage:{group_id}"
+                # 检查 UMO 是否允许 (ConfigManager 会自动处理 UMO 和 Simple ID 的匹配逻辑)
+                if self.config_manager.is_group_allowed(umo):
                     enabled_groups.append(group_id)
 
             logger.info(
@@ -447,8 +453,12 @@ class AutoScheduler:
                 # 锁资源由 WeakValueDictionary 自动管理，无需手动清理
                 logger.info(f"群 {group_id} 自动分析完成")
 
-    async def _get_all_groups(self) -> list[str]:
-        """获取所有bot实例所在的群列表"""
+    async def _get_all_groups(self) -> list[tuple[str, str]]:
+        """
+        获取所有bot实例所在的群列表
+        Returns:
+            list[tuple[str, str]]: [(platform_id, group_id), ...]
+        """
         all_groups = set()
 
         if (
@@ -475,6 +485,20 @@ class AutoScheduler:
                 ):
                     call_action_func = bot_instance.api.call_action
 
+                # 特别处理 Discord 适配器 (如果有专门的方法)
+                if hasattr(bot_instance, "get_group_list"):
+                    try:
+                        result = await bot_instance.get_group_list()
+                        if result:
+                            for group_id in result:
+                                all_groups.add((platform_id, str(group_id)))
+                            logger.info(
+                                f"平台 {platform_id} (Adapter) 成功获取 {len(result)} 个群组"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.debug(f"平台 {platform_id} get_group_list 失败: {e}")
+
                 if call_action_func:
                     # 尝试 OneBot v11 get_group_list
                     try:
@@ -495,7 +519,9 @@ class AutoScheduler:
                         if isinstance(result, list):
                             for group in result:
                                 if isinstance(group, dict) and "group_id" in group:
-                                    all_groups.add(str(group["group_id"]))
+                                    all_groups.add(
+                                        (platform_id, str(group["group_id"]))
+                                    )
                             logger.info(
                                 f"平台 {platform_id} 成功获取 {len(result)} 个群组"
                             )
