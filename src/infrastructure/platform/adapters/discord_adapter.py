@@ -229,47 +229,35 @@ class DiscordAdapter(PlatformAdapter):
 
     def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
         """
-        将统一消息格式转换为 Discord 原生格式 (模拟)
-        
-        用于与现有分析器的向后兼容。
+        将统一消息格式转换为 OneBot 兼容格式 (用于兼容 MessageHandler)
         """
         raw_messages = []
         for msg in messages:
-            # 构造模拟的 Discord 消息字典
+            # 构造 OneBot 风格的消息字典
             raw_msg = {
-                "id": msg.message_id,
-                "channel_id": msg.group_id,
-                "author": {
-                    "id": msg.sender_id,
-                    "username": msg.sender_name,
-                    "discriminator": "0000", # 兼容旧格式
-                    "global_name": msg.sender_card,
-                    "avatar": None, # 暂不获取头像hash
+                "message_id": msg.message_id,
+                "group_id": msg.group_id,
+                "time": msg.timestamp,
+                "sender": {
+                    "user_id": msg.sender_id,
+                    "nickname": msg.sender_name,
+                    "card": msg.sender_card,
                 },
-                "content": msg.text_content,
-                "timestamp": datetime.fromtimestamp(msg.timestamp).isoformat(),
-                "edited_timestamp": None,
-                "tts": False,
-                "mention_everyone": False,
-                "mentions": [],
-                "mention_roles": [],
-                "attachments": [],
-                "embeds": [],
-                "pinned": False,
-                "type": 0,
+                "message": [],
             }
             
-            # 处理附件
+            # 构造消息链
             for content in msg.contents:
-                if content.type == MessageContentType.IMAGE:
-                    raw_msg["attachments"].append({
-                        "id": "0", # 伪造ID
-                        "filename": "image.png",
-                        "size": 0,
-                        "url": content.url,
-                        "proxy_url": content.url,
-                        "content_type": "image/png",
-                    })
+                if content.type == MessageContentType.TEXT:
+                    raw_msg["message"].append({"type": "text", "data": {"text": content.text}})
+                elif content.type == MessageContentType.IMAGE:
+                    raw_msg["message"].append({"type": "image", "data": {"url": content.url, "file": content.url}})
+                elif content.type == MessageContentType.AT:
+                    raw_msg["message"].append({"type": "at", "data": {"qq": content.at_user_id}})
+                elif content.type == MessageContentType.REPLY:
+                    if content.raw_data and "reply_id" in content.raw_data:
+                        raw_msg["message"].append({"type": "reply", "data": {"id": content.raw_data["reply_id"]}})
+                # 其他类型暂忽略或作为未知
             
             raw_messages.append(raw_msg)
         
