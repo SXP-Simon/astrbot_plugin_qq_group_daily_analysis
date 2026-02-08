@@ -366,9 +366,9 @@ class DiscordAdapter(PlatformAdapter):
 
         try:
             channel_id = int(group_id)
-            channel = self.bot.get_channel(channel_id)
+            channel = self._discord_client.get_channel(channel_id)
             if not channel:
-                channel = await self.bot.fetch_channel(channel_id)
+                channel = await self._discord_client.fetch_channel(channel_id)
 
             if not hasattr(channel, "send"):
                 return False
@@ -376,16 +376,54 @@ class DiscordAdapter(PlatformAdapter):
             # 处理本地文件或 URL
             file_to_send = None
             if image_path.startswith(("http://", "https://")):
-                # URL 方式，直接放在内容里或者作为 embed (Discord.py send 不直接支持 url 作为 file)
-                # 简单起见，如果是有 caption，将 URL 拼接到 content
-                content = f"{caption}\n{image_path}" if caption else image_path
-                await channel.send(content=content)
-                return True
+                # URL 方式，需要下载图片后作为文件发送
+                # 因为 Discord 无法访问内部 URL
+                import aiohttp
+                from io import BytesIO
+
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(
+                            image_path, timeout=aiohttp.ClientTimeout(total=30)
+                        ) as response:
+                            if response.status == 200:
+                                image_data = await response.read()
+                                # 从 URL 提取文件名
+                                filename = image_path.split("/")[-1].split("?")[0]
+                                if not filename.lower().endswith(
+                                    (".png", ".jpg", ".jpeg", ".gif", ".webp")
+                                ):
+                                    filename = "report.png"
+                                file_to_send = discord.File(
+                                    BytesIO(image_data), filename=filename
+                                )
+                            else:
+                                logger.warning(
+                                    f"Discord 下载图片失败，状态码: {response.status}"
+                                )
+                                # 降级：直接发送 URL
+                                content = (
+                                    f"{caption}\n{image_path}"
+                                    if caption
+                                    else image_path
+                                )
+                                await channel.send(content=content)
+                                return True
+                except Exception as download_error:
+                    logger.warning(f"Discord 下载图片异常: {download_error}")
+                    # 降级：直接发送 URL
+                    content = f"{caption}\n{image_path}" if caption else image_path
+                    await channel.send(content=content)
+                    return True
             else:
                 # 本地文件
                 file_to_send = discord.File(image_path)
-                await channel.send(content=caption, file=file_to_send)
-                return True
+
+            if file_to_send:
+                await channel.send(
+                    content=caption if caption else None, file=file_to_send
+                )
+            return True
 
         except Exception as e:
             logger.error(f"Discord 发送图片失败: {e}")
