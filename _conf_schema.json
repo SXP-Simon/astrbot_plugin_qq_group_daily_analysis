@@ -21,6 +21,12 @@
         "default": 3,
         "hint": "同时进行的群聊分析任务数量，建议根据机器性能调整，过高可能导致LLM API RPM 超出限制，卡顿或被风控"
     },
+    "debug_mode": {
+        "type": "bool",
+        "description": "调试模式（建议关闭）",
+        "default": false,
+        "hint": "启用后，会在 plugin_data/debug_data 目录下保存每次分析的平台 API 原始历史消息和 Prompt 原文，用于调试和优化提示词。"
+    },
     "max_messages": {
         "type": "int",
         "description": "单次分析的获取最大消息条数基准",
