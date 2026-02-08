@@ -267,40 +267,64 @@ class BotManager:
             elif hasattr(platform, "client"):
                 bot_client = platform.client
 
-            if (
-                hasattr(platform, "metadata")
-                and hasattr(platform.metadata, "id")
-            ):
-                platform_id = platform.metadata.id
-                
-                # 尝试获取平台名称
+            # Get metadata robustly
+            metadata = getattr(platform, "metadata", None)
+            if not metadata and hasattr(platform, "meta"):
+                try:
+                    metadata = platform.meta()
+                except Exception:
+                    pass
+            
+            # Check if we have valid metadata and ID
+            platform_id = None
+            if metadata:
+                if hasattr(metadata, "id"):
+                    platform_id = metadata.id
+                elif isinstance(metadata, dict):
+                    platform_id = metadata.get("id")
+            
+            if platform_id:
+                # Detect platform name from metadata
                 platform_name = None
-                # 优先使用 type (通常是协议名, e.g. discord, aiocqhttp)
-                if hasattr(platform.metadata, "type"):
-                    platform_name = platform.metadata.type
-                elif hasattr(platform.metadata, "name"):
-                    platform_name = platform.metadata.name
+                # 优先使用 type
+                if hasattr(metadata, "type"):
+                    platform_name = metadata.type
+                elif isinstance(metadata, dict) and "type" in metadata:
+                    platform_name = metadata["type"]
+                elif hasattr(metadata, "name"):
+                    platform_name = metadata.name
+                elif isinstance(metadata, dict) and "name" in metadata:
+                    platform_name = metadata["name"]
                 
-                # 验证平台名称是否支持，如果不支持且有 client，尝试检测
+                # Verify if this platform name is supported, if not, try detecting from bot instance if available
                 if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))) and bot_client:
-                    detected = self._detect_platform_name(bot_client)
-                    if detected:
-                        platform_name = detected
+                     detected = self._detect_platform_name(bot_client)
+                     if detected:
+                         platform_name = detected
                 
                 logger.debug(f"Discovered platform: {platform_id} ({platform_name}), client ready: {bool(bot_client)}")
 
-                # 无论 bot_client 状态如何，都存储平台实例
+                # Store platform instance regardless of bot_client state
                 self._platforms[platform_id] = platform
                 
                 if bot_client:
                     self.set_bot_instance(bot_client, platform_id, platform_name)
                     discovered[platform_id] = bot_client
                 else:
-                    # 懒加载场景：找到平台但客户端尚未准备好。
-                    # 将其添加到 discovered，以便 main.py 知道我们找到了某些东西。
-                    # 使用平台对象作为日志记录的占位符。
                     logger.info(f"Platform {platform_id} found but client is not ready. Will lazy load.")
                     discovered[platform_id] = platform
+            else:
+                # Fallback: if metadata is missing/broken but we have a client, try to use it
+                if bot_client:
+                    platform_name = self._detect_platform_name(bot_client)
+                    if platform_name:
+                        # Generate a temporary ID or use name
+                        platform_id = platform_name
+                        logger.warning(f"Platform metadata missing, using detected type '{platform_name}' as ID.")
+                        
+                        self._platforms[platform_id] = platform
+                        self.set_bot_instance(bot_client, platform_id, platform_name)
+                        discovered[platform_id] = bot_client
 
         # 记录适配器创建结果
         if self._adapters:
