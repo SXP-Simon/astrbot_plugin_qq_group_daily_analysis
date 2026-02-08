@@ -126,11 +126,18 @@ class QQGroupDailyAnalysis(Star):
         分析群聊日常活动
         用法: /群分析 [天数]
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台，移除特定事件类型检查
+        # if not isinstance(event, AiocqhttpMessageEvent):
+        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
+        #     return
 
-        group_id = event.get_group_id()
+        # 尝试获取 group_id，不同平台可能实现不同，但通常 AstrMessageEvent 有 get_group_id 或 message_obj.group_id
+        group_id = None
+        if hasattr(event, "get_group_id"):
+            group_id = event.get_group_id()
+        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
+            group_id = event.message_obj.group_id
+            
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
@@ -335,11 +342,13 @@ class QQGroupDailyAnalysis(Star):
         设置分析报告输出格式
         用法: /设置格式 [image|text|pdf]
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台
+        group_id = None
+        if hasattr(event, "get_group_id"):
+            group_id = event.get_group_id()
+        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
+            group_id = event.message_obj.group_id
 
-        group_id = event.get_group_id()
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
@@ -383,9 +392,13 @@ class QQGroupDailyAnalysis(Star):
         设置分析报告模板
         用法: /设置模板 [模板名称或序号]
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台
+        # if not isinstance(event, AiocqhttpMessageEvent):
+        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
+        #     return
+        
+        # 某些命令可能不需要 group_id，但这里保持一致
+        pass # 继续执行
 
         import os
 
@@ -453,9 +466,11 @@ class QQGroupDailyAnalysis(Star):
         查看所有可用的报告模板及预览图
         用法: /查看模板
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台
+        # if not isinstance(event, AiocqhttpMessageEvent):
+        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
+        #     return
+        pass # 继续执行
 
         import os
 
@@ -540,9 +555,11 @@ class QQGroupDailyAnalysis(Star):
         安装 PDF 功能依赖
         用法: /安装PDF
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台
+        # if not isinstance(event, AiocqhttpMessageEvent):
+        #     yield event.plain_result("❌ 此功能仅支持QQ群聊")
+        #     return
+        pass # 继续执行
 
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
@@ -570,11 +587,13 @@ class QQGroupDailyAnalysis(Star):
         - reload: 重新加载配置并重启定时任务
         - test: 测试自动分析功能
         """
-        if not isinstance(event, AiocqhttpMessageEvent):
-            yield event.plain_result("❌ 此功能仅支持QQ群聊")
-            return
+        # 兼容多平台
+        group_id = None
+        if hasattr(event, "get_group_id"):
+            group_id = event.get_group_id()
+        elif hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
+            group_id = event.message_obj.group_id
 
-        group_id = event.get_group_id()
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
