@@ -9,8 +9,19 @@ from datetime import datetime
 from .utils import InfoUtils
 
 
+import re
+
+
 class UserAnalyzer:
     """用户分析器"""
+
+    # Discord 自定义表情正则 <:name:id> 或 <a:name:id>
+    DISCORD_CUSTOM_EMOJI_PATTERN = r"<a?:.+?:\d+>"
+
+    # 简单的 Unicode Emoji 正则范围 (覆盖大多数常见 Emoji)
+    UNICODE_EMOJI_PATTERN = (
+        r"[\U0001F000-\U0001F9FF]|[\U00002600-\U000026FF]|[\U00002700-\U000027BF]"
+    )
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
@@ -53,6 +64,15 @@ class UserAnalyzer:
                 if content.get("type") == "text":
                     text = content.get("data", {}).get("text", "")
                     user_stats[user_id]["char_count"] += len(text)
+
+                    # 统计文本中的 Discord 自定义表情
+                    discord_emojis = re.findall(self.DISCORD_CUSTOM_EMOJI_PATTERN, text)
+                    user_stats[user_id]["emoji_count"] += len(discord_emojis)
+
+                    # 统计文本中的 Unicode Emoji
+                    unicode_emojis = re.findall(self.UNICODE_EMOJI_PATTERN, text)
+                    user_stats[user_id]["emoji_count"] += len(unicode_emojis)
+
                 elif content.get("type") == "face":
                     # QQ基础表情
                     user_stats[user_id]["emoji_count"] += 1
