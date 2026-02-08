@@ -624,21 +624,35 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        if action == "enable":
+        elif action == "enable":
             mode = self.config_manager.get_group_list_mode()
+            target_id = event.unified_msg_origin or group_id  # 优先使用 UMO
+
             if mode == "whitelist":
                 glist = self.config_manager.get_group_list()
-                if group_id not in glist:
-                    glist.append(group_id)
+                # 检查 UMO 或 Group ID 是否已在列表中
+                if not self.config_manager.is_group_allowed(target_id):
+                    glist.append(target_id)
                     self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群加入白名单")
+                    yield event.plain_result(
+                        f"✅ 已将当前群加入白名单\nID: {target_id}"
+                    )
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在白名单中")
             elif mode == "blacklist":
                 glist = self.config_manager.get_group_list()
+
+                # 尝试移除 UMO 和 Group ID
+                removed = False
+                if target_id in glist:
+                    glist.remove(target_id)
+                    removed = True
                 if group_id in glist:
                     glist.remove(group_id)
+                    removed = True
+
+                if removed:
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从黑名单移除")
                     self.auto_scheduler.schedule_jobs(self.context)
@@ -649,10 +663,21 @@ class QQGroupDailyAnalysis(Star):
 
         elif action == "disable":
             mode = self.config_manager.get_group_list_mode()
+            target_id = event.unified_msg_origin or group_id  # 优先使用 UMO
+
             if mode == "whitelist":
                 glist = self.config_manager.get_group_list()
+
+                # 尝试移除 UMO 和 Group ID
+                removed = False
+                if target_id in glist:
+                    glist.remove(target_id)
+                    removed = True
                 if group_id in glist:
                     glist.remove(group_id)
+                    removed = True
+
+                if removed:
                     self.config_manager.set_group_list(glist)
                     yield event.plain_result("✅ 已将当前群从白名单移除")
                     self.auto_scheduler.schedule_jobs(self.context)
@@ -660,10 +685,15 @@ class QQGroupDailyAnalysis(Star):
                     yield event.plain_result("ℹ️ 当前群不在白名单中")
             elif mode == "blacklist":
                 glist = self.config_manager.get_group_list()
-                if group_id not in glist:
-                    glist.append(group_id)
+                # 检查 UMO 或 Group ID 是否已在列表中
+                if self.config_manager.is_group_allowed(
+                    target_id
+                ):  # 如果允许，说明不在黑名单
+                    glist.append(target_id)
                     self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群加入黑名单")
+                    yield event.plain_result(
+                        f"✅ 已将当前群加入黑名单\nID: {target_id}"
+                    )
                     self.auto_scheduler.schedule_jobs(self.context)
                 else:
                     yield event.plain_result("ℹ️ 当前群已在黑名单中")

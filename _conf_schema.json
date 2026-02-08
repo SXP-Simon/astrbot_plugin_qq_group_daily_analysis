@@ -8,9 +8,9 @@
     },
     "group_list": {
         "type": "list",
-        "description": "群组名单列表",
+        "description": "群组白/黑名单列表",
         "default": [],
-        "hint": "黑白名单模式下使用的群号列表",
+        "hint": "黑白名单模式下使用的群组列表。支持填写 AstrBot UMO (如 qq_123456:GroupMessage:123456) 或 纯群号 (如 123456，将尝试自动匹配)。可以使用 /sid 命令查看当前会话的 UMO。",
         "items": {
             "type": "string"
         }
