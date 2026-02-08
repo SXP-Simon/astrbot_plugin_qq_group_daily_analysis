@@ -5,13 +5,14 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Any, Tuple
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 
 class MessageContentType(Enum):
     """消息内容类型枚举"""
+
     TEXT = "text"
     IMAGE = "image"
     FILE = "file"
@@ -29,9 +30,10 @@ class MessageContentType(Enum):
 class MessageContent:
     """
     消息内容段值对象
-    
+
     不可变，用于组成消息链
     """
+
     type: MessageContentType
     text: str = ""
     url: str = ""
@@ -51,33 +53,34 @@ class MessageContent:
 class UnifiedMessage:
     """
     统一消息格式 - 跨平台核心值对象
-    
+
     设计原则：
     1. 只保留分析所需的字段
     2. 使用平台无关的类型
     3. 不可变 (frozen=True) - 线程安全
     4. 所有 ID 使用字符串 - 避免平台差异
     """
+
     # 基础标识
     message_id: str
     sender_id: str
     sender_name: str
     group_id: str
-    
+
     # 消息内容
     text_content: str  # 提取的纯文本用于 LLM 分析
-    contents: Tuple[MessageContent, ...] = field(default_factory=tuple)
-    
+    contents: tuple[MessageContent, ...] = field(default_factory=tuple)
+
     # 时间信息
     timestamp: int = 0  # Unix 时间戳
-    
+
     # 平台信息
     platform: str = "unknown"
-    
+
     # 可选信息
-    reply_to_id: Optional[str] = None
-    sender_card: Optional[str] = None  # 群名片/昵称
-    
+    reply_to_id: str | None = None
+    sender_card: str | None = None  # 群名片/昵称
+
     # 分析辅助方法
     def has_text(self) -> bool:
         """是否有文本内容"""

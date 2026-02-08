@@ -4,7 +4,7 @@
 
 from .circuit_breaker import CircuitBreaker, CircuitState
 from .rate_limiter import RateLimiter
-from .retry import retry_async, RetryConfig
+from .retry import RetryConfig, retry_async
 
 __all__ = [
     "CircuitBreaker",

@@ -6,17 +6,17 @@
 - GroupAnalysisResult: 群聊分析结果实体
 """
 
-from .analysis_task import AnalysisTask, TaskStatus
 from .analysis_result import (
-    GroupAnalysisResult,
-    SummaryTopic,
-    UserTitle,
-    GoldenQuote,
-    TokenUsage,
-    EmojiStatistics,
     ActivityVisualization,
+    EmojiStatistics,
+    GoldenQuote,
+    GroupAnalysisResult,
     GroupStatistics,
+    SummaryTopic,
+    TokenUsage,
+    UserTitle,
 )
+from .analysis_task import AnalysisTask, TaskStatus
 
 # 别名，保持向后兼容
 AnalysisResult = GroupAnalysisResult

@@ -5,12 +5,11 @@ LLM 客户端 - 包装 AstrBot 的 LLM 提供商系统
 抽象了提供商管理的细节。
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from ...utils.logger import logger
-
-from ...domain.value_objects.statistics import TokenUsage
 from ...domain.exceptions import LLMException, LLMRateLimitException
+from ...domain.value_objects.statistics import TokenUsage
+from ...utils.logger import logger
 
 
 class LLMClient:
@@ -29,9 +28,9 @@ class LLMClient:
             context: 具有提供商访问权限的 AstrBot 插件上下文
         """
         self.context = context
-        self._provider_cache: Dict[str, Any] = {}
+        self._provider_cache: dict[str, Any] = {}
 
-    def get_provider(self, provider_id: Optional[str] = None) -> Any:
+    def get_provider(self, provider_id: str | None = None) -> Any:
         """
         通过 ID 获取 LLM 提供商。
 
@@ -68,11 +67,11 @@ class LLMClient:
     async def chat_completion(
         self,
         prompt: str,
-        provider_id: Optional[str] = None,
+        provider_id: str | None = None,
         max_tokens: int = 2000,
         temperature: float = 0.7,
-        system_prompt: Optional[str] = None,
-    ) -> Tuple[str, TokenUsage]:
+        system_prompt: str | None = None,
+    ) -> tuple[str, TokenUsage]:
         """
         发起聊天完成请求。
 
@@ -138,10 +137,10 @@ class LLMClient:
     async def analyze_with_json_output(
         self,
         prompt: str,
-        provider_id: Optional[str] = None,
+        provider_id: str | None = None,
         max_tokens: int = 2000,
         temperature: float = 0.7,
-    ) -> Tuple[str, TokenUsage]:
+    ) -> tuple[str, TokenUsage]:
         """
         发起期望 JSON 输出的完成请求。
 
@@ -166,7 +165,7 @@ class LLMClient:
             temperature=temperature,
         )
 
-    def list_available_providers(self) -> List[Dict[str, str]]:
+    def list_available_providers(self) -> list[dict[str, str]]:
         """
         列出所有可用的 LLM 提供商。
 

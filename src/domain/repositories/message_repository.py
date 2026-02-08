@@ -3,17 +3,16 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict
 
-from ..value_objects.unified_message import UnifiedMessage
 from ..value_objects.platform_capabilities import PlatformCapabilities
 from ..value_objects.unified_group import UnifiedGroup, UnifiedMember
+from ..value_objects.unified_message import UnifiedMessage
 
 
 class IMessageRepository(ABC):
     """
     消息仓储接口
-    
+
     每个平台适配器必须实现此接口。
     所有方法返回统一格式，隐藏平台差异。
     """
@@ -24,17 +23,17 @@ class IMessageRepository(ABC):
         group_id: str,
         days: int = 1,
         max_count: int = 1000,
-        before_id: Optional[str] = None,
-    ) -> List[UnifiedMessage]:
+        before_id: str | None = None,
+    ) -> list[UnifiedMessage]:
         """
         获取群组消息历史
-        
+
         参数:
             group_id: 群组 ID
             days: 获取最近 N 天的消息
             max_count: 最大消息数量
             before_id: 获取此 ID 之前的消息（用于分页）
-            
+
         返回:
             统一消息列表，按时间升序排列
         """
@@ -59,7 +58,7 @@ class IMessageSender(ABC):
         self,
         group_id: str,
         text: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> bool:
         """发送文本消息"""
         pass
@@ -79,7 +78,7 @@ class IMessageSender(ABC):
         self,
         group_id: str,
         file_path: str,
-        filename: Optional[str] = None,
+        filename: str | None = None,
     ) -> bool:
         """发送文件"""
         pass
@@ -89,17 +88,17 @@ class IGroupInfoRepository(ABC):
     """群组信息仓储接口"""
 
     @abstractmethod
-    async def get_group_info(self, group_id: str) -> Optional[UnifiedGroup]:
+    async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取群组信息"""
         pass
 
     @abstractmethod
-    async def get_group_list(self) -> List[str]:
+    async def get_group_list(self) -> list[str]:
         """获取机器人所在的所有群组 ID"""
         pass
 
     @abstractmethod
-    async def get_member_list(self, group_id: str) -> List[UnifiedMember]:
+    async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         """获取群组成员列表"""
         pass
 
@@ -108,6 +107,6 @@ class IGroupInfoRepository(ABC):
         self,
         group_id: str,
         user_id: str,
-    ) -> Optional[UnifiedMember]:
+    ) -> UnifiedMember | None:
         """获取指定成员信息"""
         pass

@@ -2,10 +2,9 @@
 平台适配器工厂
 """
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
 from ...utils.logger import logger
-
 from .base import PlatformAdapter
 
 
@@ -17,10 +16,10 @@ class PlatformAdapterFactory:
     使用注册表模式便于扩展。
     """
 
-    _adapters: Dict[str, Type[PlatformAdapter]] = {}
+    _adapters: dict[str, type[PlatformAdapter]] = {}
 
     @classmethod
-    def register(cls, platform_name: str, adapter_class: Type[PlatformAdapter]):
+    def register(cls, platform_name: str, adapter_class: type[PlatformAdapter]):
         """注册新适配器"""
         cls._adapters[platform_name.lower()] = adapter_class
 
@@ -30,7 +29,7 @@ class PlatformAdapterFactory:
         platform_name: str,
         bot_instance: Any,
         config: dict = None,
-    ) -> Optional[PlatformAdapter]:
+    ) -> PlatformAdapter | None:
         """
         创建平台适配器
 

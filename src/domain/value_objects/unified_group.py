@@ -3,28 +3,29 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class UnifiedMember:
     """统一成员信息"""
+
     user_id: str
     nickname: str
-    card: Optional[str] = None  # 群名片
+    card: str | None = None  # 群名片
     role: str = "member"  # owner, admin, member
-    join_time: Optional[int] = None
-    avatar_url: Optional[str] = None
-    avatar_data: Optional[str] = None  # Base64 用于模板渲染
+    join_time: int | None = None
+    avatar_url: str | None = None
+    avatar_data: str | None = None  # Base64 用于模板渲染
 
 
 @dataclass(frozen=True)
 class UnifiedGroup:
     """统一群组信息"""
+
     group_id: str
     group_name: str
     member_count: int = 0
-    owner_id: Optional[str] = None
-    create_time: Optional[int] = None
-    description: Optional[str] = None
+    owner_id: str | None = None
+    create_time: int | None = None
+    description: str | None = None
     platform: str = "unknown"

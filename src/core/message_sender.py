@@ -3,7 +3,6 @@ import base64
 import aiohttp
 
 from ..utils.logger import logger
-
 from ..utils.trace_context import TraceContext
 
 
@@ -246,8 +245,8 @@ class MessageSender:
         """
         获取可用的发送平台列表 (返回 Adapter 实例)
         """
-        from ..infrastructure.platform.factory import PlatformAdapterFactory
         from ..infrastructure.platform.base import PlatformAdapter
+        from ..infrastructure.platform.factory import PlatformAdapterFactory
 
         instances = []
 

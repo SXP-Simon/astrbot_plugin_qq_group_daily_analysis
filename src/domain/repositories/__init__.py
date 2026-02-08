@@ -1,10 +1,10 @@
 # 仓储接口
-from .message_repository import IMessageRepository, IMessageSender, IGroupInfoRepository
 from .avatar_repository import IAvatarRepository
+from .message_repository import IGroupInfoRepository, IMessageRepository, IMessageSender
 
 __all__ = [
     "IMessageRepository",
-    "IMessageSender", 
+    "IMessageSender",
     "IGroupInfoRepository",
     "IAvatarRepository",
 ]

@@ -6,9 +6,9 @@
 
 import asyncio
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
-from typing import Callable, Optional, Tuple, Type, Union
 
 from ...utils.logger import logger
 
@@ -22,7 +22,7 @@ class RetryConfig:
     max_delay: float = 60.0
     exponential_base: float = 2.0
     jitter: bool = True
-    retry_exceptions: Tuple[Type[Exception], ...] = (Exception,)
+    retry_exceptions: tuple[type[Exception], ...] = (Exception,)
 
 
 def calculate_delay(
@@ -60,8 +60,8 @@ def retry_async(
     max_delay: float = 60.0,
     exponential_base: float = 2.0,
     jitter: bool = True,
-    retry_exceptions: Tuple[Type[Exception], ...] = (Exception,),
-    on_retry: Optional[Callable[[Exception, int], None]] = None,
+    retry_exceptions: tuple[type[Exception], ...] = (Exception,),
+    on_retry: Callable[[Exception, int], None] | None = None,
 ):
     """
     带指数退避的异步函数重试装饰器。
@@ -120,7 +120,7 @@ class RetryExecutor:
     带重试逻辑的函数执行器。
     """
 
-    def __init__(self, config: Optional[RetryConfig] = None):
+    def __init__(self, config: RetryConfig | None = None):
         """
         初始化重试执行器。
 
@@ -133,7 +133,7 @@ class RetryExecutor:
         self,
         func: Callable,
         *args,
-        config: Optional[RetryConfig] = None,
+        config: RetryConfig | None = None,
         **kwargs,
     ):
         """

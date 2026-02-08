@@ -5,12 +5,11 @@
 
 import asyncio
 
-from .logger import logger
-
 from ..analysis.llm_analyzer import LLMAnalyzer
 from ..analysis.statistics import UserAnalyzer
 from ..core.message_handler import MessageHandler
 from ..models.data_models import TokenUsage
+from .logger import logger
 
 
 class MessageAnalyzer:

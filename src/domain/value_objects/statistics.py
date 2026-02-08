@@ -6,7 +6,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 @dataclass(frozen=True)
@@ -97,9 +96,15 @@ class EmojiStatistics:
             details = tuple(details.items())
 
         return cls(
-            standard_emoji_count=data.get("face_count", data.get("standard_emoji_count", 0)),
-            custom_emoji_count=data.get("mface_count", data.get("custom_emoji_count", 0)),
-            animated_emoji_count=data.get("bface_count", data.get("animated_emoji_count", 0)),
+            standard_emoji_count=data.get(
+                "face_count", data.get("standard_emoji_count", 0)
+            ),
+            custom_emoji_count=data.get(
+                "mface_count", data.get("custom_emoji_count", 0)
+            ),
+            animated_emoji_count=data.get(
+                "bface_count", data.get("animated_emoji_count", 0)
+            ),
             sticker_count=data.get("sface_count", data.get("sticker_count", 0)),
             other_emoji_count=data.get("other_emoji_count", 0),
             emoji_details=details,
@@ -155,11 +160,17 @@ class ActivityVisualization:
         heatmap = data.get("activity_heatmap_data", data.get("heatmap_data", {}))
 
         return cls(
-            hourly_activity=tuple(hourly.items()) if isinstance(hourly, dict) else tuple(hourly),
-            daily_activity=tuple(daily.items()) if isinstance(daily, dict) else tuple(daily),
+            hourly_activity=tuple(hourly.items())
+            if isinstance(hourly, dict)
+            else tuple(hourly),
+            daily_activity=tuple(daily.items())
+            if isinstance(daily, dict)
+            else tuple(daily),
             user_activity_ranking=tuple(ranking),
             peak_hours=tuple(peaks),
-            heatmap_data=tuple(heatmap.items()) if isinstance(heatmap, dict) else tuple(heatmap),
+            heatmap_data=tuple(heatmap.items())
+            if isinstance(heatmap, dict)
+            else tuple(heatmap),
         )
 
     def to_dict(self) -> dict:
@@ -196,7 +207,9 @@ class GroupStatistics:
     participant_count: int = 0
     most_active_period: str = ""
     emoji_statistics: EmojiStatistics = field(default_factory=EmojiStatistics)
-    activity_visualization: ActivityVisualization = field(default_factory=ActivityVisualization)
+    activity_visualization: ActivityVisualization = field(
+        default_factory=ActivityVisualization
+    )
     token_usage: TokenUsage = field(default_factory=TokenUsage)
 
     @property
@@ -269,7 +282,7 @@ class UserStatistics:
     char_count: int = 0
     emoji_count: int = 0
     reply_count: int = 0
-    hours: Dict[int, int] = field(default_factory=lambda: {h: 0 for h in range(24)})
+    hours: dict[int, int] = field(default_factory=lambda: dict.fromkeys(range(24), 0))
 
     @property
     def average_chars(self) -> float:

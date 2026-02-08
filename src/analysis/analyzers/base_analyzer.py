@@ -6,9 +6,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ...utils.logger import logger
-
 from ...models.data_models import TokenUsage
+from ...utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
     call_provider_with_retry,
@@ -113,8 +112,9 @@ class BaseAnalyzer(ABC):
             session_id: 会话ID
         """
         try:
-            from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
             from pathlib import Path
+
+            from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
             plugin_name = "astrbot_plugin_qq_group_daily_analysis"
             base_data_path = get_astrbot_plugin_data_path()

@@ -18,7 +18,7 @@ print(f"Project Root: {project_root}")
 
 # Mock logger before importing anything that uses it
 # Mock logger
-from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.utils import (
+from data.plugins.astrbot_plugin_qq_group_daily_analysis.src.utils import (  # noqa: E402
     logger as plugin_logger_module,
 )
 

@@ -6,7 +6,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass(frozen=True)
@@ -103,7 +102,7 @@ class UserTitleCollection:
     这是可变的，以便逐步构建称号集合。
     """
 
-    titles: List[UserTitle] = field(default_factory=list)
+    titles: list[UserTitle] = field(default_factory=list)
 
     def add(self, title: UserTitle) -> None:
         """添加用户称号到集合。"""
@@ -123,7 +122,7 @@ class UserTitleCollection:
                 return title
         return None
 
-    def to_list(self) -> List[dict]:
+    def to_list(self) -> list[dict]:
         """将所有称号转换为字典列表。"""
         return [t.to_dict() for t in self.titles]
 
