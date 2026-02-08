@@ -46,7 +46,9 @@ class LLMException(AnalysisException):
 
     def __init__(self, message: str = "LLM API 调用失败", provider: str = ""):
         self.provider = provider
-        super().__init__(f"{message} (提供商: {provider})" if provider else message, "LLM_ERROR")
+        super().__init__(
+            f"{message} (提供商: {provider})" if provider else message, "LLM_ERROR"
+        )
 
 
 class LLMRateLimitException(LLMException):
@@ -82,7 +84,9 @@ class PlatformNotSupportedException(PlatformException):
     """当平台不被支持时抛出。"""
 
     def __init__(self, platform: str):
-        super().__init__(f"平台 '{platform}' 不被支持", platform, "PLATFORM_NOT_SUPPORTED")
+        super().__init__(
+            f"平台 '{platform}' 不被支持", platform, "PLATFORM_NOT_SUPPORTED"
+        )
 
 
 class PlatformConnectionException(PlatformException):
@@ -102,17 +106,29 @@ class PlatformAPIException(PlatformException):
 class MessageFetchException(PlatformException):
     """当获取消息失败时抛出。"""
 
-    def __init__(self, message: str = "获取消息失败", platform: str = "", group_id: str = ""):
+    def __init__(
+        self, message: str = "获取消息失败", platform: str = "", group_id: str = ""
+    ):
         self.group_id = group_id
-        super().__init__(f"{message} (群组: {group_id})" if group_id else message, platform, "MESSAGE_FETCH_ERROR")
+        super().__init__(
+            f"{message} (群组: {group_id})" if group_id else message,
+            platform,
+            "MESSAGE_FETCH_ERROR",
+        )
 
 
 class MessageSendException(PlatformException):
     """当发送消息失败时抛出。"""
 
-    def __init__(self, message: str = "发送消息失败", platform: str = "", group_id: str = ""):
+    def __init__(
+        self, message: str = "发送消息失败", platform: str = "", group_id: str = ""
+    ):
         self.group_id = group_id
-        super().__init__(f"{message} (群组: {group_id})" if group_id else message, platform, "MESSAGE_SEND_ERROR")
+        super().__init__(
+            f"{message} (群组: {group_id})" if group_id else message,
+            platform,
+            "MESSAGE_SEND_ERROR",
+        )
 
 
 # ============================================================================
@@ -158,10 +174,15 @@ class RepositoryException(DomainException):
 class DataNotFoundException(RepositoryException):
     """当请求的数据未找到时抛出。"""
 
-    def __init__(self, message: str = "数据未找到", entity_type: str = "", entity_id: str = ""):
+    def __init__(
+        self, message: str = "数据未找到", entity_type: str = "", entity_id: str = ""
+    ):
         self.entity_type = entity_type
         self.entity_id = entity_id
-        super().__init__(f"{entity_type} 未找到: {entity_id}" if entity_type else message, "DATA_NOT_FOUND")
+        super().__init__(
+            f"{entity_type} 未找到: {entity_id}" if entity_type else message,
+            "DATA_NOT_FOUND",
+        )
 
 
 class DataPersistenceException(RepositoryException):

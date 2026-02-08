@@ -6,12 +6,11 @@
 """
 
 from datetime import datetime
-from typing import List, Optional
 
-from ..value_objects.topic import Topic
-from ..value_objects.user_title import UserTitle
 from ..value_objects.golden_quote import GoldenQuote
 from ..value_objects.statistics import GroupStatistics, TokenUsage
+from ..value_objects.topic import Topic
+from ..value_objects.user_title import UserTitle
 
 
 class ReportGenerator:
@@ -36,9 +35,9 @@ class ReportGenerator:
     def generate_full_report(
         self,
         statistics: GroupStatistics,
-        topics: List[Topic],
-        user_titles: List[UserTitle],
-        golden_quotes: List[GoldenQuote],
+        topics: list[Topic],
+        user_titles: list[UserTitle],
+        golden_quotes: list[GoldenQuote],
         include_header: bool = True,
         include_footer: bool = True,
     ) -> str:
@@ -79,7 +78,7 @@ class ReportGenerator:
 
     def _generate_header(self) -> str:
         """生成报告头部。"""
-        title = f"📊 群聊分析报告"
+        title = "📊 群聊分析报告"
         if self.group_name:
             title += f" - {self.group_name}"
 
@@ -101,7 +100,7 @@ class ReportGenerator:
 
         return "\n".join(lines)
 
-    def _generate_topics_section(self, topics: List[Topic]) -> str:
+    def _generate_topics_section(self, topics: list[Topic]) -> str:
         """生成话题部分。"""
         lines = ["💬 **讨论话题**"]
 
@@ -114,12 +113,16 @@ class ReportGenerator:
             lines.append(f"   参与者: {contributors_str}")
             if topic.detail:
                 # 截断过长的详情
-                detail = topic.detail[:200] + "..." if len(topic.detail) > 200 else topic.detail
+                detail = (
+                    topic.detail[:200] + "..."
+                    if len(topic.detail) > 200
+                    else topic.detail
+                )
                 lines.append(f"   {detail}")
 
         return "\n".join(lines)
 
-    def _generate_user_titles_section(self, titles: List[UserTitle]) -> str:
+    def _generate_user_titles_section(self, titles: list[UserTitle]) -> str:
         """生成用户称号部分。"""
         lines = ["🏆 **用户称号与徽章**"]
 
@@ -129,12 +132,16 @@ class ReportGenerator:
             if title.mbti:
                 lines.append(f"   🧠 MBTI: {title.mbti}")
             if title.reason:
-                reason = title.reason[:150] + "..." if len(title.reason) > 150 else title.reason
+                reason = (
+                    title.reason[:150] + "..."
+                    if len(title.reason) > 150
+                    else title.reason
+                )
                 lines.append(f"   💡 原因: {reason}")
 
         return "\n".join(lines)
 
-    def _generate_golden_quotes_section(self, quotes: List[GoldenQuote]) -> str:
+    def _generate_golden_quotes_section(self, quotes: list[GoldenQuote]) -> str:
         """生成金句部分。"""
         lines = ["✨ **金句集锦**"]
 
@@ -142,12 +149,16 @@ class ReportGenerator:
             lines.append(f'\n{i}. "{quote.content}"')
             lines.append(f"   — {quote.sender}")
             if quote.reason:
-                reason = quote.reason[:100] + "..." if len(quote.reason) > 100 else quote.reason
+                reason = (
+                    quote.reason[:100] + "..."
+                    if len(quote.reason) > 100
+                    else quote.reason
+                )
                 lines.append(f"   ({reason})")
 
         return "\n".join(lines)
 
-    def _generate_footer(self, token_usage: Optional[TokenUsage] = None) -> str:
+    def _generate_footer(self, token_usage: TokenUsage | None = None) -> str:
         """生成报告尾部。"""
         lines = ["─" * 40]
         lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -157,37 +168,7 @@ class ReportGenerator:
 
         return "\n".join(lines)
 
-    def generate_summary_report(
-        self,
-        statistics: GroupStatistics,
-        top_topic: Optional[Topic] = None,
-        top_quote: Optional[GoldenQuote] = None,
-    ) -> str:
-        """
-        生成简要摘要报告。
-
-        参数:
-            statistics: 群聊统计
-            top_topic: 最重要的话题（可选）
-            top_quote: 最佳金句（可选）
-
-        返回:
-            简要摘要字符串
-        """
-        lines = [
-            f"📊 每日摘要 ({self.date_str})",
-            f"消息: {statistics.message_count} | 参与: {statistics.participant_count}人",
-        ]
-
-        if top_topic:
-            lines.append(f"🔥 热门话题: {top_topic.name}")
-
-        if top_quote:
-            lines.append(f'✨ 金句: "{top_quote.content}" — {top_quote.sender}')
-
-        return "\n".join(lines)
-
-    def _generate_topics_section(self, topics: List[Topic]) -> str:
+    def _generate_topics_section(self, topics: list[Topic]) -> str:
         """Generate topics section."""
         lines = ["💬 **Discussion Topics**"]
 
@@ -200,12 +181,16 @@ class ReportGenerator:
             lines.append(f"   Contributors: {contributors_str}")
             if topic.detail:
                 # Truncate long details
-                detail = topic.detail[:200] + "..." if len(topic.detail) > 200 else topic.detail
+                detail = (
+                    topic.detail[:200] + "..."
+                    if len(topic.detail) > 200
+                    else topic.detail
+                )
                 lines.append(f"   {detail}")
 
         return "\n".join(lines)
 
-    def _generate_user_titles_section(self, titles: List[UserTitle]) -> str:
+    def _generate_user_titles_section(self, titles: list[UserTitle]) -> str:
         """Generate user titles section."""
         lines = ["🏆 **User Titles & Badges**"]
 
@@ -215,25 +200,33 @@ class ReportGenerator:
             if title.mbti:
                 lines.append(f"   🧠 MBTI: {title.mbti}")
             if title.reason:
-                reason = title.reason[:150] + "..." if len(title.reason) > 150 else title.reason
+                reason = (
+                    title.reason[:150] + "..."
+                    if len(title.reason) > 150
+                    else title.reason
+                )
                 lines.append(f"   💡 Reason: {reason}")
 
         return "\n".join(lines)
 
-    def _generate_golden_quotes_section(self, quotes: List[GoldenQuote]) -> str:
+    def _generate_golden_quotes_section(self, quotes: list[GoldenQuote]) -> str:
         """Generate golden quotes section."""
         lines = ["✨ **Golden Quotes**"]
 
         for i, quote in enumerate(quotes, 1):
-            lines.append(f"\n{i}. \"{quote.content}\"")
+            lines.append(f'\n{i}. "{quote.content}"')
             lines.append(f"   — {quote.sender}")
             if quote.reason:
-                reason = quote.reason[:100] + "..." if len(quote.reason) > 100 else quote.reason
+                reason = (
+                    quote.reason[:100] + "..."
+                    if len(quote.reason) > 100
+                    else quote.reason
+                )
                 lines.append(f"   ({reason})")
 
         return "\n".join(lines)
 
-    def _generate_footer(self, token_usage: Optional[TokenUsage] = None) -> str:
+    def _generate_footer(self, token_usage: TokenUsage | None = None) -> str:
         """Generate report footer."""
         lines = ["─" * 40]
         lines.append(f"Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -246,8 +239,8 @@ class ReportGenerator:
     def generate_summary_report(
         self,
         statistics: GroupStatistics,
-        top_topic: Optional[Topic] = None,
-        top_quote: Optional[GoldenQuote] = None,
+        top_topic: Topic | None = None,
+        top_quote: GoldenQuote | None = None,
     ) -> str:
         """
         Generate a brief summary report.
@@ -269,6 +262,6 @@ class ReportGenerator:
             lines.append(f"🔥 Hot Topic: {top_topic.name}")
 
         if top_quote:
-            lines.append(f"✨ Quote: \"{top_quote.content}\" — {top_quote.sender}")
+            lines.append(f'✨ Quote: "{top_quote.content}" — {top_quote.sender}')
 
         return "\n".join(lines)

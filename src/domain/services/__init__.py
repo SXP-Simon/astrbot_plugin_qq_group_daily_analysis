@@ -10,11 +10,11 @@
 - 生成服务: 报告生成
 """
 
-from .statistics_calculator import StatisticsCalculator
+from .golden_quote_analyzer import GoldenQuoteAnalyzerAdapter, IGoldenQuoteAnalyzer
 from .report_generator import ReportGenerator
+from .statistics_calculator import StatisticsCalculator
 from .topic_analyzer import ITopicAnalyzer, TopicAnalyzerAdapter
 from .user_title_analyzer import IUserTitleAnalyzer, UserTitleAnalyzerAdapter
-from .golden_quote_analyzer import IGoldenQuoteAnalyzer, GoldenQuoteAnalyzerAdapter
 
 __all__ = [
     # 统计与报告服务

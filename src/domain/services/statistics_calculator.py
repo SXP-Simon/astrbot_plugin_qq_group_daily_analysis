@@ -5,16 +5,13 @@
 它是平台无关的，与领域值对象配合使用。
 """
 
-from datetime import datetime
-from typing import Dict, List, Optional
-
 from ..value_objects import UnifiedMessage
 from ..value_objects.statistics import (
-    GroupStatistics,
-    UserStatistics,
-    EmojiStatistics,
     ActivityVisualization,
+    EmojiStatistics,
+    GroupStatistics,
     TokenUsage,
+    UserStatistics,
 )
 
 
@@ -26,7 +23,7 @@ class StatisticsCalculator:
     平台无关的统计数据。
     """
 
-    def __init__(self, bot_user_ids: Optional[List[str]] = None):
+    def __init__(self, bot_user_ids: list[str] | None = None):
         """
         初始化统计计算器。
 
@@ -37,8 +34,8 @@ class StatisticsCalculator:
 
     def calculate_group_statistics(
         self,
-        messages: List[UnifiedMessage],
-        token_usage: Optional[TokenUsage] = None,
+        messages: list[UnifiedMessage],
+        token_usage: TokenUsage | None = None,
     ) -> GroupStatistics:
         """
         从消息计算综合群组统计。
@@ -64,7 +61,7 @@ class StatisticsCalculator:
         # 计算基本统计
         message_count = len(filtered_messages)
         total_characters = sum(len(msg.text_content) for msg in filtered_messages)
-        unique_senders = set(msg.sender_id for msg in filtered_messages)
+        unique_senders = {msg.sender_id for msg in filtered_messages}
         participant_count = len(unique_senders)
 
         # 计算表情统计
@@ -87,8 +84,8 @@ class StatisticsCalculator:
         )
 
     def calculate_user_statistics(
-        self, messages: List[UnifiedMessage]
-    ) -> Dict[str, UserStatistics]:
+        self, messages: list[UnifiedMessage]
+    ) -> dict[str, UserStatistics]:
         """
         从消息计算单用户统计。
 
@@ -98,7 +95,7 @@ class StatisticsCalculator:
         返回:
             user_id 到 UserStatistics 的映射字典
         """
-        user_stats: Dict[str, UserStatistics] = {}
+        user_stats: dict[str, UserStatistics] = {}
 
         for msg in messages:
             # 跳过机器人消息
@@ -130,10 +127,10 @@ class StatisticsCalculator:
 
     def get_top_users(
         self,
-        user_stats: Dict[str, UserStatistics],
+        user_stats: dict[str, UserStatistics],
         limit: int = 10,
         min_messages: int = 5,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         按消息数获取活跃用户排行。
 
@@ -146,7 +143,9 @@ class StatisticsCalculator:
             按消息数排序的活跃用户字典列表
         """
         eligible_users = [
-            stats for stats in user_stats.values() if stats.message_count >= min_messages
+            stats
+            for stats in user_stats.values()
+            if stats.message_count >= min_messages
         ]
 
         sorted_users = sorted(
@@ -168,7 +167,7 @@ class StatisticsCalculator:
         ]
 
     def _calculate_emoji_statistics(
-        self, messages: List[UnifiedMessage]
+        self, messages: list[UnifiedMessage]
     ) -> EmojiStatistics:
         """从消息计算表情使用统计。"""
         standard_count = 0
@@ -176,7 +175,7 @@ class StatisticsCalculator:
         animated_count = 0
         sticker_count = 0
         other_count = 0
-        emoji_details: Dict[str, int] = {}
+        emoji_details: dict[str, int] = {}
 
         for msg in messages:
             for content in msg.contents:
@@ -206,12 +205,12 @@ class StatisticsCalculator:
         )
 
     def _calculate_activity_visualization(
-        self, messages: List[UnifiedMessage]
+        self, messages: list[UnifiedMessage]
     ) -> ActivityVisualization:
         """从消息计算活动可视化数据。"""
-        hourly: Dict[int, int] = {h: 0 for h in range(24)}
-        daily: Dict[str, int] = {}
-        user_counts: Dict[str, int] = {}
+        hourly: dict[int, int] = dict.fromkeys(range(24), 0)
+        daily: dict[str, int] = {}
+        user_counts: dict[str, int] = {}
 
         for msg in messages:
             # 每小时活动
@@ -240,12 +239,10 @@ class StatisticsCalculator:
             daily_activity=tuple(daily.items()),
             user_activity_ranking=tuple(user_ranking),
             peak_hours=tuple(peak_hours),
-            heatmap_data=tuple(),  # 可扩展用于热力图可视化
+            heatmap_data=(),  # 可扩展用于热力图可视化
         )
 
-    def _determine_most_active_period(
-        self, activity: ActivityVisualization
-    ) -> str:
+    def _determine_most_active_period(self, activity: ActivityVisualization) -> str:
         """确定最活跃时间段描述。"""
         hourly = dict(activity.hourly_activity)
 

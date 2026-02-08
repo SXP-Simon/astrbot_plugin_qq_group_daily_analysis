@@ -7,7 +7,7 @@ QQ群日常分析插件
 
 import asyncio
 import os
-from typing import Any, Optional
+from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -15,17 +15,15 @@ from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
 
-from .src.application.analysis_orchestrator import AnalysisOrchestrator, AnalysisConfig
-from .src.infrastructure.platform.factory import PlatformAdapterFactory
-from .src.core.config import ConfigManager
+from .src.application.analysis_orchestrator import AnalysisConfig, AnalysisOrchestrator
 from .src.core.bot_manager import BotManager
+from .src.core.config import ConfigManager
 from .src.core.history_manager import HistoryManager
 from .src.reports.generators import ReportGenerator
 from .src.scheduler.auto_scheduler import AutoScheduler
 from .src.scheduler.retry import RetryManager
 from .src.utils.helpers import MessageAnalyzer
 from .src.utils.pdf_utils import PDFInstaller
-from .src.domain.value_objects.unified_message import UnifiedMessage
 
 
 class QQGroupDailyAnalysis(Star):

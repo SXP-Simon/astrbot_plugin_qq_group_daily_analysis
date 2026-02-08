@@ -8,7 +8,7 @@ import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 # 当前追踪的上下文变量
 _current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
@@ -29,10 +29,10 @@ class TraceContext:
     platform: str = ""
     operation: str = ""
     start_time: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # 计时数据
-    _checkpoints: Dict[str, datetime] = field(default_factory=dict, init=False)
+    _checkpoints: dict[str, datetime] = field(default_factory=dict, init=False)
 
     def checkpoint(self, name: str) -> None:
         """
@@ -43,7 +43,7 @@ class TraceContext:
         """
         self._checkpoints[name] = datetime.now()
 
-    def elapsed_ms(self, from_checkpoint: Optional[str] = None) -> float:
+    def elapsed_ms(self, from_checkpoint: str | None = None) -> float:
         """
         获取经过的时间（毫秒）。
 
@@ -60,7 +60,7 @@ class TraceContext:
         delta = datetime.now() - start
         return delta.total_seconds() * 1000
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """将追踪上下文转换为字典。"""
         return {
             "trace_id": self.trace_id,

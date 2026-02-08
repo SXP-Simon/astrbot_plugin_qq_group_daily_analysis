@@ -9,8 +9,8 @@ Discord 平台适配器
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional, Any, Dict
-import asyncio
+from typing import Any
+
 from ....utils.logger import logger
 
 try:
@@ -18,16 +18,16 @@ try:
 except ImportError:
     discord = None
 
-from ....domain.value_objects.unified_message import (
-    UnifiedMessage,
-    MessageContent,
-    MessageContentType,
-)
 from ....domain.value_objects.platform_capabilities import (
-    PlatformCapabilities,
     DISCORD_CAPABILITIES,
+    PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
+from ....domain.value_objects.unified_message import (
+    MessageContent,
+    MessageContentType,
+    UnifiedMessage,
+)
 from ..base import PlatformAdapter
 
 
@@ -103,8 +103,8 @@ class DiscordAdapter(PlatformAdapter):
         group_id: str,
         days: int = 1,
         max_count: int = 100,
-        before_id: Optional[str] = None,
-    ) -> List[UnifiedMessage]:
+        before_id: str | None = None,
+    ) -> list[UnifiedMessage]:
         """
         获取 Discord 频道消息历史
 
@@ -169,7 +169,7 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"获取 Discord 消息失败: {e}", exc_info=True)
             return []
 
-    def _convert_message(self, raw_msg: Any, group_id: str) -> Optional[UnifiedMessage]:
+    def _convert_message(self, raw_msg: Any, group_id: str) -> UnifiedMessage | None:
         """
         将 Discord 消息转换为统一格式
 
@@ -278,7 +278,7 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"转换 Discord 消息失败: {e}")
             return None
 
-    def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
+    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
         """
         将统一消息格式转换为 OneBot 兼容格式 (用于兼容 MessageHandler)
         """
@@ -334,7 +334,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         group_id: str,
         text: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> bool:
         """发送文本消息到 Discord 频道"""
         if not discord:
@@ -389,8 +389,9 @@ class DiscordAdapter(PlatformAdapter):
             if image_path.startswith(("http://", "https://")):
                 # URL 方式，需要下载图片后作为文件发送
                 # 因为 Discord 无法访问内部 URL
-                import aiohttp
                 from io import BytesIO
+
+                import aiohttp
 
                 try:
                     async with aiohttp.ClientSession() as session:
@@ -444,7 +445,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         group_id: str,
         file_path: str,
-        filename: Optional[str] = None,
+        filename: str | None = None,
     ) -> bool:
         """发送文件到 Discord 频道"""
         if not discord:
@@ -468,7 +469,7 @@ class DiscordAdapter(PlatformAdapter):
 
     # ==================== IGroupInfoRepository ====================
 
-    async def get_group_info(self, group_id: str) -> Optional[UnifiedGroup]:
+    async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取 Discord 频道信息"""
         if not discord:
             return None
@@ -504,7 +505,7 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"Discord 获取群组信息失败: {e}")
             return None
 
-    async def get_group_list(self) -> List[str]:
+    async def get_group_list(self) -> list[str]:
         """获取机器人所在的所有频道 ID (仅列出 TextChannel)"""
         if not discord:
             return []
@@ -520,7 +521,7 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"Discord 获取群组列表失败: {e}")
             return []
 
-    async def get_member_list(self, group_id: str) -> List[UnifiedMember]:
+    async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         """获取 Discord 服务器成员列表"""
         if not discord:
             return []
@@ -578,7 +579,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         group_id: str,
         user_id: str,
-    ) -> Optional[UnifiedMember]:
+    ) -> UnifiedMember | None:
         """获取特定成员信息"""
         if not discord:
             return None
@@ -633,7 +634,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         user_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 Discord 用户头像 URL"""
         if not discord:
             logger.warning("[群分析插件 DiscordAdapter] py-cord 未安装")
@@ -675,7 +676,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         user_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 Discord 用户头像 Base64 数据"""
         # 暂时只返回 None，让上层使用 URL
         return None
@@ -684,7 +685,7 @@ class DiscordAdapter(PlatformAdapter):
         self,
         group_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 Discord 服务器图标 URL"""
         if not discord:
             return None
@@ -706,9 +707,9 @@ class DiscordAdapter(PlatformAdapter):
 
     async def batch_get_avatar_urls(
         self,
-        user_ids: List[str],
+        user_ids: list[str],
         size: int = 100,
-    ) -> Dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """批量获取 Discord 用户头像 URL"""
         return {
             user_id: await self.get_user_avatar_url(user_id, size)

@@ -7,9 +7,6 @@
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Optional
-
-from ...utils.logger import logger
 
 
 @dataclass
@@ -41,7 +38,7 @@ class RateLimiter:
         self._tokens = min(self.burst, self._tokens + elapsed * self.rate)
         self._last_update = now
 
-    async def acquire(self, tokens: int = 1, timeout: Optional[float] = None) -> bool:
+    async def acquire(self, tokens: int = 1, timeout: float | None = None) -> bool:
         """
         从桶中获取令牌。
 

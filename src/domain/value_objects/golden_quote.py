@@ -6,7 +6,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass(frozen=True)
@@ -75,7 +74,10 @@ class GoldenQuote:
     def is_valid(self) -> bool:
         """检查金句是否有有效数据。"""
         return bool(
-            self.content and self.content.strip() and self.sender and self.sender.strip()
+            self.content
+            and self.content.strip()
+            and self.sender
+            and self.sender.strip()
         )
 
     @property
@@ -114,7 +116,7 @@ class GoldenQuoteCollection:
     这是可变的，以便逐步构建语录集合。
     """
 
-    quotes: List[GoldenQuote] = field(default_factory=list)
+    quotes: list[GoldenQuote] = field(default_factory=list)
 
     def add(self, quote: GoldenQuote) -> None:
         """添加金句到集合。"""
@@ -126,7 +128,7 @@ class GoldenQuoteCollection:
         quote = GoldenQuote.from_dict(data)
         self.add(quote)
 
-    def to_list(self) -> List[dict]:
+    def to_list(self) -> list[dict]:
         """将所有语录转换为字典列表。"""
         return [q.to_dict() for q in self.quotes]
 

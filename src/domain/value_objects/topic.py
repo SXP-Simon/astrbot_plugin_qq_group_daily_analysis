@@ -6,7 +6,6 @@
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass(frozen=True)
@@ -78,7 +77,9 @@ class Topic:
     @property
     def is_valid(self) -> bool:
         """检查话题是否有有效数据。"""
-        return bool(self.name and self.name.strip() and self.detail and self.detail.strip())
+        return bool(
+            self.name and self.name.strip() and self.detail and self.detail.strip()
+        )
 
 
 @dataclass
@@ -89,7 +90,7 @@ class TopicCollection:
     这是可变的，以便逐步构建话题集合。
     """
 
-    topics: List[Topic] = field(default_factory=list)
+    topics: list[Topic] = field(default_factory=list)
 
     def add(self, topic: Topic) -> None:
         """添加话题到集合。"""
@@ -101,7 +102,7 @@ class TopicCollection:
         topic = Topic.from_dict(data)
         self.add(topic)
 
-    def to_list(self) -> List[dict]:
+    def to_list(self) -> list[dict]:
         """将所有话题转换为字典列表。"""
         return [t.to_dict() for t in self.topics]
 

@@ -7,7 +7,6 @@ import asyncio
 from typing import Any
 
 from ...utils.logger import logger
-
 from ...utils.resilience import CircuitBreaker, global_llm_rate_limiter
 
 _circuit_breakers = {}
