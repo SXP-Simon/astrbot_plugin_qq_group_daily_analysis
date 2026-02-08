@@ -1,8 +1,8 @@
 # 11. DDD 重构实施状态文档 (DDD Refactoring Implementation Status)
 
 > **文档日期**: 2026-02-08
-> **版本**: v1.0
-> **状态**: 实施中
+> **版本**: v1.1
+> **状态**: Phase 1 完成
 
 ---
 
@@ -104,6 +104,23 @@ src/application/
   - `to_onebot_message()`: UnifiedMessage → OneBot dict
   - `unified_to_analysis_text()`: 生成 LLM 分析用文本
 
+### 2.4 核心层集成 (Core Layer Integration) ✅
+
+**BotManager 重构**:
+- 自动创建 `PlatformAdapter` alongside bot instances
+- 新增 `get_adapter()`, `has_adapter()`, `can_analyze()` 方法
+- 新增 `_detect_platform_name()` 自动平台检测
+- `get_status_info()` 包含 adapter 信息
+
+```python
+# 使用示例
+adapter = bot_manager.get_adapter(platform_id)
+if adapter:
+    caps = adapter.get_capabilities()
+    if caps.can_analyze():
+        messages = await adapter.fetch_messages(group_id, days=1)
+```
+
 ---
 
 ## 3. 与原设计文档的差异
@@ -186,12 +203,16 @@ if orchestrator.can_analyze():
 | Commit | 描述 |
 |--------|------|
 | `c1d3bf5` | feat: add DDD architecture layers (domain, infrastructure, application) |
+| `8d5d95a` | docs: add DDD implementation status and architecture decisions |
+| `59ab291` | chore: simplify .gitignore with glob pattern for __pycache__ |
+| `62a91a9` | refactor: integrate PlatformAdapterFactory into BotManager |
 
 ---
 
 ## 7. 下一步计划
 
-1. 添加更多平台适配器 (Telegram, Discord)
-2. 将 `main.py` 中的平台检测逻辑迁移到使用 `PlatformAdapterFactory`
+1. ~~将 BotManager 集成 PlatformAdapterFactory~~ ✅
+2. 添加更多平台适配器 (Telegram, Discord)
 3. 为新功能使用 `AnalysisOrchestrator` 作为入口
 4. 编写单元测试覆盖 DDD 层
+5. 端到端测试完整分析流程
