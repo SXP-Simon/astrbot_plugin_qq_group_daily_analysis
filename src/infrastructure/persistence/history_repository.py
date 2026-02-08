@@ -15,10 +15,14 @@ from ...utils.logger import logger
 
 class HistoryRepository:
     """
-    用于存储和检索分析历史的仓库。
+    基础设施：历史仓库
 
-    此实现将历史记录存储为 JSON 文件，保持
-    与现有 history_manager 的向后兼容性。
+    负责群聊分析历史记录的持久化存储与检索。目前使用本地 JSON 文件实现，
+    保持了与旧版 `history_manager` 的数据格式兼容性。
+
+    Attributes:
+        data_dir (Path): 插件数据存储的总根目录
+        history_dir (Path): 专门存放历史记录的子目录
     """
 
     def __init__(self, data_dir: str):
@@ -26,18 +30,18 @@ class HistoryRepository:
         初始化历史仓库。
 
         Args:
-            data_dir: 存储历史数据的基础目录
+            data_dir (str): 存储历史数据的基础目录路径
         """
         self.data_dir = Path(data_dir)
         self.history_dir = self.data_dir / "history"
         self._ensure_directories()
 
     def _ensure_directories(self) -> None:
-        """确保所需目录存在。"""
+        """内部方法：确保所需的目录结构已创建。"""
         self.history_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_group_history_path(self, group_id: str) -> Path:
-        """获取群组的历史文件路径。"""
+        """内部方法：获取特定群组的历史 JSON 文件路径。"""
         return self.history_dir / f"group_{group_id}.json"
 
     def save_analysis_result(
@@ -47,52 +51,52 @@ class HistoryRepository:
         date_str: str | None = None,
     ) -> bool:
         """
-        保存分析结果到历史记录。
+        将分析结果保存到持久化存储。
 
         Args:
-            group_id: 群组标识符
-            result: 分析结果字典
-            date_str: 日期字符串（默认为今天）
+            group_id (str): 群组标识符
+            result (dict[str, Any]): 包含统计、金句等信息的分析结果字典
+            date_str (str, optional): 关联日期 (YYYY-MM-DD)，默认为执行日
 
         Returns:
-            如果保存成功则返回 True
+            bool: 保存成功返回 True，发生异常返回 False
         """
         try:
             date_str = date_str or datetime.now().strftime("%Y-%m-%d")
             history = self.load_group_history(group_id)
 
-            # 如果不存在则添加时间戳
+            # 注入执行时间戳
             if "timestamp" not in result:
                 result["timestamp"] = datetime.now().isoformat()
 
-            # 按日期存储
+            # 结构化存储：二级映射 {date -> result}
             if "daily" not in history:
                 history["daily"] = {}
 
             history["daily"][date_str] = result
             history["last_updated"] = datetime.now().isoformat()
 
-            # 写入文件
+            # 原子写入（覆盖）
             history_path = self._get_group_history_path(group_id)
             with open(history_path, "w", encoding="utf-8") as f:
                 json.dump(history, f, ensure_ascii=False, indent=2)
 
-            logger.debug(f"已保存群组 {group_id} 在 {date_str} 的分析结果")
+            logger.debug(f"已保存群 {group_id} 在 {date_str} 的历史分析记录")
             return True
 
         except Exception as e:
-            logger.error(f"保存分析结果失败: {e}")
+            logger.error(f"保存群 {group_id} 的历史记录失败: {e}")
             return False
 
     def load_group_history(self, group_id: str) -> dict[str, Any]:
         """
-        加载群组历史记录。
+        加载特定群组的完整历史记录字典。
 
         Args:
-            group_id: 群组标识符
+            group_id (str): 群组标识符
 
         Returns:
-            历史记录字典
+            dict[str, Any]: 历史数据字典，若文件不存在则返回包含空 daily 结构的初始字典
         """
         try:
             history_path = self._get_group_history_path(group_id)
@@ -101,78 +105,77 @@ class HistoryRepository:
                     return json.load(f)
             return {"daily": {}, "group_id": group_id}
         except Exception as e:
-            logger.error(f"加载群组历史记录失败: {e}")
+            logger.error(f"加载群 {group_id} 的历史记录失败: {e}")
             return {"daily": {}, "group_id": group_id}
 
     def get_analysis_result(
         self, group_id: str, date_str: str
     ) -> dict[str, Any] | None:
         """
-        获取特定日期的分析结果。
+        获取指定日期已存档的分析结果。
 
         Args:
-            group_id: 群组标识符
-            date_str: 日期字符串 (YYYY-MM-DD 格式)
+            group_id (str): 群组 ID
+            date_str (str): 目标日期 (YYYY-MM-DD)
 
         Returns:
-            分析结果，如果未找到则返回 None
+            Optional[dict[str, Any]]: 分析结果字典，未找到则返回 None
         """
         history = self.load_group_history(group_id)
         return history.get("daily", {}).get(date_str)
 
     def get_recent_results(self, group_id: str, limit: int = 7) -> list[dict[str, Any]]:
         """
-        获取最近的分析结果。
+        获取指定群组最近 N 次的分析结果列表。
 
         Args:
-            group_id: 群组标识符
-            limit: 返回的最大结果数
+            group_id (str): 群组 ID
+            limit (int): 最大返回条数
 
         Returns:
-            最近分析结果列表
+            list[dict[str, Any]]: 按日期降序排列的结果列表
         """
         history = self.load_group_history(group_id)
         daily = history.get("daily", {})
 
-        # 按日期降序排序
+        # 按日期字符串字典序降序排列（YYYY-MM-DD 天然有序）
         sorted_dates = sorted(daily.keys(), reverse=True)[:limit]
         return [daily[date] for date in sorted_dates]
 
     def has_analysis_for_date(self, group_id: str, date_str: str) -> bool:
         """
-        检查特定日期是否存在分析结果。
+        检查指定日期是否已经生成过分析。
 
         Args:
-            group_id: 群组标识符
-            date_str: 日期字符串 (YYYY-MM-DD 格式)
+            group_id (str): 群组 ID
+            date_str (str): 日期字符串
 
         Returns:
-            如果分析结果存在则返回 True
+            bool: 存在记录则返回 True
         """
-        result = self.get_analysis_result(group_id, date_str)
-        return result is not None
+        return self.get_analysis_result(group_id, date_str) is not None
 
     def delete_old_history(self, group_id: str, keep_days: int = 30) -> int:
         """
-        删除超过指定天数的历史记录。
+        自动清理超过天数限制的陈旧历史记录。
 
         Args:
-            group_id: 群组标识符
-            keep_days: 保留历史记录的天数
+            group_id (str): 群组 ID
+            keep_days (int): 保留的天数上限
 
         Returns:
-            删除的条目数
+            int: 实际删除的记录条数
         """
         try:
             history = self.load_group_history(group_id)
             daily = history.get("daily", {})
 
-            # 计算截止日期（简单的字符串比较适用于 YYYY-MM-DD 格式）
+            # 计算截止日期边界
             from datetime import timedelta
 
             cutoff = (datetime.now() - timedelta(days=keep_days)).strftime("%Y-%m-%d")
 
-            # 查找要删除的日期
+            # 筛选已过期的日期
             dates_to_delete = [date for date in daily.keys() if date < cutoff]
 
             for date in dates_to_delete:
@@ -187,22 +190,23 @@ class HistoryRepository:
             return len(dates_to_delete)
 
         except Exception as e:
-            logger.error(f"删除旧历史记录失败: {e}")
+            logger.error(f"清理群 {group_id} 的陈旧历史记录失败: {e}")
             return 0
 
     def list_groups_with_history(self) -> list[str]:
         """
-        列出所有有历史记录的群组。
+        扫描文件系统，列出当前所有具有存档记录的群组 ID。
 
         Returns:
-            群组 ID 列表
+            list[str]: 群组 ID 字符串列表
         """
         try:
             groups = []
             for file_path in self.history_dir.glob("group_*.json"):
+                # 从文件名反推群组 ID (group_123.json -> 123)
                 group_id = file_path.stem.replace("group_", "")
                 groups.append(group_id)
             return groups
         except Exception as e:
-            logger.error(f"列出群组失败: {e}")
+            logger.error(f"列出历史记录群组失败: {e}")
             return []

@@ -23,15 +23,9 @@ class MessageHandler:
         """从bot实例中提取ID（单个）"""
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
             return str(bot_instance.self_id)
-        elif hasattr(bot_instance, "qq") and bot_instance.qq:
-            return str(bot_instance.qq)
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
         return None
-
-    def _extract_bot_qq_id_from_instance(self, bot_instance):
-        """从bot实例中提取QQ号（已弃用）"""
-        return self._extract_bot_self_id_from_instance(bot_instance)
 
     async def fetch_group_messages(
         self, bot_instance, group_id: str, days: int, platform_id: str = None
@@ -64,12 +58,12 @@ class MessageHandler:
                 logger.error("未提供 bot_instance 且未找到适配器")
                 return []
 
-            # 确保bot_manager有QQ号列表用于过滤
+            # 确保bot_manager有 ID 列表用于过滤
             if self.bot_manager and not self.bot_manager.has_bot_self_id():
-                # 尝试从bot_instance提取QQ号并设置为列表
-                bot_self_id = self._extract_bot_qq_id_from_instance(bot_instance)
+                # 尝试从bot_instance提取 ID 并设置为列表
+                bot_self_id = self._extract_bot_self_id_from_instance(bot_instance)
                 if bot_self_id:
-                    # 将单个QQ号转换为列表，保持统一处理
+                    # 将单个 ID 转换为列表，保持统一处理
                     self.bot_manager.set_bot_self_ids([bot_self_id])
 
             # 计算时间范围
@@ -117,9 +111,9 @@ class MessageHandler:
                             )
                             return []
                 elif hasattr(bot_instance, "api"):
-                    # QQ 官方 bot (botClient) 不支持历史消息
+                    # 官方 bot (botClient) 不支持历史消息
                     logger.error(
-                        f"群 {group_id} 检测到 QQ 官方 Bot，官方 API 不支持获取历史消息"
+                        f"群 {group_id} 检测到官方 Bot，官方 API 不支持获取历史消息"
                     )
                     return []
                 else:
@@ -211,7 +205,7 @@ class MessageHandler:
                     text = content.get("data", {}).get("text", "")
                     total_chars += len(text)
                 elif content.get("type") == "face":
-                    # QQ基础表情
+                    # 基础表情
                     emoji_statistics.face_count += 1
                     face_id = content.get("data", {}).get("id", "unknown")
                     emoji_statistics.face_details[f"face_{face_id}"] = (

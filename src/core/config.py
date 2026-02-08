@@ -186,10 +186,6 @@ class ConfigManager:
             ids = self.config.get("bot_qq_ids", [])
         return ids
 
-    def get_bot_qq_ids(self) -> list:
-        """获取bot QQ号列表 (已弃用，建议使用 get_bot_self_ids)"""
-        return self.get_bot_self_ids()
-
     def get_pdf_filename_format(self) -> str:
         """获取PDF文件名格式"""
         return self.config.get(

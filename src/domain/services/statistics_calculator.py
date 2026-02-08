@@ -17,18 +17,20 @@ from ..value_objects.statistics import (
 
 class StatisticsCalculator:
     """
-    计算群聊统计的领域服务。
+    领域服务：统计计算器
 
-    该服务处理 UnifiedMessage 对象并生成
-    平台无关的统计数据。
+    负责处理统一格式的消息流，并生成多维度的统计分析结果。
+
+    Attributes:
+        bot_user_ids (set[str]): 需要在统计中过滤掉的机器人 ID 集合
     """
 
     def __init__(self, bot_user_ids: list[str] | None = None):
         """
         初始化统计计算器。
 
-        参数:
-            bot_user_ids: 要从统计中过滤的机器人用户 ID 列表
+        Args:
+            bot_user_ids (list[str], optional): 机器人用户 ID 列表
         """
         self.bot_user_ids = set(bot_user_ids or [])
 
@@ -38,14 +40,14 @@ class StatisticsCalculator:
         token_usage: TokenUsage | None = None,
     ) -> GroupStatistics:
         """
-        从消息计算综合群组统计。
+        根据一组消息计算综合群组统计数据。
 
-        参数:
-            messages: 要分析的统一消息列表
-            token_usage: LLM 分析的可选令牌使用量
+        Args:
+            messages (list[UnifiedMessage]): 待分析的消息列表
+            token_usage (TokenUsage, optional): 关联的 LLM 令牌消耗
 
-        返回:
-            包含计算统计的 GroupStatistics 对象
+        Returns:
+            GroupStatistics: 计算出的群组统计对象
         """
         if not messages:
             return GroupStatistics()
@@ -87,13 +89,13 @@ class StatisticsCalculator:
         self, messages: list[UnifiedMessage]
     ) -> dict[str, UserStatistics]:
         """
-        从消息计算单用户统计。
+        为每个独立用户计算详细的行为统计。
 
-        参数:
-            messages: 要分析的统一消息列表
+        Args:
+            messages (list[UnifiedMessage]): 待分析的消息列表
 
-        返回:
-            user_id 到 UserStatistics 的映射字典
+        Returns:
+            dict[str, UserStatistics]: 用户 ID 到统计对象的映射
         """
         user_stats: dict[str, UserStatistics] = {}
 
@@ -113,14 +115,14 @@ class StatisticsCalculator:
             stats = user_stats[user_id]
             stats.message_count += 1
             stats.char_count += len(msg.text_content)
-            stats.emoji_count += msg.emoji_count
+            stats.emoji_count += msg.get_emoji_count()
 
             # 计算回复数
             if msg.reply_to_id:
                 stats.reply_count += 1
 
             # 跟踪每小时活动
-            hour = msg.timestamp.hour
+            hour = msg.get_datetime().hour
             stats.hours[hour] = stats.hours.get(hour, 0) + 1
 
         return user_stats
@@ -132,15 +134,15 @@ class StatisticsCalculator:
         min_messages: int = 5,
     ) -> list[dict]:
         """
-        按消息数获取活跃用户排行。
+        获取基于消息活跃度的前 N 名用户排行。
 
-        参数:
-            user_stats: 用户统计字典
-            limit: 返回的最大用户数
-            min_messages: 被包含所需的最少消息数
+        Args:
+            user_stats (dict[str, UserStatistics]): 用户统计映射
+            limit (int): 返回的最大数量
+            min_messages (int): 进入排行的最低消息门槛
 
-        返回:
-            按消息数排序的活跃用户字典列表
+        Returns:
+            list[dict]: 排序后的用户摘要字典列表
         """
         eligible_users = [
             stats
@@ -148,6 +150,7 @@ class StatisticsCalculator:
             if stats.message_count >= min_messages
         ]
 
+        # 按消息数降序排序
         sorted_users = sorted(
             eligible_users, key=lambda x: x.message_count, reverse=True
         )
@@ -169,7 +172,15 @@ class StatisticsCalculator:
     def _calculate_emoji_statistics(
         self, messages: list[UnifiedMessage]
     ) -> EmojiStatistics:
-        """从消息计算表情使用统计。"""
+        """
+        内部方法：扫描消息流并汇总表情符号及贴纸的使用频次。
+
+        Args:
+            messages (list[UnifiedMessage]): 待扫描的消息列表
+
+        Returns:
+            EmojiStatistics: 包含标准表情、自定义表情、贴纸等分类计数的统计对象
+        """
         standard_count = 0
         custom_count = 0
         animated_count = 0
@@ -179,11 +190,15 @@ class StatisticsCalculator:
 
         for msg in messages:
             for content in msg.contents:
-                if content.type.value == "emoji":
-                    emoji_id = content.metadata.get("emoji_id", "unknown")
+                if content.is_emoji():
+                    emoji_id = content.emoji_id or "unknown"
                     emoji_details[emoji_id] = emoji_details.get(emoji_id, 0) + 1
 
-                    emoji_type = content.metadata.get("emoji_type", "standard")
+                    emoji_type = (
+                        content.raw_data.get("emoji_type", "standard")
+                        if isinstance(content.raw_data, dict)
+                        else "standard"
+                    )
                     if emoji_type == "standard":
                         standard_count += 1
                     elif emoji_type == "custom":
@@ -207,18 +222,27 @@ class StatisticsCalculator:
     def _calculate_activity_visualization(
         self, messages: list[UnifiedMessage]
     ) -> ActivityVisualization:
-        """从消息计算活动可视化数据。"""
+        """
+        内部方法：计算群组在时间轴（小时/日期）上的活跃分布。
+
+        Args:
+            messages (list[UnifiedMessage]): 消息列表
+
+        Returns:
+            ActivityVisualization: 包含 24 小时活跃分布、每日活跃趋势、峰值小时及用户排名的对象
+        """
         hourly: dict[int, int] = dict.fromkeys(range(24), 0)
         daily: dict[str, int] = {}
         user_counts: dict[str, int] = {}
 
         for msg in messages:
+            dt = msg.get_datetime()
             # 每小时活动
-            hour = msg.timestamp.hour
+            hour = dt.hour
             hourly[hour] += 1
 
             # 每日活动
-            date_str = msg.timestamp.strftime("%Y-%m-%d")
+            date_str = dt.strftime("%Y-%m-%d")
             daily[date_str] = daily.get(date_str, 0) + 1
 
             # 用户活动
@@ -239,14 +263,22 @@ class StatisticsCalculator:
             daily_activity=tuple(daily.items()),
             user_activity_ranking=tuple(user_ranking),
             peak_hours=tuple(peak_hours),
-            heatmap_data=(),  # 可扩展用于热力图可视化
+            heatmap_data=(),
         )
 
     def _determine_most_active_period(self, activity: ActivityVisualization) -> str:
-        """确定最活跃时间段描述。"""
+        """
+        内部方法：根据 24 小时分布数据判定群组的最活跃时段文字描述。
+
+        Args:
+            activity (ActivityVisualization): 活跃分布数据
+
+        Returns:
+            str: 语义化的时间段描述 (如 '上午 (6:00-12:00)')
+        """
         hourly = dict(activity.hourly_activity)
 
-        if not hourly:
+        if not hourly or all(count == 0 for count in hourly.values()):
             return "未知"
 
         # 找到高峰时段

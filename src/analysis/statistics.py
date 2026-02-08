@@ -26,8 +26,8 @@ class UserAnalyzer:
 
     def analyze_users(self, messages: list[dict]) -> dict[str, dict]:
         """分析用户活跃度"""
-        # 获取机器人QQ号列表用于过滤
-        bot_qq_ids = self.config_manager.get_bot_self_ids()
+        # 获取机器人 ID 列表用于过滤
+        bot_self_ids = self.config_manager.get_bot_self_ids()
 
         user_stats = defaultdict(
             lambda: {
@@ -45,7 +45,7 @@ class UserAnalyzer:
             user_id = str(sender.get("user_id", ""))
 
             # 跳过机器人自己的消息，避免进入统计
-            if bot_qq_ids and user_id in [str(qq) for qq in bot_qq_ids]:
+            if bot_self_ids and user_id in [str(sid) for sid in bot_self_ids]:
                 continue
 
             nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
@@ -72,7 +72,7 @@ class UserAnalyzer:
                     user_stats[user_id]["emoji_count"] += len(unicode_emojis)
 
                 elif content.get("type") == "face":
-                    # QQ基础表情
+                    # 基础表情
                     user_stats[user_id]["emoji_count"] += 1
                 elif content.get("type") == "mface":
                     # 动画表情/魔法表情
@@ -99,13 +99,13 @@ class UserAnalyzer:
         self, user_analysis: dict[str, dict], limit: int = 10
     ) -> list[dict]:
         """获取最活跃的用户"""
-        # 获取机器人QQ号列表用于过滤
-        bot_qq_ids = self.config_manager.get_bot_self_ids()
+        # 获取机器人 ID 列表用于过滤
+        bot_self_ids = self.config_manager.get_bot_self_ids()
 
         users = []
         for user_id, stats in user_analysis.items():
             # 过滤机器人自己
-            if bot_qq_ids and str(user_id) in [str(qq) for qq in bot_qq_ids]:
+            if bot_self_ids and str(user_id) in [str(sid) for sid in bot_self_ids]:
                 continue
 
             users.append(

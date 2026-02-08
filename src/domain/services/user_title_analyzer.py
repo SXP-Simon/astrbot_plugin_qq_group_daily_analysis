@@ -101,7 +101,7 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
         # 将结果转换为领域值对象
         titles = [
             UserTitle(
-                user_id=str(t.qq),
+                user_id=str(t.user_id),
                 user_name=t.name,
                 title=t.title,
                 mbti=t.mbti,
