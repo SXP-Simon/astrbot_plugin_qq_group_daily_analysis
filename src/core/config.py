@@ -391,7 +391,7 @@ class ConfigManager:
             from playwright.async_api import async_playwright  # noqa: F401
 
             self._playwright_available = True
-
+            
             # 检查版本
             try:
                 self._playwright_version = playwright.__version__

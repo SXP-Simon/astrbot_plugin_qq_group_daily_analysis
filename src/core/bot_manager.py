@@ -131,14 +131,14 @@ class BotManager:
                     elif hasattr(platform.metadata, "name"):
                         platform_name = platform.metadata.name
                 
-                # fallback detection if name not supported
+                # 后备检测：如果不支持名称
                 if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))):
                     detected = self._detect_platform_name(bot_client)
                     if detected:
                         platform_name = detected
 
                 self.set_bot_instance(bot_client, platform_id, platform_name)
-                logger.info(f"Lazy discovered bot instance for {platform_id}")
+                logger.info(f"懒加载发现平台 {platform_id} 的 bot 实例")
 
     def get_all_bot_instances(self) -> dict:
         """获取所有已加载的bot实例 {platform_id: bot_instance}"""
@@ -258,10 +258,10 @@ class BotManager:
         platforms = self._context.platform_manager.get_insts()
         discovered = {}
         
-        logger.info(f"auto_discover_bot_instances: Found {len(platforms)} platforms in manager.")
+        logger.info(f"auto_discover_bot_instances: 在管理器中发现 {len(platforms)} 个平台。")
         for p in platforms:
             p_id = p.metadata.id if hasattr(p, "metadata") else "unknown"
-            logger.info(f" - Inspecting platform: {p_id}, type: {type(p).__name__}")
+            logger.info(f" - 正在检查平台: {p_id}, 类型: {type(p).__name__}")
 
         for platform in platforms:
             # 获取bot实例
@@ -273,7 +273,7 @@ class BotManager:
             elif hasattr(platform, "client"):
                 bot_client = platform.client
 
-            # Get metadata robustly
+            # 健壮地获取元数据
             metadata = getattr(platform, "metadata", None)
             if not metadata and hasattr(platform, "meta"):
                 try:
@@ -281,7 +281,7 @@ class BotManager:
                 except Exception:
                     pass
             
-            # Check if we have valid metadata and ID
+            # 检查是否有有效的元数据和ID
             platform_id = None
             if metadata:
                 if hasattr(metadata, "id"):
@@ -290,7 +290,7 @@ class BotManager:
                     platform_id = metadata.get("id")
             
             if platform_id:
-                # Detect platform name from metadata
+                # 从元数据检测平台名称
                 platform_name = None
                 # 优先使用 type
                 if hasattr(metadata, "type"):
@@ -302,31 +302,31 @@ class BotManager:
                 elif isinstance(metadata, dict) and "name" in metadata:
                     platform_name = metadata["name"]
                 
-                # Verify if this platform name is supported, if not, try detecting from bot instance if available
+                # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
                 if (not platform_name or not PlatformAdapterFactory.is_supported(str(platform_name))) and bot_client:
                      detected = self._detect_platform_name(bot_client)
                      if detected:
                          platform_name = detected
                 
-                logger.debug(f"Discovered platform: {platform_id} ({platform_name}), client ready: {bool(bot_client)}")
+                logger.debug(f"发现平台: {platform_id} ({platform_name}), 客户端就绪: {bool(bot_client)}")
 
-                # Store platform instance regardless of bot_client state
+                # 无论bot客户端状态如何，都存储平台实例
                 self._platforms[platform_id] = platform
                 
                 if bot_client:
                     self.set_bot_instance(bot_client, platform_id, platform_name)
                     discovered[platform_id] = bot_client
                 else:
-                    logger.info(f"Platform {platform_id} found but client is not ready. Will lazy load.")
+                    logger.info(f"发现平台 {platform_id} 但客户端未就绪。将进行懒加载。")
                     discovered[platform_id] = platform
             else:
-                # Fallback: if metadata is missing/broken but we have a client, try to use it
+                # 后备方案：如果元数据丢失/损坏但我们有客户端，尝试使用它
                 if bot_client:
                     platform_name = self._detect_platform_name(bot_client)
                     if platform_name:
-                        # Generate a temporary ID or use name
+                        # 生成临时ID或使用名称
                         platform_id = platform_name
-                        logger.warning(f"Platform metadata missing, using detected type '{platform_name}' as ID.")
+                        logger.warning(f"平台元数据丢失，使用检测到的类型 '{platform_name}' 作为 ID。")
                         
                         self._platforms[platform_id] = platform
                         self.set_bot_instance(bot_client, platform_id, platform_name)
@@ -373,7 +373,7 @@ class BotManager:
             "bot_self_ids": self._bot_self_ids,
             "platform_count": len(self._bot_instances),
             "platforms": list(self._bot_instances.keys()),
-            "adapters": adapter_info,  # DDD integration info
+            "adapters": adapter_info,  # DDD 集成信息
             "ready_for_auto_analysis": self.is_ready_for_auto_analysis(),
         }
 
