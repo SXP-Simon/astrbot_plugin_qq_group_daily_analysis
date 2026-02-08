@@ -53,8 +53,27 @@ class MessageHandler:
         """获取群聊消息记录"""
         try:
             # 验证参数
-            if not group_id or not bot_instance:
+            if not group_id:
                 logger.error(f"群 {group_id} 参数无效")
+                return []
+
+            # 优先使用 PlatformAdapter (DDD)
+            if self.bot_manager and platform_id:
+                adapter = self.bot_manager.get_adapter(platform_id)
+                if adapter:
+                    logger.info(f"使用适配器获取群 {group_id} 消息 (平台: {platform_id})")
+                    # 使用 adapter 获取统一消息列表
+                    unified_messages = await adapter.fetch_messages(
+                        group_id=str(group_id),
+                        days=days,
+                        max_count=self.config_manager.get_max_messages()
+                    )
+                    # 转换为原始格式以兼容后续处理 (后续应迁移到统一格式处理)
+                    return adapter.convert_to_raw_format(unified_messages)
+
+            # --- 以下为旧逻辑 (Legacy) ---
+            if not bot_instance:
+                logger.error("未提供 bot_instance 且未找到适配器")
                 return []
 
             # 确保bot_manager有QQ号列表用于过滤
