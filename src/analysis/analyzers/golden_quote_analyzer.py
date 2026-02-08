@@ -126,6 +126,48 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             logger.error(f"创建金句对象失败: {e}")
             return []
 
+    async def analyze_golden_quotes(
+        self, messages: list[dict], umo: str = None
+    ) -> tuple[list[GoldenQuote], TokenUsage]:
+        """
+        分析群聊金句
+
+        Args:
+            messages: 群聊消息列表
+            umo: 模型唯一标识符
+
+        Returns:
+            (金句列表, Token使用统计)
+        """
+        try:
+            # 提取圣经的文本消息
+            interesting_messages = self.extract_interesting_messages(messages)
+
+            if not interesting_messages:
+                logger.info("没有符合条件的圣经消息，返回空结果")
+                return [], TokenUsage()
+
+            logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
+            quotes, usage = await self.analyze(interesting_messages, umo)
+
+            # 回填 User ID
+            for quote in quotes:
+                for msg in interesting_messages:
+                    # 尝试匹配内容和发送者
+                    # 注意：LLM 可能会微调内容，这里使用包含匹配或精确匹配
+                    if (
+                        quote.content in msg["content"]
+                        or msg["content"] in quote.content
+                    ) and quote.sender == msg["sender"]:
+                        quote.user_id = str(msg.get("user_id", ""))
+                        break
+
+            return quotes, usage
+
+        except Exception as e:
+            logger.error(f"金句分析失败: {e}")
+            return [], TokenUsage()
+
     def extract_interesting_messages(self, messages: list[dict]) -> list[dict]:
         """
         提取圣经的文本消息
@@ -156,7 +198,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
                                     "sender": nickname,
                                     "time": msg_time,
                                     "content": text,
-                                    "qq": sender.get("user_id", 0),
+                                    "user_id": str(sender.get("user_id", "")),
                                 }
                             )
 
@@ -165,46 +207,3 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         except Exception as e:
             logger.error(f"提取圣经消息失败: {e}")
             return []
-
-    async def analyze_golden_quotes(
-        self, messages: list[dict], umo: str = None
-    ) -> tuple[list[GoldenQuote], TokenUsage]:
-        """
-        分析群聊金句
-
-        Args:
-            messages: 群聊消息列表
-            umo: 模型唯一标识符
-
-        Returns:
-            (金句列表, Token使用统计)
-        """
-        try:
-            # 提取圣经的文本消息
-            interesting_messages = self.extract_interesting_messages(messages)
-
-            if not interesting_messages:
-                logger.info("没有符合条件的圣经消息，返回空结果")
-                return [], TokenUsage()
-
-            logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
-            logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
-            quotes, usage = await self.analyze(interesting_messages, umo)
-
-            # 回填QQ号
-            for quote in quotes:
-                for msg in interesting_messages:
-                    # 尝试匹配内容和发送者
-                    # 注意：LLM 可能会微调内容，这里使用包含匹配或精确匹配
-                    if (
-                        quote.content in msg["content"]
-                        or msg["content"] in quote.content
-                    ) and quote.sender == msg["sender"]:
-                        quote.qq = msg.get("qq", 0)
-                        break
-
-            return quotes, usage
-
-        except Exception as e:
-            logger.error(f"金句分析失败: {e}")
-            return [], TokenUsage()

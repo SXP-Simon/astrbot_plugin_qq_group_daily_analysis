@@ -256,7 +256,7 @@ class ReportGenerator:
         titles_list = []
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
-            avatar_data = await self._get_user_avatar(str(title.qq), avatar_getter)
+            avatar_data = await self._get_user_avatar(str(title.user_id), avatar_getter)
             title_data = {
                 "name": title.name,
                 "title": title.title,
@@ -276,8 +276,8 @@ class ReportGenerator:
         quotes_list = []
         for quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.qq), avatar_getter)
-                if quote.qq
+                await self._get_user_avatar(str(quote.user_id), avatar_getter)
+                if quote.user_id
                 else None
             )
             quotes_list.append(
