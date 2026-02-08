@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 
 from astrbot.api import logger
 
-from ...src.models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
-from ...src.visualization.activity_charts import ActivityVisualizer
+from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
+from ..visualization.activity_charts import ActivityVisualizer
 
 
 class MessageHandler:

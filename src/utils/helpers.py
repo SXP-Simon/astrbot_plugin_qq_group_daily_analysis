@@ -7,10 +7,10 @@ import asyncio
 
 from astrbot.api import logger
 
-from ...src.analysis.llm_analyzer import LLMAnalyzer
-from ...src.analysis.statistics import UserAnalyzer
-from ...src.core.message_handler import MessageHandler
-from ...src.models.data_models import TokenUsage
+from ..analysis.llm_analyzer import LLMAnalyzer
+from ..analysis.statistics import UserAnalyzer
+from ..core.message_handler import MessageHandler
+from ..models.data_models import TokenUsage
 
 
 class MessageAnalyzer:
