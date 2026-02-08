@@ -75,3 +75,4 @@ data/t2i_templates/base.html
 __pycache__/main.cpython-312.pyc
 src/core/__pycache__/message_sender.cpython-311.pyc
 src/reports/__pycache__/dispatcher.cpython-311.pyc
+tests/__pycache__/verify_history.cpython-311.pyc
