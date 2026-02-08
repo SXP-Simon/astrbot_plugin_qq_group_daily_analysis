@@ -316,12 +316,27 @@ class QQGroupDailyAnalysis(Star):
             # 8. 生成并发送报告
             output_format = self.config_manager.get_output_format()
 
+            # 定义头像获取回调
+            async def avatar_getter(user_id: str) -> str | None:
+                if not orchestrator:
+                    return None
+                try:
+                    # orchestrator.get_member_avatars 接受列表返回字典
+                    avatars = await orchestrator.get_member_avatars([user_id])
+                    return avatars.get(user_id)
+                except Exception as e:
+                    logger.warning(f"获取头像失败 {user_id}: {e}")
+                    return None
+
             if output_format == "image":
                 (
                     image_url,
                     html_content,
                 ) = await self.report_generator.generate_image_report(
-                    analysis_result, group_id, self.html_render
+                    analysis_result,
+                    group_id,
+                    self.html_render,
+                    avatar_getter=avatar_getter,
                 )
 
                 if image_url:
@@ -358,7 +373,7 @@ class QQGroupDailyAnalysis(Star):
                     return
 
                 pdf_path = await self.report_generator.generate_pdf_report(
-                    analysis_result, group_id
+                    analysis_result, group_id, avatar_getter=avatar_getter
                 )
 
                 if pdf_path:
