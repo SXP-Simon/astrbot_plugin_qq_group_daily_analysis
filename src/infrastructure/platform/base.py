@@ -52,3 +52,19 @@ class PlatformAdapter(
 
     def get_platform_name(self) -> str:
         return self.capabilities.platform_name
+
+    @abstractmethod
+    def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
+        """
+        将统一消息格式转换为平台原生格式。
+        
+        此方法由各平台适配器实现，返回该平台的原生消息格式。
+        用于与现有分析器的向后兼容。
+        
+        参数：
+            messages: UnifiedMessage 列表
+            
+        返回：
+            平台原生格式的消息字典列表
+        """
+        raise NotImplementedError
