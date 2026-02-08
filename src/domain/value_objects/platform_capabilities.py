@@ -1,8 +1,8 @@
 """
-Platform Capabilities Value Object - Runtime decision support
+平台能力值对象 - 运行时决策支持
 
-Each platform adapter declares its capabilities,
-application layer decides operations based on capabilities.
+每个平台适配器声明其能力，
+应用层根据能力决定操作。
 """
 
 from dataclasses import dataclass
@@ -12,30 +12,30 @@ from typing import Optional
 @dataclass(frozen=True)
 class PlatformCapabilities:
     """
-    Platform capability description
+    平台能力描述
     
-    Design principles:
-    1. All fields have default values (most conservative assumption)
-    2. Immutable
-    3. Provide convenient check methods
+    设计原则：
+    1. 所有字段都有默认值（最保守假设）
+    2. 不可变
+    3. 提供便捷的检查方法
     """
-    # Platform identification
+    # 平台标识
     platform_name: str
     platform_version: str = "unknown"
     
-    # Message retrieval capabilities
+    # 消息获取能力
     supports_message_history: bool = False
     max_message_history_days: int = 0
     max_message_count: int = 0
     supports_message_search: bool = False
     
-    # Group info capabilities
+    # 群组信息能力
     supports_group_list: bool = False
     supports_group_info: bool = False
     supports_member_list: bool = False
     supports_member_info: bool = False
     
-    # Message sending capabilities
+    # 消息发送能力
     supports_text_message: bool = True
     supports_image_message: bool = False
     supports_file_message: bool = False
@@ -44,20 +44,20 @@ class PlatformCapabilities:
     max_text_length: int = 4096
     max_image_size_mb: float = 10.0
     
-    # Special capabilities
+    # 特殊能力
     supports_at_all: bool = False
     supports_recall: bool = False
     supports_edit: bool = False
     
-    # Avatar capabilities
+    # 头像能力
     supports_user_avatar: bool = True
     supports_group_avatar: bool = False
     avatar_needs_api_call: bool = False
     avatar_sizes: tuple = (100,)
     
-    # Check methods
+    # 检查方法
     def can_analyze(self) -> bool:
-        """Whether supports group chat analysis (core capability)"""
+        """是否支持群聊分析（核心能力）"""
         return (
             self.supports_message_history 
             and self.max_message_history_days > 0
@@ -65,7 +65,7 @@ class PlatformCapabilities:
         )
 
     def can_send_report(self, format: str = "image") -> bool:
-        """Whether can send report"""
+        """是否能发送报告"""
         if format == "text":
             return self.supports_text_message
         elif format == "image":
@@ -75,11 +75,11 @@ class PlatformCapabilities:
         return False
 
     def get_effective_days(self, requested_days: int) -> int:
-        """Get actual available days"""
+        """获取实际可用天数"""
         return min(requested_days, self.max_message_history_days)
 
     def get_effective_count(self, requested_count: int) -> int:
-        """Get actual available message count"""
+        """获取实际可用消息数"""
         return min(requested_count, self.max_message_count)
 
 
@@ -173,7 +173,7 @@ SLACK_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(24, 32, 48, 72, 192, 512, 1024),
 )
 
-# Capability lookup table
+# 能力查找表
 PLATFORM_CAPABILITIES = {
     "aiocqhttp": ONEBOT_V11_CAPABILITIES,
     "onebot": ONEBOT_V11_CAPABILITIES,
@@ -184,5 +184,5 @@ PLATFORM_CAPABILITIES = {
 
 
 def get_capabilities(platform_name: str) -> Optional[PlatformCapabilities]:
-    """Get capabilities by platform name"""
+    """根据平台名称获取能力"""
     return PLATFORM_CAPABILITIES.get(platform_name.lower())

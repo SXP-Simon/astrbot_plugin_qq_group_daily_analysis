@@ -1,5 +1,5 @@
 """
-Resilience Module - Circuit breaker, rate limiter, and retry utilities
+弹性模块 - 断路器、速率限制器和重试工具
 """
 
 from .circuit_breaker import CircuitBreaker, CircuitState

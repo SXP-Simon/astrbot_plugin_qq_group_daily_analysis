@@ -1,5 +1,5 @@
 """
-Platform Adapter Base Class
+平台适配器基类
 """
 
 from abc import ABC, abstractmethod
@@ -24,10 +24,10 @@ class PlatformAdapter(
     ABC
 ):
     """
-    Platform adapter base class
+    平台适配器基类
     
-    Combines message repository, message sender, group info, and avatar interfaces.
-    Each platform adapter inherits this class and implements all methods.
+    组合消息仓储、消息发送、群组信息和头像接口。
+    每个平台适配器继承此类并实现所有方法。
     """
 
     def __init__(self, bot_instance: Any, config: dict = None):
@@ -37,14 +37,14 @@ class PlatformAdapter(
 
     @property
     def capabilities(self) -> PlatformCapabilities:
-        """Platform capabilities (lazy initialization)"""
+        """平台能力（延迟初始化）"""
         if self._capabilities is None:
             self._capabilities = self._init_capabilities()
         return self._capabilities
 
     @abstractmethod
     def _init_capabilities(self) -> PlatformCapabilities:
-        """Initialize platform capabilities, subclass must implement"""
+        """初始化平台能力，子类必须实现"""
         raise NotImplementedError
 
     def get_capabilities(self) -> PlatformCapabilities:

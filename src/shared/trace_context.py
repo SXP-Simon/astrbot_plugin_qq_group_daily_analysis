@@ -1,7 +1,7 @@
 """
-Trace Context - Request tracing and correlation
+追踪上下文 - 请求追踪和关联
 
-Provides context for tracking requests across the plugin.
+提供用于在插件中跟踪请求的上下文。
 """
 
 import uuid
@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-# Context variable for current trace
+# 当前追踪的上下文变量
 _current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
     "current_trace", default=None
 )
@@ -19,10 +19,9 @@ _current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
 @dataclass
 class TraceContext:
     """
-    Context for tracing requests through the plugin.
+    用于在插件中追踪请求的上下文。
 
-    Provides correlation IDs and timing information for debugging
-    and monitoring.
+    提供用于调试和监控的关联 ID 和计时信息。
     """
 
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -32,27 +31,27 @@ class TraceContext:
     start_time: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    # Timing data
+    # 计时数据
     _checkpoints: Dict[str, datetime] = field(default_factory=dict, init=False)
 
     def checkpoint(self, name: str) -> None:
         """
-        Record a timing checkpoint.
+        记录计时检查点。
 
-        Args:
-            name: Checkpoint name
+        参数:
+            name: 检查点名称
         """
         self._checkpoints[name] = datetime.now()
 
     def elapsed_ms(self, from_checkpoint: Optional[str] = None) -> float:
         """
-        Get elapsed time in milliseconds.
+        获取经过的时间（毫秒）。
 
-        Args:
-            from_checkpoint: Optional checkpoint to measure from
+        参数:
+            from_checkpoint: 可选的起始检查点
 
-        Returns:
-            Elapsed time in milliseconds
+        返回:
+            经过的时间（毫秒）
         """
         start = self.start_time
         if from_checkpoint and from_checkpoint in self._checkpoints:
@@ -62,7 +61,7 @@ class TraceContext:
         return delta.total_seconds() * 1000
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert trace context to dictionary."""
+        """将追踪上下文转换为字典。"""
         return {
             "trace_id": self.trace_id,
             "group_id": self.group_id,
@@ -75,17 +74,17 @@ class TraceContext:
         }
 
     def __enter__(self) -> "TraceContext":
-        """Enter context manager."""
+        """进入上下文管理器。"""
         _current_trace.set(self)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit context manager."""
+        """退出上下文管理器。"""
         _current_trace.set(None)
 
     @classmethod
     def current(cls) -> Optional["TraceContext"]:
-        """Get the current trace context."""
+        """获取当前追踪上下文。"""
         return _current_trace.get()
 
     @classmethod
@@ -96,15 +95,15 @@ class TraceContext:
         operation: str = "",
     ) -> "TraceContext":
         """
-        Get current trace or create a new one.
+        获取当前追踪或创建新追踪。
 
-        Args:
-            group_id: Group identifier
-            platform: Platform name
-            operation: Operation name
+        参数:
+            group_id: 群组标识符
+            platform: 平台名称
+            operation: 操作名称
 
-        Returns:
-            TraceContext instance
+        返回:
+            TraceContext 实例
         """
         current = cls.current()
         if current:
@@ -119,10 +118,10 @@ class TraceContext:
 
 def get_trace_id() -> str:
     """
-    Get current trace ID or generate a new one.
+    获取当前追踪 ID 或生成新的。
 
-    Returns:
-        Trace ID string
+    返回:
+        追踪 ID 字符串
     """
     trace = TraceContext.current()
     if trace:
@@ -136,15 +135,15 @@ def with_trace(
     operation: str = "",
 ):
     """
-    Decorator to add trace context to a function.
+    为函数添加追踪上下文的装饰器。
 
-    Args:
-        group_id: Group identifier
-        platform: Platform name
-        operation: Operation name
+    参数:
+        group_id: 群组标识符
+        platform: 平台名称
+        operation: 操作名称
 
-    Returns:
-        Decorated function
+    返回:
+        装饰后的函数
     """
 
     def decorator(func):

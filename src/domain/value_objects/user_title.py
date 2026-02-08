@@ -1,8 +1,8 @@
 """
-UserTitle Value Object - Platform-agnostic user title representation
+用户称号值对象 - 平台无关的用户称号表示
 
-This value object represents a user's title/badge assigned based on their
-chat behavior analysis. It is immutable and contains no platform-specific logic.
+该值对象表示基于聊天行为分析分配给用户的称号/徽章。
+它是不可变的，不包含任何平台特定的逻辑。
 """
 
 from dataclasses import dataclass, field
@@ -12,17 +12,17 @@ from typing import List
 @dataclass(frozen=True)
 class UserTitle:
     """
-    UserTitle value object for group chat analysis.
+    群聊分析的用户称号值对象。
 
-    Represents a title/badge assigned to a user based on their behavior.
-    Immutable by design (frozen=True).
+    表示基于用户行为分配的称号/徽章。
+    设计上不可变 (frozen=True)。
 
-    Attributes:
-        name: User's display name
-        user_id: Platform-agnostic user identifier (stored as string)
-        title: The title/badge assigned to the user
-        mbti: MBTI personality type assessment
-        reason: Explanation for why this title was assigned
+    属性:
+        name: 用户显示名称
+        user_id: 平台无关的用户标识符（存储为字符串）
+        title: 分配给用户的称号/徽章
+        mbti: MBTI 人格类型评估
+        reason: 分配该称号的原因说明
     """
 
     name: str
@@ -32,23 +32,23 @@ class UserTitle:
     reason: str = ""
 
     def __post_init__(self):
-        """Validate and normalize user title data after initialization."""
-        # Ensure user_id is always a string
+        """初始化后验证和规范化用户称号数据。"""
+        # 确保 user_id 始终是字符串
         if not isinstance(self.user_id, str):
             object.__setattr__(self, "user_id", str(self.user_id))
 
     @classmethod
     def from_dict(cls, data: dict) -> "UserTitle":
         """
-        Create UserTitle from dictionary data.
+        从字典数据创建 UserTitle。
 
-        Args:
-            data: Dictionary with user title data
+        参数:
+            data: 包含用户称号数据的字典
 
-        Returns:
-            UserTitle instance
+        返回:
+            UserTitle 实例
         """
-        # Handle both 'qq' and 'user_id' keys for backward compatibility
+        # 同时处理 'qq' 和 'user_id' 键以保持向后兼容
         user_id = data.get("user_id", data.get("qq", ""))
 
         return cls(
@@ -61,15 +61,15 @@ class UserTitle:
 
     def to_dict(self) -> dict:
         """
-        Convert UserTitle to dictionary.
+        将 UserTitle 转换为字典。
 
-        Returns:
-            Dictionary representation
+        返回:
+            字典表示
         """
         return {
             "name": self.name,
             "user_id": self.user_id,
-            "qq": int(self.user_id) if self.user_id.isdigit() else 0,  # Backward compat
+            "qq": int(self.user_id) if self.user_id.isdigit() else 0,  # 向后兼容
             "title": self.title,
             "mbti": self.mbti,
             "reason": self.reason,
@@ -77,7 +77,7 @@ class UserTitle:
 
     @property
     def is_valid(self) -> bool:
-        """Check if user title has valid data."""
+        """检查用户称号是否有有效数据。"""
         return bool(
             self.name
             and self.name.strip()
@@ -88,7 +88,7 @@ class UserTitle:
 
     @property
     def qq(self) -> int:
-        """Get QQ number for backward compatibility."""
+        """获取 QQ 号码以保持向后兼容。"""
         try:
             return int(self.user_id)
         except (ValueError, TypeError):
@@ -98,25 +98,25 @@ class UserTitle:
 @dataclass
 class UserTitleCollection:
     """
-    Collection of user titles with utility methods.
+    带有实用方法的用户称号集合。
 
-    This is mutable to allow building up a collection of titles.
+    这是可变的，以便逐步构建称号集合。
     """
 
     titles: List[UserTitle] = field(default_factory=list)
 
     def add(self, title: UserTitle) -> None:
-        """Add a user title to the collection."""
+        """添加用户称号到集合。"""
         if title.is_valid:
             self.titles.append(title)
 
     def add_from_dict(self, data: dict) -> None:
-        """Add a user title from dictionary data."""
+        """从字典数据添加用户称号。"""
         title = UserTitle.from_dict(data)
         self.add(title)
 
     def get_by_user_id(self, user_id: str) -> UserTitle | None:
-        """Get title by user ID."""
+        """根据用户 ID 获取称号。"""
         user_id_str = str(user_id)
         for title in self.titles:
             if title.user_id == user_id_str:
@@ -124,7 +124,7 @@ class UserTitleCollection:
         return None
 
     def to_list(self) -> List[dict]:
-        """Convert all titles to list of dictionaries."""
+        """将所有称号转换为字典列表。"""
         return [t.to_dict() for t in self.titles]
 
     def __len__(self) -> int:

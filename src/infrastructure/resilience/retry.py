@@ -1,7 +1,7 @@
 """
-Retry - Retry utilities with exponential backoff
+重试 - 带指数退避的重试工具
 
-Provides retry decorators and utilities for handling transient failures.
+提供用于处理瞬态故障的重试装饰器和工具。
 """
 
 import asyncio
@@ -15,7 +15,7 @@ from astrbot.api import logger
 
 @dataclass
 class RetryConfig:
-    """Configuration for retry behavior."""
+    """重试行为配置。"""
 
     max_attempts: int = 3
     base_delay: float = 1.0
@@ -33,17 +33,17 @@ def calculate_delay(
     jitter: bool,
 ) -> float:
     """
-    Calculate delay for a retry attempt.
+    计算重试尝试的延迟。
 
-    Args:
-        attempt: Current attempt number (0-based)
-        base_delay: Base delay in seconds
-        max_delay: Maximum delay in seconds
-        exponential_base: Base for exponential backoff
-        jitter: Whether to add random jitter
+    参数:
+        attempt: 当前尝试次数（从 0 开始）
+        base_delay: 基础延迟（秒）
+        max_delay: 最大延迟（秒）
+        exponential_base: 指数退避的基数
+        jitter: 是否添加随机抖动
 
-    Returns:
-        Delay in seconds
+    返回:
+        延迟时间（秒）
     """
     delay = base_delay * (exponential_base**attempt)
     delay = min(delay, max_delay)
@@ -64,19 +64,19 @@ def retry_async(
     on_retry: Optional[Callable[[Exception, int], None]] = None,
 ):
     """
-    Decorator for retrying async functions with exponential backoff.
+    带指数退避的异步函数重试装饰器。
 
-    Args:
-        max_attempts: Maximum number of attempts
-        base_delay: Base delay between retries
-        max_delay: Maximum delay between retries
-        exponential_base: Base for exponential backoff
-        jitter: Whether to add random jitter
-        retry_exceptions: Tuple of exceptions to retry on
-        on_retry: Optional callback on retry (exception, attempt)
+    参数:
+        max_attempts: 最大尝试次数
+        base_delay: 重试之间的基础延迟
+        max_delay: 重试之间的最大延迟
+        exponential_base: 指数退避的基数
+        jitter: 是否添加随机抖动
+        retry_exceptions: 要重试的异常元组
+        on_retry: 重试时的可选回调（异常，尝试次数）
 
-    Returns:
-        Decorated function
+    返回:
+        装饰后的函数
     """
 
     def decorator(func: Callable):
@@ -99,13 +99,13 @@ def retry_async(
                             on_retry(e, attempt + 1)
 
                         logger.debug(
-                            f"Retry {attempt + 1}/{max_attempts} for {func.__name__} "
-                            f"after {delay:.2f}s: {e}"
+                            f"重试 {attempt + 1}/{max_attempts} {func.__name__} "
+                            f"延迟 {delay:.2f}s: {e}"
                         )
                         await asyncio.sleep(delay)
                     else:
                         logger.warning(
-                            f"All {max_attempts} attempts failed for {func.__name__}: {e}"
+                            f"{func.__name__} 的所有 {max_attempts} 次尝试均失败: {e}"
                         )
 
             raise last_exception
@@ -117,15 +117,15 @@ def retry_async(
 
 class RetryExecutor:
     """
-    Executor for running functions with retry logic.
+    带重试逻辑的函数执行器。
     """
 
     def __init__(self, config: Optional[RetryConfig] = None):
         """
-        Initialize the retry executor.
+        初始化重试执行器。
 
-        Args:
-            config: Retry configuration
+        参数:
+            config: 重试配置
         """
         self.config = config or RetryConfig()
 
@@ -137,19 +137,19 @@ class RetryExecutor:
         **kwargs,
     ):
         """
-        Execute a function with retry logic.
+        使用重试逻辑执行函数。
 
-        Args:
-            func: Async function to execute
-            *args: Function arguments
-            config: Optional override config
-            **kwargs: Function keyword arguments
+        参数:
+            func: 要执行的异步函数
+            *args: 函数参数
+            config: 可选的覆盖配置
+            **kwargs: 函数关键字参数
 
-        Returns:
-            Function result
+        返回:
+            函数结果
 
-        Raises:
-            Exception: If all retries fail
+        异常:
+            Exception: 如果所有重试都失败
         """
         cfg = config or self.config
         last_exception = None
@@ -169,7 +169,7 @@ class RetryExecutor:
                         cfg.jitter,
                     )
                     logger.debug(
-                        f"Retry {attempt + 1}/{cfg.max_attempts} after {delay:.2f}s: {e}"
+                        f"重试 {attempt + 1}/{cfg.max_attempts} 延迟 {delay:.2f}s: {e}"
                     )
                     await asyncio.sleep(delay)
 

@@ -1,4 +1,4 @@
-# Value Objects
+# 值对象
 from .unified_message import UnifiedMessage, MessageContent, MessageContentType
 from .platform_capabilities import PlatformCapabilities, PLATFORM_CAPABILITIES
 from .unified_group import UnifiedGroup, UnifiedMember
@@ -14,7 +14,7 @@ from .statistics import (
 )
 
 __all__ = [
-    # Core platform abstractions
+    # 核心平台抽象
     "UnifiedMessage",
     "MessageContent",
     "MessageContentType",
@@ -22,14 +22,14 @@ __all__ = [
     "PLATFORM_CAPABILITIES",
     "UnifiedGroup",
     "UnifiedMember",
-    # Analysis value objects
+    # 分析值对象
     "Topic",
     "TopicCollection",
     "UserTitle",
     "UserTitleCollection",
     "GoldenQuote",
     "GoldenQuoteCollection",
-    # Statistics
+    # 统计
     "TokenUsage",
     "EmojiStatistics",
     "ActivityVisualization",

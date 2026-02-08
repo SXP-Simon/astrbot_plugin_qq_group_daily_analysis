@@ -1,8 +1,8 @@
 """
-Report Generator - Domain service for generating analysis reports
+报告生成器 - 生成分析报告的领域服务
 
-This service generates formatted reports from analysis results.
-It is platform-agnostic and produces text/markdown reports.
+该服务从分析结果生成格式化报告。
+它是平台无关的，生成文本/Markdown 报告。
 """
 
 from datetime import datetime
@@ -16,19 +16,19 @@ from ..value_objects.statistics import GroupStatistics, TokenUsage
 
 class ReportGenerator:
     """
-    Domain service for generating analysis reports.
+    生成分析报告的领域服务。
 
-    This service takes analysis results and produces formatted
-    text reports that can be sent to any platform.
+    该服务接收分析结果并生成格式化的
+    文本报告，可发送到任何平台。
     """
 
     def __init__(self, group_name: str = "", date_str: str = ""):
         """
-        Initialize the report generator.
+        初始化报告生成器。
 
-        Args:
-            group_name: Name of the group for report header
-            date_str: Date string for the report
+        参数:
+            group_name: 报告标题中的群组名称
+            date_str: 报告的日期字符串
         """
         self.group_name = group_name
         self.date_str = date_str or datetime.now().strftime("%Y-%m-%d")
@@ -43,18 +43,18 @@ class ReportGenerator:
         include_footer: bool = True,
     ) -> str:
         """
-        Generate a complete analysis report.
+        生成完整的分析报告。
 
-        Args:
-            statistics: Group chat statistics
-            topics: List of discussion topics
-            user_titles: List of user titles/badges
-            golden_quotes: List of golden quotes
-            include_header: Whether to include report header
-            include_footer: Whether to include report footer
+        参数:
+            statistics: 群聊统计
+            topics: 讨论话题列表
+            user_titles: 用户称号/徽章列表
+            golden_quotes: 金句列表
+            include_header: 是否包含报告头部
+            include_footer: 是否包含报告尾部
 
-        Returns:
-            Formatted report string
+        返回:
+            格式化的报告字符串
         """
         sections = []
 
@@ -78,26 +78,112 @@ class ReportGenerator:
         return "\n\n".join(sections)
 
     def _generate_header(self) -> str:
-        """Generate report header."""
-        title = f"📊 Group Analysis Report"
+        """生成报告头部。"""
+        title = f"📊 群聊分析报告"
         if self.group_name:
             title += f" - {self.group_name}"
 
-        return f"{title}\n📅 Date: {self.date_str}\n{'=' * 40}"
+        return f"{title}\n📅 日期: {self.date_str}\n{'=' * 40}"
 
     def _generate_statistics_section(self, stats: GroupStatistics) -> str:
-        """Generate statistics section."""
+        """生成统计部分。"""
         lines = [
-            "📈 **Statistics Overview**",
-            f"• Total Messages: {stats.message_count}",
-            f"• Total Characters: {stats.total_characters}",
-            f"• Participants: {stats.participant_count}",
-            f"• Average Message Length: {stats.average_message_length:.1f} chars",
-            f"• Most Active Period: {stats.most_active_period}",
+            "📈 **统计概览**",
+            f"• 消息总数: {stats.message_count}",
+            f"• 字符总数: {stats.total_characters}",
+            f"• 参与人数: {stats.participant_count}",
+            f"• 平均消息长度: {stats.average_message_length:.1f} 字符",
+            f"• 最活跃时段: {stats.most_active_period}",
         ]
 
         if stats.emoji_count > 0:
-            lines.append(f"• Emoji Used: {stats.emoji_count}")
+            lines.append(f"• 表情使用: {stats.emoji_count}")
+
+        return "\n".join(lines)
+
+    def _generate_topics_section(self, topics: List[Topic]) -> str:
+        """生成话题部分。"""
+        lines = ["💬 **讨论话题**"]
+
+        for i, topic in enumerate(topics, 1):
+            contributors_str = ", ".join(topic.contributors[:3])
+            if len(topic.contributors) > 3:
+                contributors_str += f" 等{len(topic.contributors) - 3}人"
+
+            lines.append(f"\n{i}. **{topic.name}**")
+            lines.append(f"   参与者: {contributors_str}")
+            if topic.detail:
+                # 截断过长的详情
+                detail = topic.detail[:200] + "..." if len(topic.detail) > 200 else topic.detail
+                lines.append(f"   {detail}")
+
+        return "\n".join(lines)
+
+    def _generate_user_titles_section(self, titles: List[UserTitle]) -> str:
+        """生成用户称号部分。"""
+        lines = ["🏆 **用户称号与徽章**"]
+
+        for title in titles:
+            lines.append(f"\n👤 **{title.name}**")
+            lines.append(f"   🎖️ 称号: {title.title}")
+            if title.mbti:
+                lines.append(f"   🧠 MBTI: {title.mbti}")
+            if title.reason:
+                reason = title.reason[:150] + "..." if len(title.reason) > 150 else title.reason
+                lines.append(f"   💡 原因: {reason}")
+
+        return "\n".join(lines)
+
+    def _generate_golden_quotes_section(self, quotes: List[GoldenQuote]) -> str:
+        """生成金句部分。"""
+        lines = ["✨ **金句集锦**"]
+
+        for i, quote in enumerate(quotes, 1):
+            lines.append(f'\n{i}. "{quote.content}"')
+            lines.append(f"   — {quote.sender}")
+            if quote.reason:
+                reason = quote.reason[:100] + "..." if len(quote.reason) > 100 else quote.reason
+                lines.append(f"   ({reason})")
+
+        return "\n".join(lines)
+
+    def _generate_footer(self, token_usage: Optional[TokenUsage] = None) -> str:
+        """生成报告尾部。"""
+        lines = ["─" * 40]
+        lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        if token_usage and token_usage.total_tokens > 0:
+            lines.append(f"令牌使用: {token_usage.total_tokens} tokens")
+
+        return "\n".join(lines)
+
+    def generate_summary_report(
+        self,
+        statistics: GroupStatistics,
+        top_topic: Optional[Topic] = None,
+        top_quote: Optional[GoldenQuote] = None,
+    ) -> str:
+        """
+        生成简要摘要报告。
+
+        参数:
+            statistics: 群聊统计
+            top_topic: 最重要的话题（可选）
+            top_quote: 最佳金句（可选）
+
+        返回:
+            简要摘要字符串
+        """
+        lines = [
+            f"📊 每日摘要 ({self.date_str})",
+            f"消息: {statistics.message_count} | 参与: {statistics.participant_count}人",
+        ]
+
+        if top_topic:
+            lines.append(f"🔥 热门话题: {top_topic.name}")
+
+        if top_quote:
+            lines.append(f'✨ 金句: "{top_quote.content}" — {top_quote.sender}')
 
         return "\n".join(lines)
 
