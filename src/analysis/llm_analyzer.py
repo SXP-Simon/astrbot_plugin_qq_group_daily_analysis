@@ -5,9 +5,8 @@ LLM分析器模块
 
 import asyncio
 
-from ..utils.logger import logger
-
 from ..models.data_models import GoldenQuote, SummaryTopic, TokenUsage, UserTitle
+from ..utils.logger import logger
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer
 from .analyzers.topic_analyzer import TopicAnalyzer
 from .analyzers.user_title_analyzer import UserTitleAnalyzer
@@ -181,10 +180,11 @@ class LLMAnalyzer:
             if self.config_manager.get_debug_mode():
                 try:
                     import json
+                    from pathlib import Path
+
                     from astrbot.core.utils.astrbot_path import (
                         get_astrbot_plugin_data_path,
                     )
-                    from pathlib import Path
 
                     plugin_name = "astrbot_plugin_qq_group_daily_analysis"
                     base_data_path = get_astrbot_plugin_data_path()

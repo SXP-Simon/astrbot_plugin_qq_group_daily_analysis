@@ -2,11 +2,10 @@
 分析任务实体 - 聚合根
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
 import time
 import uuid
+from dataclasses import dataclass, field
+from enum import Enum
 
 
 class TaskStatus(Enum):
@@ -24,6 +23,7 @@ class TaskStatus(Enum):
 @dataclass
 class AnalysisTask:
     """分析任务实体 - 聚合根"""
+
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     group_id: str = ""
     platform_name: str = ""
@@ -31,10 +31,10 @@ class AnalysisTask:
     status: TaskStatus = TaskStatus.PENDING
     is_manual: bool = False
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    result_id: Optional[str] = None
-    error_message: Optional[str] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    result_id: str | None = None
+    error_message: str | None = None
 
     def start(self, can_analyze: bool) -> bool:
         """启动任务，验证平台能力"""
@@ -63,7 +63,7 @@ class AnalysisTask:
         self.completed_at = time.time()
 
     @property
-    def duration(self) -> Optional[float]:
+    def duration(self) -> float | None:
         """获取任务持续时间（秒）"""
         if self.started_at and self.completed_at:
             return self.completed_at - self.started_at

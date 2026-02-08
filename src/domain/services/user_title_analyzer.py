@@ -11,10 +11,10 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Tuple, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ..value_objects.user_title import UserTitle
 from ..value_objects.unified_message import UnifiedMessage
+from ..value_objects.user_title import UserTitle
 
 if TYPE_CHECKING:
     from ..value_objects.statistics import TokenUsage
@@ -23,28 +23,28 @@ if TYPE_CHECKING:
 class IUserTitleAnalyzer(ABC):
     """
     用户称号分析服务接口
-    
+
     定义平台无关的用户称号分析契约。
     所有平台的用户称号分析都应该实现此接口。
     """
-    
+
     @abstractmethod
     async def analyze(
         self,
-        messages: List[UnifiedMessage],
-        user_analysis: Dict[str, Any],
+        messages: list[UnifiedMessage],
+        user_analysis: dict[str, Any],
         unified_msg_origin: str = None,
-        top_users: List[Dict] = None,
-    ) -> Tuple[List[UserTitle], "TokenUsage"]:
+        top_users: list[dict] = None,
+    ) -> tuple[list[UserTitle], "TokenUsage"]:
         """
         分析用户称号
-        
+
         参数:
             messages: 统一格式的消息列表
             user_analysis: 用户分析统计数据
             unified_msg_origin: 消息来源标识，用于选择 LLM 提供商
             top_users: 活跃用户列表（可选）
-            
+
         返回:
             (用户称号列表, Token 使用统计)
         """
@@ -54,50 +54,50 @@ class IUserTitleAnalyzer(ABC):
 class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
     """
     用户称号分析服务适配器
-    
+
     将现有的 UserTitleAnalyzer 实现适配为领域服务接口。
     负责 UnifiedMessage 与原始消息格式之间的转换。
     """
-    
+
     def __init__(self, legacy_analyzer):
         """
         初始化适配器
-        
+
         参数:
             legacy_analyzer: 现有的 UserTitleAnalyzer 实例
         """
         self._analyzer = legacy_analyzer
-    
+
     async def analyze(
         self,
-        messages: List[UnifiedMessage],
-        user_analysis: Dict[str, Any],
+        messages: list[UnifiedMessage],
+        user_analysis: dict[str, Any],
         unified_msg_origin: str = None,
-        top_users: List[Dict] = None,
-    ) -> Tuple[List[UserTitle], "TokenUsage"]:
+        top_users: list[dict] = None,
+    ) -> tuple[list[UserTitle], "TokenUsage"]:
         """
         分析用户称号
-        
+
         将 UnifiedMessage 转换为原始格式，调用现有分析器，
         然后将结果转换为领域值对象。
-        
+
         参数:
             messages: 统一格式的消息列表
             user_analysis: 用户分析统计数据
             unified_msg_origin: 消息来源标识
             top_users: 活跃用户列表
-            
+
         返回:
             (用户称号列表, Token 使用统计)
         """
         # 将 UnifiedMessage 转换为原始消息格式
         raw_messages = [self._to_raw_message(msg) for msg in messages]
-        
+
         # 调用现有分析器
         legacy_titles, token_usage = await self._analyzer.analyze_user_titles(
             raw_messages, user_analysis, unified_msg_origin, top_users
         )
-        
+
         # 将结果转换为领域值对象
         titles = [
             UserTitle(
@@ -109,27 +109,24 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
             )
             for t in legacy_titles
         ]
-        
+
         return titles, token_usage
-    
+
     def _to_raw_message(self, msg: UnifiedMessage) -> dict:
         """
         将 UnifiedMessage 转换为原始消息格式
-        
+
         参数:
             msg: 统一消息对象
-            
+
         返回:
             原始消息字典
         """
         # 构建消息内容列表
         message_content = []
         if msg.text_content:
-            message_content.append({
-                "type": "text",
-                "data": {"text": msg.text_content}
-            })
-        
+            message_content.append({"type": "text", "data": {"text": msg.text_content}})
+
         return {
             "message_id": msg.message_id,
             "time": int(msg.timestamp.timestamp()) if msg.timestamp else 0,

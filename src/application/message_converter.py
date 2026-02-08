@@ -5,33 +5,30 @@
 提供向后兼容性。
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-
 from ..domain.value_objects.unified_message import (
-    UnifiedMessage,
     MessageContent,
     MessageContentType,
+    UnifiedMessage,
 )
 
 
 class MessageConverter:
     """
     在原始平台消息和 UnifiedMessage 格式之间进行转换。
-    
+
     这提供了一个迁移路径：现有代码可以继续使用原始字典，
     而新代码使用 UnifiedMessage。
     """
 
     @staticmethod
-    def from_onebot_message(raw_msg: dict, group_id: str) -> Optional[UnifiedMessage]:
+    def from_onebot_message(raw_msg: dict, group_id: str) -> UnifiedMessage | None:
         """
         将 OneBot v11 原始消息转换为 UnifiedMessage。
-        
+
         Args:
             raw_msg: 来自 OneBot API 的原始消息字典
             group_id: 群组 ID
-            
+
         Returns:
             UnifiedMessage 或 None（如果转换失败）
         """
@@ -53,56 +50,70 @@ class MessageConverter:
                 if seg_type == "text":
                     text = seg_data.get("text", "")
                     text_parts.append(text)
-                    contents.append(MessageContent(type=MessageContentType.TEXT, text=text))
+                    contents.append(
+                        MessageContent(type=MessageContentType.TEXT, text=text)
+                    )
 
                 elif seg_type == "image":
-                    contents.append(MessageContent(
-                        type=MessageContentType.IMAGE,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.IMAGE,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 elif seg_type == "at":
-                    contents.append(MessageContent(
-                        type=MessageContentType.AT,
-                        at_user_id=str(seg_data.get("qq", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.AT,
+                            at_user_id=str(seg_data.get("qq", "")),
+                        )
+                    )
 
                 elif seg_type in ("face", "mface", "bface", "sface"):
-                    contents.append(MessageContent(
-                        type=MessageContentType.EMOJI,
-                        emoji_id=str(seg_data.get("id", "")),
-                        raw_data={"face_type": seg_type}
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.EMOJI,
+                            emoji_id=str(seg_data.get("id", "")),
+                            raw_data={"face_type": seg_type},
+                        )
+                    )
 
                 elif seg_type == "reply":
-                    contents.append(MessageContent(
-                        type=MessageContentType.REPLY,
-                        raw_data={"reply_id": seg_data.get("id", "")}
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.REPLY,
+                            raw_data={"reply_id": seg_data.get("id", "")},
+                        )
+                    )
 
                 elif seg_type == "forward":
-                    contents.append(MessageContent(
-                        type=MessageContentType.FORWARD,
-                        raw_data=seg_data
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.FORWARD, raw_data=seg_data
+                        )
+                    )
 
                 elif seg_type == "record":
-                    contents.append(MessageContent(
-                        type=MessageContentType.VOICE,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.VOICE,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 elif seg_type == "video":
-                    contents.append(MessageContent(
-                        type=MessageContentType.VIDEO,
-                        url=seg_data.get("url", seg_data.get("file", ""))
-                    ))
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.VIDEO,
+                            url=seg_data.get("url", seg_data.get("file", "")),
+                        )
+                    )
 
                 else:
-                    contents.append(MessageContent(
-                        type=MessageContentType.UNKNOWN,
-                        raw_data=seg
-                    ))
+                    contents.append(
+                        MessageContent(type=MessageContentType.UNKNOWN, raw_data=seg)
+                    )
 
             # 从内容中提取 reply_to
             reply_to = None
@@ -131,11 +142,11 @@ class MessageConverter:
     def to_onebot_message(unified: UnifiedMessage) -> dict:
         """
         将 UnifiedMessage 转换回 OneBot v11 原始格式。
-        
+
         用于与期望原始字典的现有代码向后兼容。
         """
         message_chain = []
-        
+
         for content in unified.contents:
             if content.type == MessageContentType.TEXT:
                 message_chain.append({"type": "text", "data": {"text": content.text}})
@@ -144,10 +155,18 @@ class MessageConverter:
             elif content.type == MessageContentType.AT:
                 message_chain.append({"type": "at", "data": {"qq": content.at_user_id}})
             elif content.type == MessageContentType.EMOJI:
-                face_type = content.raw_data.get("face_type", "face") if content.raw_data else "face"
-                message_chain.append({"type": face_type, "data": {"id": content.emoji_id}})
+                face_type = (
+                    content.raw_data.get("face_type", "face")
+                    if content.raw_data
+                    else "face"
+                )
+                message_chain.append(
+                    {"type": face_type, "data": {"id": content.emoji_id}}
+                )
             elif content.type == MessageContentType.REPLY:
-                reply_id = content.raw_data.get("reply_id", "") if content.raw_data else ""
+                reply_id = (
+                    content.raw_data.get("reply_id", "") if content.raw_data else ""
+                )
                 message_chain.append({"type": "reply", "data": {"id": reply_id}})
             elif content.type == MessageContentType.VOICE:
                 message_chain.append({"type": "record", "data": {"url": content.url}})
@@ -168,12 +187,14 @@ class MessageConverter:
             "message": message_chain,
             "time": unified.timestamp,
             # 添加这些辅助字段，以便旧分析器可以直接使用
-            "raw_message": unified.text_content, 
-            "user_id": unified.sender_id, 
+            "raw_message": unified.text_content,
+            "user_id": unified.sender_id,
         }
 
     @staticmethod
-    def batch_from_onebot(raw_messages: List[dict], group_id: str) -> List[UnifiedMessage]:
+    def batch_from_onebot(
+        raw_messages: list[dict], group_id: str
+    ) -> list[UnifiedMessage]:
         """将一批 OneBot 消息转换为 UnifiedMessage 列表。"""
         result = []
         for raw_msg in raw_messages:
@@ -183,15 +204,15 @@ class MessageConverter:
         return result
 
     @staticmethod
-    def batch_to_onebot(unified_messages: List[UnifiedMessage]) -> List[dict]:
+    def batch_to_onebot(unified_messages: list[UnifiedMessage]) -> list[dict]:
         """将一批 UnifiedMessage 转换为 OneBot 原始格式。"""
         return [MessageConverter.to_onebot_message(msg) for msg in unified_messages]
 
     @staticmethod
-    def unified_to_analysis_text(messages: List[UnifiedMessage]) -> str:
+    def unified_to_analysis_text(messages: list[UnifiedMessage]) -> str:
         """
         将 UnifiedMessage 列表转换为 LLM 分析文本格式。
-        
+
         这是现有 LLM 分析器期望的格式。
         """
         lines = []

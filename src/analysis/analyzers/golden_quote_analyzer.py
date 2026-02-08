@@ -5,9 +5,8 @@
 
 from datetime import datetime
 
-from ...utils.logger import logger
-
 from ...models.data_models import GoldenQuote, TokenUsage
+from ...utils.logger import logger
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_golden_quotes_with_regex
 from .base_analyzer import BaseAnalyzer

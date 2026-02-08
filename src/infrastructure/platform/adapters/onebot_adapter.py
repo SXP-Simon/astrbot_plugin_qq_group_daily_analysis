@@ -4,21 +4,22 @@ OneBot v11 平台适配器
 支持 NapCat、go-cqhttp、Lagrange 及其他 OneBot 实现。
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Any, Dict
-import aiohttp
 import base64
+from datetime import datetime, timedelta
+from typing import Any
 
-from ....domain.value_objects.unified_message import (
-    UnifiedMessage,
-    MessageContent,
-    MessageContentType,
-)
+import aiohttp
+
 from ....domain.value_objects.platform_capabilities import (
-    PlatformCapabilities,
     ONEBOT_V11_CAPABILITIES,
+    PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
+from ....domain.value_objects.unified_message import (
+    MessageContent,
+    MessageContentType,
+    UnifiedMessage,
+)
 from ..base import PlatformAdapter
 
 
@@ -56,8 +57,8 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         days: int = 1,
         max_count: int = 1000,
-        before_id: Optional[str] = None,
-    ) -> List[UnifiedMessage]:
+        before_id: str | None = None,
+    ) -> list[UnifiedMessage]:
         """获取群组消息历史"""
 
         if not hasattr(self.bot, "call_action"):
@@ -96,9 +97,7 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return []
 
-    def _convert_message(
-        self, raw_msg: dict, group_id: str
-    ) -> Optional[UnifiedMessage]:
+    def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
         """将 OneBot 消息转换为统一格式"""
         try:
             sender = raw_msg.get("sender", {})
@@ -204,7 +203,7 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return None
 
-    def convert_to_raw_format(self, messages: List[UnifiedMessage]) -> List[dict]:
+    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
         """
         将统一消息格式转换为 OneBot 原生格式。
 
@@ -279,7 +278,7 @@ class OneBotAdapter(PlatformAdapter):
         self,
         group_id: str,
         text: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> bool:
         """发送文本消息"""
         try:
@@ -330,7 +329,7 @@ class OneBotAdapter(PlatformAdapter):
         self,
         group_id: str,
         file_path: str,
-        filename: Optional[str] = None,
+        filename: str | None = None,
     ) -> bool:
         """发送文件"""
         try:
@@ -346,7 +345,7 @@ class OneBotAdapter(PlatformAdapter):
 
     # ==================== IGroupInfoRepository ====================
 
-    async def get_group_info(self, group_id: str) -> Optional[UnifiedGroup]:
+    async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取群组信息"""
         try:
             result = await self.bot.call_action(
@@ -368,7 +367,7 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return None
 
-    async def get_group_list(self) -> List[str]:
+    async def get_group_list(self) -> list[str]:
         """获取机器人所在的所有群组 ID"""
         try:
             result = await self.bot.call_action("get_group_list")
@@ -376,7 +375,7 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             return []
 
-    async def get_member_list(self, group_id: str) -> List[UnifiedMember]:
+    async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         """获取群组成员列表"""
         try:
             result = await self.bot.call_action(
@@ -403,7 +402,7 @@ class OneBotAdapter(PlatformAdapter):
         self,
         group_id: str,
         user_id: str,
-    ) -> Optional[UnifiedMember]:
+    ) -> UnifiedMember | None:
         """获取特定成员信息"""
         try:
             result = await self.bot.call_action(
@@ -431,7 +430,7 @@ class OneBotAdapter(PlatformAdapter):
         self,
         user_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 QQ 用户头像 URL"""
         actual_size = self._get_nearest_size(size)
         if actual_size >= 640:
@@ -442,7 +441,7 @@ class OneBotAdapter(PlatformAdapter):
         self,
         user_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 QQ 用户头像 Base64 数据"""
         url = await self.get_user_avatar_url(user_id, size)
         if not url:
@@ -466,16 +465,16 @@ class OneBotAdapter(PlatformAdapter):
         self,
         group_id: str,
         size: int = 100,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取 QQ 群头像 URL"""
         actual_size = self._get_nearest_size(size)
         return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
 
     async def batch_get_avatar_urls(
         self,
-        user_ids: List[str],
+        user_ids: list[str],
         size: int = 100,
-    ) -> Dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """批量获取 QQ 用户头像 URL（无需 API 调用）"""
         return {
             user_id: await self.get_user_avatar_url(user_id, size)

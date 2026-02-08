@@ -5,11 +5,10 @@ Bot实例管理模块
 已重构以集成 DDD PlatformAdapter 架构，支持多平台扩展。
 """
 
-from typing import Any, Optional
-
-from ..utils.logger import logger
+from typing import Any
 
 from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
+from ..utils.logger import logger
 
 
 class BotManager:
@@ -174,7 +173,7 @@ class BotManager:
             return bot_instance.platform
         return self._default_platform
 
-    def _detect_platform_name(self, bot_instance) -> Optional[str]:
+    def _detect_platform_name(self, bot_instance) -> str | None:
         """
         从 bot 实例检测平台名称，用于创建适配器。
 
@@ -215,7 +214,7 @@ class BotManager:
 
     # ==================== DDD 集成方法 ====================
 
-    def get_adapter(self, platform_id: str = None) -> Optional[PlatformAdapter]:
+    def get_adapter(self, platform_id: str = None) -> PlatformAdapter | None:
         """
         获取指定平台的 PlatformAdapter。
 

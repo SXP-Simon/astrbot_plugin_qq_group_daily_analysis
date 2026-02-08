@@ -6,35 +6,35 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class PlatformCapabilities:
     """
     平台能力描述
-    
+
     设计原则：
     1. 所有字段都有默认值（最保守假设）
     2. 不可变
     3. 提供便捷的检查方法
     """
+
     # 平台标识
     platform_name: str
     platform_version: str = "unknown"
-    
+
     # 消息获取能力
     supports_message_history: bool = False
     max_message_history_days: int = 0
     max_message_count: int = 0
     supports_message_search: bool = False
-    
+
     # 群组信息能力
     supports_group_list: bool = False
     supports_group_info: bool = False
     supports_member_list: bool = False
     supports_member_info: bool = False
-    
+
     # 消息发送能力
     supports_text_message: bool = True
     supports_image_message: bool = False
@@ -43,23 +43,23 @@ class PlatformCapabilities:
     supports_reply_message: bool = False
     max_text_length: int = 4096
     max_image_size_mb: float = 10.0
-    
+
     # 特殊能力
     supports_at_all: bool = False
     supports_recall: bool = False
     supports_edit: bool = False
-    
+
     # 头像能力
     supports_user_avatar: bool = True
     supports_group_avatar: bool = False
     avatar_needs_api_call: bool = False
     avatar_sizes: tuple = (100,)
-    
+
     # 检查方法
     def can_analyze(self) -> bool:
         """是否支持群聊分析（核心能力）"""
         return (
-            self.supports_message_history 
+            self.supports_message_history
             and self.max_message_history_days > 0
             and self.max_message_count > 0
         )
@@ -183,6 +183,6 @@ PLATFORM_CAPABILITIES = {
 }
 
 
-def get_capabilities(platform_name: str) -> Optional[PlatformCapabilities]:
+def get_capabilities(platform_name: str) -> PlatformCapabilities | None:
     """根据平台名称获取能力"""
     return PLATFORM_CAPABILITIES.get(platform_name.lower())

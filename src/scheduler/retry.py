@@ -2,9 +2,10 @@ import asyncio
 import base64
 import random
 import time
-import aiohttp
 from collections.abc import Callable
 from dataclasses import dataclass
+
+import aiohttp
 
 from ..utils.logger import logger
 

@@ -3,9 +3,8 @@
 专门处理用户称号和MBTI类型分析
 """
 
-from ...utils.logger import logger
-
 from ...models.data_models import TokenUsage, UserTitle
+from ...utils.logger import logger
 from ..utils.json_utils import extract_user_titles_with_regex
 from .base_analyzer import BaseAnalyzer
 

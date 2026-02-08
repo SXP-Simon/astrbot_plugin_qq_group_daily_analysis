@@ -9,14 +9,13 @@
 - MessageConverter 提供双向转换以保持兼容性
 """
 
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
+from typing import Any, Optional
 
-from ..utils.logger import logger
-
-from ..domain.value_objects.unified_message import UnifiedMessage
 from ..domain.value_objects.platform_capabilities import PlatformCapabilities
+from ..domain.value_objects.unified_message import UnifiedMessage
 from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
+from ..utils.logger import logger
 from .message_converter import MessageConverter
 
 
@@ -104,7 +103,7 @@ class AnalysisOrchestrator:
         group_id: str,
         days: int = None,
         max_count: int = None,
-    ) -> List[UnifiedMessage]:
+    ) -> list[UnifiedMessage]:
         """
         使用平台适配器获取消息。
 
@@ -138,7 +137,7 @@ class AnalysisOrchestrator:
         group_id: str,
         days: int = None,
         max_count: int = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         获取消息并转换为原始字典格式。
 
@@ -190,9 +189,9 @@ class AnalysisOrchestrator:
 
     async def get_member_avatars(
         self,
-        user_ids: List[str],
+        user_ids: list[str],
         size: int = 100,
-    ) -> Dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """
         批量获取用户头像 URL。
 
@@ -227,7 +226,7 @@ class AnalysisOrchestrator:
         """发送文件到群组。"""
         return await self.adapter.send_file(group_id, file_path, filename)
 
-    def validate_message_count(self, messages: List[UnifiedMessage]) -> bool:
+    def validate_message_count(self, messages: list[UnifiedMessage]) -> bool:
         """
         检查消息数量是否达到最小阈值。
 
@@ -239,7 +238,7 @@ class AnalysisOrchestrator:
         """
         return len(messages) >= self.config.min_messages_threshold
 
-    def get_analysis_text(self, messages: List[UnifiedMessage]) -> str:
+    def get_analysis_text(self, messages: list[UnifiedMessage]) -> str:
         """
         将消息转换为 LLM 分析文本格式。
 

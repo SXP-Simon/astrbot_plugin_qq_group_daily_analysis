@@ -5,15 +5,13 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-
-from ..utils.logger import logger
+from typing import Any
 
 from ..domain.services import ReportGenerator
-from ..domain.value_objects.topic import Topic
-from ..domain.value_objects.user_title import UserTitle
 from ..domain.value_objects.golden_quote import GoldenQuote
 from ..domain.value_objects.statistics import GroupStatistics
+from ..domain.value_objects.topic import Topic
+from ..domain.value_objects.user_title import UserTitle
 from ..infrastructure.config import ConfigManager
 from ..infrastructure.persistence import HistoryRepository
 
@@ -46,10 +44,10 @@ class ReportingService:
         group_id: str,
         group_name: str,
         statistics: GroupStatistics,
-        topics: List[Topic],
-        user_titles: List[UserTitle],
-        golden_quotes: List[GoldenQuote],
-        date_str: Optional[str] = None,
+        topics: list[Topic],
+        user_titles: list[UserTitle],
+        golden_quotes: list[GoldenQuote],
+        date_str: str | None = None,
     ) -> str:
         """
         生成完整的分析报告。
@@ -91,9 +89,9 @@ class ReportingService:
         self,
         group_id: str,
         statistics: GroupStatistics,
-        top_topic: Optional[Topic] = None,
-        top_quote: Optional[GoldenQuote] = None,
-        date_str: Optional[str] = None,
+        top_topic: Topic | None = None,
+        top_quote: GoldenQuote | None = None,
+        date_str: str | None = None,
     ) -> str:
         """
         生成简要摘要报告。
@@ -120,8 +118,8 @@ class ReportingService:
     def save_report(
         self,
         group_id: str,
-        report_data: Dict[str, Any],
-        date_str: Optional[str] = None,
+        report_data: dict[str, Any],
+        date_str: str | None = None,
     ) -> bool:
         """
         保存报告到历史记录。
@@ -146,7 +144,7 @@ class ReportingService:
         self,
         group_id: str,
         date_str: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         获取已保存的报告。
 
@@ -163,7 +161,7 @@ class ReportingService:
         self,
         group_id: str,
         limit: int = 7,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         获取群组的最近报告。
 
@@ -193,7 +191,7 @@ class ReportingService:
         self,
         report: str,
         platform: str,
-        format_type: Optional[str] = None,
+        format_type: str | None = None,
     ) -> str:
         """
         为特定平台格式化报告。
@@ -236,10 +234,10 @@ class ReportingService:
         group_id: str,
         group_name: str,
         statistics: GroupStatistics,
-        topics: List[Topic],
-        user_titles: List[UserTitle],
-        golden_quotes: List[GoldenQuote],
-    ) -> Dict[str, Any]:
+        topics: list[Topic],
+        user_titles: list[UserTitle],
+        golden_quotes: list[GoldenQuote],
+    ) -> dict[str, Any]:
         """
         创建用于存储的报告数据字典。
 

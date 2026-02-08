@@ -5,9 +5,9 @@
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Optional
 
 from ...utils.logger import logger
 
@@ -105,7 +105,7 @@ class CircuitBreaker:
         self,
         func: Callable,
         *args,
-        fallback: Optional[Callable] = None,
+        fallback: Callable | None = None,
         **kwargs,
     ):
         """
@@ -132,6 +132,6 @@ class CircuitBreaker:
             result = await func(*args, **kwargs)
             self.record_success()
             return result
-        except Exception as e:
+        except Exception:
             self.record_failure()
             raise

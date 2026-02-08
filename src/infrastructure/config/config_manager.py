@@ -5,9 +5,7 @@
 封装了现有的配置模块，并增加了验证和默认值功能。
 """
 
-from typing import Any, Dict, List, Optional
-
-from ...utils.logger import logger
+from typing import Any
 
 
 class ConfigManager:
@@ -17,7 +15,7 @@ class ConfigManager:
     提供带有默认值和验证的配置值类型化访问。
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         初始化配置管理器。
 
@@ -71,7 +69,7 @@ class ConfigManager:
     # 群组配置
     # ========================================================================
 
-    def get_enabled_groups(self) -> List[str]:
+    def get_enabled_groups(self) -> list[str]:
         """获取启用的群组 ID 列表。"""
         groups = self.get("enabled_groups", [])
         return [str(g) for g in groups] if groups else []
@@ -81,7 +79,7 @@ class ConfigManager:
         enabled = self.get_enabled_groups()
         return str(group_id) in enabled or not enabled  # 空列表意味着全部启用
 
-    def get_bot_qq_ids(self) -> List[str]:
+    def get_bot_qq_ids(self) -> list[str]:
         """获取要过滤掉的机器人 QQ ID 列表。"""
         ids = self.get("bot_qq_ids", [])
         return [str(i) for i in ids] if ids else []
@@ -108,15 +106,15 @@ class ConfigManager:
 
     # ========================================================================
     # LLM 配置
-    def get_topic_provider_id(self) -> Optional[str]:
+    def get_topic_provider_id(self) -> str | None:
         """获取话题分析的提供商 ID"""
         return self.get("topic_provider_id")
 
-    def get_user_title_provider_id(self) -> Optional[str]:
+    def get_user_title_provider_id(self) -> str | None:
         """获取用户称号分析的提供商 ID"""
         return self.get("user_title_provider_id")
 
-    def get_golden_quote_provider_id(self) -> Optional[str]:
+    def get_golden_quote_provider_id(self) -> str | None:
         """获取金句分析的提供商 ID"""
         return self.get("golden_quote_provider_id")
 
@@ -136,15 +134,15 @@ class ConfigManager:
     # 提示词配置
     # ========================================================================
 
-    def get_topic_analysis_prompt(self) -> Optional[str]:
+    def get_topic_analysis_prompt(self) -> str | None:
         """获取话题分析的自定义提示词模板"""
         return self.get("prompts.topic_analysis")
 
-    def get_user_title_analysis_prompt(self) -> Optional[str]:
+    def get_user_title_analysis_prompt(self) -> str | None:
         """获取用户称号分析的自定义提示词模板"""
         return self.get("prompts.user_title_analysis")
 
-    def get_golden_quote_analysis_prompt(self) -> Optional[str]:
+    def get_golden_quote_analysis_prompt(self) -> str | None:
         """获取金句分析的自定义提示词模板"""
         return self.get("prompts.golden_quote_analysis")
 
@@ -192,11 +190,11 @@ class ConfigManager:
     # 工具方法
     # ========================================================================
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """获取原始配置字典"""
         return self._config.copy()
 
-    def update(self, updates: Dict[str, Any]) -> None:
+    def update(self, updates: dict[str, Any]) -> None:
         """
         使用新值更新配置
 
@@ -205,7 +203,7 @@ class ConfigManager:
         """
         self._config.update(updates)
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """
         验证配置
 

@@ -6,17 +6,12 @@
 """
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, Set
-
-from ..utils.logger import logger
+from typing import Any
 
 from ..infrastructure.config import ConfigManager
-from ..shared.constants import (
-    TASK_STATE_PENDING,
-    TASK_STATE_RUNNING,
-    TASK_STATE_COMPLETED,
-)
+from ..utils.logger import logger
 
 
 class ScheduledTask:
@@ -35,8 +30,8 @@ class ScheduledTask:
         self.scheduled_time = scheduled_time
         self.callback = callback
         self.enabled = enabled
-        self.last_run: Optional[datetime] = None
-        self.next_run: Optional[datetime] = None
+        self.last_run: datetime | None = None
+        self.next_run: datetime | None = None
         self._calculate_next_run()
 
     def _calculate_next_run(self) -> None:
@@ -96,10 +91,10 @@ class SchedulingService:
             config: 配置管理器
         """
         self.config = config
-        self._tasks: Dict[str, ScheduledTask] = {}
+        self._tasks: dict[str, ScheduledTask] = {}
         self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._callbacks: Dict[str, Callable] = {}
+        self._task: asyncio.Task | None = None
+        self._callbacks: dict[str, Callable] = {}
 
     def register_callback(self, name: str, callback: Callable) -> None:
         """
@@ -114,7 +109,7 @@ class SchedulingService:
     def add_task(
         self,
         group_id: str,
-        scheduled_time: Optional[str] = None,
+        scheduled_time: str | None = None,
         callback_name: str = "analyze",
     ) -> str:
         """
@@ -181,7 +176,7 @@ class SchedulingService:
             return True
         return False
 
-    def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task_status(self, task_id: str) -> dict[str, Any] | None:
         """
         获取计划任务的状态。
 
@@ -204,7 +199,7 @@ class SchedulingService:
             "next_run": task.next_run.isoformat() if task.next_run else None,
         }
 
-    def list_tasks(self) -> List[Dict[str, Any]]:
+    def list_tasks(self) -> list[dict[str, Any]]:
         """列出所有计划任务。"""
         return [self.get_task_status(tid) for tid in self._tasks.keys()]
 

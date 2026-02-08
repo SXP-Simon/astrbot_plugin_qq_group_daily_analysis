@@ -11,7 +11,6 @@ from pathlib import Path
 import aiohttp
 
 from ..utils.logger import logger
-
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 

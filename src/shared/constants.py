@@ -7,6 +7,7 @@ from enum import Enum
 
 class Platform(str, Enum):
     """平台枚举类"""
+
     ONEBOT = "onebot"
     AIOCQHTTP = "aiocqhttp"
     TELEGRAM = "telegram"
@@ -17,6 +18,7 @@ class Platform(str, Enum):
 
 class TaskStatus(str, Enum):
     """任务状态枚举类"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -26,6 +28,7 @@ class TaskStatus(str, Enum):
 
 class ContentType(str, Enum):
     """消息内容类型枚举类"""
+
     TEXT = "text"
     IMAGE = "image"
     EMOJI = "emoji"
@@ -40,6 +43,7 @@ class ContentType(str, Enum):
 
 class ReportFormat(str, Enum):
     """报告格式枚举类"""
+
     TEXT = "text"
     MARKDOWN = "markdown"
     IMAGE = "image"

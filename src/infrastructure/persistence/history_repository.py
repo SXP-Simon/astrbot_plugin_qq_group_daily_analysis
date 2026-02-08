@@ -6,10 +6,9 @@
 """
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ...utils.logger import logger
 
@@ -44,8 +43,8 @@ class HistoryRepository:
     def save_analysis_result(
         self,
         group_id: str,
-        result: Dict[str, Any],
-        date_str: Optional[str] = None,
+        result: dict[str, Any],
+        date_str: str | None = None,
     ) -> bool:
         """
         保存分析结果到历史记录。
@@ -85,7 +84,7 @@ class HistoryRepository:
             logger.error(f"保存分析结果失败: {e}")
             return False
 
-    def load_group_history(self, group_id: str) -> Dict[str, Any]:
+    def load_group_history(self, group_id: str) -> dict[str, Any]:
         """
         加载群组历史记录。
 
@@ -98,7 +97,7 @@ class HistoryRepository:
         try:
             history_path = self._get_group_history_path(group_id)
             if history_path.exists():
-                with open(history_path, "r", encoding="utf-8") as f:
+                with open(history_path, encoding="utf-8") as f:
                     return json.load(f)
             return {"daily": {}, "group_id": group_id}
         except Exception as e:
@@ -107,7 +106,7 @@ class HistoryRepository:
 
     def get_analysis_result(
         self, group_id: str, date_str: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         获取特定日期的分析结果。
 
@@ -121,7 +120,7 @@ class HistoryRepository:
         history = self.load_group_history(group_id)
         return history.get("daily", {}).get(date_str)
 
-    def get_recent_results(self, group_id: str, limit: int = 7) -> List[Dict[str, Any]]:
+    def get_recent_results(self, group_id: str, limit: int = 7) -> list[dict[str, Any]]:
         """
         获取最近的分析结果。
 
@@ -168,7 +167,6 @@ class HistoryRepository:
             history = self.load_group_history(group_id)
             daily = history.get("daily", {})
 
-            cutoff_date = datetime.now().strftime("%Y-%m-%d")
             # 计算截止日期（简单的字符串比较适用于 YYYY-MM-DD 格式）
             from datetime import timedelta
 
@@ -192,7 +190,7 @@ class HistoryRepository:
             logger.error(f"删除旧历史记录失败: {e}")
             return 0
 
-    def list_groups_with_history(self) -> List[str]:
+    def list_groups_with_history(self) -> list[str]:
         """
         列出所有有历史记录的群组。
 

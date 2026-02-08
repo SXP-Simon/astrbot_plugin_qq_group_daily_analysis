@@ -8,11 +8,10 @@ import weakref
 
 from apscheduler.triggers.cron import CronTrigger
 
-from ..infrastructure.platform.factory import PlatformAdapterFactory
-from ..utils.logger import logger
-
 from ..core.message_sender import MessageSender
+from ..infrastructure.platform.factory import PlatformAdapterFactory
 from ..reports.dispatcher import ReportDispatcher
+from ..utils.logger import logger
 from ..utils.trace_context import TraceContext
 
 
@@ -518,7 +517,6 @@ class AutoScheduler:
         all_groups = set()
 
         # 延迟导入以避免循环依赖
-        from ..infrastructure.platform.factory import PlatformAdapterFactory
 
         # 强制刷新一次 Bot 实例，确保最新的 Bot 被发现
         if hasattr(self.bot_manager, "auto_discover_bot_instances"):
