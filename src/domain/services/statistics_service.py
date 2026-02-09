@@ -97,7 +97,11 @@ class StatisticsService:
             legacy_list.append(
                 {
                     "time": msg.timestamp,
-                    "sender": {"user_id": msg.sender_id},
+                    "sender": {
+                        "user_id": msg.sender_id,
+                        "nickname": msg.sender_name,
+                        "card": msg.sender_card or "",
+                    },
                     "message": [
                         {"type": "text", "data": {"text": msg.text_content or ""}}
                     ],

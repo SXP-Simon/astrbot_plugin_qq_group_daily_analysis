@@ -156,15 +156,21 @@ class LLMAnalyzer:
         user_analysis: dict,
         umo: str = None,
         top_users: list[dict] = None,
+        topic_enabled: bool = True,
+        user_title_enabled: bool = True,
+        golden_quote_enabled: bool = True,
     ) -> tuple[list[SummaryTopic], list[UserTitle], list[GoldenQuote], TokenUsage]:
         """
-        并发执行所有分析任务（话题、用户称号、金句）
+        并发执行所有分析任务（话题、用户称号、金句），支持按需启用。
 
         Args:
             messages: 群聊消息列表
             user_analysis: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(可选)
+            topic_enabled: 是否启用话题分析
+            user_title_enabled: 是否启用用户称号分析
+            golden_quote_enabled: 是否启用金句分析
 
         Returns:
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
@@ -179,10 +185,13 @@ class LLMAnalyzer:
             else:
                 session_id = timestamp
 
-            logger.info(f"开始并发执行所有分析任务，会话ID: {session_id}")
+            logger.info(
+                f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled})，会话ID: {session_id}"
+            )
 
             # 保存原始消息数据 (Debug Mode)
             if self.config_manager.get_debug_mode():
+                # ... (保持原有的调试保存代码)
                 try:
                     import json
                     from pathlib import Path
@@ -202,44 +211,57 @@ class LLMAnalyzer:
                     msg_file_path = debug_dir / f"{session_id}_messages.json"
                     with open(msg_file_path, "w", encoding="utf-8") as f:
                         json.dump(messages, f, ensure_ascii=False, indent=2)
-                    logger.info(f"已保存原始消息数据到: {msg_file_path}")
-                except Exception as e:
-                    logger.error(f"保存原始消息数据失败: {e}", exc_info=True)
+                except Exception:
+                    pass
 
-            # 并发执行三个分析任务
-            results = await asyncio.gather(
-                self.topic_analyzer.analyze_topics(messages, umo, session_id),
-                self.user_title_analyzer.analyze_user_titles(
-                    messages, user_analysis, umo, top_users, session_id
-                ),
-                self.golden_quote_analyzer.analyze_golden_quotes(
-                    messages, umo, session_id
-                ),
-                return_exceptions=True,
-            )
+            # 构建并发任务列表
+            tasks = []
+            task_names = []
+
+            if topic_enabled:
+                tasks.append(
+                    self.topic_analyzer.analyze_topics(messages, umo, session_id)
+                )
+                task_names.append("topic")
+
+            if user_title_enabled:
+                tasks.append(
+                    self.user_title_analyzer.analyze_user_titles(
+                        messages, user_analysis, umo, top_users, session_id
+                    )
+                )
+                task_names.append("user_title")
+
+            if golden_quote_enabled:
+                tasks.append(
+                    self.golden_quote_analyzer.analyze_golden_quotes(
+                        messages, umo, session_id
+                    )
+                )
+                task_names.append("golden_quote")
+
+            if not tasks:
+                return [], [], [], TokenUsage()
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # 处理结果
             topics, topic_usage = [], TokenUsage()
             user_titles, title_usage = [], TokenUsage()
             golden_quotes, quote_usage = [], TokenUsage()
 
-            # 话题分析结果
-            if isinstance(results[0], Exception):
-                logger.error(f"话题分析失败: {results[0]}")
-            else:
-                topics, topic_usage = results[0]
+            for i, result in enumerate(results):
+                name = task_names[i]
+                if isinstance(result, Exception):
+                    logger.error(f"分析任务 {name} 失败: {result}")
+                    continue
 
-            # 用户称号分析结果
-            if isinstance(results[1], Exception):
-                logger.error(f"用户称号分析失败: {results[1]}")
-            else:
-                user_titles, title_usage = results[1]
-
-            # 金句分析结果
-            if isinstance(results[2], Exception):
-                logger.error(f"金句分析失败: {results[2]}")
-            else:
-                golden_quotes, quote_usage = results[2]
+                if name == "topic":
+                    topics, topic_usage = result
+                elif name == "user_title":
+                    user_titles, title_usage = result
+                elif name == "golden_quote":
+                    golden_quotes, quote_usage = result
 
             # 合并Token使用统计
             total_usage = TokenUsage(

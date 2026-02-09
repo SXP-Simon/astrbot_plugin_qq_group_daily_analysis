@@ -105,9 +105,6 @@ class BotManager:
     def _refresh_from_stored_platforms(self):
         """尝试从已存储的平台对象中刷新 bot 实例 (Lazy Load)"""
         for platform_id, platform in self._platforms.items():
-            if platform_id in self._bot_instances:
-                continue
-
             bot_client = None
             # 优先尝试 get_client()
             if hasattr(platform, "get_client"):
@@ -121,6 +118,13 @@ class BotManager:
                 bot_client = platform.client
 
             if bot_client:
+                # 检查是否已存在且是否发生变化（防止重复创建适配器）
+                old_client = self._bot_instances.get(platform_id)
+
+                # 如果 client 对象没变且已经有适配器，跳过
+                if bot_client is old_client and platform_id in self._adapters:
+                    continue
+
                 platform_name = None
                 if hasattr(platform, "metadata"):
                     # 优先使用 type
@@ -128,6 +132,16 @@ class BotManager:
                         platform_name = platform.metadata.type
                     elif hasattr(platform.metadata, "name"):
                         platform_name = platform.metadata.name
+
+                # 兼容不同版本的元数据获取
+                if not platform_name:
+                    meta = getattr(platform, "meta", None)
+                    if callable(meta):
+                        try:
+                            metadata = meta()
+                            platform_name = getattr(metadata, "name", None)
+                        except Exception:
+                            pass
 
                 # 后备检测：如果不支持名称
                 if not platform_name or not PlatformAdapterFactory.is_supported(
@@ -138,7 +152,7 @@ class BotManager:
                         platform_name = detected
 
                 self.set_bot_instance(bot_client, platform_id, platform_name)
-                logger.info(f"懒加载发现平台 {platform_id} 的 bot 实例")
+                logger.info(f"已刷新/发现平台 {platform_id} 的 bot 实例 (变动或懒加载)")
 
     def get_all_bot_instances(self) -> dict:
         """获取所有已加载的bot实例 {platform_id: bot_instance}"""
@@ -213,16 +227,28 @@ class BotManager:
         这是 DDD 架构操作的主要方法。
         """
         if platform_id:
+            # 无论是否存在适配器，都尝试检测一次 client 是否有变（如重启后 session 变化）
+            if platform_id in self._platforms:
+                self._refresh_from_stored_platforms()
+
             return self._adapters.get(platform_id)
 
         if self._adapters:
             if len(self._adapters) == 1:
                 return list(self._adapters.values())[0]
 
-            logger.error(
+            logger.warning(
                 f"存在多个适配器 {list(self._adapters.keys())}，但未指定 platform_id。"
             )
             return None
+
+        # 如果没有任何适配器，尝试全局刷新一次
+        self._refresh_from_stored_platforms()
+        if self._adapters:
+            if platform_id:
+                return self._adapters.get(platform_id)
+            if len(self._adapters) == 1:
+                return list(self._adapters.values())[0]
 
         return None
 
@@ -373,17 +399,22 @@ class BotManager:
 
     def update_from_event(self, event):
         """从事件更新bot实例（用于手动命令）"""
-        if hasattr(event, "bot") and event.bot:
+        # 兼容不同平台的 bot 实例属性名 (OneBot 使用 bot, Discord 使用 client)
+        bot_instance = getattr(event, "bot", None) or getattr(event, "client", None)
+
+        if bot_instance:
             # 从事件中获取平台ID
             platform_id = None
-            if hasattr(event, "platform") and isinstance(event.platform, str):
+            if hasattr(event, "get_platform_id"):
+                platform_id = event.get_platform_id()
+            elif hasattr(event, "platform_meta") and hasattr(event.platform_meta, "id"):
+                platform_id = event.platform_meta.id
+            elif hasattr(event, "platform") and isinstance(event.platform, str):
                 platform_id = event.platform
-            elif hasattr(event, "metadata") and hasattr(event.metadata, "id"):
-                platform_id = event.metadata.id
 
-            self.set_bot_instance(event.bot, platform_id)
+            self.set_bot_instance(bot_instance, platform_id)
             # 每次都尝试从bot实例提取ID
-            bot_self_id = self._extract_bot_self_id(event.bot)
+            bot_self_id = self._extract_bot_self_id(bot_instance)
             if bot_self_id:
                 # 将单个ID转换为列表，保持统一处理
                 self.set_bot_self_ids([bot_self_id])
