@@ -1,0 +1,34 @@
+<div class="chart-section-horizontal">
+    {% for item in chart_data %}
+    {% set bar_bg = 'var(--color-purple)' %}
+    {% set bar_height = '4px' %}
+    {% set bar_opacity = '1' %}
+
+    {% if item.count == 0 %}
+    {% set bar_bg = 'var(--ink-secondary)' %}
+    {% set bar_height = '4px' %}
+    {% set bar_opacity = '0.2' %}
+    {% elif item.percentage >= 70 %}
+    {% set bar_bg = 'var(--accent-orange)' %}
+    {% set bar_height = item.percentage ~ '%' %}
+    {% elif item.percentage >= 30 %}
+    {% set bar_bg = 'var(--color-green)' %}
+    {% set bar_height = item.percentage ~ '%' %}
+    {% else %}
+    {% set bar_bg = 'var(--color-blue)' %}
+    {% set bar_height = item.percentage ~ '%' %}
+    {% endif %}
+
+    <div class="chart-column">
+        {% if item.count > 0 %}
+        <div class="chart-value-top">{{ item.count }}</div>
+        {% endif %}
+
+        {% set style_str = 'height: ' ~ bar_height ~ '; background: ' ~ bar_bg ~ '; opacity: ' ~ bar_opacity ~ ';
+        border-bottom: none;' %}
+        <div class="chart-bar-vertical" style="{{ style_str }}"></div>
+
+        <div class="chart-label-xaxis">{{ "%02d" | format(item.hour) }}</div>
+    </div>
+    {% endfor %}
+</div>

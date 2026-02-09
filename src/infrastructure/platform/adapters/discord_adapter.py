@@ -474,6 +474,53 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"Discord 文件发送失败: {e}")
             return False
 
+    async def send_forward_msg(
+        self,
+        group_id: str,
+        nodes: list[dict],
+    ) -> bool:
+        """
+        在 Discord 模拟合并转发。
+
+        由于 Discord 没有原生节点转发 API，我们将其转换为一组文本消息发送。
+        """
+        if not discord:
+            return False
+
+        try:
+            channel_id = int(group_id)
+            channel = self._discord_client.get_channel(channel_id)
+            if not channel:
+                channel = await self._discord_client.fetch_channel(channel_id)
+
+            if not hasattr(channel, "send"):
+                return False
+
+            # 将节点汇总为美化的文本块
+            lines = ["📊 **结构化报告摘要 (Structured Report)**\n"]
+            for node in nodes:
+                data = node.get("data", node)  # 兼容不同格式
+                name = data.get("name", "AstrBot")
+                content = data.get("content", "")
+                lines.append(f"**[{name}]**:\n{content}\n")
+
+            full_text = "\n".join(lines)
+
+            # 分段处理大消息
+            if len(full_text) > 1900:
+                parts = [
+                    full_text[i : i + 1900] for i in range(0, len(full_text), 1900)
+                ]
+                for part in parts:
+                    await channel.send(content=part)
+            else:
+                await channel.send(content=full_text)
+
+            return True
+        except Exception as e:
+            logger.error(f"Discord 模拟转发失败: {e}")
+            return False
+
     # ==================== IGroupInfoRepository 实现 ====================
 
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:

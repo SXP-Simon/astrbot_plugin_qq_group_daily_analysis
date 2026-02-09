@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群聊日常分析报告</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-body: #f2f2f2;
+            --bg-card: #ffffff;
+            --text-main: #111111;
+            --text-muted: #666666;
+            --accent: #222222;
+            --border: #e0e0e0;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+            --radius: 12px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        /* Header - Editorial Style */
+        .header {
+            background: #ffffff;
+            color: var(--text-main);
+            padding: 50px 30px 30px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h1 {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 2.4em;
+            font-weight: 700;
+            margin-bottom: 12px;
+            letter-spacing: -0.03em;
+            color: var(--text-main);
+        }
+
+        .header .date {
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9em;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .section {
+            margin-bottom: 50px;
+        }
+
+        .full-width-section {
+            grid-column: 1 / -1;
+        }
+
+        .section-title {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.5em;
+            font-weight: 600;
+            margin-bottom: 25px;
+            color: var(--text-main);
+            position: relative;
+            padding-left: 16px;
+        }
+
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background-color: var(--accent);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #fafafa;
+            padding: 20px 10px;
+            text-align: center;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            min-width: 0;
+            /* Prevent overflow */
+        }
+
+        .stat-number {
+            font-family: 'Inter', sans-serif;
+            font-size: 1.8em;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 6px;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            word-break: break-all;
+            /* Ensure long numbers wrap if needed */
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Active Period */
+        .active-period {
+            background: var(--accent);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+            margin: 30px 0;
+            border-radius: var(--radius);
+        }
+
+        .active-period .time {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 2.2em;
+            font-weight: 400;
+            margin-bottom: 6px;
+        }
+
+        .active-period .label {
+            font-size: 0.85em;
+            opacity: 0.8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Activity Chart */
+        .activity-chart-container {
+            background: #ffffff;
+            padding: 0;
+            margin-bottom: 50px;
+        }
+
+        .chart-header {
+            margin-bottom: 25px;
+        }
+
+        .chart-title {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.3em;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        /* Chart Bars */
+        .hour-bar-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            height: 18px;
+        }
+
+        .hour-label {
+            width: 45px;
+            text-align: left;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            font-family: 'Inter', sans-serif;
+            flex-shrink: 0;
+        }
+
+        .bar-wrapper {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            /* Important for flex child truncation */
+        }
+
+        .bar {
+            height: 8px;
+            background: var(--accent);
+            border-radius: 4px;
+            opacity: 0.8;
+        }
+
+        .hourly-value-outside {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            min-width: 25px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .hourly-value-inside {
+            color: white;
+            font-size: 10px;
+            padding: 0 5px;
+            font-weight: 600;
+        }
+
+        /* Grids */
+        .topics-grid,
+        .users-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            align-items: stretch;
+        }
+
+        /* Topic Item Styling */
+        .topic-item {
+            background: #fafafa;
+            padding: 25px;
+            border-radius: var(--radius);
+            height: 100%;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .topic-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .topic-number {
+            background: var(--text-main);
+            color: #ffffff;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 12px;
+            font-size: 0.8em;
+            flex-shrink: 0;
+        }
+
+        .topic-title {
+            font-family: 'Noto Serif SC', serif;
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 1.1em;
+            line-height: 1.3;
+        }
+
+        .topic-contributors {
+            color: var(--text-muted);
+            font-size: 0.8em;
+            margin-bottom: 10px;
+            padding-left: 36px;
+            font-style: italic;
+        }
+
+        .topic-detail {
+            color: #444;
+            line-height: 1.6;
+            font-size: 0.9em;
+            padding-left: 36px;
+        }
+
+        /* User Title Styling */
+        .user-title {
+            background: #fafafa;
+            padding: 20px;
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            border: 1px solid var(--border);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .user-avatar,
+        .user-avatar-placeholder {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            margin-right: 15px;
+            background: #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            color: #888;
+            object-fit: cover;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            flex-shrink: 0;
+        }
+
+        .user-details {
+            flex: 1;
+            min-width: 0;
+            /* Allow text truncation */
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 1em;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-badges {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .user-title-badge {
+            background: #ffffff;
+            color: var(--text-main);
+            border: 1px solid var(--text-main);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .user-mbti {
+            background: #e0e0e0;
+            color: var(--text-main);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .user-reason {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            font-weight: 500;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        /* Quote Item Styling */
+        .quote-item {
+            background: #fafafa;
+            padding: 25px;
+            margin-bottom: 15px;
+            border-radius: var(--radius);
+            border-left: 3px solid var(--text-main);
+            overflow: hidden;
+        }
+
+        .quote-content {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 1.1em;
+            color: var(--text-main);
+            font-weight: 500;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        .quote-author {
+            font-size: 0.85em;
+            color: var(--text-main);
+            font-weight: 600;
+            text-align: right;
+            margin-bottom: 6px;
+        }
+
+        .quote-reason {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            background: rgba(0, 0, 0, 0.03);
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            float: right;
+            clear: both;
+        }
+
+        /* Footer */
+        .footer {
+            background: #ffffff;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 30px;
+            font-size: 0.8em;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .header {
+                padding: 40px 20px;
+            }
+
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .topics-grid,
+            .users-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .user-reason {
+                padding-left: 0;
+                margin-top: 10px;
+            }
+
+            .stat-number {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>群聊日常分析报告</h1>
+            <div class="date">{{current_date}}</div>
+        </div>
+        <div class="content">
+            <div class="section full-width-section">
+                <h2 class="section-title">基础统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number">{{message_count}}</div>
+                        <div class="stat-label">消息总数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{participant_count}}</div>
+                        <div class="stat-label">参与人数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{total_characters}}</div>
+                        <div class="stat-label">总字符数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number">{{emoji_count}}</div>
+                        <div class="stat-label">表情数量</div>
+                    </div>
+                </div>
+                <div class="active-period">
+                    <div class="time">{{most_active_period}}</div>
+                    <div class="label">最活跃时段</div>
+                </div>
+            </div>
+
+            <div class="activity-chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">24小时活跃度分布</div>
+                </div>
+                {{hourly_chart_html}}
+            </div>
+
+            {{topics_html}}
+            {{titles_html}}
+            {{quotes_html}}
+        </div>
+        <div class="footer">
+            由 AstrBot QQ群日常分析插件 生成 | {{current_datetime}} | SXP-Simon/astrbot_plugin_qq_group_daily_analysis<br>
+            <small style="opacity: 0.8; font-size: 0.9em; margin-top: 8px; display: block;">AI分析消耗：{{total_tokens}}
+                tokens (输入: {{prompt_tokens}}, 输出: {{completion_tokens}})</small>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,15 @@
+{% if chart_data %}
+{% for item in chart_data %}
+<div class="activity-row">
+    <div class="activity-hour">{{ "%02d"|format(item.hour) }}:00</div>
+    <div class="activity-meter">
+        <div class="activity-bar" style="--pct: {{ "%.2f"|format(item.percentage) }}%;"></div>
+    </div>
+    <div class="activity-count">{{ item.count }}</div>
+</div>
+{% endfor %}
+{% else %}
+<div class="activity-row">
+    <div class="topic-meta" style="grid-column: span 3;">NO_DATA_AVAILABLE</div>
+</div>
+{% endif %}

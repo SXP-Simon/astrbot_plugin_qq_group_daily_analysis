@@ -1,0 +1,14 @@
+{% for item in chart_data %}
+<div class="hour-bar-container">
+    <div class="hour-label">{{ "%02d" | format(item.hour) }}:00</div>
+    <div class="bar-wrapper">
+        <div class="bar" style="width: {{ item.percentage }}%;">
+            {% if item.percentage > 15 %}
+            <span class="hourly-value-inside">{{ item.count }}</span>
+            {% endif %}
+        </div>
+        {% if item.percentage <= 15 %} <span class="hourly-value-outside">{{ item.count }}</span>
+            {% endif %}
+    </div>
+</div>
+{% endfor %}
