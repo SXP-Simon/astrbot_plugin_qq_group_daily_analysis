@@ -74,6 +74,22 @@ class IMessageSender(ABC):
         pass
 
     @abstractmethod
+    async def send_forward_msg(
+        self,
+        group_id: str,
+        nodes: list[dict],
+    ) -> bool:
+        """
+        发送合并转发消息。
+
+        Args:
+            group_id: 目标群组 ID
+            nodes: 转发节点列表。每个节点通常包含 name, uin (或 user_id), content。
+                   目前主要用于 OneBot 兼容性。
+        """
+        pass
+
+    @abstractmethod
     async def send_file(
         self,
         group_id: str,

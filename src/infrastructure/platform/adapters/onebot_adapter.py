@@ -418,6 +418,41 @@ class OneBotAdapter(PlatformAdapter):
             logger.error(f"OneBot 文件发送失败: {e}")
             return False
 
+    async def send_forward_msg(
+        self,
+        group_id: str,
+        nodes: list[dict],
+    ) -> bool:
+        """
+        发送群合并转发消息。
+
+        Args:
+            group_id (str): 目标群号
+            nodes (list[dict]): 转发节点列表
+
+        Returns:
+            bool: 是否发送成功
+        """
+        if not hasattr(self.bot, "call_action"):
+            return False
+
+        try:
+            # 兼容处理节点中的 uin -> user_id (有些后端偏好 uin)
+            for node in nodes:
+                if "data" in node:
+                    if "user_id" in node["data"] and "uin" not in node["data"]:
+                        node["data"]["uin"] = node["data"]["user_id"]
+
+            await self.bot.call_action(
+                "send_group_forward_msg",
+                group_id=int(group_id),
+                messages=nodes,
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"OneBot 发送合并转发消息失败: {e}")
+            return False
+
     # ==================== IGroupInfoRepository 实现 ====================
 
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:

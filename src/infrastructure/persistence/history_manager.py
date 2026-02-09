@@ -1,5 +1,5 @@
 """
-历史记录管理器模块
+历史记录管理器模块 - 基础设施持久化层
 负责存储和查询群聊分析报告的摘要信息
 使用 AstrBot 的 put_kv_data/get_kv_data 实现
 """
@@ -7,7 +7,7 @@
 import datetime
 from typing import Any
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 class HistoryManager:
@@ -90,16 +90,7 @@ class HistoryManager:
     ) -> dict[str, Any] | None:
         """
         根据群组、日期和时间点检索一份历史摘要。
-
-        Args:
-            group_id (str): 群组 ID
-            date_str (str): 日期 (YYYY-MM-DD)
-            time_str (str): 时间点 (HH-MM)
-
-        Returns:
-            dict[str, Any] | None: 历史摘要字典，未找到返回 None
         """
-        # 对齐存储时的 Key 规范
         time_str = time_str.replace(":", "-")
         key = f"analysis_{group_id}_{date_str}_{time_str}"
         return await self.plugin.get_kv_data(key, None)
@@ -107,14 +98,6 @@ class HistoryManager:
     async def has_history(self, group_id: str, date_str: str, time_str: str) -> bool:
         """
         快速判定是否存在指定时间点的历史分析记录。
-
-        Args:
-            group_id (str): 群组 ID
-            date_str (str): 日期
-            time_str (str): 时间点
-
-        Returns:
-            bool: 是否存在记录
         """
         history = await self.get_history(group_id, date_str, time_str)
         return history is not None

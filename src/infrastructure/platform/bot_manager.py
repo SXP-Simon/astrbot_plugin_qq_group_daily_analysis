@@ -1,14 +1,12 @@
 """
-Bot实例管理模块
+Bot实例管理模块 - 基础设施层
 统一管理bot实例的获取、设置和使用
-
-已重构以集成 DDD PlatformAdapter 架构，支持多平台扩展。
 """
 
 from typing import Any
 
-from ..infrastructure.platform import PlatformAdapter, PlatformAdapterFactory
-from ..utils.logger import logger
+from ...utils.logger import logger
+from . import PlatformAdapter, PlatformAdapterFactory
 
 
 class BotManager:
@@ -146,6 +144,14 @@ class BotManager:
         """获取所有已加载的bot实例 {platform_id: bot_instance}"""
         return self._bot_instances.copy()
 
+    def get_platform_count(self) -> int:
+        """获取当前已加载的平台数量"""
+        return len(self._bot_instances)
+
+    def get_platform_ids(self) -> list[str]:
+        """获取所有已加载的平台 ID 列表"""
+        return list(self._bot_instances.keys())
+
     def has_bot_instance(self) -> bool:
         """检查是否有可用的bot实例"""
         return bool(self._bot_instances)
@@ -169,11 +175,6 @@ class BotManager:
         从 bot 实例检测平台名称，用于创建适配器。
 
         返回平台名称如 'aiocqhttp', 'discord' 等。
-
-        检测优先级:
-        1. bot 实例的 platform 属性
-        2. 已知的 API 特征检测
-        3. 类名模式匹配（作为后备方案）
         """
         # 优先使用 platform 属性
         if hasattr(bot_instance, "platform"):
@@ -304,10 +305,6 @@ class BotManager:
                 elif isinstance(metadata, dict) and "name" in metadata:
                     platform_name = metadata["name"]
 
-                logger.info(
-                    f"[群分析插件 BotManager] Initial platform_name detection: {platform_name}"
-                )
-
                 # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
                 if (
                     not platform_name
@@ -332,22 +329,7 @@ class BotManager:
                         f"发现平台 {platform_id} 但客户端未就绪。将进行懒加载。"
                     )
                     discovered[platform_id] = platform
-            else:
-                # 后备方案：如果元数据丢失/损坏但我们有客户端，尝试使用它
-                if bot_client:
-                    platform_name = self._detect_platform_name(bot_client)
-                    if platform_name:
-                        # 生成临时ID或使用名称
-                        platform_id = platform_name
-                        logger.warning(
-                            f"平台元数据丢失，使用检测到的类型 '{platform_name}' 作为 ID。"
-                        )
 
-                        self._platforms[platform_id] = platform
-                        self.set_bot_instance(bot_client, platform_id, platform_name)
-                        discovered[platform_id] = bot_client
-
-        # 记录适配器创建结果
         if self._adapters:
             logger.info(
                 f"已创建 {len(self._adapters)} 个 PlatformAdapter: "
@@ -367,7 +349,6 @@ class BotManager:
         discovered = await self.auto_discover_bot_instances()
         self._is_initialized = True
 
-        # 返回发现的实例字典
         return discovered
 
     def get_status_info(self) -> dict[str, Any]:
@@ -392,9 +373,6 @@ class BotManager:
 
     def update_from_event(self, event):
         """从事件更新bot实例（用于手动命令）"""
-        # 检查是否为 QQ 平台事件 (兼容性检查)
-        # 注意: 非 aiocqhttp 平台也可以使用，只要适配器已注册
-
         if hasattr(event, "bot") and event.bot:
             # 从事件中获取平台ID
             platform_id = None
@@ -449,8 +427,6 @@ class BotManager:
     def is_plugin_enabled(self, platform_id: str, plugin_name: str) -> bool:
         """检查指定平台是否启用了该插件"""
         if platform_id not in self._platforms:
-            # 如果找不到平台对象（例如是手动添加的），默认认为启用
-            # 或者可以返回 True，因为无法进行否定检查
             return True
 
         platform = self._platforms[platform_id]
@@ -460,7 +436,7 @@ class BotManager:
         plugin_set = platform.config.get("plugin_set", ["*"])
 
         if plugin_set is None:
-            return False  # 如果明确为 None, 视为都不启用? 或者默认? Default is ["*"] usually.
+            return False
 
         if "*" in plugin_set:
             return True

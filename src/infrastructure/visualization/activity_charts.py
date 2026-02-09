@@ -6,7 +6,7 @@
 from collections import defaultdict
 from datetime import datetime
 
-from ..models.data_models import ActivityVisualization
+from ...domain.models.data_models import ActivityVisualization
 
 
 class ActivityVisualizer:

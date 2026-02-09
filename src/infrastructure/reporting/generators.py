@@ -10,12 +10,13 @@ from pathlib import Path
 
 import aiohttp
 
-from ..utils.logger import logger
+from ...domain.repositories.report_repository import IReportGenerator
+from ...utils.logger import logger
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 
 
-class ReportGenerator:
+class ReportGenerator(IReportGenerator):
     """报告生成器"""
 
     def __init__(self, config_manager):
