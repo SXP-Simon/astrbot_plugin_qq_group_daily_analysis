@@ -28,8 +28,13 @@ class BotManager:
         self._default_platform = "default"  # 默认平台
 
     def set_context(self, context):
-        """设置AstrBot上下文"""
+        """设置AstrBot上下文，并传递给所有支持的适配器"""
         self._context = context
+
+        # 将 context 传递给所有支持 set_context 的适配器
+        for adapter in self._adapters.values():
+            if hasattr(adapter, "set_context"):
+                adapter.set_context(context)
 
     def set_bot_instance(self, bot_instance, platform_id=None, platform_name=None):
         """
@@ -55,6 +60,9 @@ class BotManager:
                     platform_name, bot_instance, adapter_config
                 )
                 if adapter:
+                    # 如果有 context，传递给适配器
+                    if self._context and hasattr(adapter, "set_context"):
+                        adapter.set_context(self._context)
                     self._adapters[platform_id] = adapter
                     logger.debug(
                         f"已为 {platform_id} ({platform_name}) 创建 PlatformAdapter"
