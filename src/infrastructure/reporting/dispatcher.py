@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from typing import Any
 
-from ..utils.logger import logger
-from ..utils.trace_context import TraceContext
+from ...utils.logger import logger
+from ...utils.trace_context import TraceContext
 
 
 class ReportDispatcher:
