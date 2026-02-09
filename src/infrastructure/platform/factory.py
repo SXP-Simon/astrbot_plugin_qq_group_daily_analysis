@@ -82,5 +82,13 @@ def _register_adapters():
     except ImportError:
         pass
 
+    try:
+        from .adapters.telegram_adapter import TelegramAdapter
+
+        PlatformAdapterFactory.register("telegram", TelegramAdapter)
+    except ImportError:
+        pass
+
 
 _register_adapters()
+

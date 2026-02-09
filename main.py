@@ -148,6 +148,125 @@ class QQGroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
 
+    # ==================== 消息历史存储（统一方法，可复用） ====================
+
+    async def _store_message_to_history(self, event: AstrMessageEvent) -> None:
+        """
+        将消息存储到 AstrBot 的 message_history_manager
+
+        这是一个可复用的统一方法，支持所有通过 context 机制存储消息的平台。
+        不使用 fallback 值 - 如果获取不到必要数据会抛出异常。
+
+        Args:
+            event: AstrBot 消息事件
+
+        Raises:
+            ValueError: 当必要数据（group_id, sender_id, platform_id）无法获取时
+            RuntimeError: 当消息内容为空时
+        """
+        # 1. 获取群组 ID（必需）
+        group_id = self._get_group_id_from_event(event)
+        if not group_id:
+            raise ValueError("无法获取群组 ID，拒绝存储消息")
+
+        # 2. 获取发送者 ID（必需）
+        sender_id = event.get_sender_id()
+        if not sender_id:
+            raise ValueError(f"群 {group_id}: 无法获取发送者 ID，拒绝存储消息")
+        sender_id = str(sender_id)
+
+        # 3. 获取发送者名称（必需）
+        sender_name = event.get_sender_name()
+        if not sender_name:
+            raise ValueError(
+                f"群 {group_id}: 无法获取发送者名称 (sender_id={sender_id})，拒绝存储消息"
+            )
+
+        # 4. 获取平台 ID（必需）
+        platform_id = event.get_platform_id()
+        if not platform_id:
+            raise ValueError(f"群 {group_id}: 无法获取平台 ID，拒绝存储消息")
+
+        # 5. 提取消息内容
+        message_parts = self._extract_message_parts(event)
+        if not message_parts:
+            raise RuntimeError(
+                f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
+            )
+
+        # 6. 存储到数据库
+        await self.context.message_history_manager.insert(
+            platform_id=platform_id,
+            user_id=group_id,
+            content={"type": "user", "message": message_parts},
+            sender_id=sender_id,
+            sender_name=sender_name,
+        )
+
+        logger.debug(
+            f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
+        )
+
+    def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict]:
+        """
+        从事件中提取消息内容
+
+        Returns:
+            消息部分列表，格式为 [{"type": "plain", "text": "..."}, ...]
+        """
+        message_parts = []
+        message = event.message_obj
+
+        if message and hasattr(message, "message"):
+            for seg in message.message:
+                if not hasattr(seg, "type"):
+                    continue
+
+                seg_type = seg.type
+                if seg_type in ("Plain", "text"):
+                    text = getattr(seg, "text", None)
+                    if text is None and hasattr(seg, "data"):
+                        text = seg.data.get("text")
+                    if text:
+                        message_parts.append({"type": "plain", "text": text})
+
+                elif seg_type in ("Image", "image"):
+                    url = getattr(seg, "url", None)
+                    if url is None and hasattr(seg, "data"):
+                        url = seg.data.get("url")
+                    if url:
+                        message_parts.append({"type": "image", "url": url})
+
+                elif seg_type in ("At", "at"):
+                    target = getattr(seg, "target", None)
+                    if target is None and hasattr(seg, "data"):
+                        target = seg.data.get("qq") or seg.data.get("target")
+                    if target:
+                        message_parts.append({"type": "at", "target_id": str(target)})
+
+        # 如果没有从消息链提取到内容，尝试使用 message_str
+        if not message_parts and event.message_str:
+            message_parts.append({"type": "plain", "text": event.message_str})
+
+        return message_parts
+
+    # ==================== Telegram 消息拦截器 ====================
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
+    async def intercept_telegram_messages(self, event: AstrMessageEvent):
+        """
+        拦截 Telegram 群消息并存储到数据库
+
+        使用统一的 _store_message_to_history 方法存储消息。
+        """
+        try:
+            await self._store_message_to_history(event)
+        except (ValueError, RuntimeError) as e:
+            logger.warning(f"[Telegram] 消息存储失败: {e}")
+        except Exception as e:
+            logger.error(f"[Telegram] 消息存储异常: {e}", exc_info=True)
+
     @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
