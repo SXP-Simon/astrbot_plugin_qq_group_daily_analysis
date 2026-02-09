@@ -7,12 +7,12 @@
 import asyncio
 from typing import Any
 
+from ...domain.models.data_models import TokenUsage
+from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.repositories.report_repository import IReportGenerator
+from ...domain.services.analysis_domain_service import AnalysisDomainService
+from ...domain.services.statistics_service import StatisticsService
 from ...utils.logger import logger
-from ..domain.models.data_models import TokenUsage
-from ..domain.repositories.analysis_repository import IAnalysisProvider
-from ..domain.repositories.report_repository import IReportGenerator
-from ..domain.services.analysis_domain_service import AnalysisDomainService
-from ..domain.services.statistics_service import StatisticsService
 
 
 class AnalysisApplicationService:

@@ -9,10 +9,10 @@ import weakref
 from apscheduler.triggers.cron import CronTrigger
 
 from ...utils.logger import logger
-from ..core.message_sender import MessageSender
+from ...utils.trace_context import TraceContext
+from ..messaging.message_sender import MessageSender
 from ..platform.factory import PlatformAdapterFactory
 from ..reporting.dispatcher import ReportDispatcher
-from ..utils.trace_context import TraceContext
 
 
 class AutoScheduler:

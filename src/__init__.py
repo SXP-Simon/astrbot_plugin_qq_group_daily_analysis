@@ -15,5 +15,3 @@ QQ群日常分析插件 - 源代码包
 - utils: 工具函数
 - visualization: 可视化组件
 """
-
-__version__ = "2.0.0"
