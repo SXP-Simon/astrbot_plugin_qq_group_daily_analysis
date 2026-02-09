@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import aiohttp
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 @dataclass
@@ -194,73 +194,27 @@ class RetryManager:
                 logger.error(f"[RetryManager] Base64编码失败: {e}")
                 return False
 
-            # 2. 获取 Bot 实例
-            bot = self.bot_manager.get_bot_instance(task.platform_id)
-            if not bot:
+            # 2. 获取适配器 (DDD 基础设施层)
+            adapter = self.bot_manager.get_adapter(task.platform_id)
+            if not adapter:
                 logger.error(
-                    f"[RetryManager] 平台 {task.platform_id} 的 Bot 实例未找到，无法重试"
+                    f"[RetryManager] 平台 {task.platform_id} 的适配器未找到，无法重试"
                 )
-                return False  # 无法重试，因为 Bot 已离线
+                return False
 
-            # 3. 发送图片
+            # 3. 发送图片 (通过统一适配器接口)
             logger.info(
-                f"[RetryManager] 正在向群 {task.group_id} 发送重试图片 (Base64模式)..."
+                f"[RetryManager] 正在向群 {task.group_id} 发送重试图片 (Adapter: {type(adapter).__name__})..."
             )
 
-            # 使用 OneBot v11 标准 API
-            if hasattr(bot, "api") and hasattr(bot.api, "call_action"):
-                try:
-                    # 构造消息
-                    # 使用 list 格式兼容性更好
-                    message = [
-                        {
-                            "type": "text",
-                            "data": {"text": "📊 每日群聊分析报告（重试发送）：\n"},
-                        },
-                        {"type": "image", "data": {"file": image_file_str}},
-                    ]
-
-                    result = await bot.api.call_action(
-                        "send_group_msg", group_id=int(task.group_id), message=message
-                    )
-
-                    # 检查 retcode
-                    if isinstance(result, dict):
-                        retcode = result.get("retcode", 0)
-                        if retcode == 0:
-                            return True
-                        elif retcode == 1200:
-                            # 即使是 Base64 也可能超时，但概率小很多
-                            logger.warning(
-                                "[RetryManager] 发送失败 (retcode=1200): 消息可能过大或Bot连接不稳定"
-                            )
-                            return False
-                        else:
-                            logger.warning(
-                                f"[RetryManager] 发送失败 (retcode={retcode}): {result}"
-                            )
-                            return False
-                    return (
-                        True  # 假设非 dict 类型返回即成功（某些适配器可能返回不同类型）
-                    )
-
-                except Exception as e:
-                    logger.error(f"[RetryManager] 发送API调用异常: {e}")
-                    return False
-
-            elif hasattr(bot, "send_msg"):  # 尝试 AstrBot 抽象接口
-                try:
-                    # 尝试直接发送
-                    await bot.send_msg(image_file_str, group_id=task.group_id)
-                    return True
-                except Exception as e:
-                    logger.error(f"[RetryManager] 抽象接口发送失败: {e}")
-                    return False
-
-            else:
-                logger.warning(
-                    f"[RetryManager] 未知的 Bot 类型 {type(bot)}，无法发送消息。"
-                )
+            # 注意：某些适配器可能需要 URL，某些需要 Base64。
+            # 适配器内部通常应处理好 bytes/base64 的发送。
+            # 这里我们尝试直接传 image_file_str (base64://)
+            try:
+                success = await adapter.send_image(task.group_id, image_file_str)
+                return success
+            except Exception as e:
+                logger.error(f"[RetryManager] 适配器发送图片异常: {e}")
                 return False
 
         except Exception as e:
@@ -271,7 +225,7 @@ class RetryManager:
             pass
 
     async def _send_fallback_text(self, task: RetryTask):
-        """发送文本回退报告（使用合并转发）"""
+        """发送文本回退报告（业务逻辑委派给适配器）"""
         if not self.report_generator:
             logger.warning("[RetryManager] 未配置 ReportGenerator，无法发送文本回退")
             return
@@ -282,60 +236,41 @@ class RetryManager:
                 task.analysis_result
             )
 
-            bot = self.bot_manager.get_bot_instance(task.platform_id)
-            if not bot:
+            # 2. 获取适配器 (DDD 基础设施层)
+            adapter = self.bot_manager.get_adapter(task.platform_id)
+            if not adapter:
+                logger.error(
+                    f"[RetryManager] 无法获取适配器 {task.platform_id}，放弃发送回退文本"
+                )
                 return
 
-            # 构造合并转发节点
-            # 注意：这里需要构造符合 OneBot v11 标准的节点列表
-            # 即使没有 self_id，我们也可以尝试发送
-
-            # 获取 bot self_id (如果能获取到)
-            bot_id = "10000"  # fallback id
-            if hasattr(bot, "self_id"):
-                bot_id = str(bot.self_id)
-
             nickname = "AstrBot日常分析"
-
             nodes = [
                 {
                     "type": "node",
                     "data": {
                         "name": nickname,
-                        "uin": bot_id,
                         "content": "⚠️ 图片报告多次生成失败，为您呈现文本版报告：",
                     },
                 },
                 {
                     "type": "node",
-                    "data": {"name": nickname, "uin": bot_id, "content": text_report},
+                    "data": {"name": nickname, "content": text_report},
                 },
             ]
 
-            if hasattr(bot, "api") and hasattr(bot.api, "call_action"):
-                # 尝试发送群合并转发消息
-                # 一般使用 send_group_forward_msg 或 send_group_msg (带 nodes)
-                try:
-                    await bot.api.call_action(
-                        "send_group_forward_msg",
-                        group_id=int(task.group_id),
-                        messages=nodes,
-                    )
-                    logger.info(
-                        f"[RetryManager] 群 {task.group_id} 文本回退报告发送成功 (合并转发)"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[RetryManager] 合并转发失败，尝试直接发送文本: {e}"
-                    )
-                    # 回退到直接发送宽文本
-                    await bot.api.call_action(
-                        "send_group_msg",
-                        group_id=int(task.group_id),
-                        message=f"⚠️ 图片报告生成失败，文本报告：\n{text_report}"[
-                            :4500
-                        ],  # 截断防止过长
-                    )
+            # 3. 通过适配器发送结构化消息
+            success = await adapter.send_forward_msg(task.group_id, nodes)
+
+            if success:
+                logger.info(f"[RetryManager] 群 {task.group_id} 文本回退报告发送成功")
+            else:
+                # 最终兜底：发送简单文本
+                logger.warning("[RetryManager] 结构化发送失败，尝试直接发送文本回退")
+                await adapter.send_text(
+                    task.group_id,
+                    f"⚠️ 图片报告生成失败，文本报告：\n{text_report}"[:4500],
+                )
 
         except Exception as e:
-            logger.error(f"[RetryManager] 文本回退发送失败: {e}", exc_info=True)
+            logger.error(f"[RetryManager] 文本回退流程异常: {e}", exc_info=True)

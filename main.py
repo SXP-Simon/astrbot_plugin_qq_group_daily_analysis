@@ -7,7 +7,6 @@ QQ群日常分析插件
 
 import asyncio
 import os
-from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -15,14 +14,18 @@ from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
 
-from .src.application.analysis_orchestrator import AnalysisConfig, AnalysisOrchestrator
-from .src.core.bot_manager import BotManager
-from .src.core.config import ConfigManager
-from .src.core.history_manager import HistoryManager
-from .src.reports.generators import ReportGenerator
-from .src.scheduler.auto_scheduler import AutoScheduler
-from .src.scheduler.retry import RetryManager
-from .src.utils.helpers import MessageAnalyzer
+from .src.application.services.analysis_application_service import (
+    AnalysisApplicationService,
+)
+from .src.domain.services.analysis_domain_service import AnalysisDomainService
+from .src.domain.services.statistics_service import StatisticsService
+from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
+from .src.infrastructure.config.config_manager import ConfigManager
+from .src.infrastructure.persistence.history_manager import HistoryManager
+from .src.infrastructure.platform.bot_manager import BotManager
+from .src.infrastructure.reporting.generators import ReportGenerator
+from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
+from .src.infrastructure.scheduler.retry import RetryManager
 from .src.utils.pdf_utils import PDFInstaller
 
 
@@ -33,110 +36,45 @@ class QQGroupDailyAnalysis(Star):
         super().__init__(context)
         self.config = config
 
-        # 初始化模块化组件（使用实例属性而非全局变量）
+        # 1. 基础设施层
         self.config_manager = ConfigManager(config)
         self.bot_manager = BotManager(self.config_manager)
         self.bot_manager.set_context(context)
-        self.message_analyzer = MessageAnalyzer(
-            context, self.config_manager, self.bot_manager
-        )
-        self.report_generator = ReportGenerator(self.config_manager)
         self.history_manager = HistoryManager(self)
+        self.report_generator = ReportGenerator(self.config_manager)
+
+        # 2. 领域层
+        self.statistics_service = StatisticsService()
+        self.analysis_domain_service = AnalysisDomainService()
+
+        # 3. 分析核心 (LLM Bridge)
+        self.llm_analyzer = LLMAnalyzer(context, self.config_manager)
+
+        # 4. 应用层
+        self.analysis_service = AnalysisApplicationService(
+            self.config_manager,
+            self.bot_manager,
+            self.history_manager,
+            self.report_generator,
+            self.llm_analyzer,
+            self.statistics_service,
+            self.analysis_domain_service,
+        )
+
+        # 调度与重试
         self.retry_manager = RetryManager(
             self.bot_manager, self.html_render, self.report_generator
         )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
-            self.message_analyzer.message_handler,
-            self.message_analyzer,
-            self.report_generator,
+            self.analysis_service,
             self.bot_manager,
             self.retry_manager,
-            self.history_manager,
-            self.html_render,  # 传入html_render函数
+            self.html_render,
         )
 
-        # 注册分析编排器缓存
-        self.orchestrators = {}  # {platform_id: AnalysisOrchestrator}
-
-        # 注册日志过滤器
-        from .src.utils.trace_context import TraceLogFilter
-
-        logger.addFilter(TraceLogFilter())
-
-        logger.info("QQ群日常分析插件已初始化（模块化版本）")
-
-    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从事件中提取群组ID（跨平台兼容）"""
-        # 使用正确的 AstrMessageEvent API
-        if hasattr(event, "get_group_id"):
-            group_id = event.get_group_id()
-            return str(group_id) if group_id else None
-        if hasattr(event, "message_obj") and hasattr(event.message_obj, "group_id"):
-            group_id = event.message_obj.group_id
-            return str(group_id) if group_id else None
-        return None
-
-    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从事件中提取平台ID（跨平台兼容）"""
-        # 使用正确的 AstrMessageEvent API
-        if hasattr(event, "get_platform_id"):
-            return event.get_platform_id()
-        if hasattr(event, "platform_meta") and hasattr(event.platform_meta, "id"):
-            return event.platform_meta.id
-        return None
-
-    def _get_platform_name_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从事件中提取平台名称（如 discord, aiocqhttp 等）"""
-        # 使用正确的 AstrMessageEvent API
-        if hasattr(event, "get_platform_name"):
-            return event.get_platform_name()
-        if hasattr(event, "platform_meta") and hasattr(event.platform_meta, "name"):
-            return event.platform_meta.name
-        return None
-
-    def _get_orchestrator(
-        self,
-        platform_id: str,
-        platform_name: str | None = None,
-        bot_instance: Any = None,
-    ) -> AnalysisOrchestrator | None:
-        """获取或创建分析编排器"""
-        if platform_id in self.orchestrators:
-            return self.orchestrators[platform_id]
-
-        # 如果缓存中没有，尝试创建
-        if not bot_instance:
-            bot_instance = self.bot_manager.get_bot_instance(platform_id)
-
-        if not bot_instance:
-            return None
-
-        # 检测平台名称（优先使用传入的 platform_name）
-        if not platform_name:
-            platform_name = self.bot_manager._detect_platform_name(bot_instance)
-        if not platform_name:
-            return None
-
-        # 创建编排器
-        analysis_config = AnalysisConfig(
-            days=self.config_manager.get_analysis_days(),
-            min_messages_threshold=self.config_manager.get_min_messages_threshold(),
-            max_messages=self.config_manager.get_max_messages(),
-            output_format=self.config_manager.get_output_format(),
-        )
-
-        orchestrator = AnalysisOrchestrator.create_for_platform(
-            platform_name,
-            bot_instance,
-            config={"bot_self_ids": self.config_manager.get_bot_self_ids()},
-            analysis_config=analysis_config,
-        )
-
-        if orchestrator:
-            self.orchestrators[platform_id] = orchestrator
-
-        return orchestrator
+    # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
+    # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
 
     @filter.on_platform_loaded()
     async def on_platform_loaded(self):
@@ -147,6 +85,7 @@ class QQGroupDailyAnalysis(Star):
                 config = self.context.get_config()
                 plugin_set = config.get("plugin_set")
 
+                # ！！！仅开发阶段使用，正式发布后删除！！！
                 if isinstance(plugin_set, list) and not plugin_set:
                     logger.warning("检测到 plugin_set 为空，自动修正以启用插件")
                     config["plugin_set"].append(
@@ -165,8 +104,7 @@ class QQGroupDailyAnalysis(Star):
             # 初始化所有bot实例
             discovered = await self.bot_manager.initialize_from_config()
             if discovered:
-                platform_count = len(discovered)
-                logger.info(f"Bot管理器初始化成功，发现 {platform_count} 个适配器")
+                logger.info("Bot管理器初始化成功")
                 for platform_id, bot_instance in discovered.items():
                     logger.info(
                         f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
@@ -223,109 +161,47 @@ class QQGroupDailyAnalysis(Star):
         分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
-        # 1. 获取 group_id, platform_id 和 platform_name
         group_id = self._get_group_id_from_event(event)
         platform_id = self._get_platform_id_from_event(event)
-        platform_name = self._get_platform_name_from_event(event)
 
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        # 更新bot实例（用于手动命令）
-        if hasattr(event, "bot"):
-            self.bot_manager.update_from_event(event)
+        # 更新bot实例
+        self.bot_manager.update_from_event(event)
 
-        # 2. 检查群组权限
         if not self.config_manager.is_group_allowed(group_id):
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
-        # 3. 设置分析天数
-        analysis_days = (
-            days if days and 1 <= days <= 7 else self.config_manager.get_analysis_days()
-        )
-
-        yield event.plain_result(f"🔍 开始分析群聊近{analysis_days}天的活动，请稍候...")
-        logger.info(
-            f"收到分析请求: group_id={group_id}, platform_id={platform_id}, platform_name={platform_name}, days={analysis_days}"
-        )
+        yield event.plain_result("🔍 正在启动跨平台分析引擎，正在拉取最近消息...")
 
         try:
-            # 4. 获取编排器
-            # 首先尝试从 event 直接提取 bot 客户端
-            bot_from_event = None
-            if hasattr(event, "client"):  # Discord 平台有 client 属性
-                bot_from_event = event.client
-            elif hasattr(event, "bot"):  # 其他平台可能有 bot 属性
-                bot_from_event = event.bot
-
-            orchestrator = self._get_orchestrator(
-                platform_id, platform_name, bot_from_event
-            )
-            if not orchestrator:
-                # 尝试使用 bot_manager 获取 bot 实例再创建
-                bot_instance = self.bot_manager.get_bot_instance(platform_id)
-                if bot_instance:
-                    orchestrator = self._get_orchestrator(
-                        platform_id, platform_name, bot_instance
-                    )
-
-            if not orchestrator:
-                yield event.plain_result(
-                    f"❌ 未找到平台 {platform_name or platform_id} 的分析编排器，请检查配置或联系开发者"
-                )
-                return
-
-            # 5. 获取群聊消息 (使用编排器)
-            messages = await orchestrator.fetch_messages_as_raw(
-                group_id=group_id, days=analysis_days
+            # 调用 DDD 应用级服务
+            result = await self.analysis_service.execute_daily_analysis(
+                group_id=group_id, platform_id=platform_id, manual=True
             )
 
-            if not messages:
-                yield event.plain_result(
-                    "❌ 未找到足够的群聊记录，请确保群内有足够的消息历史"
-                )
-                return
-
-            # 检查消息数量是否足够分析
-            min_threshold = self.config_manager.get_min_messages_threshold()
-            if len(messages) < min_threshold:
-                yield event.plain_result(
-                    f"❌ 消息数量不足（{len(messages)}条），至少需要{min_threshold}条消息才能进行有效分析"
-                )
+            if not result.get("success"):
+                reason = result.get("reason")
+                if reason == "no_messages":
+                    yield event.plain_result("❌ 未找到足够的群聊记录")
+                else:
+                    yield event.plain_result("❌ 分析失败，原因未知")
                 return
 
             yield event.plain_result(
-                f"📊 已获取{len(messages)}条消息，正在进行智能分析..."
+                f"📊 已获取{result['messages_count']}条消息，正在生成渲染报告..."
             )
 
-            # 6. 进行分析
-            analysis_result = await self.message_analyzer.analyze_messages(
-                messages, group_id, event.unified_msg_origin
-            )
-
-            if not analysis_result or not analysis_result.get("statistics"):
-                yield event.plain_result("❌ 分析过程中出现错误，请稍后重试")
-                return
-
-            # 7. 保存到历史记录
-            await self.history_manager.save_analysis(group_id, analysis_result)
-
-            # 8. 生成并发送报告
+            analysis_result = result["analysis_result"]
+            adapter = result["adapter"]
             output_format = self.config_manager.get_output_format()
 
-            # 定义头像获取回调
+            # 定义头像获取回调 (Infrastructure delegate)
             async def avatar_getter(user_id: str) -> str | None:
-                if not orchestrator:
-                    return None
-                try:
-                    # orchestrator.get_member_avatars 接受列表返回字典
-                    avatars = await orchestrator.get_member_avatars([user_id])
-                    return avatars.get(user_id)
-                except Exception as e:
-                    logger.warning(f"获取头像失败 {user_id}: {e}")
-                    return None
+                return await adapter.get_user_avatar_url(user_id)
 
             if output_format == "image":
                 (
@@ -339,68 +215,45 @@ class QQGroupDailyAnalysis(Star):
                 )
 
                 if image_url:
-                    # 使用编排器发送图片
-                    if await orchestrator.send_image(group_id, image_url):
-                        logger.info(f"图片报告发送成功: {group_id}")
-                    else:
+                    if not await adapter.send_image(group_id, image_url):
                         yield event.image_result(image_url)
-
                 elif html_content:
-                    # 生成失败但有HTML，加入重试队列
-                    logger.warning("图片报告生成失败，加入重试队列")
-                    yield event.plain_result(
-                        "[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告暂无法生成，已加入重试队列，稍后将自动重试发送。"
-                    )
+                    yield event.plain_result("⚠️ 图片生成暂不可用，已尝试加入队列。")
                     await self.retry_manager.add_task(
                         html_content, analysis_result, group_id, platform_id
                     )
                 else:
-                    # 回退到文本报告
-                    logger.warning("图片报告生成失败（无HTML），回退到文本报告")
                     text_report = self.report_generator.generate_text_report(
                         analysis_result
                     )
                     yield event.plain_result(
-                        f"[AstrBot QQ群日常分析总结插件] ⚠️ 图片报告生成失败，以下是文本版本：\n\n{text_report}"
+                        f"⚠️ 图片生成失败，回退文本：\n\n{text_report}"
                     )
 
             elif output_format == "pdf":
-                if not self.config_manager.playwright_available:
-                    yield event.plain_result(
-                        "❌ PDF 功能不可用，请使用 /安装PDF 命令安装依赖"
-                    )
-                    return
-
                 pdf_path = await self.report_generator.generate_pdf_report(
                     analysis_result, group_id, avatar_getter=avatar_getter
                 )
-
                 if pdf_path:
-                    # 使用编排器发送文件
-                    if await orchestrator.send_file(group_id, pdf_path):
-                        pass  # 发送成功
-                    else:
+                    if not await adapter.send_file(group_id, pdf_path):
                         from pathlib import Path
 
-                        pdf_file = File(name=Path(pdf_path).name, file=pdf_path)
-                        result = event.make_result()
-                        result.chain.append(pdf_file)
-                        yield result
+                        yield event.chain_result(
+                            [File(name=Path(pdf_path).name, file=pdf_path)]
+                        )
                 else:
-                    logger.warning("PDF 报告生成失败，回退到文本报告")
-                    text_report = self.report_generator.generate_text_report(
-                        analysis_result
-                    )
-                    yield event.plain_result(
-                        f"\n📝 以下是文本版本的分析报告：\n\n{text_report}"
-                    )
+                    yield event.plain_result("⚠️ PDF 生成失败。")
+
             else:
-                # 文本报告
                 text_report = self.report_generator.generate_text_report(
                     analysis_result
                 )
-                if not await orchestrator.send_text(group_id, text_report):
+                if not await adapter.send_text(group_id, text_report):
                     yield event.plain_result(text_report)
+
+        except Exception as e:
+            logger.error(f"群分析失败: {e}", exc_info=True)
+            yield event.plain_result(f"❌ 分析核心执行失败: {str(e)}")
 
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)

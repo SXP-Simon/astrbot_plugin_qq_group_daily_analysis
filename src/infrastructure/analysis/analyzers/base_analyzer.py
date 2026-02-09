@@ -6,8 +6,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ...models.data_models import TokenUsage
-from ...utils.logger import logger
+from ....domain.models.data_models import TokenUsage
+from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
     call_provider_with_retry,

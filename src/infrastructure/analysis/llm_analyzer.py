@@ -5,8 +5,13 @@ LLM分析器模块
 
 import asyncio
 
-from ..models.data_models import GoldenQuote, SummaryTopic, TokenUsage, UserTitle
-from ..utils.logger import logger
+from ...domain.models.data_models import (
+    GoldenQuote,
+    SummaryTopic,
+    TokenUsage,
+    UserTitle,
+)
+from ...utils.logger import logger
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer
 from .analyzers.topic_analyzer import TopicAnalyzer
 from .analyzers.user_title_analyzer import UserTitleAnalyzer

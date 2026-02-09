@@ -9,7 +9,7 @@ import threading
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 class HTMLTemplates:
