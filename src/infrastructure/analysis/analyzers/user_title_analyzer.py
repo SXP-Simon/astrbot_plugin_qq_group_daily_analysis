@@ -178,16 +178,15 @@ class UserTitleAnalyzer(BaseAnalyzer):
 
             for user_id, stats in user_analysis.items():
                 user_id_str = str(user_id)
-                # 过滤机器人自己的消息
+                # 过滤机器人由 MessageCleaner 已处理，此处仅作为二级防御
                 if bot_self_ids and user_id_str in [str(uid) for uid in bot_self_ids]:
-                    logger.debug(f"过滤掉机器人ID: {user_id}")
                     continue
 
-                # 只处理活跃用户
+                # 只处理活跃用户 (top_users 或 消息数>=5)
                 if user_id_str not in target_user_ids:
                     continue
 
-                # 分析用户特征
+                # 分析用户特征 (此处已基于已清理的 stats)
                 night_messages = sum(stats["hours"][h] for h in range(6))
                 avg_chars = (
                     stats["char_count"] / stats["message_count"]
@@ -198,7 +197,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
                 user_summaries.append(
                     {
                         "name": stats["nickname"],
-                        "user_id": user_id_str,  # 使用 user_id
+                        "user_id": user_id_str,
                         "message_count": stats["message_count"],
                         "avg_chars": round(avg_chars, 1),
                         "emoji_ratio": round(

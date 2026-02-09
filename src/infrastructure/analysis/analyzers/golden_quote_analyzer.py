@@ -170,40 +170,34 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
 
     def extract_interesting_messages(self, messages: list[dict]) -> list[dict]:
         """
-        提取圣经的文本消息
+        根据清理后的消息提取可能有意义的消息片段用于金句分析。
 
         Args:
-            messages: 群聊消息列表
+            messages: 已由 MessageCleaner 处理过的 legacy 消息列表
 
         Returns:
-            圣经的文本消息列表
+            提取的文本消息列表
         """
-        try:
-            interesting_messages = []
+        interesting_messages = []
 
-            for msg in messages:
-                sender = msg.get("sender", {})
-                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-                msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
+        for msg in messages:
+            # 获取发送者显示名
+            sender = msg.get("sender", {})
+            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
+            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
 
-                for content in msg.get("message", []):
-                    if content.get("type") == "text":
-                        text = content.get("data", {}).get("text", "").strip()
-                        # 过滤长度适中、可能圣经的消息
-                        if 5 <= len(text) <= 100 and not text.startswith(
-                            ("http", "www", "/")
-                        ):
-                            interesting_messages.append(
-                                {
-                                    "sender": nickname,
-                                    "time": msg_time,
-                                    "content": text,
-                                    "user_id": str(sender.get("user_id", "")),
-                                }
-                            )
+            for content in msg.get("message", []):
+                if content.get("type") == "text":
+                    text = content.get("data", {}).get("text", "").strip()
+                    # 过滤掉过短或过长的噪音（已经在 cleaner 处理过一遍基本垃圾）
+                    if 2 <= len(text) <= 500:
+                        interesting_messages.append(
+                            {
+                                "sender": nickname,
+                                "time": msg_time,
+                                "content": text,
+                                "user_id": str(sender.get("user_id", "")),
+                            }
+                        )
 
-            return interesting_messages
-
-        except Exception as e:
-            logger.error(f"提取圣经消息失败: {e}")
-            return []
+        return interesting_messages

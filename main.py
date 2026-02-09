@@ -109,8 +109,6 @@ class QQGroupDailyAnalysis(Star):
                     logger.info(
                         f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
                     )
-                    # 预先创建编排器
-                    self._get_orchestrator(platform_id, bot_instance=bot_instance)
 
                 # 启动调度器
                 self.auto_scheduler.schedule_jobs(self.context)
@@ -142,10 +140,8 @@ class QQGroupDailyAnalysis(Star):
             # 重置实例属性
             self.auto_scheduler = None
             self.bot_manager = None
-            self.message_analyzer = None
             self.report_generator = None
             self.config_manager = None
-            self.orchestrators = {}
 
             logger.info("QQ群日常分析插件资源清理完成")
 
@@ -598,3 +594,25 @@ class QQGroupDailyAnalysis(Star):
 💡 可用命令: enable, disable, status, reload, test
 💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
 💡 其他命令: /设置格式, /安装PDF""")
+
+    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
+        """从消息事件中安全获取群组 ID"""
+        try:
+            group_id = event.get_group_id()
+            return group_id if group_id else None
+        except Exception:
+            return None
+
+    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str:
+        """从消息事件中获取平台唯一 ID"""
+        try:
+            return event.get_platform_id()
+        except Exception:
+            # 后备方案：从元数据获取
+            if (
+                hasattr(event, "platform_meta")
+                and event.platform_meta
+                and hasattr(event.platform_meta, "id")
+            ):
+                return event.platform_meta.id
+            return "default"
