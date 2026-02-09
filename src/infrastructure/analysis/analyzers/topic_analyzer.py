@@ -257,79 +257,38 @@ class TopicAnalyzer(BaseAnalyzer):
 
     def extract_text_messages(self, messages: list[dict]) -> list[dict]:
         """
-        从群聊消息中提取文本消息
+        从已清理的消息中提取文本消息用于话题分析。
 
         Args:
-            messages: 群聊消息列表
+            messages: 已由 MessageCleaner 处理过的 legacy 消息列表
 
         Returns:
             提取的文本消息列表
         """
-        logger.debug(
-            f"extract_text_messages 开始处理，输入消息数量: {len(messages) if messages else 0}"
-        )
-        logger.debug(f"extract_text_messages 输入消息类型: {type(messages)}")
-
-        if not messages:
-            logger.warning("extract_text_messages 收到空消息列表")
-            return []
-
         text_messages = []
 
-        for i, msg in enumerate(messages):
-            logger.debug(f"处理第 {i + 1} 条消息，类型: {type(msg)}")
-            # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
-            if not isinstance(msg, dict):
-                logger.warning(f"跳过非字典类型的消息: {type(msg)} - {msg}")
-                continue
+        for msg in messages:
+            # 获取发送者显示名
+            sender = msg.get("sender", {})
+            nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
+            msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
 
-            try:
-                sender = msg.get("sender", {})
-                # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
-                if not isinstance(sender, dict):
-                    logger.warning(
-                        f"extract_text_messages 跳过sender非字典类型的消息: {type(sender)} - {sender}"
-                    )
-                    continue
+            for content in msg.get("message", []):
+                if content.get("type") == "text":
+                    text = content.get("data", {}).get("text", "").strip()
+                    # 已经在 MessageCleaner 中处理过基本的垃圾内容
+                    if text:
+                        # 简单的额外清理
+                        cleaned_text = text.replace("\n", " ").replace("\r", " ")
+                        cleaned_text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", cleaned_text)
 
-                # 获取发送者ID并过滤机器人消息
-                user_id = str(sender.get("user_id", ""))
-                bot_self_ids = self.config_manager.get_bot_self_ids()
-
-                # 跳过机器人自己的消息
-                if bot_self_ids and user_id in [str(uid) for uid in bot_self_ids]:
-                    logger.debug(f"extract_text_messages 过滤掉机器人QQ号: {user_id}")
-                    continue
-
-                nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
-                msg_time = datetime.fromtimestamp(msg.get("time", 0)).strftime("%H:%M")
-
-                for content in msg.get("message", []):
-                    if content.get("type") == "text":
-                        text = content.get("data", {}).get("text", "").strip()
-                        if text and len(text) > 2 and not text.startswith("/"):
-                            # 清理消息内容
-                            text = text.replace('""', '"').replace('""', '"')
-                            text = text.replace(""", "'").replace(""", "'")
-                            text = text.replace("\n", " ").replace("\r", " ")
-                            text = text.replace("\t", " ")
-                            text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
-                            text_messages.append(
-                                {
-                                    "sender": nickname,
-                                    "time": msg_time,
-                                    "content": text.strip(),
-                                }
-                            )
-            except Exception as e:
-                logger.error(f"处理第 {i + 1} 条消息时出错: {e}", exc_info=True)
-                continue
-
-        logger.debug(
-            f"extract_text_messages 完成，提取到 {len(text_messages)} 条文本消息"
-        )
-        if text_messages:
-            logger.debug(f"extract_text_messages 第一条文本消息: {text_messages[0]}")
+                        text_messages.append(
+                            {
+                                "sender": nickname,
+                                "time": msg_time,
+                                "content": cleaned_text.strip(),
+                            }
+                        )
         return text_messages
 
     async def analyze_topics(

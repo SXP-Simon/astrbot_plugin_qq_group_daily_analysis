@@ -63,25 +63,34 @@ class AnalysisApplicationService:
         days = self.config_manager.get_analysis_days()
         max_count = self.config_manager.get_max_messages()
 
-        unified_messages = await adapter.fetch_messages(
+        raw_messages = await adapter.fetch_messages(
             group_id=group_id, days=days, max_count=max_count
         )
 
-        if not unified_messages:
+        if not raw_messages:
             logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
             return {"success": False, "reason": "no_messages"}
 
-        # 检查最小消息阈值
-        if (
-            len(unified_messages) < self.config_manager.get_min_messages_threshold()
-            and not manual
-        ):
+        # 3. 清理消息 (Filter commands, bot messages, noise)
+        from ...domain.services.message_cleaner_service import MessageCleanerService
+
+        cleaner = MessageCleanerService()
+        bot_self_ids = self.config_manager.get_bot_self_ids()
+
+        # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
+        unified_messages = cleaner.clean_messages(
+            raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+        )
+
+        # 4. 检查最小消息阈值 (在清理后进行)
+        threshold = self.config_manager.get_min_messages_threshold()
+        if len(unified_messages) < threshold and not manual:
             logger.info(
-                f"群 {group_id} 消息数 ({len(unified_messages)}) 未达到自动分析阈值"
+                f"群 {group_id} 有效消息数 ({len(unified_messages)}) 未达到自动分析阈值 ({threshold})"
             )
             return {"success": False, "reason": "below_threshold"}
 
-        # 3. 基础统计 (Domain Service)
+        # 5. 基础统计 (Domain Service)
         statistics = await asyncio.to_thread(
             self.statistics_service.calculate_group_statistics, unified_messages
         )
@@ -120,7 +129,7 @@ class AnalysisApplicationService:
             f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         )
 
-        if topic_enabled and user_title_enabled and golden_quote_enabled:
+        if topic_enabled or user_title_enabled or golden_quote_enabled:
             (
                 topics,
                 user_titles,
@@ -131,10 +140,10 @@ class AnalysisApplicationService:
                 user_activity,
                 umo=unified_msg_origin,
                 top_users=top_users,
+                topic_enabled=topic_enabled,
+                user_title_enabled=user_title_enabled,
+                golden_quote_enabled=golden_quote_enabled,
             )
-        else:
-            # 按需串行执行 (略，实际实现可补全或合并)
-            pass
 
         # 回填结果
         statistics.golden_quotes = golden_quotes
