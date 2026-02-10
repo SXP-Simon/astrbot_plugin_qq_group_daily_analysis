@@ -270,6 +270,8 @@ class LLMAnalyzer:
         umo: str = None,
         topics_per_batch: int = 3,
         quotes_per_batch: int = 3,
+        topic_enabled: bool = True,
+        golden_quote_enabled: bool = True,
     ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage]:
         """
         增量分析模式的并发执行方法。
@@ -281,6 +283,8 @@ class LLMAnalyzer:
             umo: 模型唯一标识符
             topics_per_batch: 本次批次最大话题数量
             quotes_per_batch: 本次批次最大金句数量
+            topic_enabled: 是否启用话题分析
+            golden_quote_enabled: 是否启用金句分析
 
         Returns:
             (话题列表, 金句列表, 总Token使用统计)
@@ -296,7 +300,7 @@ class LLMAnalyzer:
                 session_id = f"incr_{timestamp}"
 
             logger.info(
-                f"开始增量并发分析 (话题上限:{topics_per_batch}, 金句上限:{quotes_per_batch})，"
+                f"开始增量并发分析 (话题:{topic_enabled}/{topics_per_batch}, 金句:{golden_quote_enabled}/{quotes_per_batch})，"
                 f"消息数量: {len(messages)}，会话ID: {session_id}"
             )
 
@@ -310,12 +314,25 @@ class LLMAnalyzer:
 
             try:
                 # 构建并发任务列表（仅话题和金句，不包含用户称号）
-                tasks = [
-                    self.topic_analyzer.analyze_topics(messages, umo, session_id),
-                    self.golden_quote_analyzer.analyze_golden_quotes(
-                        messages, umo, session_id
-                    ),
-                ]
+                tasks = []
+                task_names = []
+
+                if topic_enabled:
+                    tasks.append(
+                        self.topic_analyzer.analyze_topics(messages, umo, session_id)
+                    )
+                    task_names.append("topic")
+
+                if golden_quote_enabled:
+                    tasks.append(
+                        self.golden_quote_analyzer.analyze_golden_quotes(
+                            messages, umo, session_id
+                        )
+                    )
+                    task_names.append("golden_quote")
+
+                if not tasks:
+                    return [], [], TokenUsage()
 
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -323,17 +340,16 @@ class LLMAnalyzer:
                 topics, topic_usage = [], TokenUsage()
                 golden_quotes, quote_usage = [], TokenUsage()
 
-                # 话题分析结果
-                if isinstance(results[0], Exception):
-                    logger.error(f"增量话题分析失败: {results[0]}")
-                else:
-                    topics, topic_usage = results[0]
+                for i, result in enumerate(results):
+                    name = task_names[i]
+                    if isinstance(result, Exception):
+                        logger.error(f"增量{name}分析失败: {result}")
+                        continue
 
-                # 金句分析结果
-                if isinstance(results[1], Exception):
-                    logger.error(f"增量金句分析失败: {results[1]}")
-                else:
-                    golden_quotes, quote_usage = results[1]
+                    if name == "topic":
+                        topics, topic_usage = result
+                    elif name == "golden_quote":
+                        golden_quotes, quote_usage = result
 
                 # 合并Token使用统计
                 total_usage = TokenUsage(
