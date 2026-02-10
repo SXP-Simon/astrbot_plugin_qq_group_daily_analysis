@@ -294,7 +294,16 @@ class QQGroupDailyAnalysis(Star):
         # 更新bot实例
         self.bot_manager.update_from_event(event)
 
-        if not self.config_manager.is_group_allowed(group_id):
+        # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
+        check_target = getattr(event, "unified_msg_origin", None)
+        if not check_target:
+            check_target = f"{platform_id}:GroupMessage:{group_id}"
+
+        if not self.config_manager.is_group_allowed(check_target):
+            # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
+            # But if list item HAS colon, we need precise match.
+            # If prompt fails, try simple ID as fallback for permissive cases?
+            # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
@@ -720,7 +729,13 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result(f"✅ 增量分析立即报告模式: {status_text}")
 
         else:  # status
-            is_allowed = self.config_manager.is_group_allowed(group_id)
+            check_target = getattr(event, "unified_msg_origin", None)
+            if not check_target:
+                check_target = (
+                    f"{self._get_platform_id_from_event(event)}:GroupMessage:{group_id}"
+                )
+
+            is_allowed = self.config_manager.is_group_allowed(check_target)
             status = "已启用" if is_allowed else "未启用"
             mode = self.config_manager.get_group_list_mode()
 
