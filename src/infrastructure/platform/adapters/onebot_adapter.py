@@ -374,6 +374,8 @@ class OneBotAdapter(PlatformAdapter):
 
             if image_path.startswith(("http://", "https://")):
                 file_str = image_path
+            elif image_path.startswith("base64://"):
+                file_str = image_path
             else:
                 file_str = f"file:///{image_path}"
 

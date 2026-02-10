@@ -107,18 +107,26 @@ class ReportGenerator(IReportGenerator):
                         image_options["quality"] = None
 
                     logger.info(f"正在尝试渲染策略: {image_options}")
-                    image_url = await html_render_func(
+                    # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
+                    image_data = await html_render_func(
                         html_content,  # 渲染后的HTML内容
                         {},  # 空数据字典，因为数据已包含在HTML中
-                        True,  # return_url=True，返回URL而不是下载文件
+                        False,  # return_url=False，直接获取图片数据
                         image_options,
                     )
 
-                    if image_url:
-                        logger.info(f"图片生成成功 ({image_options}): {image_url}")
-                        return image_url, html_content
-                    else:
-                        logger.warning(f"渲染策略 {image_options} 返回空 URL")
+                    if image_data:
+                        if isinstance(image_data, bytes):
+                            b64 = base64.b64encode(image_data).decode("utf-8")
+                            image_url = f"base64://{b64}"
+                            logger.info(f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]")
+                            return image_url, html_content
+                        elif isinstance(image_data, str):
+                            # Fallback: 如果返回的是字符串（可能是URL或路径）
+                            logger.info(f"图片生成成功 (String): {image_data}")
+                            return image_data, html_content
+                    
+                    logger.warning(f"渲染策略 {image_options} 返回空数据")
 
                 except Exception as e:
                     logger.warning(f"渲染策略 {image_options} 失败: {e}")
