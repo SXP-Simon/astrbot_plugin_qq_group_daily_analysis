@@ -124,6 +124,21 @@ class ReportGenerator(IReportGenerator):
                         elif isinstance(image_data, str):
                             # Fallback: 如果返回的是字符串（可能是URL或路径）
                             logger.info(f"图片生成成功 (String): {image_data}")
+                            
+                            # 尝试读取文件转 Base64 (解决 Docker 路径不可达问题)
+                            if not image_data.startswith(("http://", "https://")):
+                                try:
+                                    import os
+                                    if os.path.exists(image_data):
+                                        with open(image_data, "rb") as f:
+                                            file_bytes = f.read()
+                                        b64 = base64.b64encode(file_bytes).decode("utf-8")
+                                        image_url = f"base64://{b64}"
+                                        logger.info(f"本地图片转 Base64 成功: {len(file_bytes)} bytes")
+                                        return image_url, html_content
+                                except Exception as e:
+                                    logger.warning(f"尝试读取本地图片失败: {e}")
+
                             return image_data, html_content
                     
                     logger.warning(f"渲染策略 {image_options} 返回空数据")
