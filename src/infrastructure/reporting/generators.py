@@ -119,47 +119,65 @@ class ReportGenerator(IReportGenerator):
                         if isinstance(image_data, bytes):
                             b64 = base64.b64encode(image_data).decode("utf-8")
                             image_url = f"base64://{b64}"
-                            logger.info(f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]")
+                            logger.info(
+                                f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                            )
                             return image_url, html_content
                         elif isinstance(image_data, str):
                             # Fallback: 如果返回的是字符串（可能是URL或路径）
                             logger.info(f"图片生成成功 (String): {image_data}")
-                            
+
                             # 尝试读取文件转 Base64 (解决 Docker 路径不可达问题)
                             if not image_data.startswith(("http://", "https://")):
                                 try:
                                     import os
+
                                     if os.path.exists(image_data):
                                         with open(image_data, "rb") as f:
                                             file_bytes = f.read()
-                                        
+
                                         # 校验是否为有效图片 (防止发送 "Internal Server Error" 文本)
                                         is_valid_image = False
-                                        if file_bytes.startswith(b"\xff\xd8"): # JPEG
+                                        if file_bytes.startswith(b"\xff\xd8"):  # JPEG
                                             is_valid_image = True
-                                        elif file_bytes.startswith(b"\x89PNG\r\n\x1a\n"): # PNG
+                                        elif file_bytes.startswith(
+                                            b"\x89PNG\r\n\x1a\n"
+                                        ):  # PNG
                                             is_valid_image = True
-                                        
+
                                         if not is_valid_image:
                                             try:
-                                                text_content = file_bytes.decode('utf-8')
-                                                if "Error" in text_content or "Exception" in text_content:
-                                                    logger.error(f"渲染器生成了错误文件而非图片: {text_content[:200]}")
+                                                text_content = file_bytes.decode(
+                                                    "utf-8"
+                                                )
+                                                if (
+                                                    "Error" in text_content
+                                                    or "Exception" in text_content
+                                                ):
+                                                    logger.error(
+                                                        f"渲染器生成了错误文件而非图片: {text_content[:200]}"
+                                                    )
                                                     return None, html_content
                                             except Exception:
                                                 pass
-                                            logger.warning(f"生成的图片文件头异常 (非JPEG/PNG): {file_bytes[:10].hex()}")
+                                            logger.warning(
+                                                f"生成的图片文件头异常 (非JPEG/PNG): {file_bytes[:10].hex()}"
+                                            )
                                             return None, html_content
 
-                                        b64 = base64.b64encode(file_bytes).decode("utf-8")
+                                        b64 = base64.b64encode(file_bytes).decode(
+                                            "utf-8"
+                                        )
                                         image_url = f"base64://{b64}"
-                                        logger.info(f"本地图片转 Base64 成功: {len(file_bytes)} bytes")
+                                        logger.info(
+                                            f"本地图片转 Base64 成功: {len(file_bytes)} bytes"
+                                        )
                                         return image_url, html_content
                                 except Exception as e:
                                     logger.warning(f"尝试读取本地图片失败: {e}")
 
                             return image_data, html_content
-                    
+
                     logger.warning(f"渲染策略 {image_options} 返回空数据")
 
                 except Exception as e:
@@ -402,7 +420,7 @@ class ReportGenerator(IReportGenerator):
         def replacer(match):
             uid = match.group(1)
             url = avatars.get(uid)
-            
+
             name = None
             if user_analysis and uid in user_analysis:
                 name = user_analysis[uid].get("name")
@@ -415,18 +433,20 @@ class ReportGenerator(IReportGenerator):
                     "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
                 )
                 img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
-                name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
-                
+                name_style = (
+                    "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
+                )
+
                 return (
                     f'<span class="user-capsule" style="{capsule_style}">'
                     f'<img src="{url}" style="{img_style}">'
                     f'<span style="{name_style}">{name}</span>'
-                    f'</span>'
+                    f"</span>"
                 )
             elif url:
                 # 仅有头像回退
                 return f'<img class="user-avatar-inline" src="{url}" style="width:1.3em;height:1.3em;border-radius:50%;vertical-align:text-bottom;margin:0 2px;">'
-            
+
             return match.group(0)
 
         return re.sub(pattern, replacer, detail)
@@ -455,65 +475,131 @@ class ReportGenerator(IReportGenerator):
 
         return result
 
-    async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str | None:
+    async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str:
         """
-        获取用户头像的本地文件路径 (file:// URI)。
-        
-        优化策略：
-        1. 优先使用本地缓存文件，避免重复下载和 Base64 编解码开销
-        2. 下载后保存到 data/temp/avatars/ 目录
-        3. 返回 file:// 协议路径，供 Playwright 本地渲染使用
+        获取用户头像的 Base64 Data URI。
+
+        策略：
+        1. 优先使用本地缓存文件
+        2. 下载并保存到 data/plugin_data/.../cache/avatars/
+        3. 读取文件并转换为 Base64，嵌入 HTML
+        这是为了解决 Docker/沙箱环境中渲染器无法访问宿主机 file:// 路径的问题。
         """
+        import base64
+
         try:
             # 1. 准备缓存目录
             # 使用 plugin_data 目录以确保持久化和标准结构
-            temp_dir = Path("data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars")
+            temp_dir = Path(
+                "data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars"
+            )
             if not temp_dir.exists():
                 await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
-            
+
             # 使用小尺寸 (40px) 以优化性能
             file_name = f"{user_id}_40.jpg"
             file_path = temp_dir / file_name
-            
+
+            file_content = None
+
             # 2. 检查缓存
             if file_path.exists() and file_path.stat().st_size > 0:
-                # 必须使用绝对路径
-                return f"file://{file_path.absolute()}"
-
-            # 3. 获取 URL
-            avatar_url = None
-            if avatar_getter:
+                # 异步读取缓存
                 try:
-                    # avatar_getter 应该返回 URL
-                    result = await avatar_getter(user_id)
-                    if result and result.startswith("http"):
-                        avatar_url = result
-                except Exception as e:
-                    logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
+                    file_content = await asyncio.to_thread(file_path.read_bytes)
+                except Exception:
+                    pass
 
-            # 4. Fallback URL
-            if not avatar_url:
-                if user_id.isdigit() and 5 <= len(user_id) <= 12:
-                    # 强制使用 spec=40
-                    avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
-                else:
-                    return None
+            # 3. 如果无缓存，获取 URL 并下载
+            if not file_content:
+                avatar_url = None
+                if avatar_getter:
+                    try:
+                        # avatar_getter 应该返回 URL
+                        result = await avatar_getter(user_id)
+                        if result and result.startswith("http"):
+                            avatar_url = result
+                    except Exception as e:
+                        logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
 
-            # 5. 下载并保存
-            async with aiohttp.ClientSession() as client:
-                async with client.get(avatar_url, timeout=5) as response:
-                    if response.status == 200:
-                        content = await response.read()
-                        if content:
-                            await asyncio.to_thread(file_path.write_bytes, content)
-                            return f"file://{file_path.absolute()}"
+                # 4. Fallback URL (仅针对看起来像 QQ 号的 ID)
+                if not avatar_url:
+                    if user_id.isdigit() and 5 <= len(user_id) <= 12:
+                        # 强制使用 spec=40
+                        avatar_url = (
+                            f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
+                        )
                     else:
-                        logger.warning(f"下载头像失败 {avatar_url}: {response.status}")
-            
-            return None
+                        # 其他平台若无 URL，无法获取头像
+                        return self._get_default_avatar_base64()
+
+                # 5. 下载并保存
+                async with aiohttp.ClientSession() as client:
+                    try:
+                        async with client.get(avatar_url, timeout=5) as response:
+                            if response.status == 200:
+                                content = await response.read()
+                                if content:
+                                    # 校验文件头
+                                    is_valid_image = False
+                                    if content.startswith(b"\xff\xd8"):  # JPEG
+                                        is_valid_image = True
+                                    elif content.startswith(
+                                        b"\x89PNG\r\n\x1a\n"
+                                    ):  # PNG
+                                        is_valid_image = True
+                                    elif content.startswith(b"GIF8"):  # GIF
+                                        is_valid_image = True
+                                    elif (
+                                        content.startswith(b"RIFF")
+                                        and b"WEBP" in content[:16]
+                                    ):  # WebP
+                                        is_valid_image = True
+
+                                    if is_valid_image:
+                                        await asyncio.to_thread(
+                                            file_path.write_bytes, content
+                                        )
+                                        file_content = content
+                                    else:
+                                        logger.warning(
+                                            f"下载的头像数据格式无效 ({avatar_url})"
+                                        )
+                            else:
+                                logger.warning(
+                                    f"下载头像失败 {avatar_url}: {response.status}"
+                                )
+                    except Exception as e:
+                        logger.warning(f"下载头像网络错误 {avatar_url}: {e}")
+
+            # 6. 转换为 Base64 Data URI
+            if file_content:
+                b64 = base64.b64encode(file_content).decode("utf-8")
+                # 简单判断 mime type
+                mime = "image/jpeg"
+                if file_content.startswith(b"\x89PNG"):
+                    mime = "image/png"
+                elif file_content.startswith(b"GIF8"):
+                    mime = "image/gif"
+                elif file_content.startswith(b"RIFF"):
+                    mime = "image/webp"
+
+                return f"data:{mime};base64,{b64}"
+
+            return self._get_default_avatar_base64()
+
         except Exception as e:
             logger.error(f"获取用户头像失败 {user_id}: {e}")
-            return None
+            return self._get_default_avatar_base64()
+
+    def _get_default_avatar_base64(self) -> str:
+        """返回默认头像 (灰色圆形占位符)"""
+        import base64
+
+        # 一个简单的灰色圆圈 SVG 转 Base64
+        svg = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#ddd"/></svg>'
+        b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+        return f"data:image/svg+xml;base64,{b64}"
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""

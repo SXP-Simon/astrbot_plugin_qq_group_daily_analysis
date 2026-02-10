@@ -608,7 +608,19 @@ class TelegramAdapter(PlatformAdapter):
                     if file.file_path:
                         # 构建完整 URL
                         # 格式: https://api.telegram.org/file/bot<token>/<file_path>
-                        return file.file_path
+                        # python-telegram-bot 的 File.file_path 属性通常只返回路径部分
+                        # 需要手动拼接或使用 instance.file.file_path (取决于版本)
+                        
+                        file_path = file.file_path
+                        if file_path.startswith("http"):
+                            return file_path
+                        
+                        # 尝试构建完整 URL
+                        if hasattr(client, "token"):
+                            return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
+                        
+                        # 如果无法获取 token，返回 None
+                        return None
             return None
         except Exception as e:
             logger.debug(f"[Telegram] 获取用户头像失败: {e}")
@@ -640,7 +652,14 @@ class TelegramAdapter(PlatformAdapter):
             if chat.photo:
                 file = await client.get_file(chat.photo.big_file_id)
                 if file.file_path:
-                    return file.file_path
+                    file_path = file.file_path
+                    if file_path.startswith("http"):
+                        return file_path
+                    
+                    if hasattr(client, "token"):
+                        return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
+                    
+                    return None
             return None
         except Exception as e:
             logger.debug(f"[Telegram] 获取群头像失败: {e}")
