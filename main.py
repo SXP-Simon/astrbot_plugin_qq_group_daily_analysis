@@ -606,6 +606,7 @@ class QQGroupDailyAnalysis(Star):
         - status: 查看当前状态
         - reload: 重新加载配置并重启定时任务
         - test: 测试自动分析功能
+        - incremental_debug: 切换增量分析立即报告模式（调试用）
         """
         group_id = self._get_group_id_from_event(event)
 
@@ -711,6 +712,13 @@ class QQGroupDailyAnalysis(Star):
             except Exception as e:
                 yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
 
+        elif action == "incremental_debug":
+            current_state = self.config_manager.get_incremental_report_immediately()
+            new_state = not current_state
+            self.config_manager.set_incremental_report_immediately(new_state)
+            status_text = "已启用" if new_state else "已禁用"
+            yield event.plain_result(f"✅ 增量分析立即报告模式: {status_text}")
+
         else:  # status
             is_allowed = self.config_manager.is_group_allowed(group_id)
             status = "已启用" if is_allowed else "未启用"
@@ -738,15 +746,19 @@ class QQGroupDailyAnalysis(Star):
                     f"活跃时段{active_start}:00-{active_end}:00)"
                 )
 
+            debug_report = self.config_manager.get_incremental_report_immediately()
+            debug_status = "✅ 开启" if debug_report else "❌ 关闭"
+
             yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status} (模式: {mode})
 • 自动分析: {auto_status} ({auto_time})
 • 增量分析: {incremental_status_text}
+• 调试模式: {debug_status} (增量立即报告)
 • 输出格式: {output_format}
 • PDF 功能: {pdf_status}
 • 最小消息数: {min_threshold}
 
-💡 可用命令: enable, disable, status, reload, test
+💡 可用命令: enable, disable, status, reload, test, incremental_debug
 💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
 💡 其他命令: /设置格式, /安装PDF, /增量状态""")
 
