@@ -309,7 +309,12 @@ class AnalysisApplicationService:
         # 8. 构建 IncrementalBatch
         # 8a. 转换话题: SummaryTopic -> dict
         new_topics = [
-            {"topic": t.topic, "contributors": t.contributors, "detail": t.detail}
+            {
+                "topic": t.topic,
+                "contributors": t.contributors,
+                "detail": t.detail,
+                "contributor_ids": t.contributor_ids,
+            }
             for t in topics
         ]
 

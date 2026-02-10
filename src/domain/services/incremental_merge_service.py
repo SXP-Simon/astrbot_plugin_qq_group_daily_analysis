@@ -237,6 +237,7 @@ class IncrementalMergeService:
                 topic=topic_dict.get("topic", "未知话题"),
                 contributors=topic_dict.get("contributors", []),
                 detail=topic_dict.get("detail", ""),
+                contributor_ids=topic_dict.get("contributor_ids", []),
             )
             topics.append(topic)
 

@@ -13,6 +13,7 @@ class SummaryTopic:
     topic: str
     contributors: list[str]
     detail: str
+    contributor_ids: list[str] = field(default_factory=list)  # 贡献者ID列表 (用于显示头像)
 
 
 @dataclass

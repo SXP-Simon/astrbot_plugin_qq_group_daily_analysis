@@ -237,12 +237,19 @@ class ReportGenerator(IReportGenerator):
         # 使用Jinja2模板构建话题HTML（批量渲染）
         max_topics = self.config_manager.get_max_topics()
         topics_list = []
+        user_analysis = analysis_result.get("user_analysis")
+
         for i, topic in enumerate(topics[:max_topics], 1):
+            # 处理话题详情中的用户引用头像
+            processed_detail = await self._process_topic_detail(
+                topic.detail, avatar_getter, user_analysis
+            )
             topics_list.append(
                 {
                     "index": i,
                     "topic": topic,
                     "contributors": "、".join(topic.contributors),
+                    "detail": processed_detail,
                 }
             )
 
@@ -329,6 +336,58 @@ class ReportGenerator(IReportGenerator):
 
         logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
         return render_data
+
+    async def _process_topic_detail(
+        self, detail: str, avatar_getter, user_analysis: dict = None
+    ) -> str:
+        """
+        处理话题详情，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
+        """
+        import re
+
+        pattern = r"\[(\d+)\]"
+        matches = re.findall(pattern, detail)
+        if not matches:
+            return detail
+
+        unique_ids = set(matches)
+        avatars = {}
+
+        # 并发获取头像
+        for uid in unique_ids:
+            avatars[uid] = await self._get_user_avatar(uid, avatar_getter)
+
+        def replacer(match):
+            uid = match.group(1)
+            url = avatars.get(uid)
+            
+            name = None
+            if user_analysis and uid in user_analysis:
+                name = user_analysis[uid].get("name")
+
+            if url and name:
+                # 胶囊样式 (Capsule Style)
+                capsule_style = (
+                    "display:inline-flex;align-items:center;background:rgba(0,0,0,0.05);"
+                    "padding:2px 6px 2px 2px;border-radius:12px;margin:0 2px;"
+                    "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
+                )
+                img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
+                name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
+                
+                return (
+                    f'<span class="user-capsule" style="{capsule_style}">'
+                    f'<img src="{url}" style="{img_style}">'
+                    f'<span style="{name_style}">{name}</span>'
+                    f'</span>'
+                )
+            elif url:
+                # 仅有头像回退
+                return f'<img class="user-avatar-inline" src="{url}" style="width:1.3em;height:1.3em;border-radius:50%;vertical-align:text-bottom;margin:0 2px;">'
+            
+            return match.group(0)
+
+        return re.sub(pattern, replacer, detail)
 
     def _render_html_template(self, template: str, data: dict) -> str:
         """HTML模板渲染，使用 {{key}} 占位符格式
