@@ -191,28 +191,7 @@ class LLMAnalyzer:
 
             # 保存原始消息数据 (Debug Mode)
             if self.config_manager.get_debug_mode():
-                # ... (保持原有的调试保存代码)
-                try:
-                    import json
-                    from pathlib import Path
-
-                    from astrbot.core.utils.astrbot_path import (
-                        get_astrbot_plugin_data_path,
-                    )
-
-                    plugin_name = "astrbot_plugin_qq_group_daily_analysis"
-                    base_data_path = get_astrbot_plugin_data_path()
-                    if isinstance(base_data_path, str):
-                        base_data_path = Path(base_data_path)
-
-                    debug_dir = base_data_path / plugin_name / "debug_data"
-                    debug_dir.mkdir(parents=True, exist_ok=True)
-
-                    msg_file_path = debug_dir / f"{session_id}_messages.json"
-                    with open(msg_file_path, "w", encoding="utf-8") as f:
-                        json.dump(messages, f, ensure_ascii=False, indent=2)
-                except Exception:
-                    pass
+                self._save_debug_messages(messages, session_id)
 
             # 构建并发任务列表
             tasks = []
@@ -284,6 +263,130 @@ class LLMAnalyzer:
         except Exception as e:
             logger.error(f"并发分析失败: {e}")
             return [], [], [], TokenUsage()
+
+    async def analyze_incremental_concurrent(
+        self,
+        messages: list[dict],
+        umo: str = None,
+        topics_per_batch: int = 3,
+        quotes_per_batch: int = 3,
+    ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage]:
+        """
+        增量分析模式的并发执行方法。
+        仅执行话题分析和金句分析（用户称号分析在最终报告时执行），
+        使用较小的批次数量以控制单次分析的输出规模。
+
+        Args:
+            messages: 本次增量分析的群聊消息列表
+            umo: 模型唯一标识符
+            topics_per_batch: 本次批次最大话题数量
+            quotes_per_batch: 本次批次最大金句数量
+
+        Returns:
+            (话题列表, 金句列表, 总Token使用统计)
+        """
+        try:
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if umo:
+                safe_umo = umo.replace(":", "_")
+                session_id = f"incr_{timestamp}_{safe_umo}"
+            else:
+                session_id = f"incr_{timestamp}"
+
+            logger.info(
+                f"开始增量并发分析 (话题上限:{topics_per_batch}, 金句上限:{quotes_per_batch})，"
+                f"消息数量: {len(messages)}，会话ID: {session_id}"
+            )
+
+            # 保存原始消息数据 (Debug Mode)
+            if self.config_manager.get_debug_mode():
+                self._save_debug_messages(messages, session_id)
+
+            # 设置增量模式的最大数量覆盖值
+            self.topic_analyzer._incremental_max_count = topics_per_batch
+            self.golden_quote_analyzer._incremental_max_count = quotes_per_batch
+
+            try:
+                # 构建并发任务列表（仅话题和金句，不包含用户称号）
+                tasks = [
+                    self.topic_analyzer.analyze_topics(messages, umo, session_id),
+                    self.golden_quote_analyzer.analyze_golden_quotes(
+                        messages, umo, session_id
+                    ),
+                ]
+
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 处理结果
+                topics, topic_usage = [], TokenUsage()
+                golden_quotes, quote_usage = [], TokenUsage()
+
+                # 话题分析结果
+                if isinstance(results[0], Exception):
+                    logger.error(f"增量话题分析失败: {results[0]}")
+                else:
+                    topics, topic_usage = results[0]
+
+                # 金句分析结果
+                if isinstance(results[1], Exception):
+                    logger.error(f"增量金句分析失败: {results[1]}")
+                else:
+                    golden_quotes, quote_usage = results[1]
+
+                # 合并Token使用统计
+                total_usage = TokenUsage(
+                    prompt_tokens=topic_usage.prompt_tokens + quote_usage.prompt_tokens,
+                    completion_tokens=topic_usage.completion_tokens
+                    + quote_usage.completion_tokens,
+                    total_tokens=topic_usage.total_tokens + quote_usage.total_tokens,
+                )
+
+                logger.info(
+                    f"增量并发分析完成 - 话题: {len(topics)}, 金句: {len(golden_quotes)}, "
+                    f"Token消耗: {total_usage.total_tokens}"
+                )
+                return topics, golden_quotes, total_usage
+
+            finally:
+                # 无论成功或失败，都要恢复原始的最大数量设置
+                self.topic_analyzer._incremental_max_count = None
+                self.golden_quote_analyzer._incremental_max_count = None
+
+        except Exception as e:
+            logger.error(f"增量并发分析失败: {e}", exc_info=True)
+            return [], [], TokenUsage()
+
+    def _save_debug_messages(self, messages: list[dict], session_id: str):
+        """
+        保存调试消息数据到文件（Debug Mode 专用）
+
+        Args:
+            messages: 群聊消息列表
+            session_id: 会话ID
+        """
+        try:
+            import json
+            from pathlib import Path
+
+            from astrbot.core.utils.astrbot_path import (
+                get_astrbot_plugin_data_path,
+            )
+
+            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
+            base_data_path = get_astrbot_plugin_data_path()
+            if isinstance(base_data_path, str):
+                base_data_path = Path(base_data_path)
+
+            debug_dir = base_data_path / plugin_name / "debug_data"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+
+            msg_file_path = debug_dir / f"{session_id}_messages.json"
+            with open(msg_file_path, "w", encoding="utf-8") as f:
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
     # 向后兼容的方法，保持原有调用方式
     async def _call_provider_with_retry(

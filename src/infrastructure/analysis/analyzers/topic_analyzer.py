@@ -28,7 +28,9 @@ class TopicAnalyzer(BaseAnalyzer):
         return "话题"
 
     def get_max_count(self) -> int:
-        """获取最大话题数量"""
+        """获取最大话题数量，增量模式下使用覆盖值"""
+        if self._incremental_max_count is not None:
+            return self._incremental_max_count
         return self.config_manager.get_max_topics()
 
     def get_max_tokens(self) -> int:
