@@ -326,6 +326,48 @@ class ConfigManager:
         """获取是否使用用户群名片"""
         return self.config.get("enable_user_card", False)
 
+    # ========== 增量分析配置 ==========
+
+    def get_incremental_enabled(self) -> bool:
+        """获取是否启用增量分析模式"""
+        return self.config.get("incremental_enabled", False)
+
+    def get_incremental_interval_minutes(self) -> int:
+        """获取增量分析间隔（分钟）"""
+        return self.config.get("incremental_interval_minutes", 120)
+
+    def get_incremental_max_daily_analyses(self) -> int:
+        """获取每天最大增量分析次数"""
+        return self.config.get("incremental_max_daily_analyses", 8)
+
+    def get_incremental_max_messages(self) -> int:
+        """获取单次增量分析的最大消息数"""
+        return self.config.get("incremental_max_messages", 300)
+
+    def get_incremental_min_messages(self) -> int:
+        """获取触发增量分析的最小消息数阈值"""
+        return self.config.get("incremental_min_messages", 20)
+
+    def get_incremental_topics_per_batch(self) -> int:
+        """获取单次增量分析提取的最大话题数"""
+        return self.config.get("incremental_topics_per_batch", 3)
+
+    def get_incremental_quotes_per_batch(self) -> int:
+        """获取单次增量分析提取的最大金句数"""
+        return self.config.get("incremental_quotes_per_batch", 3)
+
+    def get_incremental_active_start_hour(self) -> int:
+        """获取增量分析活跃时段起始小时（24小时制）"""
+        return self.config.get("incremental_active_start_hour", 8)
+
+    def get_incremental_active_end_hour(self) -> int:
+        """获取增量分析活跃时段结束小时（24小时制）"""
+        return self.config.get("incremental_active_end_hour", 23)
+
+    def get_incremental_stagger_seconds(self) -> int:
+        """获取多群增量分析的交错间隔（秒），避免 API 压力"""
+        return self.config.get("incremental_stagger_seconds", 30)
+
     @property
     def playwright_available(self) -> bool:
         """检查playwright是否可用"""
