@@ -397,7 +397,20 @@ class DiscordAdapter(PlatformAdapter):
                 return False
 
             file_to_send = None
-            if image_path.startswith(("http://", "https://")):
+            if image_path.startswith("base64://"):
+                # Base64 图片：解码 -> 内存 Object -> Discord
+                from io import BytesIO
+                try:
+                    base64_data = image_path.split("base64://")[1]
+                    image_bytes = base64.b64decode(base64_data)
+                    file_to_send = discord.File(
+                        BytesIO(image_bytes), filename="daily_report_image.png"
+                    )
+                except Exception as e:
+                    logger.error(f"Discord Base64 图片解码失败: {e}")
+                    return False
+
+            elif image_path.startswith(("http://", "https://")):
                 # 远程图片：下载 -> 内存 Object -> Discord
                 from io import BytesIO
 
