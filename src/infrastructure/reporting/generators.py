@@ -30,6 +30,7 @@ class ReportGenerator(IReportGenerator):
         group_id: str,
         html_render_func,
         avatar_getter=None,
+        nickname_getter=None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -50,6 +51,7 @@ class ReportGenerator(IReportGenerator):
                 analysis_result,
                 chart_template="activity_chart.html",
                 avatar_getter=avatar_getter,
+                nickname_getter=nickname_getter,
             )
 
             # 先渲染HTML模板（使用异步方法）
@@ -238,6 +240,7 @@ class ReportGenerator(IReportGenerator):
         analysis_result: dict,
         chart_template: str = "activity_chart.html",
         avatar_getter=None,
+        nickname_getter=None,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -253,7 +256,7 @@ class ReportGenerator(IReportGenerator):
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
             processed_detail = await self._process_topic_detail(
-                topic.detail, avatar_getter, user_analysis
+                topic.detail, avatar_getter, nickname_getter, user_analysis
             )
             topics_list.append(
                 {
@@ -349,7 +352,11 @@ class ReportGenerator(IReportGenerator):
         return render_data
 
     async def _process_topic_detail(
-        self, detail: str, avatar_getter, user_analysis: dict = None
+        self,
+        detail: str,
+        avatar_getter,
+        nickname_getter=None,
+        user_analysis: dict = None,
     ) -> str:
         """
         处理话题详情，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
@@ -361,46 +368,60 @@ class ReportGenerator(IReportGenerator):
         if not matches:
             return detail
 
-        unique_ids = set(matches)
-        avatars = {}
-
-        # 并发获取头像
-        for uid in unique_ids:
-            avatars[uid] = await self._get_user_avatar(uid, avatar_getter)
-
-        def replacer(match):
+        async def replacer(match):
             uid = match.group(1)
-            url = avatars.get(uid)
+            url = await self._get_user_avatar(
+                uid, avatar_getter
+            )  # 内部已有缓存，无需顶层并发获取
 
             name = None
+            # 1. 尝试从 LLM 分析结果获取
             if user_analysis and uid in user_analysis:
                 name = user_analysis[uid].get("name")
 
-            if url and name:
-                # 胶囊样式 (Capsule Style)
-                capsule_style = (
-                    "display:inline-flex;align-items:center;background:rgba(0,0,0,0.05);"
-                    "padding:2px 6px 2px 2px;border-radius:12px;margin:0 2px;"
-                    "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
-                )
-                img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
-                name_style = (
-                    "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
-                )
+            # 2. 尝试通过回调获取实时昵称
+            if not name and nickname_getter:
+                try:
+                    name = await nickname_getter(uid)
+                except Exception as e:
+                    logger.warning(f"获取昵称失败 {uid}: {e}")
 
-                return (
-                    f'<span class="user-capsule" style="{capsule_style}">'
-                    f'<img src="{url}" style="{img_style}">'
-                    f'<span style="{name_style}">{name}</span>'
-                    f"</span>"
-                )
-            elif url:
-                # 仅有头像回退
-                return f'<img class="user-avatar-inline" src="{url}" style="width:1.3em;height:1.3em;border-radius:50%;vertical-align:text-bottom;margin:0 2px;">'
+            # 胶囊样式 (Capsule Style) - 统一使用
+            capsule_style = (
+                "display:inline-flex;align-items:center;background:rgba(0,0,0,0.05);"
+                "padding:2px 6px 2px 2px;border-radius:12px;margin:0 2px;"
+                "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
+            )
+            img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
+            name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
-            return match.group(0)
+            # 确保有头像 URL（Base64 或 默认）
+            if not url:
+                url = self._get_default_avatar_base64()
 
-        return re.sub(pattern, replacer, detail)
+            return (
+                f'<span class="user-capsule" style="{capsule_style}">'
+                f'<img src="{url}" style="{img_style}">'
+                f'<span style="{name_style}">{name}</span>'
+                f"</span>"
+            )
+
+        # re.sub 不支持异步回调，需要先提取所有 ID 进行处理，或者使用自定义的替换逻辑
+        # 这里为了保持异步特性，我们需要手动处理
+
+        # 1. 找出所有匹配项
+        matches = list(re.finditer(pattern, detail))
+        if not matches:
+            return detail
+
+        # 2. 从后往前替换，保持索引正确
+        result = detail
+        for match in reversed(matches):
+            replacement = await replacer(match)
+            start, end = match.span()
+            result = result[:start] + replacement + result[end:]
+
+        return result
 
     def _render_html_template(self, template: str, data: dict) -> str:
         """HTML模板渲染，使用 {{key}} 占位符格式
