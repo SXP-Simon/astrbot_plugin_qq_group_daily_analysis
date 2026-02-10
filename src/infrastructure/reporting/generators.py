@@ -456,56 +456,61 @@ class ReportGenerator(IReportGenerator):
         return result
 
     async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str | None:
-        """获取用户头像的base64编码"""
+        """
+        获取用户头像的本地文件路径 (file:// URI)。
+        
+        优化策略：
+        1. 优先使用本地缓存文件，避免重复下载和 Base64 编解码开销
+        2. 下载后保存到 data/temp/avatars/ 目录
+        3. 返回 file:// 协议路径，供 Playwright 本地渲染使用
+        """
         try:
-            # 1. 如果提供了 avatar_getter，优先使用它获取 avatar_url
+            # 1. 准备缓存目录
+            # 使用 plugin_data 目录以确保持久化和标准结构
+            temp_dir = Path("data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars")
+            if not temp_dir.exists():
+                await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
+            
+            # 使用小尺寸 (40px) 以优化性能
+            file_name = f"{user_id}_40.jpg"
+            file_path = temp_dir / file_name
+            
+            # 2. 检查缓存
+            if file_path.exists() and file_path.stat().st_size > 0:
+                # 必须使用绝对路径
+                return f"file://{file_path.absolute()}"
+
+            # 3. 获取 URL
             avatar_url = None
             if avatar_getter:
                 try:
-                    # avatar_getter 可能返回 URL 或直接返回 base64
-                    # 假定它返回 img URL，后续我们自己下载转 base64
-                    # 或者如果它返回 data:image 格式（base64），则直接使用
+                    # avatar_getter 应该返回 URL
                     result = await avatar_getter(user_id)
-                    if result:
-                        if result.startswith("data:image"):
-                            return result
+                    if result and result.startswith("http"):
                         avatar_url = result
                 except Exception as e:
                     logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
 
-            # 2. 如果没有 avatar_getter 或获取失败，使用默认头像逻辑
-            # 为保持兼容性，如果 avatar_url 仍为 None，则尝试常见的头像服务
+            # 4. Fallback URL
             if not avatar_url:
-                if (
-                    user_id.isdigit() and 5 <= len(user_id) <= 12
-                ):  # 简单判断是否可能是数字 ID
-                    # 对于数字 ID，使用通用的头像服务作为后备 (使用小尺寸 spec=40)
-                    avatar_url = (
-                        f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
-                    )
+                if user_id.isdigit() and 5 <= len(user_id) <= 12:
+                    # 强制使用 spec=40
+                    avatar_url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
                 else:
-                    return (
-                        None  # 非数字 ID 且无 avatar_getter，返回 None 使用默认占位符
-                    )
+                    return None
 
-            if not avatar_url:
-                return None
-
+            # 5. 下载并保存
             async with aiohttp.ClientSession() as client:
-                async with client.get(avatar_url, timeout=10) as response:
-                    if response.status != 200:
+                async with client.get(avatar_url, timeout=5) as response:
+                    if response.status == 200:
+                        content = await response.read()
+                        if content:
+                            await asyncio.to_thread(file_path.write_bytes, content)
+                            return f"file://{file_path.absolute()}"
+                    else:
                         logger.warning(f"下载头像失败 {avatar_url}: {response.status}")
-                        return None
-
-                    avatar_data = await response.read()
-
-                    if not isinstance(avatar_data, bytes):
-                        logger.warning(f"获取到的头像数据类型异常: {type(avatar_data)}")
-                        return None
-
-                    # 转换为base64编码
-                    avatar_base64 = base64.b64encode(avatar_data).decode("utf-8")
-                    return f"data:image/jpeg;base64,{avatar_base64}"
+            
+            return None
         except Exception as e:
             logger.error(f"获取用户头像失败 {user_id}: {e}")
             return None
