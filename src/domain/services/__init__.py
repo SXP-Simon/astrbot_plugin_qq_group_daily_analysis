@@ -11,6 +11,7 @@
 """
 
 from .golden_quote_analyzer import GoldenQuoteAnalyzerAdapter, IGoldenQuoteAnalyzer
+from .incremental_merge_service import IncrementalMergeService
 from .report_generator import ReportGenerator
 from .statistics_calculator import StatisticsCalculator
 from .topic_analyzer import ITopicAnalyzer, TopicAnalyzerAdapter
@@ -20,6 +21,8 @@ __all__ = [
     # 统计与报告服务
     "StatisticsCalculator",
     "ReportGenerator",
+    # 增量合并服务
+    "IncrementalMergeService",
     # 话题分析服务
     "ITopicAnalyzer",
     "TopicAnalyzerAdapter",
