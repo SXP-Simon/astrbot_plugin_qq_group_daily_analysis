@@ -479,9 +479,9 @@ class ReportGenerator(IReportGenerator):
                 if (
                     user_id.isdigit() and 5 <= len(user_id) <= 12
                 ):  # 简单判断是否可能是数字 ID
-                    # 对于数字 ID，使用通用的头像服务作为后备
+                    # 对于数字 ID，使用通用的头像服务作为后备 (使用小尺寸 spec=40)
                     avatar_url = (
-                        f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=100"
+                        f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
                     )
                 else:
                     return (
