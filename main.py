@@ -27,6 +27,8 @@ from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.utils.pdf_utils import PDFInstaller
+from .src.infrastructure.persistence.incremental_store import IncrementalStore
+from .src.domain.services.incremental_merge_service import IncrementalMergeService
 
 
 class QQGroupDailyAnalysis(Star):
@@ -50,7 +52,11 @@ class QQGroupDailyAnalysis(Star):
         # 3. 分析核心 (LLM Bridge)
         self.llm_analyzer = LLMAnalyzer(context, self.config_manager)
 
-        # 4. 应用层
+        # 4. 增量分析组件
+        self.incremental_store = IncrementalStore(self)
+        self.incremental_merge_service = IncrementalMergeService()
+
+        # 5. 应用层
         self.analysis_service = AnalysisApplicationService(
             self.config_manager,
             self.bot_manager,
@@ -59,6 +65,8 @@ class QQGroupDailyAnalysis(Star):
             self.llm_analyzer,
             self.statistics_service,
             self.analysis_domain_service,
+            incremental_store=self.incremental_store,
+            incremental_merge_service=self.incremental_merge_service,
         )
 
         # 调度与重试
@@ -703,16 +711,62 @@ class QQGroupDailyAnalysis(Star):
             output_format = self.config_manager.get_output_format()
             min_threshold = self.config_manager.get_min_messages_threshold()
 
+            # 增量分析状态
+            incremental_enabled = self.config_manager.get_incremental_enabled()
+            incremental_status_text = "未启用"
+            if incremental_enabled:
+                interval = self.config_manager.get_incremental_interval_minutes()
+                max_daily = self.config_manager.get_incremental_max_daily_analyses()
+                active_start = self.config_manager.get_incremental_active_start_hour()
+                active_end = self.config_manager.get_incremental_active_end_hour()
+                incremental_status_text = (
+                    f"已启用 (间隔{interval}分钟, 最多{max_daily}次/天, "
+                    f"活跃时段{active_start}:00-{active_end}:00)"
+                )
+
             yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status} (模式: {mode})
 • 自动分析: {auto_status} ({auto_time})
+• 增量分析: {incremental_status_text}
 • 输出格式: {output_format}
 • PDF 功能: {pdf_status}
 • 最小消息数: {min_threshold}
 
 💡 可用命令: enable, disable, status, reload, test
 💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
-💡 其他命令: /设置格式, /安装PDF""")
+💡 其他命令: /设置格式, /安装PDF, /增量状态""")
+
+    @filter.command("增量状态", alias={"incremental_status"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def incremental_status(self, event: AstrMessageEvent):
+        """查看当前增量分析状态"""
+        group_id = self._get_group_id_from_event(event)
+        if not group_id:
+            yield event.plain_result("❌ 请在群聊中使用此命令")
+            return
+
+        if not self.config_manager.get_incremental_enabled():
+            yield event.plain_result("ℹ️ 增量分析模式未启用，请在插件配置中开启")
+            return
+
+        import datetime as dt_mod
+
+        today_str = dt_mod.datetime.now().strftime("%Y-%m-%d")
+        state = await self.incremental_store.get_state(group_id, today_str)
+
+        if not state or state.total_analysis_count == 0:
+            yield event.plain_result(f"📊 今日 ({today_str}) 尚无增量分析数据")
+            return
+
+        summary = state.get_summary()
+        yield event.plain_result(
+            f"📊 增量分析状态 ({today_str})\n"
+            f"• 分析次数: {summary['total_analysis_count']}\n"
+            f"• 累计消息: {summary['total_message_count']}\n"
+            f"• 话题数: {summary['topics_count']}\n"
+            f"• 金句数: {summary['quotes_count']}\n"
+            f"• 参与者: {summary['participant_count']}"
+        )
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从消息事件中安全获取群组 ID"""
