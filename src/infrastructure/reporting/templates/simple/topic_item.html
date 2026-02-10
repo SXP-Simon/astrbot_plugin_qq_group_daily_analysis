@@ -5,7 +5,7 @@
     <div style="margin-bottom: 10px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;">
         <strong>#{{ item.index }} {{ item.topic.topic }}</strong>
         <span style="color: #666; font-size: 0.8em;">(参与者: {{ item.contributors }})</span>
-        <p style="margin: 5px 0;">{{ item.detail }}</p>
+        <p style="margin: 5px 0;">{{ item.detail | safe }}</p>
     </div>
     {% endfor %}
 </div>

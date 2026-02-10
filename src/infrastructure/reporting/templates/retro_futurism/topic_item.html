@@ -10,7 +10,7 @@
     <div class="topic-content">
         <h3 class="topic-title">{{ topic.topic.topic }}</h3>
         <p class="topic-meta">PARTICIPANTS: {{ topic.contributors }}</p>
-        <p class="topic-detail">{{ topic.detail }}</p>
+        <p class="topic-detail">{{ topic.detail | safe }}</p>
     </div>
 </article>
 {% endfor %}

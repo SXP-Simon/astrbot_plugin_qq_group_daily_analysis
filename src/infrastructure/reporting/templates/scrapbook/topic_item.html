@@ -26,7 +26,7 @@
                 style="font-family: var(--font-hand); font-size: 1.05em; color: var(--ink-secondary); margin-bottom: 8px;">
                 🙋‍♀️ 参与者： {{ topic.contributors }}
             </div>
-            <div class="topic-detail">{{ topic.detail }}</div>
+            <div class="topic-detail">{{ topic.detail | safe }}</div>
         </div>
     </div>
     {% endfor %}
