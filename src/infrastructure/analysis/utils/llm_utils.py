@@ -276,7 +276,7 @@ async def call_provider_with_retry(
     return None
 
 
-def extract_token_usage(response) -> dict | None:
+def extract_token_usage(response) -> dict:
     """
     从LLM响应中提取token使用统计
 
@@ -286,24 +286,38 @@ def extract_token_usage(response) -> dict | None:
     Returns:
         Token使用统计字典，包含prompt_tokens, completion_tokens, total_tokens
     """
+    token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
     try:
-        token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        # 1. 尝试直接获取 response.usage
+        usage = getattr(response, "usage", None)
 
-        # 尝试从 LLMResponse 中提取 usage
-        # 假设 LLMResponse 有 usage 属性或 raw_completion 属性
-        if hasattr(response, "usage") and response.usage:
-            usage = response.usage
-            token_usage["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
-            token_usage["completion_tokens"] = (
-                getattr(usage, "completion_tokens", 0) or 0
-            )
-            token_usage["total_tokens"] = getattr(usage, "total_tokens", 0) or 0
-            return token_usage
-
-        # 兼容旧的提取方式 (如果 response 是旧的 ProviderResponse)
-        if getattr(response, "raw_completion", None) is not None:
+        # 2. 尝试从 response.raw_completion.usage 获取 (兼容旧版)
+        if not usage and hasattr(response, "raw_completion"):
             usage = getattr(response.raw_completion, "usage", None)
-            if usage:
+
+        # 3. 如果 response 本身就是 dict (某些特殊情况)
+        if not usage and isinstance(response, dict):
+            usage = response.get("usage")
+
+        if usage:
+            # 优先检查 AstrBot 的 TokenUsage 对象字段 (input, output, total)
+            # AstrBot TokenUsage define: input (prop), output (attr), total (prop)
+            if hasattr(usage, "input") and hasattr(usage, "output"):
+                token_usage["prompt_tokens"] = getattr(usage, "input", 0) or 0
+                token_usage["completion_tokens"] = getattr(usage, "output", 0) or 0
+                token_usage["total_tokens"] = getattr(usage, "total", 0) or 0
+
+            # 处理 usage 是字典的情况
+            elif isinstance(usage, dict):
+                token_usage["prompt_tokens"] = usage.get("prompt_tokens", 0) or 0
+                token_usage["completion_tokens"] = (
+                    usage.get("completion_tokens", 0) or 0
+                )
+                token_usage["total_tokens"] = usage.get("total_tokens", 0) or 0
+
+            # 处理 OpenAI CompletionUsage 等标准对象
+            else:
                 token_usage["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
                 token_usage["completion_tokens"] = (
                     getattr(usage, "completion_tokens", 0) or 0
