@@ -148,9 +148,10 @@ class TopicAnalyzer(BaseAnalyzer):
             return ""
 
         # 构建消息文本
+        # 使用用户提供的 ID-Only 格式: [HH:MM] [用户ID]: 消息内容
         messages_text = "\n".join(
             [
-                f"[{msg['time']}] [{msg['user_id']}] {msg['sender']}: {msg['content']}"
+                f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}"
                 for msg in text_messages
             ]
         )
@@ -338,32 +339,41 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.debug(f"第一条文本消息类型: {type(text_messages[0])}")
                 logger.debug(f"第一条文本消息内容: {text_messages[0]}")
 
-            # 建立昵称到ID的映射表
-            nickname_to_id = {}
+            # 建立 ID 到昵称的映射表
+            id_to_nickname = {}
             for msg in text_messages:
                 sender = msg.get("sender")
                 user_id = msg.get("user_id")
                 if sender and user_id:
-                    nickname_to_id[sender] = user_id
+                    id_to_nickname[user_id] = sender
 
             # 直接传入原始消息，让 build_prompt 方法处理
             topics, usage = await self.analyze(messages, umo, session_id)
 
-            # 回填贡献者 ID
+            # 后处理：contributors 此时包含的是 ID，需要映射回昵称
             for topic in topics:
-                ids = set()
-                for contributor in topic.contributors:
-                    # 尝试精确匹配
-                    if contributor in nickname_to_id:
-                        ids.add(nickname_to_id[contributor])
-                    else:
-                        # 尝试模糊匹配（LLM可能会简化名字）
-                        for nick, uid in nickname_to_id.items():
-                            if contributor in nick or nick in contributor:
-                                ids.add(uid)
-                                # 找到一个匹配即可，避免过度匹配
-                                break
-                topic.contributor_ids = list(ids)
+                raw_ids = topic.contributors  # LLM 返回的是 ID 列表
+                
+                # 填充 contributor_ids
+                # 过滤掉非数字的脏数据 (LLM 偶尔会发疯)
+                valid_ids = [str(uid).strip() for uid in raw_ids if str(uid).strip().isdigit()]
+                topic.contributor_ids = valid_ids
+                
+                # 映射回昵称用于显示
+                resolved_names = []
+                for uid in valid_ids:
+                    # 尝试从当前批次消息映射
+                    name = id_to_nickname.get(uid)
+                    if not name:
+                        # 尝试去全局配置里找 (e.g. 机器人自己)
+                        bot_ids = self.config_manager.get_bot_self_ids()
+                        if uid in bot_ids:
+                            name = "Bot"
+                        else:
+                            name = uid # Fallback to ID
+                    resolved_names.append(name)
+                
+                topic.contributors = resolved_names
 
             return topics, usage
 
