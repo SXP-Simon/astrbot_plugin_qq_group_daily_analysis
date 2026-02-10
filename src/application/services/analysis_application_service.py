@@ -282,6 +282,10 @@ class AnalysisApplicationService:
         # 7. LLM 增量分析（仅话题 + 金句）
         topics_per_batch = self.config_manager.get_incremental_topics_per_batch()
         quotes_per_batch = self.config_manager.get_incremental_quotes_per_batch()
+        
+        # 获取功能开关状态
+        topic_enabled = self.config_manager.get_topic_analysis_enabled()
+        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
 
         # 需要将 UnifiedMessage 转换为 legacy 格式供 LLM 分析器使用
         legacy_messages = self.statistics_service._convert_to_legacy_dict(
@@ -297,6 +301,8 @@ class AnalysisApplicationService:
                 umo=unified_msg_origin,
                 topics_per_batch=topics_per_batch,
                 quotes_per_batch=quotes_per_batch,
+                topic_enabled=topic_enabled,
+                golden_quote_enabled=golden_quote_enabled,
             )
         )
 
