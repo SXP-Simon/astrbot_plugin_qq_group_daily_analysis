@@ -69,8 +69,17 @@ class ReportDispatcher:
         image_url = None
         html_content = None
         try:
+            # 定义头像获取回调，请求小尺寸头像以优化性能
+            async def avatar_getter(user_id: str):
+                if not platform_id:
+                    return None
+                adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+                if adapter and hasattr(adapter, "get_user_avatar_url"):
+                    return await adapter.get_user_avatar_url(user_id, size=40)
+                return None
+
             image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result, group_id, self._html_render_func
+                analysis_result, group_id, self._html_render_func, avatar_getter=avatar_getter
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
