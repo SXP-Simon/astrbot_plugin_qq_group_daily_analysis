@@ -1,16 +1,20 @@
 """
 增量合并领域服务
 
-负责将 IncrementalState 累积数据转换为现有实体类型，
+负责将 IncrementalBatch 列表合并为 IncrementalState，
+以及将 IncrementalState 累积数据转换为现有实体类型，
 以便复用现有的报告生成器和分发器。
 
 核心职责：
+- merge_batches: 将多个 IncrementalBatch 合并为一个 IncrementalState（滑动窗口聚合）
 - IncrementalState → GroupStatistics（含 ActivityVisualization、EmojiStatistics）
 - IncrementalState → list[SummaryTopic]
 - IncrementalState → list[GoldenQuote]
 """
 
-from ...domain.entities.incremental_state import IncrementalState
+import time
+
+from ...domain.entities.incremental_state import IncrementalBatch, IncrementalState
 from ...domain.models.data_models import (
     ActivityVisualization,
     EmojiStatistics,
@@ -26,9 +30,125 @@ class IncrementalMergeService:
     """
     增量合并服务
 
-    将一天内累积的增量分析状态转换为现有报告系统所需的数据结构，
+    将滑动窗口内的多个批次数据合并为报告所需的数据结构，
     确保增量模式下生成的最终报告与传统单次分析报告格式完全一致。
     """
+
+    def merge_batches(
+        self,
+        batches: list[IncrementalBatch],
+        window_start: float,
+        window_end: float,
+    ) -> IncrementalState:
+        """
+        从批次列表合并构建 IncrementalState。
+
+        遍历所有批次，累加统计数据并对话题和金句执行去重，
+        生成可用于报告的聚合视图。
+
+        Args:
+            batches: 时间窗口内的批次列表（按时间升序）
+            window_start: 窗口起始时间戳（epoch）
+            window_end: 窗口结束时间戳（epoch）
+
+        Returns:
+            IncrementalState: 合并后的聚合视图
+        """
+        state = IncrementalState(
+            group_id=batches[0].group_id if batches else "",
+            window_start=window_start,
+            window_end=window_end,
+            total_analysis_count=len(batches),
+            created_at=window_start,
+            updated_at=time.time(),
+        )
+
+        for batch in batches:
+            # 累加消息和字符计数
+            state.total_message_count += batch.messages_count
+            state.total_character_count += batch.characters_count
+
+            # 合并每小时消息分布（按键累加）
+            for hour_key, count in batch.hourly_msg_counts.items():
+                hour_str = str(hour_key)
+                state.hourly_message_counts[hour_str] = (
+                    state.hourly_message_counts.get(hour_str, 0) + count
+                )
+
+            # 合并每小时字符分布
+            for hour_key, count in batch.hourly_char_counts.items():
+                hour_str = str(hour_key)
+                state.hourly_character_counts[hour_str] = (
+                    state.hourly_character_counts.get(hour_str, 0) + count
+                )
+
+            # 合并用户统计（按用户累加消息数、字符数等）
+            for user_id, stats in batch.user_stats.items():
+                if user_id not in state.user_activities:
+                    state.user_activities[user_id] = {
+                        "name": stats.get("name", user_id),
+                        "message_count": 0,
+                        "char_count": 0,
+                        "emoji_count": 0,
+                        "active_hours": [],
+                        "last_message_time": 0,
+                    }
+                existing = state.user_activities[user_id]
+                existing["message_count"] += stats.get("message_count", 0)
+                existing["char_count"] += stats.get("char_count", 0)
+                existing["emoji_count"] += stats.get("emoji_count", 0)
+                # 合并活跃小时（去重）
+                existing_hours = set(existing.get("active_hours", []))
+                existing_hours.update(stats.get("active_hours", []))
+                existing["active_hours"] = list(existing_hours)
+                # 取最后消息时间的较大值
+                batch_last = stats.get("last_message_time", 0)
+                if batch_last > existing.get("last_message_time", 0):
+                    existing["last_message_time"] = batch_last
+                # 更新昵称（使用最新批次的昵称）
+                name = stats.get("name", "")
+                if name:
+                    existing["name"] = name
+
+            # 合并表情统计（按键累加）
+            for emoji_key, count in batch.emoji_stats.items():
+                state.emoji_counts[emoji_key] = (
+                    state.emoji_counts.get(emoji_key, 0) + count
+                )
+
+            # 合并话题（去重）
+            for topic in batch.topics:
+                if not IncrementalState.is_duplicate_topic(topic, state.topics):
+                    state.topics.append(topic)
+
+            # 合并金句（去重）
+            for quote in batch.golden_quotes:
+                if not IncrementalState.is_duplicate_quote(quote, state.golden_quotes):
+                    state.golden_quotes.append(quote)
+
+            # 累加 token 消耗
+            for token_key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                state.total_token_usage[token_key] = (
+                    state.total_token_usage.get(token_key, 0)
+                    + batch.token_usage.get(token_key, 0)
+                )
+
+            # 合并参与者 ID（取并集）
+            state.all_participant_ids.update(batch.participant_ids)
+
+            # 记录最后分析消息时间戳（取最大值）
+            if batch.last_message_timestamp > state.last_analyzed_message_timestamp:
+                state.last_analyzed_message_timestamp = batch.last_message_timestamp
+
+        logger.info(
+            f"合并批次完成: 群={state.group_id}, "
+            f"窗口={state.get_window_date_str()}, "
+            f"批次数={len(batches)}, "
+            f"总消息={state.total_message_count}, "
+            f"话题={len(state.topics)}, 金句={len(state.golden_quotes)}"
+        )
+
+        return state
 
     def build_final_statistics(self, state: IncrementalState) -> GroupStatistics:
         """
@@ -38,7 +158,7 @@ class IncrementalMergeService:
         包含完整的 24 小时活跃度分布、表情统计和 token 消耗。
 
         Args:
-            state: 当天的增量分析状态
+            state: 由 merge_batches 合并生成的增量分析状态
 
         Returns:
             GroupStatistics: 与传统分析格式一致的统计数据
@@ -58,7 +178,7 @@ class IncrementalMergeService:
         # 构建活跃度可视化数据
         activity_visualization = ActivityVisualization(
             hourly_activity=hourly_activity,
-            daily_activity={state.date_str: state.total_message_count},
+            daily_activity={state.get_window_date_str(): state.total_message_count},
             user_activity_ranking=user_ranking,
             peak_hours=peak_hours,
             activity_heatmap_data={},
@@ -106,7 +226,7 @@ class IncrementalMergeService:
         将 IncrementalState 中累积的话题字典转换为 SummaryTopic 实例列表。
 
         Args:
-            state: 当天的增量分析状态
+            state: 由 merge_batches 合并生成的增量分析状态
 
         Returns:
             list[SummaryTopic]: 话题列表，格式与传统分析结果一致
@@ -130,7 +250,7 @@ class IncrementalMergeService:
         将 IncrementalState 中累积的金句字典转换为 GoldenQuote 实例列表。
 
         Args:
-            state: 当天的增量分析状态
+            state: 由 merge_batches 合并生成的增量分析状态
 
         Returns:
             list[GoldenQuote]: 金句列表，格式与传统分析结果一致
@@ -160,7 +280,7 @@ class IncrementalMergeService:
         返回的 analysis_result 完全一致，可直接传入 ReportDispatcher。
 
         Args:
-            state: 当天的增量分析状态
+            state: 由 merge_batches 合并生成的增量分析状态
             user_titles: 用户称号列表（由最终报告时 LLM 分析生成）
 
         Returns:
@@ -182,7 +302,7 @@ class IncrementalMergeService:
 
         logger.info(
             f"从增量状态构建完整分析结果: "
-            f"群={state.group_id}, 日期={state.date_str}, "
+            f"群={state.group_id}, 窗口={state.get_window_date_str()}, "
             f"消息={state.total_message_count}, "
             f"话题={len(topics)}, "
             f"金句={len(golden_quotes)}, "

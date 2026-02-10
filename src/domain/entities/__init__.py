@@ -4,8 +4,8 @@
 该模块导出所有领域实体类，包括:
 - AnalysisTask: 分析任务聚合根
 - GroupAnalysisResult: 群聊分析结果实体
-- IncrementalState: 增量分析状态实体
-- BatchRecord: 增量分析批次记录
+- IncrementalBatch: 增量分析独立批次实体
+- IncrementalState: 增量分析聚合视图（报告时使用）
 """
 
 from .analysis_result import (
@@ -19,7 +19,7 @@ from .analysis_result import (
     UserTitle,
 )
 from .analysis_task import AnalysisTask, TaskStatus
-from .incremental_state import BatchRecord, IncrementalState
+from .incremental_state import IncrementalBatch, IncrementalState
 
 # 别名，保持向后兼容
 AnalysisResult = GroupAnalysisResult
@@ -36,6 +36,6 @@ __all__ = [
     "EmojiStatistics",
     "ActivityVisualization",
     "GroupStatistics",
+    "IncrementalBatch",
     "IncrementalState",
-    "BatchRecord",
 ]

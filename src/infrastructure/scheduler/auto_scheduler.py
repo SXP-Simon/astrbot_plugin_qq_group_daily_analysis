@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import time as time_mod
 import weakref
 
 from apscheduler.triggers.cron import CronTrigger
@@ -575,12 +576,12 @@ class AutoScheduler:
                     return result
 
                 # 增量分析只累积数据，不发送报告
-                batch = result.get("batch_record", {})
+                batch_summary = result.get("batch_summary", {})
                 logger.info(
                     f"群 {group_id} 增量分析完成: "
                     f"消息数={result.get('messages_count', 0)}, "
-                    f"新话题={batch.get('topics_added', 0)}, "
-                    f"新金句={batch.get('quotes_added', 0)}"
+                    f"话题={batch_summary.get('topics_count', 0)}, "
+                    f"金句={batch_summary.get('quotes_count', 0)}"
                 )
                 return result
 
@@ -732,6 +733,24 @@ class AutoScheduler:
                     if hasattr(adapter, "platform_id")
                     else target_platform_id,
                 )
+
+                # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）
+                try:
+                    analysis_days = self.config_manager.get_analysis_days()
+                    before_ts = time_mod.time() - (analysis_days * 2 * 24 * 3600)
+                    incremental_store = self.analysis_service.incremental_store
+                    if incremental_store:
+                        cleaned = await incremental_store.cleanup_old_batches(
+                            group_id, before_ts
+                        )
+                        if cleaned > 0:
+                            logger.info(
+                                f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"
+                            )
+                except Exception as cleanup_err:
+                    logger.warning(
+                        f"群 {group_id} 过期批次清理失败（不影响报告）: {cleanup_err}"
+                    )
 
                 logger.info(f"群 {group_id} 增量最终报告发送成功")
                 return result

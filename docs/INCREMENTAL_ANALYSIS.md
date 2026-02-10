@@ -2,35 +2,46 @@
 
 ## 概述
 
-增量分析是对传统"一天一次完整分析"模式的改进。核心思路是在一天内多次执行小批量分析，将结果累积合并，最终在配置的报告时间点生成完整的日报。
+增量分析是对传统"一天一次完整分析"模式的改进。核心思路是在一天内多次执行小批量分析，将结果作为独立批次存储，最终在配置的报告时间点按滑动窗口查询并合并所有批次，生成完整的日报。
 
 ### 解决的问题
 
 1. **消息量过大时分析效果差**：单次拉取的消息量有限，无法覆盖全天聊天内容
 2. **24小时活跃图表形同虚设**：单次分析只能捕捉到部分时段的数据
 3. **API端点短期压力暴增**：所有群聊在同一时间点执行分析，LLM API 瞬时负载极高
-4. **空闲时段浪费分析次数**：固定间隔调度无法适应群聊活跃度的波动
+4. **天然日期隔离问题**：旧版按天存储（key含日期），跨天分析数据断裂，多次发送报告时窗口内容相同
 
-## 架构设计
+## 架构设计（v2 — 滑动窗口批次架构）
 
 增量分析遵循项目现有的 DDD 分层架构：
 
 ```
 应用层 (Application)
 └── AnalysisApplicationService
-    ├── execute_incremental_analysis()    # 单次增量批次
-    └── execute_incremental_final_report() # 最终报告生成
+    ├── execute_incremental_analysis()    # 单次增量 → 存储独立批次
+    └── execute_incremental_final_report() # 滑动窗口查询 → 合并 → 报告
 
 领域层 (Domain)
-├── IncrementalState         # 增量状态实体（累积数据）
-├── BatchRecord              # 批次记录值对象
-└── IncrementalMergeService  # 合并服务（去重、统计构建）
+├── IncrementalBatch         # 独立批次实体（持久化单元）
+├── IncrementalState         # 聚合视图（不持久化，报告时合并产生）
+└── IncrementalMergeService  # 合并服务（merge_batches + 去重 + 统计构建）
 
 基础设施层 (Infrastructure)
-├── IncrementalStore          # 持久化（KV存储）
-├── AutoScheduler             # 调度器（传统/增量双模式）
+├── IncrementalStore          # 批次持久化（KV索引 + 批次数据）
+├── AutoScheduler             # 调度器（传统/增量双模式 + 过期清理）
 └── LLMAnalyzer               # LLM分析（增量并发方法）
 ```
+
+### 核心设计变更（v1 → v2）
+
+| 维度 | v1（旧版） | v2（当前版本） |
+|------|-----------|--------------|
+| 存储单元 | 按天的 `IncrementalState` | 独立的 `IncrementalBatch` |
+| KV Key | `incremental_state_{group_id}_{date}` | `incr_batch_{group_id}_{batch_id}` |
+| 合并时机 | 每次增量分析时合并 | 报告生成时按窗口查询后合并 |
+| 窗口范围 | 自然日（0:00-24:00） | 滑动窗口（now - analysis_days×24h ~ now） |
+| 日期隔离 | 有（跨天数据断裂） | 无（窗口连续覆盖） |
+| 多次发送 | 相同数据 | 窗口随时间滑动，数据不同 |
 
 ## 数据流
 
@@ -41,13 +52,14 @@
     → 获取启用的群聊目标
     → 交错并发执行（控制API压力）
         → AnalysisApplicationService.execute_incremental_analysis()
-            → 加载/创建当天 IncrementalState
+            → 获取 last_analyzed_timestamp（跨批次去重）
             → 拉取自上次分析以来的新消息
             → 检查最小消息数阈值（不足则跳过）
             → LLM 并发分析（话题 + 金句，限制数量）
             → 统计小时级消息分布、用户活跃度
-            → IncrementalState.merge_batch() 合并（去重）
-            → 持久化保存
+            → 构建 IncrementalBatch 对象
+            → save_batch() 保存批次 + 更新索引
+            → update_last_analyzed_timestamp()
 ```
 
 ### 最终报告生成流程
@@ -57,19 +69,55 @@
     → 获取启用的群聊目标
     → 交错并发执行
         → AnalysisApplicationService.execute_incremental_final_report()
-            → 加载当天 IncrementalState
-            → 检查是否有分析数据
-            → IncrementalMergeService.build_final_statistics() → GroupStatistics
-            → IncrementalMergeService.build_topics_for_report() → [SummaryTopic]
-            → IncrementalMergeService.build_quotes_for_report() → [GoldenQuote]
-            → 用户画像分析（使用累积的全天数据）
-            → 组装 analysis_result
+            → 计算滑动窗口: [now - analysis_days×24h, now]
+            → query_batches() 按窗口查询批次列表
+            → IncrementalMergeService.merge_batches() → IncrementalState
+            → 用户画像分析（使用合并后的全窗口数据）
+            → build_analysis_result() → analysis_result
             → ReportDispatcher 分发报告
+            → cleanup_old_batches() 清理 2×窗口外的过期批次
+```
+
+## 持久化（KV 键设计）
+
+```
+批次索引:  incr_batch_index_{group_id}
+  值: [{"batch_id": "uuid", "timestamp": 1234567890.0}, ...]
+
+批次数据:  incr_batch_{group_id}_{batch_id}
+  值: IncrementalBatch.to_dict()
+
+去重时间戳: incr_last_ts_{group_id}
+  值: int (最后分析消息的 epoch 时间戳)
+```
+
+### 滑动窗口查询
+
+```python
+# 报告生成时
+window_end = time.time()
+window_start = window_end - (analysis_days * 24 * 3600)
+batches = await store.query_batches(group_id, window_start, window_end)
+state = merge_service.merge_batches(batches, window_start, window_end)
+```
+
+### 过期清理
+
+报告发送成功后，清理 2×窗口范围之前的旧批次：
+
+```python
+before_ts = time.time() - (analysis_days * 2 * 24 * 3600)
+await store.cleanup_old_batches(group_id, before_ts)
 ```
 
 ## 去重机制
 
-### 话题去重
+### 消息去重（跨批次）
+
+使用全局的 `incr_last_ts_{group_id}` 记录最后分析消息时间戳，
+每次增量分析只处理时间戳大于该值的新消息。
+
+### 话题去重（合并时）
 
 使用 Jaccard 字符级相似度，阈值 0.6：
 
@@ -77,9 +125,9 @@
 similarity = len(chars_a & chars_b) / len(chars_a | chars_b)
 ```
 
-比较维度：`keyword` + `summary` 文本拼接后的字符集合。
+比较维度：`topic` 文本的字符集合。
 
-### 金句去重
+### 金句去重（合并时）
 
 同样使用 Jaccard 字符级相似度，阈值 0.7（更严格，避免误去重）。
 
@@ -112,37 +160,32 @@ similarity = len(chars_a & chars_b) / len(chars_a | chars_b)
 
 - 在活跃时段内按间隔执行小批量分析（如每2小时一次）
 - 每次只分析上次以来的新消息，提取少量话题和金句
-- 在配置的报告时间点汇总全天数据生成最终报告
+- 在配置的报告时间点按滑动窗口合并所有批次生成最终报告
 - 适合消息量大、需要全天覆盖的群聊
+- 支持同一天多次发送报告（窗口随时间滑动）
 
 ## 命令
 
 | 命令 | 说明 |
 |------|------|
-| `/增量状态` | 查看当前群今日的增量分析累积情况 |
+| `/增量状态` | 查看当前滑动窗口内的增量分析累积情况 |
 | `/分析设置 status` | 查看完整设置状态（含增量分析配置） |
 
-## 持久化
+## 旧版兼容
 
-增量状态使用 AstrBot 的 KV 存储：
-
-- Key 格式：`incremental_state_{group_id}_{date_str}`
-- Value：JSON 序列化的 `IncrementalState`
-- 每日自然过期（下一天生成新的 key）
+`IncrementalStore.migrate_legacy_state()` 支持将旧版 `incremental_state_{group_id}_{date}` 格式的数据迁移到新批次架构。迁移后旧键会被删除。
 
 ## 文件清单
 
 | 文件 | 层 | 说明 |
 |------|-----|------|
-| `src/domain/entities/incremental_state.py` | 领域 | 增量状态实体 + 批次记录 |
-| `src/domain/services/incremental_merge_service.py` | 领域 | 合并服务（构建统计、话题、金句） |
-| `src/infrastructure/persistence/incremental_store.py` | 基础设施 | KV 持久化仓储 |
-| `src/infrastructure/analysis/llm_analyzer.py` | 基础设施 | 新增 `analyze_incremental_concurrent()` |
-| `src/infrastructure/analysis/analyzers/base_analyzer.py` | 基础设施 | 新增 `_incremental_max_count` 属性 |
-| `src/infrastructure/analysis/analyzers/topic_analyzer.py` | 基础设施 | 覆盖 `get_max_count()` |
-| `src/infrastructure/analysis/analyzers/golden_quote_analyzer.py` | 基础设施 | 覆盖 `get_max_count()` |
-| `src/infrastructure/scheduler/auto_scheduler.py` | 基础设施 | 双模式调度（传统+增量） |
+| `src/domain/entities/incremental_state.py` | 领域 | IncrementalBatch（批次实体）+ IncrementalState（聚合视图） |
+| `src/domain/services/incremental_merge_service.py` | 领域 | merge_batches() + 构建统计、话题、金句 |
+| `src/infrastructure/persistence/incremental_store.py` | 基础设施 | 批次索引/数据 KV 持久化、窗口查询、过期清理 |
+| `src/infrastructure/analysis/llm_analyzer.py` | 基础设施 | `analyze_incremental_concurrent()` |
+| `src/infrastructure/analysis/analyzers/base_analyzer.py` | 基础设施 | `_incremental_max_count` 属性 |
+| `src/infrastructure/scheduler/auto_scheduler.py` | 基础设施 | 双模式调度（传统+增量）+ 报告后过期批次清理 |
 | `src/infrastructure/config/config_manager.py` | 基础设施 | 10个增量配置 getter |
-| `src/application/services/analysis_application_service.py` | 应用 | 增量分析 + 最终报告用例 |
-| `main.py` | 入口 | 接线 + `/增量状态` 命令 |
+| `src/application/services/analysis_application_service.py` | 应用 | 增量分析（存批次）+ 最终报告（窗口查询+合并）|
+| `main.py` | 入口 | 接线 + `/增量状态` 命令（滑动窗口查询）|
 | `_conf_schema.json` | 配置 | 增量分析配置 Schema |
