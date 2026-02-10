@@ -121,11 +121,15 @@ class ConfigManager:
 
     def get_user_title_analysis_enabled(self) -> bool:
         """获取是否启用用户称号分析"""
-        return self._get_group("analysis_features").get("user_title_analysis_enabled", True)
+        return self._get_group("analysis_features").get(
+            "user_title_analysis_enabled", True
+        )
 
     def get_golden_quote_analysis_enabled(self) -> bool:
         """获取是否启用金句分析"""
-        return self._get_group("analysis_features").get("golden_quote_analysis_enabled", True)
+        return self._get_group("analysis_features").get(
+            "golden_quote_analysis_enabled", True
+        )
 
     def get_max_topics(self) -> int:
         """获取最大话题数量"""
@@ -216,7 +220,9 @@ class ConfigManager:
 
     def get_user_title_analysis_prompt(self, style: str = "user_title_prompt") -> str:
         """获取用户称号分析提示词模板"""
-        prompts_config = self._get_group("prompts").get("user_title_analysis_prompts", {})
+        prompts_config = self._get_group("prompts").get(
+            "user_title_analysis_prompts", {}
+        )
         prompt = prompts_config.get(style, "")
         if prompt:
             return prompt
@@ -226,7 +232,9 @@ class ConfigManager:
         self, style: str = "golden_quote_prompt"
     ) -> str:
         """获取金句分析提示词模板"""
-        prompts_config = self._get_group("prompts").get("golden_quote_analysis_prompts", {})
+        prompts_config = self._get_group("prompts").get(
+            "golden_quote_analysis_prompts", {}
+        )
         prompt = prompts_config.get(style, "")
         if prompt:
             return prompt
@@ -317,7 +325,9 @@ class ConfigManager:
 
     def set_golden_quote_analysis_enabled(self, enabled: bool):
         """设置是否启用金句分析"""
-        self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = enabled
+        self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
+            enabled
+        )
         self.config.save_config()
 
     def set_max_topics(self, count: int):
@@ -363,6 +373,17 @@ class ConfigManager:
     def get_incremental_enabled(self) -> bool:
         """获取是否启用增量分析模式"""
         return self._get_group("incremental").get("incremental_enabled", False)
+
+    def get_incremental_report_immediately(self) -> bool:
+        """获取是否启用增量分析立即发送报告（调试用）"""
+        return self._get_group("incremental").get(
+            "incremental_report_immediately", False
+        )
+
+    def set_incremental_report_immediately(self, enabled: bool):
+        """设置增量分析是否立即发送报告"""
+        self._ensure_group("incremental")["incremental_report_immediately"] = enabled
+        self.config.save_config()
 
     def get_incremental_interval_minutes(self) -> int:
         """获取增量分析间隔（分钟）"""

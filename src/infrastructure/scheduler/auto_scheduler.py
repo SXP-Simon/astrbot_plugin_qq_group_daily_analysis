@@ -202,9 +202,7 @@ class AutoScheduler:
                     f"已注册增量分析任务: {hour:02d}:{minute:02d} (Job ID: {job_id})"
                 )
             except Exception as e:
-                logger.error(
-                    f"注册增量分析任务失败 ({hour:02d}:{minute:02d}): {e}"
-                )
+                logger.error(f"注册增量分析任务失败 ({hour:02d}:{minute:02d}): {e}")
 
         # 注册最终报告生成任务（使用配置的自动分析时间点）
         time_config = self.config_manager.get_auto_analysis_time()
@@ -227,9 +225,7 @@ class AutoScheduler:
                     misfire_grace_time=60,
                 )
                 self.scheduler_job_ids.append(job_id)
-                logger.info(
-                    f"已注册增量最终报告任务: {t_str} (Job ID: {job_id})"
-                )
+                logger.info(f"已注册增量最终报告任务: {t_str} (Job ID: {job_id})")
             except Exception as e:
                 logger.error(f"注册增量最终报告任务失败 ({t_str}): {e}")
 
@@ -478,9 +474,25 @@ class AutoScheduler:
                     # 按索引交错延迟，均匀分散 API 压力
                     if idx > 0 and stagger > 0:
                         await asyncio.sleep(stagger * idx)
-                    return await self._perform_incremental_analysis_for_group_with_timeout(
-                        gid, pid
+
+                    result = (
+                        await self._perform_incremental_analysis_for_group_with_timeout(
+                            gid, pid
+                        )
                     )
+
+                    # 检查是否需要立即发送报告（调试模式）
+                    if self.config_manager.get_incremental_report_immediately():
+                        if isinstance(result, dict) and result.get("success"):
+                            logger.info(
+                                f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
+                            )
+                            # 立即生成最终报告
+                            await self._perform_incremental_final_report_for_group_with_timeout(
+                                gid, pid
+                            )
+
+                    return result
 
             analysis_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
@@ -586,9 +598,7 @@ class AutoScheduler:
                 return result
 
             except Exception as e:
-                logger.error(
-                    f"群 {group_id} 增量分析执行失败: {e}", exc_info=True
-                )
+                logger.error(f"群 {group_id} 增量分析执行失败: {e}", exc_info=True)
                 return {"success": False, "reason": str(e)}
             finally:
                 logger.debug(f"群 {group_id} 增量分析流程结束")
@@ -707,9 +717,7 @@ class AutoScheduler:
 
                 # 检查平台状态
                 if not self.bot_manager.is_ready_for_auto_analysis():
-                    logger.warning(
-                        f"群 {group_id} 最终报告跳过：bot管理器未就绪"
-                    )
+                    logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
                     return {"success": False, "reason": "bot_not_ready"}
 
                 # 委派给应用层服务执行最终报告用例
@@ -756,9 +764,7 @@ class AutoScheduler:
                 return result
 
             except Exception as e:
-                logger.error(
-                    f"群 {group_id} 最终报告执行失败: {e}", exc_info=True
-                )
+                logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
                 return {"success": False, "reason": str(e)}
             finally:
                 logger.debug(f"群 {group_id} 最终报告流程结束")
@@ -787,9 +793,7 @@ class AutoScheduler:
         adapter_ids = list(self.bot_manager._adapters.keys())
 
         # 调试模式下记录详细信息，INFO级别仅显示概览
-        logger.debug(
-            f"[AutoScheduler] Bot实例: {bot_ids}, 适配器: {adapter_ids}"
-        )
+        logger.debug(f"[AutoScheduler] Bot实例: {bot_ids}, 适配器: {adapter_ids}")
 
         if not bot_ids:
             logger.warning("[AutoScheduler] 自动发现后未找到任何Bot实例")

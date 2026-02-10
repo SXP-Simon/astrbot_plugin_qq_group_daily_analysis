@@ -226,6 +226,12 @@
                 "default": false,
                 "hint": "启用后，插件会在一天内多次进行小规模分析并累积结果，最终在报告时间汇总输出。适用于消息量大的群聊，可显著提升分析覆盖率和24小时活跃图表准确性。关闭时保持传统的单次全量分析模式。"
             },
+            "incremental_report_immediately": {
+                "type": "bool",
+                "description": "增量分析立即报告（调试用）",
+                "default": false,
+                "hint": "【调试功能】启用后，每次增量分析完成后都会立即生成并发送一份最终报告。仅建议在调试时开启，生产环境请保持关闭，否则会频繁打扰群友。"
+            },
             "incremental_interval_minutes": {
                 "type": "int",
                 "description": "增量分析间隔（分钟）",
