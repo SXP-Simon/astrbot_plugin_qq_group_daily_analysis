@@ -132,6 +132,25 @@ class ReportGenerator(IReportGenerator):
                                     if os.path.exists(image_data):
                                         with open(image_data, "rb") as f:
                                             file_bytes = f.read()
+                                        
+                                        # 校验是否为有效图片 (防止发送 "Internal Server Error" 文本)
+                                        is_valid_image = False
+                                        if file_bytes.startswith(b"\xff\xd8"): # JPEG
+                                            is_valid_image = True
+                                        elif file_bytes.startswith(b"\x89PNG\r\n\x1a\n"): # PNG
+                                            is_valid_image = True
+                                        
+                                        if not is_valid_image:
+                                            try:
+                                                text_content = file_bytes.decode('utf-8')
+                                                if "Error" in text_content or "Exception" in text_content:
+                                                    logger.error(f"渲染器生成了错误文件而非图片: {text_content[:200]}")
+                                                    return None, html_content
+                                            except Exception:
+                                                pass
+                                            logger.warning(f"生成的图片文件头异常 (非JPEG/PNG): {file_bytes[:10].hex()}")
+                                            return None, html_content
+
                                         b64 = base64.b64encode(file_bytes).decode("utf-8")
                                         image_url = f"base64://{b64}"
                                         logger.info(f"本地图片转 Base64 成功: {len(file_bytes)} bytes")
