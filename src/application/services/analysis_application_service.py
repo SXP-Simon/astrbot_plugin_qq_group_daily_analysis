@@ -6,9 +6,11 @@
 
 import asyncio
 import datetime as dt
+import time as time_mod
 from collections import defaultdict
 from typing import Any
 
+from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.repositories.report_repository import IReportGenerator
@@ -185,10 +187,10 @@ class AnalysisApplicationService:
         self, group_id: str, platform_id: str | None = None
     ) -> dict[str, Any]:
         """
-        执行一次增量分析用例。
+        执行一次增量分析用例（滑动窗口批次架构）。
 
         与每日分析不同，增量分析每次仅处理最近一段时间的消息，
-        提取少量话题和金句，将结果合并到当天的累积状态中。
+        提取少量话题和金句，将结果作为独立批次存储到 KV。
         不生成用户称号（留到最终报告时再做），不生成报告。
 
         流程：
@@ -199,8 +201,8 @@ class AnalysisApplicationService:
         5. 检查最小消息阈值
         6. 计算基础统计（小时分布、用户活跃、表情）
         7. LLM 增量分析（仅话题 + 金句）
-        8. 构建合并参数并合并到 IncrementalState
-        9. 持久化状态
+        8. 构建 IncrementalBatch 并保存
+        9. 更新最后分析消息时间戳
         10. 返回批次结果
 
         Args:
@@ -208,7 +210,7 @@ class AnalysisApplicationService:
             platform_id: 平台标识，缺省为默认
 
         Returns:
-            dict: 包含 success、batch_record、state_summary 等信息
+            dict: 包含 success、batch_summary 等信息
         """
         if not self.incremental_store:
             raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
@@ -241,15 +243,16 @@ class AnalysisApplicationService:
             raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
         )
 
-        # 4. 获取当天增量状态并按时间戳去重
-        today_str = dt.datetime.now().strftime("%Y-%m-%d")
-        state = await self.incremental_store.get_or_create_state(group_id, today_str)
+        # 4. 按时间戳去重：获取最后分析消息时间戳
+        last_analyzed_ts = await self.incremental_store.get_last_analyzed_timestamp(
+            group_id
+        )
 
-        if state.last_analyzed_message_timestamp > 0:
+        if last_analyzed_ts > 0:
             unified_messages = [
                 msg
                 for msg in unified_messages
-                if msg.timestamp > state.last_analyzed_message_timestamp
+                if msg.timestamp > last_analyzed_ts
             ]
 
         # 5. 检查最小消息阈值
@@ -297,7 +300,7 @@ class AnalysisApplicationService:
             )
         )
 
-        # 8. 构建合并参数
+        # 8. 构建 IncrementalBatch
         # 8a. 转换话题: SummaryTopic -> dict
         new_topics = [
             {"topic": t.topic, "contributors": t.contributors, "detail": t.detail}
@@ -322,7 +325,7 @@ class AnalysisApplicationService:
             "total_tokens": token_usage.total_tokens,
         }
 
-        # 8d. 转换用户统计: AnalysisDomainService 格式 -> IncrementalState 格式
+        # 8d. 转换用户统计: AnalysisDomainService 格式 -> IncrementalBatch 格式
         user_stats = self._convert_user_activity_for_merge(
             user_activity, unified_messages
         )
@@ -338,7 +341,7 @@ class AnalysisApplicationService:
         }
 
         # 8f. 获取参与者 ID 和最后消息时间戳
-        participant_ids = {msg.sender_id for msg in unified_messages}
+        participant_ids = list({msg.sender_id for msg in unified_messages})
         last_message_timestamp = max(
             (msg.timestamp for msg in unified_messages), default=0
         )
@@ -346,35 +349,38 @@ class AnalysisApplicationService:
         # 8g. 计算本批次总字符数
         characters_count = sum(msg.get_text_length() for msg in unified_messages)
 
-        # 9. 合并到增量状态
-        batch_record = state.merge_batch(
+        # 构建批次对象
+        batch = IncrementalBatch(
+            group_id=group_id,
+            timestamp=time_mod.time(),
             messages_count=len(unified_messages),
             characters_count=characters_count,
-            hourly_msg_counts=hourly_msg_counts,
-            hourly_char_counts=hourly_char_counts,
+            hourly_msg_counts={str(k): v for k, v in hourly_msg_counts.items()},
+            hourly_char_counts={str(k): v for k, v in hourly_char_counts.items()},
             user_stats=user_stats,
             emoji_stats=emoji_stats,
-            new_topics=new_topics,
-            new_quotes=new_quotes,
+            topics=new_topics,
+            golden_quotes=new_quotes,
             token_usage=token_usage_dict,
             last_message_timestamp=last_message_timestamp,
             participant_ids=participant_ids,
         )
 
-        # 10. 持久化状态
-        await self.incremental_store.save_state(state)
+        # 9. 保存批次并更新最后分析时间戳
+        await self.incremental_store.save_batch(batch)
+        await self.incremental_store.update_last_analyzed_timestamp(
+            group_id, last_message_timestamp
+        )
 
         logger.info(
             f"群 {group_id} 增量分析完成: "
             f"本批次消息={len(unified_messages)}, "
-            f"新话题={len(new_topics)}, 新金句={len(new_quotes)}, "
-            f"累计分析次数={state.total_analysis_count}"
+            f"新话题={len(new_topics)}, 新金句={len(new_quotes)}"
         )
 
         return {
             "success": True,
-            "batch_record": batch_record.to_dict(),
-            "state_summary": state.get_summary(),
+            "batch_summary": batch.get_summary(),
             "messages_count": len(unified_messages),
         }
 
@@ -382,19 +388,21 @@ class AnalysisApplicationService:
         self, group_id: str, platform_id: str | None = None
     ) -> dict[str, Any]:
         """
-        基于当天增量累积状态生成最终报告。
+        基于滑动窗口内的增量批次生成最终报告。
 
-        将一天内多次增量分析积累的话题、金句、统计数据汇总，
-        额外执行用户称号分析（需要完整的累积数据），然后生成
-        与传统每日分析格式完全一致的 analysis_result。
+        按 analysis_days × 24h 的时间窗口查询所有批次，
+        合并为 IncrementalState，额外执行用户称号分析，
+        然后生成与传统每日分析格式完全一致的 analysis_result。
 
         流程：
-        1. 加载当天增量状态
-        2. 检查状态有效性
-        3. 执行用户称号 LLM 分析（基于累积数据）
-        4. 使用 IncrementalMergeService 构建 analysis_result
-        5. 持久化到 history_manager
-        6. 返回结果
+        1. 计算滑动窗口范围
+        2. 查询窗口内的所有批次
+        3. 检查批次有效性
+        4. 合并批次为 IncrementalState
+        5. 执行用户称号 LLM 分析（基于合并后的累积数据）
+        6. 使用 IncrementalMergeService 构建 analysis_result
+        7. 持久化到 history_manager
+        8. 返回结果
 
         Args:
             group_id: 群组 ID
@@ -410,34 +418,42 @@ class AnalysisApplicationService:
 
         logger.info(f"开始增量最终报告: 群 {group_id}, 平台 {platform_id or '默认'}")
 
-        # 1. 加载当天增量状态
-        today_str = dt.datetime.now().strftime("%Y-%m-%d")
-        state = await self.incremental_store.get_state(group_id, today_str)
+        # 1. 计算滑动窗口范围
+        analysis_days = self.config_manager.get_analysis_days()
+        window_end = time_mod.time()
+        window_start = window_end - (analysis_days * 24 * 3600)
 
-        # 2. 检查状态有效性
-        if not state or state.total_analysis_count == 0:
+        # 2. 查询窗口内的所有批次
+        batches = await self.incremental_store.query_batches(
+            group_id, window_start, window_end
+        )
+
+        # 3. 检查批次有效性
+        if not batches:
             logger.warning(
-                f"群 {group_id} 无当天增量分析数据，无法生成最终报告"
+                f"群 {group_id} 滑动窗口内无增量分析数据，无法生成最终报告"
             )
             return {"success": False, "reason": "no_incremental_data"}
 
-        # 3. 获取适配器（报告发送需要）
+        # 4. 合并批次为 IncrementalState
+        state = self.incremental_merge_service.merge_batches(
+            batches, window_start, window_end
+        )
+
+        # 5. 获取适配器（报告发送需要）
         adapter = self.bot_manager.get_adapter(platform_id)
         if not adapter:
             raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-        # 4. 执行用户称号 LLM 分析
+        # 6. 执行用户称号 LLM 分析
         user_titles = []
         user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
 
         if user_title_enabled and state.user_activities:
             max_user_titles = self.config_manager.get_max_user_titles()
-            # 从累积的 user_activities 中取出 top 用户
+            # 从合并后的 user_activities 中取出 top 用户
             top_users = state.get_user_activity_ranking(max_user_titles)
 
-            # 准备用户称号分析所需的 legacy 消息格式
-            # 因为增量模式不保存原始消息，这里用空列表
-            # 用户称号分析器主要依赖 user_analysis 和 top_users，消息内容非必需
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}"
                 if platform_id
@@ -468,20 +484,20 @@ class AnalysisApplicationService:
                     state.total_token_usage.get("total_tokens", 0)
                     + title_token_usage.total_tokens
                 )
-                await self.incremental_store.save_state(state)
             except Exception as e:
                 logger.error(f"增量最终报告用户称号分析失败: {e}", exc_info=True)
 
-        # 5. 构建 analysis_result
+        # 7. 构建 analysis_result
         analysis_result = self.incremental_merge_service.build_analysis_result(
             state, user_titles
         )
 
-        # 6. 持久化到 history_manager
+        # 8. 持久化到 history_manager
         await self.history_manager.save_analysis(group_id, analysis_result)
 
         logger.info(
             f"群 {group_id} 增量最终报告完成: "
+            f"窗口={state.get_window_date_str()}, "
             f"累计消息={state.total_message_count}, "
             f"话题={len(state.topics)}, 金句={len(state.golden_quotes)}, "
             f"批次={state.total_analysis_count}"
@@ -528,7 +544,7 @@ class AnalysisApplicationService:
     ) -> dict[str, dict]:
         """
         将 AnalysisDomainService.analyze_user_activity() 的返回格式
-        转换为 IncrementalState.merge_batch() 所需的 user_stats 格式。
+        转换为 IncrementalBatch 所需的 user_stats 格式。
 
         转换映射：
         - nickname -> name
@@ -540,7 +556,7 @@ class AnalysisApplicationService:
             messages: 本批次的消息列表（用于提取每个用户的最后发言时间）
 
         Returns:
-            dict: IncrementalState.merge_batch() 所需的 user_stats 格式
+            dict: IncrementalBatch 所需的 user_stats 格式
         """
         # 预先计算每个用户的最后消息时间戳
         user_last_time: dict[str, int] = {}

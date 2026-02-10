@@ -739,7 +739,7 @@ class QQGroupDailyAnalysis(Star):
     @filter.command("增量状态", alias={"incremental_status"})
     @filter.permission_type(PermissionType.ADMIN)
     async def incremental_status(self, event: AstrMessageEvent):
-        """查看当前增量分析状态"""
+        """查看当前增量分析状态（滑动窗口）"""
         group_id = self._get_group_id_from_event(event)
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -749,23 +749,42 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("ℹ️ 增量分析模式未启用，请在插件配置中开启")
             return
 
-        import datetime as dt_mod
+        import time as time_mod
 
-        today_str = dt_mod.datetime.now().strftime("%Y-%m-%d")
-        state = await self.incremental_store.get_state(group_id, today_str)
+        # 计算滑动窗口范围
+        analysis_days = self.config_manager.get_analysis_days()
+        window_end = time_mod.time()
+        window_start = window_end - (analysis_days * 24 * 3600)
 
-        if not state or state.total_analysis_count == 0:
-            yield event.plain_result(f"📊 今日 ({today_str}) 尚无增量分析数据")
+        # 查询窗口内的批次
+        batches = await self.incremental_store.query_batches(
+            group_id, window_start, window_end
+        )
+
+        if not batches:
+            from datetime import datetime
+
+            start_str = datetime.fromtimestamp(window_start).strftime("%m-%d %H:%M")
+            end_str = datetime.fromtimestamp(window_end).strftime("%m-%d %H:%M")
+            yield event.plain_result(
+                f"📊 滑动窗口 ({start_str} ~ {end_str}) 内尚无增量分析数据"
+            )
             return
 
+        # 合并批次获取聚合视图
+        state = self.incremental_merge_service.merge_batches(
+            batches, window_start, window_end
+        )
         summary = state.get_summary()
+
         yield event.plain_result(
-            f"📊 增量分析状态 ({today_str})\n"
-            f"• 分析次数: {summary['total_analysis_count']}\n"
-            f"• 累计消息: {summary['total_message_count']}\n"
+            f"📊 增量分析状态 (窗口: {summary['window']})\n"
+            f"• 分析次数: {summary['total_analyses']}\n"
+            f"• 累计消息: {summary['total_messages']}\n"
             f"• 话题数: {summary['topics_count']}\n"
             f"• 金句数: {summary['quotes_count']}\n"
-            f"• 参与者: {summary['participant_count']}"
+            f"• 参与者: {summary['participants']}\n"
+            f"• 高峰时段: {summary['peak_hours']}"
         )
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
