@@ -130,7 +130,12 @@ class TopicAnalyzer(BaseAnalyzer):
                     cleaned_text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", cleaned_text)
 
                     text_messages.append(
-                        {"sender": nickname, "time": msg_time, "content": cleaned_text}
+                        {
+                            "sender": nickname,
+                            "time": msg_time,
+                            "content": cleaned_text,
+                            "user_id": str(user_id),
+                        }
                     )
             except Exception as e:
                 logger.error(
@@ -145,7 +150,7 @@ class TopicAnalyzer(BaseAnalyzer):
         # 构建消息文本
         messages_text = "\n".join(
             [
-                f"[{msg['time']}] {msg['sender']}: {msg['content']}"
+                f"[{msg['time']}] [{msg['user_id']}] {msg['sender']}: {msg['content']}"
                 for msg in text_messages
             ]
         )
@@ -289,6 +294,7 @@ class TopicAnalyzer(BaseAnalyzer):
                                 "sender": nickname,
                                 "time": msg_time,
                                 "content": cleaned_text.strip(),
+                                "user_id": str(sender.get("user_id", "")),
                             }
                         )
         return text_messages
@@ -332,8 +338,34 @@ class TopicAnalyzer(BaseAnalyzer):
                 logger.debug(f"第一条文本消息类型: {type(text_messages[0])}")
                 logger.debug(f"第一条文本消息内容: {text_messages[0]}")
 
+            # 建立昵称到ID的映射表
+            nickname_to_id = {}
+            for msg in text_messages:
+                sender = msg.get("sender")
+                user_id = msg.get("user_id")
+                if sender and user_id:
+                    nickname_to_id[sender] = user_id
+
             # 直接传入原始消息，让 build_prompt 方法处理
-            return await self.analyze(messages, umo, session_id)
+            topics, usage = await self.analyze(messages, umo, session_id)
+
+            # 回填贡献者 ID
+            for topic in topics:
+                ids = set()
+                for contributor in topic.contributors:
+                    # 尝试精确匹配
+                    if contributor in nickname_to_id:
+                        ids.add(nickname_to_id[contributor])
+                    else:
+                        # 尝试模糊匹配（LLM可能会简化名字）
+                        for nick, uid in nickname_to_id.items():
+                            if contributor in nick or nick in contributor:
+                                ids.add(uid)
+                                # 找到一个匹配即可，避免过度匹配
+                                break
+                topic.contributor_ids = list(ids)
+
+            return topics, usage
 
         except Exception as e:
             logger.error(f"话题分析失败: {e}", exc_info=True)
