@@ -24,7 +24,7 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，建议1-7天"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况"
             },
             "max_messages": {
                 "type": "int",
@@ -35,7 +35,7 @@
             "min_messages_threshold": {
                 "type": "int",
                 "description": "最小消息数阈值",
-                "default": 50,
+                "default": 200,
                 "hint": "进行分析所需的最小消息数量"
             },
             "bot_self_ids": {
@@ -50,7 +50,7 @@
             "enable_user_card": {
                 "type": "bool",
                 "description": "使用用户群名片",
-                "default": false,
+                "default": true,
                 "hint": "在分析中优先使用用户的群名片作为昵称显示"
             },
             "output_format": {
@@ -87,8 +87,8 @@
             "auto_analysis_time": {
                 "type": "list",
                 "description": "自动分析时间列表",
-                "default": ["09:00"],
-                "hint": "每日自动分析的时间点列表，格式HH:MM（例如 23:00 ），支持多个时间点",
+                "default": ["23:00"],
+                "hint": "每日自动分析的时间点列表，格式HH:MM（例如 23:00 ），支持多个时间点，增量分析也基于此时间点进行分析和报告生成",
                 "items": {
                     "type": "string"
                 }
@@ -97,7 +97,7 @@
                 "type": "int",
                 "description": "自动分析最大并发数",
                 "default": 3,
-                "hint": "同时进行的群聊分析任务数量，建议根据机器性能调整，过高可能导致LLM API RPM 超出限制，卡顿或被风控"
+                "hint": "同时进行的群聊分析任务数量，建议根据机器性能和服务商情况调整，过高可能导致LLM API RPM 超出限制，卡顿或被风控"
             }
         }
     },
@@ -212,7 +212,7 @@
     "incremental": {
         "description": "增量分析设置",
         "type": "object",
-        "hint": "增量分析模式相关配置，启用后插件会在一天内多次进行小规模分析并累积结果，适用于消息量大的群聊",
+        "hint": "增量分析模式相关配置，启用后插件会在一天内多次进行小规模分析并累积结果，适用于消息量特别大的群聊",
         "items": {
             "incremental_enabled": {
                 "type": "bool",
@@ -224,7 +224,7 @@
                 "type": "int",
                 "description": "增量分析间隔（分钟）",
                 "default": 120,
-                "hint": "每隔多少分钟执行一次增量分析。建议60-180分钟，间隔越短分析越精细但消耗更多 Token。"
+                "hint": "每隔多少分钟执行一次增量分析。建议根据群聊实际情况处理，间隔越短分析越精细但消耗更多 Token。"
             },
             "incremental_max_daily_analyses": {
                 "type": "int",
@@ -236,31 +236,31 @@
                 "type": "int",
                 "description": "单次增量分析最大消息数",
                 "default": 300,
-                "hint": "每次增量分析最多处理的消息条数。数值越大单次分析越全面但 Token 消耗越高。建议200-500。"
+                "hint": "每次增量分析最多处理的消息条数。数值越大单次分析越全面但 Token 消耗越高。因为插件的逻辑是记录旧一次拉取获取到的最晚消息，只会处理后续的新消息，所以建议允许根据群聊实际情况设定的越大越好。"
             },
             "incremental_min_messages": {
                 "type": "int",
                 "description": "增量分析最小消息数阈值",
-                "default": 20,
-                "hint": "当自上次分析以来的新消息数低于此阈值时，跳过本次增量分析以节省 Token。建议10-50。"
+                "default": 100,
+                "hint": "当自上次分析以来的新消息数低于此阈值时，跳过本次增量分析以节省 Token。可能导致少量消息的群聊分析结果不完整，但是依旧建议设置较大值，因为当获取到的消息不够时，最晚消息的游标不会更新，可以等消息足够后的增量分析进行分析。"
             },
             "incremental_topics_per_batch": {
                 "type": "int",
                 "description": "单次增量提取话题数",
-                "default": 3,
-                "hint": "每次增量分析最多提取的话题数量。最终报告会汇总所有批次的话题。建议2-5。"
+                "default": 2,
+                "hint": "每次增量分析最多提取的话题数量。最终报告会汇总所有批次的话题。建议1-4。"
             },
             "incremental_quotes_per_batch": {
                 "type": "int",
                 "description": "单次增量提取金句数",
-                "default": 3,
-                "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议2-5。"
+                "default": 2,
+                "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议1-2。"
             },
             "incremental_active_start_hour": {
                 "type": "int",
                 "description": "增量分析活跃起始时段",
                 "default": 8,
-                "hint": "增量分析的活跃时段起始小时（24小时制）。在活跃时段之外不会触发增量分析，避免凌晨等低活跃时段浪费分析配额。"
+                "hint": "增量分析的活跃时段起始小时（24小时制）。如果目标群聊凌晨也活跃，建议设定的很早；在活跃时段之外不会触发增量分析，避免凌晨等低活跃时段浪费分析配额."
             },
             "incremental_active_end_hour": {
                 "type": "int",
@@ -271,8 +271,8 @@
             "incremental_stagger_seconds": {
                 "type": "int",
                 "description": "多群增量分析交错间隔（秒）",
-                "default": 30,
-                "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。建议15-60秒。"
+                "default": 2,
+                "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。"
             }
         }
     },
