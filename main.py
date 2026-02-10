@@ -326,6 +326,16 @@ class QQGroupDailyAnalysis(Star):
             async def avatar_getter(user_id: str) -> str | None:
                 return await adapter.get_user_avatar_url(user_id)
 
+            # 定义昵称获取回调
+            async def nickname_getter(user_id: str) -> str | None:
+                try:
+                    member = await adapter.get_member_info(group_id, user_id)
+                    if member:
+                        return member.card or member.nickname
+                except Exception:
+                    pass
+                return None
+
             if output_format == "image":
                 (
                     image_url,
@@ -335,6 +345,7 @@ class QQGroupDailyAnalysis(Star):
                     group_id,
                     self.html_render,
                     avatar_getter=avatar_getter,
+                    nickname_getter=nickname_getter,
                 )
 
                 if image_url:
@@ -355,7 +366,10 @@ class QQGroupDailyAnalysis(Star):
 
             elif output_format == "pdf":
                 pdf_path = await self.report_generator.generate_pdf_report(
-                    analysis_result, group_id, avatar_getter=avatar_getter
+                    analysis_result,
+                    group_id,
+                    avatar_getter=avatar_getter,
+                    nickname_getter=nickname_getter,
                 )
                 if pdf_path:
                     if not await adapter.send_file(group_id, pdf_path):
