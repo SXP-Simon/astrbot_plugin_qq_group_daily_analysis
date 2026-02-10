@@ -32,6 +32,8 @@ class BaseAnalyzer(ABC):
         """
         self.context = context
         self.config_manager = config_manager
+        # 增量分析模式下的最大数量覆盖值，为 None 时使用配置默认值
+        self._incremental_max_count: int | None = None
 
     def get_provider_id_key(self) -> str:
         """
