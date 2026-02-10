@@ -200,6 +200,66 @@
         "default": "群聊分析报告_{group_id}_{date}.pdf",
         "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
     },
+    "incremental_enabled": {
+        "type": "bool",
+        "description": "启用增量分析模式",
+        "default": false,
+        "hint": "启用后，插件会在一天内多次进行小规模分析并累积结果，最终在报告时间汇总输出。适用于消息量大的群聊，可显著提升分析覆盖率和24小时活跃图表准确性。关闭时保持传统的单次全量分析模式。"
+    },
+    "incremental_interval_minutes": {
+        "type": "int",
+        "description": "增量分析间隔（分钟）",
+        "default": 120,
+        "hint": "每隔多少分钟执行一次增量分析。建议60-180分钟，间隔越短分析越精细但消耗更多 Token。"
+    },
+    "incremental_max_daily_analyses": {
+        "type": "int",
+        "description": "每日最大增量分析次数",
+        "default": 8,
+        "hint": "一天内最多执行多少次增量分析。达到上限后当天不再触发新的增量分析，但仍会在报告时间生成最终报告。建议4-12次。"
+    },
+    "incremental_max_messages": {
+        "type": "int",
+        "description": "单次增量分析最大消息数",
+        "default": 300,
+        "hint": "每次增量分析最多处理的消息条数。数值越大单次分析越全面但 Token 消耗越高。建议200-500。"
+    },
+    "incremental_min_messages": {
+        "type": "int",
+        "description": "增量分析最小消息数阈值",
+        "default": 20,
+        "hint": "当自上次分析以来的新消息数低于此阈值时，跳过本次增量分析以节省 Token。建议10-50。"
+    },
+    "incremental_topics_per_batch": {
+        "type": "int",
+        "description": "单次增量提取话题数",
+        "default": 3,
+        "hint": "每次增量分析最多提取的话题数量。最终报告会汇总所有批次的话题。建议2-5。"
+    },
+    "incremental_quotes_per_batch": {
+        "type": "int",
+        "description": "单次增量提取金句数",
+        "default": 3,
+        "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议2-5。"
+    },
+    "incremental_active_start_hour": {
+        "type": "int",
+        "description": "增量分析活跃起始时段",
+        "default": 8,
+        "hint": "增量分析的活跃时段起始小时（24小时制）。在活跃时段之外不会触发增量分析，避免凌晨等低活跃时段浪费分析配额。"
+    },
+    "incremental_active_end_hour": {
+        "type": "int",
+        "description": "增量分析活跃结束时段",
+        "default": 23,
+        "hint": "增量分析的活跃时段结束小时（24小时制）。超过此时段后不再触发增量分析。"
+    },
+    "incremental_stagger_seconds": {
+        "type": "int",
+        "description": "多群增量分析交错间隔（秒）",
+        "default": 30,
+        "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。建议15-60秒。"
+    },
     "topic_analysis_prompts": {
         "description": "话题分析提示词模板",
         "type": "object",
