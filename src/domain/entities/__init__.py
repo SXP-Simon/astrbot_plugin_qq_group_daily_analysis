@@ -21,14 +21,10 @@ from .analysis_result import (
 from .analysis_task import AnalysisTask, TaskStatus
 from .incremental_state import IncrementalBatch, IncrementalState
 
-# 别名，保持向后兼容
-AnalysisResult = GroupAnalysisResult
-
 __all__ = [
     "AnalysisTask",
     "TaskStatus",
     "GroupAnalysisResult",
-    "AnalysisResult",  # 别名
     "SummaryTopic",
     "UserTitle",
     "GoldenQuote",
