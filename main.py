@@ -755,10 +755,6 @@ class QQGroupDailyAnalysis(Star):
 
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 分析核心执行失败: {str(e)}")
-
-        except Exception as e:
-            logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
