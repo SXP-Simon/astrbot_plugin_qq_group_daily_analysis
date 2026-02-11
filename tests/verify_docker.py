@@ -13,7 +13,6 @@ try:
         AutoScheduler,
     )
     from astrbot_plugin_qq_group_daily_analysis.main import QQGroupDailyAnalysis
-    from astrbot.api.event import filter
 except ImportError as e:
     print(f"ImportError in Docker: {e}")
     # Fallback to local paths if testing locally
@@ -22,7 +21,6 @@ except ImportError as e:
         AutoScheduler,
     )
     from astrbot_plugin_qq_group_daily_analysis.main import QQGroupDailyAnalysis
-    from astrbot.api.event import filter
 
 
 class TestPhase3Docker(unittest.IsolatedAsyncioTestCase):
@@ -98,13 +96,13 @@ class TestPhase3Docker(unittest.IsolatedAsyncioTestCase):
             ) as MockBotManager,
             patch(
                 "astrbot_plugin_qq_group_daily_analysis.main.MessageAnalyzer"
-            ) as MockMessageAnalyzer,
+            ),
             patch(
                 "astrbot_plugin_qq_group_daily_analysis.main.ReportGenerator"
-            ) as MockReportGenerator,
+            ),
             patch(
                 "astrbot_plugin_qq_group_daily_analysis.main.RetryManager"
-            ) as MockRetryManager,
+            ),
             patch(
                 "astrbot_plugin_qq_group_daily_analysis.main.AutoScheduler"
             ) as MockAutoScheduler,
