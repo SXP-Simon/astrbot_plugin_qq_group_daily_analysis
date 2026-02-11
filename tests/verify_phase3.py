@@ -42,9 +42,9 @@ anthropic.types = anthropic_types
 
 httpx = mock_package("httpx")
 
-import asyncio
-import unittest
-from unittest.mock import AsyncMock, patch
+import asyncio  # noqa: E402
+import unittest  # noqa: E402
+from unittest.mock import AsyncMock, patch  # noqa: E402
 
 # Adjust path to include the plugin directory
 sys.path.append(
@@ -55,9 +55,9 @@ sys.path.append(r"c:\Helianthus\astrpro\AstrBot-master")
 sys.path.append("/AstrBot")
 sys.path.append("/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis")
 
-from src.scheduler.auto_scheduler import AutoScheduler
-from main import QQGroupDailyAnalysis
-from astrbot.api.event import filter  # Import to ensure decorators work
+from src.scheduler.auto_scheduler import AutoScheduler  # noqa: E402
+from main import QQGroupDailyAnalysis  # noqa: E402
+from astrbot.api.event import filter  # noqa: E402, F401
 
 
 class TestPhase3(unittest.IsolatedAsyncioTestCase):
@@ -117,11 +117,11 @@ class TestPhase3(unittest.IsolatedAsyncioTestCase):
         with (
             patch("main.ConfigManager") as MockConfigManager,
             patch("main.BotManager") as MockBotManager,
-            patch("main.MessageAnalyzer") as MockMessageAnalyzer,
-            patch("main.ReportGenerator") as MockReportGenerator,
+            patch("main.MessageAnalyzer"),
+            patch("main.ReportGenerator"),
             patch("main.RetryManager") as MockRetryManager,
             patch("main.AutoScheduler") as MockAutoScheduler,
-            patch("main.TraceLogFilter") as MockLogFilter,
+            patch("main.TraceLogFilter"),
         ):
             # Setup mocks
             mock_auto_scheduler_instance = MockAutoScheduler.return_value

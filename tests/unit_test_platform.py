@@ -17,11 +17,8 @@ if astrbot_root not in sys.path:
 print(f"Added to sys.path: {plugin_root}, {astrbot_root}")
 
 try:
-    from src.infrastructure.platform.factory import PlatformAdapterFactory
-    from src.infrastructure.platform.base import PlatformAdapter
-    from src.infrastructure.platform.adapters.discord_adapter import DiscordAdapter, DISCORD_CAPABILITIES
-    from src.application.analysis_orchestrator import AnalysisOrchestrator
-    from src.domain.value_objects.unified_message import UnifiedMessage
+    from src.infrastructure.platform.factory import PlatformAdapterFactory  # noqa: E402
+    from src.infrastructure.platform.adapters.discord_adapter import DiscordAdapter  # noqa: E402
 except ImportError as e:
     print(f"Import Error: {e}")
     print(f"sys.path: {sys.path}")

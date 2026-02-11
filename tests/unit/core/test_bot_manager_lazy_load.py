@@ -11,8 +11,8 @@ astrbot_root = os.path.abspath(os.path.join(plugin_root, "../../../"))
 if astrbot_root not in sys.path:
     sys.path.insert(0, astrbot_root)
 
-from src.core.bot_manager import BotManager
-from src.infrastructure.platform.factory import PlatformAdapterFactory
+from src.core.bot_manager import BotManager  # noqa: E402
+from src.infrastructure.platform.factory import PlatformAdapterFactory  # noqa: E402
 
 class TestBotManagerLazyLoad(unittest.TestCase):
     def setUp(self):
