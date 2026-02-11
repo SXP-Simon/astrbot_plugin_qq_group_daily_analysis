@@ -133,27 +133,27 @@ async def main():
     topics = [
         SummaryTopic(
             topic="AstrBot新功能",
-            detail="大家对PDF生成功能的讨论非常热烈，提出了很多优化建议。",
+            detail="大家对 [10001] 提到的PDF生成功能的讨论非常热烈，[10002] 提出了很多优化建议。",
             contributors=["开发者", "测试员"],
         ),
         SummaryTopic(
             topic="周末计划",
-            detail="有人提议去爬山，也有人想在家打游戏。",
+            detail="[10003] 提议去爬山，也有人想在家打游戏。",
             contributors=["旅行家", "宅男"],
         ),
         SummaryTopic(
             topic="代码调试",
-            detail="关于Python异步编程的深入探讨。",
+            detail="关于Python异步编程的深入探讨，[10001]分享了一些心得。",
             contributors=["小白", "大神"],
         ),
         SummaryTopic(
             topic="美食分享",
-            detail="深夜放毒，发了很多火锅和烧烤的照片。",
+            detail="深夜放毒，[10004] 发了很多火锅和烧烤的照片。",
             contributors=["吃货A", "吃货B"],
         ),
         SummaryTopic(
             topic="模组推荐",
-            detail="推荐了一些好用的Minecraft模组。",
+            detail="[10005] 推荐了一些好用的Minecraft模组。",
             contributors=["MC玩家"],
         ),
     ]
@@ -224,6 +224,16 @@ async def main():
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles,
+        "user_analysis": {
+            "10001": {"nickname": "极客"},
+            "10002": {"nickname": "社牛"},
+            "10003": {"nickname": "百科"},
+            "10004": {"nickname": "潜水"},
+            "10005": {"nickname": "欧皇"},
+        },
+        "token_usage": TokenUsage(
+            prompt_tokens=2000, completion_tokens=1000, total_tokens=3000
+        ),
     }
 
     print("Generating PDF Report...")
