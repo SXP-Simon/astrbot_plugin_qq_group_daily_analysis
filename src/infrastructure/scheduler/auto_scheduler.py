@@ -25,18 +25,20 @@ class AutoScheduler:
         analysis_service,
         bot_manager,
         retry_manager,
+        report_generator=None,
         html_render_func=None,
     ):
         self.config_manager = config_manager
         self.analysis_service = analysis_service
         self.bot_manager = bot_manager
         self.retry_manager = retry_manager
+        self.report_generator = report_generator
         self.html_render_func = html_render_func
 
         # 初始化核心组件
         self.message_sender = MessageSender(bot_manager, config_manager, retry_manager)
         self.report_dispatcher = ReportDispatcher(
-            config_manager, None, self.message_sender, retry_manager
+            config_manager, report_generator, self.message_sender, retry_manager
         )
         if html_render_func:
             self.report_dispatcher.set_html_render(html_render_func)
