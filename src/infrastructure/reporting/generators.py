@@ -380,11 +380,15 @@ class ReportGenerator(IReportGenerator):
             if user_analysis and uid in user_analysis:
                 stats = user_analysis[uid]
                 name = stats.get("nickname") or stats.get("name")
+                if self._is_placeholder_display_name(name, uid):
+                    name = None
 
             # 2. 尝试通过回调获取实时昵称
             if not name and nickname_getter:
                 try:
                     name = await nickname_getter(uid)
+                    if self._is_placeholder_display_name(name, uid):
+                        name = None
                 except Exception as e:
                     logger.warning(f"获取昵称失败 {uid}: {e}")
 
@@ -400,7 +404,7 @@ class ReportGenerator(IReportGenerator):
             # 3. 最终后备: 确保有头像和名称
             if not url:
                 url = self._get_default_avatar_base64()
-            if not name:
+            if self._is_placeholder_display_name(name, uid):
                 name = str(uid)
 
             return (
@@ -426,6 +430,18 @@ class ReportGenerator(IReportGenerator):
             result = result[:start] + replacement + result[end:]
 
         return result
+
+    @staticmethod
+    def _is_placeholder_display_name(name: str | None, user_id: str) -> bool:
+        """判断展示名称是否为占位值。"""
+        if not name:
+            return True
+        normalized = str(name).strip()
+        if not normalized:
+            return True
+        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
+            return True
+        return normalized == str(user_id).strip()
 
     def _render_html_template(self, template: str, data: dict) -> str:
         """HTML模板渲染，使用 {{key}} 占位符格式

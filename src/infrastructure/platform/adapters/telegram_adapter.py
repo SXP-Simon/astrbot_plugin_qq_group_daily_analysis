@@ -5,6 +5,7 @@ Telegram 平台适配器
 通过 AstrBot 的 message_history_manager 存储和读取消息历史。
 """
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
@@ -170,6 +171,16 @@ class TelegramAdapter(PlatformAdapter):
             cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
             messages = []
+            sender_name_cache: dict[str, str] = {}
+            # 先用本批历史记录中已有的有效昵称预热缓存，减少额外 API 请求
+            for record in history_records:
+                sender_id = str(getattr(record, "sender_id", "") or "").strip()
+                sender_name = str(getattr(record, "sender_name", "") or "").strip()
+                if sender_id and not self._is_placeholder_sender_name(
+                    sender_name, sender_id
+                ):
+                    sender_name_cache[sender_id] = sender_name
+
             for record in history_records:
                 # before_id 过滤，仅保留更早的记录
                 if before_id_int is not None:
@@ -196,6 +207,9 @@ class TelegramAdapter(PlatformAdapter):
                         continue
                     if msg.sender_id in self.bot_self_ids:
                         continue
+                    msg = await self._fix_sender_name_if_needed(
+                        group_id, msg, sender_name_cache
+                    )
                     messages.append(msg)
 
             messages.sort(key=lambda m: m.timestamp)
@@ -229,6 +243,70 @@ class TelegramAdapter(PlatformAdapter):
             except Exception:
                 pass
         return "telegram"
+
+    @staticmethod
+    def _is_placeholder_sender_name(name: str | None, sender_id: str | None) -> bool:
+        """判断 sender_name 是否属于占位值。"""
+        if not name:
+            return True
+        normalized = str(name).strip()
+        if not normalized:
+            return True
+        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
+            return True
+        if sender_id and normalized == str(sender_id).strip():
+            return True
+        return False
+
+    async def _fix_sender_name_if_needed(
+        self,
+        group_id: str,
+        msg: UnifiedMessage,
+        sender_name_cache: dict[str, str],
+    ) -> UnifiedMessage:
+        """
+        如果 sender_name 是占位值，尝试通过 get_member_info 修复。
+
+        说明：
+        - 兼容历史脏数据（sender_name 写成 user_id / Unknown）
+        - 使用 sender_id 级缓存，避免重复请求 Telegram API
+        """
+        if not self._is_placeholder_sender_name(msg.sender_name, msg.sender_id):
+            return msg
+
+        sender_id = str(msg.sender_id)
+        if sender_id in sender_name_cache:
+            cached_name = sender_name_cache[sender_id]
+            if cached_name == msg.sender_name:
+                return msg
+            logger.info(
+                "[TEMP][SenderNameFix][Cache] "
+                f"group_id={group_id} sender_id={sender_id} "
+                f"from={msg.sender_name} to={cached_name}"
+            )
+            return replace(msg, sender_name=cached_name)
+
+        resolved_name = msg.sender_name
+        try:
+            member = await self.get_member_info(group_id, sender_id)
+            if member:
+                candidate = str(member.nickname or "").strip()
+                if self._is_placeholder_sender_name(candidate, sender_id):
+                    candidate = str(member.card or "").strip()
+                if not self._is_placeholder_sender_name(candidate, sender_id):
+                    resolved_name = candidate
+        except Exception as e:
+            logger.debug(f"[Telegram] 修复 sender_name 失败 (uid={sender_id}): {e}")
+
+        sender_name_cache[sender_id] = resolved_name
+        if resolved_name == msg.sender_name:
+            return msg
+        logger.info(
+            "[TEMP][SenderNameFix][MemberInfo] "
+            f"group_id={group_id} sender_id={sender_id} "
+            f"from={msg.sender_name} to={resolved_name}"
+        )
+        return replace(msg, sender_name=resolved_name)
 
     def _convert_history_record(
         self, record: Any, group_id: str
@@ -287,10 +365,13 @@ class TelegramAdapter(PlatformAdapter):
                     )
                 )
 
+            sender_id = str(record.sender_id or "")
+            sender_name = str(record.sender_name or "").strip() or "Unknown"
+
             return UnifiedMessage(
                 message_id=str(record.id),
-                sender_id=record.sender_id or "",
-                sender_name=record.sender_name or "Unknown",
+                sender_id=sender_id,
+                sender_name=sender_name,
                 sender_card=None,
                 group_id=group_id,
                 text_content=text_content,
@@ -561,7 +642,10 @@ class TelegramAdapter(PlatformAdapter):
                 members.append(
                     UnifiedMember(
                         user_id=str(user.id),
-                        nickname=user.first_name or user.username or "Unknown",
+                        nickname=user.full_name
+                        or user.first_name
+                        or user.username
+                        or "Unknown",
                         card=user.username,
                         role="admin" if admin.status == "administrator" else "owner",
                     )
@@ -594,7 +678,10 @@ class TelegramAdapter(PlatformAdapter):
 
             return UnifiedMember(
                 user_id=str(user.id),
-                nickname=user.first_name or user.username or "Unknown",
+                nickname=user.full_name
+                or user.first_name
+                or user.username
+                or "Unknown",
                 card=user.username,
                 role=role,
             )
