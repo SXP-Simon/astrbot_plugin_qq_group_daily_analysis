@@ -5,6 +5,7 @@
 
 import asyncio
 import base64
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -450,6 +451,14 @@ class ReportGenerator(IReportGenerator):
 
         return result
 
+    @staticmethod
+    def _safe_url_for_log(url: str | None) -> str:
+        """对日志中的 URL 进行脱敏，避免泄露 token。"""
+        if not url:
+            return ""
+        # Telegram file URL: .../file/bot<token>/<file_path>
+        return re.sub(r"/bot[^/]+/", "/bot<redacted>/", url)
+
     async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str:
         """
         获取用户头像的 Base64 Data URI。
@@ -509,6 +518,7 @@ class ReportGenerator(IReportGenerator):
                         return self._get_default_avatar_base64()
 
                 # 5. 下载并保存
+                safe_avatar_url = self._safe_url_for_log(avatar_url)
                 async with aiohttp.ClientSession() as client:
                     try:
                         async with client.get(avatar_url, timeout=5) as response:
@@ -538,14 +548,14 @@ class ReportGenerator(IReportGenerator):
                                         file_content = content
                                     else:
                                         logger.warning(
-                                            f"下载的头像数据格式无效 ({avatar_url})"
+                                            f"下载的头像数据格式无效 ({safe_avatar_url})"
                                         )
                             else:
                                 logger.warning(
-                                    f"下载头像失败 {avatar_url}: {response.status}"
+                                    f"下载头像失败 {safe_avatar_url}: {response.status}"
                                 )
                     except Exception as e:
-                        logger.warning(f"下载头像网络错误 {avatar_url}: {e}")
+                        logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
 
             # 6. 转换为 Base64 Data URI
             if file_content:

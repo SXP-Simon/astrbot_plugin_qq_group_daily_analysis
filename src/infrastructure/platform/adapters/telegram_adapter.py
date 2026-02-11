@@ -5,11 +5,12 @@ Telegram 平台适配器
 通过 AstrBot 的 message_history_manager 存储和读取消息历史。
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
 from ....domain.value_objects.platform_capabilities import (
+    TELEGRAM_CAPABILITIES,
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
@@ -62,6 +63,7 @@ class TelegramAdapter(PlatformAdapter):
         if config:
             ids = config.get("bot_self_ids", [])
             self.bot_self_ids = [str(i) for i in ids] if ids else []
+        self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
 
     def set_context(self, context: "Context") -> None:
         """
@@ -115,28 +117,7 @@ class TelegramAdapter(PlatformAdapter):
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回 Telegram 平台能力声明"""
-        # 通过数据库存储支持消息历史
-        return PlatformCapabilities(
-            platform_name="telegram",
-            platform_version="bot_api_7.x",
-            supports_message_history=True,  # 通过数据库支持
-            max_message_history_days=7,  # 取决于存储时长
-            max_message_count=1000,
-            supports_group_list=False,
-            supports_group_info=True,
-            supports_member_list=True,
-            supports_text_message=True,
-            supports_image_message=True,
-            supports_file_message=True,
-            supports_reply_message=True,
-            max_text_length=4096,
-            max_image_size_mb=50.0,
-            supports_edit=True,
-            supports_user_avatar=True,
-            supports_group_avatar=True,
-            avatar_needs_api_call=True,
-            avatar_sizes=(160, 320, 640),
-        )
+        return TELEGRAM_CAPABILITIES
 
     # ==================== IMessageRepository ====================
 
@@ -163,6 +144,12 @@ class TelegramAdapter(PlatformAdapter):
 
             # 获取平台 ID（从 bot 实例获取）
             platform_id = self._get_platform_id()
+            before_id_int: int | None = None
+            if before_id:
+                try:
+                    before_id_int = int(before_id)
+                except (TypeError, ValueError):
+                    logger.warning(f"[Telegram] before_id invalid: {before_id}")
 
             # 获取消息历史
             history_records = await history_mgr.get(
@@ -179,13 +166,26 @@ class TelegramAdapter(PlatformAdapter):
                 )
                 return []
 
-            # 时间过滤
-            cutoff_time = datetime.now() - timedelta(days=days)
+            # 时间过滤（数据库时间为 UTC aware）
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
 
             messages = []
             for record in history_records:
+                # before_id 过滤，仅保留更早的记录
+                if before_id_int is not None:
+                    try:
+                        if int(record.id) >= before_id_int:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+
                 # 检查时间
-                if record.created_at < cutoff_time:
+                record_time = getattr(record, "created_at", None)
+                if not record_time:
+                    continue
+                if record_time.tzinfo is None:
+                    record_time = record_time.replace(tzinfo=timezone.utc)
+                if record_time < cutoff_time:
                     continue
 
                 # 转换为 UnifiedMessage
@@ -198,6 +198,7 @@ class TelegramAdapter(PlatformAdapter):
                         continue
                     messages.append(msg)
 
+            messages.sort(key=lambda m: m.timestamp)
             logger.info(
                 f"[Telegram] 从数据库获取群 {group_id} 的消息: "
                 f"{len(messages)}/{len(history_records)} 条"
@@ -211,11 +212,22 @@ class TelegramAdapter(PlatformAdapter):
 
     def _get_platform_id(self) -> str:
         """获取平台 ID"""
+        if self._platform_id:
+            return self._platform_id
+
+        if isinstance(self.config, dict):
+            config_platform_id = str(self.config.get("platform_id", "")).strip()
+            if config_platform_id:
+                return config_platform_id
+
         # 尝试从 bot 实例获取
-        if hasattr(self.bot, "meta"):
-            meta = self.bot.meta()
-            if hasattr(meta, "id"):
-                return meta.id
+        if hasattr(self.bot, "meta") and callable(self.bot.meta):
+            try:
+                meta = self.bot.meta()
+                if hasattr(meta, "id"):
+                    return meta.id
+            except Exception:
+                pass
         return "telegram"
 
     def _convert_history_record(
@@ -255,10 +267,15 @@ class TelegramAdapter(PlatformAdapter):
                             )
                         )
                     elif part_type == "at":
+                        target_id = (
+                            part.get("target_id", "")
+                            or part.get("qq", "")
+                            or part.get("at_user_id", "")
+                        )
                         contents.append(
                             MessageContent(
                                 type=MessageContentType.AT,
-                                target_id=part.get("target_id", ""),
+                                at_user_id=str(target_id),
                             )
                         )
 
@@ -320,7 +337,7 @@ class TelegramAdapter(PlatformAdapter):
                     )
                 elif content.type == MessageContentType.AT:
                     raw["message"].append(
-                        {"type": "at", "data": {"qq": content.target_id or ""}}
+                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
                     )
 
             result.append(raw)
@@ -371,6 +388,7 @@ class TelegramAdapter(PlatformAdapter):
 
         try:
             chat_id, message_thread_id = self._parse_group_id(group_id)
+            photo_obj: Any = None
 
             kwargs: dict[str, Any] = {"chat_id": chat_id}
             if message_thread_id:
@@ -397,18 +415,22 @@ class TelegramAdapter(PlatformAdapter):
                 except Exception as e:
                     logger.warning(f"[Telegram] 下载图片失败，尝试直接发送: {e}")
                     kwargs["photo"] = image_path
+
+                photo_obj = kwargs["photo"]
+                await client.send_photo(**kwargs)
             else:
                 # 本地文件
-                kwargs["photo"] = open(image_path, "rb")
+                with open(image_path, "rb") as f:
+                    kwargs["photo"] = f
+                    await client.send_photo(**kwargs)
 
-            await client.send_photo(**kwargs)
-
-            # 关闭文件句柄
-            if not isinstance(kwargs["photo"], (str, BytesIO)):
-                kwargs["photo"].close()
+            if isinstance(photo_obj, BytesIO):
+                photo_obj.close()
 
             return True
         except Exception as e:
+            if "photo_obj" in locals() and isinstance(photo_obj, BytesIO):
+                photo_obj.close()
             logger.error(f"[Telegram] 发送图片失败: {e}")
             return False
 

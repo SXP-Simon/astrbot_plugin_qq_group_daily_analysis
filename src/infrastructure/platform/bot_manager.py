@@ -55,6 +55,7 @@ class BotManager:
             if platform_name and PlatformAdapterFactory.is_supported(platform_name):
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
+                    "platform_id": str(platform_id),
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config

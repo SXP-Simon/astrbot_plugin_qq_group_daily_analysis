@@ -823,6 +823,7 @@ class AutoScheduler:
                             bot_instance,
                             config={
                                 "bot_self_ids": self.config_manager.get_bot_self_ids(),
+                                "platform_id": str(platform_id),
                             },
                         )
 
