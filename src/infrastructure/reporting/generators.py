@@ -377,7 +377,8 @@ class ReportGenerator(IReportGenerator):
             name = None
             # 1. 尝试从 LLM 分析结果获取
             if user_analysis and uid in user_analysis:
-                name = user_analysis[uid].get("name")
+                stats = user_analysis[uid]
+                name = stats.get("nickname") or stats.get("name")
 
             # 2. 尝试通过回调获取实时昵称
             if not name and nickname_getter:
@@ -395,9 +396,11 @@ class ReportGenerator(IReportGenerator):
             img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
             name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
-            # 确保有头像 URL（Base64 或 默认）
+            # 3. 最终后备: 确保有头像和名称
             if not url:
                 url = self._get_default_avatar_base64()
+            if not name:
+                name = str(uid)
 
             return (
                 f'<span class="user-capsule" style="{capsule_style}">'
