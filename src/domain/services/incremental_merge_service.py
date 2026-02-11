@@ -112,9 +112,24 @@ class IncrementalMergeService:
 
             # 合并表情统计（按键累加）
             for emoji_key, count in batch.emoji_stats.items():
-                state.emoji_counts[emoji_key] = (
-                    state.emoji_counts.get(emoji_key, 0) + count
-                )
+                current_val = state.emoji_counts.get(emoji_key, 0)
+                if isinstance(count, dict):
+                    # 如果是嵌套字典（如 face_details），则合并内部计数
+                    if not isinstance(current_val, dict):
+                        current_val = {}
+
+                    for sub_key, sub_count in count.items():
+                        current_val[sub_key] = current_val.get(sub_key, 0) + sub_count
+
+                    state.emoji_counts[emoji_key] = current_val
+                else:
+                    # 如果是数值，直接累加
+                    if isinstance(current_val, dict):
+                        # 异常情况：现有值是字典但新值是数字，通常不应发生，除非 schema 变更
+                        # 此时保留字典，忽略数字或记录错误，这里选择保留字典
+                        continue
+
+                    state.emoji_counts[emoji_key] = current_val + count
 
             # 合并话题（去重）
             for topic in batch.topics:
@@ -128,10 +143,9 @@ class IncrementalMergeService:
 
             # 累加 token 消耗
             for token_key in ("prompt_tokens", "completion_tokens", "total_tokens"):
-                state.total_token_usage[token_key] = (
-                    state.total_token_usage.get(token_key, 0)
-                    + batch.token_usage.get(token_key, 0)
-                )
+                state.total_token_usage[token_key] = state.total_token_usage.get(
+                    token_key, 0
+                ) + batch.token_usage.get(token_key, 0)
 
             # 合并参与者 ID（取并集）
             state.all_participant_ids.update(batch.participant_ids)
