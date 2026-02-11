@@ -9,6 +9,7 @@ import asyncio
 import os
 import re
 from collections import Counter
+from datetime import datetime, timezone
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -35,6 +36,8 @@ from .src.utils.pdf_utils import PDFInstaller
 
 class QQGroupDailyAnalysis(Star):
     """QQ群日常分析插件主类"""
+
+    _TG_GROUP_REGISTRY_KV_KEY = "telegram_seen_groups_v1"
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -82,6 +85,7 @@ class QQGroupDailyAnalysis(Star):
             self.retry_manager,
             self.report_generator,
             self.html_render,
+            plugin_instance=self,
         )
 
         self._initialized = False
@@ -271,9 +275,137 @@ class QQGroupDailyAnalysis(Star):
             f"parts_count={len(message_parts)}"
         )
 
+        # Telegram: 记录已见群/话题，用于自动分析拉群回退
+        if self._is_telegram_event(event, platform_id):
+            try:
+                await self._upsert_telegram_group_registry(
+                    platform_id=platform_id,
+                    group_id=group_id,
+                    sender_id=sender_id,
+                    sender_name=sender_name,
+                    event_message_id=event_message_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[TEMP][TGRegistry][UpsertFailed] "
+                    f"platform_id={platform_id} group_id={group_id} error={e}"
+                )
+
         logger.debug(
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
+
+    @staticmethod
+    def _is_telegram_event(event: AstrMessageEvent, platform_id: str) -> bool:
+        """判断当前事件是否为 Telegram 平台。"""
+        platform_name = str(event.get_platform_name() or "").strip().lower()
+        if platform_name == "telegram":
+            return True
+        return str(platform_id or "").strip().lower().startswith("telegram")
+
+    async def _upsert_telegram_group_registry(
+        self,
+        platform_id: str,
+        group_id: str,
+        sender_id: str,
+        sender_name: str,
+        event_message_id: str,
+    ) -> None:
+        """更新 Telegram 已见群/话题注册表（KV）。"""
+        registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
+        if not isinstance(registry, dict):
+            registry = {}
+
+        platforms = registry.get("platforms")
+        if not isinstance(platforms, dict):
+            platforms = {}
+            registry["platforms"] = platforms
+
+        platform_key = str(platform_id).strip()
+        group_key = str(group_id).strip()
+
+        platform_map = platforms.get(platform_key)
+        if not isinstance(platform_map, dict):
+            platform_map = {}
+            platforms[platform_key] = platform_map
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        existed = group_key in platform_map and isinstance(
+            platform_map[group_key], dict
+        )
+        entry = platform_map.get(group_key)
+        if not isinstance(entry, dict):
+            entry = {}
+
+        first_seen = entry.get("first_seen")
+        if not isinstance(first_seen, str) or not first_seen:
+            first_seen = now_iso
+
+        entry.update(
+            {
+                "first_seen": first_seen,
+                "last_seen": now_iso,
+                "last_sender_id": str(sender_id),
+                "last_sender_name": str(sender_name),
+                "last_event_message_id": str(event_message_id),
+            }
+        )
+        platform_map[group_key] = entry
+
+        registry["updated_at"] = now_iso
+        await self.put_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, registry)
+
+        platform_targets = len(platform_map)
+        total_targets = sum(
+            len(groups) for groups in platforms.values() if isinstance(groups, dict)
+        )
+        logger.info(
+            "[TEMP][TGRegistry][Upsert] "
+            f"platform_id={platform_key} group_id={group_key} existed={existed} "
+            f"platform_targets={platform_targets} total_targets={total_targets} "
+            f"sender_id={sender_id} sender_name={sender_name}"
+        )
+
+    async def get_telegram_seen_group_ids(
+        self, platform_id: str | None = None
+    ) -> list[str]:
+        """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
+        registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
+        if not isinstance(registry, dict):
+            logger.info(
+                "[TEMP][TGRegistry][Read] invalid_registry_type, fallback_empty"
+            )
+            return []
+
+        platforms = registry.get("platforms")
+        if not isinstance(platforms, dict):
+            logger.info("[TEMP][TGRegistry][Read] no_platforms, fallback_empty")
+            return []
+
+        groups: set[str] = set()
+        if platform_id:
+            platform_map = platforms.get(str(platform_id).strip(), {})
+            if isinstance(platform_map, dict):
+                groups.update(
+                    str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                )
+        else:
+            for platform_map in platforms.values():
+                if not isinstance(platform_map, dict):
+                    continue
+                groups.update(
+                    str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                )
+
+        sorted_groups = sorted(groups)
+        preview = sorted_groups[:10]
+        logger.info(
+            "[TEMP][TGRegistry][Read] "
+            f"platform_id={platform_id or '*'} count={len(sorted_groups)} "
+            f"groups_preview={preview}"
+        )
+        return sorted_groups
 
     @staticmethod
     def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
