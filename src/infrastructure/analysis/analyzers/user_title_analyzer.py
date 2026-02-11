@@ -187,32 +187,36 @@ class UserTitleAnalyzer(BaseAnalyzer):
                     continue
 
                 # 分析用户特征 (此处已基于已清理的 stats)
-                night_messages = sum(stats["hours"][h] for h in range(6))
-                avg_chars = (
-                    stats["char_count"] / stats["message_count"]
-                    if stats["message_count"] > 0
-                    else 0
-                )
+                # 兼容性处理：优先使用 hours (dict)，如果没有则尝试从消息推断或使用空
+                hours_data = stats.get("hours")
+                if hours_data is None:
+                    # 尝试兼容旧 schema 或简化版
+                    active_hours = stats.get("active_hours", [])
+                    hours_data = dict.fromkeys(active_hours, 1)
 
+                # 安全计算夜间发言数
+                night_messages = sum(hours_data.get(h, 0) for h in range(6))
+
+                message_count = stats.get("message_count", 0)
+                if message_count <= 0:
+                    continue
+
+                avg_chars = stats.get("char_count", 0) / message_count
+
+                # 称号所需维度
                 user_summaries.append(
                     {
-                        "name": stats["nickname"],
+                        "name": stats.get("nickname", stats.get("name", user_id_str)),
                         "user_id": user_id_str,
-                        "message_count": stats["message_count"],
+                        "message_count": message_count,
                         "avg_chars": round(avg_chars, 1),
                         "emoji_ratio": round(
-                            stats["emoji_count"] / stats["message_count"], 2
-                        )
-                        if stats["message_count"] > 0
-                        else 0,
-                        "night_ratio": round(night_messages / stats["message_count"], 2)
-                        if stats["message_count"] > 0
-                        else 0,
+                            stats.get("emoji_count", 0) / message_count, 2
+                        ),
+                        "night_ratio": round(night_messages / message_count, 2),
                         "reply_ratio": round(
-                            stats["reply_count"] / stats["message_count"], 2
-                        )
-                        if stats["message_count"] > 0
-                        else 0,
+                            stats.get("reply_count", 0) / message_count, 2
+                        ),
                     }
                 )
 

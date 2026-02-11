@@ -250,9 +250,7 @@ class AnalysisApplicationService:
 
         if last_analyzed_ts > 0:
             unified_messages = [
-                msg
-                for msg in unified_messages
-                if msg.timestamp > last_analyzed_ts
+                msg for msg in unified_messages if msg.timestamp > last_analyzed_ts
             ]
 
         # 5. 检查最小消息阈值
@@ -282,7 +280,7 @@ class AnalysisApplicationService:
         # 7. LLM 增量分析（仅话题 + 金句）
         topics_per_batch = self.config_manager.get_incremental_topics_per_batch()
         quotes_per_batch = self.config_manager.get_incremental_quotes_per_batch()
-        
+
         # 获取功能开关状态
         topic_enabled = self.config_manager.get_topic_analysis_enabled()
         golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
@@ -295,15 +293,17 @@ class AnalysisApplicationService:
             f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         )
 
-        topics, golden_quotes, token_usage = (
-            await self.llm_analyzer.analyze_incremental_concurrent(
-                legacy_messages,
-                umo=unified_msg_origin,
-                topics_per_batch=topics_per_batch,
-                quotes_per_batch=quotes_per_batch,
-                topic_enabled=topic_enabled,
-                golden_quote_enabled=golden_quote_enabled,
-            )
+        (
+            topics,
+            golden_quotes,
+            token_usage,
+        ) = await self.llm_analyzer.analyze_incremental_concurrent(
+            legacy_messages,
+            umo=unified_msg_origin,
+            topics_per_batch=topics_per_batch,
+            quotes_per_batch=quotes_per_batch,
+            topic_enabled=topic_enabled,
+            golden_quote_enabled=golden_quote_enabled,
         )
 
         # 8. 构建 IncrementalBatch
@@ -441,9 +441,7 @@ class AnalysisApplicationService:
 
         # 3. 检查批次有效性
         if not batches:
-            logger.warning(
-                f"群 {group_id} 滑动窗口内无增量分析数据，无法生成最终报告"
-            )
+            logger.warning(f"群 {group_id} 滑动窗口内无增量分析数据，无法生成最终报告")
             return {"success": False, "reason": "no_incremental_data"}
 
         # 4. 合并批次为 IncrementalState
@@ -466,19 +464,18 @@ class AnalysisApplicationService:
             top_users = state.get_user_activity_ranking(max_user_titles)
 
             unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}"
-                if platform_id
-                else group_id
+                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
             try:
-                user_titles_result, title_token_usage = (
-                    await self.llm_analyzer.analyze_user_titles(
-                        messages=[],  # 增量模式下不传原始消息
-                        user_analysis=state.user_activities,
-                        umo=unified_msg_origin,
-                        top_users=top_users,
-                    )
+                (
+                    user_titles_result,
+                    title_token_usage,
+                ) = await self.llm_analyzer.analyze_user_titles(
+                    messages=[],  # 增量模式下不传原始消息
+                    user_analysis=state.user_activities,
+                    umo=unified_msg_origin,
+                    top_users=top_users,
                 )
                 user_titles = user_titles_result
 
@@ -579,11 +576,14 @@ class AnalysisApplicationService:
         result: dict[str, dict] = {}
         for user_id, stats in user_activity.items():
             result[user_id] = {
-                "name": stats.get("nickname", user_id),
+                "nickname": stats.get("nickname", user_id),
                 "message_count": stats.get("message_count", 0),
                 "char_count": stats.get("char_count", 0),
                 "emoji_count": stats.get("emoji_count", 0),
-                "active_hours": list(stats.get("hours", {}).keys()),
+                "reply_count": stats.get("reply_count", 0),
+                "hours": dict(
+                    stats.get("hours", {})
+                ),  # 这里的 hours 是 defaultdict(int)，转为 dict
                 "last_message_time": user_last_time.get(user_id, 0),
             }
 

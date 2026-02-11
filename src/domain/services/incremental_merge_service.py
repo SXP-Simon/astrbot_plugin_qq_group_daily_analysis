@@ -86,29 +86,46 @@ class IncrementalMergeService:
             for user_id, stats in batch.user_stats.items():
                 if user_id not in state.user_activities:
                     state.user_activities[user_id] = {
-                        "name": stats.get("name", user_id),
+                        "nickname": stats.get("nickname", stats.get("name", user_id)),
                         "message_count": 0,
                         "char_count": 0,
                         "emoji_count": 0,
-                        "active_hours": [],
+                        "reply_count": 0,
+                        "hours": {},
                         "last_message_time": 0,
                     }
                 existing = state.user_activities[user_id]
                 existing["message_count"] += stats.get("message_count", 0)
                 existing["char_count"] += stats.get("char_count", 0)
                 existing["emoji_count"] += stats.get("emoji_count", 0)
-                # 合并活跃小时（去重）
-                existing_hours = set(existing.get("active_hours", []))
-                existing_hours.update(stats.get("active_hours", []))
-                existing["active_hours"] = list(existing_hours)
+                existing["reply_count"] += stats.get("reply_count", 0)
+
+                # 合并每小时统计
+                # 兼容旧版本 (active_hours 是 list) 和新版本 (hours 是 dict)
+                batch_hours = stats.get("hours", {})
+                if isinstance(batch_hours, dict):
+                    # 现代 schema: hours 是 dict {hour: count}
+                    for h_str, h_count in batch_hours.items():
+                        h_int = int(h_str)
+                        existing["hours"][h_int] = (
+                            existing["hours"].get(h_int, 0) + h_count
+                        )
+                else:
+                    # 兼容旧 schema: 只有 active_hours (list)
+                    active_hours = stats.get("active_hours", [])
+                    for h in active_hours:
+                        h_int = int(h)
+                        existing["hours"][h_int] = existing["hours"].get(h_int, 0) + 1
+
                 # 取最后消息时间的较大值
                 batch_last = stats.get("last_message_time", 0)
                 if batch_last > existing.get("last_message_time", 0):
                     existing["last_message_time"] = batch_last
+
                 # 更新昵称（使用最新批次的昵称）
-                name = stats.get("name", "")
-                if name:
-                    existing["name"] = name
+                nickname = stats.get("nickname", stats.get("name", ""))
+                if nickname:
+                    existing["nickname"] = nickname
 
             # 合并表情统计（按键累加）
             for emoji_key, count in batch.emoji_stats.items():

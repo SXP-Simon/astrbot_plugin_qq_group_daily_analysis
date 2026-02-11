@@ -78,6 +78,7 @@ class QQGroupDailyAnalysis(Star):
             self.analysis_service,
             self.bot_manager,
             self.retry_manager,
+            self.report_generator,
             self.html_render,
         )
 
