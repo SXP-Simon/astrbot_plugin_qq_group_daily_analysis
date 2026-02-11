@@ -13,7 +13,6 @@ KV 键设计：
   值: int (epoch timestamp)
 """
 
-import time
 from typing import Any
 
 from ...domain.entities.incremental_state import IncrementalBatch
@@ -131,10 +130,12 @@ class IncrementalStore:
 
             # 2. 更新索引
             index = await self._get_index(group_id)
-            index.append({
-                "batch_id": batch.batch_id,
-                "timestamp": batch.timestamp,
-            })
+            index.append(
+                {
+                    "batch_id": batch.batch_id,
+                    "timestamp": batch.timestamp,
+                }
+            )
             await self._save_index(group_id, index)
 
             logger.debug(
@@ -173,7 +174,8 @@ class IncrementalStore:
 
         # 筛选在窗口范围内的批次
         matching_entries = [
-            entry for entry in index
+            entry
+            for entry in index
             if window_start <= entry.get("timestamp", 0) <= window_end
         ]
 
@@ -247,22 +249,16 @@ class IncrementalStore:
         key = self._last_ts_key(group_id)
         try:
             await self.plugin.put_kv_data(key, timestamp)
-            logger.debug(
-                f"更新最后分析时间戳: 群 {group_id}, ts={timestamp}"
-            )
+            logger.debug(f"更新最后分析时间戳: 群 {group_id}, ts={timestamp}")
         except Exception as e:
-            logger.error(
-                f"更新最后分析时间戳失败 (Key: {key}): {e}", exc_info=True
-            )
+            logger.error(f"更新最后分析时间戳失败 (Key: {key}): {e}", exc_info=True)
             raise
 
     # ================================================================
     # 过期批次清理
     # ================================================================
 
-    async def cleanup_old_batches(
-        self, group_id: str, before_timestamp: float
-    ) -> int:
+    async def cleanup_old_batches(self, group_id: str, before_timestamp: float) -> int:
         """
         清理指定群中早于给定时间戳的所有批次。
 
@@ -337,9 +333,7 @@ class IncrementalStore:
         index = await self._get_index(group_id)
         return len(index)
 
-    async def get_all_batch_summaries(
-        self, group_id: str
-    ) -> list[dict]:
+    async def get_all_batch_summaries(self, group_id: str) -> list[dict]:
         """
         获取指定群所有批次的摘要信息（不加载完整数据）。
 
@@ -355,4 +349,3 @@ class IncrementalStore:
         # 按时间戳升序排列
         index.sort(key=lambda x: x.get("timestamp", 0))
         return index
-

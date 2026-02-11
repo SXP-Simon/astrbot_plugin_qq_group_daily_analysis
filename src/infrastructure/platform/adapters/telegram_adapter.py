@@ -52,7 +52,7 @@ class TelegramAdapter(PlatformAdapter):
     def __init__(self, bot_instance: Any, config: dict | None = None):
         super().__init__(bot_instance, config)
         self._cached_client: ExtBot | None = None
-        self._context: "Context | None" = None
+        self._context: Context | None = None
 
         # 机器人自身 ID（用于消息过滤）
         self.bot_user_id = str(config.get("bot_user_id", "")) if config else ""
@@ -610,15 +610,15 @@ class TelegramAdapter(PlatformAdapter):
                         # 格式: https://api.telegram.org/file/bot<token>/<file_path>
                         # python-telegram-bot 的 File.file_path 属性通常只返回路径部分
                         # 需要手动拼接或使用 instance.file.file_path (取决于版本)
-                        
+
                         file_path = file.file_path
                         if file_path.startswith("http"):
                             return file_path
-                        
+
                         # 尝试构建完整 URL
                         if hasattr(client, "token"):
                             return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
-                        
+
                         # 如果无法获取 token，返回 None
                         return None
             return None
@@ -655,10 +655,10 @@ class TelegramAdapter(PlatformAdapter):
                     file_path = file.file_path
                     if file_path.startswith("http"):
                         return file_path
-                    
+
                     if hasattr(client, "token"):
                         return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
-                    
+
                     return None
             return None
         except Exception as e:

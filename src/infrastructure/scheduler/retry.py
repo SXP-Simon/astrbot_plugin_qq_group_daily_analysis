@@ -179,17 +179,26 @@ class RetryManager:
                     # 本地文件路径
                     try:
                         import os
+
                         if os.path.exists(image_data):
                             with open(image_data, "rb") as f:
                                 image_data = f.read()
-                            
+
                             # 校验文件头 (防御性编程，避免发送错误文本)
-                            if not image_data.startswith(b"\xff\xd8") and not image_data.startswith(b"\x89PNG"):
-                                if len(image_data) < 1024 and (b"Error" in image_data or b"Exception" in image_data):
-                                    logger.error(f"[RetryManager] 渲染器生成了错误文件而非图片: {image_data.decode('utf-8', errors='ignore')}")
+                            if not image_data.startswith(
+                                b"\xff\xd8"
+                            ) and not image_data.startswith(b"\x89PNG"):
+                                if len(image_data) < 1024 and (
+                                    b"Error" in image_data or b"Exception" in image_data
+                                ):
+                                    logger.error(
+                                        f"[RetryManager] 渲染器生成了错误文件而非图片: {image_data.decode('utf-8', errors='ignore')}"
+                                    )
                                     return False
                         else:
-                            logger.error(f"[RetryManager] 渲染器返回的路径不存在: {image_data}")
+                            logger.error(
+                                f"[RetryManager] 渲染器返回的路径不存在: {image_data}"
+                            )
                             image_data = None
                     except Exception as e:
                         logger.error(f"[RetryManager] 读取本地图片失败: {e}")
