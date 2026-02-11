@@ -63,11 +63,13 @@ class IncrementalBatch:
     golden_quotes: list[dict] = field(default_factory=list)
 
     # Token 消耗
-    token_usage: dict = field(default_factory=lambda: {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    })
+    token_usage: dict = field(
+        default_factory=lambda: {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+    )
 
     # 增量追踪
     last_message_timestamp: int = 0
@@ -107,11 +109,14 @@ class IncrementalBatch:
             emoji_stats=data.get("emoji_stats", {}),
             topics=data.get("topics", []),
             golden_quotes=data.get("golden_quotes", []),
-            token_usage=data.get("token_usage", {
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            }),
+            token_usage=data.get(
+                "token_usage",
+                {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            ),
             last_message_timestamp=data.get("last_message_timestamp", 0),
             participant_ids=data.get("participant_ids", []),
         )
@@ -179,11 +184,13 @@ class IncrementalState:
     total_message_count: int = 0
     total_character_count: int = 0
     total_analysis_count: int = 0
-    total_token_usage: dict = field(default_factory=lambda: {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-    })
+    total_token_usage: dict = field(
+        default_factory=lambda: {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+    )
 
     # 增量跟踪
     last_analyzed_message_timestamp: int = 0
@@ -237,12 +244,14 @@ class IncrementalState:
         """
         users = []
         for user_id, data in self.user_activities.items():
-            users.append({
-                "user_id": user_id,
-                "name": data.get("name", user_id),
-                "message_count": data.get("message_count", 0),
-                "char_count": data.get("char_count", 0),
-            })
+            users.append(
+                {
+                    "user_id": user_id,
+                    "name": data.get("name", user_id),
+                    "message_count": data.get("message_count", 0),
+                    "char_count": data.get("char_count", 0),
+                }
+            )
         users.sort(key=lambda x: x["message_count"], reverse=True)
         return users[:top_n]
 

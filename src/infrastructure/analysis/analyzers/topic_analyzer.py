@@ -353,12 +353,14 @@ class TopicAnalyzer(BaseAnalyzer):
             # 后处理：contributors 此时包含的是 ID，需要映射回昵称
             for topic in topics:
                 raw_ids = topic.contributors  # LLM 返回的是 ID 列表
-                
+
                 # 填充 contributor_ids
                 # 过滤掉非数字的脏数据 (LLM 偶尔会发疯)
-                valid_ids = [str(uid).strip() for uid in raw_ids if str(uid).strip().isdigit()]
+                valid_ids = [
+                    str(uid).strip() for uid in raw_ids if str(uid).strip().isdigit()
+                ]
                 topic.contributor_ids = valid_ids
-                
+
                 # 映射回昵称用于显示
                 resolved_names = []
                 for uid in valid_ids:
@@ -370,9 +372,9 @@ class TopicAnalyzer(BaseAnalyzer):
                         if uid in bot_ids:
                             name = "Bot"
                         else:
-                            name = uid # Fallback to ID
+                            name = uid  # Fallback to ID
                     resolved_names.append(name)
-                
+
                 topic.contributors = resolved_names
 
             return topics, usage
