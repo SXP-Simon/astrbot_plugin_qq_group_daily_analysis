@@ -188,12 +188,8 @@ class QQGroupDailyAnalysis(Star):
             raise ValueError(f"群 {group_id}: 无法获取发送者 ID，拒绝存储消息")
         sender_id = str(sender_id)
 
-        # 3. 获取发送者名称（必需）
-        sender_name = event.get_sender_name()
-        if not sender_name:
-            raise ValueError(
-                f"群 {group_id}: 无法获取发送者名称 (sender_id={sender_id})，拒绝存储消息"
-            )
+        # 3. 获取发送者名称（昵称优先，必要时回退）
+        sender_name = self._resolve_sender_name(event, sender_id)
 
         # 4. 获取平台 ID（必需）
         platform_id = event.get_platform_id()
@@ -207,8 +203,55 @@ class QQGroupDailyAnalysis(Star):
                 f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
             )
 
-        # 6. 存储到数据库
-        await self.context.message_history_manager.insert(
+        # 6. 临时调试日志：打印入库前关键信息
+        message_types = []
+        for part in message_parts:
+            if isinstance(part, dict):
+                message_types.append(str(part.get("type", "unknown")))
+
+        preview_parts: list[str] = []
+        for part in message_parts:
+            if not isinstance(part, dict):
+                continue
+
+            part_type = str(part.get("type", "unknown"))
+            if part_type in ("plain", "text"):
+                text = str(part.get("text", "")).strip()
+                if text:
+                    preview_parts.append(text)
+            elif part_type == "at":
+                target = str(
+                    part.get("target_id")
+                    or part.get("qq")
+                    or part.get("at_user_id")
+                    or ""
+                ).strip()
+                preview_parts.append(f"@{target}" if target else "@")
+            elif part_type == "image":
+                url = str(part.get("url", "")).strip()
+                preview_parts.append(f"[image]{url}" if url else "[image]")
+            else:
+                preview_parts.append(f"[{part_type}]")
+
+        preview_text = " ".join(preview_parts).strip()
+        if len(preview_text) > 300:
+            preview_text = preview_text[:300] + "...(truncated)"
+
+        msg_obj = getattr(event, "message_obj", None)
+        event_message_id = str(getattr(msg_obj, "message_id", "") or "")
+        unified_msg_origin = str(getattr(event, "unified_msg_origin", "") or "")
+
+        logger.info(
+            "[TEMP][HistoryStore][BeforeInsert] "
+            f"platform_id={platform_id} group_id={group_id} "
+            f"sender_id={sender_id} sender_name={sender_name} "
+            f"event_message_id={event_message_id} unified_msg_origin={unified_msg_origin} "
+            f"parts_count={len(message_parts)} part_types={message_types} "
+            f"content_preview={preview_text}"
+        )
+
+        # 7. 存储到数据库
+        insert_result = await self.context.message_history_manager.insert(
             platform_id=platform_id,
             user_id=group_id,
             content={"type": "user", "message": message_parts},
@@ -216,9 +259,102 @@ class QQGroupDailyAnalysis(Star):
             sender_name=sender_name,
         )
 
+        record_id = str(getattr(insert_result, "id", "") or "")
+        created_at = getattr(insert_result, "created_at", None)
+        logger.info(
+            "[TEMP][HistoryStore][AfterInsert] "
+            f"record_id={record_id} created_at={created_at} "
+            f"platform_id={platform_id} group_id={group_id} "
+            f"sender_id={sender_id} sender_name={sender_name} "
+            f"parts_count={len(message_parts)}"
+        )
+
         logger.debug(
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
+
+    @staticmethod
+    def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
+        """判断 sender_name 是否为空或占位值。"""
+        if not name:
+            return True
+        normalized = str(name).strip()
+        if not normalized:
+            return True
+        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
+            return True
+        return normalized == str(sender_id).strip()
+
+    def _resolve_sender_name(self, event: AstrMessageEvent, sender_id: str) -> str:
+        """
+        解析发送者展示名。
+
+        优先级：
+        - Telegram:
+          1. raw_message.from_user.full_name
+          2. raw_message.from_user.first_name
+          3. event.get_sender_name() / message_obj.sender.nickname
+          4. raw_message.from_user.username
+          5. sender_id
+        - 其他平台：
+          1. event.get_sender_name()
+          2. message_obj.sender.nickname
+          3. raw_message.from_user.full_name / first_name / username
+          4. sender_id（最终回退，避免消息丢失）
+        """
+        platform_name = str(event.get_platform_name() or "").lower()
+        candidates: list[str | None] = []
+
+        msg_obj = getattr(event, "message_obj", None)
+        sender_obj = getattr(msg_obj, "sender", None)
+        raw_message = getattr(msg_obj, "raw_message", None)
+        raw_msg_obj = getattr(raw_message, "message", raw_message)
+        from_user = getattr(raw_msg_obj, "from_user", None)
+
+        # Telegram 特殊策略：优先显示名，不优先 username
+        if platform_name == "telegram":
+            if from_user is not None:
+                full_name = getattr(from_user, "full_name", None)
+                first_name = getattr(from_user, "first_name", None)
+                username = getattr(from_user, "username", None)
+                logger.info(
+                    "[TEMP][SenderNameRaw] "
+                    f"sender_id={sender_id} full_name={full_name} "
+                    f"first_name={first_name} username={username} "
+                    f"event_sender_name={event.get_sender_name()}"
+                )
+                candidates.extend([full_name, first_name])
+
+            candidates.append(event.get_sender_name())
+            if sender_obj is not None:
+                candidates.append(getattr(sender_obj, "nickname", None))
+
+            if from_user is not None:
+                candidates.append(getattr(from_user, "username", None))
+        else:
+            candidates.append(event.get_sender_name())
+            if sender_obj is not None:
+                candidates.append(getattr(sender_obj, "nickname", None))
+
+        if from_user is not None:
+            candidates.extend(
+                [
+                    getattr(from_user, "full_name", None),
+                    getattr(from_user, "first_name", None),
+                    getattr(from_user, "username", None),
+                ]
+            )
+
+        for candidate in candidates:
+            name = str(candidate or "").strip()
+            if not self._is_placeholder_sender_name(name, sender_id):
+                return name
+
+        logger.warning(
+            f"[HistoryStore] 无法解析昵称，回退为 sender_id: {sender_id} "
+            f"(platform={event.get_platform_id()})"
+        )
+        return sender_id
 
     def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict]:
         """
@@ -252,10 +388,18 @@ class QQGroupDailyAnalysis(Star):
 
                 elif seg_type in ("At", "at"):
                     target = getattr(seg, "target", None)
+                    if target is None:
+                        target = getattr(seg, "qq", None)
                     if target is None and hasattr(seg, "data"):
                         target = seg.data.get("qq") or seg.data.get("target")
                     if target:
-                        message_parts.append({"type": "at", "target_id": str(target)})
+                        message_parts.append(
+                            {
+                                "type": "at",
+                                "target_id": str(target),
+                                "name": str(getattr(seg, "name", "") or ""),
+                            }
+                        )
 
         # 如果没有从消息链提取到内容，尝试使用 message_str
         if not message_parts and event.message_str:
