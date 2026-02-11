@@ -125,17 +125,17 @@ async def debug_render(
         SummaryTopic(
             topic="关于AstrBot插件开发的讨论",
             contributors=["张三", "李四", "王五"],
-            detail="大家深入探讨了如何利用Jinja2模板渲染出精美的分析报告，并分享了调试技巧。",
+            detail="大家深入探讨了专家 [123456789] 提到的如何利用Jinja2模板渲染出精美的分析报告，[987654321] 也分享了调试技巧。",
         ),
         SummaryTopic(
             topic="午餐吃什么的终极哲学问题",
             contributors=["赵六", "孙七"],
-            detail="群友们就黄焖鸡米饭和螺蛳粉的优劣进行了长达一小时的辩论，最终未能达成共识。",
+            detail="[112233445] 提议去吃黄焖鸡，但群友对螺蛳粉的优劣进行了长达一小时的辩论，最终未能达成共识。",
         ),
         SummaryTopic(
             topic="新出的3A大作测评",
             contributors=["周八", "吴九"],
-            detail="分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
         ),
     ]
 
@@ -193,6 +193,11 @@ async def debug_render(
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles,
+        "user_analysis": {
+            "123456789": {"nickname": "张三"},
+            "987654321": {"nickname": "李四"},
+            "112233445": {"nickname": "潜水员"},
+        },
         "analysis_date": "2026年02月11日",
         "group_id": "123456",
         "group_name": "测试群组",
