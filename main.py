@@ -89,6 +89,7 @@ class QQGroupDailyAnalysis(Star):
         )
 
         self._initialized = False
+        self._tg_registry_lock: asyncio.Lock | None = None
         # 异步注册任务，处理插件重载情况
         asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
 
@@ -303,6 +304,12 @@ class QQGroupDailyAnalysis(Star):
             return True
         return str(platform_id or "").strip().lower().startswith("telegram")
 
+    def _get_tg_registry_lock(self) -> asyncio.Lock:
+        """懒加载 Telegram 群/话题注册表锁，避免并发读改写覆盖。"""
+        if self._tg_registry_lock is None:
+            self._tg_registry_lock = asyncio.Lock()
+        return self._tg_registry_lock
+
     async def _upsert_telegram_group_registry(
         self,
         platform_id: str,
@@ -312,100 +319,104 @@ class QQGroupDailyAnalysis(Star):
         event_message_id: str,
     ) -> None:
         """更新 Telegram 已见群/话题注册表（KV）。"""
-        registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
-        if not isinstance(registry, dict):
-            registry = {}
+        lock = self._get_tg_registry_lock()
+        async with lock:
+            registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
+            if not isinstance(registry, dict):
+                registry = {}
 
-        platforms = registry.get("platforms")
-        if not isinstance(platforms, dict):
-            platforms = {}
-            registry["platforms"] = platforms
+            platforms = registry.get("platforms")
+            if not isinstance(platforms, dict):
+                platforms = {}
+                registry["platforms"] = platforms
 
-        platform_key = str(platform_id).strip()
-        group_key = str(group_id).strip()
+            platform_key = str(platform_id).strip()
+            group_key = str(group_id).strip()
 
-        platform_map = platforms.get(platform_key)
-        if not isinstance(platform_map, dict):
-            platform_map = {}
-            platforms[platform_key] = platform_map
+            platform_map = platforms.get(platform_key)
+            if not isinstance(platform_map, dict):
+                platform_map = {}
+                platforms[platform_key] = platform_map
 
-        now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
 
-        existed = group_key in platform_map and isinstance(
-            platform_map[group_key], dict
-        )
-        entry = platform_map.get(group_key)
-        if not isinstance(entry, dict):
-            entry = {}
+            existed = group_key in platform_map and isinstance(
+                platform_map[group_key], dict
+            )
+            entry = platform_map.get(group_key)
+            if not isinstance(entry, dict):
+                entry = {}
 
-        first_seen = entry.get("first_seen")
-        if not isinstance(first_seen, str) or not first_seen:
-            first_seen = now_iso
+            first_seen = entry.get("first_seen")
+            if not isinstance(first_seen, str) or not first_seen:
+                first_seen = now_iso
 
-        entry.update(
-            {
-                "first_seen": first_seen,
-                "last_seen": now_iso,
-                "last_sender_id": str(sender_id),
-                "last_sender_name": str(sender_name),
-                "last_event_message_id": str(event_message_id),
-            }
-        )
-        platform_map[group_key] = entry
+            entry.update(
+                {
+                    "first_seen": first_seen,
+                    "last_seen": now_iso,
+                    "last_sender_id": str(sender_id),
+                    "last_sender_name": str(sender_name),
+                    "last_event_message_id": str(event_message_id),
+                }
+            )
+            platform_map[group_key] = entry
 
-        registry["updated_at"] = now_iso
-        await self.put_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, registry)
+            registry["updated_at"] = now_iso
+            await self.put_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, registry)
 
-        platform_targets = len(platform_map)
-        total_targets = sum(
-            len(groups) for groups in platforms.values() if isinstance(groups, dict)
-        )
-        logger.info(
-            "[TEMP][TGRegistry][Upsert] "
-            f"platform_id={platform_key} group_id={group_key} existed={existed} "
-            f"platform_targets={platform_targets} total_targets={total_targets} "
-            f"sender_id={sender_id} sender_name={sender_name}"
-        )
+            platform_targets = len(platform_map)
+            total_targets = sum(
+                len(groups) for groups in platforms.values() if isinstance(groups, dict)
+            )
+            logger.info(
+                "[TEMP][TGRegistry][Upsert] "
+                f"platform_id={platform_key} group_id={group_key} existed={existed} "
+                f"platform_targets={platform_targets} total_targets={total_targets} "
+                f"sender_id={sender_id} sender_name={sender_name}"
+            )
 
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
     ) -> list[str]:
         """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
-        registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
-        if not isinstance(registry, dict):
+        lock = self._get_tg_registry_lock()
+        async with lock:
+            registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
+            if not isinstance(registry, dict):
+                logger.info(
+                    "[TEMP][TGRegistry][Read] invalid_registry_type, fallback_empty"
+                )
+                return []
+
+            platforms = registry.get("platforms")
+            if not isinstance(platforms, dict):
+                logger.info("[TEMP][TGRegistry][Read] no_platforms, fallback_empty")
+                return []
+
+            groups: set[str] = set()
+            if platform_id:
+                platform_map = platforms.get(str(platform_id).strip(), {})
+                if isinstance(platform_map, dict):
+                    groups.update(
+                        str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                    )
+            else:
+                for platform_map in platforms.values():
+                    if not isinstance(platform_map, dict):
+                        continue
+                    groups.update(
+                        str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                    )
+
+            sorted_groups = sorted(groups)
+            preview = sorted_groups[:10]
             logger.info(
-                "[TEMP][TGRegistry][Read] invalid_registry_type, fallback_empty"
+                "[TEMP][TGRegistry][Read] "
+                f"platform_id={platform_id or '*'} count={len(sorted_groups)} "
+                f"groups_preview={preview}"
             )
-            return []
-
-        platforms = registry.get("platforms")
-        if not isinstance(platforms, dict):
-            logger.info("[TEMP][TGRegistry][Read] no_platforms, fallback_empty")
-            return []
-
-        groups: set[str] = set()
-        if platform_id:
-            platform_map = platforms.get(str(platform_id).strip(), {})
-            if isinstance(platform_map, dict):
-                groups.update(
-                    str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
-                )
-        else:
-            for platform_map in platforms.values():
-                if not isinstance(platform_map, dict):
-                    continue
-                groups.update(
-                    str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
-                )
-
-        sorted_groups = sorted(groups)
-        preview = sorted_groups[:10]
-        logger.info(
-            "[TEMP][TGRegistry][Read] "
-            f"platform_id={platform_id or '*'} count={len(sorted_groups)} "
-            f"groups_preview={preview}"
-        )
-        return sorted_groups
+            return sorted_groups
 
     @staticmethod
     def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
