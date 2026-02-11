@@ -11,4 +11,3 @@ data/cmd_config.json
 data/t2i_templates/astrbot_powershell.html
 data/t2i_templates/base.html
 .sisyphus/
-group-insight-main/
