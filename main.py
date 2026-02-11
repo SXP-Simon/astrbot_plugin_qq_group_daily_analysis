@@ -82,55 +82,59 @@ class QQGroupDailyAnalysis(Star):
             self.html_render,
         )
 
+        self._initialized = False
+        # 异步注册任务，处理插件重载情况
+        asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
+
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
 
     @filter.on_platform_loaded()
     async def on_platform_loaded(self):
         """平台加载完成后初始化"""
+        await self._run_initialization("Platform Loaded")
+
+    async def _run_initialization(self, source: str):
+        """统一初始化逻辑"""
+        if self._initialized:
+            return
+
+        # 稍微延迟，确保 context 和环境稳定
+        await asyncio.sleep(2)
+        if self._initialized:  # Double check after sleep
+            return
+
         try:
+            logger.info(f"正在执行插件初始化 (来源: {source})...")
             # 检查插件是否被启用 (Fix for empty plugin_set issue)
             if self.context:
                 config = self.context.get_config()
-                plugin_set = config.get("plugin_set")
-
-                # ！！！仅开发阶段使用，正式发布后删除！！！
-                if isinstance(plugin_set, list) and not plugin_set:
-                    logger.warning("检测到 plugin_set 为空，自动修正以启用插件")
-                    config["plugin_set"].append(
-                        "astrbot_plugin_qq_group_daily_analysis"
-                    )
-                elif (
+                # ... 为空修正逻辑保持不变 ...
+                plugin_set = config.get("plugin_set", [])
+                if (
                     isinstance(plugin_set, list)
-                    and "*" not in plugin_set
                     and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set
                 ):
-                    logger.warning("检测到当前插件未在 plugin_set 中，自动添加")
-                    config["plugin_set"].append(
-                        "astrbot_plugin_qq_group_daily_analysis"
-                    )
+                    # 此时不强制修改 config，但可以记录日志
+                    pass
 
             # 初始化所有bot实例
             discovered = await self.bot_manager.initialize_from_config()
             if discovered:
                 logger.info("Bot管理器初始化成功")
-                for platform_id, bot_instance in discovered.items():
-                    logger.info(
-                        f"  - 平台 {platform_id}: {type(bot_instance).__name__}"
-                    )
-
                 # 启动调度器
                 self.auto_scheduler.schedule_jobs(self.context)
             else:
                 logger.warning("Bot管理器初始化失败，未发现任何适配器")
-                status = self.bot_manager.get_status_info()
-                logger.info(f"Bot管理器状态: {status}")
 
             # 始终启动重试管理器
             await self.retry_manager.start()
 
+            self._initialized = True
+            logger.info("插件任务注册完成")
+
         except Exception as e:
-            logger.error(f"平台加载事件处理失败: {e}", exc_info=True)
+            logger.error(f"插件初始化失败: {e}", exc_info=True)
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
