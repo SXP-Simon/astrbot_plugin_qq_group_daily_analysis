@@ -62,11 +62,19 @@ class ConfigManager:
         target = str(group_id_or_umo)
 
         target_simple_id = target.split(":")[-1] if ":" in target else target
+        target_parent_id = (
+            target_simple_id.split("#", 1)[0]
+            if "#" in target_simple_id
+            else target_simple_id
+        )
 
         def _is_match(item: str, target: str, target_simple_id: str) -> bool:
             if ":" in item:
                 return item == target
-            return item == target_simple_id
+            if item == target_simple_id:
+                return True
+            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
+            return "#" in target_simple_id and item == target_parent_id
 
         is_in_list = any(_is_match(item, target, target_simple_id) for item in glist)
 

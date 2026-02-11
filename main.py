@@ -919,7 +919,13 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
 
         elif action == "test":
-            if not self.config_manager.is_group_allowed(group_id):
+            check_target = getattr(event, "unified_msg_origin", None)
+            if not check_target:
+                check_target = (
+                    f"{self._get_platform_id_from_event(event)}:GroupMessage:{group_id}"
+                )
+
+            if not self.config_manager.is_group_allowed(check_target):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
                 return
 
