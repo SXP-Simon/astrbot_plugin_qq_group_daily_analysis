@@ -68,15 +68,37 @@ class ConfigManager:
             else target_simple_id
         )
 
-        def _is_match(item: str, target: str, target_simple_id: str) -> bool:
+        def _is_match(
+            item: str,
+            target: str,
+            target_simple_id: str,
+            target_parent_id: str,
+        ) -> bool:
             if ":" in item:
-                return item == target
+                if item == target:
+                    return True
+
+                # 允许 Telegram 话题会话通过“父 UMO”命中，
+                # 例如: item=telegram2:GroupMessage:-1001
+                #      target=telegram2:GroupMessage:-1001#2264
+                if "#" in target_simple_id:
+                    if ":" not in target:
+                        return False
+                    item_prefix, item_tail = item.rsplit(":", 1)
+                    target_prefix, _ = target.rsplit(":", 1)
+                    return (
+                        item_prefix == target_prefix and item_tail == target_parent_id
+                    )
+                return False
             if item == target_simple_id:
                 return True
             # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
             return "#" in target_simple_id and item == target_parent_id
 
-        is_in_list = any(_is_match(item, target, target_simple_id) for item in glist)
+        is_in_list = any(
+            _is_match(item, target, target_simple_id, target_parent_id)
+            for item in glist
+        )
 
         if mode == "whitelist":
             return is_in_list
