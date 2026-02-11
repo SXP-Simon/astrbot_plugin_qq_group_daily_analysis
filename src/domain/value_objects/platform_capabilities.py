@@ -165,12 +165,14 @@ ONEBOT_V11_CAPABILITIES = PlatformCapabilities(
 TELEGRAM_CAPABILITIES = PlatformCapabilities(
     platform_name="telegram",
     platform_version="bot_api_7.x",
-    supports_message_history=False,
-    max_message_history_days=0,
-    max_message_count=0,
+    # 通过 PlatformMessageHistoryManager + 消息拦截器支持历史读取
+    supports_message_history=True,
+    max_message_history_days=7,
+    max_message_count=1000,
     supports_group_list=False,
     supports_group_info=True,
     supports_member_list=True,
+    supports_member_info=True,
     supports_text_message=True,
     supports_image_message=True,
     supports_file_message=True,
