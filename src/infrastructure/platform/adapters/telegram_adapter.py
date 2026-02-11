@@ -5,6 +5,7 @@ Telegram 平台适配器
 通过 AstrBot 的 message_history_manager 存储和读取消息历史。
 """
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -130,20 +131,17 @@ class TelegramAdapter(PlatformAdapter):
         before_id: str | None = None,
     ) -> list[UnifiedMessage]:
         """
-        获取历史消息
+        获取历史消息。
 
         从 AstrBot 的 message_history_manager 读取存储的消息。
-        消息需要事先通过拦截器存储到数据库。
         """
         if not self._context:
             logger.warning("[Telegram] 未设置 context，无法获取消息历史")
             return []
 
         try:
-            # 从 message_history_manager 获取消息
             history_mgr = self._context.message_history_manager
 
-            # 获取平台 ID（从 bot 实例获取）
             platform_id = self._get_platform_id()
             before_id_int: int | None = None
             if before_id:
@@ -152,72 +150,92 @@ class TelegramAdapter(PlatformAdapter):
                 except (TypeError, ValueError):
                     logger.warning(f"[Telegram] before_id invalid: {before_id}")
 
-            # 获取消息历史
-            history_records = await history_mgr.get(
-                platform_id=platform_id,
-                user_id=group_id,
-                page=1,
-                page_size=max_count,
-            )
-
-            if not history_records:
-                logger.info(
-                    f"[Telegram] 群 {group_id} 没有存储的消息。"
-                    f"提示：消息需要通过拦截器实时存储。"
-                )
-                return []
-
-            # 时间过滤（数据库时间为 UTC aware）
             cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+            target_count = max(1, int(max_count))
+            page_size = target_count
+            current_page = 1
 
-            messages = []
+            messages: list[UnifiedMessage] = []
             sender_name_cache: dict[str, str] = {}
-            # 先用本批历史记录中已有的有效昵称预热缓存，减少额外 API 请求
-            for record in history_records:
-                sender_id = str(getattr(record, "sender_id", "") or "").strip()
-                sender_name = str(getattr(record, "sender_name", "") or "").strip()
-                if sender_id and not self._is_placeholder_sender_name(
-                    sender_name, sender_id
-                ):
-                    sender_name_cache[sender_id] = sender_name
+            total_records_loaded = 0
 
-            for record in history_records:
-                # before_id 过滤，仅保留更早的记录
-                if before_id_int is not None:
-                    try:
-                        if int(record.id) >= before_id_int:
-                            continue
-                    except (TypeError, ValueError):
-                        pass
+            while len(messages) < target_count:
+                history_records = await history_mgr.get(
+                    platform_id=platform_id,
+                    user_id=group_id,
+                    page=current_page,
+                    page_size=page_size,
+                )
+                if not history_records:
+                    if current_page == 1:
+                        logger.info(
+                            f"[Telegram] 群 {group_id} 没有存储的消息。"
+                            f"提示：消息需要通过拦截器实时存储。"
+                        )
+                    break
 
-                # 检查时间
-                record_time = getattr(record, "created_at", None)
-                if not record_time:
-                    continue
-                if record_time.tzinfo is None:
-                    record_time = record_time.replace(tzinfo=timezone.utc)
-                if record_time < cutoff_time:
-                    continue
+                total_records_loaded += len(history_records)
 
-                # 转换为 UnifiedMessage
-                msg = self._convert_history_record(record, group_id)
-                if msg:
+                # 先用当前页已有的有效昵称预热缓存，减少额外 API 请求
+                for record in history_records:
+                    sender_id = str(getattr(record, "sender_id", "") or "").strip()
+                    sender_name = str(getattr(record, "sender_name", "") or "").strip()
+                    if sender_id and not self._is_placeholder_sender_name(
+                        sender_name, sender_id
+                    ):
+                        sender_name_cache[sender_id] = sender_name
+
+                oldest_record_time: datetime | None = None
+                for record in history_records:
+                    if before_id_int is not None:
+                        try:
+                            if int(record.id) >= before_id_int:
+                                continue
+                        except (TypeError, ValueError):
+                            pass
+
+                    record_time = getattr(record, "created_at", None)
+                    if not record_time:
+                        continue
+                    if record_time.tzinfo is None:
+                        record_time = record_time.replace(tzinfo=timezone.utc)
+                    if oldest_record_time is None or record_time < oldest_record_time:
+                        oldest_record_time = record_time
+                    if record_time < cutoff_time:
+                        continue
+
+                    msg = self._convert_history_record(record, group_id)
+                    if not msg:
+                        continue
+
                     # 过滤机器人自己的消息
                     if self.bot_user_id and msg.sender_id == self.bot_user_id:
                         continue
                     if msg.sender_id in self.bot_self_ids:
                         continue
+
                     msg = await self._fix_sender_name_if_needed(
                         group_id, msg, sender_name_cache
                     )
                     messages.append(msg)
+                    if len(messages) >= target_count:
+                        break
+
+                # 下一页一定更旧，若当前页最旧记录已越过时间窗口则可提前停止
+                if oldest_record_time and oldest_record_time < cutoff_time:
+                    break
+                if len(history_records) < page_size:
+                    break
+                current_page += 1
 
             messages.sort(key=lambda m: m.timestamp)
+            if len(messages) > target_count:
+                messages = messages[-target_count:]
+
             logger.info(
                 f"[Telegram] 从数据库获取群 {group_id} 的消息: "
-                f"{len(messages)}/{len(history_records)} 条"
+                f"{len(messages)}/{total_records_loaded} 条"
             )
-
             return messages
 
         except Exception as e:
@@ -780,10 +798,22 @@ class TelegramAdapter(PlatformAdapter):
         size: int = 100,
     ) -> dict[str, str | None]:
         """批量获取头像 URL"""
-        result = {}
-        for uid in user_ids:
-            result[uid] = await self.get_user_avatar_url(uid, size)
-        return result
+        if not user_ids:
+            return {}
+
+        # 适度并发，避免串行等待过久，也避免瞬时过载 Telegram API
+        semaphore = asyncio.Semaphore(8)
+
+        async def _fetch_avatar(uid: str) -> tuple[str, str | None]:
+            async with semaphore:
+                try:
+                    return uid, await self.get_user_avatar_url(uid, size)
+                except Exception as e:
+                    logger.debug(f"[Telegram] 批量获取头像失败 uid={uid}: {e}")
+                    return uid, None
+
+        pairs = await asyncio.gather(*(_fetch_avatar(uid) for uid in user_ids))
+        return {uid: avatar_url for uid, avatar_url in pairs}
 
     # ==================== 辅助方法 ====================
 
