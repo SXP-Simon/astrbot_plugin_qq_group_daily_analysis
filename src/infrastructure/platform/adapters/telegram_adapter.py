@@ -299,11 +299,6 @@ class TelegramAdapter(PlatformAdapter):
             cached_name = sender_name_cache[sender_id]
             if cached_name == msg.sender_name:
                 return msg
-            logger.info(
-                "[TEMP][SenderNameFix][Cache] "
-                f"group_id={group_id} sender_id={sender_id} "
-                f"from={msg.sender_name} to={cached_name}"
-            )
             return replace(msg, sender_name=cached_name)
 
         resolved_name = msg.sender_name
@@ -321,11 +316,6 @@ class TelegramAdapter(PlatformAdapter):
         sender_name_cache[sender_id] = resolved_name
         if resolved_name == msg.sender_name:
             return msg
-        logger.info(
-            "[TEMP][SenderNameFix][MemberInfo] "
-            f"group_id={group_id} sender_id={sender_id} "
-            f"from={msg.sender_name} to={resolved_name}"
-        )
         return replace(msg, sender_name=resolved_name)
 
     def _convert_history_record(

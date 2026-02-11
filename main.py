@@ -243,70 +243,17 @@ class QQGroupDailyAnalysis(Star):
                 f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
             )
 
-        # 6. 临时调试日志：打印入库前关键信息
-        message_types = []
-        for part in message_parts:
-            if isinstance(part, dict):
-                message_types.append(str(part.get("type", "unknown")))
-
-        preview_parts: list[str] = []
-        for part in message_parts:
-            if not isinstance(part, dict):
-                continue
-
-            part_type = str(part.get("type", "unknown"))
-            if part_type in ("plain", "text"):
-                text = str(part.get("text", "")).strip()
-                if text:
-                    preview_parts.append(text)
-            elif part_type == "at":
-                target = str(
-                    part.get("target_id")
-                    or part.get("qq")
-                    or part.get("at_user_id")
-                    or ""
-                ).strip()
-                preview_parts.append(f"@{target}" if target else "@")
-            elif part_type == "image":
-                url = str(part.get("url", "")).strip()
-                preview_parts.append(f"[image]{url}" if url else "[image]")
-            else:
-                preview_parts.append(f"[{part_type}]")
-
-        preview_text = " ".join(preview_parts).strip()
-        if len(preview_text) > 300:
-            preview_text = preview_text[:300] + "...(truncated)"
-
+        # 6. 提取事件消息 ID（用于 Telegram 已见群/话题记录）
         msg_obj = getattr(event, "message_obj", None)
         event_message_id = str(getattr(msg_obj, "message_id", "") or "")
-        unified_msg_origin = str(getattr(event, "unified_msg_origin", "") or "")
-
-        logger.info(
-            "[TEMP][HistoryStore][BeforeInsert] "
-            f"platform_id={platform_id} group_id={group_id} "
-            f"sender_id={sender_id} sender_name={sender_name} "
-            f"event_message_id={event_message_id} unified_msg_origin={unified_msg_origin} "
-            f"parts_count={len(message_parts)} part_types={message_types} "
-            f"content_preview={preview_text}"
-        )
 
         # 7. 存储到数据库
-        insert_result = await self.context.message_history_manager.insert(
+        await self.context.message_history_manager.insert(
             platform_id=platform_id,
             user_id=group_id,
             content={"type": "user", "message": message_parts},
             sender_id=sender_id,
             sender_name=sender_name,
-        )
-
-        record_id = str(getattr(insert_result, "id", "") or "")
-        created_at = getattr(insert_result, "created_at", None)
-        logger.info(
-            "[TEMP][HistoryStore][AfterInsert] "
-            f"record_id={record_id} created_at={created_at} "
-            f"platform_id={platform_id} group_id={group_id} "
-            f"sender_id={sender_id} sender_name={sender_name} "
-            f"parts_count={len(message_parts)}"
         )
 
         # Telegram: 记录已见群/话题，用于自动分析拉群回退
@@ -321,7 +268,7 @@ class QQGroupDailyAnalysis(Star):
                 )
             except Exception as e:
                 logger.warning(
-                    "[TEMP][TGRegistry][UpsertFailed] "
+                    "[TGRegistry] Upsert failed: "
                     f"platform_id={platform_id} group_id={group_id} error={e}"
                 )
 
@@ -373,9 +320,6 @@ class QQGroupDailyAnalysis(Star):
 
             now_iso = datetime.now(timezone.utc).isoformat()
 
-            existed = group_key in platform_map and isinstance(
-                platform_map[group_key], dict
-            )
             entry = platform_map.get(group_key)
             if not isinstance(entry, dict):
                 entry = {}
@@ -398,17 +342,6 @@ class QQGroupDailyAnalysis(Star):
             registry["updated_at"] = now_iso
             await self.put_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, registry)
 
-            platform_targets = len(platform_map)
-            total_targets = sum(
-                len(groups) for groups in platforms.values() if isinstance(groups, dict)
-            )
-            logger.info(
-                "[TEMP][TGRegistry][Upsert] "
-                f"platform_id={platform_key} group_id={group_key} existed={existed} "
-                f"platform_targets={platform_targets} total_targets={total_targets} "
-                f"sender_id={sender_id} sender_name={sender_name}"
-            )
-
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
     ) -> list[str]:
@@ -417,14 +350,10 @@ class QQGroupDailyAnalysis(Star):
         async with lock:
             registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
             if not isinstance(registry, dict):
-                logger.info(
-                    "[TEMP][TGRegistry][Read] invalid_registry_type, fallback_empty"
-                )
                 return []
 
             platforms = registry.get("platforms")
             if not isinstance(platforms, dict):
-                logger.info("[TEMP][TGRegistry][Read] no_platforms, fallback_empty")
                 return []
 
             groups: set[str] = set()
@@ -446,14 +375,7 @@ class QQGroupDailyAnalysis(Star):
                         if str(gid).strip()
                     )
 
-            sorted_groups = sorted(groups)
-            preview = sorted_groups[:10]
-            logger.info(
-                "[TEMP][TGRegistry][Read] "
-                f"platform_id={platform_id or '*'} count={len(sorted_groups)} "
-                f"groups_preview={preview}"
-            )
-            return sorted_groups
+            return sorted(groups)
 
     @staticmethod
     def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
@@ -496,16 +418,12 @@ class QQGroupDailyAnalysis(Star):
         # Telegram 特殊策略：优先显示名，不优先 username
         if platform_name == "telegram":
             if from_user is not None:
-                full_name = getattr(from_user, "full_name", None)
-                first_name = getattr(from_user, "first_name", None)
-                username = getattr(from_user, "username", None)
-                logger.info(
-                    "[TEMP][SenderNameRaw] "
-                    f"sender_id={sender_id} full_name={full_name} "
-                    f"first_name={first_name} username={username} "
-                    f"event_sender_name={event.get_sender_name()}"
+                candidates.extend(
+                    [
+                        getattr(from_user, "full_name", None),
+                        getattr(from_user, "first_name", None),
+                    ]
                 )
-                candidates.extend([full_name, first_name])
 
             candidates.append(event.get_sender_name())
             if sender_obj is not None:
