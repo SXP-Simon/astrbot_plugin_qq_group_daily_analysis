@@ -2,23 +2,54 @@ import argparse
 import asyncio
 import os
 import sys
+import types
 from pathlib import Path
 
+# ==========================================
+# 1. Environment Setup
+# ==========================================
 # Add src to path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+# Assuming we are in scripts/
+current_dir = os.path.dirname(os.path.abspath(__file__))
+plugin_root = os.path.abspath(os.path.join(current_dir, ".."))
+sys.path.insert(0, plugin_root)
 
 # Mock astrbot.api before importing our modules
-import types
-
 astrbot_api = types.ModuleType("astrbot.api")
-astrbot_api.logger = types.ModuleType("logger")
-astrbot_api.logger.info = lambda x, *args, **kwargs: print(f"[INFO] {x}")
-astrbot_api.logger.error = lambda x, *args, **kwargs: print(f"[ERROR] {x}")
-astrbot_api.logger.warning = lambda x, *args, **kwargs: print(f"[WARN] {x}")
+
+
+class MockLogger:
+    def info(self, msg, *args, **kwargs):
+        print(f"[INFO] {msg}")
+
+    def error(self, msg, *args, **kwargs):
+        print(f"[ERROR] {msg}")
+
+    def warning(self, msg, *args, **kwargs):
+        print(f"[WARN] {msg}")
+
+    def debug(self, msg, *args, **kwargs):
+        print(f"[DEBUG] {msg}")
+
+    def log(self, level, msg, *args, **kwargs):
+        print(f"[LOG {level}] {msg}")
+
+    def isEnabledFor(self, level):
+        return True
+
+
+astrbot_api.logger = MockLogger()
 astrbot_api.AstrBotConfig = dict
 sys.modules["astrbot.api"] = astrbot_api
 
-from src.models.data_models import (  # noqa: E402
+# Mock astrbot.core.utils.astrbot_path
+astrbot_core_utils = types.ModuleType("astrbot.core.utils")
+astrbot_path = types.ModuleType("astrbot.core.utils.astrbot_path")
+astrbot_path.get_astrbot_data_path = lambda: Path(".")
+sys.modules["astrbot.core.utils"] = astrbot_core_utils
+sys.modules["astrbot.core.utils.astrbot_path"] = astrbot_path
+
+from src.domain.entities.analysis_result import (  # noqa: E402
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
@@ -27,12 +58,12 @@ from src.models.data_models import (  # noqa: E402
     TokenUsage,
     UserTitle,
 )
-from src.reports.generators import ReportGenerator  # noqa: E402
-from src.reports.templates import HTMLTemplates  # noqa: E402
+from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
+from src.infrastructure.reporting.templates import HTMLTemplates  # noqa: E402
 
 
 class MockConfigManager:
-    def __init__(self, template_name: str = "format") -> None:
+    def __init__(self, template_name: str = "scrapbook") -> None:
         self.template_name = template_name
 
     def get_report_template(self) -> str:
@@ -53,11 +84,20 @@ class MockConfigManager:
     def get_pdf_filename_format(self) -> str:
         return "report_{group_id}_{date}.pdf"
 
+    def get_enable_user_card(self) -> bool:
+        return True
 
-async def mock_get_user_avatar(user_id: int) -> str:
-    # Return a placeholder or a real base64 if needed
-    # For debugging, a simple colored square or a known avatar is fine
-    return "https://q4.qlogo.cn/headimg_dl?dst_uin=123456789&spec=640"
+    @property
+    def playwright_available(self) -> bool:
+        return True
+
+    def get_browser_path(self) -> str:
+        return ""
+
+
+async def mock_get_user_avatar(user_id: str) -> str:
+    # Return a known avatar URL for testing
+    return f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
 
 
 async def debug_render(
@@ -66,41 +106,18 @@ async def debug_render(
     # 1. Setup Mock Data
     config_manager = MockConfigManager(template_name)
 
-    # Mock Analysis Result
+    # 2. Mock Analysis Result using Entities
     stats = GroupStatistics(
         message_count=1250,
         total_characters=45000,
         participant_count=42,
         most_active_period="20:00 - 22:00",
-        golden_quotes=[
-            GoldenQuote(
-                content="代码写得好，下班走得早。",
-                sender="张三",
-                reason="深刻揭示了程序员的生存法则",
-                qq=123456789,
-            ),
-            GoldenQuote(
-                content="这个Bug我不修，它就是个Feature。",
-                sender="李四",
-                reason="经典的开发辩解",
-                qq=987654321,
-            ),
-            GoldenQuote(
-                content="PHP是世界上最好的语言！",
-                sender="王五",
-                reason="引发了长达3小时的群聊大讨论",
-                qq=112233445,
-            ),
-        ],
         emoji_count=156,
         emoji_statistics=EmojiStatistics(face_count=100, mface_count=56),
         activity_visualization=ActivityVisualization(
             hourly_activity={
                 i: (10 + i * 5 if i < 12 else 100 - i * 2) for i in range(24)
             }
-        ),
-        token_usage=TokenUsage(
-            prompt_tokens=1500, completion_tokens=800, total_tokens=2300
         ),
     )
 
@@ -125,58 +142,92 @@ async def debug_render(
     user_titles = [
         UserTitle(
             name="张三",
-            qq=123456789,
+            user_id="123456789",
             title="代码收割机",
             mbti="INTJ",
             reason="在短短一小时内提交了10个PR，效率惊人。",
         ),
         UserTitle(
             name="李四",
-            qq=987654321,
+            user_id="987654321",
             title="群聊气氛组",
             mbti="ENFP",
             reason="总能精准接住每一个冷笑话，让群里充满快活的气息。",
         ),
         UserTitle(
-            name="https://www.example.com/very/long/url/that/might/overflow/the/container/if/word/break/is/not/set/correctly/and/it/keeps/going/and/going/forever",
-            qq=112233445,
+            name="潜水员",
+            user_id="112233445",
             title="深夜潜水员",
             mbti="INFP",
             reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
         ),
     ]
 
+    golden_quotes = [
+        GoldenQuote(
+            content="代码写得好，下班走得早。",
+            sender="张三",
+            reason="深刻揭示了程序员的生存法则",
+            user_id="123456789",
+        ),
+        GoldenQuote(
+            content="这个Bug我不修，它就是个Feature。",
+            sender="李四",
+            reason="经典的开发辩解",
+            user_id="987654321",
+        ),
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
+        ),
+    ]
+
+    stats.golden_quotes = golden_quotes
+    stats.token_usage = TokenUsage(
+        prompt_tokens=1500, completion_tokens=800, total_tokens=2300
+    )
+
     analysis_result = {
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles,
+        "analysis_date": "2026年02月11日",
+        "group_id": "123456",
+        "group_name": "测试群组",
     }
 
-    # 2. Initialize Generator
+    # 3. Initialize Generator
     generator = ReportGenerator(config_manager)
 
-    # Override _get_user_avatar to avoid real network calls if desired,
-    # but here we'll just let it use the mock URL
-    generator._get_user_avatar = mock_get_user_avatar
+    # Override internal methods to facilitate debugging without real dependencies
+    generator._get_user_avatar_data = mock_get_user_avatar
 
-    # 3. Render Data
+    # 4. Prepare Render Data
+    # Note: _prepare_render_data handles converting Entities to template-friendly dicts
     render_payload = await generator._prepare_render_data(analysis_result)
 
-    # 4. Render Main Template
-    # We'll test the image template
+    # 5. Render Main Template
     html_templates = HTMLTemplates(config_manager)
+    # Get image template string
     raw_template = html_templates.get_image_template()
 
+    if not raw_template:
+        print(f"[ERROR] Failed to load template for '{template_name}'")
+        return
+
+    # Use generator's internal renderer
     final_html = generator._render_html_template(raw_template, render_payload)
 
-    # 5. Save to file
+    # 6. Save to file
     output_path = Path(output_file)
     output_path.write_text(final_html, encoding="utf-8")
 
     print(
         f"Successfully rendered template '{template_name}' to {output_path.absolute()}"
     )
-    print("You can now open this file with VS Code Live Server to debug your HTML/CSS.")
+    print("You can now open this file with your browser to debug your HTML/CSS.")
 
 
 def main() -> None:
@@ -187,8 +238,8 @@ def main() -> None:
         "-t",
         "--template",
         type=str,
-        default="retro_futurism",
-        help="Template name to render (default: retro_futurism)",
+        default="scrapbook",
+        help="Template name to render (default: scrapbook)",
     )
     parser.add_argument(
         "-o",
