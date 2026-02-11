@@ -7,6 +7,8 @@ QQ群日常分析插件
 
 import asyncio
 import os
+import re
+from collections import Counter
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -366,6 +368,29 @@ class QQGroupDailyAnalysis(Star):
         message_parts = []
         message = event.message_obj
 
+        # 先收集 @ 标记，后续用于从 plain 文本中去重
+        pending_mentions: Counter[str] = Counter()
+        if message and hasattr(message, "message"):
+            for seg in message.message:
+                if not hasattr(seg, "type"):
+                    continue
+                if seg.type not in ("At", "at"):
+                    continue
+
+                target = getattr(seg, "target", None)
+                if target is None:
+                    target = getattr(seg, "qq", None)
+                if target is None and hasattr(seg, "data"):
+                    target = seg.data.get("qq") or seg.data.get("target")
+
+                target_str = str(target or "").strip()
+                if target_str:
+                    pending_mentions[target_str] += 1
+
+                display_name = str(getattr(seg, "name", "") or "").strip()
+                if display_name and display_name != target_str:
+                    pending_mentions[display_name] += 1
+
         if message and hasattr(message, "message"):
             for seg in message.message:
                 if not hasattr(seg, "type"):
@@ -377,6 +402,7 @@ class QQGroupDailyAnalysis(Star):
                     if text is None and hasattr(seg, "data"):
                         text = seg.data.get("text")
                     if text:
+                        text = self._strip_known_mentions(text, pending_mentions)
                         message_parts.append({"type": "plain", "text": text})
 
                 elif seg_type in ("Image", "image"):
@@ -405,7 +431,45 @@ class QQGroupDailyAnalysis(Star):
         if not message_parts and event.message_str:
             message_parts.append({"type": "plain", "text": event.message_str})
 
+        # 清理空文本段，避免出现仅空格文本
+        message_parts = [
+            part
+            for part in message_parts
+            if not (
+                part.get("type") == "plain" and not str(part.get("text", "")).strip()
+            )
+        ]
+
         return message_parts
+
+    @staticmethod
+    def _strip_known_mentions(text: str, pending_mentions: Counter[str]) -> str:
+        """
+        从文本中移除已识别的 @ 提及，避免与结构化 at 段重复。
+        """
+        cleaned = str(text)
+        if not cleaned or not pending_mentions:
+            return cleaned.strip()
+
+        for mention, remaining in list(pending_mentions.items()):
+            if not mention or remaining <= 0:
+                continue
+
+            pattern = re.compile(rf"(?<!\w)@{re.escape(mention)}(?!\w)")
+            removed = 0
+            while removed < remaining:
+                cleaned, subn = pattern.subn("", cleaned, count=1)
+                if subn == 0:
+                    break
+                removed += 1
+
+            if removed > 0:
+                pending_mentions[mention] -= removed
+                if pending_mentions[mention] <= 0:
+                    pending_mentions.pop(mention, None)
+
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+        return cleaned
 
     # ==================== Telegram 消息拦截器 ====================
 
