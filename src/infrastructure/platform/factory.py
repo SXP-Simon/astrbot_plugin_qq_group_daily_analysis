@@ -91,4 +91,3 @@ def _register_adapters():
 
 
 _register_adapters()
-

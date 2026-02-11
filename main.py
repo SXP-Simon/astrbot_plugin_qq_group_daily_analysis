@@ -18,17 +18,17 @@ from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
+from .src.domain.services.incremental_merge_service import IncrementalMergeService
 from .src.domain.services.statistics_service import StatisticsService
 from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.persistence.history_manager import HistoryManager
+from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.utils.pdf_utils import PDFInstaller
-from .src.infrastructure.persistence.incremental_store import IncrementalStore
-from .src.domain.services.incremental_merge_service import IncrementalMergeService
 
 
 class QQGroupDailyAnalysis(Star):

@@ -399,8 +399,9 @@ class DiscordAdapter(PlatformAdapter):
             file_to_send = None
             if image_path.startswith("base64://"):
                 # Base64 图片：解码 -> 内存 Object -> Discord
-                from io import BytesIO
                 import base64  # Fix: Ensure base64 is imported
+                from io import BytesIO
+
                 try:
                     base64_data = image_path.split("base64://")[1]
                     image_bytes = base64.b64decode(base64_data)

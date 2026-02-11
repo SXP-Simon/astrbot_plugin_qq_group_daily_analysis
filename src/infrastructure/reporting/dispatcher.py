@@ -79,7 +79,10 @@ class ReportDispatcher:
                 return None
 
             image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result, group_id, self._html_render_func, avatar_getter=avatar_getter
+                analysis_result,
+                group_id,
+                self._html_render_func,
+                avatar_getter=avatar_getter,
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
