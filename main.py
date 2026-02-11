@@ -93,6 +93,35 @@ class QQGroupDailyAnalysis(Star):
         # 异步注册任务，处理插件重载情况
         asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
 
+    def _resolve_template_base_dir(self) -> str:
+        """解析报告模板目录（兼容新旧目录结构）"""
+        plugin_root = os.path.dirname(__file__)
+        candidate_dirs = [
+            os.path.join(plugin_root, "src", "infrastructure", "reporting", "templates"),
+            os.path.join(plugin_root, "src", "reports", "templates"),
+        ]
+        for candidate in candidate_dirs:
+            if os.path.isdir(candidate):
+                return candidate
+        return candidate_dirs[0]
+
+    def _resolve_template_preview_path(self, template_name: str) -> str | None:
+        """解析模板预览图路径（兼容新旧命名和目录）"""
+        plugin_root = os.path.dirname(__file__)
+        template_base_dir = self._resolve_template_base_dir()
+        candidate_paths = [
+            os.path.join(plugin_root, "assets", f"{template_name}-demo.jpg"),
+            os.path.join(plugin_root, "assets", f"{template_name}.jpg"),
+            os.path.join(plugin_root, "assets", "templates", f"{template_name}-demo.jpg"),
+            os.path.join(plugin_root, "assets", "templates", f"{template_name}.jpg"),
+            os.path.join(template_base_dir, template_name, "demo.jpg"),
+            os.path.join(template_base_dir, template_name, "preview.jpg"),
+        ]
+        for candidate in candidate_paths:
+            if os.path.exists(candidate):
+                return candidate
+        return None
+
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
 
@@ -811,9 +840,7 @@ class QQGroupDailyAnalysis(Star):
         用法: /设置模板 [模板名称或序号]
         """
         # 获取模板目录和可用模板列表
-        template_base_dir = os.path.join(
-            os.path.dirname(__file__), "src", "reports", "templates"
-        )
+        template_base_dir = self._resolve_template_base_dir()
 
         def _list_templates_sync():
             if os.path.exists(template_base_dir):
@@ -875,10 +902,7 @@ class QQGroupDailyAnalysis(Star):
         from astrbot.api.message_components import Image, Node, Nodes, Plain
 
         # 获取模板目录
-        template_dir = os.path.join(
-            os.path.dirname(__file__), "src", "reports", "templates"
-        )
-        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        template_dir = self._resolve_template_base_dir()
 
         def _list_templates_sync():
             if os.path.exists(template_dir):
@@ -930,8 +954,8 @@ class QQGroupDailyAnalysis(Star):
             node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
 
             # 添加预览图
-            preview_image_path = os.path.join(assets_dir, f"{template_name}-demo.jpg")
-            if os.path.exists(preview_image_path):
+            preview_image_path = self._resolve_template_preview_path(template_name)
+            if preview_image_path:
                 node_content.append(Image.fromFileSystem(preview_image_path))
 
             node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
