@@ -860,11 +860,6 @@ class AutoScheduler:
                                 str(platform_id)
                             )
                             used_tg_kv_fallback = bool(groups)
-                            logger.info(
-                                "[TEMP][TGRegistry][SchedulerFallback] "
-                                f"platform_id={platform_id} fallback_used={used_tg_kv_fallback} "
-                                f"fallback_count={len(groups)}"
-                            )
 
                         for group_id in groups:
                             all_groups.add((platform_id, str(group_id)))
@@ -889,34 +884,20 @@ class AutoScheduler:
     async def _get_telegram_groups_from_plugin_kv(self, platform_id: str) -> list[str]:
         """从插件 KV 获取 Telegram 已见群/话题，作为 get_group_list 的回退。"""
         if not self.plugin_instance:
-            logger.info(
-                "[TEMP][TGRegistry][SchedulerFetch] "
-                f"platform_id={platform_id} skipped=no_plugin_instance"
-            )
             return []
 
         getter = getattr(self.plugin_instance, "get_telegram_seen_group_ids", None)
         if not callable(getter):
-            logger.info(
-                "[TEMP][TGRegistry][SchedulerFetch] "
-                f"platform_id={platform_id} skipped=no_getter"
-            )
             return []
 
         try:
             groups = await getter(platform_id=platform_id)
-            normalized = sorted(
+            return sorted(
                 {str(group_id).strip() for group_id in groups if str(group_id).strip()}
             )
-            logger.info(
-                "[TEMP][TGRegistry][SchedulerFetch] "
-                f"platform_id={platform_id} count={len(normalized)} "
-                f"groups_preview={normalized[:10]}"
-            )
-            return normalized
         except Exception as e:
             logger.warning(
-                "[TEMP][TGRegistry][SchedulerFetchFailed] "
+                "[TGRegistry] Scheduler fetch failed: "
                 f"platform_id={platform_id} error={e}"
             )
             return []
