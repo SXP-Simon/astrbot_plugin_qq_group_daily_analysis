@@ -97,7 +97,9 @@ class QQGroupDailyAnalysis(Star):
         """解析报告模板目录（兼容新旧目录结构）"""
         plugin_root = os.path.dirname(__file__)
         candidate_dirs = [
-            os.path.join(plugin_root, "src", "infrastructure", "reporting", "templates"),
+            os.path.join(
+                plugin_root, "src", "infrastructure", "reporting", "templates"
+            ),
             os.path.join(plugin_root, "src", "reports", "templates"),
         ]
         for candidate in candidate_dirs:
@@ -112,7 +114,9 @@ class QQGroupDailyAnalysis(Star):
         candidate_paths = [
             os.path.join(plugin_root, "assets", f"{template_name}-demo.jpg"),
             os.path.join(plugin_root, "assets", f"{template_name}.jpg"),
-            os.path.join(plugin_root, "assets", "templates", f"{template_name}-demo.jpg"),
+            os.path.join(
+                plugin_root, "assets", "templates", f"{template_name}-demo.jpg"
+            ),
             os.path.join(plugin_root, "assets", "templates", f"{template_name}.jpg"),
             os.path.join(template_base_dir, template_name, "demo.jpg"),
             os.path.join(template_base_dir, template_name, "preview.jpg"),
@@ -428,14 +432,18 @@ class QQGroupDailyAnalysis(Star):
                 platform_map = platforms.get(str(platform_id).strip(), {})
                 if isinstance(platform_map, dict):
                     groups.update(
-                        str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                        str(gid).strip()
+                        for gid in platform_map.keys()
+                        if str(gid).strip()
                     )
             else:
                 for platform_map in platforms.values():
                     if not isinstance(platform_map, dict):
                         continue
                     groups.update(
-                        str(gid).strip() for gid in platform_map.keys() if str(gid).strip()
+                        str(gid).strip()
+                        for gid in platform_map.keys()
+                        if str(gid).strip()
                     )
 
             sorted_groups = sorted(groups)

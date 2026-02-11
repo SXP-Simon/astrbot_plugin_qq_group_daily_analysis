@@ -218,8 +218,10 @@ class TelegramAdapter(PlatformAdapter):
                         group_id, msg, sender_name_cache
                     )
                     messages.append(msg)
-                    if len(messages) >= target_count:
-                        break
+
+                # 当前页完整处理后已足够，停止继续翻更旧页面。
+                if len(messages) >= target_count:
+                    break
 
                 # 下一页一定更旧，若当前页最旧记录已越过时间窗口则可提前停止
                 if oldest_record_time and oldest_record_time < cutoff_time:
@@ -813,7 +815,7 @@ class TelegramAdapter(PlatformAdapter):
                     return uid, None
 
         pairs = await asyncio.gather(*(_fetch_avatar(uid) for uid in user_ids))
-        return {uid: avatar_url for uid, avatar_url in pairs}
+        return dict(pairs)
 
     # ==================== 辅助方法 ====================
 
