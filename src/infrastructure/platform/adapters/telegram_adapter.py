@@ -92,7 +92,6 @@ class TelegramAdapter(PlatformAdapter):
         2. 回退：从插件的 KV 存储中获取已知群组 (需注入插件实例)
         """
         groups = []
-        client = self._telegram_client
 
         # 1. 尝试 API (目前 python-telegram-bot 不支持直接列出所有 chat)
         # 如果 client 有扩展方法或未来支持，可在此实现
