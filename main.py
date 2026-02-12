@@ -113,13 +113,6 @@ class QQGroupDailyAnalysis(Star):
         template_base_dir = self._resolve_template_base_dir()
         candidate_paths = [
             os.path.join(plugin_root, "assets", f"{template_name}-demo.jpg"),
-            os.path.join(plugin_root, "assets", f"{template_name}.jpg"),
-            os.path.join(
-                plugin_root, "assets", "templates", f"{template_name}-demo.jpg"
-            ),
-            os.path.join(plugin_root, "assets", "templates", f"{template_name}.jpg"),
-            os.path.join(template_base_dir, template_name, "demo.jpg"),
-            os.path.join(template_base_dir, template_name, "preview.jpg"),
         ]
         for candidate in candidate_paths:
             if os.path.exists(candidate):
