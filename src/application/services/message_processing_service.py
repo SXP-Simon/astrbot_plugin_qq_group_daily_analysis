@@ -4,8 +4,8 @@ from collections import Counter
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.star import Context
 
-from ...utils.logger import logger
 from ...infrastructure.persistence.telegram_group_registry import TelegramGroupRegistry
+from ...utils.logger import logger
 
 
 class MessageProcessingService:
