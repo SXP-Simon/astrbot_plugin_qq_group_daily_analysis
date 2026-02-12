@@ -61,44 +61,56 @@ class ConfigManager:
         glist = [str(g) for g in self.get_group_list()]
         target = str(group_id_or_umo)
 
+        # 核心 ID 解析
         target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
+
+        # 1. 剥离话题 ID (#)
+        target_without_topic = (
             target_simple_id.split("#", 1)[0]
             if "#" in target_simple_id
             else target_simple_id
         )
 
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
+        # 2. 剥离独立会话的前置用户 ID (_)
+        # 例如: 903928770_1007096543 -> 1007096543
+        target_actual_group_id = (
+            target_without_topic.split("_", 1)[-1]
+            if "_" in target_without_topic
+            else target_without_topic
+        )
+
+        def _is_match(item: str) -> bool:
+            # 1. 完整/前缀 UMO 匹配 (包含平台前缀)
             if ":" in item:
                 if item == target:
                     return True
 
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
-                # 例如: item=telegram2:GroupMessage:-1001
-                #      target=telegram2:GroupMessage:-1001#2264
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
-            return "#" in target_simple_id and item == target_parent_id
+                # 若 target 有平台前缀，尝试前缀匹配
+                if ":" in target:
+                    try:
+                        item_prefix, item_tail = item.rsplit(":", 1)
+                        target_prefix, _ = target.rsplit(":", 1)
 
-        is_in_list = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+                        if item_prefix == target_prefix:
+                            # 命中了清理后的群 ID (支持剥离话题或剥离独立会话前级)
+                            if item_tail in (
+                                target_without_topic,
+                                target_actual_group_id,
+                            ):
+                                return True
+                    except (ValueError, IndexError):
+                        pass
+                return False
+
+            # 2. 简单 ID 匹配 (无平台前缀)
+            # 命中了原始 ID、剥话题后的 ID 或剥离独立会话前缀后的 ID
+            return item in (
+                target_simple_id,
+                target_without_topic,
+                target_actual_group_id,
+            )
+
+        is_in_list = any(_is_match(item) for item in glist)
 
         if mode == "whitelist":
             return is_in_list
