@@ -1,0 +1,26 @@
+{% if titles %}
+<div class="sf-user-masonry">
+    {% for title in titles %}
+    <div class="sf-user-card avoid-break">
+        <div class="sf-card-header">
+            <div class="sf-avatar-wrap">
+                {% if title.avatar_data %}
+                <img src="{{ title.avatar_data }}" alt="{{ title.name }}" class="sf-avatar">
+                {% else %}
+                <div class="sf-avatar-placeholder"
+                    style="font-family: var(--font-calligraphy); font-size: 2.2rem; color: #fff;">福</div>
+                {% endif %}
+            </div>
+            <div class="sf-user-info">
+                <h4 class="sf-user-name" style="margin: 0 0 5px; font-size: 1.3rem;">{{ title.name }}</h4>
+                <div class="sf-user-badges">
+                    <span class="sf-badge mbti">{{ title.mbti }}</span>
+                    <span class="sf-badge sf-title">{{ title.title }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="sf-user-reason">{{ title.reason }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
