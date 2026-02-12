@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>春节特供 · 群聊日报</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 引入书法字体和节日字体 -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --red-festive: #b71c1c;
+            --red-light: #d32f2f;
+            --gold-primary: #ffca28;
+            --gold-dark: #f9a825;
+            --wood-dark: #3e2723;
+            --bg-paper: #fff9e6;
+            /* 宣纸色 */
+            --text-main: #3e2723;
+            --text-gold: #ffca28;
+
+            --font-calligraphy: 'Ma Shan Zheng', cursive;
+            --font-heading: 'ZCOOL XiaoWei', serif;
+            --font-body: 'Noto Serif SC', serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--red-festive);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            background-image:
+                radial-gradient(var(--red-light) 1px, transparent 1px),
+                linear-gradient(45deg, rgba(255, 202, 40, 0.05) 25%, transparent 25%, transparent 50%, rgba(255, 202, 40, 0.05) 50%, rgba(255, 202, 40, 0.05) 75%, transparent 75%, transparent);
+            background-size: 40px 40px, 100px 100px;
+            min-height: 100vh;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 1100px;
+            width: 100%;
+            background: var(--bg-paper);
+            border: 15px solid var(--red-festive);
+            outline: 3px solid var(--gold-primary);
+            outline-offset: -10px;
+            position: relative;
+            padding: 60px;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+        }
+
+        /* 装饰角标 */
+        .corner {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 5px solid var(--gold-primary);
+            z-index: 10;
+        }
+
+        .corner-tl {
+            top: -10px;
+            left: -10px;
+            border-right: none;
+            border-bottom: none;
+            border-radius: 15px 0 0 0;
+        }
+
+        .corner-tr {
+            top: -10px;
+            right: -10px;
+            border-left: none;
+            border-bottom: none;
+            border-radius: 0 15px 0 0;
+        }
+
+        .corner-bl {
+            bottom: -10px;
+            left: -10px;
+            border-right: none;
+            border-top: none;
+            border-radius: 0 0 0 15px;
+        }
+
+        .corner-br {
+            bottom: -10px;
+            right: -10px;
+            border-left: none;
+            border-top: none;
+            border-radius: 0 0 15px 0;
+        }
+
+        /* Header */
+        .sf-header {
+            text-align: center;
+            margin-bottom: 60px;
+            position: relative;
+        }
+
+        .sf-title-wrap {
+            display: inline-block;
+            padding: 20px 60px;
+            background: var(--red-festive);
+            border: 3px double var(--gold-primary);
+            color: var(--gold-primary);
+            transform: skew(-5deg);
+        }
+
+        .sf-header h1 {
+            font-family: var(--font-calligraphy);
+            font-size: 5rem;
+            margin: 0;
+            line-height: 1.2;
+            text-shadow: 3px 3px 0px rgba(0, 0, 0, 0.2);
+        }
+
+        .sf-date {
+            font-family: var(--font-heading);
+            font-size: 1.5rem;
+            margin-top: 15px;
+            color: var(--red-festive);
+            font-weight: bold;
+        }
+
+        /* Layout Overhaul like Scrapbook */
+        .sf-stats-wrapper {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 40px;
+            align-items: stretch;
+        }
+
+        .sf-stats-grid {
+            flex: 2;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .sf-hongbao {
+            background: var(--red-festive);
+            padding: 20px 15px;
+            border-radius: 12px 12px 60px 60px;
+            color: var(--gold-primary);
+            text-align: center;
+            border: 2px solid var(--gold-primary);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .sf-hongbao::before {
+            content: '福';
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            font-family: var(--font-calligraphy);
+            font-size: 4rem;
+            opacity: 0.1;
+            transform: rotate(15deg);
+        }
+
+        .sf-peak-badge {
+            flex: 1.2;
+            background: var(--gold-primary);
+            border: 4px solid var(--red-festive);
+            border-radius: 20px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            box-shadow: 8px 8px 0 var(--red-festive);
+        }
+
+        .sf-peak-badge::after {
+            content: 'YEAR OF THE HORSE';
+            /* Based on user current date 2026 */
+            position: absolute;
+            bottom: 10px;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            color: var(--red-festive);
+            font-weight: bold;
+            opacity: 0.5;
+        }
+
+        .sf-main-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 50px;
+        }
+
+        /* Window Frame for Chart */
+        .sf-window {
+            background: #fff;
+            border: 10px solid var(--wood-dark);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            position: relative;
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
+            overflow-x: auto;
+        }
+
+        .sf-window-title {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--wood-dark);
+            color: var(--gold-primary);
+            padding: 5px 25px;
+            font-size: 0.9rem;
+            font-family: var(--font-mono);
+            border-radius: 4px;
+        }
+
+        /* Chart Elements */
+        .sf-chart-wrapper {
+            width: 100%;
+            background: #fff;
+        }
+
+        .sf-chart-container {
+            height: 250px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-around;
+            gap: 2px;
+            padding: 10px 5px 30px;
+            min-width: 400px;
+        }
+
+        .sf-chart-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+        }
+
+        .sf-chart-bar {
+            width: 80%;
+            background: linear-gradient(to top, var(--red-festive), var(--gold-primary));
+            height: var(--h, 0%);
+            border-radius: 4px 4px 0 0;
+            box-shadow: 0 0 12px rgba(183, 28, 28, 0.3);
+            border: 1px solid rgba(255, 202, 40, 0.4);
+            transition: height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .sf-chart-tick {
+            font-size: 0.6rem;
+            transform: rotate(-45deg);
+            margin-top: 5px;
+            white-space: nowrap;
+        }
+
+        .sf-chart-val {
+            font-size: 0.6rem;
+            font-weight: bold;
+            color: var(--red-festive);
+            margin-bottom: 2px;
+        }
+
+        /* Topic Scrolls */
+        .sf-section-box {
+            margin-bottom: 40px;
+        }
+
+        .sf-section-title {
+            font-family: var(--font-calligraphy);
+            font-size: 2.4rem;
+            color: var(--red-festive);
+            margin-bottom: 35px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            position: relative;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--red-festive);
+            background: linear-gradient(to right, rgba(183, 28, 28, 0.05), transparent);
+        }
+
+        .sf-section-title::before {
+            content: '☁️';
+            /* Cloud decoration */
+            font-size: 1.2rem;
+            opacity: 0.6;
+        }
+
+        .sf-section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 80px;
+            height: 8px;
+            background: var(--gold-primary);
+            clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%);
+        }
+
+        .sf-topic-card {
+            background: #fff;
+            padding: 25px;
+            margin-bottom: 25px;
+            border: 2px solid var(--red-festive);
+            box-shadow: 8px 8px 0 rgba(183, 28, 28, 0.1);
+            position: relative;
+        }
+
+        .sf-topic-title {
+            font-family: var(--font-heading);
+            font-size: 1.8rem;
+            color: var(--red-festive);
+            margin-bottom: 10px;
+        }
+
+        .sf-topic-meta {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        .sf-topic-detail {
+            line-height: 1.8;
+            font-size: 1.1rem;
+        }
+
+        /* User Grid */
+        .sf-user-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sf-user-card {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 25px;
+            background: #fff;
+            border-left: 4px solid var(--red-festive);
+            border-right: 4px solid var(--red-festive);
+            border-top: 1px solid var(--red-festive);
+            border-bottom: 1px solid var(--red-festive);
+            position: relative;
+            box-shadow: 6px 6px 20px rgba(183, 28, 28, 0.1);
+            background-image: radial-gradient(rgba(183, 28, 28, 0.02) 1px, transparent 1px);
+            background-size: 15px 15px;
+        }
+
+        .sf-user-card::before {
+            content: '春';
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-family: var(--font-calligraphy);
+            font-size: 3rem;
+            color: var(--red-festive);
+            opacity: 0.05;
+            pointer-events: none;
+        }
+
+        .sf-card-header {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            border-bottom: 1px solid rgba(183, 28, 28, 0.1);
+            padding-bottom: 15px;
+        }
+
+        .sf-avatar-wrap {
+            width: 65px;
+            height: 65px;
+            flex-shrink: 0;
+            border: 2px solid var(--gold-primary);
+            background: var(--red-festive);
+            padding: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .sf-avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .sf-avatar-placeholder {
+            font-family: var(--font-calligraphy);
+            font-size: 3rem;
+            color: var(--red-festive);
+        }
+
+        .sf-user-name {
+            margin: 0 0 5px;
+            font-family: var(--font-heading);
+            font-size: 1.4rem;
+            color: var(--red-festive);
+        }
+
+        .sf-user-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        /* Seal Style Tags */
+        .sf-badge {
+            font-family: var(--font-heading);
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 2px 10px;
+            border: 1.5px solid var(--red-festive);
+            position: relative;
+            display: inline-block;
+            margin-right: 6px;
+            margin-bottom: 4px;
+            background: #fff;
+            color: var(--red-festive);
+            line-height: 1.2;
+            width: fit-content;
+        }
+
+        .sf-badge.mbti {
+            color: var(--red-festive);
+            border: 1px solid var(--red-festive);
+            opacity: 0.8;
+        }
+
+        .sf-badge.sf-title {
+            color: #fff;
+            background: var(--red-festive);
+            border-color: var(--red-festive);
+            box-shadow: 3px 3px 0 rgba(255, 202, 40, 0.4);
+        }
+
+        .sf-badge::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            right: 2px;
+            bottom: 2px;
+            border: 1px solid currentColor;
+            opacity: 0.2;
+        }
+
+        .sf-user-reason {
+            font-size: 1.05rem;
+            color: var(--text-main);
+            line-height: 1.6;
+            text-align: justify;
+        }
+
+        /* Vertical Flow Elements */
+        .sf-user-masonry {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+        }
+
+        .sf-quote-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .sf-quote-item {
+            width: 85%;
+            display: flex;
+            gap: 20px;
+            position: relative;
+        }
+
+        .sf-quote-item.sf-right {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .sf-quote-avatar-wrap {
+            width: 70px;
+            height: 70px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            border: 3px solid var(--gold-primary);
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sf-quote-bubble {
+            flex: 1;
+            background: #fff;
+            border: 2px solid var(--red-festive);
+            padding: 25px;
+            border-radius: 4px 25px 25px 25px;
+            position: relative;
+            box-shadow: 6px 6px 0 rgba(183, 28, 28, 0.1);
+            background-image: radial-gradient(rgba(183, 28, 28, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .sf-quote-item.sf-right .sf-quote-bubble {
+            border-radius: 25px 4px 25px 25px;
+            background-color: #fffaf0;
+            text-align: right;
+        }
+
+        .sf-quote-content {
+            font-family: var(--font-heading);
+            font-size: 1.5rem;
+            color: var(--text-main);
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .sf-quote-author {
+            font-family: var(--font-calligraphy);
+            font-size: 1.8rem;
+            color: var(--red-festive);
+            margin-bottom: 10px;
+        }
+
+        .sf-quote-reason {
+            font-size: 0.9rem;
+            color: #888;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+            text-align: left;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 60px;
+            text-align: center;
+            color: var(--red-festive);
+            font-family: var(--font-heading);
+            border-top: 2px solid var(--gold-primary);
+            padding-top: 30px;
+        }
+
+        .sf-footer-tag {
+            background: var(--gold-primary);
+            color: var(--red-festive);
+            padding: 5px 20px;
+            display: inline-block;
+            margin-top: 10px;
+            transform: rotate(-2deg);
+        }
+
+        .avoid-break {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="corner corner-tl"></div>
+        <div class="corner corner-tr"></div>
+        <div class="corner corner-bl"></div>
+        <div class="corner corner-br"></div>
+
+        <div class="sf-header">
+            <div class="sf-title-wrap">
+                <h1>🧧 春节特供日报 🧧</h1>
+            </div>
+            <div class="sf-date">—— {{current_date}} · 岁在丙午 ——</div>
+        </div>
+
+        <div class="sf-stats-wrapper">
+            <div class="sf-stats-grid">
+                <div class="sf-hongbao">
+                    <div class="hb-label">消息总数</div>
+                    <div class="hb-value">{{message_count}}</div>
+                </div>
+                <div class="sf-hongbao">
+                    <div class="hb-label">参与群友</div>
+                    <div class="hb-value">{{participant_count}}</div>
+                </div>
+                <div class="sf-hongbao">
+                    <div class="hb-label">表情统计</div>
+                    <div class="hb-value">{{emoji_count}}</div>
+                </div>
+                <div class="sf-hongbao">
+                    <div class="hb-label">总字符数</div>
+                    <div class="hb-value" style="font-size: 1.8rem;">{{total_characters}}</div>
+                </div>
+            </div>
+
+            <div class="sf-peak-badge">
+                <div
+                    style="font-family: var(--font-calligraphy); font-size: 2rem; color: var(--red-festive); margin-bottom: 5px;">
+                    巅峰时刻
+                </div>
+                <div
+                    style="font-family: var(--font-heading); font-size: 3.2rem; color: var(--wood-dark); font-weight: 800; line-height: 1;">
+                    {{most_active_period}}
+                </div>
+                <div style="font-size: 0.9rem; margin-top: 12px; font-weight: bold; color: var(--red-festive);">🏮 鸿运齐天
+                    · 众友云集 🏮</div>
+            </div>
+        </div>
+
+        <div class="sf-main-flow">
+            <!-- 1. Topics: Full Width -->
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>🏮</span> 核心话题回顾</div>
+                <div class="sf-topic-list">
+                    {{topics_html}}
+                </div>
+            </div>
+
+            <!-- 2. Chart: Full Width with SF window -->
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>📈</span> 活跃时序图</div>
+                <div class="sf-window">
+                    <div class="sf-window-title">ACTIVITY CHRONICLE</div>
+                    {{hourly_chart_html}}
+                </div>
+            </div>
+
+            <!-- 3. Characters: Masonry 2-Column Grid -->
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>🎖️</span> 群友风云榜</div>
+                {{titles_html}}
+            </div>
+
+            <!-- 4. Quotes: Staggered Timeline -->
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>✨</span> 每日金句回响</div>
+                <div class="sf-quote-timeline">
+                    {{quotes_html}}
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div>宜 · 总结分析 // {{current_datetime}}</div>
+            <div class="sf-footer-tag">SXP-Simon / astrbot_plugin_qq_group_daily_analysis</div>
+        </footer>
+    </div>
+</body>
+
+</html>
