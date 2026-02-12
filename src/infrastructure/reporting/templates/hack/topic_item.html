@@ -1,0 +1,11 @@
+{% if topics %}
+<div class="topic-list">
+    {% for topic in topics %}
+    <div class="topic-item avoid-break">
+        <div class="topic-title">{{ topic.topic.topic }}</div>
+        <div class="comment" style="margin-bottom: 15px;">/* Participants: {{ topic.contributors }} */</div>
+        <div style="line-height: 1.6; opacity: 0.9;">{{ topic.detail | safe }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

@@ -1,17 +1,20 @@
 {% if quotes %}
 {% for quote in quotes %}
-<article class="quote-item">
-    <span class="color-third"></span>
-    <div class="quote-icon">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/>
-        </svg>
+<section class="quote-item">
+    {% if quote.avatar_url %}
+    <div class="quote-avatar">
+        <img src="{{ quote.avatar_url }}" alt="{{ quote.sender }}">
     </div>
-    <div>
-        <p class="quote-content">{{ quote.content }}</p>
-        <div class="quote-author">— {{ quote.sender }}</div>
-        <p class="quote-note">{{ quote.reason }}</p>
+    {% elif quote.avatar_data %}
+    <div class="quote-avatar">
+        <img src="{{ quote.avatar_data }}" alt="{{ quote.sender }}">
     </div>
-</article>
+    {% endif %}
+    <div class="quote-body">
+        <div class="quote-content">{{ quote.content }}</div>
+        <div class="quote-author">ORIGIN: {{ quote.sender }}</div>
+        <div class="quote-reason-small">ANALYSIS // {{ quote.reason }}</div>
+    </div>
+</section>
 {% endfor %}
 {% endif %}

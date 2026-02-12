@@ -1,23 +1,24 @@
 {% if titles %}
 {% for title in titles %}
-<article class="title-item">
-    <div class="title-header">
-        <div class="title-avatar">
-            {% if title.avatar_data %}
-            <img src="{{ title.avatar_data }}" alt="{{ title.name }}">
-            {% else %}
-            <div class="title-avatar-fallback">CRT</div>
-            {% endif %}
-        </div>
-        <div class="title-info">
-            <span class="title-name">{{ title.name }}</span>
-            <div class="title-badges">
-                <span class="title-mbti">{{ title.mbti }}</span>
-                <span class="title-role">{{ title.title }}</span>
-            </div>
-        </div>
+<div class="title-item">
+    <div class="title-avatar-wrap">
+        {% if title.avatar_data %}
+        <img src="{{ title.avatar_data }}" alt="{{ title.name }}">
+        {% else %}
+        <div
+            style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:12px; opacity:0.3;">
+            DATA_ERR</div>
+        {% endif %}
     </div>
-    <p class="title-reason">{{ title.reason }}</p>
-</article>
+    <div class="title-info">
+        <h4>{{ title.name }}</h4>
+        <div class="title-badge">
+            <span>{{ title.mbti }}</span>
+            <span style="color:var(--c-dec-3);">//</span>
+            <span>{{ title.title }}</span>
+        </div>
+        <div class="title-reason">{{ title.reason }}</div>
+    </div>
+</div>
 {% endfor %}
 {% endif %}

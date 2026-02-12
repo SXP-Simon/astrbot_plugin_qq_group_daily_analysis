@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Night Mode Analysis Portal (PDF)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        /* PDF specific styles */
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        :root {
+            --bg-deep: #0a0a0a;
+            --bg-panel: #141414;
+            --bg-card: #1c1c1c;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent-orange: #ff9900;
+            --accent-blue: #3399ff;
+            --accent-red: #ff3366;
+            --accent-green: #00ff88;
+            --border-color: #2a2a2a;
+            --grid-color: rgba(255, 255, 255, 0.03);
+
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-body: 'Inter', 'Noto Sans SC', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 30px 30px;
+            min-height: 100vh;
+            font-size: 16px;
+        }
+
+        .layout {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            /* Balanced 2-column split */
+            gap: 30px;
+            align-items: flex-start;
+        }
+
+        .left-col,
+        .right-col {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        /* Terminal Window Style */
+        .window {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            margin-bottom: 0;
+        }
+
+        .window-header {
+            background: #1e1e1e;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .traffic-lights {
+            display: flex;
+            gap: 8px;
+        }
+
+        .light {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .light.red {
+            background: #ff5f56;
+        }
+
+        .light.green {
+            background: #27c93f;
+        }
+
+        .window-title {
+            margin-left: 15px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .top-nav {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            align-items: center;
+        }
+
+        .nav-item {
+            color: var(--accent-orange);
+            font-weight: bold;
+        }
+
+        .prompt {
+            color: var(--accent-orange);
+            font-weight: bold;
+        }
+
+        .keyword {
+            color: var(--accent-red);
+        }
+
+        .comment {
+            color: #555;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin: 0 0 15px;
+            letter-spacing: -1.5px;
+            line-height: 1;
+            color: #fff;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 153, 0, 0.2);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .stat-label {
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stat-label::before {
+            content: '>';
+            color: var(--accent-orange);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--accent-orange);
+            font-family: var(--font-mono);
+        }
+
+        .section-header {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+        }
+
+        .code-block {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            height: 220px;
+            position: relative;
+            padding: 20px 5px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
+        .topic-list,
+        .user-grid,
+        .quote-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .user-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 6px;
+            display: flex;
+            gap: 15px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .user-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 6px;
+        }
+
+        .user-info h4 {
+            margin: 0 0 4px;
+            font-size: 1rem;
+        }
+
+        .tag {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            border: 1px solid;
+            margin-right: 5px;
+        }
+
+        .tag.mbti {
+            color: #ffcc00;
+            border-color: rgba(255, 204, 0, 0.3);
+            background: rgba(255, 204, 0, 0.1);
+        }
+
+        .tag.title {
+            color: var(--accent-blue);
+            border-color: rgba(51, 153, 255, 0.3);
+        }
+
+        .topic-item {
+            padding: 15px;
+            border-left: 3px solid var(--accent-orange);
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .topic-title {
+            font-weight: bold;
+            font-size: 1.3rem;
+            margin-bottom: 8px;
+            color: var(--accent-orange);
+        }
+
+        .quote-item {
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+            background: #111;
+        }
+
+        .quote-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 1px solid #333;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .quote-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .quote-body {
+            flex: 1;
+        }
+
+        .quote-text {
+            font-style: italic;
+            font-size: 0.95rem;
+            color: var(--accent-orange);
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+
+        footer {
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .avoid-break {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="top-nav">
+            <div class="nav-item">● ready</div>
+            <div class="nav-item">~/report</div>
+        </div>
+
+        <div class="main-container">
+            <!-- Left Column: Insights & Topics -->
+            <div class="left-col">
+                <div>
+                    <div class="comment">// Report: {{current_date}}</div>
+                    <h1><span class="prompt">&gt;</span> Daily Analysis</h1>
+                    <div class="code-block">
+                        <span class="keyword">stats</span> = {<br>
+                        &nbsp;&nbsp;msg: {{message_count}},<br>
+                        &nbsp;&nbsp;users: {{participant_count}}<br>
+                        }
+                    </div>
+                </div>
+
+                <div class="avoid-break">
+                    <div class="section-header"><span class="prompt">$</span> ls ./topics</div>
+                    <div class="topic-list">
+                        {{topics_html}}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Chart & People -->
+            <div class="right-col">
+                <div class="window avoid-break">
+                    <div class="window-header">
+                        <div class="traffic-lights">
+                            <div class="light red"></div>
+                            <div class="light green"></div>
+                        </div>
+                        <div class="window-title">activity.log</div>
+                    </div>
+                    <div class="chart-container">
+                        {{hourly_chart_html}}
+                    </div>
+                </div>
+
+                <div class="avoid-break">
+                    <div class="section-header"><span class="prompt">$</span> cat users</div>
+                    <div class="user-grid">
+                        {{titles_html}}
+                    </div>
+                </div>
+
+                <div class="avoid-break">
+                    <div class="section-header"><span class="prompt">$</span> grep golden</div>
+                    <div class="quote-grid">
+                        {{quotes_html}}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div>SYSTEM_REPORT // CHANNEL: {{platform_id}} // {{current_datetime}}</div>
+            <div style="color: var(--accent-orange);">AstrBotDevs/AstrBot 群分析</div>
+        </footer>
+    </div>
+</body>
+
+</html>
