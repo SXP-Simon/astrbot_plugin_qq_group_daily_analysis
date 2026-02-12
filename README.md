@@ -128,6 +128,7 @@ retro_futurism 模板效果图
 |------|-----------|--------------|
 | **QQ** | OneBot v11 | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。 |
 | **Discord** | Discord | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。 |
+| **Telegram** | Telegram Bot API | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
 
 > [!CAUTION]
@@ -135,6 +136,11 @@ retro_futurism 模板效果图
 > 如果机器人无法获取群列表或分析报 `403 Forbidden`，请检查 Discord 开发者面板中：
 > 1. **Privileged Gateway Intents**: 开启 `Message Content Intent`。
 > 2. **频道权限**: 确保机器人所在的频道，对应的角色拥有 **“查看消息历史记录”** 权限。
+
+> [!IMPORTANT]
+> **Telegram 用户重点注意**：
+> 1. 如果 TG Bot 不是群管理员，务必在拉入群前先关闭 BotFather 隐私模式。
+> 2. 如果 Bot 已经在群里且不是管理员，关闭隐私模式后必须先移除再重新拉入群，否则新设置不会生效。
 
 
 
