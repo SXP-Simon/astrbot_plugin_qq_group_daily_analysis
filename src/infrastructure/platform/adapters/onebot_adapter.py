@@ -69,6 +69,18 @@ class OneBotAdapter(PlatformAdapter):
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
         return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
 
+    def _parse_id(self, id_str: str) -> int:
+        """
+        解析复合 ID (如 1234567890（用户ID）_123456789（群ID）) 并返回真实的整数 ID。
+        支持剥离下划线 (_) 分隔的前缀。
+        """
+        try:
+            # 必须先 split，因为 int("1_2") 在 Python 里会变成 12
+            actual_id = str(id_str).split("_")[-1]
+            return int(actual_id)
+        except (ValueError, IndexError):
+            return 0
+
     # ==================== IMessageRepository 实现 ====================
 
     async def fetch_messages(
@@ -97,7 +109,7 @@ class OneBotAdapter(PlatformAdapter):
             # 调用 OneBot 标准 API: get_group_msg_history
             result = await self.bot.call_action(
                 "get_group_msg_history",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
                 count=max_count,
             )
 
@@ -341,7 +353,7 @@ class OneBotAdapter(PlatformAdapter):
 
             await self.bot.call_action(
                 "send_group_msg",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
                 message=message,
             )
             return True
@@ -383,7 +395,7 @@ class OneBotAdapter(PlatformAdapter):
 
             await self.bot.call_action(
                 "send_group_msg",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
                 message=message,
             )
             return True
@@ -411,7 +423,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             await self.bot.call_action(
                 "upload_group_file",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
                 file=file_path,
                 name=filename or file_path.replace("\\", "/").split("/")[-1],
             )
@@ -447,7 +459,7 @@ class OneBotAdapter(PlatformAdapter):
 
             await self.bot.call_action(
                 "send_group_forward_msg",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
                 messages=nodes,
             )
             return True
@@ -462,7 +474,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             result = await self.bot.call_action(
                 "get_group_info",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
             )
 
             if not result:
@@ -492,7 +504,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             result = await self.bot.call_action(
                 "get_group_member_list",
-                group_id=int(group_id),
+                group_id=self._parse_id(group_id),
             )
 
             members = []
@@ -519,8 +531,8 @@ class OneBotAdapter(PlatformAdapter):
         try:
             result = await self.bot.call_action(
                 "get_group_member_info",
-                group_id=int(group_id),
-                user_id=int(user_id),
+                group_id=self._parse_id(group_id),
+                user_id=self._parse_id(user_id),
             )
 
             if not result:
