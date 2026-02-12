@@ -64,6 +64,15 @@ class MessageContent:
         """检查是否为表情内容。"""
         return self.type == MessageContentType.EMOJI
 
+    @property
+    def target_id(self) -> str:
+        """
+        获取被 @ 的用户 ID（兼容旧代码）。
+
+        Alias for at_user_id.
+        """
+        return self.at_user_id
+
 
 @dataclass(frozen=True)
 class UnifiedMessage:
