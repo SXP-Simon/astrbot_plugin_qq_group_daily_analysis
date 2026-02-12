@@ -448,16 +448,21 @@ class TelegramTemplatePreviewHandler:
             if "message is not modified" in str(e).lower():
                 return
             if self._is_photo_dimension_error(e):
-                with open(image_path, "rb") as image_file:
-                    media = InputMediaDocument(media=image_file, caption=caption)
-                    await query.edit_message_media(
-                        media=media,
-                        reply_markup=keyboard,
-                        connect_timeout=self._CONNECT_TIMEOUT,
-                        read_timeout=self._READ_TIMEOUT,
-                        write_timeout=self._WRITE_TIMEOUT,
-                        pool_timeout=self._POOL_TIMEOUT,
-                    )
+                try:
+                    with open(image_path, "rb") as image_file:
+                        media = InputMediaDocument(media=image_file, caption=caption)
+                        await query.edit_message_media(
+                            media=media,
+                            reply_markup=keyboard,
+                            connect_timeout=self._CONNECT_TIMEOUT,
+                            read_timeout=self._READ_TIMEOUT,
+                            write_timeout=self._WRITE_TIMEOUT,
+                            pool_timeout=self._POOL_TIMEOUT,
+                        )
+                except BadRequest as document_error:
+                    if "message is not modified" in str(document_error).lower():
+                        return
+                    raise
                 return
             raise
 
