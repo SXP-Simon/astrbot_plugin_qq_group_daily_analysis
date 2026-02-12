@@ -1,14 +1,18 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.7.3] - feat(auto_scheduler): 增量分析问题修复
-*   **✨ 新功能**: 参考 [v4.7.1] 日志，建议尝试增量分析
-*   **🔌 多平台开发中**: 正在尝试接入多平台，目前 Onebot 和 Discord 基本通过了初步测试，如果有 bug 欢迎 issue 反馈， telegram 还在开发中
+## [v4.7.5] - feat(Telegram): Telegram 平台支持
+*   **✨ 新功能**: Telegram 平台初步支持
+*   **✨ 新功能**: 将模板选择改为 options，方便配置
 
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.7.3] - feat(auto_scheduler): 增量分析问题修复
+*   **✨ 新功能**: 参考 [v4.7.1] 日志，建议尝试增量分析
+*   **🔌 多平台开发中**: 正在尝试接入多平台，目前 Onebot 和 Discord 基本通过了初步测试，如果有 bug 欢迎 issue 反馈， telegram 还在开发中
 
 ## [v4.7.2] - feat(话题分析): 话题分析支持用户头像显示
 
