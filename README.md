@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
 
-_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**、**Discord**，未来支持更多平台。 ✨_
+_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
@@ -30,7 +30,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 
 > [!warning]
 > **实验性开发中**：
-> - 多平台支持功能尚在开发中，当前仅支持QQ OneBot, Discord。
+> - 多平台支持功能尚在开发中，当前仅支持QQ OneBot, Discord, Telegram。
 > - 旧版本稳定版在[QQ 分支](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/QQ)，仅 QQ 平台支持
 
 
