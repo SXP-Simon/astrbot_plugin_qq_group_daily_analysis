@@ -457,10 +457,6 @@ class QQGroupDailyAnalysis(Star):
             yield event.plain_result(parse_error)
             return
 
-        if not template_name:
-            yield event.plain_result("❌ 模板参数不能为空")
-            return
-
         if not await self.template_command_service.template_exists(template_name):
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
             return
