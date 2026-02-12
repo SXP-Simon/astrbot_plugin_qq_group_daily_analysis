@@ -166,9 +166,18 @@
             outline-offset: 3px;
             padding: 15px;
             display: flex;
-            gap: 15px;
+            flex-direction: column;
+            gap: 12px;
             position: relative;
-            margin-bottom: 5px;
+            margin-bottom: 20px;
+        }
+
+        .sf-card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px dashed rgba(183, 28, 28, 0.2);
+            padding-bottom: 10px;
         }
 
         .sf-avatar-wrap {
@@ -180,10 +189,6 @@
             background: var(--red-festive);
             padding: 2px;
             border-radius: 50%;
-            /* This was duplicated, keeping the one inside the new block */
-            /* border: 2px solid var(--gold-primary); */
-            /* overflow: hidden; */
-            /* background: #fff; */
         }
 
         .sf-avatar {
@@ -195,6 +200,14 @@
         .sf-user-name {
             font-weight: bold;
             color: var(--red-festive);
+            margin: 0 0 5px;
+            font-size: 1.1rem;
+        }
+
+        .sf-user-reason {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            text-align: justify;
         }
 
         .sf-quote-item {

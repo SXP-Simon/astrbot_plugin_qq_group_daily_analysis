@@ -288,15 +288,23 @@
 
         .sf-section-title {
             font-family: var(--font-calligraphy);
-            font-size: 2.2rem;
+            font-size: 2.4rem;
             color: var(--red-festive);
-            margin-bottom: 30px;
+            margin-bottom: 35px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 15px;
             position: relative;
-            padding-bottom: 10px;
+            padding-bottom: 12px;
             border-bottom: 2px solid var(--red-festive);
+            background: linear-gradient(to right, rgba(183, 28, 28, 0.05), transparent);
+        }
+
+        .sf-section-title::before {
+            content: '☁️';
+            /* Cloud decoration */
+            font-size: 1.2rem;
+            opacity: 0.6;
         }
 
         .sf-section-title::after {
@@ -304,10 +312,10 @@
             position: absolute;
             bottom: -5px;
             left: 0;
-            width: 60px;
+            width: 80px;
             height: 8px;
             background: var(--gold-primary);
-            border-radius: 4px;
+            clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%);
         }
 
         .sf-topic-card {
@@ -349,59 +357,50 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
-            padding: 20px;
+            padding: 25px;
             background: #fff;
-            background-image:
-                linear-gradient(90deg, var(--red-festive) 2px, transparent 2px),
-                linear-gradient(-90deg, var(--red-festive) 2px, transparent 2px);
-            background-size: 100% 100%;
-            border: 1px solid var(--red-festive);
+            border-left: 4px solid var(--red-festive);
+            border-right: 4px solid var(--red-festive);
+            border-top: 1px solid var(--red-festive);
+            border-bottom: 1px solid var(--red-festive);
             position: relative;
-            box-shadow: 4px 4px 15px rgba(183, 28, 28, 0.08);
-            border-radius: 4px;
+            box-shadow: 6px 6px 20px rgba(183, 28, 28, 0.1);
+            background-image: radial-gradient(rgba(183, 28, 28, 0.02) 1px, transparent 1px);
+            background-size: 15px 15px;
+        }
+
+        .sf-user-card::before {
+            content: '春';
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-family: var(--font-calligraphy);
+            font-size: 3rem;
+            color: var(--red-festive);
+            opacity: 0.05;
+            pointer-events: none;
         }
 
         .sf-card-header {
             display: flex;
             align-items: center;
-            gap: 15px;
-            border-bottom: 1px dashed rgba(183, 28, 28, 0.2);
-            padding-bottom: 12px;
-        }
-
-        .sf-user-card::before {
-            content: '';
-            position: absolute;
-            top: -5px;
-            left: -5px;
-            width: 15px;
-            height: 15px;
-            border-top: 3px solid var(--gold-primary);
-            border-left: 3px solid var(--gold-primary);
-        }
-
-        .sf-user-card::after {
-            content: '';
-            position: absolute;
-            bottom: -5px;
-            right: -5px;
-            width: 15px;
-            height: 15px;
-            border-bottom: 3px solid var(--gold-primary);
-            border-right: 3px solid var(--gold-primary);
+            gap: 18px;
+            border-bottom: 1px solid rgba(183, 28, 28, 0.1);
+            padding-bottom: 15px;
         }
 
         .sf-avatar-wrap {
-            width: 60px;
-            height: 60px;
+            width: 65px;
+            height: 65px;
             flex-shrink: 0;
             border: 2px solid var(--gold-primary);
             background: var(--red-festive);
-            padding: 2px;
+            padding: 3px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
         }
 
         .sf-avatar {
@@ -409,7 +408,6 @@
             height: 100%;
             object-fit: cover;
             border-radius: 50%;
-            /* Inner circle */
         }
 
         .sf-avatar-placeholder {
@@ -438,27 +436,29 @@
             font-family: var(--font-heading);
             font-size: 0.75rem;
             font-weight: bold;
-            padding: 3px 10px;
+            padding: 2px 10px;
             border: 1.5px solid var(--red-festive);
             position: relative;
             display: inline-block;
-            margin-right: 5px;
+            margin-right: 6px;
+            margin-bottom: 4px;
             background: #fff;
             color: var(--red-festive);
-            line-height: 1;
+            line-height: 1.2;
+            width: fit-content;
         }
 
         .sf-badge.mbti {
             color: var(--red-festive);
-            border-color: var(--red-festive);
-            background: transparent;
+            border: 1px solid var(--red-festive);
+            opacity: 0.8;
         }
 
         .sf-badge.sf-title {
             color: #fff;
             background: var(--red-festive);
             border-color: var(--red-festive);
-            box-shadow: 2px 2px 0 rgba(255, 202, 40, 0.5);
+            box-shadow: 3px 3px 0 rgba(255, 202, 40, 0.4);
         }
 
         .sf-badge::after {
@@ -469,7 +469,7 @@
             right: 2px;
             bottom: 2px;
             border: 1px solid currentColor;
-            opacity: 0.3;
+            opacity: 0.2;
         }
 
         .sf-user-reason {
@@ -653,9 +653,7 @@
             <!-- 3. Characters: Masonry 2-Column Grid -->
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>🎖️</span> 群友风云榜</div>
-                <div class="sf-user-masonry">
-                    {{titles_html}}
-                </div>
+                {{titles_html}}
             </div>
 
             <!-- 4. Quotes: Staggered Timeline -->
