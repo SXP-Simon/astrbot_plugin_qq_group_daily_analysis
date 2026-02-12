@@ -26,6 +26,7 @@ class BotManager:
         self._context = None
         self._is_initialized = False
         self._default_platform = "default"  # 默认平台
+        self._plugin_instance = None  # 插件实例引用，用于适配器回调
 
     def set_context(self, context):
         """设置AstrBot上下文，并传递给所有支持的适配器"""
@@ -35,6 +36,10 @@ class BotManager:
         for adapter in self._adapters.values():
             if hasattr(adapter, "set_context"):
                 adapter.set_context(context)
+
+    def set_plugin_instance(self, plugin_instance: Any):
+        """设置插件实例引用"""
+        self._plugin_instance = plugin_instance
 
     def set_bot_instance(self, bot_instance, platform_id=None, platform_name=None):
         """
@@ -56,6 +61,7 @@ class BotManager:
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
                     "platform_id": str(platform_id),
+                    "plugin_instance": self._plugin_instance,
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config

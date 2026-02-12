@@ -840,33 +840,19 @@ class AutoScheduler:
                             if str(group_id).strip()
                         ]
 
-                        # 获取平台名称（用于 Telegram 回退判定）
+                        # 获取平台名称（仅用于日志）
                         p_name = None
                         if hasattr(adapter, "get_platform_name"):
                             try:
                                 p_name = adapter.get_platform_name()
                             except Exception:
                                 p_name = None
-                        if not p_name:
-                            p_name = (
-                                self.bot_manager._detect_platform_name(bot_instance)
-                                or "unknown"
-                            )
-                        p_name = str(p_name).strip()
-
-                        used_tg_kv_fallback = False
-                        if not groups and p_name.lower() == "telegram":
-                            groups = await self._get_telegram_groups_from_plugin_kv(
-                                str(platform_id)
-                            )
-                            used_tg_kv_fallback = bool(groups)
 
                         for group_id in groups:
                             all_groups.add((platform_id, str(group_id)))
 
                         logger.info(
-                            f"平台 {platform_id} ({p_name}) 成功获取 {len(groups)} 个群组"
-                            + (" (KV回退)" if used_tg_kv_fallback else "")
+                            f"平台 {platform_id} ({p_name or 'unknown'}) 成功获取 {len(groups)} 个群组"
                         )
                         continue
 
@@ -880,24 +866,3 @@ class AutoScheduler:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
 
         return list(all_groups)
-
-    async def _get_telegram_groups_from_plugin_kv(self, platform_id: str) -> list[str]:
-        """从插件 KV 获取 Telegram 已见群/话题，作为 get_group_list 的回退。"""
-        if not self.plugin_instance:
-            return []
-
-        getter = getattr(self.plugin_instance, "get_telegram_seen_group_ids", None)
-        if not callable(getter):
-            return []
-
-        try:
-            groups = await getter(platform_id=platform_id)
-            return sorted(
-                {str(group_id).strip() for group_id in groups if str(group_id).strip()}
-            )
-        except Exception as e:
-            logger.warning(
-                "[TGRegistry] Scheduler fetch failed: "
-                f"platform_id={platform_id} error={e}"
-            )
-            return []
