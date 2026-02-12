@@ -359,6 +359,8 @@ class TelegramTemplatePreviewHandler:
         if not update.callback_query or not update.callback_query.data:
             return
 
+        self._cleanup_expired_sessions()
+
         query = update.callback_query
         data = query.data
         parts = data.split(":")
@@ -369,6 +371,10 @@ class TelegramTemplatePreviewHandler:
         _, token, action = parts
         session = self._sessions.get(token)
         if not session:
+            await query.answer("预览会话已过期，请重新发送 /查看模板", show_alert=True)
+            return
+        if time.time() - session.created_at > self._SESSION_TTL_SECONDS:
+            self._sessions.pop(token, None)
             await query.answer("预览会话已过期，请重新发送 /查看模板", show_alert=True)
             return
 
