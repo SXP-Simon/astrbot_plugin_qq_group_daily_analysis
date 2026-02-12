@@ -1,0 +1,26 @@
+{% if titles %}
+<div class="user-grid">
+    {% for title in titles %}
+    <div class="user-card avoid-break">
+        <div class="user-avatar">
+            {% if title.avatar_data %}
+            <img src="{{ title.avatar_data }}" alt="{{ title.name }}"
+                style="width:100%; height:100%; object-fit:cover; border-radius: 6px;">
+            {% else %}
+            <div
+                style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background: #222; border-radius: 6px; font-family: var(--font-mono); font-size: 10px; color: #444;">
+                ID_REF</div>
+            {% endif %}
+        </div>
+        <div class="user-info">
+            <h4>{{ title.name }}</h4>
+            <div style="margin-bottom: 10px;">
+                <span class="tag mbti">{{ title.mbti }}</span>
+                <span class="tag title">{{ title.title }}</span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">{{ title.reason }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

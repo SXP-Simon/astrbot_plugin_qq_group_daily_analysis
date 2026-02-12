@@ -1,0 +1,13 @@
+{% if chart_data %}
+{% for item in chart_data %}
+<div class="activity-col">
+    <span class="activity-val-top">{{ item.count }}</span>
+    <div class="activity-bar-v" style="--h:{{ " %.2f"|format(item.percentage) }}%;"></div>
+    <span class="activity-tick">{{ "%02d"|format(item.hour) }}:00</span>
+</div>
+{% endfor %}
+{% else %}
+<div class="activity-col" style="flex:1; justify-content: center; height: 100px;">
+    <div class="comment">// NO_DATA_STREAM</div>
+</div>
+{% endif %}

@@ -72,14 +72,14 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 <details>
 <summary>点击展开查看其他模板效果图</summary>
 
+retro_futurism 模板效果图
+![retro_futurism效果图](./assets/retro_futurism-demo.jpg)
+
 format 模板效果图
 ![format效果图](./assets/format-demo.jpg)
 
 simple 模板效果图(用于展示贡献指南)
 ![simple效果图](./assets/simple-demo.jpg)
-
-retro_futurism 模板效果图
-![retro_futurism效果图](./assets/retro_futurism-demo.jpg)
 
 </details>
 
