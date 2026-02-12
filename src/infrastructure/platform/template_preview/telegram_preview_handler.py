@@ -99,18 +99,43 @@ class TelegramTemplatePreviewHandler:
             return
 
         platforms = context.platform_manager.get_insts()
+        seen_platform_ids: set[str] = set()
         for platform in platforms:
             platform_id, platform_name = self._extract_platform_meta(platform)
             if platform_name != "telegram":
                 continue
-            client = self._extract_platform_client(platform)
-            if client is not None and platform_id:
-                self._platform_clients[platform_id] = client
-            if not platform_id or platform_id in self._registered_platform_ids:
+            if not platform_id:
                 continue
+
+            seen_platform_ids.add(platform_id)
+            client = self._extract_platform_client(platform)
+            if client is not None:
+                self._platform_clients[platform_id] = client
+
             application = getattr(platform, "application", None)
             if not application:
                 continue
+
+            existing = self._handlers.get(platform_id)
+            if existing:
+                old_application, old_handler = existing
+                if old_application is application:
+                    self._registered_platform_ids.add(platform_id)
+                    continue
+
+                # 平台对象热替换：解绑旧 application 上的 handler 后重绑
+                try:
+                    old_application.remove_handler(old_handler)
+                    logger.info(
+                        f"[TemplatePreview][Telegram] 检测到 application 变更，已解绑旧回调: platform_id={platform_id}"
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"[TemplatePreview][Telegram] 解绑旧回调失败: platform_id={platform_id}, err={e}"
+                    )
+                self._handlers.pop(platform_id, None)
+                self._registered_platform_ids.discard(platform_id)
+
             try:
                 handler = CallbackQueryHandler(
                     self._on_callback_query,
@@ -126,6 +151,26 @@ class TelegramTemplatePreviewHandler:
                 logger.warning(
                     f"[TemplatePreview][Telegram] 注册回调处理器失败: platform_id={platform_id}, err={e}"
                 )
+
+        # 兜底清理：平台下线后移除残留 handler，避免资源泄漏
+        stale_ids = [
+            platform_id
+            for platform_id in list(self._handlers.keys())
+            if platform_id not in seen_platform_ids
+        ]
+        for stale_platform_id in stale_ids:
+            old_application, old_handler = self._handlers.pop(stale_platform_id)
+            try:
+                old_application.remove_handler(old_handler)
+                logger.info(
+                    f"[TemplatePreview][Telegram] 已清理离线平台回调: platform_id={stale_platform_id}"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"[TemplatePreview][Telegram] 清理离线平台回调失败: platform_id={stale_platform_id}, err={e}"
+                )
+            self._registered_platform_ids.discard(stale_platform_id)
+            self._platform_clients.pop(stale_platform_id, None)
 
     async def unregister_callback_handlers(self) -> None:
         """卸载已注册的回调处理器（插件终止时调用）。"""
