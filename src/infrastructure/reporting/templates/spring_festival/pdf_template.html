@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>春节特供日报 (PDF)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        :root {
+            --red-festive: #b71c1c;
+            --gold-primary: #ffca28;
+            --wood-dark: #3e2723;
+            --bg-paper: #fffcf0;
+            --text-main: #3e2723;
+
+            --font-calligraphy: 'Ma Shan Zheng', cursive;
+            --font-heading: 'ZCOOL XiaoWei', serif;
+            --font-body: 'Noto Serif SC', serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-paper);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            font-size: 14px;
+        }
+
+        .layout {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            border: 10px solid var(--red-festive);
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Decoration */
+        .decoration {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 2px solid var(--gold-primary);
+            pointer-events: none;
+        }
+
+        .sf-header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 5px double var(--red-festive);
+            padding-bottom: 20px;
+        }
+
+        .sf-header h1 {
+            font-family: var(--font-calligraphy);
+            font-size: 4rem;
+            color: var(--red-festive);
+            margin: 0;
+        }
+
+        .sf-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .sf-hongbao {
+            background: var(--red-festive);
+            padding: 15px;
+            border-radius: 8px;
+            color: var(--gold-primary);
+            text-align: center;
+        }
+
+        .sf-badge {
+            font-family: var(--font-heading);
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 1px 8px;
+            border: 2px solid;
+            position: relative;
+            line-height: 1;
+        }
+
+        .sf-badge.mbti {
+            color: var(--red-festive);
+            border-color: var(--red-festive);
+            background: transparent;
+        }
+
+        .sf-badge.sf-title {
+            color: #fff;
+            background: var(--red-festive);
+            border-color: var(--red-festive);
+        }
+
+        .hb-label {
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+        }
+
+        .hb-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .sf-main {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 25px;
+        }
+
+        .sf-section-title {
+            font-family: var(--font-calligraphy);
+            font-size: 2rem;
+            color: var(--red-festive);
+            border-left: 5px solid var(--red-festive);
+            padding-left: 10px;
+            margin-bottom: 15px;
+            margin-top: 25px;
+        }
+
+        .sf-topic-card {
+            background: #fff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid var(--red-festive);
+        }
+
+        .sf-topic-title {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: var(--red-festive);
+            margin-bottom: 5px;
+        }
+
+        .sf-topic-meta {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        /* User Grid */
+        .sf-user-card {
+            background: #fff;
+            border: 1px solid var(--red-festive);
+            outline: 1px solid var(--red-festive);
+            outline-offset: 3px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .sf-card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-bottom: 1px dashed rgba(183, 28, 28, 0.2);
+            padding-bottom: 10px;
+        }
+
+        .sf-avatar-wrap {
+            width: 50px;
+            height: 50px;
+            flex-shrink: 0;
+            border: 2px solid var(--gold-primary);
+            overflow: hidden;
+            background: var(--red-festive);
+            padding: 2px;
+            border-radius: 50%;
+        }
+
+        .sf-avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sf-user-name {
+            font-weight: bold;
+            color: var(--red-festive);
+            margin: 0 0 5px;
+            font-size: 1.1rem;
+        }
+
+        .sf-user-reason {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            text-align: justify;
+        }
+
+        .sf-quote-item {
+            padding: 15px;
+            border: 2px solid var(--red-festive);
+            margin-bottom: 15px;
+            background: #fff;
+        }
+
+        .sf-quote-content {
+            font-family: var(--font-heading);
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+        }
+
+        .sf-quote-author {
+            text-align: right;
+            font-weight: bold;
+            color: var(--red-festive);
+        }
+
+        .chart-container {
+            height: 180px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background: #fff;
+        }
+
+        .sf-chart-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+            flex: 1;
+        }
+
+        .sf-chart-bar {
+            width: 60%;
+            background: var(--red-festive);
+            height: var(--h);
+        }
+
+        .sf-chart-tick {
+            font-size: 0.5rem;
+            transform: rotate(-45deg);
+        }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            border-top: 1px solid var(--gold-primary);
+            padding-top: 20px;
+            font-size: 0.8rem;
+            color: var(--red-festive);
+        }
+
+        .avoid-break {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="decoration"></div>
+
+        <div class="sf-header">
+            <h1>🏮 春节特供日报 🏮</h1>
+            <div>—— {{current_date}} ——</div>
+        </div>
+
+        <div class="sf-stats-grid">
+            <div class="sf-hongbao">
+                <div class="hb-label">消息数</div>
+                <div class="hb-value">{{message_count}}</div>
+            </div>
+            <div class="sf-hongbao">
+                <div class="hb-label">群友数</div>
+                <div class="hb-value">{{participant_count}}</div>
+            </div>
+            <div class="sf-hongbao">
+                <div class="hb-label">总字数</div>
+                <div class="hb-value">{{total_characters}}</div>
+            </div>
+            <div class="sf-hongbao">
+                <div class="hb-label">活跃窗口</div>
+                <div class="hb-value" style="font-size: 1.2rem;">{{most_active_period}}</div>
+            </div>
+        </div>
+
+        <div class="sf-main">
+            <div class="left-col">
+                <div class="sf-section-title">核心话题回顾</div>
+                {{topics_html}}
+            </div>
+            <div class="right-col">
+                <div class="sf-section-title">活跃趋势</div>
+                <div class="chart-container">
+                    {{hourly_chart_html}}
+                </div>
+
+                <div class="sf-section-title">群友风云榜</div>
+                {{titles_html}}
+            </div>
+        </div>
+
+        <div class="sf-section-title">每日金句回响</div>
+        {{quotes_html}}
+
+        <footer>
+            <div>Generated by SXP-Simon / astrbot_plugin_qq_group_daily_analysis // {{current_datetime}}</div>
+        </footer>
+    </div>
+</body>
+
+</html>

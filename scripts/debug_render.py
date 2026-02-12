@@ -70,13 +70,13 @@ class MockConfigManager:
         return self.template_name
 
     def get_max_topics(self) -> int:
-        return 5
+        return 8
 
     def get_max_user_titles(self) -> int:
         return 8
 
     def get_max_golden_quotes(self) -> int:
-        return 5
+        return 8
 
     def get_pdf_output_dir(self) -> str:
         return "data/pdf"
@@ -137,6 +137,26 @@ async def debug_render(
             contributors=["周八", "吴九"],
             detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
         ),
+        SummaryTopic(
+            topic="新出的3A大作测评",
+            contributors=["周八", "吴九"],
+            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+        ),
+        SummaryTopic(
+            topic="新出的3A大作测评",
+            contributors=["周八", "吴九"],
+            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+        ),
+        SummaryTopic(
+            topic="新出的3A大作测评",
+            contributors=["周八", "吴九"],
+            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+        ),
+        SummaryTopic(
+            topic="新出的3A大作测评",
+            contributors=["周八", "吴九"],
+            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+        ),
     ]
 
     user_titles = [
@@ -161,6 +181,34 @@ async def debug_render(
             mbti="INFP",
             reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
         ),
+        UserTitle(
+            name="潜水员",
+            user_id="112233445",
+            title="深夜潜水员",
+            mbti="INFP",
+            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
+        ),
+        UserTitle(
+            name="潜水员",
+            user_id="112233445",
+            title="深夜潜水员",
+            mbti="INFP",
+            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
+        ),
+        UserTitle(
+            name="潜水员",
+            user_id="112233445",
+            title="深夜潜水员",
+            mbti="INFP",
+            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
+        ),
+        UserTitle(
+            name="潜水员",
+            user_id="112233445",
+            title="深夜潜水员",
+            mbti="INFP",
+            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
+        ),
     ]
 
     golden_quotes = [
@@ -175,6 +223,30 @@ async def debug_render(
             sender="李四",
             reason="经典的开发辩解",
             user_id="987654321",
+        ),
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
+        ),
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
+        ),
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
+        ),
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
         ),
         GoldenQuote(
             content="PHP是世界上最好的语言！",
