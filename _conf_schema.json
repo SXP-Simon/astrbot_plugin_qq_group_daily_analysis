@@ -66,8 +66,14 @@
             "report_template": {
                 "type": "string",
                 "description": "报告模板",
+                "options": [
+                    "scrapbook",
+                    "retro_futurism",
+                    "simple",
+                    "format"
+                ],
                 "default": "scrapbook",
-                "hint": "分析报告使用的HTML模板名称，使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果"
+                "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
             },
             "debug_mode": {
                 "type": "bool",
