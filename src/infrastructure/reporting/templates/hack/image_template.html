@@ -15,7 +15,7 @@
             --bg-panel: #141414;
             --bg-card: #1c1c1c;
             --text-primary: #ffffff;
-            --text-secondary: #a0a0a0;
+            --text-secondary: #cccccc;
             --accent-orange: #ff9900;
             /* Primary */
             --accent-blue: #3399ff;
@@ -158,7 +158,7 @@
         }
 
         .comment {
-            color: #555;
+            color: var(--text-secondary);
         }
 
         h1 {
@@ -539,7 +539,7 @@
                         &nbsp;&nbsp;peak_time: <span
                             style="color: var(--accent-blue);">'{{most_active_period}}'</span><br>
                         };<br>
-                        <span class="comment">// Total characters: {{total_characters}}</span>
+                        <span style="color: var(--accent-green);">// Total characters: {{total_characters}}</span>
                     </div>
                 </div>
 
@@ -593,12 +593,12 @@
         </div>
 
         <footer>
-            <div>SYSTEM_REPORT // CHANNEL: {{platform_id}} // {{current_datetime}}</div>
+            <div>SYSTEM_REPORT // {{current_datetime}}</div>
             <div>
                 TOKENS: <span class="footer-token">{{total_tokens}}</span>
                 [P: {{prompt_tokens}} | C: {{completion_tokens}}]
             </div>
-            <div style="color: var(--accent-orange);">AstrBotDevs/AstrBot 群分析</div>
+            <div style="color: var(--accent-orange);">SXP-Simon/astrbot_plugin_qq_group_daily_analysis 群分析</div>
         </footer>
     </div>
 </body>
