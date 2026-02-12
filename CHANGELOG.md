@@ -1,14 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.7.5] - feat(Telegram): Telegram 平台支持
-*   **✨ 新功能**: Telegram 平台初步支持
-*   **✨ 新功能**: 将模板选择改为 options，方便配置
-
+## [v4.7.6] - feat: Telegram 按钮交互选择模板 (#83)
+*   **✨ 新功能**: Telegram 平台的 `/设置模板` 指令支持通过按钮交互选择模板，提升用户体验。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.7.5] - feat(Telegram): Telegram 平台支持
+*   **✨ 新功能**: Telegram 平台初步支持
+*   **✨ 新功能**: 将模板选择改为 options，方便配置
 
 ## [v4.7.3] - feat(auto_scheduler): 增量分析问题修复
 *   **✨ 新功能**: 参考 [v4.7.1] 日志，建议尝试增量分析
