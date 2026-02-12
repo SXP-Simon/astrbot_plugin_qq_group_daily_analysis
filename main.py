@@ -14,6 +14,9 @@ from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
 
+from .src.application.commands.template_command_service import (
+    TemplateCommandService,
+)
 from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
@@ -31,6 +34,10 @@ from .src.infrastructure.persistence.telegram_group_registry import (
     TelegramGroupRegistry,
 )
 from .src.infrastructure.platform.bot_manager import BotManager
+from .src.infrastructure.platform.template_preview import (
+    TelegramTemplatePreviewHandler,
+    TemplatePreviewRouter,
+)
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
@@ -83,6 +90,16 @@ class QQGroupDailyAnalysis(Star):
         self.message_processing_service = MessageProcessingService(
             context, self.telegram_group_registry
         )
+        self.template_command_service = TemplateCommandService(
+            plugin_root=os.path.dirname(__file__)
+        )
+        self.telegram_template_preview_handler = TelegramTemplatePreviewHandler(
+            config_manager=self.config_manager,
+            template_service=self.template_command_service,
+        )
+        self.template_preview_router = TemplatePreviewRouter(
+            handlers=[self.telegram_template_preview_handler]
+        )
 
         # 调度与重试
         self.retry_manager = RetryManager(
@@ -101,32 +118,6 @@ class QQGroupDailyAnalysis(Star):
         self._initialized = False
         # 异步注册任务，处理插件重载情况
         asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
-
-    def _resolve_template_base_dir(self) -> str:
-        """解析报告模板目录（兼容新旧目录结构）"""
-        plugin_root = os.path.dirname(__file__)
-        candidate_dirs = [
-            os.path.join(
-                plugin_root, "src", "infrastructure", "reporting", "templates"
-            ),
-            os.path.join(plugin_root, "src", "reports", "templates"),
-        ]
-        for candidate in candidate_dirs:
-            if os.path.isdir(candidate):
-                return candidate
-        return candidate_dirs[0]
-
-    def _resolve_template_preview_path(self, template_name: str) -> str | None:
-        """解析模板预览图路径（兼容新旧命名和目录）"""
-        plugin_root = os.path.dirname(__file__)
-
-        candidate_paths = [
-            os.path.join(plugin_root, "assets", f"{template_name}-demo.jpg"),
-        ]
-        for candidate in candidate_paths:
-            if os.path.exists(candidate):
-                return candidate
-        return None
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
@@ -164,6 +155,9 @@ class QQGroupDailyAnalysis(Star):
             discovered = await self.bot_manager.initialize_from_config()
             if discovered:
                 logger.info("Bot管理器初始化成功")
+                await self.template_preview_router.ensure_handlers_registered(
+                    self.context
+                )
                 # 启动调度器
                 self.auto_scheduler.schedule_jobs(self.context)
             else:
@@ -191,6 +185,8 @@ class QQGroupDailyAnalysis(Star):
 
             if self.retry_manager:
                 await self.retry_manager.stop()
+            if self.template_preview_router:
+                await self.template_preview_router.unregister_handlers()
 
             # 重置实例属性
             self.auto_scheduler = None
@@ -199,6 +195,8 @@ class QQGroupDailyAnalysis(Star):
             self.config_manager = None
             self.message_processing_service = None
             self.telegram_group_registry = None
+            self.template_preview_router = None
+            self.telegram_template_preview_handler = None
 
             logger.info("QQ群日常分析插件资源清理完成")
 
@@ -431,22 +429,12 @@ class QQGroupDailyAnalysis(Star):
         设置分析报告模板（跨平台支持）
         用法: /设置模板 [模板名称或序号]
         """
-        # 获取模板目录和可用模板列表
-        template_base_dir = self._resolve_template_base_dir()
+        # 命令由插件处理，禁用默认 LLM 回退。
+        event.should_call_llm(True)
 
-        def _list_templates_sync():
-            if os.path.exists(template_base_dir):
-                return sorted(
-                    [
-                        d
-                        for d in os.listdir(template_base_dir)
-                        if os.path.isdir(os.path.join(template_base_dir, d))
-                        and not d.startswith("__")
-                    ]
-                )
-            return []
-
-        available_templates = await asyncio.to_thread(_list_templates_sync)
+        available_templates = (
+            await self.template_command_service.list_available_templates()
+        )
 
         if not template_input:
             current_template = self.config_manager.get_report_template()
@@ -462,22 +450,18 @@ class QQGroupDailyAnalysis(Star):
 💡 使用 /查看模板 查看预览图""")
             return
 
-        # 判断输入是序号还是模板名称
-        template_name = template_input
-        if template_input.isdigit():
-            index = int(template_input)
-            if 1 <= index <= len(available_templates):
-                template_name = available_templates[index - 1]
-            else:
-                yield event.plain_result(
-                    f"❌ 无效的序号 '{template_input}'，有效范围: 1-{len(available_templates)}"
-                )
-                return
+        template_name, parse_error = self.template_command_service.parse_template_input(
+            template_input, available_templates
+        )
+        if parse_error:
+            yield event.plain_result(parse_error)
+            return
 
-        # 检查模板是否存在
-        template_dir = os.path.join(template_base_dir, template_name)
-        template_exists = await asyncio.to_thread(os.path.exists, template_dir)
-        if not template_exists:
+        if not template_name:
+            yield event.plain_result("❌ 模板参数不能为空")
+            return
+
+        if not await self.template_command_service.template_exists(template_name):
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
             return
 
@@ -491,69 +475,40 @@ class QQGroupDailyAnalysis(Star):
         查看所有可用的报告模板及预览图（跨平台支持）
         用法: /查看模板
         """
-        from astrbot.api.message_components import Image, Node, Nodes, Plain
+        # 命令由插件处理，禁用默认 LLM 回退。
+        event.should_call_llm(True)
 
-        # 获取模板目录
-        template_dir = self._resolve_template_base_dir()
-
-        def _list_templates_sync():
-            if os.path.exists(template_dir):
-                return sorted(
-                    [
-                        d
-                        for d in os.listdir(template_dir)
-                        if os.path.isdir(os.path.join(template_dir, d))
-                        and not d.startswith("__")
-                    ]
-                )
-            return []
-
-        available_templates = await asyncio.to_thread(_list_templates_sync)
+        available_templates = (
+            await self.template_command_service.list_available_templates()
+        )
 
         if not available_templates:
             yield event.plain_result("❌ 未找到任何可用的报告模板")
             return
 
+        platform_id = self._get_platform_id_from_event(event)
+        await self.template_preview_router.ensure_handlers_registered(self.context)
+        (
+            handled,
+            handler_results,
+        ) = await self.template_preview_router.handle_view_templates(
+            event=event,
+            platform_id=platform_id,
+            available_templates=available_templates,
+        )
+        if handled:
+            for result in handler_results:
+                yield result
+            return
+
         current_template = self.config_manager.get_report_template()
-
-        # 获取机器人信息用于合并转发消息
         bot_id = event.get_self_id()
-        bot_name = "模板预览"
-
-        # 圆圈数字序号
-        circle_numbers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"]
-
-        # 构建合并转发消息节点列表
-        node_list = []
-
-        # 添加标题节点
-        header_content = [
-            Plain(
-                f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换"
-            )
-        ]
-        node_list.append(Node(uin=bot_id, name=bot_name, content=header_content))
-
-        # 为每个模板创建一个节点
-        for index, template_name in enumerate(available_templates):
-            current_mark = " ✅" if template_name == current_template else ""
-            num_label = (
-                circle_numbers[index]
-                if index < len(circle_numbers)
-                else f"({index + 1})"
-            )
-
-            node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
-
-            # 添加预览图
-            preview_image_path = self._resolve_template_preview_path(template_name)
-            if preview_image_path:
-                node_content.append(Image.fromFileSystem(preview_image_path))
-
-            node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
-
-        # 使用 Nodes 包装成一个合并转发消息
-        yield event.chain_result([Nodes(node_list)])
+        preview_nodes = self.template_command_service.build_template_preview_nodes(
+            available_templates=available_templates,
+            current_template=current_template,
+            bot_id=bot_id,
+        )
+        yield event.chain_result([preview_nodes])
 
     @filter.command("安装PDF", alias={"install_pdf"})
     @filter.permission_type(PermissionType.ADMIN)
