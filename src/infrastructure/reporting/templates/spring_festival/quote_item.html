@@ -1,0 +1,24 @@
+{% if quotes %}
+<div class="sf-quote-timeline">
+    {% for quote in quotes %}
+    <div class="sf-quote-item {% if loop.index is even %}sf-right{% endif %} avoid-break">
+        <div class="sf-quote-avatar-wrap">
+            {% if quote.avatar_url %}
+            <img src="{{ quote.avatar_url }}" alt="{{ quote.sender }}"
+                style="width:100%; height:100%; object-fit:cover;">
+            {% elif quote.avatar_data %}
+            <img src="{{ quote.avatar_data }}" alt="{{ quote.sender }}"
+                style="width:100%; height:100%; object-fit:cover;">
+            {% else %}
+            <div style="font-family: var(--font-calligraphy); font-size: 2rem; color: var(--red-festive);">福</div>
+            {% endif %}
+        </div>
+        <div class="sf-quote-bubble">
+            <div class="sf-quote-content">“{{ quote.content }}”</div>
+            <div class="sf-quote-author">—— {{ quote.sender }}</div>
+            <div class="sf-quote-reason">【评语】{{ quote.reason }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
