@@ -75,6 +75,9 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 retro_futurism 模板效果图
 ![retro_futurism效果图](./assets/retro_futurism-demo.jpg)
 
+spring_festival 模板效果图
+![spring_festival效果图](./assets/spring_festival-demo.jpg)
+
 hack 模板效果图
 ![hack效果图](./assets/hack-demo.jpg)
 
