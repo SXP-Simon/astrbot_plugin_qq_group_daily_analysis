@@ -230,12 +230,6 @@ async def debug_render(
             reason="引发了长达3小时的群聊大讨论",
             user_id="112233445",
         ),
-                GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
-            user_id="112233445",
-        ),
         GoldenQuote(
             content="PHP是世界上最好的语言！",
             sender="王五",
@@ -248,7 +242,13 @@ async def debug_render(
             reason="引发了长达3小时的群聊大讨论",
             user_id="112233445",
         ),
-                GoldenQuote(
+        GoldenQuote(
+            content="PHP是世界上最好的语言！",
+            sender="王五",
+            reason="引发了长达3小时的群聊大讨论",
+            user_id="112233445",
+        ),
+        GoldenQuote(
             content="PHP是世界上最好的语言！",
             sender="王五",
             reason="引发了长达3小时的群聊大讨论",
