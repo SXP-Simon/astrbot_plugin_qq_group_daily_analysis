@@ -7,9 +7,6 @@ QQ群日常分析插件
 
 import asyncio
 import os
-import re
-from collections import Counter
-from datetime import datetime, timezone
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -33,11 +30,16 @@ from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.utils.pdf_utils import PDFInstaller
 
+from .src.infrastructure.persistence.telegram_group_registry import (
+    TelegramGroupRegistry,
+)
+from .src.application.services.message_processing_service import (
+    MessageProcessingService,
+)
+
 
 class QQGroupDailyAnalysis(Star):
     """QQ群日常分析插件主类"""
-
-    _TG_GROUP_REGISTRY_KV_KEY = "telegram_seen_groups_v1"
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -47,8 +49,12 @@ class QQGroupDailyAnalysis(Star):
         self.config_manager = ConfigManager(config)
         self.bot_manager = BotManager(self.config_manager)
         self.bot_manager.set_context(context)
+        self.bot_manager.set_plugin_instance(self)
         self.history_manager = HistoryManager(self)
         self.report_generator = ReportGenerator(self.config_manager)
+
+        # Telegram 注册表 (持久层)
+        self.telegram_group_registry = TelegramGroupRegistry(self)
 
         # 2. 领域层
         self.statistics_service = StatisticsService()
@@ -74,6 +80,11 @@ class QQGroupDailyAnalysis(Star):
             incremental_merge_service=self.incremental_merge_service,
         )
 
+        # 消息处理服务
+        self.message_processing_service = MessageProcessingService(
+            context, self.telegram_group_registry
+        )
+
         # 调度与重试
         self.retry_manager = RetryManager(
             self.bot_manager, self.html_render, self.report_generator
@@ -89,7 +100,6 @@ class QQGroupDailyAnalysis(Star):
         )
 
         self._initialized = False
-        self._tg_registry_lock: asyncio.Lock | None = None
         # 异步注册任务，处理插件重载情况
         asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
 
@@ -110,7 +120,7 @@ class QQGroupDailyAnalysis(Star):
     def _resolve_template_preview_path(self, template_name: str) -> str | None:
         """解析模板预览图路径（兼容新旧命名和目录）"""
         plugin_root = os.path.dirname(__file__)
-        template_base_dir = self._resolve_template_base_dir()
+
         candidate_paths = [
             os.path.join(plugin_root, "assets", f"{template_name}-demo.jpg"),
         ]
@@ -188,379 +198,13 @@ class QQGroupDailyAnalysis(Star):
             self.bot_manager = None
             self.report_generator = None
             self.config_manager = None
+            self.message_processing_service = None
+            self.telegram_group_registry = None
 
             logger.info("QQ群日常分析插件资源清理完成")
 
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
-
-    # ==================== 消息历史存储（统一方法，可复用） ====================
-
-    async def _store_message_to_history(self, event: AstrMessageEvent) -> None:
-        """
-        将消息存储到 AstrBot 的 message_history_manager
-
-        这是一个可复用的统一方法，支持所有通过 context 机制存储消息的平台。
-        不使用 fallback 值 - 如果获取不到必要数据会抛出异常。
-
-        Args:
-            event: AstrBot 消息事件
-
-        Raises:
-            ValueError: 当必要数据（group_id, sender_id, platform_id）无法获取时
-            RuntimeError: 当消息内容为空时
-        """
-        # 1. 获取群组 ID（必需）
-        group_id = self._get_group_id_from_event(event)
-        if not group_id:
-            raise ValueError("无法获取群组 ID，拒绝存储消息")
-
-        # 2. 获取发送者 ID（必需）
-        sender_id = event.get_sender_id()
-        if not sender_id:
-            raise ValueError(f"群 {group_id}: 无法获取发送者 ID，拒绝存储消息")
-        sender_id = str(sender_id)
-
-        # 3. 获取发送者名称（昵称优先，必要时回退）
-        sender_name = self._resolve_sender_name(event, sender_id)
-
-        # 4. 获取平台 ID（必需）
-        platform_id = event.get_platform_id()
-        if not platform_id:
-            raise ValueError(f"群 {group_id}: 无法获取平台 ID，拒绝存储消息")
-
-        # 5. 提取消息内容
-        message_parts = self._extract_message_parts(event)
-        if not message_parts:
-            raise RuntimeError(
-                f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
-            )
-
-        # 6. 提取事件消息 ID（用于 Telegram 已见群/话题记录）
-        msg_obj = getattr(event, "message_obj", None)
-        event_message_id = str(getattr(msg_obj, "message_id", "") or "")
-
-        # 7. 存储到数据库
-        await self.context.message_history_manager.insert(
-            platform_id=platform_id,
-            user_id=group_id,
-            content={"type": "user", "message": message_parts},
-            sender_id=sender_id,
-            sender_name=sender_name,
-        )
-
-        # Telegram: 记录已见群/话题，用于自动分析拉群回退
-        if self._is_telegram_event(event, platform_id):
-            try:
-                await self._upsert_telegram_group_registry(
-                    platform_id=platform_id,
-                    group_id=group_id,
-                    sender_id=sender_id,
-                    sender_name=sender_name,
-                    event_message_id=event_message_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    "[TGRegistry] Upsert failed: "
-                    f"platform_id={platform_id} group_id={group_id} error={e}"
-                )
-
-        logger.debug(
-            f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
-        )
-
-    @staticmethod
-    def _is_telegram_event(event: AstrMessageEvent, platform_id: str) -> bool:
-        """判断当前事件是否为 Telegram 平台。"""
-        platform_name = str(event.get_platform_name() or "").strip().lower()
-        if platform_name == "telegram":
-            return True
-        return str(platform_id or "").strip().lower().startswith("telegram")
-
-    def _get_tg_registry_lock(self) -> asyncio.Lock:
-        """懒加载 Telegram 群/话题注册表锁，避免并发读改写覆盖。"""
-        if self._tg_registry_lock is None:
-            self._tg_registry_lock = asyncio.Lock()
-        return self._tg_registry_lock
-
-    async def _upsert_telegram_group_registry(
-        self,
-        platform_id: str,
-        group_id: str,
-        sender_id: str,
-        sender_name: str,
-        event_message_id: str,
-    ) -> None:
-        """更新 Telegram 已见群/话题注册表（KV）。"""
-        lock = self._get_tg_registry_lock()
-        async with lock:
-            registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
-            if not isinstance(registry, dict):
-                registry = {}
-
-            platforms = registry.get("platforms")
-            if not isinstance(platforms, dict):
-                platforms = {}
-                registry["platforms"] = platforms
-
-            platform_key = str(platform_id).strip()
-            group_key = str(group_id).strip()
-
-            platform_map = platforms.get(platform_key)
-            if not isinstance(platform_map, dict):
-                platform_map = {}
-                platforms[platform_key] = platform_map
-
-            now_iso = datetime.now(timezone.utc).isoformat()
-
-            entry = platform_map.get(group_key)
-            if not isinstance(entry, dict):
-                entry = {}
-
-            first_seen = entry.get("first_seen")
-            if not isinstance(first_seen, str) or not first_seen:
-                first_seen = now_iso
-
-            entry.update(
-                {
-                    "first_seen": first_seen,
-                    "last_seen": now_iso,
-                    "last_sender_id": str(sender_id),
-                    "last_sender_name": str(sender_name),
-                    "last_event_message_id": str(event_message_id),
-                }
-            )
-            platform_map[group_key] = entry
-
-            registry["updated_at"] = now_iso
-            await self.put_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, registry)
-
-    async def get_telegram_seen_group_ids(
-        self, platform_id: str | None = None
-    ) -> list[str]:
-        """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
-        lock = self._get_tg_registry_lock()
-        async with lock:
-            registry = await self.get_kv_data(self._TG_GROUP_REGISTRY_KV_KEY, {})
-            if not isinstance(registry, dict):
-                return []
-
-            platforms = registry.get("platforms")
-            if not isinstance(platforms, dict):
-                return []
-
-            groups: set[str] = set()
-            if platform_id:
-                platform_map = platforms.get(str(platform_id).strip(), {})
-                if isinstance(platform_map, dict):
-                    groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
-                    )
-            else:
-                for platform_map in platforms.values():
-                    if not isinstance(platform_map, dict):
-                        continue
-                    groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
-                    )
-
-            return sorted(groups)
-
-    @staticmethod
-    def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
-        """判断 sender_name 是否为空或占位值。"""
-        if not name:
-            return True
-        normalized = str(name).strip()
-        if not normalized:
-            return True
-        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
-            return True
-        return normalized == str(sender_id).strip()
-
-    def _resolve_sender_name(self, event: AstrMessageEvent, sender_id: str) -> str:
-        """
-        解析发送者展示名。
-
-        优先级：
-        - Telegram:
-          1. raw_message.from_user.full_name
-          2. raw_message.from_user.first_name
-          3. event.get_sender_name() / message_obj.sender.nickname
-          4. raw_message.from_user.username
-          5. sender_id
-        - 其他平台：
-          1. event.get_sender_name()
-          2. message_obj.sender.nickname
-          3. raw_message.from_user.full_name / first_name / username
-          4. sender_id（最终回退，避免消息丢失）
-        """
-        platform_name = str(event.get_platform_name() or "").lower()
-        candidates: list[str | None] = []
-
-        msg_obj = getattr(event, "message_obj", None)
-        sender_obj = getattr(msg_obj, "sender", None)
-        raw_message = getattr(msg_obj, "raw_message", None)
-        raw_msg_obj = getattr(raw_message, "message", raw_message)
-        from_user = getattr(raw_msg_obj, "from_user", None)
-
-        # Telegram 特殊策略：优先显示名，不优先 username
-        if platform_name == "telegram":
-            if from_user is not None:
-                candidates.extend(
-                    [
-                        getattr(from_user, "full_name", None),
-                        getattr(from_user, "first_name", None),
-                    ]
-                )
-
-            candidates.append(event.get_sender_name())
-            if sender_obj is not None:
-                candidates.append(getattr(sender_obj, "nickname", None))
-
-            if from_user is not None:
-                candidates.append(getattr(from_user, "username", None))
-        else:
-            candidates.append(event.get_sender_name())
-            if sender_obj is not None:
-                candidates.append(getattr(sender_obj, "nickname", None))
-
-        if from_user is not None:
-            candidates.extend(
-                [
-                    getattr(from_user, "full_name", None),
-                    getattr(from_user, "first_name", None),
-                    getattr(from_user, "username", None),
-                ]
-            )
-
-        for candidate in candidates:
-            name = str(candidate or "").strip()
-            if not self._is_placeholder_sender_name(name, sender_id):
-                return name
-
-        logger.warning(
-            f"[HistoryStore] 无法解析昵称，回退为 sender_id: {sender_id} "
-            f"(platform={event.get_platform_id()})"
-        )
-        return sender_id
-
-    def _extract_message_parts(self, event: AstrMessageEvent) -> list[dict]:
-        """
-        从事件中提取消息内容
-
-        Returns:
-            消息部分列表，格式为 [{"type": "plain", "text": "..."}, ...]
-        """
-        message_parts = []
-        message = event.message_obj
-
-        # 先收集 @ 标记，后续用于从 plain 文本中去重
-        pending_mentions: Counter[str] = Counter()
-        if message and hasattr(message, "message"):
-            for seg in message.message:
-                if not hasattr(seg, "type"):
-                    continue
-                if seg.type not in ("At", "at"):
-                    continue
-
-                target = getattr(seg, "target", None)
-                if target is None:
-                    target = getattr(seg, "qq", None)
-                if target is None and hasattr(seg, "data"):
-                    target = seg.data.get("qq") or seg.data.get("target")
-
-                target_str = str(target or "").strip()
-                if target_str:
-                    pending_mentions[target_str] += 1
-
-                display_name = str(getattr(seg, "name", "") or "").strip()
-                if display_name and display_name != target_str:
-                    pending_mentions[display_name] += 1
-
-        if message and hasattr(message, "message"):
-            for seg in message.message:
-                if not hasattr(seg, "type"):
-                    continue
-
-                seg_type = seg.type
-                if seg_type in ("Plain", "text"):
-                    text = getattr(seg, "text", None)
-                    if text is None and hasattr(seg, "data"):
-                        text = seg.data.get("text")
-                    if text:
-                        text = self._strip_known_mentions(text, pending_mentions)
-                        message_parts.append({"type": "plain", "text": text})
-
-                elif seg_type in ("Image", "image"):
-                    url = getattr(seg, "url", None)
-                    if url is None and hasattr(seg, "data"):
-                        url = seg.data.get("url")
-                    if url:
-                        message_parts.append({"type": "image", "url": url})
-
-                elif seg_type in ("At", "at"):
-                    target = getattr(seg, "target", None)
-                    if target is None:
-                        target = getattr(seg, "qq", None)
-                    if target is None and hasattr(seg, "data"):
-                        target = seg.data.get("qq") or seg.data.get("target")
-                    if target:
-                        message_parts.append(
-                            {
-                                "type": "at",
-                                "target_id": str(target),
-                                "name": str(getattr(seg, "name", "") or ""),
-                            }
-                        )
-
-        # 如果没有从消息链提取到内容，尝试使用 message_str
-        if not message_parts and event.message_str:
-            message_parts.append({"type": "plain", "text": event.message_str})
-
-        # 清理空文本段，避免出现仅空格文本
-        message_parts = [
-            part
-            for part in message_parts
-            if not (
-                part.get("type") == "plain" and not str(part.get("text", "")).strip()
-            )
-        ]
-
-        return message_parts
-
-    @staticmethod
-    def _strip_known_mentions(text: str, pending_mentions: Counter[str]) -> str:
-        """
-        从文本中移除已识别的 @ 提及，避免与结构化 at 段重复。
-        """
-        cleaned = str(text)
-        if not cleaned or not pending_mentions:
-            return cleaned.strip()
-
-        for mention, remaining in list(pending_mentions.items()):
-            if not mention or remaining <= 0:
-                continue
-
-            pattern = re.compile(rf"(?<!\w)@{re.escape(mention)}(?!\w)")
-            removed = 0
-            while removed < remaining:
-                cleaned, subn = pattern.subn("", cleaned, count=1)
-                if subn == 0:
-                    break
-                removed += 1
-
-            if removed > 0:
-                pending_mentions[mention] -= removed
-                if pending_mentions[mention] <= 0:
-                    pending_mentions.pop(mention, None)
-
-        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-        return cleaned
 
     # ==================== Telegram 消息拦截器 ====================
 
@@ -570,14 +214,44 @@ class QQGroupDailyAnalysis(Star):
         """
         拦截 Telegram 群消息并存储到数据库
 
-        使用统一的 _store_message_to_history 方法存储消息。
+        委托给 MessageProcessingService 处理
         """
         try:
-            await self._store_message_to_history(event)
+            await self.message_processing_service.process_message(event)
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[Telegram] 消息存储失败: {e}")
         except Exception as e:
             logger.error(f"[Telegram] 消息存储异常: {e}", exc_info=True)
+
+    async def get_telegram_seen_group_ids(
+        self, platform_id: str | None = None
+    ) -> list[str]:
+        """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
+        return await self.telegram_group_registry.get_all_group_ids(platform_id)
+
+    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
+        """从消息事件中安全获取群组 ID"""
+        # 保留此辅助方法，因为在其他 command 中仍被频繁使用
+        try:
+            group_id = event.get_group_id()
+            return group_id if group_id else None
+        except Exception:
+            return None
+
+    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str:
+        """从消息事件中获取平台唯一 ID"""
+        # 保留此辅助方法，因为在其他 command 中仍被频繁使用
+        try:
+            return event.get_platform_id()
+        except Exception:
+            # 后备方案：从元数据获取
+            if (
+                hasattr(event, "platform_meta")
+                and event.platform_meta
+                and hasattr(event.platform_meta, "id")
+            ):
+                return event.platform_meta.id
+            return "default"
 
     @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
