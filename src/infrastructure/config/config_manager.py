@@ -197,6 +197,44 @@ class ConfigManager:
         """获取是否启用调试模式"""
         return self._get_group("basic").get("debug_mode", False)
 
+    def get_onebot_history_batch_size(self) -> int:
+        """获取 OneBot 历史拉取批次大小。"""
+        value = int(self._get_group("basic").get("onebot_history_batch_size", 100) or 100)
+        return max(20, min(value, 300))
+
+    def get_onebot_history_api_max_retries(self) -> int:
+        """获取 OneBot 历史 API 最大重试次数。"""
+        value = int(
+            self._get_group("basic").get("onebot_history_api_max_retries", 2) or 2
+        )
+        return max(0, min(value, 8))
+
+    def get_onebot_history_retry_backoff_seconds(self) -> float:
+        """获取 OneBot 历史 API 重试退避基值（秒）。"""
+        value = float(
+            self._get_group("basic").get("onebot_history_retry_backoff_seconds", 1.0)
+            or 1.0
+        )
+        return max(0.2, min(value, 30.0))
+
+    def get_onebot_history_circuit_breaker_threshold(self) -> int:
+        """获取 OneBot/NapCat 历史拉取熔断阈值。"""
+        value = int(
+            self._get_group("basic").get("onebot_history_circuit_breaker_threshold", 3)
+            or 3
+        )
+        return max(1, min(value, 20))
+
+    def get_onebot_history_circuit_breaker_cooldown_seconds(self) -> int:
+        """获取 OneBot/NapCat 熔断冷却秒数。"""
+        value = int(
+            self._get_group("basic").get(
+                "onebot_history_circuit_breaker_cooldown_seconds", 300
+            )
+            or 300
+        )
+        return max(30, min(value, 3600))
+
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
         return self._get_group("llm").get("llm_provider_id", "")

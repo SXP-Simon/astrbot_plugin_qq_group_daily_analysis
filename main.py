@@ -206,19 +206,19 @@ class QQGroupDailyAnalysis(Star):
     # ==================== Telegram 消息拦截器 ====================
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
-    async def intercept_telegram_messages(self, event: AstrMessageEvent):
+    async def intercept_group_messages(self, event: AstrMessageEvent):
         """
-        拦截 Telegram 群消息并存储到数据库
+        拦截群消息并存储到数据库（跨平台）
 
-        委托给 MessageProcessingService 处理
+        委托给 MessageProcessingService 处理，
+        Telegram 额外维护已见群/话题注册表。
         """
         try:
             await self.message_processing_service.process_message(event)
         except (ValueError, RuntimeError) as e:
-            logger.warning(f"[Telegram] 消息存储失败: {e}")
+            logger.warning(f"[MessageStore] 消息存储失败: {e}")
         except Exception as e:
-            logger.error(f"[Telegram] 消息存储异常: {e}", exc_info=True)
+            logger.error(f"[MessageStore] 消息存储异常: {e}", exc_info=True)
 
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
