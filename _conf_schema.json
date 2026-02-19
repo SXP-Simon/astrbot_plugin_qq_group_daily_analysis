@@ -36,6 +36,36 @@
                 "default": 1000,
                 "hint": "单次分析的获取最大消息条数基准值，如果当天群聊消息过多，已经获取到足够的消息(达到 max_messages)，停止获取，获取到的消息数量是最新一次获取到的超过 max_messages 的消息数量，建议500-2000"
             },
+            "onebot_history_batch_size": {
+                "type": "int",
+                "description": "OneBot 历史拉取批次大小",
+                "default": 100,
+                "hint": "用于 /群分析 回退到 get_group_msg_history 时的单批次数量。推荐 50-150；越小越稳，越大越快。上限 300。"
+            },
+            "onebot_history_api_max_retries": {
+                "type": "int",
+                "description": "OneBot 历史拉取重试次数",
+                "default": 2,
+                "hint": "回退到 get_group_msg_history 失败时的重试次数，建议 1-3。"
+            },
+            "onebot_history_retry_backoff_seconds": {
+                "type": "float",
+                "description": "OneBot 历史拉取重试退避基值(秒)",
+                "default": 1.0,
+                "hint": "重试退避时间基值，采用指数退避。"
+            },
+            "onebot_history_circuit_breaker_threshold": {
+                "type": "int",
+                "description": "OneBot 历史拉取熔断阈值",
+                "default": 3,
+                "hint": "连续命中特定 NapCat 视频解析错误达到该次数后，短时间内仅使用本地缓存，不再请求历史 API。"
+            },
+            "onebot_history_circuit_breaker_cooldown_seconds": {
+                "type": "int",
+                "description": "OneBot 熔断冷却时间(秒)",
+                "default": 300,
+                "hint": "熔断开启后持续时间；期间 /群分析 不调用 get_group_msg_history。"
+            },
             "min_messages_threshold": {
                 "type": "int",
                 "description": "最小消息数阈值",

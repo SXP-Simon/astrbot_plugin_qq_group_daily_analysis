@@ -62,6 +62,11 @@ class BotManager:
                     "bot_self_ids": self._bot_self_ids.copy(),
                     "platform_id": str(platform_id),
                     "plugin_instance": self._plugin_instance,
+                    "onebot_history_batch_size": self.config_manager.get_onebot_history_batch_size(),
+                    "onebot_history_api_max_retries": self.config_manager.get_onebot_history_api_max_retries(),
+                    "onebot_history_retry_backoff_seconds": self.config_manager.get_onebot_history_retry_backoff_seconds(),
+                    "onebot_history_circuit_breaker_threshold": self.config_manager.get_onebot_history_circuit_breaker_threshold(),
+                    "onebot_history_circuit_breaker_cooldown_seconds": self.config_manager.get_onebot_history_circuit_breaker_cooldown_seconds(),
                 }
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config

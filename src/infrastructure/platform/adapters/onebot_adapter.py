@@ -4,8 +4,10 @@ OneBot v11 平台适配器
 支持 NapCat、go-cqhttp、Lagrange 及其他 OneBot 实现。
 """
 
+import asyncio
 import base64
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiohttp
@@ -60,6 +62,12 @@ class OneBotAdapter(PlatformAdapter):
         self.bot_self_ids = (
             [str(id) for id in config.get("bot_qq_ids", [])] if config else []
         )
+        self._context = None
+        self._platform_id = (
+            str(config.get("platform_id", "") or "").strip() if config else ""
+        )
+        self._napcat_error_hits = 0
+        self._napcat_circuit_open_until = 0.0
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -68,6 +76,81 @@ class OneBotAdapter(PlatformAdapter):
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
         return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
+
+    def set_context(self, context: Any) -> None:
+        """注入 AstrBot Context，用于优先读取 message_history_manager。"""
+        self._context = context
+
+    def _get_history_batch_size(self) -> int:
+        """获取 OneBot 历史拉取批次大小。"""
+        if isinstance(self.config, dict):
+            value = int(self.config.get("onebot_history_batch_size", 100) or 100)
+            return max(20, min(value, 300))
+        return 100
+
+    def _get_history_api_max_retries(self) -> int:
+        """获取 OneBot 历史 API 最大重试次数。"""
+        if isinstance(self.config, dict):
+            value = int(self.config.get("onebot_history_api_max_retries", 2) or 2)
+            return max(0, min(value, 8))
+        return 2
+
+    def _get_history_retry_backoff_seconds(self) -> float:
+        """获取 OneBot 历史 API 重试退避基值（秒）。"""
+        if isinstance(self.config, dict):
+            value = float(
+                self.config.get("onebot_history_retry_backoff_seconds", 1.0) or 1.0
+            )
+            return max(0.2, min(value, 30.0))
+        return 1.0
+
+    def _get_circuit_breaker_threshold(self) -> int:
+        """获取 NapCat 历史拉取熔断阈值。"""
+        if isinstance(self.config, dict):
+            value = int(
+                self.config.get("onebot_history_circuit_breaker_threshold", 3) or 3
+            )
+            return max(1, min(value, 20))
+        return 3
+
+    def _get_circuit_breaker_cooldown_seconds(self) -> int:
+        """获取 NapCat 熔断冷却时间（秒）。"""
+        if isinstance(self.config, dict):
+            value = int(
+                self.config.get("onebot_history_circuit_breaker_cooldown_seconds", 300)
+                or 300
+            )
+            return max(30, min(value, 3600))
+        return 300
+
+    @staticmethod
+    def _is_napcat_video_info_error(err: Exception) -> bool:
+        """判断是否命中 NapCat 视频 info 解析异常。"""
+        text = str(err).lower()
+        return "getgroupvideourl" in text and "reading 'info'" in text
+
+    def _is_napcat_circuit_open(self) -> bool:
+        """熔断器是否处于开启状态。"""
+        return time.time() < self._napcat_circuit_open_until
+
+    def _record_napcat_failure(self) -> None:
+        """记录一次 NapCat 指定错误并必要时触发熔断。"""
+        self._napcat_error_hits += 1
+        threshold = self._get_circuit_breaker_threshold()
+        if self._napcat_error_hits < threshold:
+            return
+
+        cooldown = self._get_circuit_breaker_cooldown_seconds()
+        self._napcat_circuit_open_until = time.time() + cooldown
+        self._napcat_error_hits = 0
+        logger.warning(
+            "NapCat 历史接口熔断已开启："
+            f"cooldown={cooldown}s"
+        )
+
+    def _record_napcat_success(self) -> None:
+        """成功后复位错误计数。"""
+        self._napcat_error_hits = 0
 
     # ==================== IMessageRepository 实现 ====================
 
@@ -81,55 +164,324 @@ class OneBotAdapter(PlatformAdapter):
         """
         从 OneBot 后端拉取群组历史消息。
 
-        Args:
-            group_id (str): 群号
-            days (int): 拉取过去几天的消息
-            max_count (int): 最大拉取条数
-            before_id (str, optional): 锚点消息 ID（部分后端支持）
-
-        Returns:
-            list[UnifiedMessage]: 统一格式的消息列表
+        优先从 AstrBot 的 message_history_manager 读取缓存，
+        避免在 NapCat 上调用 get_group_msg_history 触发高负载媒体解析。
         """
+        target_count = max(1, int(max_count))
+
+        cached_messages = await self._fetch_messages_from_history_manager(
+            group_id=group_id,
+            days=days,
+            max_count=target_count,
+            before_id=before_id,
+        )
+        if cached_messages:
+            return cached_messages
+
+        if self._is_napcat_circuit_open():
+            remain = int(self._napcat_circuit_open_until - time.time())
+            logger.warning(
+                "NapCat 历史接口熔断中，跳过 get_group_msg_history："
+                f"group_id={group_id}, remaining={max(remain, 0)}s"
+            )
+            return []
+
+        return await self._fetch_messages_via_api_with_retry(
+            group_id=group_id,
+            days=days,
+            max_count=target_count,
+            before_id=before_id,
+        )
+
+    async def _fetch_messages_via_api_with_retry(
+        self,
+        group_id: str,
+        days: int,
+        max_count: int,
+        before_id: str | None,
+    ) -> list[UnifiedMessage]:
+        """通过小批次分页 + 退避重试获取 OneBot 历史消息。"""
         if not hasattr(self.bot, "call_action"):
             return []
 
-        try:
-            # 调用 OneBot 标准 API: get_group_msg_history
-            result = await self.bot.call_action(
-                "get_group_msg_history",
-                group_id=int(group_id),
-                count=max_count,
-            )
+        max_retries = self._get_history_api_max_retries()
+        backoff = self._get_history_retry_backoff_seconds()
 
-            if not result or "messages" not in result:
-                return []
+        for attempt in range(max_retries + 1):
+            try:
+                result = await self._fetch_messages_via_api_batched(
+                    group_id=group_id,
+                    days=days,
+                    max_count=max_count,
+                    before_id=before_id,
+                )
+                self._record_napcat_success()
+                return result
+            except Exception as e:
+                is_napcat_error = self._is_napcat_video_info_error(e)
+                if is_napcat_error:
+                    self._record_napcat_failure()
 
-            end_time = datetime.now()
-            start_time = end_time - timedelta(days=days)
+                if attempt >= max_retries:
+                    logger.warning(f"OneBot 获取消息失败（重试耗尽）: {e}")
+                    return []
 
-            messages = []
-            for raw_msg in result.get("messages", []):
+                sleep_s = backoff * (2**attempt)
+                logger.warning(
+                    "OneBot 获取消息失败，准备重试: "
+                    f"attempt={attempt + 1}/{max_retries}, backoff={sleep_s:.1f}s, err={e}"
+                )
+                await asyncio.sleep(sleep_s)
+
+        return []
+
+    async def _fetch_messages_via_api_batched(
+        self,
+        group_id: str,
+        days: int,
+        max_count: int,
+        before_id: str | None,
+    ) -> list[UnifiedMessage]:
+        """使用小批次分页拉取 OneBot 历史消息。"""
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=days)
+        batch_size = min(self._get_history_batch_size(), max_count)
+
+        cursor_seq: int | None = None
+        if before_id:
+            try:
+                cursor_seq = int(before_id)
+            except (TypeError, ValueError):
+                logger.warning(f"OneBot before_id 无效: {before_id}")
+
+        collected: list[UnifiedMessage] = []
+        seen_message_ids: set[str] = set()
+
+        while len(collected) < max_count:
+            params: dict[str, Any] = {
+                "group_id": int(group_id),
+                "count": min(batch_size, max_count - len(collected)),
+            }
+            if cursor_seq is not None:
+                params["message_seq"] = cursor_seq
+
+            result = await self.bot.call_action("get_group_msg_history", **params)
+            raw_list = result.get("messages", []) if isinstance(result, dict) else []
+            if not raw_list:
+                break
+
+            oldest_seq: int | None = None
+            added_in_batch = 0
+
+            for raw_msg in raw_list:
                 msg_time = datetime.fromtimestamp(raw_msg.get("time", 0))
-                # 时间范围过滤
                 if not (start_time <= msg_time <= end_time):
                     continue
 
-                # 身份过滤（排除机器人自己）
                 sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
                 if sender_id in self.bot_self_ids:
                     continue
 
                 unified = self._convert_message(raw_msg, group_id)
-                if unified:
-                    messages.append(unified)
+                if not unified:
+                    continue
+                if unified.message_id and unified.message_id in seen_message_ids:
+                    continue
 
-            # 确保按时间顺序排列
-            messages.sort(key=lambda m: m.timestamp)
-            return messages
+                if unified.message_id:
+                    seen_message_ids.add(unified.message_id)
+                collected.append(unified)
+                added_in_batch += 1
 
-        except Exception as e:
-            logger.warning(f"OneBot 获取消息失败: {e}")
+                seq_candidates = [
+                    raw_msg.get("message_seq"),
+                    raw_msg.get("real_id"),
+                    raw_msg.get("message_id"),
+                ]
+                for seq in seq_candidates:
+                    try:
+                        seq_int = int(seq)
+                    except (TypeError, ValueError):
+                        continue
+                    if oldest_seq is None or seq_int < oldest_seq:
+                        oldest_seq = seq_int
+
+                if len(collected) >= max_count:
+                    break
+
+            if len(raw_list) < params["count"]:
+                break
+            if added_in_batch == 0:
+                break
+            if oldest_seq is None:
+                break
+
+            next_cursor = oldest_seq - 1
+            if cursor_seq is not None and next_cursor >= cursor_seq:
+                break
+            cursor_seq = next_cursor
+
+        collected.sort(key=lambda m: m.timestamp)
+        return collected
+
+    async def _fetch_messages_from_history_manager(
+        self,
+        group_id: str,
+        days: int,
+        max_count: int,
+        before_id: str | None,
+    ) -> list[UnifiedMessage]:
+        """优先读取 AstrBot 消息历史，避免触发 NapCat 历史 API 的重型解析。"""
+        if not self._context or not hasattr(self._context, "message_history_manager"):
             return []
+
+        try:
+            history_mgr = self._context.message_history_manager
+            platform_id = self._platform_id or "default"
+
+            before_id_int: int | None = None
+            if before_id:
+                try:
+                    before_id_int = int(before_id)
+                except (TypeError, ValueError):
+                    logger.warning(f"OneBot before_id 无效: {before_id}")
+
+            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+            page_size = max_count
+            current_page = 1
+            messages: list[UnifiedMessage] = []
+
+            while len(messages) < max_count:
+                records = await history_mgr.get(
+                    platform_id=platform_id,
+                    user_id=group_id,
+                    page=current_page,
+                    page_size=page_size,
+                )
+                if not records:
+                    break
+
+                oldest_record_time: datetime | None = None
+                for record in records:
+                    if before_id_int is not None:
+                        try:
+                            if int(record.id) >= before_id_int:
+                                continue
+                        except (TypeError, ValueError):
+                            pass
+
+                    record_time = getattr(record, "created_at", None)
+                    if not record_time:
+                        continue
+                    if record_time.tzinfo is None:
+                        record_time = record_time.replace(tzinfo=timezone.utc)
+                    if oldest_record_time is None or record_time < oldest_record_time:
+                        oldest_record_time = record_time
+                    if record_time < cutoff_time:
+                        continue
+
+                    msg = self._convert_history_record(record, group_id)
+                    if not msg:
+                        continue
+                    if msg.sender_id in self.bot_self_ids:
+                        continue
+                    messages.append(msg)
+
+                if len(messages) >= max_count:
+                    break
+                if oldest_record_time and oldest_record_time < cutoff_time:
+                    break
+                if len(records) < page_size:
+                    break
+                current_page += 1
+
+            messages.sort(key=lambda m: m.timestamp)
+            if len(messages) > max_count:
+                messages = messages[-max_count:]
+
+            if messages:
+                logger.info(
+                    f"OneBot 从本地历史缓存读取群 {group_id} 消息: {len(messages)} 条"
+                )
+            return messages
+        except Exception as e:
+            logger.warning(f"OneBot 读取本地消息历史失败，将回退 API 拉取: {e}")
+            return []
+
+    def _convert_history_record(
+        self, record: Any, group_id: str
+    ) -> UnifiedMessage | None:
+        """将 message_history_manager 记录转换为 UnifiedMessage。"""
+        try:
+            content = record.content or {}
+            message_parts = content.get("message", [])
+
+            text_content = ""
+            contents: list[MessageContent] = []
+            for part in message_parts:
+                if not isinstance(part, dict):
+                    continue
+                part_type = part.get("type", "")
+                if part_type in ("plain", "text"):
+                    text = str(part.get("text", "") or "")
+                    text_content += text
+                    contents.append(
+                        MessageContent(type=MessageContentType.TEXT, text=text)
+                    )
+                elif part_type == "image":
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.IMAGE,
+                            url=part.get("url", "") or part.get("attachment_id", ""),
+                        )
+                    )
+                elif part_type == "at":
+                    target_id = (
+                        part.get("target_id", "")
+                        or part.get("qq", "")
+                        or part.get("at_user_id", "")
+                    )
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.AT,
+                            at_user_id=str(target_id),
+                        )
+                    )
+                elif part_type in ("face", "mface", "bface", "sface", "emoji"):
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.EMOJI,
+                            emoji_id=str(part.get("id", "") or part.get("emoji_id", "")),
+                            raw_data={"face_type": part_type},
+                        )
+                    )
+
+            if not contents:
+                fallback_text = str(getattr(record, "message_str", "") or "")
+                if fallback_text:
+                    text_content = fallback_text
+                contents.append(
+                    MessageContent(type=MessageContentType.TEXT, text=text_content)
+                )
+
+            sender_id = str(getattr(record, "sender_id", "") or "")
+            sender_name = str(getattr(record, "sender_name", "") or "").strip()
+
+            return UnifiedMessage(
+                message_id=str(getattr(record, "id", "") or ""),
+                sender_id=sender_id,
+                sender_name=sender_name or sender_id or "Unknown",
+                sender_card=None,
+                group_id=group_id,
+                text_content=text_content,
+                contents=tuple(contents),
+                timestamp=int(getattr(record, "created_at").timestamp()),
+                platform="onebot",
+                reply_to_id=None,
+            )
+        except Exception as e:
+            logger.debug(f"OneBot 转换本地历史记录失败: {e}")
+            return None
 
     def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
         """内部方法：将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象。"""
