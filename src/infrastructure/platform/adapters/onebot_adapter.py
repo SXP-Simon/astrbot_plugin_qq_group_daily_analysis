@@ -226,7 +226,7 @@ class OneBotAdapter(PlatformAdapter):
         before_id: str | None,
     ) -> list[UnifiedMessage]:
         """使用小批次分页拉取 OneBot 历史消息。"""
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now()
         start_time = end_time - timedelta(days=days)
         batch_size = min(self._history_batch_size, max_count)
 
