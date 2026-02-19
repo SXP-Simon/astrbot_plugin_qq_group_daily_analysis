@@ -80,11 +80,21 @@ class TemplateCommandService:
                 f"❌ 无效的序号 '{normalized_input}'，有效范围: 1-{len(available_templates)}",
             )
 
-        # 兼容大小写输入（例如 /设置模板 Simple）
-        template_lookup = {name.lower(): name for name in available_templates}
+        # 兼容大小写输入（例如 /设置模板 Simple），并避免大小写冲突吞模板
+        lower_to_names: dict[str, list[str]] = {}
+        for name in available_templates:
+            key = name.lower()
+            lower_to_names.setdefault(key, []).append(name)
+
         normalized_lower = normalized_input.lower()
-        if normalized_lower in template_lookup:
-            return template_lookup[normalized_lower], None
+        has_case_collision = any(len(names) > 1 for names in lower_to_names.values())
+
+        if not has_case_collision:
+            if normalized_lower in lower_to_names:
+                return lower_to_names[normalized_lower][0], None
+        elif normalized_input in available_templates:
+            # 有冲突时只做区分大小写精确匹配，避免不可达模板
+            return normalized_input, None
 
         return normalized_input, None
 

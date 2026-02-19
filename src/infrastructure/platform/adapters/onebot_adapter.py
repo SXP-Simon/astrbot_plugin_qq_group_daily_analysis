@@ -66,6 +66,31 @@ class OneBotAdapter(PlatformAdapter):
         self._platform_id = (
             str(config.get("platform_id", "") or "").strip() if config else ""
         )
+
+        # 这些值由 ConfigManager 负责边界约束；适配器仅消费已清洗值。
+        self._history_batch_size = (
+            int(config.get("onebot_history_batch_size", 100) or 100) if config else 100
+        )
+        self._history_api_max_retries = (
+            int(config.get("onebot_history_api_max_retries", 2) or 2) if config else 2
+        )
+        self._history_retry_backoff_seconds = (
+            float(config.get("onebot_history_retry_backoff_seconds", 1.0) or 1.0)
+            if config
+            else 1.0
+        )
+        self._history_circuit_breaker_threshold = (
+            int(config.get("onebot_history_circuit_breaker_threshold", 3) or 3)
+            if config
+            else 3
+        )
+        self._history_circuit_breaker_cooldown_seconds = (
+            int(config.get("onebot_history_circuit_breaker_cooldown_seconds", 300) or 300)
+            if config
+            else 300
+        )
+        self._history_local_page_size = min(max(self._history_batch_size, 50), 300)
+
         self._napcat_error_hits = 0
         self._napcat_circuit_open_until = 0.0
 
@@ -81,48 +106,6 @@ class OneBotAdapter(PlatformAdapter):
         """注入 AstrBot Context，用于优先读取 message_history_manager。"""
         self._context = context
 
-    def _get_history_batch_size(self) -> int:
-        """获取 OneBot 历史拉取批次大小。"""
-        if isinstance(self.config, dict):
-            value = int(self.config.get("onebot_history_batch_size", 100) or 100)
-            return max(20, min(value, 300))
-        return 100
-
-    def _get_history_api_max_retries(self) -> int:
-        """获取 OneBot 历史 API 最大重试次数。"""
-        if isinstance(self.config, dict):
-            value = int(self.config.get("onebot_history_api_max_retries", 2) or 2)
-            return max(0, min(value, 8))
-        return 2
-
-    def _get_history_retry_backoff_seconds(self) -> float:
-        """获取 OneBot 历史 API 重试退避基值（秒）。"""
-        if isinstance(self.config, dict):
-            value = float(
-                self.config.get("onebot_history_retry_backoff_seconds", 1.0) or 1.0
-            )
-            return max(0.2, min(value, 30.0))
-        return 1.0
-
-    def _get_circuit_breaker_threshold(self) -> int:
-        """获取 NapCat 历史拉取熔断阈值。"""
-        if isinstance(self.config, dict):
-            value = int(
-                self.config.get("onebot_history_circuit_breaker_threshold", 3) or 3
-            )
-            return max(1, min(value, 20))
-        return 3
-
-    def _get_circuit_breaker_cooldown_seconds(self) -> int:
-        """获取 NapCat 熔断冷却时间（秒）。"""
-        if isinstance(self.config, dict):
-            value = int(
-                self.config.get("onebot_history_circuit_breaker_cooldown_seconds", 300)
-                or 300
-            )
-            return max(30, min(value, 3600))
-        return 300
-
     @staticmethod
     def _is_napcat_video_info_error(err: Exception) -> bool:
         """判断是否命中 NapCat 视频 info 解析异常。"""
@@ -136,11 +119,11 @@ class OneBotAdapter(PlatformAdapter):
     def _record_napcat_failure(self) -> None:
         """记录一次 NapCat 指定错误并必要时触发熔断。"""
         self._napcat_error_hits += 1
-        threshold = self._get_circuit_breaker_threshold()
+        threshold = self._history_circuit_breaker_threshold
         if self._napcat_error_hits < threshold:
             return
 
-        cooldown = self._get_circuit_breaker_cooldown_seconds()
+        cooldown = self._history_circuit_breaker_cooldown_seconds
         self._napcat_circuit_open_until = time.time() + cooldown
         self._napcat_error_hits = 0
         logger.warning(
@@ -204,8 +187,8 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return []
 
-        max_retries = self._get_history_api_max_retries()
-        backoff = self._get_history_retry_backoff_seconds()
+        max_retries = self._history_api_max_retries
+        backoff = self._history_retry_backoff_seconds
 
         for attempt in range(max_retries + 1):
             try:
@@ -243,9 +226,9 @@ class OneBotAdapter(PlatformAdapter):
         before_id: str | None,
     ) -> list[UnifiedMessage]:
         """使用小批次分页拉取 OneBot 历史消息。"""
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(days=days)
-        batch_size = min(self._get_history_batch_size(), max_count)
+        batch_size = min(self._history_batch_size, max_count)
 
         cursor_seq: int | None = None
         if before_id:
@@ -274,7 +257,9 @@ class OneBotAdapter(PlatformAdapter):
             added_in_batch = 0
 
             for raw_msg in raw_list:
-                msg_time = datetime.fromtimestamp(raw_msg.get("time", 0))
+                msg_time = datetime.fromtimestamp(
+                    raw_msg.get("time", 0), tz=timezone.utc
+                )
                 if not (start_time <= msg_time <= end_time):
                     continue
 
@@ -347,7 +332,7 @@ class OneBotAdapter(PlatformAdapter):
                     logger.warning(f"OneBot before_id 无效: {before_id}")
 
             cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
-            page_size = max_count
+            page_size = min(max_count, self._history_local_page_size)
             current_page = 1
             messages: list[UnifiedMessage] = []
 
