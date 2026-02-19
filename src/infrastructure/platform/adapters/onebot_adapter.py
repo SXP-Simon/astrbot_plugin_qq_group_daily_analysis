@@ -257,9 +257,7 @@ class OneBotAdapter(PlatformAdapter):
             added_in_batch = 0
 
             for raw_msg in raw_list:
-                msg_time = datetime.fromtimestamp(
-                    raw_msg.get("time", 0), tz=timezone.utc
-                )
+                msg_time = datetime.fromtimestamp(raw_msg.get("time", 0))
                 if not (start_time <= msg_time <= end_time):
                     continue
 
