@@ -2,12 +2,13 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.7.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.7.8-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![](https://img.shields.io/badge/五彩斑斓的Bug群-Bug反馈群&水群-white?style=for-the-badge&color=76bad9&logo=qq&logoColor=76bad9)](https://qm.qq.com/q/oTzIrdDBIc)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
 
-_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
+_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**、**Telegram**、**Discord**，未来支持更多平台。 [灵感来源](https://github.com/LSTM-Kirigaya/openmcp-tutorial/tree/main/qq-group-summary)。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
@@ -32,6 +33,19 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 > **实验性开发中**：
 > - 多平台支持功能尚在开发中，当前仅支持QQ OneBot, Discord, Telegram。
 > - 旧版本稳定版在[QQ 分支](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/QQ)，仅 QQ 平台支持
+
+
+> [!CAUTION]
+> **Discord 用户重点注意**：
+> 如果机器人无法获取群列表或分析报 `403 Forbidden`，请检查 Discord 开发者面板中：
+> 1. **Privileged Gateway Intents**: 开启 `Message Content Intent`。
+> 2. **频道权限**: 确保机器人所在的频道，对应的角色拥有 **“查看消息历史记录”** 权限。
+
+> [!IMPORTANT]
+> **Telegram 用户重点注意**：
+> 1. 如果 TG Bot 不是群管理员，务必在拉入群前先关闭 BotFather 隐私模式。
+> 2. 如果 Bot 已经在群里且不是管理员，关闭隐私模式后必须先移除再重新拉入群，否则新设置不会生效。
+
 
 
 ### 🛠️ 灵活配置
@@ -67,27 +81,39 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 
 
 ## 效果
-![默认模板效果图](./assets/scrapbook-demo.jpg)
 
-<details>
-<summary>点击展开查看其他模板效果图</summary>
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Scrapbook (默认)</b></p>
+      <img src="./assets/scrapbook-demo.jpg" alt="scrapbook" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Retro Futurism</b></p>
+      <img src="./assets/retro_futurism-demo.jpg" alt="retro_futurism" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Spring Festival</b></p>
+      <img src="./assets/spring_festival-demo.jpg" alt="spring_festival" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Hack</b></p>
+      <img src="./assets/hack-demo.jpg" alt="hack" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Format</b></p>
+      <img src="./assets/format-demo.jpg" alt="format" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Simple</b></p>
+      <img src="./assets/simple-demo.jpg" alt="simple" width="100%">
+    </td>
+  </tr>
+</table>
 
-retro_futurism 模板效果图
-![retro_futurism效果图](./assets/retro_futurism-demo.jpg)
 
-spring_festival 模板效果图
-![spring_festival效果图](./assets/spring_festival-demo.jpg)
-
-hack 模板效果图
-![hack效果图](./assets/hack-demo.jpg)
-
-format 模板效果图
-![format效果图](./assets/format-demo.jpg)
-
-simple 模板效果图(用于展示贡献指南)
-![simple效果图](./assets/simple-demo.jpg)
-
-</details>
 
 ## 使用方法
 
@@ -137,18 +163,6 @@ simple 模板效果图(用于展示贡献指南)
 | **Telegram** | Telegram Bot API | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
 
-> [!CAUTION]
-> **Discord 用户重点注意**：
-> 如果机器人无法获取群列表或分析报 `403 Forbidden`，请检查 Discord 开发者面板中：
-> 1. **Privileged Gateway Intents**: 开启 `Message Content Intent`。
-> 2. **频道权限**: 确保机器人所在的频道，对应的角色拥有 **“查看消息历史记录”** 权限。
-
-> [!IMPORTANT]
-> **Telegram 用户重点注意**：
-> 1. 如果 TG Bot 不是群管理员，务必在拉入群前先关闭 BotFather 隐私模式。
-> 2. 如果 Bot 已经在群里且不是管理员，关闭隐私模式后必须先移除再重新拉入群，否则新设置不会生效。
-
-
 
 ## 注意事项
 
@@ -183,21 +197,19 @@ simple 模板效果图(用于展示贡献指南)
 
 ## 贡献
 
-### 项目架构图
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>项目架构图</b></p>
+      <img src="./assets/structure-demo.jpg" alt="项目架构图" width="100%">
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>贡献指南</b></p>
+      <img src="./assets/contribution-guide.jpg" alt="贡献指南" width="100%">
+    </td>
+  </tr>
+</table>
 
-<div align="center">
-
-![项目架构图](./assets/structure-demo.jpg)
-
-</div>
-
-### 贡献指南
-
-<div align="center">
-
-![贡献指南](./assets/contribution-guide.jpg)
-
-</div>
 
 ### 开发环境设置
 
