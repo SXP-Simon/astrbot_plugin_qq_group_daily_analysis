@@ -752,25 +752,3 @@ class QQGroupDailyAnalysis(Star):
             f"• 参与者: {summary['participants']}\n"
             f"• 高峰时段: {summary['peak_hours']}"
         )
-
-    def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从消息事件中安全获取群组 ID"""
-        try:
-            group_id = event.get_group_id()
-            return group_id if group_id else None
-        except Exception:
-            return None
-
-    def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str:
-        """从消息事件中获取平台唯一 ID"""
-        try:
-            return event.get_platform_id()
-        except Exception:
-            # 后备方案：从元数据获取
-            if (
-                hasattr(event, "platform_meta")
-                and event.platform_meta
-                and hasattr(event.platform_meta, "id")
-            ):
-                return event.platform_meta.id
-            return "default"
