@@ -6,6 +6,7 @@ PDF工具模块
 import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from .logger import logger
@@ -72,9 +73,6 @@ class PDFInstaller:
 
             logger.info("第一步完成。正在检查浏览器内核...")
 
-            # 2. 检查自定义路径：若用户已手动提供内核，则跳过下载步骤
-            from pathlib import Path
-
             custom_path = config_manager.get_browser_path()
             if custom_path and Path(custom_path).exists():
                 logger.info(f"检测到自定义浏览器路径: {custom_path}。跳过内核下载。")
@@ -127,7 +125,7 @@ class PDFInstaller:
     @staticmethod
     async def _background_playwright_install() -> None:
         """
-        底层宿主任务：驱动系统 shell 执行浏览器二进制文件部署。
+        底层宿主任务：驱动 system shell 执行浏览器二进制文件部署。
         """
         try:
             logger.info("正在执行二进制文件：playwright install chromium")
