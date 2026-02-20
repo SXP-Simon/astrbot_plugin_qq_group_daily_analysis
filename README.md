@@ -86,29 +86,29 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>Scrapbook (默认)</b></p>
-      <img src="./assets/scrapbook-demo.jpg" alt="scrapbook" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="scrapbook" width="100%">
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Retro Futurism</b></p>
-      <img src="./assets/retro_futurism-demo.jpg" alt="retro_futurism" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="retro_futurism" width="100%">
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Spring Festival</b></p>
-      <img src="./assets/spring_festival-demo.jpg" alt="spring_festival" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/spring_festival-demo.jpg" alt="spring_festival" width="100%">
     </td>
   </tr>
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>Hack</b></p>
-      <img src="./assets/hack-demo.jpg" alt="hack" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="hack" width="100%">
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Format</b></p>
-      <img src="./assets/format-demo.jpg" alt="format" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/format-demo.jpg" alt="format" width="100%">
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Simple</b></p>
-      <img src="./assets/simple-demo.jpg" alt="simple" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/simple-demo.jpg" alt="simple" width="100%">
     </td>
   </tr>
 </table>
@@ -180,7 +180,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 - **自动去重**：智能识别重复话题和金句，合并生成最终报告。
 
 **启用方法：**
-在插件配置中开启 `incremental_enabled`，并根据需要调整分析间隔 (`incremental_interval_minutes`) 和消息阈值。
+- 在插件配置中开启 `incremental_enabled`，并根据需要调整分析间隔 (`incremental_interval_minutes`) 和消息阈值。
 
 ## 常见问题 (FAQ)
 
@@ -201,14 +201,15 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>项目架构图</b></p>
-      <img src="./assets/structure-demo.jpg" alt="项目架构图" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/structure-demo.jpg" alt="项目架构图" width="100%">
     </td>
     <td align="center" width="50%" valign="top">
       <p><b>贡献指南</b></p>
-      <img src="./assets/contribution-guide.jpg" alt="贡献指南" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/contribution-guide.jpg" alt="贡献指南" width="100%">
     </td>
   </tr>
 </table>
+
 
 
 ### 开发环境设置
