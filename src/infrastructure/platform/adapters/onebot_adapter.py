@@ -749,10 +749,14 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传任务是否成功启动
         """
         try:
+            # 尝试转换为 Base64，解决跨容器路径不一致导致的 1200 错误
+            b64_str = await self._get_base64_from_file(file_path)
+            upload_path = b64_str if b64_str else file_path
+
             params = {
                 "group_id": int(group_id),
-                "file": file_path,
-                "name": filename or file_path.replace("\\", "/").split("/")[-1],
+                "file": upload_path,
+                "name": filename or os.path.basename(file_path),
             }
             if folder_id:
                 params["folder"] = folder_id
