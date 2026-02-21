@@ -341,7 +341,7 @@ class GroupDailyAnalysis(Star):
                     if album_name and hasattr(adapter, "find_album_id"):
                         album_id = await adapter.find_album_id(group_id, album_name)  # type: ignore[attr-defined]
                     await adapter.upload_group_album(  # type: ignore[attr-defined]
-                        group_id, image_file, album_id=album_id
+                        group_id, image_file, album_id=album_id, album_name=album_name
                     )
                 except Exception as e:
                     logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
