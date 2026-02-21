@@ -1,7 +1,7 @@
 name: astrbot_plugin_qq_group_daily_analysis # 这是你的插件的唯一识别名。
 display_name: 群分析总结插件 # 插件的显示名称
 desc: "[多平台接入开发中] 群日常分析总结插件 - 支持 QQ (aiocqhttp)、Telegram、Discord；生成精美的群聊分析报告，支持话题分析、用户形象、群聊圣经等功能"  # 插件简短描述
-version: v4.7.9 # 插件版本号。格式：v1.1.1 或者 v1.1
+version: v4.7.10 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: SXP-Simon # 作者
 astrbot_version: ">=4.16.0"
 support_platforms: 
