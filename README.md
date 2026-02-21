@@ -330,6 +330,14 @@ python scripts/debug_render.py -h
 
 </details>
 
+## ❤️ Special Thanks
+
+❤️ 特别感谢所有 Contributors 的贡献 ❤️
+
+<a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysist/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&max=200&columns=14" />
+</a>
+
 ## Star History
 
 <a href="https://www.star-history.com/#SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=top-left">
