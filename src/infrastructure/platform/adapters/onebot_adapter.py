@@ -4,6 +4,7 @@ OneBot v11 平台适配器
 支持 NapCat、go-cqhttp、Lagrange 及其他 OneBot 实现。
 """
 
+import asyncio
 import base64
 from datetime import datetime, timedelta
 from typing import Any
@@ -80,12 +81,13 @@ class OneBotAdapter(PlatformAdapter):
     ) -> list[UnifiedMessage]:
         """
         从 OneBot 后端拉取群组历史消息。
+        采用分页拉取策略（参考 portrayal 插件），减少 NapCat/go-cqhttp 单次请求的 CPU 和内存负担。
 
         Args:
             group_id (str): 群号
             days (int): 拉取过去几天的消息
             max_count (int): 最大拉取条数
-            before_id (str, optional): 锚点消息 ID（部分后端支持）
+            before_id (str, optional): 锚点消息 ID，用于分页回溯
 
         Returns:
             list[UnifiedMessage]: 统一格式的消息列表
@@ -94,41 +96,92 @@ class OneBotAdapter(PlatformAdapter):
             return []
 
         try:
-            # 调用 OneBot 标准 API: get_group_msg_history
-            result = await self.bot.call_action(
-                "get_group_msg_history",
-                group_id=int(group_id),
-                count=max_count,
-            )
-
-            if not result or "messages" not in result:
-                return []
+            chunk_size = 100  # 每次拉取 100 条，较为稳健
+            all_raw_messages = []
 
             end_time = datetime.now()
             start_time = end_time - timedelta(days=days)
+            start_timestamp = int(start_time.timestamp())
 
-            messages = []
-            for raw_msg in result.get("messages", []):
-                msg_time = datetime.fromtimestamp(raw_msg.get("time", 0))
-                # 时间范围过滤
-                if not (start_time <= msg_time <= end_time):
-                    continue
+            # 使用 message_seq (在 NapCat 中通常可用 message_id 作为 seq 参数)
+            # 进行分页回溯拉取
+            current_anchor_id = before_id
 
-                # 身份过滤（排除机器人自己）
-                sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
-                if sender_id in self.bot_self_ids:
+            logger.info(
+                f"OneBot 开始分页回溯拉取消息: 群 {group_id}, 时间限制 {days}天, 数量限制 {max_count}"
+            )
+
+            while len(all_raw_messages) < max_count:
+                fetch_count = min(chunk_size, max_count - len(all_raw_messages))
+
+                params = {
+                    "group_id": int(group_id),
+                    "count": fetch_count,
+                    "reverseOrder": True,  # 关键：协助分页向上回退拉取历史
+                }
+
+                if current_anchor_id:
+                    params["message_seq"] = current_anchor_id
+
+                result = await self.bot.call_action("get_group_msg_history", **params)
+
+                if not result or "messages" not in result:
+                    break
+
+                messages = result.get("messages", [])
+                if not messages:
+                    break
+
+                # 时间过滤与列表合并
+                # 消息通常是按时间正序排列的，即 messages[0] 最旧，messages[-1] 最新
+                chunk_earliest_msg = messages[0]
+                chunk_earliest_time = chunk_earliest_msg.get("time", 0)
+
+                for raw_msg in messages:
+                    msg_time = raw_msg.get("time", 0)
+
+                    # 身份过滤（排除机器人自己）
+                    sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
+                    if sender_id in self.bot_self_ids:
+                        continue
+
+                    # 时间范围判定
+                    if start_timestamp <= msg_time <= int(end_time.timestamp()):
+                        all_raw_messages.append(raw_msg)
+
+                # 更新锚点为该批次最旧的消息 ID，用于下一次回溯请求
+                current_anchor_id = chunk_earliest_msg.get("message_id")
+
+                # 如果该批次最旧的消息已经早于 start_time，或者拉取的数量不足，说明已到达回溯终点
+                if chunk_earliest_time < start_timestamp or len(messages) < fetch_count:
+                    break
+
+                # 稍微延迟，减缓服务端压力（避免 NapCat 瞬间 CPU 飙升）
+                await asyncio.sleep(0.05)
+
+            # 统一转换为 UnifiedMessage 并在返回前去重排序
+            unified_messages = []
+            seen_ids = set()
+            for raw_msg in all_raw_messages:
+                mid = str(raw_msg.get("message_id", ""))
+                if not mid or mid in seen_ids:
                     continue
 
                 unified = self._convert_message(raw_msg, group_id)
                 if unified:
-                    messages.append(unified)
+                    unified_messages.append(unified)
+                    seen_ids.add(mid)
 
-            # 确保按时间顺序排列
-            messages.sort(key=lambda m: m.timestamp)
-            return messages
+            # 确保最终结果符合时间顺序
+            unified_messages.sort(key=lambda m: m.timestamp)
+
+            logger.info(
+                f"OneBot 分页拉取完成: 共处理 {len(all_raw_messages)} 条原始消息, 最终有效 {len(unified_messages)} 条"
+            )
+            return unified_messages
 
         except Exception as e:
-            logger.warning(f"OneBot 获取消息失败: {e}")
+            logger.warning(f"OneBot 分页获取消息失败: {e}")
             return []
 
     def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
