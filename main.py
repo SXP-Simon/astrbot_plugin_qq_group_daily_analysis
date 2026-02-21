@@ -464,9 +464,15 @@ class GroupDailyAnalysis(Star):
                 )
 
                 if image_url:
-                    if not await adapter.send_image(group_id, image_url):
+                    # 优先使用适配器的 send_image (支持 Base64 转换)
+                    success = await adapter.send_image(group_id, image_url)
+                    if not success:
+                        logger.warning(
+                            f"适配器发送图片失败，尝试使用 AstrBot 内置方式回退 (可能因跨容器路径问题失败)"
+                        )
                         yield event.image_result(image_url)
-                    # 上传到群文件/群相册
+
+                    # 上传到群文件/群相册 (属于附加功能，不影响消息发送)
                     await self._try_upload_image(group_id, image_url, platform_id)
                 elif html_content:
                     yield event.plain_result("⚠️ 图片生成暂不可用，已尝试加入队列。")

@@ -444,39 +444,49 @@ class OneBotAdapter(PlatformAdapter):
             bool: 是否成功
         """
         try:
-            message = []
+            # 策略 1: 优先尝试物理路径 (高性能, 支持超大图)
+            file_str = image_path
+            if not image_path.startswith(("http://", "https://", "base64://")):
+                file_str = f"file:///{os.path.abspath(image_path)}"
 
-            if caption:
-                message.append({"type": "text", "data": {"text": caption}})
+            try:
+                message = []
+                if caption:
+                    message.append({"type": "text", "data": {"text": caption}})
+                message.append({"type": "image", "data": {"file": file_str}})
 
-            if image_path.startswith(("http://", "https://")):
-                file_str = image_path
-            elif image_path.startswith("base64://"):
-                file_str = image_path
-            else:
-                # 尝试转换为 Base64，解决跨容器路径不一致导致的 1200 错误
+                await self.bot.call_action(
+                    "send_group_msg",
+                    group_id=int(group_id),
+                    message=message,
+                )
+                return True
+            except Exception as e:
+                # 如果是网络图片或 Base64 已经报错，则直接失败
+                if image_path.startswith(("http://", "https://", "base64://")):
+                    raise e
+
+                # 策略 2: 路径报错 (如 1200 / ENOENT)，回退到 Base64 发送 (兼容跨容器)
+                logger.warning(f"路径发送图片失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(image_path)
-                if b64_str:
-                    logger.debug(
-                        f"已将本地图片转换为 Base64 发送: {image_path[:50]}..."
-                    )
-                    file_str = b64_str
-                else:
-                    logger.warning(
-                        f"无法读取本地图片，将尝试使用原始路径回退: {image_path}"
-                    )
-                    file_str = f"file:///{image_path}"
+                if not b64_str:
+                    raise e  # 无法读取本地文件，抛出原始错误
 
-            message.append({"type": "image", "data": {"file": file_str}})
+                message = []
+                if caption:
+                    message.append({"type": "text", "data": {"text": caption}})
+                message.append({"type": "image", "data": {"file": b64_str}})
 
-            await self.bot.call_action(
-                "send_group_msg",
-                group_id=int(group_id),
-                message=message,
-            )
-            return True
+                await self.bot.call_action(
+                    "send_group_msg",
+                    group_id=int(group_id),
+                    message=message,
+                )
+                logger.info(f"Base64 回退模式发送图片成功: 群 {group_id}")
+                return True
+
         except Exception as e:
-            logger.error(f"OneBot 图片发送失败: {e}")
+            logger.error(f"OneBot 图片发送最终失败: {e}")
             return False
 
     async def send_file(
@@ -497,21 +507,32 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传任务启动是否成功
         """
         try:
-            # 同样优先使用 Base64 发送文件，适配跨容器环境
-            file_str = await self._get_base64_from_file(file_path)
-            if not file_str:
-                logger.warning(f"无法读取本地文件进行 Base64 编码: {file_path}")
-                file_str = file_path  # 回退
+            # 策略 1: 优先尝试物理路径
+            try:
+                await self.bot.call_action(
+                    "upload_group_file",
+                    group_id=int(group_id),
+                    file=file_path,
+                    name=filename or os.path.basename(file_path),
+                )
+                return True
+            except Exception as e:
+                # 策略 2: 路径报错，回退到 Base64
+                logger.warning(f"路径发送文件失败 ({e})，尝试 Base64 回退模式...")
+                file_b64 = await self._get_base64_from_file(file_path)
+                if not file_b64:
+                    raise e
 
-            await self.bot.call_action(
-                "upload_group_file",
-                group_id=int(group_id),
-                file=file_str,
-                name=filename or os.path.basename(file_path),
-            )
-            return True
+                await self.bot.call_action(
+                    "upload_group_file",
+                    group_id=int(group_id),
+                    file=file_b64,
+                    name=filename or os.path.basename(file_path),
+                )
+                logger.info(f"Base64 回退模式发送文件成功: {filename or file_path}")
+                return True
         except Exception as e:
-            logger.error(f"OneBot 文件发送失败: {e}")
+            logger.error(f"OneBot 文件发送最终失败: {e}")
             return False
 
     async def send_forward_msg(
@@ -749,26 +770,36 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传任务是否成功启动
         """
         try:
-            # 尝试转换为 Base64，解决跨容器路径不一致导致的 1200 错误
-            b64_str = await self._get_base64_from_file(file_path)
-            upload_path = b64_str if b64_str else file_path
-
+            # 策略 1: 优先使用物理路径
             params = {
                 "group_id": int(group_id),
-                "file": upload_path,
+                "file": file_path,
                 "name": filename or os.path.basename(file_path),
             }
             if folder_id:
                 params["folder"] = folder_id
 
-            await self.bot.call_action("upload_group_file", **params)
-            logger.info(
-                f"OneBot 群文件上传成功: {params['name']} -> 群 {group_id}"
-                + (f" (目录: {folder_id})" if folder_id else " (根目录)")
-            )
-            return True
+            try:
+                await self.bot.call_action("upload_group_file", **params)
+                logger.info(
+                    f"OneBot 群文件上传成功: {params['name']} -> 群 {group_id}"
+                    + (f" (目录: {folder_id})" if folder_id else " (根目录)")
+                )
+                return True
+            except Exception as e:
+                # 策略 2: 路径报错，回退到 Base64
+                logger.warning(f"路径上传群文件失败 ({e})，尝试 Base64 回退模式...")
+                b64_str = await self._get_base64_from_file(file_path)
+                if not b64_str:
+                    raise e
+
+                params["file"] = b64_str
+                await self.bot.call_action("upload_group_file", **params)
+                logger.info(f"Base64 回退模式上传群文件成功: {params['name']}")
+                return True
+
         except Exception as e:
-            logger.error(f"OneBot 群文件上传失败: {e}")
+            logger.error(f"OneBot 群文件上传最终失败: {e}")
             return False
 
     async def create_group_file_folder(
@@ -928,47 +959,50 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 return False
 
-            # 尝试转换为 Base64 以保证跨容器成功率 (兼容性取决于 OneBot 实现)
-            b64_file = await self._get_base64_from_file(image_path)
-            upload_path = b64_file if b64_file else image_path
-
-            # 策略 1: 尝试 upload_image_to_qun_album (参考 astrbot_plugin_qun_album)
+            # 策略 1: 优先尝试物理路径
             try:
-                # 注意：NapCat 的某些实现强制要求 album_id 字段存在
+                # 尝试 upload_image_to_qun_album
                 params = {
                     "group_id": int(group_id),
-                    "file": upload_path,
-                    "album_id": str(album_id or ""),  # 保证字段存在
+                    "file": image_path,
+                    "album_id": str(album_id or ""),
                 }
                 if album_name:
                     params["album_name"] = album_name
 
-                logger.debug(f"尝试调用 upload_image_to_qun_album, 参数: {params}")
-
+                logger.debug(
+                    f"尝试调用 upload_image_to_qun_album (路径模式), 参数: {params}"
+                )
                 await self.bot.call_action("upload_image_to_qun_album", **params)
-                logger.info(
-                    f"OneBot (upload_image_to_qun_album) 群相册上传成功: 群 {group_id}"
-                )
+                logger.info(f"OneBot (路径模式) 群相册上传成功: 群 {group_id}")
                 return True
-            except Exception as e:
-                # 策略 2: 尝试 upload_group_album (NapCat 另一种可能的名称)
-                if "not found" not in str(e).lower() and "不支持" not in str(e).lower():
-                    logger.debug(
-                        f"策略 1 upload_image_to_qun_album 失败，尝试策略 2: {e}"
+            except Exception as e1:
+                # 策略 2: 路径失败，尝试 Base64 模式
+                logger.warning(f"路径上传相册失败 ({e1})，尝试 Base64 回退模式...")
+                b64_file = await self._get_base64_from_file(image_path)
+                if not b64_file:
+                    raise e1
+
+                # 重新尝试两个可能的 API 名
+                try:
+                    params = {
+                        "group_id": int(group_id),
+                        "file": b64_file,
+                        "album_id": str(album_id or ""),
+                    }
+                    if album_name:
+                        params["album_name"] = album_name
+
+                    await self.bot.call_action("upload_image_to_qun_album", **params)
+                    logger.info(
+                        f"Base64 回退模式 (upload_image_to_qun_album) 群相册上传成功"
                     )
-
-                params = {
-                    "group_id": int(group_id),
-                    "file": upload_path,
-                    "album_id": str(album_id or ""),
-                }
-
-                logger.debug(f"尝试调用 upload_group_album, 参数: {params}")
-                await self.bot.call_action("upload_group_album", **params)
-                logger.info(
-                    f"OneBot (upload_group_album) 群相册上传成功: 群 {group_id}"
-                )
-                return True
+                    return True
+                except Exception as e2:
+                    logger.debug(f"Base64 模式 1 失败，尝试模式 2: {e2}")
+                    await self.bot.call_action("upload_group_album", **params)
+                    logger.info(f"Base64 回退模式 (upload_group_album) 群相册上传成功")
+                    return True
 
         except Exception as e:
             error_msg = str(e).lower()
