@@ -995,13 +995,13 @@ class OneBotAdapter(PlatformAdapter):
 
                     await self.bot.call_action("upload_image_to_qun_album", **params)
                     logger.info(
-                        f"Base64 回退模式 (upload_image_to_qun_album) 群相册上传成功"
+                        "Base64 回退模式 (upload_image_to_qun_album) 群相册上传成功"
                     )
                     return True
                 except Exception as e2:
                     logger.debug(f"Base64 模式 1 失败，尝试模式 2: {e2}")
                     await self.bot.call_action("upload_group_album", **params)
-                    logger.info(f"Base64 回退模式 (upload_group_album) 群相册上传成功")
+                    logger.info("Base64 回退模式 (upload_group_album) 群相册上传成功")
                     return True
 
         except Exception as e:

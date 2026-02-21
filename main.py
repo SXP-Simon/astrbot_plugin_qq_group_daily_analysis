@@ -279,8 +279,8 @@ class GroupDailyAnalysis(Star):
         尝试将图片报告上传到群文件和/或群相册（静默处理，失败仅日志提示）。
         """
         import base64
-        import tempfile
         import re
+        import tempfile
         from datetime import datetime
 
         enable_file = self.config_manager.get_enable_group_file_upload()
@@ -468,7 +468,7 @@ class GroupDailyAnalysis(Star):
                     success = await adapter.send_image(group_id, image_url)
                     if not success:
                         logger.warning(
-                            f"适配器发送图片失败，尝试使用 AstrBot 内置方式回退 (可能因跨容器路径问题失败)"
+                            "适配器发送图片失败，尝试使用 AstrBot 内置方式回退 (可能因跨容器路径问题失败)"
                         )
                         yield event.image_result(image_url)
 
