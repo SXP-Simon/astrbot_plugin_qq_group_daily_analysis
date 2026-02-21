@@ -126,13 +126,18 @@ class OneBotAdapter(PlatformAdapter):
                 result = await self.bot.call_action("get_group_msg_history", **params)
 
                 if not result or "messages" not in result:
+                    logger.debug(
+                        f"OneBot 分页拉取：API 调用返回空或无效数据，停止回溯。群: {group_id}"
+                    )
                     break
 
                 messages = result.get("messages", [])
                 if not messages:
+                    logger.debug(
+                        f"OneBot 分页拉取：获取到 0 条消息，停止回溯。群: {group_id}"
+                    )
                     break
 
-                # 时间过滤与列表合并
                 # 消息通常是按时间正序排列的，即 messages[0] 最旧，messages[-1] 最新
                 chunk_earliest_msg = messages[0]
                 chunk_earliest_time = chunk_earliest_msg.get("time", 0)
@@ -150,11 +155,29 @@ class OneBotAdapter(PlatformAdapter):
                         all_raw_messages.append(raw_msg)
 
                 # 更新锚点为该批次最旧的消息 ID，用于下一次回溯请求
-                current_anchor_id = chunk_earliest_msg.get("message_id")
+                new_anchor_id = chunk_earliest_msg.get("message_id")
 
-                # 如果该批次最旧的消息已经早于 start_time，或者拉取的数量不足，说明已到达回溯终点
-                if chunk_earliest_time < start_timestamp or len(messages) < fetch_count:
+                # 如果时间已经超过限制，或者锚点没有变化（说明已经到底），则停止
+                if chunk_earliest_time < start_timestamp:
+                    logger.debug(
+                        f"OneBot 分页拉取：消息时间 ({chunk_earliest_time}) 早于起始时间 ({start_timestamp})，回溯完成。"
+                    )
                     break
+
+                if str(new_anchor_id) == str(current_anchor_id):
+                    logger.debug(
+                        "OneBot 分页拉取：消息锚点没有变化，可能已到达历史尽头。"
+                    )
+                    break
+
+                current_anchor_id = new_anchor_id
+                logger.debug(
+                    f"OneBot 分页拉取进度: 已获取 {len(all_raw_messages)} 条符合条件的消息，下一次锚点: {current_anchor_id}"
+                )
+
+                # 如果这批消息全都是旧的（不在我们要的时间范围内），也应该可以考虑停止
+                # 但由于 get_group_msg_history 的 reverseOrder 行为在不同实现下可能不一致，
+                # 只要时间没越界且还有消息，我们就继续拉取直到 max_count 或时间越界。
 
                 # 稍微延迟，减缓服务端压力（避免 NapCat 瞬间 CPU 飙升）
                 await asyncio.sleep(0.05)
