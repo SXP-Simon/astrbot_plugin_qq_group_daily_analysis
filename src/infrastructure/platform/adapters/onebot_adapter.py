@@ -862,6 +862,19 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传是否成功
         """
         try:
+            # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
+            # 注意：某些 API (如 upload_image_to_qun_album) 强制要求 album_id
+            if not album_id:
+                albums = await self.get_group_album_list(group_id)
+                if albums:
+                    album_id = str(
+                        albums[0].get("album_id") or albums[0].get("id") or ""
+                    )
+                    if album_id:
+                        logger.debug(
+                            f"未指定有效的相册，自动选择默认相册 ID: {album_id}"
+                        )
+
             # 策略 1: 尝试 upload_image_to_qun_album (参考 astrbot_plugin_qun_album)
             try:
                 params = {
