@@ -35,7 +35,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.5
 
-    def build_prompt(self, user_data: dict) -> str:
+    def build_prompt(self, data: dict) -> str:
         """
         构建用户称号分析提示词
 
@@ -45,7 +45,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         Returns:
             提示词字符串
         """
-        user_summaries = user_data.get("user_summaries", [])
+        user_summaries = data.get("user_summaries", [])
 
         if not user_summaries:
             return ""
@@ -91,7 +91,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """
         return extract_user_titles_with_regex(result_text, max_count)
 
-    def create_data_objects(self, titles_data: list[dict]) -> list[UserTitle]:
+    def create_data_objects(self, data_list: list[dict]) -> list[UserTitle]:
         """
         创建用户称号对象列表
 
@@ -105,7 +105,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
             titles = []
             max_titles = self.get_max_count()
 
-            for title_data in titles_data[:max_titles]:
+            for title_data in data_list[:max_titles]:
                 # 确保数据格式正确
                 name = title_data.get("name", "").strip()
                 user_id = title_data.get("user_id")
@@ -142,7 +142,10 @@ class UserTitleAnalyzer(BaseAnalyzer):
             return []
 
     def prepare_user_data(
-        self, messages: list[dict], user_analysis: dict, top_users: list[dict] = None
+        self,
+        messages: list[dict],
+        user_analysis: dict,
+        top_users: list[dict] | None = None,
     ) -> dict:
         """
         准备用户数据
@@ -235,10 +238,10 @@ class UserTitleAnalyzer(BaseAnalyzer):
     async def analyze_user_titles(
         self,
         messages: list[dict],
-        user_analysis: dict,
-        umo: str = None,
-        top_users: list[dict] = None,
-        session_id: str = None,
+        user_activity: dict,
+        umo: str | None = None,
+        top_users: list[dict] | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """
         分析用户称号
@@ -255,7 +258,7 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """
         try:
             # 准备用户数据,传入活跃用户列表
-            user_data = self.prepare_user_data(messages, user_analysis, top_users)
+            user_data = self.prepare_user_data(messages, user_activity, top_users)
 
             if not user_data["user_summaries"]:
                 logger.info("没有符合条件的用户，返回空结果")

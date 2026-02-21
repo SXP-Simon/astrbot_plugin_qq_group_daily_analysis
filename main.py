@@ -44,8 +44,28 @@ from .src.infrastructure.scheduler.retry import RetryManager
 from .src.utils.pdf_utils import PDFInstaller
 
 
-class QQGroupDailyAnalysis(Star):
-    """QQ群日常分析插件主类"""
+class GroupDailyAnalysis(Star):
+    """群分析插件主类"""
+
+    # ── 显式类型声明（消除 Pylance Optional 推断） ──
+    config: AstrBotConfig
+    config_manager: ConfigManager
+    bot_manager: BotManager
+    history_manager: HistoryManager
+    report_generator: ReportGenerator
+    telegram_group_registry: TelegramGroupRegistry
+    statistics_service: StatisticsService
+    analysis_domain_service: AnalysisDomainService
+    llm_analyzer: LLMAnalyzer
+    incremental_store: IncrementalStore
+    incremental_merge_service: IncrementalMergeService
+    analysis_service: AnalysisApplicationService
+    message_processing_service: MessageProcessingService
+    template_command_service: TemplateCommandService
+    telegram_template_preview_handler: TelegramTemplatePreviewHandler
+    template_preview_router: TemplatePreviewRouter
+    retry_manager: RetryManager
+    auto_scheduler: AutoScheduler
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -188,15 +208,15 @@ class QQGroupDailyAnalysis(Star):
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
 
-            # 重置实例属性
-            self.auto_scheduler = None
-            self.bot_manager = None
-            self.report_generator = None
-            self.config_manager = None
-            self.message_processing_service = None
-            self.telegram_group_registry = None
-            self.template_preview_router = None
-            self.telegram_template_preview_handler = None
+            # 释放实例属性引用（插件卸载后不再使用）
+            del self.auto_scheduler
+            del self.bot_manager
+            del self.report_generator
+            del self.config_manager
+            del self.message_processing_service
+            del self.telegram_group_registry
+            del self.template_preview_router
+            del self.telegram_template_preview_handler
 
             logger.info("QQ群日常分析插件资源清理完成")
 
@@ -249,6 +269,90 @@ class QQGroupDailyAnalysis(Star):
             ):
                 return event.platform_meta.id
             return "default"
+
+    # ================================================================
+    # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）
+    # ================================================================
+
+    async def _try_upload_image(self, group_id: str, image_url: str, platform_id: str):
+        """
+        尝试将图片报告上传到群文件和/或群相册（静默处理，失败仅日志提示）。
+        """
+        import base64
+        import tempfile
+        from datetime import datetime
+
+        enable_file = self.config_manager.get_enable_group_file_upload()
+        enable_album = self.config_manager.get_enable_group_album_upload()
+        if not enable_file and not enable_album:
+            return
+
+        adapter = self.bot_manager.get_adapter(platform_id)
+        if not adapter or not hasattr(adapter, "upload_group_file_to_folder"):
+            return
+
+        # 将图片保存为临时文件
+        image_file = None
+        created_temp = False
+        try:
+            if image_url.startswith("base64://"):
+                data = base64.b64decode(image_url[len("base64://") :])
+            elif image_url.startswith("data:"):
+                parts = image_url.split(",", 1)
+                data = base64.b64decode(parts[1]) if len(parts) == 2 else None
+            elif os.path.isfile(image_url):
+                image_file = os.path.abspath(image_url)
+                data = None
+            else:
+                return
+
+            if data and not image_file:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                image_file = os.path.join(
+                    tempfile.gettempdir(), f"群聊分析报告_{group_id}_{ts}.png"
+                )
+                with open(image_file, "wb") as f:
+                    f.write(data)
+                created_temp = True
+
+            if not image_file:
+                return
+
+            if enable_file:
+                try:
+                    folder_name = self.config_manager.get_group_file_folder()
+                    folder_id = None
+                    if folder_name:
+                        folder_id = await adapter.find_or_create_folder(  # type: ignore[attr-defined]
+                            group_id, folder_name
+                        )
+                    await adapter.upload_group_file_to_folder(  # type: ignore[attr-defined]
+                        group_id=group_id,
+                        file_path=image_file,
+                        folder_id=folder_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
+
+            if enable_album and hasattr(adapter, "upload_group_album"):
+                try:
+                    album_name = self.config_manager.get_group_album_name()
+                    album_id = None
+                    if album_name and hasattr(adapter, "find_album_id"):
+                        album_id = await adapter.find_album_id(group_id, album_name)  # type: ignore[attr-defined]
+                    await adapter.upload_group_album(  # type: ignore[attr-defined]
+                        group_id, image_file, album_id=album_id
+                    )
+                except Exception as e:
+                    logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
+        except Exception as e:
+            logger.warning(f"图片上传处理异常: {e}")
+        finally:
+            if created_temp and image_file and os.path.exists(image_file):
+                try:
+                    os.remove(image_file)
+                except OSError:
+                    pass
 
     @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
@@ -335,6 +439,8 @@ class QQGroupDailyAnalysis(Star):
                 if image_url:
                     if not await adapter.send_image(group_id, image_url):
                         yield event.image_result(image_url)
+                    # 上传到群文件/群相册
+                    await self._try_upload_image(group_id, image_url, platform_id)
                 elif html_content:
                     yield event.plain_result("⚠️ 图片生成暂不可用，已尝试加入队列。")
                     await self.retry_manager.add_task(
@@ -456,6 +562,7 @@ class QQGroupDailyAnalysis(Star):
         if parse_error:
             yield event.plain_result(parse_error)
             return
+        assert template_name is not None
 
         if not await self.template_command_service.template_exists(template_name):
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")

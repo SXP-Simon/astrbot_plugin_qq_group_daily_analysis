@@ -604,3 +604,260 @@ class OneBotAdapter(PlatformAdapter):
             user_id: await self.get_user_avatar_url(user_id, size)
             for user_id in user_ids
         }
+
+    # ================================================================
+    # 群文件 / 群相册上传
+    # ================================================================
+
+    async def upload_group_file_to_folder(
+        self,
+        group_id: str,
+        file_path: str,
+        filename: str | None = None,
+        folder_id: str | None = None,
+    ) -> bool:
+        """
+        上传文件到群文件目录的指定子文件夹。
+
+        Args:
+            group_id: 目标群号
+            file_path: 本地文件绝对路径
+            filename: 显示的文件名，默认为路径尾部
+            folder_id: 目标文件夹 ID（由 get_group_file_root_folders 获取）。
+                       为 None 或空字符串时上传到根目录。
+
+        Returns:
+            bool: 上传任务是否成功启动
+        """
+        try:
+            params = {
+                "group_id": int(group_id),
+                "file": file_path,
+                "name": filename or file_path.replace("\\", "/").split("/")[-1],
+            }
+            if folder_id:
+                params["folder"] = folder_id
+
+            await self.bot.call_action("upload_group_file", **params)
+            logger.info(
+                f"OneBot 群文件上传成功: {params['name']} -> 群 {group_id}"
+                + (f" (目录: {folder_id})" if folder_id else " (根目录)")
+            )
+            return True
+        except Exception as e:
+            logger.error(f"OneBot 群文件上传失败: {e}")
+            return False
+
+    async def create_group_file_folder(
+        self,
+        group_id: str,
+        folder_name: str,
+    ) -> str | None:
+        """
+        在群文件根目录下创建子文件夹。
+
+        Args:
+            group_id: 目标群号
+            folder_name: 文件夹名称
+
+        Returns:
+            str | None: 创建成功时返回 folder_id，失败返回 None
+        """
+        try:
+            result = await self.bot.call_action(
+                "create_group_file_folder",
+                group_id=int(group_id),
+                name=folder_name,
+                parent_id="/",
+            )
+            # go-cqhttp 等实现可能不返回 folder_id
+            folder_id = None
+            if isinstance(result, dict):
+                folder_id = result.get("folder_id") or result.get("id")
+            logger.info(
+                f"OneBot 群文件夹创建成功: {folder_name} (群 {group_id})"
+                + (f" [ID: {folder_id}]" if folder_id else "")
+            )
+            return folder_id
+        except Exception as e:
+            error_msg = str(e).lower()
+            # 文件夹已存在的情况不视为错误
+            if "exist" in error_msg or "已存在" in error_msg:
+                logger.info(f"OneBot 群文件夹已存在: {folder_name} (群 {group_id})")
+                return None  # 需要通过 get_group_file_root_folders 获取 ID
+            logger.error(f"OneBot 群文件夹创建失败: {e}")
+            return None
+
+    async def get_group_file_root_folders(
+        self,
+        group_id: str,
+    ) -> list[dict]:
+        """
+        获取群文件根目录下的文件夹列表。
+
+        Args:
+            group_id: 目标群号
+
+        Returns:
+            list[dict]: 文件夹列表，每项包含 folder_id/name 等字段。
+                        API 不可用时返回空列表。
+        """
+        try:
+            result = await self.bot.call_action(
+                "get_group_root_files",
+                group_id=int(group_id),
+            )
+            if isinstance(result, dict):
+                return result.get("folders", []) or []
+            return []
+        except Exception as e:
+            logger.debug(f"OneBot 获取群文件夹列表失败: {e}")
+            return []
+
+    async def find_or_create_folder(
+        self,
+        group_id: str,
+        folder_name: str,
+    ) -> str | None:
+        """
+        查找或创建指定名称的群文件子文件夹，返回 folder_id。
+
+        先尝试在现有根目录文件夹中查找匹配名称的文件夹，
+        找不到则创建新文件夹。
+
+        Args:
+            group_id: 目标群号
+            folder_name: 文件夹名称
+
+        Returns:
+            str | None: folder_id（成功时）或 None（失败时）
+        """
+        if not folder_name:
+            return None
+
+        # 1. 先尝试查找已有文件夹
+        folders = await self.get_group_file_root_folders(group_id)
+        for folder in folders:
+            name = folder.get("folder_name") or folder.get("name", "")
+            fid = folder.get("folder_id") or folder.get("id", "")
+            if name == folder_name and fid:
+                logger.debug(f"找到已有群文件夹: {folder_name} [ID: {fid}]")
+                return fid
+
+        # 2. 未找到，尝试创建
+        created_id = await self.create_group_file_folder(group_id, folder_name)
+        if created_id:
+            return created_id
+
+        # 3. 创建后再次查找（某些实现创建时不返回 ID）
+        folders = await self.get_group_file_root_folders(group_id)
+        for folder in folders:
+            name = folder.get("folder_name") or folder.get("name", "")
+            fid = folder.get("folder_id") or folder.get("id", "")
+            if name == folder_name and fid:
+                logger.debug(f"创建后找到群文件夹: {folder_name} [ID: {fid}]")
+                return fid
+
+        logger.warning(
+            f"无法获取群文件夹 ID: {folder_name} (群 {group_id})，将上传到根目录"
+        )
+        return None
+
+    async def upload_group_album(
+        self,
+        group_id: str,
+        image_path: str,
+        album_id: str | None = None,
+    ) -> bool:
+        """
+        上传图片到群相册（NapCat 扩展 API）。
+
+        注意：此 API 仅 NapCat 支持，go-cqhttp / Lagrange 等不支持。
+        调用失败时会静默降级，不影响正常发送。
+
+        Args:
+            group_id: 目标群号
+            image_path: 本地图片文件的绝对路径
+            album_id: 目标相册 ID，为 None 时上传到默认相册
+
+        Returns:
+            bool: 上传是否成功
+        """
+        try:
+            params = {
+                "group_id": int(group_id),
+                "file": image_path,
+            }
+            if album_id:
+                params["album_id"] = album_id
+
+            await self.bot.call_action("upload_group_album", **params)
+            logger.info(f"NapCat 群相册上传成功: 群 {group_id}")
+            return True
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "not found" in error_msg or "not support" in error_msg:
+                logger.warning(
+                    "当前 OneBot 实现不支持群相册上传 API (upload_group_album)，"
+                    "此功能仅 NapCat 可用。"
+                )
+            else:
+                logger.warning(f"NapCat 群相册上传失败: {e}")
+            return False
+
+    async def get_group_album_list(
+        self,
+        group_id: str,
+    ) -> list[dict]:
+        """
+        获取群相册列表（NapCat 扩展 API）。
+
+        Args:
+            group_id: 目标群号
+
+        Returns:
+            list[dict]: 相册列表，每项可能包含 album_id / name 等字段。
+                        API 不可用时返回空列表。
+        """
+        try:
+            result = await self.bot.call_action(
+                "get_group_album_list",
+                group_id=int(group_id),
+            )
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                return result.get("albums", []) or result.get("data", []) or []
+            return []
+        except Exception as e:
+            logger.debug(f"获取群相册列表失败: {e}")
+            return []
+
+    async def find_album_id(
+        self,
+        group_id: str,
+        album_name: str,
+    ) -> str | None:
+        """
+        根据相册名称查找 album_id。找不到返回 None（将回退到默认相册）。
+
+        Args:
+            group_id: 目标群号
+            album_name: 目标相册名称
+
+        Returns:
+            str | None: 匹配的 album_id，未找到返回 None
+        """
+        if not album_name:
+            return None
+
+        albums = await self.get_group_album_list(group_id)
+        for album in albums:
+            name = album.get("name") or album.get("album_name", "")
+            aid = album.get("album_id") or album.get("id", "")
+            if name == album_name and aid:
+                logger.debug(f"找到群相册: {album_name} [ID: {aid}]")
+                return str(aid)
+
+        logger.info(f"未找到群相册 '{album_name}' (群 {group_id})，将使用默认相册")
+        return None
