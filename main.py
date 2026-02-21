@@ -209,14 +209,14 @@ class GroupDailyAnalysis(Star):
                 await self.template_preview_router.unregister_handlers()
 
             # 释放实例属性引用（插件卸载后不再使用）
-            del self.auto_scheduler
-            del self.bot_manager
-            del self.report_generator
-            del self.config_manager
-            del self.message_processing_service
-            del self.telegram_group_registry
-            del self.template_preview_router
-            del self.telegram_template_preview_handler
+            self.auto_scheduler = None
+            self.bot_manager = None
+            self.report_generator = None
+            self.config_manager = None
+            self.message_processing_service = None
+            self.telegram_group_registry = None
+            self.template_preview_router = None
+            self.telegram_template_preview_handler = None
 
             logger.info("QQ群日常分析插件资源清理完成")
 
