@@ -877,14 +877,16 @@ class OneBotAdapter(PlatformAdapter):
 
             # 策略 1: 尝试 upload_image_to_qun_album (参考 astrbot_plugin_qun_album)
             try:
+                # 注意：NapCat 的某些实现强制要求 album_id 字段存在
                 params = {
                     "group_id": int(group_id),
                     "file": image_path,
+                    "album_id": str(album_id or ""),  # 保证字段存在
                 }
-                if album_id:
-                    params["album_id"] = album_id
                 if album_name:
                     params["album_name"] = album_name
+
+                logger.debug(f"尝试调用 upload_image_to_qun_album, 参数: {params}")
 
                 await self.bot.call_action("upload_image_to_qun_album", **params)
                 logger.info(
@@ -901,10 +903,10 @@ class OneBotAdapter(PlatformAdapter):
                 params = {
                     "group_id": int(group_id),
                     "file": image_path,
+                    "album_id": str(album_id or ""),
                 }
-                if album_id:
-                    params["album_id"] = album_id
 
+                logger.debug(f"尝试调用 upload_group_album, 参数: {params}")
                 await self.bot.call_action("upload_group_album", **params)
                 logger.info(
                     f"OneBot (upload_group_album) 群相册上传成功: 群 {group_id}"
@@ -945,25 +947,47 @@ class OneBotAdapter(PlatformAdapter):
                     group_id=int(group_id),
                 )
                 if result:
+                    logger.debug(f"get_qun_album_list 成功: {result}")
                     if isinstance(result, list):
                         return result
                     if isinstance(result, dict):
                         return result.get("albums", []) or result.get("data", []) or []
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"策略 1 get_qun_album_list 尝试失败: {e}")
 
             # 策略 2: 尝试 get_group_album_list
-            result = await self.bot.call_action(
-                "get_group_album_list",
-                group_id=int(group_id),
-            )
-            if isinstance(result, list):
-                return result
-            if isinstance(result, dict):
-                return result.get("albums", []) or result.get("data", []) or []
+            try:
+                result = await self.bot.call_action(
+                    "get_group_album_list",
+                    group_id=int(group_id),
+                )
+                if result:
+                    logger.debug(f"get_group_album_list 成功: {result}")
+                    if isinstance(result, list):
+                        return result
+                    if isinstance(result, dict):
+                        return result.get("albums", []) or result.get("data", []) or []
+            except Exception as e:
+                logger.debug(f"策略 2 get_group_album_list 尝试失败: {e}")
+
+            # 策略 3: 尝试 get_group_albums
+            try:
+                result = await self.bot.call_action(
+                    "get_group_albums",
+                    group_id=int(group_id),
+                )
+                if result:
+                    logger.debug(f"get_group_albums 成功: {result}")
+                    if isinstance(result, list):
+                        return result
+                    if isinstance(result, dict):
+                        return result.get("albums", []) or result.get("data", []) or []
+            except Exception as e:
+                logger.debug(f"策略 3 get_group_albums 尝试失败: {e}")
+
             return []
         except Exception as e:
-            logger.debug(f"获取群相册列表失败: {e}")
+            logger.debug(f"获取群相册列表最终失败: {e}")
             return []
 
     async def find_album_id(
