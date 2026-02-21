@@ -280,6 +280,7 @@ class GroupDailyAnalysis(Star):
         """
         import base64
         import tempfile
+        import re
         from datetime import datetime
 
         enable_file = self.config_manager.get_enable_group_file_upload()
@@ -291,7 +292,33 @@ class GroupDailyAnalysis(Star):
         if not adapter or not hasattr(adapter, "upload_group_file_to_folder"):
             return
 
-        # 将图片保存为临时文件
+        # 1. 构造一个更友好的文件名
+        now = datetime.now()
+        timestamp = now.strftime("%H%M")
+        date_str = now.strftime("%Y-%m-%d")
+
+        # 默认基础名和后缀
+        ext = (
+            ".jpg"
+            if (".jpg" in image_url.lower() or ".jpeg" in image_url.lower())
+            else ".png"
+        )
+        nice_filename = f"群分析报告_{group_id}_{date_str}_{timestamp}{ext}"
+
+        try:
+            # 尝试通过适配器获取群名称，使文件名更具辨识度
+            group_info = await adapter.get_group_info(group_id)
+            if group_info and group_info.group_name:
+                # 过滤非法文件名字符：\ / : * ? " < > |
+                safe_name = re.sub(r'[\\/:*?"<>|]', "", group_info.group_name).strip()
+                if safe_name:
+                    nice_filename = (
+                        f"群分析报告_{safe_name}_{date_str}_{timestamp}{ext}"
+                    )
+        except Exception:
+            pass
+
+        # 2. 将内容准备为文件或数据
         image_file = None
         created_temp = False
         try:
@@ -307,10 +334,8 @@ class GroupDailyAnalysis(Star):
                 return
 
             if data and not image_file:
-                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-                image_file = os.path.join(
-                    tempfile.gettempdir(), f"群聊分析报告_{group_id}_{ts}.png"
-                )
+                # 使用优化的文件名创建临时文件
+                image_file = os.path.join(tempfile.gettempdir(), nice_filename)
                 with open(image_file, "wb") as f:
                     f.write(data)
                 created_temp = True
@@ -318,6 +343,7 @@ class GroupDailyAnalysis(Star):
             if not image_file:
                 return
 
+            # 3. 执行上传：群文件
             if enable_file:
                 try:
                     folder_name = self.config_manager.get_group_file_folder()
@@ -330,6 +356,7 @@ class GroupDailyAnalysis(Star):
                         group_id=group_id,
                         file_path=image_file,
                         folder_id=folder_id,
+                        filename=nice_filename,  # 显式传递漂亮的文件名
                     )
                 except Exception as e:
                     logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
