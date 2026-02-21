@@ -6,6 +6,7 @@ OneBot v11 平台适配器
 
 import asyncio
 import base64
+import os
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -453,7 +454,18 @@ class OneBotAdapter(PlatformAdapter):
             elif image_path.startswith("base64://"):
                 file_str = image_path
             else:
-                file_str = f"file:///{image_path}"
+                # 尝试转换为 Base64，解决跨容器路径不一致导致的 1200 错误
+                b64_str = await self._get_base64_from_file(image_path)
+                if b64_str:
+                    logger.debug(
+                        f"已将本地图片转换为 Base64 发送: {image_path[:50]}..."
+                    )
+                    file_str = b64_str
+                else:
+                    logger.warning(
+                        f"无法读取本地图片，将尝试使用原始路径回退: {image_path}"
+                    )
+                    file_str = f"file:///{image_path}"
 
             message.append({"type": "image", "data": {"file": file_str}})
 
@@ -485,11 +497,17 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传任务启动是否成功
         """
         try:
+            # 同样优先使用 Base64 发送文件，适配跨容器环境
+            file_str = await self._get_base64_from_file(file_path)
+            if not file_str:
+                logger.warning(f"无法读取本地文件进行 Base64 编码: {file_path}")
+                file_str = file_path  # 回退
+
             await self.bot.call_action(
                 "upload_group_file",
                 group_id=int(group_id),
-                file=file_path,
-                name=filename or file_path.replace("\\", "/").split("/")[-1],
+                file=file_str,
+                name=filename or os.path.basename(file_path),
             )
             return True
         except Exception as e:
@@ -610,6 +628,31 @@ class OneBotAdapter(PlatformAdapter):
                 join_time=result.get("join_time"),
             )
         except Exception:
+            return None
+
+    async def _get_base64_from_file(self, file_path: str) -> str | None:
+        """
+        读取本地文件并返回 Base64 编码字符串。
+
+        Args:
+            file_path: 本地文件绝对路径
+
+        Returns:
+            str | None: base64://... 格式的字符串，读取失败返回 None
+        """
+        try:
+            import os
+
+            if not os.path.exists(file_path):
+                logger.error(f"文件不存在，无法读取 Base64: {file_path}")
+                return None
+
+            with open(file_path, "rb") as f:
+                data = f.read()
+                b64 = base64.b64encode(data).decode("utf-8")
+                return f"base64://{b64}"
+        except Exception as e:
+            logger.error(f"读取文件并转换 Base64 失败: {e}")
             return None
 
     # ==================== IAvatarRepository 实现 ====================
@@ -863,7 +906,7 @@ class OneBotAdapter(PlatformAdapter):
         """
         try:
             # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
-            # 注意：某些 API (如 upload_image_to_qun_album) 强制要求 album_id
+            # 注意：某些 API (如 upload_image_to_qun_album) 强制要求 album_id 且不能为空
             if not album_id:
                 albums = await self.get_group_album_list(group_id)
                 if albums:
@@ -875,12 +918,22 @@ class OneBotAdapter(PlatformAdapter):
                             f"未指定有效的相册，自动选择默认相册 ID: {album_id}"
                         )
 
+            if not album_id:
+                logger.info(
+                    f"群 {group_id} 未找到任何有效相册，且未指定相册名，跳过相册上传以防止后端错误。"
+                )
+                return False
+
+            # 尝试转换为 Base64 以保证跨容器成功率 (兼容性取决于 OneBot 实现)
+            b64_file = await self._get_base64_from_file(image_path)
+            upload_path = b64_file if b64_file else image_path
+
             # 策略 1: 尝试 upload_image_to_qun_album (参考 astrbot_plugin_qun_album)
             try:
                 # 注意：NapCat 的某些实现强制要求 album_id 字段存在
                 params = {
                     "group_id": int(group_id),
-                    "file": image_path,
+                    "file": upload_path,
                     "album_id": str(album_id or ""),  # 保证字段存在
                 }
                 if album_name:
@@ -902,7 +955,7 @@ class OneBotAdapter(PlatformAdapter):
 
                 params = {
                     "group_id": int(group_id),
-                    "file": image_path,
+                    "file": upload_path,
                     "album_id": str(album_id or ""),
                 }
 
