@@ -844,41 +844,70 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         image_path: str,
         album_id: str | None = None,
+        album_name: str | None = None,
     ) -> bool:
         """
         上传图片到群相册（NapCat 扩展 API）。
 
-        注意：此 API 仅 NapCat 支持，go-cqhttp / Lagrange 等不支持。
+        注意：此功能主要由 NapCat 等 OneBot 增强版实现提供。
         调用失败时会静默降级，不影响正常发送。
 
         Args:
             group_id: 目标群号
             image_path: 本地图片文件的绝对路径
-            album_id: 目标相册 ID，为 None 时上传到默认相册
+            album_id: 目标相册 ID
+            album_name: 目标相册名称（部分 API 需要）
 
         Returns:
             bool: 上传是否成功
         """
         try:
-            params = {
-                "group_id": int(group_id),
-                "file": image_path,
-            }
-            if album_id:
-                params["album_id"] = album_id
+            # 策略 1: 尝试 upload_image_to_qun_album (参考 astrbot_plugin_qun_album)
+            try:
+                params = {
+                    "group_id": int(group_id),
+                    "file": image_path,
+                }
+                if album_id:
+                    params["album_id"] = album_id
+                if album_name:
+                    params["album_name"] = album_name
 
-            await self.bot.call_action("upload_group_album", **params)
-            logger.info(f"NapCat 群相册上传成功: 群 {group_id}")
-            return True
+                await self.bot.call_action("upload_image_to_qun_album", **params)
+                logger.info(
+                    f"OneBot (upload_image_to_qun_album) 群相册上传成功: 群 {group_id}"
+                )
+                return True
+            except Exception as e:
+                # 策略 2: 尝试 upload_group_album (NapCat 另一种可能的名称)
+                if "not found" not in str(e).lower() and "不支持" not in str(e).lower():
+                    logger.debug(
+                        f"策略 1 upload_image_to_qun_album 失败，尝试策略 2: {e}"
+                    )
+
+                params = {
+                    "group_id": int(group_id),
+                    "file": image_path,
+                }
+                if album_id:
+                    params["album_id"] = album_id
+
+                await self.bot.call_action("upload_group_album", **params)
+                logger.info(
+                    f"OneBot (upload_group_album) 群相册上传成功: 群 {group_id}"
+                )
+                return True
+
         except Exception as e:
             error_msg = str(e).lower()
-            if "not found" in error_msg or "not support" in error_msg:
-                logger.warning(
-                    "当前 OneBot 实现不支持群相册上传 API (upload_group_album)，"
-                    "此功能仅 NapCat 可用。"
-                )
+            if (
+                "not found" in error_msg
+                or "not support" in error_msg
+                or "不支持" in error_msg
+            ):
+                logger.debug(f"当前 OneBot 实现不支持群相册上传 API: {e}")
             else:
-                logger.warning(f"NapCat 群相册上传失败: {e}")
+                logger.warning(f"OneBot 群相册上传失败: {e}")
             return False
 
     async def get_group_album_list(
@@ -896,6 +925,21 @@ class OneBotAdapter(PlatformAdapter):
                         API 不可用时返回空列表。
         """
         try:
+            # 策略 1: 尝试 get_qun_album_list (参考 qun_album 插件)
+            try:
+                result = await self.bot.call_action(
+                    "get_qun_album_list",
+                    group_id=int(group_id),
+                )
+                if result:
+                    if isinstance(result, list):
+                        return result
+                    if isinstance(result, dict):
+                        return result.get("albums", []) or result.get("data", []) or []
+            except Exception:
+                pass
+
+            # 策略 2: 尝试 get_group_album_list
             result = await self.bot.call_action(
                 "get_group_album_list",
                 group_id=int(group_id),
