@@ -35,7 +35,7 @@ class BaseAnalyzer(ABC):
         # 增量分析模式下的最大数量覆盖值，为 None 时使用配置默认值
         self._incremental_max_count: int | None = None
 
-    def get_provider_id_key(self) -> str:
+    def get_provider_id_key(self) -> str | None:
         """
         获取 Provider ID 配置键名
         子类可重写以指定特定的 provider，默认返回 None（使用主 LLM Provider）
@@ -139,7 +139,7 @@ class BaseAnalyzer(ABC):
             logger.error(f"保存调试数据失败: {e}", exc_info=True)
 
     async def analyze(
-        self, data: Any, umo: str = None, session_id: str = None
+        self, data: Any, umo: str | None = None, session_id: str | None = None
     ) -> tuple[list[Any], TokenUsage]:
         """
         统一的分析流程

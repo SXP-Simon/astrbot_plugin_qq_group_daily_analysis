@@ -5,12 +5,12 @@ class PluginLogger:
     """
     日志代理类：插件级统一日志装饰器
 
-    自动向所有通过该实例输出的日志信息前缀添加 `[QQ群分析]` 标签，
+    自动向所有通过该实例输出的日志信息前缀添加 `[群分析插件]` 标签，
     以便用户在 AstrBot 混合日志流中快速定位属于本插件的输出。
     不直接继承 logging.LoggerAdapter 以符合框架规范。
     """
 
-    def __init__(self, prefix: str = "[QQ群分析]"):
+    def __init__(self, prefix: str = "[群分析插件]"):
         self.prefix = prefix
 
     def _format_msg(self, msg: str) -> str:

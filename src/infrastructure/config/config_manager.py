@@ -4,6 +4,7 @@
 """
 
 import sys
+from pathlib import Path
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -217,7 +218,7 @@ class ConfigManager:
         """获取PDF输出目录"""
         try:
             plugin_name = "astrbot_plugin_qq_group_daily_analysis"
-            data_path = get_astrbot_data_path()
+            data_path = Path(get_astrbot_data_path())
             default_path = data_path / "plugin_data" / plugin_name / "reports"
             return self._get_group("pdf").get("pdf_output_dir", str(default_path))
         except Exception:
@@ -397,6 +398,26 @@ class ConfigManager:
     def get_enable_user_card(self) -> bool:
         """获取是否使用用户群名片"""
         return self._get_group("basic").get("enable_user_card", False)
+
+    # ========== 群文件/群相册上传配置 ==========
+
+    def get_enable_group_file_upload(self) -> bool:
+        """获取是否启用群文件上传"""
+        return self._get_group("qq_group_upload").get("enable_group_file_upload", False)
+
+    def get_group_file_folder(self) -> str:
+        """获取群文件上传目录名，空字符串表示根目录"""
+        return self._get_group("qq_group_upload").get("group_file_folder", "")
+
+    def get_enable_group_album_upload(self) -> bool:
+        """获取是否启用群相册上传（仅 NapCat）"""
+        return self._get_group("qq_group_upload").get(
+            "enable_group_album_upload", False
+        )
+
+    def get_group_album_name(self) -> str:
+        """获取目标群相册名称，空字符串表示默认相册"""
+        return self._get_group("qq_group_upload").get("group_album_name", "")
 
     # ========== 增量分析配置 ==========
 
