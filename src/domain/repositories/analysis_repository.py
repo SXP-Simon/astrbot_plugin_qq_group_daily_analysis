@@ -15,7 +15,10 @@ class IAnalysisProvider(ABC):
 
     @abstractmethod
     async def analyze_topics(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """分析话题"""
         pass
@@ -25,16 +28,19 @@ class IAnalysisProvider(ABC):
         self,
         messages: list[dict],
         user_activity: dict,
-        umo: str = None,
-        top_users: list[dict] = None,
-        session_id: str = None,
+        umo: str | None = None,
+        top_users: list[dict] | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """分析用户称号"""
         pass
 
     @abstractmethod
     async def analyze_golden_quotes(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """分析金句"""
         pass
@@ -44,8 +50,8 @@ class IAnalysisProvider(ABC):
         self,
         messages: list[dict],
         user_activity: dict,
-        umo: str = None,
-        top_users: list[dict] = None,
+        umo: str | None = None,
+        top_users: list[dict] | None = None,
     ) -> tuple[list[SummaryTopic], list[UserTitle], list[GoldenQuote], TokenUsage]:
         """并发分析所有内容"""
         pass

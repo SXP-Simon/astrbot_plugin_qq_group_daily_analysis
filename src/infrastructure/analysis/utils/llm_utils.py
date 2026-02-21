@@ -48,7 +48,7 @@ async def _try_get_provider_id_by_id(
     return None
 
 
-async def _try_get_session_provider_id(context, umo: str) -> str | None:
+async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
     """
     尝试获取会话 Provider ID 的辅助函数
 
@@ -97,7 +97,10 @@ async def _try_get_first_available_provider_id(context) -> str | None:
 
 
 async def get_provider_id_with_fallback(
-    context, config_manager, provider_id_key: str, umo: str = None
+    context,
+    config_manager,
+    provider_id_key: str | None,
+    umo: str | None = None,
 ) -> str | None:
     """
     根据配置键获取 Provider ID，支持多级回退
@@ -183,8 +186,8 @@ async def call_provider_with_retry(
     prompt: str,
     max_tokens: int,
     temperature: float,
-    umo: str = None,
-    provider_id_key: str = None,
+    umo: str | None = None,
+    provider_id_key: str | None = None,
 ) -> Any | None:
     """
     调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。

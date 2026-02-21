@@ -19,13 +19,18 @@ class IReportGenerator(ABC):
         group_id: str,
         html_render_func: Any,
         avatar_getter: Any = None,
+        nickname_getter: Any = None,
     ) -> tuple[str | None, str | None]:
         """生成图片报告"""
         pass
 
     @abstractmethod
     async def generate_pdf_report(
-        self, analysis_result: dict, group_id: str, avatar_getter: Any = None
+        self,
+        analysis_result: dict,
+        group_id: str,
+        avatar_getter: Any = None,
+        nickname_getter: Any = None,
     ) -> str | None:
         """生成 PDF 报告"""
         pass

@@ -149,7 +149,11 @@ class ReportGenerator(IReportGenerator):
             return None, html_content
 
     async def generate_pdf_report(
-        self, analysis_result: dict, group_id: str, avatar_getter=None
+        self,
+        analysis_result: dict,
+        group_id: str,
+        avatar_getter=None,
+        nickname_getter=None,
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
@@ -169,6 +173,7 @@ class ReportGenerator(IReportGenerator):
                 analysis_result,
                 chart_template="activity_chart_pdf.html",
                 avatar_getter=avatar_getter,
+                nickname_getter=nickname_getter,
             )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -357,7 +362,7 @@ class ReportGenerator(IReportGenerator):
         detail: str,
         avatar_getter,
         nickname_getter=None,
-        user_analysis: dict = None,
+        user_analysis: dict | None = None,
     ) -> str:
         """
         处理话题详情，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
@@ -537,7 +542,9 @@ class ReportGenerator(IReportGenerator):
                 safe_avatar_url = self._safe_url_for_log(avatar_url)
                 async with aiohttp.ClientSession() as client:
                     try:
-                        async with client.get(avatar_url, timeout=5) as response:
+                        async with client.get(
+                            avatar_url, timeout=aiohttp.ClientTimeout(total=5)
+                        ) as response:
                             if response.status == 200:
                                 content = await response.read()
                                 if content:
@@ -607,7 +614,7 @@ class ReportGenerator(IReportGenerator):
         try:
             # 动态导入 playwright
             try:
-                from playwright.async_api import async_playwright
+                from playwright.async_api import async_playwright  # type: ignore
             except ImportError:
                 logger.error("playwright 未安装，无法生成 PDF")
                 logger.info("💡 请尝试运行: pip install playwright")

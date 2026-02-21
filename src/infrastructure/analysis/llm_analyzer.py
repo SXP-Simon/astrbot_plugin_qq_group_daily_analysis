@@ -11,6 +11,7 @@ from ...domain.models.data_models import (
     TokenUsage,
     UserTitle,
 )
+from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...utils.logger import logger
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer
 from .analyzers.topic_analyzer import TopicAnalyzer
@@ -19,12 +20,16 @@ from .utils.json_utils import fix_json
 from .utils.llm_utils import call_provider_with_retry
 
 
-class LLMAnalyzer:
+class LLMAnalyzer(IAnalysisProvider):
     """
     LLM分析器
     作为统一入口，协调各个专门的分析器进行不同类型的分析
     保持向后兼容性，提供原有的接口
     """
+
+    topic_analyzer: TopicAnalyzer
+    user_title_analyzer: UserTitleAnalyzer
+    golden_quote_analyzer: GoldenQuoteAnalyzer
 
     def __init__(self, context, config_manager):
         """
@@ -43,7 +48,10 @@ class LLMAnalyzer:
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
 
     async def analyze_topics(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         使用LLM分析话题
@@ -78,10 +86,10 @@ class LLMAnalyzer:
     async def analyze_user_titles(
         self,
         messages: list[dict],
-        user_analysis: dict,
-        umo: str = None,
-        top_users: list[dict] = None,
-        session_id: str = None,
+        user_activity: dict,
+        umo: str | None = None,
+        top_users: list[dict] | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """
         使用LLM分析用户称号
@@ -89,7 +97,7 @@ class LLMAnalyzer:
 
         Args:
             messages: 群聊消息列表
-            user_analysis: 用户分析统计
+            user_activity: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(可选)
             session_id: 会话ID (用于调试模式)
@@ -110,14 +118,17 @@ class LLMAnalyzer:
 
             logger.info(f"开始用户称号分析, session_id: {session_id}")
             return await self.user_title_analyzer.analyze_user_titles(
-                messages, user_analysis, umo, top_users, session_id
+                messages, user_activity, umo, top_users, session_id
             )
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
             return [], TokenUsage()
 
     async def analyze_golden_quotes(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """
         使用LLM分析群聊金句
@@ -153,9 +164,9 @@ class LLMAnalyzer:
     async def analyze_all_concurrent(
         self,
         messages: list[dict],
-        user_analysis: dict,
-        umo: str = None,
-        top_users: list[dict] = None,
+        user_activity: dict,
+        umo: str | None = None,
+        top_users: list[dict] | None = None,
         topic_enabled: bool = True,
         user_title_enabled: bool = True,
         golden_quote_enabled: bool = True,
@@ -165,7 +176,7 @@ class LLMAnalyzer:
 
         Args:
             messages: 群聊消息列表
-            user_analysis: 用户分析统计
+            user_activity: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(可选)
             topic_enabled: 是否启用话题分析
@@ -206,7 +217,7 @@ class LLMAnalyzer:
             if user_title_enabled:
                 tasks.append(
                     self.user_title_analyzer.analyze_user_titles(
-                        messages, user_analysis, umo, top_users, session_id
+                        messages, user_activity, umo, top_users, session_id
                     )
                 )
                 task_names.append("user_title")
@@ -235,11 +246,11 @@ class LLMAnalyzer:
                     logger.error(f"分析任务 {name} 失败: {result}")
                     continue
 
-                if name == "topic":
+                if name == "topic" and isinstance(result, tuple):
                     topics, topic_usage = result
-                elif name == "user_title":
+                elif name == "user_title" and isinstance(result, tuple):
                     user_titles, title_usage = result
-                elif name == "golden_quote":
+                elif name == "golden_quote" and isinstance(result, tuple):
                     golden_quotes, quote_usage = result
 
             # 合并Token使用统计
@@ -267,7 +278,7 @@ class LLMAnalyzer:
     async def analyze_incremental_concurrent(
         self,
         messages: list[dict],
-        umo: str = None,
+        umo: str | None = None,
         topics_per_batch: int = 3,
         quotes_per_batch: int = 3,
         topic_enabled: bool = True,
@@ -346,9 +357,9 @@ class LLMAnalyzer:
                         logger.error(f"增量{name}分析失败: {result}")
                         continue
 
-                    if name == "topic":
+                    if name == "topic" and isinstance(result, tuple):
                         topics, topic_usage = result
-                    elif name == "golden_quote":
+                    elif name == "golden_quote" and isinstance(result, tuple):
                         golden_quotes, quote_usage = result
 
                 # 合并Token使用统计
@@ -411,8 +422,8 @@ class LLMAnalyzer:
         prompt: str,
         max_tokens: int,
         temperature: float,
-        umo: str = None,
-        provider_id_key: str = None,
+        umo: str | None = None,
+        provider_id_key: str | None = None,
     ):
         """
         向后兼容的LLM调用方法
