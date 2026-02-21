@@ -1,13 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.7.7] - feat(template): retro_futurism 调整和 hack, spring_festival 模板
-*   **✨ 新模板**: ![spring_festival效果图](./assets/spring_festival-demo.jpg)
-*   **✨ 新模板**: ![hack效果图](./assets/hack-demo.jpg)
-
+## [v4.7.9] - feat(Onebot): 重构 OneBot 消息拉取逻辑，采用分页回溯策略；新增分析报告同步上传至群文件和群相册的功能
+*   **✨ 新功能**: 新增分析报告同步上传至群文件和群相册的功能，等待有缘人来黑历史里挖坟
+*   **🛠️ 健壮性增强**: 重构 OneBot 消息拉取逻辑，采用分页回溯策略，减轻拉取历史消息瞬间的负荷
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.7.7] - feat(template): retro_futurism 调整和 hack, spring_festival 模板
+*   **✨ 新模板**: spring_festival
+*   **✨ 新模板**: hack
 
 ## [v4.7.6] - feat: Telegram 按钮交互选择模板 (#83)
 *   **✨ 新功能**: Telegram 平台的 `/设置模板` 指令支持通过按钮交互选择模板，提升用户体验。
