@@ -1,4 +1,8 @@
+import base64
+import os
+import tempfile
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from ...utils.logger import logger
@@ -94,22 +98,17 @@ class ReportDispatcher:
                 group_id, image_url, "📊 每日群聊分析报告已生成：", platform_id
             )
             if sent:
+                # 4. 发送成功后，尝试上传到群文件/群相册（静默处理）
+                await self._try_upload_image(group_id, image_url, platform_id)
                 return True
 
-        # 4. 发送失败或生成失败的处理 -> 加入重试队列
+        # 5. 发送失败或生成失败的处理 -> 加入重试队列
         if html_content:
             logger.warning(
                 f"[{trace_id}] Image dispatch failed, adding to retry queue..."
             )
             # 尝试获取 platform_id 如果没有提供
             if not platform_id:
-                # 这里假设 MessageSender 能帮忙或者我们需要自己查
-                # 由于 Dispatcher 不直接持有 BotManager (除了通过 MessageSender 间接持有)
-                # 原有逻辑：AutoScheduler 调用 get_platform_id_for_group
-                # 我们这里暂时依赖传入的 platform_id，如果没有，RetryManager 可能处理不了?
-                # 实际上 RetryManager 需要 platform_id。
-                # 让我们尝试通过 MessageSender 的 bot_manager 获取一个
-                # 或者更简单：如果 platform_id 为空，我们尝试获取第一个可用的 (MessageSender._get_available_platforms Logic)
                 platforms = self.message_sender._get_available_platforms(group_id)
                 if platforms:
                     platform_id = platforms[0][0]  # use first available
@@ -124,7 +123,7 @@ class ReportDispatcher:
                     f"[{trace_id}] Cannot add to retry queue: No platform_id available."
                 )
 
-        # 5. 最终回退：文本报告
+        # 6. 最终回退：文本报告
         logger.warning(f"[{trace_id}] Falling back to text report.")
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
@@ -173,3 +172,113 @@ class ReportDispatcher:
         except Exception as e:
             logger.error(f"[{TraceContext.get()}] Failed to dispatch text report: {e}")
             return False
+
+    # ================================================================
+    # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）
+    # ================================================================
+
+    async def _try_upload_image(
+        self,
+        group_id: str,
+        image_url: str,
+        platform_id: str | None,
+    ):
+        """
+        尝试将图片报告上传到群文件和/或群相册。
+
+        仅在配置启用且平台为 OneBot 时执行，失败静默处理。
+        """
+        enable_file = self.config_manager.get_enable_group_file_upload()
+        enable_album = self.config_manager.get_enable_group_album_upload()
+        if not enable_file and not enable_album:
+            return
+
+        # 仅 OneBot 平台支持
+        adapter = self._get_onebot_adapter(platform_id)
+        if not adapter:
+            return
+
+        # 将图片保存为临时文件
+        image_file = self._save_image_to_temp(image_url, group_id)
+        if not image_file:
+            return
+
+        try:
+            # 上传到群文件
+            if enable_file:
+                await self._do_upload_group_file(adapter, group_id, image_file)
+
+            # 上传到群相册
+            if enable_album:
+                await self._do_upload_group_album(adapter, group_id, image_file)
+        finally:
+            try:
+                os.remove(image_file)
+            except OSError:
+                pass
+
+    async def _do_upload_group_file(self, adapter, group_id: str, file_path: str):
+        """上传文件到群文件目录，失败静默"""
+        try:
+            folder_name = self.config_manager.get_group_file_folder()
+            folder_id = None
+            if folder_name:
+                folder_id = await adapter.find_or_create_folder(group_id, folder_name)
+            await adapter.upload_group_file_to_folder(
+                group_id=group_id,
+                file_path=file_path,
+                folder_id=folder_id,
+            )
+        except Exception as e:
+            logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
+
+    async def _do_upload_group_album(self, adapter, group_id: str, file_path: str):
+        """上传图片到群相册，失败静默"""
+        try:
+            album_name = self.config_manager.get_group_album_name()
+            album_id = None
+            if album_name and hasattr(adapter, "find_album_id"):
+                album_id = await adapter.find_album_id(group_id, album_name)
+            await adapter.upload_group_album(group_id, file_path, album_id=album_id)
+        except Exception as e:
+            logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
+
+    def _save_image_to_temp(self, image_url: str, group_id: str) -> str | None:
+        """将 base64 图片保存为临时 PNG 文件，返回路径。失败返回 None。"""
+        try:
+            image_data = None
+            if image_url.startswith("base64://"):
+                image_data = base64.b64decode(image_url[len("base64://") :])
+            elif image_url.startswith("data:"):
+                parts = image_url.split(",", 1)
+                if len(parts) == 2:
+                    image_data = base64.b64decode(parts[1])
+            elif os.path.isfile(image_url):
+                return os.path.abspath(image_url)
+            elif image_url.startswith("file:///"):
+                p = image_url[len("file:///") :]
+                if os.path.isfile(p):
+                    return os.path.abspath(p)
+
+            if not image_data:
+                return None
+
+            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.join(
+                tempfile.gettempdir(), f"群聊分析报告_{group_id}_{date_str}.png"
+            )
+            with open(path, "wb") as f:
+                f.write(image_data)
+            return path
+        except Exception as e:
+            logger.debug(f"保存图片到临时文件失败: {e}")
+            return None
+
+    def _get_onebot_adapter(self, platform_id: str | None):
+        """获取 OneBot 适配器，非 OneBot 平台返回 None。"""
+        if not platform_id:
+            return None
+        adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+        if adapter and hasattr(adapter, "upload_group_file_to_folder"):
+            return adapter
+        return None

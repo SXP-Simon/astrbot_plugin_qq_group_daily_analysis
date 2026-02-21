@@ -41,7 +41,7 @@ class TopicAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.6
 
-    def build_prompt(self, messages: list[dict]) -> str:
+    def build_prompt(self, data: list[dict]) -> str:
         """
         构建话题分析提示词
 
@@ -52,18 +52,18 @@ class TopicAnalyzer(BaseAnalyzer):
             提示词字符串
         """
         # 验证输入数据格式
-        if not isinstance(messages, list):
-            logger.error(f"build_prompt 期望列表，但收到: {type(messages)}")
+        if not isinstance(data, list):
+            logger.error(f"build_prompt 期望列表，但收到: {type(data)}")
             return ""
 
         # 检查消息列表是否为空
-        if not messages:
+        if not data:
             logger.warning("build_prompt 收到空消息列表")
             return ""
 
         # 提取文本消息
         text_messages = []
-        for i, msg in enumerate(messages):
+        for i, msg in enumerate(data):
             # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
             if not isinstance(msg, dict):
                 continue
@@ -177,20 +177,20 @@ class TopicAnalyzer(BaseAnalyzer):
         logger.warning("未找到有效的话题分析提示词配置，请检查配置文件")
         return ""
 
-    def extract_with_regex(self, result_text: str, max_topics: int) -> list[dict]:
+    def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
         使用正则表达式提取话题信息
 
         Args:
             result_text: LLM响应文本
-            max_topics: 最大话题数量
+            max_count: 最大话题数量
 
         Returns:
             话题数据列表
         """
-        return extract_topics_with_regex(result_text, max_topics)
+        return extract_topics_with_regex(result_text, max_count)
 
-    def create_data_objects(self, topics_data: list[dict]) -> list[SummaryTopic]:
+    def create_data_objects(self, data_list: list[dict]) -> list[SummaryTopic]:
         """
         创建话题对象列表
 
@@ -201,9 +201,9 @@ class TopicAnalyzer(BaseAnalyzer):
             SummaryTopic对象列表
         """
         logger.debug(
-            f"create_data_objects 开始处理，输入数据数量: {len(topics_data) if topics_data else 0}"
+            f"create_data_objects 开始处理，输入数据数量: {len(data_list) if data_list else 0}"
         )
-        logger.debug(f"输入数据类型: {type(topics_data)}")
+        logger.debug(f"输入数据类型: {type(data_list)}")
 
         try:
             topics = []
@@ -211,7 +211,7 @@ class TopicAnalyzer(BaseAnalyzer):
 
             logger.debug(f"处理前 {max_topics} 条话题数据")
 
-            for i, topic_data in enumerate(topics_data[:max_topics]):
+            for i, topic_data in enumerate(data_list[:max_topics]):
                 logger.debug(f"处理第 {i + 1} 条话题数据，类型: {type(topic_data)}")
 
                 # 确保topic_data是字典类型，避免'str' object has no attribute 'get'错误
@@ -301,7 +301,10 @@ class TopicAnalyzer(BaseAnalyzer):
         return text_messages
 
     async def analyze_topics(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """
         分析群聊话题

@@ -321,6 +321,37 @@
             }
         }
     },
+    "qq_group_upload": {
+        "description": "群文件/群相册上传设置",
+        "type": "object",
+        "hint": "图片报告生成后自动上传到群文件目录或群相册。群文件上传基于 OneBot upload_group_file API，群相册上传为 NapCat 扩展 API。仅对 QQ（OneBot）平台的图片格式报告生效",
+        "items": {
+            "enable_group_file_upload": {
+                "type": "bool",
+                "description": "启用群文件上传",
+                "default": false,
+                "hint": "图片报告生成后，自动保存为 PNG 文件并上传到群文件目录。需要 OneBot 实现支持 upload_group_file API"
+            },
+            "group_file_folder": {
+                "type": "string",
+                "description": "群文件上传目录名",
+                "default": "",
+                "hint": "上传到群文件中的子目录名称。留空则上传到根目录。如果指定的目录不存在，插件将尝试自动创建"
+            },
+            "enable_group_album_upload": {
+                "type": "bool",
+                "description": "启用群相册上传（仅 NapCat）",
+                "default": false,
+                "hint": "图片报告生成后，自动上传到群相册。此功能为 NapCat 扩展 API，其他 OneBot 实现不支持"
+            },
+            "group_album_name": {
+                "type": "string",
+                "description": "目标群相册名称",
+                "default": "",
+                "hint": "指定上传到哪个群相册。留空则上传到群默认相册。如果指定的相册不存在，将回退到默认相册"
+            }
+        }
+    },
     "prompts": {
         "description": "提示词模板",
         "type": "object",

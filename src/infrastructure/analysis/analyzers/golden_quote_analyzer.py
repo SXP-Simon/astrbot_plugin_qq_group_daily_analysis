@@ -40,7 +40,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         """获取温度参数"""
         return 0.7
 
-    def build_prompt(self, messages: list[dict]) -> str:
+    def build_prompt(self, data: list[dict]) -> str:
         """
         构建金句分析提示词
 
@@ -50,12 +50,12 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         Returns:
             提示词字符串
         """
-        if not messages:
+        if not data:
             return ""
 
         # 构建消息文本
         messages_text = "\n".join(
-            [f"[{msg['time']}] {msg['sender']}: {msg['content']}" for msg in messages]
+            [f"[{msg['time']}] {msg['sender']}: {msg['content']}" for msg in data]
         )
 
         max_golden_quotes = self.get_max_count()
@@ -92,7 +92,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         """
         return extract_golden_quotes_with_regex(result_text, max_count)
 
-    def create_data_objects(self, quotes_data: list[dict]) -> list[GoldenQuote]:
+    def create_data_objects(self, data_list: list[dict]) -> list[GoldenQuote]:
         """
         创建金句对象列表
 
@@ -106,7 +106,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             quotes = []
             max_quotes = self.get_max_count()
 
-            for quote_data in quotes_data[:max_quotes]:
+            for quote_data in data_list[:max_quotes]:
                 # 确保数据格式正确
                 content = quote_data.get("content", "").strip()
                 sender = quote_data.get("sender", "").strip()
@@ -128,7 +128,10 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             return []
 
     async def analyze_golden_quotes(
-        self, messages: list[dict], umo: str = None, session_id: str = None
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """
         分析群聊金句
