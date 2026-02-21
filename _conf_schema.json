@@ -340,15 +340,15 @@
             },
             "enable_group_album_upload": {
                 "type": "bool",
-                "description": "启用群相册上传（仅 NapCat）",
+                "description": "启用群相册上传（NapCat 通过测试）",
                 "default": false,
-                "hint": "图片报告生成后，自动上传到群相册。此功能为 NapCat 扩展 API，其他 OneBot 实现不支持"
+                "hint": "图片报告生成后，自动上传到群相册（确保 Bot 有权限上传群相册）。此功能为 NapCat 扩展 API，其他 OneBot 实现可能不支持"
             },
             "group_album_name": {
                 "type": "string",
                 "description": "目标群相册名称",
                 "default": "",
-                "hint": "指定上传到哪个群相册。留空则上传到群默认相册。如果指定的相册不存在，将回退到默认相册"
+                "hint": "指定上传到哪个群相册（请确保已经存在这个名称的相册）。留空则上传到群默认相册。如果指定的相册不存在，将回退到默认相册"
             }
         }
     },
