@@ -82,6 +82,12 @@
                 "description": "调试模式（建议关闭）",
                 "default": false,
                 "hint": "启用后，会在 plugin_data/debug_data 目录下保存每次分析的平台 API 原始历史消息和 Prompt 原文，用于调试和优化提示词。"
+            },
+            "enable_base64_image": {
+                "type": "bool",
+                "description": "图片传输使用 Base64 编码",
+                "default": true,
+                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
             }
         }
     },
