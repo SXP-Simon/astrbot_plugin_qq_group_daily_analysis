@@ -86,7 +86,7 @@
             "enable_base64_image": {
                 "type": "bool",
                 "description": "图片传输使用 Base64 编码",
-                "default": false,
+                "default": true,
                 "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
             }
         }
