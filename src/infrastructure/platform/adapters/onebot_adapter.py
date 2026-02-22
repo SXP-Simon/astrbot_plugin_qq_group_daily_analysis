@@ -493,6 +493,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径发送图片失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(image_path)
                 if not b64_str:
+                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
                     raise e
 
                 message = list(base_message)
@@ -541,6 +542,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径发送文件失败 ({e})，尝试 Base64 回退模式...")
                 file_b64 = await self._get_base64_from_file(file_path)
                 if not file_b64:
+                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
                     raise e
 
                 await self.bot.call_action(
@@ -811,6 +813,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径上传群文件失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(file_path)
                 if not b64_str:
+                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
                     raise e
 
                 params["file"] = b64_str
@@ -1001,6 +1004,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径上传相册失败 ({e1})，尝试 Base64 回退模式...")
                 b64_file = await self._get_base64_from_file(image_path)
                 if not b64_file:
+                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
                     raise e1
 
                 # 重新尝试两个可能的 API 名
