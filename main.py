@@ -467,20 +467,21 @@ class GroupDailyAnalysis(Star):
                 )
 
                 if image_url:
-                    # 优先使用适配器的 send_image (支持 Base64 转换)
-                    success = await adapter.send_image(group_id, image_url)
-                    if not success:
-                        logger.warning(
-                            "适配器发送图片失败，尝试使用 AstrBot 内置方式回退 (可能因跨容器路径问题失败)"
-                        )
-                        yield event.image_result(image_url)
+                    # 优先使用适配器的 send_image (由插件适配器统一处理 Base64 转换和路径问题)
+                    # 不再使用 yield event.image_result 回退，防止适配器超时回复导致重复发送图片
+                    await adapter.send_image(group_id, image_url)
 
                     # 上传到群文件/群相册 (属于附加功能，不影响消息发送)
                     await self._try_upload_image(group_id, image_url, platform_id)
                 elif html_content:
-                    yield event.plain_result("⚠️ 图片生成暂不可用，已尝试加入队列。")
+                    yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
+                    # 使用带提示词的重试任务，确保排队发送时视觉一致
                     await self.retry_manager.add_task(
-                        html_content, analysis_result, group_id, platform_id
+                        html_content,
+                        analysis_result,
+                        group_id,
+                        platform_id,
+                        caption="📊 每日群聊分析报告已生成：",
                     )
                 else:
                     text_report = self.report_generator.generate_text_report(

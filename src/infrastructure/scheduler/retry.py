@@ -18,6 +18,7 @@ class RetryTask:
     analysis_result: dict  # 保存原始分析结果，用于文本回退
     group_id: str
     platform_id: str  # 需要保存 platform_id 以便找回 Bot
+    caption: str = ""  # 保存原始消息提示词
     retry_count: int = 0
     max_retries: int = 3
     created_at: float = 0.0
@@ -46,6 +47,7 @@ class RetryManager:
         self.running = False
         self.worker_task = None
         self._dlq = []  # 死信队列 (Failures)
+        self._active_groups = set()  # 正在处理中的群，防止重试地狱
 
     async def start(self):
         """启动重试工作进程"""
@@ -75,7 +77,12 @@ class RetryManager:
         logger.info("[RetryManager] 图片重试管理器已停止")
 
     async def add_task(
-        self, html_content: str, analysis_result: dict, group_id: str, platform_id: str
+        self,
+        html_content: str,
+        analysis_result: dict,
+        group_id: str,
+        platform_id: str,
+        caption: str = "",
     ):
         """添加重试任务"""
         if not self.running:
@@ -84,59 +91,104 @@ class RetryManager:
             )
             await self.start()
 
+        # 核心去重：如果该群已经在重试流程中，不再重复加入队列
+        if group_id in self._active_groups:
+            logger.debug(f"[RetryManager] 群 {group_id} 已在重试观察期，跳过任务添加")
+            return
+
         task = RetryTask(
             html_content=html_content,
             analysis_result=analysis_result,
             group_id=group_id,
             platform_id=platform_id,
+            caption=caption,
             created_at=time.time(),
         )
         await self.queue.put(task)
         logger.info(f"[RetryManager] 已添加群 {group_id} 的重试任务")
 
     async def _worker(self):
-        """工作进程循环"""
+        """工作进程主循环：仅负责分发任务到协程，不阻塞"""
         while self.running:
             try:
                 task: RetryTask = await self.queue.get()
 
-                # 延迟策略：指数回退 (5s, 10s, 20s...) + 随机波动 (1~5s)
-                jitter = random.uniform(1, 5)
-                delay = 5 * (2**task.retry_count) + jitter
-
-                logger.info(
-                    f"[RetryManager] 处理群 {task.group_id} 的重试任务 (第 {task.retry_count + 1} 次尝试)"
-                )
-
-                success = await self._process_task(task)
-
-                if success:
-                    logger.info(f"[RetryManager] 群 {task.group_id} 重试成功")
+                # 如果该群已经在处理中，不再重复处理（双重保险）
+                if task.group_id in self._active_groups:
                     self.queue.task_done()
-                else:
-                    task.retry_count += 1
-                    if task.retry_count < task.max_retries:
-                        logger.warning(
-                            f"[RetryManager] 群 {task.group_id} 重试失败，{delay}秒后再次尝试"
-                        )
-                        asyncio.create_task(self._requeue_after_delay(task, delay))
-                        self.queue.task_done()
-                    else:
-                        logger.error(
-                            f"[RetryManager] 群 {task.group_id} 超过最大重试次数，移入死信队列并尝试文本回退"
-                        )
-                        self._dlq.append(task)
-                        self.queue.task_done()
-                        # 尝试发送文本回退
-                        await self._send_fallback_text(task)
+                    continue
+
+                # 启动非阻塞的延迟执行协程
+                asyncio.create_task(self._run_task_with_delay(task))
+                self.queue.task_done()
 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"[RetryManager] Worker 异常: {e}", exc_info=True)
+                logger.error(f"[RetryManager] Worker 调度异常: {e}")
                 await asyncio.sleep(1)
 
+    async def _run_task_with_delay(self, task: RetryTask):
+        """异步执行带延迟的单体重试任务"""
+        # 锁定该群，防止其他重试任务进入
+        if task.group_id in self._active_groups:
+            return
+        self._active_groups.add(task.group_id)
+
+        try:
+            # 1. 延迟策略：指数回落 + 观察期 (应对 OneBot 假超时)
+            jitter = random.uniform(2, 8)
+            delay = 20 * (2**task.retry_count) + jitter
+
+            if task.retry_count == 0:
+                logger.info(
+                    f"[RetryManager] 群 {task.group_id} 启动 {delay:.1f}s 重试观察期..."
+                )
+
+            await asyncio.sleep(delay)
+
+            if not self.running:
+                return
+
+            # 【核心判定逻辑】：睡醒后先别急着发，去群里看看那张“疑似失败”的图是不是其实已经出来了
+            adapter = self.bot_manager.get_adapter(task.platform_id)
+            if adapter and hasattr(adapter, "was_image_sent_recently"):
+                # 检查过去 3 分钟内的消息回显 (覆盖初发和之前的重试)
+                if await adapter.was_image_sent_recently(task.group_id, seconds=180):
+                    logger.info(
+                        f"[RetryManager] 根据消息回显判断，群 {task.group_id} 的图片报告已成功送达。取消后续重试。"
+                    )
+                    return
+
+            # 2. 执行渲染与发送
+            success = await self._process_task(task)
+
+            if success:
+                logger.info(f"[RetryManager] 群 {task.group_id} 重试发送成功")
+            else:
+                # 3. 失败后续处理
+                task.retry_count += 1
+                if task.retry_count < task.max_retries:
+                    # 释放锁，以便下次取到时能重新进入观察期
+                    self._active_groups.discard(task.group_id)
+                    await self.queue.put(task)
+                    logger.warning(
+                        f"[RetryManager] 群 {task.group_id} 本轮重试失败，准备进入第 {task.retry_count + 1} 轮..."
+                    )
+                else:
+                    logger.error(
+                        f"[RetryManager] 群 {task.group_id} 已达最大重试次数，执行文本回退"
+                    )
+                    await self._send_fallback_text(task)
+        except Exception as e:
+            logger.error(f"[RetryManager] 重试协程执行异常 (群 {task.group_id}): {e}")
+        finally:
+            # 确保最终释放该群的重试锁
+            if task.group_id in self._active_groups:
+                self._active_groups.discard(task.group_id)
+
     async def _requeue_after_delay(self, task: RetryTask, delay: float):
+        # 这是一个遗留辅助方法，新逻辑已在 _run_task_with_delay 中处理
         await asyncio.sleep(delay)
         await self.queue.put(task)
 
@@ -238,7 +290,9 @@ class RetryManager:
             # 适配器内部通常应处理好 bytes/base64 的发送。
             # 这里我们尝试直接传 image_file_str (base64://)
             try:
-                success = await adapter.send_image(task.group_id, image_file_str)
+                success = await adapter.send_image(
+                    task.group_id, image_file_str, caption=task.caption
+                )
                 return success
             except Exception as e:
                 logger.error(f"[RetryManager] 适配器发送图片异常: {e}")
@@ -247,9 +301,6 @@ class RetryManager:
         except Exception as e:
             logger.error(f"[RetryManager] 处理任务时发生意外错误: {e}", exc_info=True)
             return False
-
-        except Exception:
-            pass
 
     async def _send_fallback_text(self, task: RetryTask):
         """发送文本回退报告（业务逻辑委派给适配器）"""

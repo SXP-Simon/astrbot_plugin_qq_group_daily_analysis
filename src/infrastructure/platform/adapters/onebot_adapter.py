@@ -515,7 +515,76 @@ class OneBotAdapter(PlatformAdapter):
                 return True
 
         except Exception as e:
+            # 识别 OneBot 的“假失败”情况：如果由于图片过大导致超时，其实图片往往已在后台由 OneBot 自动重传并最终会成功。
+            error_str = str(e).lower()
+            # 判定为“疑似成功”的特征：超时、1200、网络错误
+            is_potential_success = (
+                "timeout" in error_str or "1200" in error_str or "网络错误" in error_str
+            )
+
+            if is_potential_success:
+                logger.warning(
+                    f"OneBot 发送群 {group_id} 图片出现疑似超时 ({e})。 "
+                    "这通常是因为图片较大导致上传缓慢。如果群内稍后出现了图片，请忽略随后可能的重试提示。"
+                )
+                return (
+                    False  # 返回 False，由上层 RetryManager 接管（带 20s 延迟观察期）
+                )
+
             logger.error(f"OneBot 图片发送最终失败: {e}")
+            return False
+
+    async def was_image_sent_recently(self, group_id: str, seconds: int = 60) -> bool:
+        """
+        [真相检查] 检查最近 X 秒内，机器人是否已经向该群发送过图片。
+        用于判断之前的“超时/1200”错误是否其实已经在后台发送成功。
+        """
+        try:
+            # 1. 获取最近的消息历史 (OneBot 标准 API)
+            history = await self.bot.call_action(
+                "get_group_msg_history",
+                group_id=int(group_id),
+                count=50,  # 只检查最近 50 条消息，足够覆盖大多数情况
+            )
+
+            if not history or "messages" not in history:
+                # 某些 OneBot 实现返回值结构不同
+                messages = history if isinstance(history, list) else []
+            else:
+                messages = history["messages"]
+
+            # 2. 逆序检查
+            import time
+
+            now = time.time()
+            self_id = str(getattr(self.bot, "self_id", ""))
+
+            for msg in reversed(messages):
+                msg_time = msg.get("time", 0)
+                # 只检查约定时间范围内的消息
+                if now - msg_time > seconds:
+                    break
+
+                # 检查发送者是否是机器人自己
+                user_id = str(
+                    msg.get("user_id", msg.get("sender", {}).get("user_id", ""))
+                )
+                if user_id != self_id:
+                    continue
+
+                # 检查消息内容是否包含图片
+                raw_message = msg.get("message", [])
+                # 适配字符串形式或列表形式的消息
+                msg_str = str(raw_message)
+                if "[CQ:image" in msg_str or '"type": "image"' in msg_str:
+                    logger.debug(
+                        f"自检发现群 {group_id} 已有成功发送的图片回显，无需重试。"
+                    )
+                    return True
+
+            return False
+        except Exception as e:
+            logger.debug(f"回显自检失败 (可能不支持 get_group_msg_history): {e}")
             return False
 
     async def send_file(
@@ -1016,6 +1085,7 @@ class OneBotAdapter(PlatformAdapter):
                     raise e1
 
                 # 重新尝试两个可能的 API 名
+                params = {}
                 try:
                     params = {
                         "group_id": int(group_id),
