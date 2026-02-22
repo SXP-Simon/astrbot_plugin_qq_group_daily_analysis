@@ -15,6 +15,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -56,7 +57,7 @@ class IncrementalBatch:
     user_stats: dict[str, dict] = field(default_factory=dict)
 
     # 表情统计
-    emoji_stats: dict[str, int] = field(default_factory=dict)
+    emoji_stats: dict[str, Any] = field(default_factory=dict)
 
     # LLM 分析结果
     topics: list[dict] = field(default_factory=list)
@@ -178,7 +179,7 @@ class IncrementalState:
     user_activities: dict[str, dict] = field(default_factory=dict)
 
     # 表情统计
-    emoji_counts: dict[str, int] = field(default_factory=dict)
+    emoji_counts: dict[str, Any] = field(default_factory=dict)
 
     # 汇总统计
     total_message_count: int = 0
@@ -247,7 +248,7 @@ class IncrementalState:
             users.append(
                 {
                     "user_id": user_id,
-                    "name": data.get("name", user_id),
+                    "name": data.get("nickname", data.get("name", user_id)),
                     "message_count": data.get("message_count", 0),
                     "char_count": data.get("char_count", 0),
                 }
