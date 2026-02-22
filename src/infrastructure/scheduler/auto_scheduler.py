@@ -258,59 +258,45 @@ class AutoScheduler:
     async def _get_enabled_targets(self) -> set[tuple[str, str]]:
         """
         获取所有启用分析的群聊目标。
-
-        根据群组列表模式（白名单/黑名单/无限制）过滤群聊，
-        返回去重后的 (group_id, platform_id) 集合。
-
-        Returns:
-            set[tuple[str, str]]: 启用分析的 (群ID, 平台ID) 集合
+        确保每个群组 ID 在一次调度任务中只出现一次（多平台/多适配器去重）。
         """
         group_list_mode = self.config_manager.get_group_list_mode()
 
-        # 使用 set 存储 (group_id, platform_id) 元组，避免重复
-        enabled_targets = set()
+        # 使用字典记录 group_id -> platform_id 实现去重
+        # 优先级：先发现先处理
+        targets_map: dict[str, str] = {}
 
         # 1. 通过 API 获取所有群组（自动发现）
-        logger.info(f"自动分析使用 {group_list_mode} 模式，正在获取群列表...")
+        logger.info(f"自动分析使用 {group_list_mode} 模式，正在扫描所有平台的群列表...")
         all_groups = await self._get_all_groups()
-        logger.info(f"共获取到 {len(all_groups)} 个群组")
 
         for platform_id, group_id in all_groups:
-            # 构造 UMO 进行权限检查
-            umo = f"{platform_id}:GroupMessage:{group_id}"
-            if self.config_manager.is_group_allowed(umo):
-                enabled_targets.add((str(group_id), str(platform_id)))
+            group_id_str = str(group_id)
+            if group_id_str in targets_map:
+                continue
 
-        # 2. 白名单模式下，额外检查配置中的 UMO
-        # 解决 get_group_list 失败但配置了明确 UMO 的情况
+            # 权限检查
+            umo = f"{platform_id}:GroupMessage:{group_id_str}"
+            if self.config_manager.is_group_allowed(umo):
+                targets_map[group_id_str] = platform_id
+
+        # 2. 白名单模式补全
         if group_list_mode == "whitelist":
             whitelist_config = self.config_manager.get_group_list()
-            logger.info(
-                f"正在检查白名单配置中的额外 UMO ({len(whitelist_config)} 条)..."
-            )
-
             for item in whitelist_config:
                 item = str(item).strip()
-                # 如果是 UMO 格式 (例: platform_id:GroupMessage:group_id)
                 if ":" in item:
                     parts = item.split(":")
                     if len(parts) >= 3:
                         p_id = parts[0]
                         g_id = parts[-1]
+                        if g_id not in targets_map:
+                            if self.bot_manager.get_bot_instance(p_id):
+                                targets_map[g_id] = p_id
 
-                        # 检查该平台是否存在
-                        if self.bot_manager.get_bot_instance(p_id):
-                            enabled_targets.add((str(g_id), str(p_id)))
-                            logger.debug(f"添加白名单 UMO 目标: {item}")
-                        else:
-                            logger.warning(
-                                f"白名单 UMO {item} 对应的平台 {p_id} 不存在或未加载"
-                            )
-
-        logger.info(
-            f"根据 {group_list_mode} 过滤及合并后，共有 {len(enabled_targets)} 个群聊需要分析"
-        )
-
+        # 转换为集合形式返回
+        enabled_targets = set(targets_map.items())
+        logger.info(f"扫码完成：共有 {len(enabled_targets)} 个群聊目标将执行分析任务")
         return enabled_targets
 
     # ================================================================
@@ -375,7 +361,7 @@ class AutoScheduler:
             logger.error(f"自动分析执行失败: {e}", exc_info=True)
 
     async def _perform_auto_analysis_for_group_with_timeout(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行自动分析（带超时控制）"""
         try:
@@ -390,7 +376,7 @@ class AutoScheduler:
             logger.error(f"群 {group_id} 分析任务执行失败: {e}")
 
     async def _perform_auto_analysis_for_group(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
         # 为每个群聊使用独立的锁
@@ -534,7 +520,7 @@ class AutoScheduler:
             logger.error(f"增量分析执行失败: {e}", exc_info=True)
 
     async def _perform_incremental_analysis_for_group_with_timeout(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行增量分析（带超时控制，10分钟）"""
         try:
@@ -553,7 +539,7 @@ class AutoScheduler:
             return {"success": False, "reason": str(e)}
 
     async def _perform_incremental_analysis_for_group(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行增量分析（业务逻辑委派给 AnalysisApplicationService）"""
         # 为每个群聊使用独立的锁
@@ -677,7 +663,7 @@ class AutoScheduler:
             logger.error(f"增量最终报告执行失败: {e}", exc_info=True)
 
     async def _perform_incremental_final_report_for_group_with_timeout(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群生成增量最终报告（带超时控制，20分钟）"""
         try:
@@ -696,7 +682,7 @@ class AutoScheduler:
             return {"success": False, "reason": str(e)}
 
     async def _perform_incremental_final_report_for_group(
-        self, group_id: str, target_platform_id: str = None
+        self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
         # 为每个群聊使用独立的锁

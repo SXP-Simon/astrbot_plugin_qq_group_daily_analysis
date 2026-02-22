@@ -115,7 +115,11 @@ class ReportDispatcher:
 
             if platform_id:
                 await self.retry_manager.add_task(
-                    html_content, analysis_result, group_id, platform_id
+                    html_content,
+                    analysis_result,
+                    group_id,
+                    platform_id,
+                    caption="📊 每日群聊分析报告已生成：",
                 )
                 return True  # 已加入队列视作处理成功 (不在此处报错)
             else:
