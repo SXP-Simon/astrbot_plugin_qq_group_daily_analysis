@@ -475,8 +475,11 @@ class OneBotAdapter(PlatformAdapter):
             file_str = image_path
             if not image_path.startswith(("http://", "https://", "base64://")):
                 if os.path.isabs(image_path):
-                    # 如果是绝对路径，保持原样（兼容 Docker 中的 /AstrBot/ 路径）
-                    file_str = f"file:///{image_path}"
+                    # 如果是绝对路径且以 / 开头，只需加 file:// 即可构成 file:///
+                    if image_path.startswith("/"):
+                        file_str = f"file://{image_path}"
+                    else:
+                        file_str = f"file:///{image_path}"
                 else:
                     # 如果是相对路径，转为绝对路径
                     file_str = f"file:///{os.path.abspath(image_path)}"
