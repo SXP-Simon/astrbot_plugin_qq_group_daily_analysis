@@ -52,6 +52,22 @@ class IAnalysisProvider(ABC):
         user_activity: dict,
         umo: str | None = None,
         top_users: list[dict] | None = None,
+        topic_enabled: bool = True,
+        user_title_enabled: bool = True,
+        golden_quote_enabled: bool = True,
     ) -> tuple[list[SummaryTopic], list[UserTitle], list[GoldenQuote], TokenUsage]:
         """并发分析所有内容"""
+        pass
+
+    @abstractmethod
+    async def analyze_incremental_concurrent(
+        self,
+        messages: list[dict],
+        umo: str | None = None,
+        topics_per_batch: int = 3,
+        quotes_per_batch: int = 3,
+        topic_enabled: bool = True,
+        golden_quote_enabled: bool = True,
+    ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage]:
+        """增量模式并发分析"""
         pass

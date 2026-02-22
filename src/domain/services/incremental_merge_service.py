@@ -83,7 +83,8 @@ class IncrementalMergeService:
                 )
 
             # 合并用户统计（按用户累加消息数、字符数等）
-            for user_id, stats in batch.user_stats.items():
+            for raw_user_id, stats in batch.user_stats.items():
+                user_id = str(raw_user_id)
                 if user_id not in state.user_activities:
                     state.user_activities[user_id] = {
                         "nickname": stats.get("nickname", stats.get("name", user_id)),
@@ -122,9 +123,9 @@ class IncrementalMergeService:
                 if batch_last > existing.get("last_message_time", 0):
                     existing["last_message_time"] = batch_last
 
-                # 更新昵称（使用最新批次的昵称）
+                # 更新昵称（使用最新批次的有效昵称）
                 nickname = stats.get("nickname", stats.get("name", ""))
-                if nickname:
+                if nickname and str(nickname).strip():
                     existing["nickname"] = nickname
 
             # 合并表情统计（按键累加）
@@ -136,7 +137,11 @@ class IncrementalMergeService:
                         current_val = {}
 
                     for sub_key, sub_count in count.items():
-                        current_val[sub_key] = current_val.get(sub_key, 0) + sub_count
+                        # 确保 current_val 是字典且 sub_count 是数字
+                        if isinstance(current_val, dict):
+                            current_val[sub_key] = (
+                                current_val.get(sub_key, 0) + sub_count
+                            )
 
                     state.emoji_counts[emoji_key] = current_val
                 else:
@@ -356,11 +361,17 @@ class IncrementalMergeService:
             EmojiStatistics: 表情统计实例
         """
         emoji_counts = state.emoji_counts
+
+        # 显式提取并检查类型，辅助 Pylance 类型推断
+        face_details = emoji_counts.get("face_details")
+        if not isinstance(face_details, dict):
+            face_details = {}
+
         return EmojiStatistics(
             face_count=emoji_counts.get("face_count", 0),
             mface_count=emoji_counts.get("mface_count", 0),
             bface_count=emoji_counts.get("bface_count", 0),
             sface_count=emoji_counts.get("sface_count", 0),
             other_emoji_count=emoji_counts.get("other_emoji_count", 0),
-            face_details=emoji_counts.get("face_details", {}),
+            face_details=face_details,
         )
