@@ -5,6 +5,7 @@
 
 import asyncio
 import base64
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -119,20 +120,43 @@ class ReportGenerator(IReportGenerator):
                     )
 
                     if image_data:
+                        # 校验是否为合法图片（防止 T2I 返回 500 错误 HTML 字符流）
+                        is_valid = False
+                        actual_data_head = None
+
                         if isinstance(image_data, bytes):
-                            b64 = base64.b64encode(image_data).decode("utf-8")
-                            image_url = f"base64://{b64}"
-                            logger.info(
-                                f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
-                            )
-                            return image_url, html_content
-                        elif isinstance(image_data, str):
-                            # Fallback: 如果返回的是字符串（可能是URL或路径）
-                            logger.info(f"图片生成成功 (String): {image_data}")
+                            actual_data_head = image_data[:10]
+                        elif isinstance(image_data, str) and os.path.exists(image_data):
+                            try:
+                                with open(image_data, "rb") as f:
+                                    actual_data_head = f.read(10)
+                            except Exception as e:
+                                logger.warning(f"读取图片临时文件失败: {e}")
 
-                            return image_data, html_content
+                        if actual_data_head:
+                            # 检查 magic numbers (JPEG: FF D8, PNG: 89 50 4E 47)
+                            if actual_data_head.startswith(
+                                b"\xff\xd8"
+                            ) or actual_data_head.startswith(b"\x89PNG"):
+                                is_valid = True
+                            else:
+                                logger.warning(
+                                    f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
+                                )
 
-                    logger.warning(f"渲染策略 {image_options} 返回空数据")
+                        if is_valid:
+                            if isinstance(image_data, bytes):
+                                b64 = base64.b64encode(image_data).decode("utf-8")
+                                image_url = f"base64://{b64}"
+                                logger.info(
+                                    f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                                )
+                                return image_url, html_content
+                            elif isinstance(image_data, str):
+                                logger.info(f"图片生成成功 (String): {image_data}")
+                                return image_data, html_content
+
+                    logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
 
                 except Exception as e:
                     logger.warning(f"渲染策略 {image_options} 失败: {e}")
