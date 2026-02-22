@@ -473,7 +473,7 @@ class AnalysisApplicationService:
                     title_token_usage,
                 ) = await self.llm_analyzer.analyze_user_titles(
                     messages=[],  # 增量模式下不传原始消息
-                    user_analysis=state.user_activities,
+                    user_activity=state.user_activities,
                     umo=unified_msg_origin,
                     top_users=top_users,
                 )
