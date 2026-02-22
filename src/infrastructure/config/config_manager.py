@@ -198,6 +198,10 @@ class ConfigManager:
         """获取是否启用调试模式"""
         return self._get_group("basic").get("debug_mode", False)
 
+    def get_enable_base64_image(self) -> bool:
+        """获取是否启用 Base64 图片传输"""
+        return self._get_group("basic").get("enable_base64_image", False)
+
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
         return self._get_group("llm").get("llm_provider_id", "")

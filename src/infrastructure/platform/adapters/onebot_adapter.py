@@ -433,28 +433,52 @@ class OneBotAdapter(PlatformAdapter):
         caption: str = "",
     ) -> bool:
         """
-        向群组发送图片。
+        向群组发送图片消息。
 
         Args:
             group_id (str): 目标群号
-            image_path (str): 本地文件路径或远程 URL
-            caption (str): 图片下方可选的文字说明
+            image_path (str): 图片路径或URL
+            caption (str): 图片消息的描述文字
 
         Returns:
-            bool: 是否成功
+            bool: 是否发送成功
         """
         try:
-            # 策略 1: 优先尝试物理路径 (高性能, 支持超大图)
+            use_base64 = False
+            plugin = self.config.get("plugin_instance") if self.config else None
+            if plugin and hasattr(plugin, "config_manager"):
+                use_base64 = plugin.config_manager.get_enable_base64_image()
+
+            base_message = []
+            if caption:
+                base_message.append({"type": "text", "data": {"text": caption}})
+
+            # 可选策略：开启时，本地文件优先直接转 Base64 发送
+            if use_base64 and not image_path.startswith(
+                ("http://", "https://", "base64://")
+            ):
+                b64_str = await self._get_base64_from_file(image_path)
+                if b64_str:
+                    message = list(base_message)
+                    message.append({"type": "image", "data": {"file": b64_str}})
+                    await self.bot.call_action(
+                        "send_group_msg",
+                        group_id=int(group_id),
+                        message=message,
+                    )
+                    logger.info(f"OneBot Base64 直传图片成功: 群 {group_id}")
+                    return True
+                logger.warning("OneBot Base64 直传失败，将回退到默认路径优先策略")
+
+            # 默认策略（上游现有行为）：
+            # 1) 优先尝试物理路径；2) 路径失败则回退 Base64
             file_str = image_path
             if not image_path.startswith(("http://", "https://", "base64://")):
                 file_str = f"file:///{os.path.abspath(image_path)}"
 
             try:
-                message = []
-                if caption:
-                    message.append({"type": "text", "data": {"text": caption}})
+                message = list(base_message)
                 message.append({"type": "image", "data": {"file": file_str}})
-
                 await self.bot.call_action(
                     "send_group_msg",
                     group_id=int(group_id),
@@ -462,21 +486,18 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 return True
             except Exception as e:
-                # 如果是网络图片或 Base64 已经报错，则直接失败
+                # 如果是网络图片或 Base64 输入，路径回退无意义，直接失败
                 if image_path.startswith(("http://", "https://", "base64://")):
                     raise e
 
-                # 策略 2: 路径报错 (如 1200 / ENOENT)，回退到 Base64 发送 (兼容跨容器)
                 logger.warning(f"路径发送图片失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(image_path)
                 if not b64_str:
-                    raise e  # 无法读取本地文件，抛出原始错误
+                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
+                    raise e
 
-                message = []
-                if caption:
-                    message.append({"type": "text", "data": {"text": caption}})
+                message = list(base_message)
                 message.append({"type": "image", "data": {"file": b64_str}})
-
                 await self.bot.call_action(
                     "send_group_msg",
                     group_id=int(group_id),
@@ -521,6 +542,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径发送文件失败 ({e})，尝试 Base64 回退模式...")
                 file_b64 = await self._get_base64_from_file(file_path)
                 if not file_b64:
+                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
                     raise e
 
                 await self.bot.call_action(
@@ -791,6 +813,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径上传群文件失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(file_path)
                 if not b64_str:
+                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
                     raise e
 
                 params["file"] = b64_str
@@ -981,6 +1004,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.warning(f"路径上传相册失败 ({e1})，尝试 Base64 回退模式...")
                 b64_file = await self._get_base64_from_file(image_path)
                 if not b64_file:
+                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
                     raise e1
 
                 # 重新尝试两个可能的 API 名
