@@ -328,7 +328,10 @@ class GroupDailyAnalysis(Star):
                 parts = image_url.split(",", 1)
                 data = base64.b64decode(parts[1]) if len(parts) == 2 else None
             elif os.path.isfile(image_url):
-                image_file = os.path.abspath(image_url)
+                if os.path.isabs(image_url):
+                    image_file = image_url
+                else:
+                    image_file = os.path.abspath(image_url)
                 data = None
             else:
                 return

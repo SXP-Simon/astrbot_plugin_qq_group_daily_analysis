@@ -474,7 +474,12 @@ class OneBotAdapter(PlatformAdapter):
             # 1) 优先尝试物理路径；2) 路径失败则回退 Base64
             file_str = image_path
             if not image_path.startswith(("http://", "https://", "base64://")):
-                file_str = f"file:///{os.path.abspath(image_path)}"
+                if os.path.isabs(image_path):
+                    # 如果是绝对路径，保持原样（兼容 Docker 中的 /AstrBot/ 路径）
+                    file_str = f"file:///{image_path}"
+                else:
+                    # 如果是相对路径，转为绝对路径
+                    file_str = f"file:///{os.path.abspath(image_path)}"
 
             try:
                 message = list(base_message)
