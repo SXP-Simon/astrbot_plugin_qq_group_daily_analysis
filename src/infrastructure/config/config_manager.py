@@ -6,8 +6,10 @@
 import sys
 from pathlib import Path
 
-from astrbot.api import AstrBotConfig, logger
+from astrbot.api import AstrBotConfig
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+from ...utils.logger import logger
 
 
 class ConfigManager:
