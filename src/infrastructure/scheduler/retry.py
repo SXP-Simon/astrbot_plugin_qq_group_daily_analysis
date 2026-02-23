@@ -113,10 +113,8 @@ class RetryManager:
             try:
                 task: RetryTask = await self.queue.get()
 
-                # 如果该群已经在处理中，不再重复处理（双重保险）
-                if task.group_id in self._active_groups:
-                    self.queue.task_done()
-                    continue
+                # 【修复】去掉原本在这里的 group_id in self._active_groups 判断
+                # 因为重新排队的任务本身就在 active_groups 中，会导致任务死在队列里被彻底丢弃
 
                 # 启动非阻塞的延迟执行协程
                 asyncio.create_task(self._run_task_with_delay(task))
@@ -130,13 +128,14 @@ class RetryManager:
 
     async def _run_task_with_delay(self, task: RetryTask):
         """异步执行带延迟的单体重试任务"""
-        # 锁定该群，防止其他重试任务进入
-        if task.group_id in self._active_groups:
+        # 锁定该群，防止其他“新”重试任务进入。
+        # 如果是重试任务（retry_count > 0），它已经在队列循环中，之前已经释放过锁。
+        if task.group_id in self._active_groups and task.retry_count == 0:
             return
         self._active_groups.add(task.group_id)
 
         try:
-            # 1. 延迟策略：指数回落 + 观察期 (应对 OneBot 假超时)
+            # 1. 策略计算：指数回落 + 抖动
             jitter = random.uniform(2, 8)
             delay = 20 * (2**task.retry_count) + jitter
 
@@ -144,19 +143,23 @@ class RetryManager:
                 logger.info(
                     f"[RetryManager] 群 {task.group_id} 启动 {delay:.1f}s 重试观察期..."
                 )
+            else:
+                logger.info(
+                    f"[RetryManager] 群 {task.group_id} 准备第 {task.retry_count + 1} 轮重试，退避 {delay:.1f}s..."
+                )
 
             await asyncio.sleep(delay)
 
             if not self.running:
                 return
 
-            # 【核心判定逻辑】：睡醒后先别急着发，去群里看看那张“疑似失败”的图是不是其实已经出来了
+            # 【真相检查 1】：睡醒后先核实群里图片是不是其实已经出来了
             adapter = self.bot_manager.get_adapter(task.platform_id)
             if adapter and hasattr(adapter, "was_image_sent_recently"):
-                # 检查过去 3 分钟内的消息回显 (覆盖初发和之前的重试)
-                if await adapter.was_image_sent_recently(task.group_id, seconds=180):
+                # 检查过去 5 分钟内的消息回显 (覆盖初发和之前的重试)
+                if await adapter.was_image_sent_recently(task.group_id, seconds=300):
                     logger.info(
-                        f"[RetryManager] 根据消息回显判断，群 {task.group_id} 的图片报告已成功送达。取消后续重试。"
+                        f"[RetryManager] [拦截] 根据历史回显，群 {task.group_id} 的图片已成功送达。取消本次重试。"
                     )
                     return
 
@@ -164,16 +167,16 @@ class RetryManager:
             success = await self._process_task(task)
 
             if success:
-                logger.info(f"[RetryManager] 群 {task.group_id} 重试发送成功")
+                logger.info(f"[RetryManager] 群 {task.group_id} 重试流程圆满完成")
             else:
                 # 3. 失败后续处理
                 task.retry_count += 1
                 if task.retry_count < task.max_retries:
-                    # 释放锁，以便下次取到时能重新进入观察期
-                    self._active_groups.discard(task.group_id)
+                    # 将任务重新放回队列。
+                    # 注意：锁会在 finally 释放，这样下一个 worker 就能拉取到它并进入睡眠。
                     await self.queue.put(task)
                     logger.warning(
-                        f"[RetryManager] 群 {task.group_id} 本轮重试失败，准备进入第 {task.retry_count + 1} 轮..."
+                        f"[RetryManager] 群 {task.group_id} 本轮调用返回失败，已排期下一轮..."
                     )
                 else:
                     logger.error(
@@ -181,9 +184,9 @@ class RetryManager:
                     )
                     await self._send_fallback_text(task)
         except Exception as e:
-            logger.error(f"[RetryManager] 重试协程执行异常 (群 {task.group_id}): {e}")
+            logger.error(f"[RetryManager] 重试协程发生意外: {e}", exc_info=True)
         finally:
-            # 确保最终释放该群的重试锁
+            # 释放群锁
             if task.group_id in self._active_groups:
                 self._active_groups.discard(task.group_id)
 
@@ -281,9 +284,18 @@ class RetryManager:
                 )
                 return False
 
-            # 3. 发送图片 (通过统一适配器接口)
+            # 3. 【临界检查 2】发送图片前最后一次复核 (针对渲染耗时极长产生的盲窗)
+            # 例如渲染 10s 期间图片出来了，这里可以最后贴身拦截一次
+            if adapter and hasattr(adapter, "was_image_sent_recently"):
+                if await adapter.was_image_sent_recently(task.group_id, seconds=120):
+                    logger.info(
+                        f"[RetryManager] [临界拦截] 渲染完成后检测到群 {task.group_id} 已有报告。拦截重复发送。"
+                    )
+                    return True
+
+            # 4. 执行实际发送
             logger.info(
-                f"[RetryManager] 正在向群 {task.group_id} 发送重试图片 (Adapter: {type(adapter).__name__})..."
+                f"[RetryManager] 正在向群 {task.group_id} 发送回补图片 (Adapter: {type(adapter).__name__})..."
             )
 
             # 注意：某些适配器可能需要 URL，某些需要 Base64。

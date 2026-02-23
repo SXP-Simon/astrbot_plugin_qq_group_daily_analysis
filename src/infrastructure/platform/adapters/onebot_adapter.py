@@ -53,15 +53,14 @@ class OneBotAdapter(PlatformAdapter):
     def __init__(self, bot_instance: Any, config: dict | None = None):
         """
         初始化 OneBot 适配器。
-
-        Args:
-            bot_instance (Any): 外部传入的机器人对象
-            config (dict, optional): 插件配置，用于提取机器人自身的 QQ 号供过滤用
         """
         super().__init__(bot_instance, config)
+        # 支持从多个潜在的配置键中提取机器人 ID
         self.bot_self_ids = (
-            [str(id) for id in config.get("bot_qq_ids", [])] if config else []
+            [str(id) for id in config.get("bot_self_ids", [])] if config else []
         )
+        if not self.bot_self_ids and config:
+            self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -544,7 +543,7 @@ class OneBotAdapter(PlatformAdapter):
             history = await self.bot.call_action(
                 "get_group_msg_history",
                 group_id=int(group_id),
-                count=50,  # 只检查最近 50 条消息，足够覆盖大多数情况
+                count=100,  # [针对重复检查优化] 提高扫描深度，覆盖大群高频刷屏的情况
             )
 
             if not history or "messages" not in history:
@@ -557,7 +556,36 @@ class OneBotAdapter(PlatformAdapter):
             import time
 
             now = time.time()
-            self_id = str(getattr(self.bot, "self_id", ""))
+            # 1. 优先从内存缓存中获取机器人 ID
+            self_id = self.bot_self_ids[0] if self.bot_self_ids else ""
+
+            # 2. 如果列表为空，尝试反射实例属性
+            if not self_id:
+                self_id = (
+                    str(getattr(self.bot, "self_id", ""))
+                    or str(getattr(self.bot, "uin", ""))
+                    or str(getattr(self.bot, "user_id", ""))
+                )
+
+            # 3. [兜底方案] 仍未获取到，通过 API 向 OneBot 服务端请求
+            if not self_id:
+                try:
+                    login_info = await self.bot.call_action("get_login_info")
+                    if login_info and "user_id" in login_info:
+                        self_id = str(login_info["user_id"])
+                        # 更新缓存，下次无需重复请求
+                        if self_id not in self.bot_self_ids:
+                            self.bot_self_ids.append(self_id)
+                        logger.info(f"[OneBot] 成功通过 API 获取到机器人 ID: {self_id}")
+                except Exception as e:
+                    logger.debug(
+                        f"[OneBot] was_image_sent_recently: get_login_info API 调用失败: {e}"
+                    )
+
+            if not self_id:
+                logger.warning(
+                    "[OneBot] was_image_sent_recently: 无法确定机器人 ID，历史回显校验可能不准确"
+                )
 
             for msg in reversed(messages):
                 msg_time = msg.get("time", 0)
