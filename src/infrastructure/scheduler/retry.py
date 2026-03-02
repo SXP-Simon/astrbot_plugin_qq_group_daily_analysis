@@ -157,7 +157,9 @@ class RetryManager:
             adapter = self.bot_manager.get_adapter(task.platform_id)
             if adapter and hasattr(adapter, "was_image_sent_recently"):
                 # 检查过去 5 分钟内的消息回显 (覆盖初发和之前的重试)
-                if await adapter.was_image_sent_recently(task.group_id, seconds=300):
+                if await adapter.was_image_sent_recently(
+                    task.group_id, seconds=300, token=task.caption
+                ):
                     logger.info(
                         f"[RetryManager] [拦截] 根据历史回显，群 {task.group_id} 的图片已成功送达。取消本次重试。"
                     )
@@ -287,7 +289,9 @@ class RetryManager:
             # 3. 【临界检查 2】发送图片前最后一次复核 (针对渲染耗时极长产生的盲窗)
             # 例如渲染 10s 期间图片出来了，这里可以最后贴身拦截一次
             if adapter and hasattr(adapter, "was_image_sent_recently"):
-                if await adapter.was_image_sent_recently(task.group_id, seconds=120):
+                if await adapter.was_image_sent_recently(
+                    task.group_id, seconds=120, token=task.caption
+                ):
                     logger.info(
                         f"[RetryManager] [临界拦截] 渲染完成后检测到群 {task.group_id} 已有报告。拦截重复发送。"
                     )

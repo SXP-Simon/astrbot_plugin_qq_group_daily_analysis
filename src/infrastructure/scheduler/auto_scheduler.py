@@ -5,7 +5,6 @@
 
 import asyncio
 import time as time_mod
-import weakref
 from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
@@ -319,21 +318,10 @@ class AutoScheduler:
 
             logger.info(f"将为 {len(target_list)} 个群聊并发执行分析")
 
-            # 创建并发任务，限制最大并发数
-            max_concurrent = self.config_manager.get_max_concurrent_tasks()
-            logger.info(f"自动分析并发数限制: {max_concurrent}")
-            sem = asyncio.Semaphore(max_concurrent)
-
-            async def safe_perform_analysis(gid, pid):
-                async with sem:
-                    return await self._perform_auto_analysis_for_group_with_timeout(
-                        gid, pid
-                    )
-
             analysis_tasks = []
             for gid, pid in target_list:
                 task = asyncio.create_task(
-                    safe_perform_analysis(gid, pid),
+                    self._perform_auto_analysis_for_group_with_timeout(gid, pid),
                     name=f"analysis_group_{gid}",
                 )
                 analysis_tasks.append(task)
@@ -343,18 +331,22 @@ class AutoScheduler:
 
             # 统计执行结果
             success_count = 0
+            skip_count = 0
             error_count = 0
 
             for i, result in enumerate(results):
                 gid, _ = target_list[i]
-                if isinstance(result, Exception):
+                if isinstance(result, asyncio.CancelledError):
+                    # 锁冲突导致的跳过
+                    skip_count += 1
+                elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 分析任务异常: {result}")
                     error_count += 1
                 else:
                     success_count += 1
 
             logger.info(
-                f"并发分析完成 - 成功: {success_count}, 失败: {error_count}, 总计: {len(target_list)}"
+                f"并发分析完成 - 成功: {success_count}, 跳过: {skip_count}, 失败: {error_count}, 总计: {len(target_list)}"
             )
 
         except Exception as e:
@@ -379,60 +371,54 @@ class AutoScheduler:
         self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
-        # 为每个群聊使用独立的锁
-        group_lock_key = f"analysis_{group_id}"
-        if not hasattr(self, "_group_locks"):
-            self._group_locks = weakref.WeakValueDictionary()
+        try:
+            # 设置 TraceID
+            trace_id = TraceContext.generate(prefix=f"group_{group_id}")
+            TraceContext.set(trace_id)
 
-        lock = self._group_locks.get(group_lock_key)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._group_locks[group_lock_key] = lock
+            logger.info(
+                f"开始为群 {group_id} 执行自动分析 (Platform: {target_platform_id or 'Auto'})"
+            )
 
-        async with lock:
-            try:
-                # 设置 TraceID
-                trace_id = TraceContext.generate(prefix=f"group_{group_id}")
-                TraceContext.set(trace_id)
+            # 检查平台状态 (BotManager 为基础设施层，用于获取平台就绪状态)
+            if not self.bot_manager.is_ready_for_auto_analysis():
+                logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
+                return
 
-                logger.info(
-                    f"开始为群 {group_id} 执行自动分析 (Platform: {target_platform_id or 'Auto'})"
-                )
+            # 委派给应用层服务执行核心用例
+            # AnalysisApplicationService 内部已处理群锁 (group_lock)
+            result = await self.analysis_service.execute_daily_analysis(
+                group_id=group_id, platform_id=target_platform_id, manual=False
+            )
 
-                # 检查平台状态 (BotManager 为基础设施层，用于获取平台就绪状态)
-                if not self.bot_manager.is_ready_for_auto_analysis():
-                    logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
-                    return
+            if not result.get("success"):
+                reason = result.get("reason")
+                logger.info(f"群 {group_id} 自动分析跳过: {reason}")
+                return
 
-                # 委派给应用层服务执行核心用例
-                result = await self.analysis_service.execute_daily_analysis(
-                    group_id=group_id, platform_id=target_platform_id, manual=False
-                )
+            # 获取分析结果及适配器
+            analysis_result = result["analysis_result"]
+            adapter = result["adapter"]
 
-                if not result.get("success"):
-                    reason = result.get("reason")
-                    logger.info(f"群 {group_id} 自动分析跳过: {reason}")
-                    return
+            # 调度导出并发送报告
+            await self.report_dispatcher.dispatch(
+                group_id,
+                analysis_result,
+                adapter.platform_id
+                if hasattr(adapter, "platform_id")
+                else target_platform_id,
+            )
 
-                # 获取分析结果及适配器
-                analysis_result = result["analysis_result"]
-                adapter = result["adapter"]
+            logger.info(f"群 {group_id} 自动分析任务执行成功")
 
-                # 调度导出并发送报告（由 ReportDispatcher 协调）
-                await self.report_dispatcher.dispatch(
-                    group_id,
-                    analysis_result,
-                    adapter.platform_id
-                    if hasattr(adapter, "platform_id")
-                    else target_platform_id,
-                )
-
-                logger.info(f"群 {group_id} 自动分析任务执行成功")
-
-            except Exception as e:
-                logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
-            finally:
-                logger.debug(f"群 {group_id} 自动分析流程结束")
+        except asyncio.CancelledError:
+            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+            logger.debug(f"群 {group_id} 任务因并发锁冲突而跳过（已在运行）")
+            raise  # 重新抛出，让上层知道任务并没真正执行而是跳过了
+        except Exception as e:
+            logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
+        finally:
+            logger.debug(f"群 {group_id} 自动分析流程结束")
 
     # ================================================================
     # 增量模式：增量分析
@@ -458,32 +444,31 @@ class AutoScheduler:
                 f"(并发限制: {max_concurrent}, 交错间隔: {stagger}秒)"
             )
 
-            sem = asyncio.Semaphore(max_concurrent)
+            # 资源限制现在由 Application Service 全局控制，此处仅保留交错逻辑
 
             async def staggered_incremental(idx, gid, pid):
-                async with sem:
-                    # 按索引交错延迟，均匀分散 API 压力
-                    if idx > 0 and stagger > 0:
-                        await asyncio.sleep(stagger * idx)
+                # 按索引交错延迟，均匀分散 API 压力
+                if idx > 0 and stagger > 0:
+                    await asyncio.sleep(stagger * idx)
 
-                    result = (
-                        await self._perform_incremental_analysis_for_group_with_timeout(
+                result = (
+                    await self._perform_incremental_analysis_for_group_with_timeout(
+                        gid, pid
+                    )
+                )
+
+                # 检查是否需要立即发送报告（调试模式）
+                if self.config_manager.get_incremental_report_immediately():
+                    if isinstance(result, dict) and result.get("success"):
+                        logger.info(
+                            f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
+                        )
+                        # 立即生成最终报告
+                        await self._perform_incremental_final_report_for_group_with_timeout(
                             gid, pid
                         )
-                    )
 
-                    # 检查是否需要立即发送报告（调试模式）
-                    if self.config_manager.get_incremental_report_immediately():
-                        if isinstance(result, dict) and result.get("success"):
-                            logger.info(
-                                f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
-                            )
-                            # 立即生成最终报告
-                            await self._perform_incremental_final_report_for_group_with_timeout(
-                                gid, pid
-                            )
-
-                    return result
+                return result
 
             analysis_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
@@ -542,57 +527,51 @@ class AutoScheduler:
         self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行增量分析（业务逻辑委派给 AnalysisApplicationService）"""
-        # 为每个群聊使用独立的锁
-        group_lock_key = f"incremental_{group_id}"
-        if not hasattr(self, "_group_locks"):
-            self._group_locks = weakref.WeakValueDictionary()
+        try:
+            # 设置 TraceID
+            trace_id = TraceContext.generate(prefix=f"incr_{group_id}")
+            TraceContext.set(trace_id)
 
-        lock = self._group_locks.get(group_lock_key)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._group_locks[group_lock_key] = lock
+            logger.info(
+                f"开始为群 {group_id} 执行增量分析 "
+                f"(Platform: {target_platform_id or 'Auto'})"
+            )
 
-        async with lock:
-            try:
-                # 设置 TraceID
-                trace_id = TraceContext.generate(prefix=f"incr_{group_id}")
-                TraceContext.set(trace_id)
+            # 检查平台状态
+            if not self.bot_manager.is_ready_for_auto_analysis():
+                logger.warning(f"群 {group_id} 增量分析跳过：bot管理器未就绪")
+                return {"success": False, "reason": "bot_not_ready"}
 
-                logger.info(
-                    f"开始为群 {group_id} 执行增量分析 "
-                    f"(Platform: {target_platform_id or 'Auto'})"
-                )
+            # 委派给应用层服务执行增量分析用例
+            # AnalysisApplicationService 内部已处理群锁 (group_lock)
+            result = await self.analysis_service.execute_incremental_analysis(
+                group_id=group_id, platform_id=target_platform_id
+            )
 
-                # 检查平台状态
-                if not self.bot_manager.is_ready_for_auto_analysis():
-                    logger.warning(f"群 {group_id} 增量分析跳过：bot管理器未就绪")
-                    return {"success": False, "reason": "bot_not_ready"}
-
-                # 委派给应用层服务执行增量分析用例
-                result = await self.analysis_service.execute_incremental_analysis(
-                    group_id=group_id, platform_id=target_platform_id
-                )
-
-                if not result.get("success"):
-                    reason = result.get("reason", "unknown")
-                    logger.info(f"群 {group_id} 增量分析跳过: {reason}")
-                    return result
-
-                # 增量分析只累积数据，不发送报告
-                batch_summary = result.get("batch_summary", {})
-                logger.info(
-                    f"群 {group_id} 增量分析完成: "
-                    f"消息数={result.get('messages_count', 0)}, "
-                    f"话题={batch_summary.get('topics_count', 0)}, "
-                    f"金句={batch_summary.get('quotes_count', 0)}"
-                )
+            if not result.get("success"):
+                reason = result.get("reason", "unknown")
+                logger.info(f"群 {group_id} 增量分析跳过: {reason}")
                 return result
 
-            except Exception as e:
-                logger.error(f"群 {group_id} 增量分析执行失败: {e}", exc_info=True)
-                return {"success": False, "reason": str(e)}
-            finally:
-                logger.debug(f"群 {group_id} 增量分析流程结束")
+            # 增量分析只累积数据，不发送报告
+            batch_summary = result.get("batch_summary", {})
+            logger.info(
+                f"群 {group_id} 增量分析完成: "
+                f"消息数={result.get('messages_count', 0)}, "
+                f"话题={batch_summary.get('topics_count', 0)}, "
+                f"金句={batch_summary.get('quotes_count', 0)}"
+            )
+            return result
+
+        except asyncio.CancelledError:
+            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+            logger.debug(f"群 {group_id} 增量分析因并发锁冲突而跳过（已在运行）")
+            return {"success": False, "reason": "already_running"}
+        except Exception as e:
+            logger.error(f"群 {group_id} 增量分析执行失败: {e}", exc_info=True)
+            return {"success": False, "reason": str(e)}
+        finally:
+            logger.debug(f"群 {group_id} 增量分析流程结束")
 
     # ================================================================
     # 增量模式：最终报告生成
@@ -618,15 +597,14 @@ class AutoScheduler:
                 f"(并发限制: {max_concurrent}, 交错间隔: {stagger}秒)"
             )
 
-            sem = asyncio.Semaphore(max_concurrent)
-
             async def staggered_final_report(idx, gid, pid):
-                async with sem:
-                    if idx > 0 and stagger > 0:
-                        await asyncio.sleep(stagger * idx)
-                    return await self._perform_incremental_final_report_for_group_with_timeout(
+                if idx > 0 and stagger > 0:
+                    await asyncio.sleep(stagger * idx)
+                return (
+                    await self._perform_incremental_final_report_for_group_with_timeout(
                         gid, pid
                     )
+                )
 
             report_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
@@ -685,80 +663,74 @@ class AutoScheduler:
         self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
-        # 为每个群聊使用独立的锁
-        group_lock_key = f"final_report_{group_id}"
-        if not hasattr(self, "_group_locks"):
-            self._group_locks = weakref.WeakValueDictionary()
+        try:
+            # 设置 TraceID
+            trace_id = TraceContext.generate(prefix=f"report_{group_id}")
+            TraceContext.set(trace_id)
 
-        lock = self._group_locks.get(group_lock_key)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._group_locks[group_lock_key] = lock
+            logger.info(
+                f"开始为群 {group_id} 生成增量最终报告 "
+                f"(Platform: {target_platform_id or 'Auto'})"
+            )
 
-        async with lock:
-            try:
-                # 设置 TraceID
-                trace_id = TraceContext.generate(prefix=f"report_{group_id}")
-                TraceContext.set(trace_id)
+            # 检查平台状态
+            if not self.bot_manager.is_ready_for_auto_analysis():
+                logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
+                return {"success": False, "reason": "bot_not_ready"}
 
-                logger.info(
-                    f"开始为群 {group_id} 生成增量最终报告 "
-                    f"(Platform: {target_platform_id or 'Auto'})"
-                )
+            # 委派给应用层服务执行最终报告用例
+            # AnalysisApplicationService 内部已处理群锁 (group_lock)
+            result = await self.analysis_service.execute_incremental_final_report(
+                group_id=group_id, platform_id=target_platform_id
+            )
 
-                # 检查平台状态
-                if not self.bot_manager.is_ready_for_auto_analysis():
-                    logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
-                    return {"success": False, "reason": "bot_not_ready"}
-
-                # 委派给应用层服务执行最终报告用例
-                result = await self.analysis_service.execute_incremental_final_report(
-                    group_id=group_id, platform_id=target_platform_id
-                )
-
-                if not result.get("success"):
-                    reason = result.get("reason", "unknown")
-                    logger.info(f"群 {group_id} 最终报告跳过: {reason}")
-                    return result
-
-                # 获取分析结果及适配器，分发报告
-                analysis_result = result["analysis_result"]
-                adapter = result["adapter"]
-
-                await self.report_dispatcher.dispatch(
-                    group_id,
-                    analysis_result,
-                    adapter.platform_id
-                    if hasattr(adapter, "platform_id")
-                    else target_platform_id,
-                )
-
-                # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）
-                try:
-                    analysis_days = self.config_manager.get_analysis_days()
-                    before_ts = time_mod.time() - (analysis_days * 2 * 24 * 3600)
-                    incremental_store = self.analysis_service.incremental_store
-                    if incremental_store:
-                        cleaned = await incremental_store.cleanup_old_batches(
-                            group_id, before_ts
-                        )
-                        if cleaned > 0:
-                            logger.info(
-                                f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"
-                            )
-                except Exception as cleanup_err:
-                    logger.warning(
-                        f"群 {group_id} 过期批次清理失败（不影响报告）: {cleanup_err}"
-                    )
-
-                logger.info(f"群 {group_id} 增量最终报告发送成功")
+            if not result.get("success"):
+                reason = result.get("reason", "unknown")
+                logger.info(f"群 {group_id} 最终报告跳过: {reason}")
                 return result
 
-            except Exception as e:
-                logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
-                return {"success": False, "reason": str(e)}
-            finally:
-                logger.debug(f"群 {group_id} 最终报告流程结束")
+            # 获取分析结果及适配器，分发报告
+            analysis_result = result["analysis_result"]
+            adapter = result["adapter"]
+
+            await self.report_dispatcher.dispatch(
+                group_id,
+                analysis_result,
+                adapter.platform_id
+                if hasattr(adapter, "platform_id")
+                else target_platform_id,
+            )
+
+            # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）
+            try:
+                analysis_days = self.config_manager.get_analysis_days()
+                before_ts = time_mod.time() - (analysis_days * 2 * 24 * 3600)
+                incremental_store = self.analysis_service.incremental_store
+                if incremental_store:
+                    cleaned = await incremental_store.cleanup_old_batches(
+                        group_id, before_ts
+                    )
+                    if cleaned > 0:
+                        logger.info(
+                            f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"
+                        )
+            except Exception as cleanup_err:
+                logger.warning(
+                    f"群 {group_id} 过期批次清理失败（不影响报告）: {cleanup_err}"
+                )
+
+            logger.info(f"群 {group_id} 增量最终报告发送成功")
+            return result
+
+        except asyncio.CancelledError:
+            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+            logger.debug(f"群 {group_id} 最终报告因并发锁冲突而跳过（已在运行）")
+            return {"success": False, "reason": "already_running"}
+        except Exception as e:
+            logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
+            return {"success": False, "reason": str(e)}
+        finally:
+            logger.debug(f"群 {group_id} 最终报告流程结束")
 
     # ================================================================
     # 群列表获取（基础设施层）

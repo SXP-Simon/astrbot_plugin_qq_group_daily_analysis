@@ -94,8 +94,9 @@ class ReportDispatcher:
 
         # 3. 发送图片
         if image_url:
+            caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
             sent = await self.message_sender.send_image_smart(
-                group_id, image_url, "📊 每日群聊分析报告已生成：", platform_id
+                group_id, image_url, caption, platform_id
             )
             if sent:
                 # 4. 发送成功后，尝试上传到群文件/群相册（静默处理）
@@ -119,7 +120,7 @@ class ReportDispatcher:
                     analysis_result,
                     group_id,
                     platform_id,
-                    caption="📊 每日群聊分析报告已生成：",
+                    caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
                 )
                 return True  # 已加入队列视作处理成功 (不在此处报错)
             else:

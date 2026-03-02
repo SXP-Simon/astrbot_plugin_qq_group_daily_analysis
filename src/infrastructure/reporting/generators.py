@@ -25,6 +25,9 @@ class ReportGenerator(IReportGenerator):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
+        # 全局 T2I 渲染信号量，保护本地资源
+        max_concurrent = self.config_manager.get_max_concurrent_tasks()
+        self._render_semaphore = asyncio.Semaphore(max_concurrent)
 
     async def generate_image_report(
         self,
@@ -67,106 +70,112 @@ class ReportGenerator(IReportGenerator):
 
             logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
 
-            # 定义渲染策略
-            render_strategies = [
-                # 1. 第一策略: PNG, Ultra quality, Device scale
-                {
-                    "full_page": True,
-                    "type": "png",
-                    "scale": "device",
-                    "device_scale_factor_level": "ultra",
-                },
-                # 2. 第二策略: JPEG, ultra, quality 100%, Device scale
-                {
-                    "full_page": True,
-                    "type": "jpeg",
-                    "quality": 100,
-                    "scale": "device",
-                    "device_scale_factor_level": "ultra",
-                },
-                # 3. 第三策略: JPEG, high, quality 80%, Device scale
-                {
-                    "full_page": True,
-                    "type": "jpeg",
-                    "quality": 95,
-                    "scale": "device",
-                    "device_scale_factor_level": "high",  # 尝试高分辨率
-                },
-                # 4. 第四策略: JPEG, normal quality, Device scale (后备)
-                {
-                    "full_page": True,
-                    "type": "jpeg",
-                    "quality": 80,
-                    "scale": "device",
-                    # normal quality
-                },
-            ]
+            # 使用信号量控制并发进入渲染引擎
+            async with self._render_semaphore:
+                logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
 
-            last_exception = None
+                # 定义渲染策略
+                render_strategies = [
+                    # 1. 第一策略: PNG, Ultra quality, Device scale
+                    {
+                        "full_page": True,
+                        "type": "png",
+                        "scale": "device",
+                        "device_scale_factor_level": "ultra",
+                    },
+                    # 2. 第二策略: JPEG, ultra, quality 100%, Device scale
+                    {
+                        "full_page": True,
+                        "type": "jpeg",
+                        "quality": 100,
+                        "scale": "device",
+                        "device_scale_factor_level": "ultra",
+                    },
+                    # 3. 第三策略: JPEG, high, quality 80%, Device scale
+                    {
+                        "full_page": True,
+                        "type": "jpeg",
+                        "quality": 95,
+                        "scale": "device",
+                        "device_scale_factor_level": "high",  # 尝试高分辨率
+                    },
+                    # 4. 第四策略: JPEG, normal quality, Device scale (后备)
+                    {
+                        "full_page": True,
+                        "type": "jpeg",
+                        "quality": 80,
+                        "scale": "device",
+                        # normal quality
+                    },
+                ]
 
-            for image_options in render_strategies:
-                try:
-                    # Cleanse options
-                    if image_options.get("type") == "png":
-                        image_options["quality"] = None
+                last_exception = None
 
-                    logger.info(f"正在尝试渲染策略: {image_options}")
-                    # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
-                    image_data = await html_render_func(
-                        html_content,  # 渲染后的HTML内容
-                        {},  # 空数据字典，因为数据已包含在HTML中
-                        False,  # return_url=False，直接获取图片数据
-                        image_options,
-                    )
+                for image_options in render_strategies:
+                    try:
+                        # Cleanse options
+                        if image_options.get("type") == "png":
+                            image_options["quality"] = None
 
-                    if image_data:
-                        # 校验是否为合法图片（防止 T2I 返回 500 错误 HTML 字符流）
-                        is_valid = False
-                        actual_data_head = None
+                        logger.info(f"正在尝试渲染策略: {image_options}")
+                        # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
+                        image_data = await html_render_func(
+                            html_content,  # 渲染后的HTML内容
+                            {},  # 空数据字典，因为数据已包含在HTML中
+                            False,  # return_url=False，直接获取图片数据
+                            image_options,
+                        )
 
-                        if isinstance(image_data, bytes):
-                            actual_data_head = image_data[:10]
-                        elif isinstance(image_data, str) and os.path.exists(image_data):
-                            try:
-                                with open(image_data, "rb") as f:
-                                    actual_data_head = f.read(10)
-                            except Exception as e:
-                                logger.warning(f"读取图片临时文件失败: {e}")
+                        if image_data:
+                            # 校验是否为合法图片（防止 T2I 返回 500 错误 HTML 字符流）
+                            is_valid = False
+                            actual_data_head = None
 
-                        if actual_data_head:
-                            # 检查 magic numbers (JPEG: FF D8, PNG: 89 50 4E 47)
-                            if actual_data_head.startswith(
-                                b"\xff\xd8"
-                            ) or actual_data_head.startswith(b"\x89PNG"):
-                                is_valid = True
-                            else:
-                                logger.warning(
-                                    f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
-                                )
-
-                        if is_valid:
                             if isinstance(image_data, bytes):
-                                b64 = base64.b64encode(image_data).decode("utf-8")
-                                image_url = f"base64://{b64}"
-                                logger.info(
-                                    f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
-                                )
-                                return image_url, html_content
-                            elif isinstance(image_data, str):
-                                logger.info(f"图片生成成功 (String): {image_data}")
-                                return image_data, html_content
+                                actual_data_head = image_data[:10]
+                            elif isinstance(image_data, str) and os.path.exists(
+                                image_data
+                            ):
+                                try:
+                                    with open(image_data, "rb") as f:
+                                        actual_data_head = f.read(10)
+                                except Exception as e:
+                                    logger.warning(f"读取图片临时文件失败: {e}")
 
-                    logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
+                            if actual_data_head:
+                                # 检查 magic numbers (JPEG: FF D8, PNG: 89 50 4E 47)
+                                if actual_data_head.startswith(
+                                    b"\xff\xd8"
+                                ) or actual_data_head.startswith(b"\x89PNG"):
+                                    is_valid = True
+                                else:
+                                    logger.warning(
+                                        f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
+                                    )
 
-                except Exception as e:
-                    logger.warning(f"渲染策略 {image_options} 失败: {e}")
-                    last_exception = e
-                    logger.warning("尝试下一个策略")
-                    continue
+                            if is_valid:
+                                if isinstance(image_data, bytes):
+                                    b64 = base64.b64encode(image_data).decode("utf-8")
+                                    image_url = f"base64://{b64}"
+                                    logger.info(
+                                        f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                                    )
+                                    return image_url, html_content
+                                elif isinstance(image_data, str):
+                                    logger.info(f"图片生成成功 (String): {image_data}")
+                                    return image_data, html_content
 
-            # 如果所有策略都失败
-            logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
-            return None, html_content
+                        logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
+
+                    except Exception as e:
+                        logger.warning(f"渲染策略 {image_options} 失败: {e}")
+                        last_exception = e
+                        logger.warning("尝试下一个策略")
+                        continue
+
+                # 如果所有策略都失败
+                logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
+                return None, html_content
 
         except Exception as e:
             logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
