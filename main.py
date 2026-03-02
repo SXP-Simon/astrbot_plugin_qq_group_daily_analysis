@@ -515,6 +515,8 @@ class GroupDailyAnalysis(Star):
                 if not await adapter.send_text(group_id, text_report):
                     yield event.plain_result(text_report)
 
+        except asyncio.CancelledError:
+            yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
@@ -787,6 +789,8 @@ class GroupDailyAnalysis(Star):
             try:
                 await self.auto_scheduler._perform_auto_analysis_for_group(group_id)
                 yield event.plain_result("✅ 自动分析测试完成，请查看群消息")
+            except asyncio.CancelledError:
+                yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
             except Exception as e:
                 yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
 
