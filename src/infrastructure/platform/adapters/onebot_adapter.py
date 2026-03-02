@@ -533,21 +533,28 @@ class OneBotAdapter(PlatformAdapter):
             logger.error(f"OneBot 图片发送最终失败: {e}")
             return False
 
-    async def was_image_sent_recently(self, group_id: str, seconds: int = 60) -> bool:
+    async def was_image_sent_recently(
+        self, group_id: str, seconds: int = 60, token: str | None = None
+    ) -> bool:
         """
         [真相检查] 检查最近 X 秒内，机器人是否已经向该群发送过图片。
         用于判断之前的“超时/1200”错误是否其实已经在后台发送成功。
         """
         try:
             # 1. 获取最近的消息历史 (OneBot 标准 API)
-            history = await self.bot.call_action(
-                "get_group_msg_history",
-                group_id=int(group_id),
-                count=100,  # [针对重复检查优化] 提高扫描深度，覆盖大群高频刷屏的情况
-            )
+            try:
+                history = await self.bot.call_action(
+                    "get_group_msg_history",
+                    group_id=int(group_id),
+                    count=50,  # 适度缩减扫描深度以提高成功率
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[OneBot] was_image_sent_recently: get_group_msg_history 失败 (可能 API 繁忙): {e}"
+                )
+                return False  # API 失败时，我们保持谨慎，但不阻止重试
 
             if not history or "messages" not in history:
-                # 某些 OneBot 实现返回值结构不同
                 messages = history if isinstance(history, list) else []
             else:
                 messages = history["messages"]
@@ -559,16 +566,16 @@ class OneBotAdapter(PlatformAdapter):
             # 1. 优先从内存缓存中获取机器人 ID
             self_id = self.bot_self_ids[0] if self.bot_self_ids else ""
 
-            # 2. 如果列表为空，尝试反射实例属性
             if not self_id:
+                # 尝试从 bot 实例中获取多个可能的 ID 属性
                 self_id = (
                     str(getattr(self.bot, "self_id", ""))
                     or str(getattr(self.bot, "uin", ""))
                     or str(getattr(self.bot, "user_id", ""))
                 )
 
-            # 3. [兜底方案] 仍未获取到，通过 API 向 OneBot 服务端请求
             if not self_id:
+                # 最后的 API 兜底：尝试从 login_info 获取
                 try:
                     login_info = await self.bot.call_action("get_login_info")
                     if login_info and "user_id" in login_info:
@@ -587,6 +594,15 @@ class OneBotAdapter(PlatformAdapter):
                     "[OneBot] was_image_sent_recently: 无法确定机器人 ID，历史回显校验可能不准确"
                 )
 
+            # [优化] 如果提供了 token，我们也尝试从 caption 中提取 ID 部分进行更精准匹配
+            search_token = None
+            if token and "[ID: " in token:
+                import re
+
+                match = re.search(r"\[ID: ([^\]]+)\]", token)
+                if match:
+                    search_token = match.group(0)  # 例如 "[ID: report_XXXX]"
+
             for msg in reversed(messages):
                 msg_time = msg.get("time", 0)
                 # 只检查约定时间范围内的消息
@@ -604,15 +620,27 @@ class OneBotAdapter(PlatformAdapter):
                 raw_message = msg.get("message", [])
                 # 适配字符串形式或列表形式的消息
                 msg_str = str(raw_message)
-                if "[CQ:image" in msg_str or '"type": "image"' in msg_str:
-                    logger.debug(
-                        f"自检发现群 {group_id} 已有成功发送的图片回显，无需重试。"
-                    )
-                    return True
+
+                has_image = "[CQ:image" in msg_str or '"type": "image"' in msg_str
+
+                if has_image:
+                    if search_token:
+                        # 精确匹配 TraceID
+                        if search_token in msg_str:
+                            logger.debug(
+                                f"自检发现群 {group_id} 已有匹配 ID ({search_token}) 的图片回显，拦截重复发送。"
+                            )
+                            return True
+                    else:
+                        # 广义匹配（回退模式）
+                        logger.debug(
+                            f"自检发现群 {group_id} 已有成功发送的图片回显，无需重试。"
+                        )
+                        return True
 
             return False
         except Exception as e:
-            logger.debug(f"回显自检失败 (可能不支持 get_group_msg_history): {e}")
+            logger.debug(f"回显自检失败: {e}")
             return False
 
     async def send_file(
