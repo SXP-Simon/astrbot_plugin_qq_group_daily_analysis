@@ -9,6 +9,7 @@ from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 
+from ...application.services.analysis_application_service import DuplicateGroupTaskError
 from ...utils.logger import logger
 from ...utils.trace_context import TraceContext
 from ..messaging.message_sender import MessageSender
@@ -316,12 +317,20 @@ class AutoScheduler:
             # 转为列表以便索引
             target_list = list(enabled_targets)
 
-            logger.info(f"将为 {len(target_list)} 个群聊并发执行分析")
+            max_concurrent = self.config_manager.get_max_concurrent_tasks()
+            sem = asyncio.Semaphore(max_concurrent)
+            logger.info(f"自动分析任务入口并发限制: {max_concurrent}")
+
+            async def throttled_analysis(gid, pid):
+                async with sem:
+                    return await self._perform_auto_analysis_for_group_with_timeout(
+                        gid, pid
+                    )
 
             analysis_tasks = []
             for gid, pid in target_list:
                 task = asyncio.create_task(
-                    self._perform_auto_analysis_for_group_with_timeout(gid, pid),
+                    throttled_analysis(gid, pid),
                     name=f"analysis_group_{gid}",
                 )
                 analysis_tasks.append(task)
@@ -336,7 +345,7 @@ class AutoScheduler:
 
             for i, result in enumerate(results):
                 gid, _ = target_list[i]
-                if isinstance(result, asyncio.CancelledError):
+                if isinstance(result, DuplicateGroupTaskError):
                     # 锁冲突导致的跳过
                     skip_count += 1
                 elif isinstance(result, Exception):
@@ -411,8 +420,8 @@ class AutoScheduler:
 
             logger.info(f"群 {group_id} 自动分析任务执行成功")
 
-        except asyncio.CancelledError:
-            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+        except DuplicateGroupTaskError:
+            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
             logger.debug(f"群 {group_id} 任务因并发锁冲突而跳过（已在运行）")
             raise  # 重新抛出，让上层知道任务并没真正执行而是跳过了
         except Exception as e:
@@ -444,31 +453,33 @@ class AutoScheduler:
                 f"(并发限制: {max_concurrent}, 交错间隔: {stagger}秒)"
             )
 
-            # 资源限制现在由 Application Service 全局控制，此处仅保留交错逻辑
+            # 任务粒度的入口并发限制，保护本地资源（DB/内存）
+            sem = asyncio.Semaphore(max_concurrent)
 
             async def staggered_incremental(idx, gid, pid):
-                # 按索引交错延迟，均匀分散 API 压力
-                if idx > 0 and stagger > 0:
-                    await asyncio.sleep(stagger * idx)
+                async with sem:
+                    # 按索引交错延迟，均匀分散 API 压力
+                    if idx > 0 and stagger > 0:
+                        await asyncio.sleep(stagger * idx)
 
-                result = (
-                    await self._perform_incremental_analysis_for_group_with_timeout(
-                        gid, pid
-                    )
-                )
-
-                # 检查是否需要立即发送报告（调试模式）
-                if self.config_manager.get_incremental_report_immediately():
-                    if isinstance(result, dict) and result.get("success"):
-                        logger.info(
-                            f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
-                        )
-                        # 立即生成最终报告
-                        await self._perform_incremental_final_report_for_group_with_timeout(
+                    result = (
+                        await self._perform_incremental_analysis_for_group_with_timeout(
                             gid, pid
                         )
+                    )
 
-                return result
+                    # 检查是否需要立即发送报告（调试模式）
+                    if self.config_manager.get_incremental_report_immediately():
+                        if isinstance(result, dict) and result.get("success"):
+                            logger.info(
+                                f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
+                            )
+                            # 立即生成最终报告
+                            await self._perform_incremental_final_report_for_group_with_timeout(
+                                gid, pid
+                            )
+
+                    return result
 
             analysis_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
@@ -488,7 +499,10 @@ class AutoScheduler:
 
             for i, result in enumerate(results):
                 gid, _ = target_list[i]
-                if isinstance(result, Exception):
+                if isinstance(result, DuplicateGroupTaskError):
+                    # 锁冲突导致的跳过
+                    skip_count += 1
+                elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 增量分析任务异常: {result}")
                     error_count += 1
                 elif isinstance(result, dict) and not result.get("success", True):
@@ -563,8 +577,8 @@ class AutoScheduler:
             )
             return result
 
-        except asyncio.CancelledError:
-            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+        except DuplicateGroupTaskError:
+            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
             logger.debug(f"群 {group_id} 增量分析因并发锁冲突而跳过（已在运行）")
             return {"success": False, "reason": "already_running"}
         except Exception as e:
@@ -597,14 +611,15 @@ class AutoScheduler:
                 f"(并发限制: {max_concurrent}, 交错间隔: {stagger}秒)"
             )
 
+            sem = asyncio.Semaphore(max_concurrent)
+
             async def staggered_final_report(idx, gid, pid):
-                if idx > 0 and stagger > 0:
-                    await asyncio.sleep(stagger * idx)
-                return (
-                    await self._perform_incremental_final_report_for_group_with_timeout(
+                async with sem:
+                    if idx > 0 and stagger > 0:
+                        await asyncio.sleep(stagger * idx)
+                    return await self._perform_incremental_final_report_for_group_with_timeout(
                         gid, pid
                     )
-                )
 
             report_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
@@ -624,7 +639,10 @@ class AutoScheduler:
 
             for i, result in enumerate(results):
                 gid, _ = target_list[i]
-                if isinstance(result, Exception):
+                if isinstance(result, DuplicateGroupTaskError):
+                    # 锁冲突导致的跳过
+                    skip_count += 1
+                elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 最终报告任务异常: {result}")
                     error_count += 1
                 elif isinstance(result, dict) and not result.get("success", True):
@@ -722,8 +740,8 @@ class AutoScheduler:
             logger.info(f"群 {group_id} 增量最终报告发送成功")
             return result
 
-        except asyncio.CancelledError:
-            # group_lock 抛出的 CancelledError 表示任务正在运行，优雅跳过
+        except DuplicateGroupTaskError:
+            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
             logger.debug(f"群 {group_id} 最终报告因并发锁冲突而跳过（已在运行）")
             return {"success": False, "reason": "already_running"}
         except Exception as e:
