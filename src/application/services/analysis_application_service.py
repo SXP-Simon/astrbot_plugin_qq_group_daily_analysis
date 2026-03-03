@@ -71,9 +71,10 @@ class AnalysisApplicationService:
         lock_key = f"{task_type}:{group_id}"
 
         # 获取或创建该群组特有的锁（保留锁作为第二道资源限流防线）
-        if lock_key not in self._locks:
-            self._locks[lock_key] = asyncio.Lock()
-        lock = self._locks[lock_key]
+        lock = self._locks.get(lock_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[lock_key] = lock
 
         # 使用同步集合实现原子化的“运行中”检查
         # 在 asyncio 的单线程循环中，同步代码段不会被中断，因此这是原子操作
