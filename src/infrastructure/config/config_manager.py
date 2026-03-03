@@ -317,12 +317,20 @@ class ConfigManager:
         self.config.save_config()
 
     def get_max_concurrent_tasks(self) -> int:
-        """获取自动分析最大并发数"""
-        return self._get_group("auto_analysis").get("max_concurrent_tasks", 3)
+        """获取自动分析最大并发群数"""
+        return self._get_group("performance").get("max_concurrent_groups", 3)
+
+    def get_llm_max_concurrent(self) -> int:
+        """获取全局 LLM 最大并发请求数"""
+        return self._get_group("performance").get("max_concurrent_llm", 3)
+
+    def get_t2i_max_concurrent(self) -> int:
+        """获取全局图片渲染（T2I）最大并发数"""
+        return self._get_group("performance").get("max_concurrent_t2i", 1)
 
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
-        self._ensure_group("auto_analysis")["max_concurrent_tasks"] = count
+        self._ensure_group("performance")["max_concurrent_groups"] = count
         self.config.save_config()
 
     def set_max_messages(self, count: int):

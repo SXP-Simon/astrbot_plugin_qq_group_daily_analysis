@@ -26,7 +26,8 @@ class ReportGenerator(IReportGenerator):
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
         # 全局 T2I 渲染信号量，保护本地资源
-        max_concurrent = self.config_manager.get_max_concurrent_tasks()
+        # 使用专用的 T2I 并发配置项
+        max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
 
     async def generate_image_report(

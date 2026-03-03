@@ -24,6 +24,12 @@ from ...infrastructure.persistence.incremental_store import IncrementalStore
 from ...utils.logger import logger
 
 
+class DuplicateGroupTaskError(Exception):
+    """当同一个群组在同一时间尝试启动相同类型的重复分析任务时抛出。"""
+
+    pass
+
+
 class AnalysisApplicationService:
     """分析应用服务 - 协调业务流程（每日分析 + 增量分析）"""
 
@@ -50,7 +56,8 @@ class AnalysisApplicationService:
         self.incremental_merge_service = incremental_merge_service
         self._locks = weakref.WeakValueDictionary()
         # 全局 LLM 分析信号量，控制对外 API 的并发压力
-        max_concurrent = self.config_manager.get_max_concurrent_tasks()
+        # 使用专用的 LLM 并发配置项
+        max_concurrent = self.config_manager.get_llm_max_concurrent()
         self.llm_semaphore = asyncio.Semaphore(max_concurrent)
 
     @asynccontextmanager
@@ -61,17 +68,18 @@ class AnalysisApplicationService:
         """
         lock_key = f"{task_type}:{group_id}"
 
-        # 获取或创建该群专属的异步锁
-        lock = self._locks.get(lock_key)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._locks[lock_key] = lock
+        # 获取或创建该群组特有的锁
+        if lock_key not in self._locks:
+            self._locks[lock_key] = asyncio.Lock()
+        lock = self._locks[lock_key]
 
-        # 检查是否已经锁定（防止并发）
+        # 检查是否已经锁定（防止并发现实）
+        # 说明：在 asyncio 中，虽然是单线程，但设计上应避免阻塞等待非预期的任务。
+        # 这里使用 locked() 检查并立即抛出异常，实现“跳过”而非“排队”。
         if lock.locked():
             logger.warning(f"群 {group_id} 的 {task_type} 任务已在运行，跳过本次请求")
-            # 这里抛出异常以便上层识别并优雅跳过
-            raise asyncio.CancelledError(f"Duplicate task for {lock_key}")
+            # 使用自定义异常以便上层识别并优雅跳过，同时不影响真实的任务取消语义
+            raise DuplicateGroupTaskError(f"Duplicate task for {lock_key}")
 
         async with lock:
             logger.debug(f"[Lock] 已获取群 {group_id} 的 {task_type} 排他锁")
