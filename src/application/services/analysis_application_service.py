@@ -59,6 +59,8 @@ class AnalysisApplicationService:
         # 使用专用的 LLM 并发配置项
         max_concurrent = self.config_manager.get_llm_max_concurrent()
         self.llm_semaphore = asyncio.Semaphore(max_concurrent)
+        # 用于追踪当前正在执行的任务，实现原子的“检查并设置”逻辑，避免 locked() 竞态
+        self._active_tasks = set()
 
     @asynccontextmanager
     async def group_lock(self, group_id: str, task_type: str = "analysis"):
@@ -68,25 +70,28 @@ class AnalysisApplicationService:
         """
         lock_key = f"{task_type}:{group_id}"
 
-        # 获取或创建该群组特有的锁
+        # 获取或创建该群组特有的锁（保留锁作为第二道资源限流防线）
         if lock_key not in self._locks:
             self._locks[lock_key] = asyncio.Lock()
         lock = self._locks[lock_key]
 
-        # 检查是否已经锁定（防止并发现实）
-        # 说明：在 asyncio 中，虽然是单线程，但设计上应避免阻塞等待非预期的任务。
-        # 这里使用 locked() 检查并立即抛出异常，实现“跳过”而非“排队”。
-        if lock.locked():
+        # 使用同步集合实现原子化的“运行中”检查
+        # 在 asyncio 的单线程循环中，同步代码段不会被中断，因此这是原子操作
+        if lock_key in self._active_tasks:
             logger.warning(f"群 {group_id} 的 {task_type} 任务已在运行，跳过本次请求")
-            # 使用自定义异常以便上层识别并优雅跳过，同时不影响真实的任务取消语义
             raise DuplicateGroupTaskError(f"Duplicate task for {lock_key}")
 
-        async with lock:
-            logger.debug(f"[Lock] 已获取群 {group_id} 的 {task_type} 排他锁")
-            try:
+        # 占位：标记任务开始
+        self._active_tasks.add(lock_key)
+
+        try:
+            async with lock:
+                logger.debug(f"[Lock] 已获取群 {group_id} 的 {task_type} 排他锁")
                 yield
-            finally:
-                logger.debug(f"[Lock] 已释放群 {group_id} 的 {task_type} 排他锁")
+        finally:
+            # 释放：标记任务结束
+            self._active_tasks.discard(lock_key)
+            logger.debug(f"[Lock] 已释放群 {group_id} 的 {task_type} 排他锁")
 
     async def execute_daily_analysis(
         self, group_id: str, platform_id: str | None = None, manual: bool = False
