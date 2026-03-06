@@ -138,12 +138,29 @@ class OneBotAdapter(PlatformAdapter):
                     )
                     break
 
-                # 消息通常是按时间正序排列的，即 messages[0] 最旧，messages[-1] 最新
-                chunk_earliest_msg = messages[0]
+                # 确定该批次中最旧的消息作为下一次回溯的起点
+                # 不同 OneBot 实现对 reverseOrder 的处理可能导致结果顺序不同（反映在消息时间戳上）
+                # 我们通过比较首尾消息的时间戳，动态识别出本批次中最旧的消息
+                first_msg = messages[0]
+                last_msg = messages[-1]
+                if first_msg.get("time", 0) <= last_msg.get("time", 0):
+                    # 正序：首条消息最旧
+                    chunk_earliest_msg = first_msg
+                else:
+                    # 逆序：末条消息最旧
+                    chunk_earliest_msg = last_msg
+
                 chunk_earliest_time = chunk_earliest_msg.get("time", 0)
 
                 for raw_msg in messages:
                     msg_time = raw_msg.get("time", 0)
+                    msg_id = str(raw_msg.get("message_id", ""))
+
+                    # 基础过滤：去重
+                    if any(
+                        str(m.get("message_id", "")) == msg_id for m in all_raw_messages
+                    ):
+                        continue
 
                     # 身份过滤（排除机器人自己）
                     sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
@@ -154,8 +171,11 @@ class OneBotAdapter(PlatformAdapter):
                     if start_timestamp <= msg_time <= int(end_time.timestamp()):
                         all_raw_messages.append(raw_msg)
 
-                # 更新锚点为该批次最旧的消息 ID，用于下一次回溯请求
-                new_anchor_id = chunk_earliest_msg.get("message_id")
+                # 更新锚点为该批次最旧的消息序列号/ID，用于下一次回溯请求
+                # 优先使用 message_seq 以适配 go-cqhttp/NapCat 的标准历史接口
+                new_anchor_id = chunk_earliest_msg.get(
+                    "message_seq", chunk_earliest_msg.get("message_id")
+                )
 
                 # 如果时间已经超过限制，或者锚点没有变化（说明已经到底），则停止
                 if chunk_earliest_time < start_timestamp:
@@ -164,7 +184,7 @@ class OneBotAdapter(PlatformAdapter):
                     )
                     break
 
-                if str(new_anchor_id) == str(current_anchor_id):
+                if current_anchor_id and str(new_anchor_id) == str(current_anchor_id):
                     logger.debug(
                         "OneBot 分页拉取：消息锚点没有变化，可能已到达历史尽头。"
                     )
@@ -175,11 +195,7 @@ class OneBotAdapter(PlatformAdapter):
                     f"OneBot 分页拉取进度: 已获取 {len(all_raw_messages)} 条符合条件的消息，下一次锚点: {current_anchor_id}"
                 )
 
-                # 如果这批消息全都是旧的（不在我们要的时间范围内），也应该可以考虑停止
-                # 但由于 get_group_msg_history 的 reverseOrder 行为在不同实现下可能不一致，
-                # 只要时间没越界且还有消息，我们就继续拉取直到 max_count 或时间越界。
-
-                # 稍微延迟，减缓服务端压力（避免 NapCat 瞬间 CPU 飙升）
+                # 稍微延迟，减缓服务端压力
                 await asyncio.sleep(0.05)
 
             # 统一转换为 UnifiedMessage 并在返回前去重排序
