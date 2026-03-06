@@ -613,8 +613,10 @@ class OneBotAdapter(PlatformAdapter):
                 user_id = str(
                     msg.get("user_id", msg.get("sender", {}).get("user_id", ""))
                 )
-                if user_id != self_id:
-                    continue
+                if user_id not in self.bot_self_ids:
+                    # 如果内存中没有，尝试最后一次实时提取作为兜底
+                    if not self_id or user_id != self_id:
+                        continue
 
                 # 检查消息内容是否包含图片
                 raw_message = msg.get("message", [])
@@ -627,14 +629,18 @@ class OneBotAdapter(PlatformAdapter):
                     if search_token:
                         # 精确匹配 TraceID
                         if search_token in msg_str:
-                            logger.debug(
-                                f"自检发现群 {group_id} 已有匹配 ID ({search_token}) 的图片回显，拦截重复发送。"
+                            logger.info(
+                                f"[OneBot] [真相检查] 发现匹配 ID ({search_token}) 的历史图片。拦截重复发送。群: {group_id}"
                             )
                             return True
+                        else:
+                            logger.debug(
+                                f"[OneBot] [真相检查] 发现机器人发送的图片，但 ID 不匹配。跳过。群: {group_id}"
+                            )
                     else:
                         # 广义匹配（回退模式）
-                        logger.debug(
-                            f"自检发现群 {group_id} 已有成功发送的图片回显，无需重试。"
+                        logger.info(
+                            f"[OneBot] [真相检查] 发现近期发送过的图片回显 (广义匹配)。无需重试。群: {group_id}"
                         )
                         return True
 

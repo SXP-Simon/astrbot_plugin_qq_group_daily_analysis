@@ -87,6 +87,11 @@ class BotManager:
         elif bot_self_ids:
             self._bot_self_ids = [str(bot_self_ids)]
 
+        # 同步更新所有现有适配器的 ID 列表
+        for adapter in self._adapters.values():
+            if hasattr(adapter, "bot_self_ids"):
+                adapter.bot_self_ids = self._bot_self_ids.copy()
+
     def get_bot_instance(self, platform_id=None):
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
         if platform_id:
