@@ -457,11 +457,11 @@ class AutoScheduler:
             sem = asyncio.Semaphore(max_concurrent)
 
             async def staggered_incremental(idx, gid, pid):
-                async with sem:
-                    # 按索引交错延迟，均匀分散 API 压力
-                    if idx > 0 and stagger > 0:
-                        await asyncio.sleep(stagger * idx)
+                # 按索引交错延迟，均匀分散 API 压力
+                if idx > 0 and stagger > 0:
+                    await asyncio.sleep(stagger * idx)
 
+                async with sem:
                     result = (
                         await self._perform_incremental_analysis_for_group_with_timeout(
                             gid, pid
@@ -614,9 +614,10 @@ class AutoScheduler:
             sem = asyncio.Semaphore(max_concurrent)
 
             async def staggered_final_report(idx, gid, pid):
+                if idx > 0 and stagger > 0:
+                    await asyncio.sleep(stagger * idx)
+
                 async with sem:
-                    if idx > 0 and stagger > 0:
-                        await asyncio.sleep(stagger * idx)
                     return await self._perform_incremental_final_report_for_group_with_timeout(
                         gid, pid
                     )
