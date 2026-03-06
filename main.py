@@ -12,10 +12,10 @@ from astrbot.api import AstrBotConfig, logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
+from astrbot.core.message.components import File
 
 from .src.utils.logger import logger
 from .src.utils.trace_context import TraceContext, TraceLogFilter
-from astrbot.core.message.components import File
 
 from .src.application.commands.template_command_service import (
     TemplateCommandService,
@@ -140,6 +140,7 @@ class GroupDailyAnalysis(Star):
         )
 
         self._initialized = False
+        self._discovery_run = False  # 是否已尝试过运行发现逻辑
         # 异步注册任务，处理插件重载情况
         asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
 
@@ -153,13 +154,18 @@ class GroupDailyAnalysis(Star):
 
     async def _run_initialization(self, source: str):
         """统一初始化逻辑"""
-        if self._initialized:
+        # 如果已经成功发现过平台，且不是来自 Platform Loaded 的强制触发，则跳过
+        if (
+            self._initialized
+            and self.bot_manager
+            and self.bot_manager.get_platform_count() > 0
+            and source != "Platform Loaded"
+        ):
             return
 
         # 稍微延迟，确保 context 和环境稳定
-        await asyncio.sleep(2)
-        if self._initialized:  # Double check after sleep
-            return
+        # 针对极少数环境，2秒可能不足以让平台管理器就绪，增加到 5秒
+        await asyncio.sleep(5)
 
         try:
             # 注册 TraceID 过滤器
@@ -181,23 +187,26 @@ class GroupDailyAnalysis(Star):
                     # 此时不强制修改 config，但可以记录日志
                     pass
 
-            # 初始化所有bot实例
-            discovered = await self.bot_manager.initialize_from_config()
-            if discovered:
-                logger.info("Bot管理器初始化成功")
+            # 1. 尝试发现 bot 实例（即使暂时没有，后续任务触发时也会再扫一遍）
+            await self.bot_manager.initialize_from_config()
+
+            # 2. 注册预览路由器 (WebUI 路由注册不依赖在线机器人)
+            if self.template_preview_router:
                 await self.template_preview_router.ensure_handlers_registered(
                     self.context
                 )
-                # 启动调度器
-                self.auto_scheduler.schedule_jobs(self.context)
-            else:
-                logger.warning("Bot管理器初始化失败，未发现任何适配器")
 
-            # 始终启动重试管理器
-            await self.retry_manager.start()
+            # 3. 强制注册定时分析任务 (确保 APScheduler 即使在空载时也有任务占位)
+            if self.auto_scheduler:
+                self.auto_scheduler.schedule_jobs(self.context)
+
+            # 4. 始终启动重试管理器
+            if self.retry_manager:
+                await self.retry_manager.start()
 
             self._initialized = True
-            logger.info("插件任务注册完成")
+            self._discovery_run = True
+            logger.info(f"插件任务注册完成 (来源: {source})")
 
         except Exception as e:
             logger.error(f"插件初始化失败: {e}", exc_info=True)
@@ -430,7 +439,9 @@ class GroupDailyAnalysis(Star):
         trace_id = TraceContext.generate(prefix=f"manual_{group_id}")
         TraceContext.set(trace_id)
 
-        yield event.plain_result(f"🔍 正在启动跨平台分析引擎，正在拉取最近消息...\n[ID: {trace_id}]")
+        yield event.plain_result(
+            f"🔍 正在启动跨平台分析引擎，正在拉取最近消息...\n[ID: {trace_id}]"
+        )
 
         try:
             # 调用 DDD 应用级服务

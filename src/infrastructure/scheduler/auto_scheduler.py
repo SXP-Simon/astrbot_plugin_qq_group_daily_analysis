@@ -763,22 +763,22 @@ class AutoScheduler:
         """
         all_groups = set()
 
-        # 强制刷新一次 Bot 实例，确保最新的 Bot 被发现
+        # 1. [韧性增强] 进入扫描前，尝试最后一次实时发现机器人
+        # 这确保了即使冷启动初始化失败，定时任务触发时仍能刷新状态
         if hasattr(self.bot_manager, "auto_discover_bot_instances"):
             try:
                 await self.bot_manager.auto_discover_bot_instances()
             except Exception as e:
-                logger.warning(f"[AutoScheduler] 自动发现失败: {e}")
+                logger.warning(f"[AutoScheduler] 周期性扫描中的平台发现失败: {e}")
 
         bot_ids = list(self.bot_manager._bot_instances.keys())
         adapter_ids = list(self.bot_manager._adapters.keys())
 
-        # 调试模式下记录详细信息，INFO级别仅显示概览
-        logger.debug(f"[AutoScheduler] Bot实例: {bot_ids}, 适配器: {adapter_ids}")
-
         if not bot_ids:
-            logger.warning("[AutoScheduler] 自动发现后未找到任何Bot实例")
+            logger.warning("[AutoScheduler] 分析周期开启，但全局未发现任何在线 Bot。任务将跳过。")
             return []
+
+        logger.info(f"[AutoScheduler] 正在扫描 {len(bot_ids)} 个平台的群聊资源...")
 
         for platform_id, bot_instance in self.bot_manager._bot_instances.items():
             # 检查该平台是否启用了此插件
