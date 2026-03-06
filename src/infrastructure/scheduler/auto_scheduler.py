@@ -772,10 +772,11 @@ class AutoScheduler:
                 logger.warning(f"[AutoScheduler] 周期性扫描中的平台发现失败: {e}")
 
         bot_ids = list(self.bot_manager._bot_instances.keys())
-        adapter_ids = list(self.bot_manager._adapters.keys())
 
         if not bot_ids:
-            logger.warning("[AutoScheduler] 分析周期开启，但全局未发现任何在线 Bot。任务将跳过。")
+            logger.warning(
+                "[AutoScheduler] 分析周期开启，但全局未发现任何在线 Bot。任务将跳过。"
+            )
             return []
 
         logger.info(f"[AutoScheduler] 正在扫描 {len(bot_ids)} 个平台的群聊资源...")
