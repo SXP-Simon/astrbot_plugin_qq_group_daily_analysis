@@ -1,7 +1,7 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.8.3] - fix(OneBot): 修复 LLBot 用户仅能获取 100 条消息的问题
-*   **🛠️ 健壮性增强**: 多字段智能探测序列号，优化了提取逻辑，不仅检查 message_seq，还支持 LLBot 示例中出现的 real_id 以及常见的 seq 字段
+## [v4.8.4] - fix(OneBot): 兼容 napcat 和 llbot 获取历史消息接口
+
 
 
 
@@ -9,6 +9,8 @@
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+## [v4.8.3] - fix(OneBot): 修复 LLBot 用户仅能获取 100 条消息的问题
+*   **🛠️ 健壮性增强**: 多字段智能探测序列号，优化了提取逻辑，不仅检查 message_seq，还支持 LLBot 示例中出现的 real_id 以及常见的 seq 字段
 
 ## [v4.8.1] - feat(traceability): 实现全链路 TraceID 追踪，增强初始化韧性与去重拦截
 *   **✨ 追踪性增强**: 实现全链路 TraceID 注入。现在所有插件日志均会自动带上任务唯一的 `trace_id` 前缀，且所有发送的图片报告及其重试消息均在该 `Caption` 下包含 `[ID: trace_id]` 标签，实现任务执行全流程透明化。
