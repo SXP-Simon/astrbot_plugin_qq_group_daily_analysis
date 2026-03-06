@@ -8,14 +8,12 @@ QQ群日常分析插件
 import asyncio
 import os
 
-from astrbot.api import AstrBotConfig, logger as astrbot_logger
+from astrbot.api import AstrBotConfig
+from astrbot.api import logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
 from astrbot.core.message.components import File
-
-from .src.utils.logger import logger
-from .src.utils.trace_context import TraceContext, TraceLogFilter
 
 from .src.application.commands.template_command_service import (
     TemplateCommandService,
@@ -45,7 +43,9 @@ from .src.infrastructure.platform.template_preview import (
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
+from .src.utils.logger import logger
 from .src.utils.pdf_utils import PDFInstaller
+from .src.utils.trace_context import TraceContext, TraceLogFilter
 
 
 class GroupDailyAnalysis(Star):
@@ -142,7 +142,9 @@ class GroupDailyAnalysis(Star):
         self._initialized = False
         self._discovery_run = False  # 是否已尝试过运行发现逻辑
         # 异步注册任务，处理插件重载情况
-        self._init_task = asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
+        self._init_task = asyncio.create_task(
+            self._run_initialization("Plugin Reload/Init")
+        )
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
@@ -219,7 +221,11 @@ class GroupDailyAnalysis(Star):
         """插件被卸载/停用时调用，清理资源"""
         try:
             # 取消正在进行的初始化任务
-            if hasattr(self, "_init_task") and self._init_task and not self._init_task.done():
+            if (
+                hasattr(self, "_init_task")
+                and self._init_task
+                and not self._init_task.done()
+            ):
                 self._init_task.cancel()
 
             logger.info("开始清理QQ群日常分析插件资源...")
