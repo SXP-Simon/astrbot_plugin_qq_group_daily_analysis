@@ -171,8 +171,11 @@ class OneBotAdapter(PlatformAdapter):
                     if start_timestamp <= msg_time <= int(end_time.timestamp()):
                         all_raw_messages.append(raw_msg)
 
-                # 提取锚点。LLBot/NapCat 等不同实现字段不统一，需多字段探测。
+                # 提取锚点。
                 # 优先级: message_seq > real_id > seq > message_id
+                # 注意：为了兼容 NapCat (NTQQ) 这种 Message ID 非连续的情况，
+                # 以及 LLBot 这种 Sequence 模式，我们统一不进行 -1 偏移。
+                # 分页产生的重叠消息将由上方的去重逻辑 (all_raw_messages 循环对比) 自动处理。
                 seq_val = (
                     chunk_earliest_msg.get("message_seq")
                     or chunk_earliest_msg.get("real_id")
@@ -180,14 +183,8 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 mid_val = chunk_earliest_msg.get("message_id")
 
-                try:
-                    # 如果能提取到正整数序列号，执行 -1 偏移以确保分页窗口向前（历史）推进
-                    if seq_val is not None and int(seq_val) > 0:
-                        new_anchor_id = int(seq_val) - 1
-                    else:
-                        new_anchor_id = mid_val
-                except (ValueError, TypeError):
-                    new_anchor_id = mid_val
+                # 优先使用 seq_val (针对 LLBot)，如果没有则回退回 ID
+                new_anchor_id = seq_val if seq_val is not None else mid_val
 
                 # 如果时间已经超过限制，或者锚点没有变化（说明已经到底），则停止
                 if chunk_earliest_time < start_timestamp:
