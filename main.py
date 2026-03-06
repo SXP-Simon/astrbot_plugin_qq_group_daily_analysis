@@ -142,7 +142,7 @@ class GroupDailyAnalysis(Star):
         self._initialized = False
         self._discovery_run = False  # 是否已尝试过运行发现逻辑
         # 异步注册任务，处理插件重载情况
-        asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
+        self._init_task = asyncio.create_task(self._run_initialization("Plugin Reload/Init"))
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
@@ -166,6 +166,10 @@ class GroupDailyAnalysis(Star):
         # 稍微延迟，确保 context 和环境稳定
         # 针对极少数环境，2秒可能不足以让平台管理器就绪，增加到 5秒
         await asyncio.sleep(5)
+
+        # [加固] 如果在等待期间插件已被卸载（terminate），则直接退出
+        if not self.bot_manager:
+            return
 
         try:
             # 注册 TraceID 过滤器
@@ -214,6 +218,10 @@ class GroupDailyAnalysis(Star):
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
         try:
+            # 取消正在进行的初始化任务
+            if hasattr(self, "_init_task") and self._init_task and not self._init_task.done():
+                self._init_task.cancel()
+
             logger.info("开始清理QQ群日常分析插件资源...")
 
             # 停止自动调度器
