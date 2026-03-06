@@ -8,10 +8,13 @@ QQ群日常分析插件
 import asyncio
 import os
 
-from astrbot.api import AstrBotConfig, logger
+from astrbot.api import AstrBotConfig, logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star
+
+from .src.utils.logger import logger
+from .src.utils.trace_context import TraceContext, TraceLogFilter
 from astrbot.core.message.components import File
 
 from .src.application.commands.template_command_service import (
@@ -159,6 +162,12 @@ class GroupDailyAnalysis(Star):
             return
 
         try:
+            # 注册 TraceID 过滤器
+            trace_filter = TraceLogFilter()
+            if not any(isinstance(f, TraceLogFilter) for f in astrbot_logger.filters):
+                astrbot_logger.addFilter(trace_filter)
+                astrbot_logger.info("[Trace] TraceID 日志追踪已启用")
+
             logger.info(f"正在执行插件初始化 (来源: {source})...")
             # 检查插件是否被启用 (Fix for empty plugin_set issue)
             if self.context:
@@ -417,7 +426,11 @@ class GroupDailyAnalysis(Star):
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
-        yield event.plain_result("🔍 正在启动跨平台分析引擎，正在拉取最近消息...")
+        # 设置 TraceID
+        trace_id = TraceContext.generate(prefix=f"manual_{group_id}")
+        TraceContext.set(trace_id)
+
+        yield event.plain_result(f"🔍 正在启动跨平台分析引擎，正在拉取最近消息...\n[ID: {trace_id}]")
 
         try:
             # 调用 DDD 应用级服务
@@ -468,9 +481,10 @@ class GroupDailyAnalysis(Star):
                 )
 
                 if image_url:
+                    caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
                     # 优先使用适配器的 send_image (由插件适配器统一处理 Base64 转换和路径问题)
                     # 不再使用 yield event.image_result 回退，防止适配器超时回复导致重复发送图片
-                    await adapter.send_image(group_id, image_url)
+                    await adapter.send_image(group_id, image_url, caption=caption)
 
                     # 上传到群文件/群相册 (属于附加功能，不影响消息发送)
                     await self._try_upload_image(group_id, image_url, platform_id)
@@ -482,7 +496,7 @@ class GroupDailyAnalysis(Star):
                         analysis_result,
                         group_id,
                         platform_id,
-                        caption="📊 每日群聊分析报告已生成：",
+                        caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
                     )
                 else:
                     text_report = self.report_generator.generate_text_report(
