@@ -171,11 +171,23 @@ class OneBotAdapter(PlatformAdapter):
                     if start_timestamp <= msg_time <= int(end_time.timestamp()):
                         all_raw_messages.append(raw_msg)
 
-                # 更新锚点为该批次最旧的消息序列号/ID，用于下一次回溯请求
-                # 优先使用 message_seq 以适配 go-cqhttp/NapCat 的标准历史接口
-                new_anchor_id = chunk_earliest_msg.get(
-                    "message_seq", chunk_earliest_msg.get("message_id")
+                # 提取锚点。LLBot/NapCat 等不同实现字段不统一，需多字段探测。
+                # 优先级: message_seq > real_id > seq > message_id
+                seq_val = (
+                    chunk_earliest_msg.get("message_seq")
+                    or chunk_earliest_msg.get("real_id")
+                    or chunk_earliest_msg.get("seq")
                 )
+                mid_val = chunk_earliest_msg.get("message_id")
+
+                try:
+                    # 如果能提取到正整数序列号，执行 -1 偏移以确保分页窗口向前（历史）推进
+                    if seq_val is not None and int(seq_val) > 0:
+                        new_anchor_id = int(seq_val) - 1
+                    else:
+                        new_anchor_id = mid_val
+                except (ValueError, TypeError):
+                    new_anchor_id = mid_val
 
                 # 如果时间已经超过限制，或者锚点没有变化（说明已经到底），则停止
                 if chunk_earliest_time < start_timestamp:
@@ -192,7 +204,7 @@ class OneBotAdapter(PlatformAdapter):
 
                 current_anchor_id = new_anchor_id
                 logger.debug(
-                    f"OneBot 分页拉取进度: 已获取 {len(all_raw_messages)} 条符合条件的消息，下一次锚点: {current_anchor_id}"
+                    f"OneBot 分页拉取进度: 已获取 {len(all_raw_messages)} 条基础/有效消息，下一次锚点: {current_anchor_id}"
                 )
 
                 # 稍微延迟，减缓服务端压力
