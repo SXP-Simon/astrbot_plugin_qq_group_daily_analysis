@@ -257,10 +257,19 @@ class OneBotAdapter(PlatformAdapter):
                     )
 
                 elif seg_type == "image":
+                    # QQ 平台: subType=1 表示表情包，通过 raw_data 传递给下游统计
+                    sub_type = seg_data.get("subType", seg_data.get("sub_type"))
+                    is_sticker = sub_type is not None and int(sub_type) == 1
                     contents.append(
                         MessageContent(
-                            type=MessageContentType.IMAGE,
+                            type=MessageContentType.EMOJI
+                            if is_sticker
+                            else MessageContentType.IMAGE,
                             url=seg_data.get("url", seg_data.get("file", "")),
+                            raw_data={
+                                "sub_type": int(sub_type) if sub_type is not None else None,
+                                "summary": seg_data.get("summary", ""),
+                            },
                         )
                     )
 
