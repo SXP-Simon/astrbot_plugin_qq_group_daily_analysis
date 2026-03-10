@@ -95,7 +95,11 @@ class AnalysisApplicationService:
             logger.debug(f"[Lock] 已释放群 {group_id} 的 {task_type} 排他锁")
 
     async def execute_daily_analysis(
-        self, group_id: str, platform_id: str | None = None, manual: bool = False
+        self,
+        group_id: str,
+        platform_id: str | None = None,
+        manual: bool = False,
+        days: int | None = None,
     ) -> dict[str, Any]:
         """
         执行每日分析用例。
@@ -113,7 +117,7 @@ class AnalysisApplicationService:
 
         async with self.group_lock(group_id, "daily"):
             logger.info(
-                f"开始执行分析用例: 群 {group_id}, platform_id={platform_id or '默认'}"
+                f"开始执行分析用例: 群 {group_id}, platform_id={platform_id or '默认'}, days={days or '默认'}"
             )
 
             # 1. 获取适配器
@@ -122,7 +126,8 @@ class AnalysisApplicationService:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
             # 2. 拉取消息
-            days = self.config_manager.get_analysis_days()
+            if days is None:
+                days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
 
             raw_messages = await adapter.fetch_messages(
