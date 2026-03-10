@@ -460,7 +460,7 @@ class GroupDailyAnalysis(Star):
         try:
             # 调用 DDD 应用级服务
             result = await self.analysis_service.execute_daily_analysis(
-                group_id=group_id, platform_id=platform_id, manual=True
+                group_id=group_id, platform_id=platform_id, manual=True, days=days
             )
 
             if not result.get("success"):
