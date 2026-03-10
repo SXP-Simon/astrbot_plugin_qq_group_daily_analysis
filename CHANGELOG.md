@@ -1,14 +1,17 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.8.4] - fix(OneBot): 兼容 napcat 和 llbot 获取历史消息接口
-
-
-
+## [v4.8.5] - fix(OneBot): 表情统计修复和群相册兼容性增强
+*   **🛠️ 健壮性增强**: 正确识别 QQ 表情包 (subType=1) (#99 @nagatoquin33)
+*   **🛠️ 健壮性增强**: 增强群相册兼容性 (#97)
+*   **🐛 去重优化**: 修复可选参数 days 以支持自定义分析天数 (#98)
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.8.4] - fix(OneBot): 兼容 napcat 和 llbot 获取历史消息接口
+
 ## [v4.8.3] - fix(OneBot): 修复 LLBot 用户仅能获取 100 条消息的问题
 *   **🛠️ 健壮性增强**: 多字段智能探测序列号，优化了提取逻辑，不仅检查 message_seq，还支持 LLBot 示例中出现的 real_id 以及常见的 seq 字段
 
