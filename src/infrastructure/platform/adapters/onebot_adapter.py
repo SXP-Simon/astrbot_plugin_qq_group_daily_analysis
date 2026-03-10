@@ -1128,7 +1128,6 @@ class OneBotAdapter(PlatformAdapter):
         """
         try:
             # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
-            # 注意：某些 API (如 upload_image_to_qun_album) 强制要求 album_id 且不能为空
             if not album_id:
                 albums = await self.get_group_album_list(group_id)
                 if albums:
@@ -1150,7 +1149,7 @@ class OneBotAdapter(PlatformAdapter):
             try:
                 # 尝试 upload_image_to_qun_album
                 params = {
-                    "group_id": int(group_id),
+                    "group_id": str(group_id),
                     "file": image_path,
                     "album_id": str(album_id or ""),
                 }
@@ -1171,17 +1170,16 @@ class OneBotAdapter(PlatformAdapter):
                     logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
                     raise e1
 
-                # 重新尝试两个可能的 API 名
-                params = {}
-                try:
-                    params = {
-                        "group_id": int(group_id),
-                        "file": b64_file,
-                        "album_id": str(album_id or ""),
-                    }
-                    if album_name:
-                        params["album_name"] = album_name
+                # 重新尝试多个可能的 API 名
+                params = {
+                    "group_id": str(group_id),
+                    "file": b64_file,
+                    "album_id": str(album_id or ""),
+                }
+                if album_name:
+                    params["album_name"] = album_name
 
+                try:
                     await self.bot.call_action("upload_image_to_qun_album", **params)
                     logger.info(
                         "Base64 回退模式 (upload_image_to_qun_album) 群相册上传成功"
@@ -1189,9 +1187,17 @@ class OneBotAdapter(PlatformAdapter):
                     return True
                 except Exception as e2:
                     logger.debug(f"Base64 模式 1 失败，尝试模式 2: {e2}")
-                    await self.bot.call_action("upload_group_album", **params)
-                    logger.info("Base64 回退模式 (upload_group_album) 群相册上传成功")
-                    return True
+                    try:
+                        await self.bot.call_action("upload_group_album", **params)
+                        logger.info(
+                            "Base64 回退模式 (upload_group_album) 群相册上传成功"
+                        )
+                        return True
+                    except Exception as e3:
+                        logger.debug(f"Base64 模式 2 失败，尝试模式 3: {e3}")
+                        await self.bot.call_action("upload_qun_album", **params)
+                        logger.info("Base64 回退模式 (upload_qun_album) 群相册上传成功")
+                        return True
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -1210,65 +1216,56 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
     ) -> list[dict]:
         """
-        获取群相册列表（NapCat 扩展 API）。
-
-        Args:
-            group_id: 目标群号
-
-        Returns:
-            list[dict]: 相册列表，每项可能包含 album_id / name 等字段。
-                        API 不可用时返回空列表。
+        获取群相册列表（兼容多种 OneBot 扩展实现）。
         """
-        try:
-            # 策略 1: 尝试 get_qun_album_list (参考 qun_album 插件)
-            try:
-                result = await self.bot.call_action(
-                    "get_qun_album_list",
-                    group_id=int(group_id),
-                )
-                if result:
-                    logger.debug(f"get_qun_album_list 成功: {result}")
-                    if isinstance(result, list):
-                        return result
-                    if isinstance(result, dict):
-                        return result.get("albums", []) or result.get("data", []) or []
-            except Exception as e:
-                logger.debug(f"策略 1 get_qun_album_list 尝试失败: {e}")
 
-            # 策略 2: 尝试 get_group_album_list
-            try:
-                result = await self.bot.call_action(
-                    "get_group_album_list",
-                    group_id=int(group_id),
+        def extract_list(data: Any) -> list[dict]:
+            if not data:
+                return []
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                # 探测常见键名
+                lst = (
+                    data.get("albums")
+                    or data.get("album_list")
+                    or data.get("albumList")
+                    or data.get("list")
+                    or []
                 )
-                if result:
-                    logger.debug(f"get_group_album_list 成功: {result}")
-                    if isinstance(result, list):
-                        return result
-                    if isinstance(result, dict):
-                        return result.get("albums", []) or result.get("data", []) or []
-            except Exception as e:
-                logger.debug(f"策略 2 get_group_album_list 尝试失败: {e}")
-
-            # 策略 3: 尝试 get_group_albums
-            try:
-                result = await self.bot.call_action(
-                    "get_group_albums",
-                    group_id=int(group_id),
-                )
-                if result:
-                    logger.debug(f"get_group_albums 成功: {result}")
-                    if isinstance(result, list):
-                        return result
-                    if isinstance(result, dict):
-                        return result.get("albums", []) or result.get("data", []) or []
-            except Exception as e:
-                logger.debug(f"策略 3 get_group_albums 尝试失败: {e}")
-
+                if isinstance(lst, list):
+                    return lst
+                # 如果 'data' 键本身存在且为列表
+                inner_data = data.get("data")
+                if isinstance(inner_data, list):
+                    return inner_data
+                if isinstance(inner_data, dict):
+                    return extract_list(inner_data)
             return []
-        except Exception as e:
-            logger.debug(f"获取群相册列表最终失败: {e}")
-            return []
+
+        # 候选 API 名称
+        actions = [
+            "get_qun_album_list",
+            "get_group_album_list",
+            "get_group_albums",
+            "get_group_root_album_list",
+        ]
+
+        for action in actions:
+            try:
+                result = await self.bot.call_action(
+                    action,
+                    group_id=str(group_id),  # 对齐文档，使用 string 类型
+                )
+                if result:
+                    albums = extract_list(result)
+                    if albums:
+                        logger.debug(f"{action} 成功获取到 {len(albums)} 个相册")
+                        return albums
+            except Exception as e:
+                logger.debug(f"策略 {action} 尝试失败: {e}")
+
+        return []
 
     async def find_album_id(
         self,
