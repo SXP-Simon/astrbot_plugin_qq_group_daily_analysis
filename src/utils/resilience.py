@@ -72,7 +72,7 @@ class CircuitBreaker:
         """
         if self.state == self.STATE_OPEN:
             # 检查冷却时间是否已过，过则进入试探性的半开状态
-            if time.time() - self.last_failure_time > self.recovery_timeout:
+            if time.monotonic() - self.last_failure_time > self.recovery_timeout:
                 self._half_open_circuit()
                 return True
             return False
@@ -81,7 +81,7 @@ class CircuitBreaker:
     def _open_circuit(self) -> None:
         """动作：开启熔断"""
         self.state = self.STATE_OPEN
-        self.last_failure_time = time.time()
+        self.last_failure_time = time.monotonic()
         logger.warning(
             f"熔断器 CircuitBreaker[{self.name}] 已激活！将拦截请求 {self.recovery_timeout} 秒。"
         )
@@ -124,6 +124,14 @@ class GlobalRateLimiter:
         """
         if cls._instance is None:
             cls._instance = cls()
+            cls._semaphore = asyncio.Semaphore(max_concurrency)
+        elif (
+            cls._semaphore is not None and cls._semaphore._value != max_concurrency  # type: ignore
+        ):
+            # 如果请求的并发数发生变化，重新创建信号量
+            logger.info(
+                f"GlobalRateLimiter 重新配置：{cls._semaphore._value} -> {max_concurrency}"
+            )
             cls._semaphore = asyncio.Semaphore(max_concurrency)
         return cls._instance
 
