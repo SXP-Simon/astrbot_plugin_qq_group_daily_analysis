@@ -7,6 +7,8 @@ QQ群日常分析插件
 
 import asyncio
 import os
+from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from astrbot.api import AstrBotConfig
 from astrbot.api import logger as astrbot_logger
@@ -51,7 +53,7 @@ from .src.utils.trace_context import TraceContext, TraceLogFilter
 class GroupDailyAnalysis(Star):
     """群分析插件主类"""
 
-    # ── 显式类型声明（消除 Pylance Optional 推断） ──
+    # ── 显式类型声明 (由 __init__ 初始化) ──
     config: AstrBotConfig
     config_manager: ConfigManager
     bot_manager: BotManager
@@ -141,10 +143,21 @@ class GroupDailyAnalysis(Star):
 
         self._initialized = False
         self._discovery_run = False  # 是否已尝试过运行发现逻辑
+        self._init_lock = asyncio.Lock()
+        self._background_tasks: set[asyncio.Task] = set()
+
         # 异步注册任务，处理插件重载情况
-        self._init_task = asyncio.create_task(
-            self._run_initialization("Plugin Reload/Init")
-        )
+        try:
+            loop = asyncio.get_running_loop()
+            self._init_task = loop.create_task(
+                self._run_initialization("Plugin Reload/Init")
+            )
+            self._background_tasks.add(self._init_task)
+            self._init_task.add_done_callback(self._background_tasks.discard)
+        except RuntimeError:
+            # 如果当前没有 running loop (例如在非异步初始化的环境中)，
+            # 则依赖 on_platform_loaded 钩子执行初始化
+            self._init_task = None
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
@@ -156,100 +169,95 @@ class GroupDailyAnalysis(Star):
 
     async def _run_initialization(self, source: str):
         """统一初始化逻辑"""
-        # 如果已经成功发现过平台，且不是来自 Platform Loaded 的强制触发，则跳过
-        if (
-            self._initialized
-            and self.bot_manager
-            and self.bot_manager.get_platform_count() > 0
-            and source != "Platform Loaded"
-        ):
-            return
+        async with self._init_lock:
+            # 如果已经成功发现过平台，且不是来自 Platform Loaded 的强制触发，则跳过
+            if (
+                self._initialized
+                and self.bot_manager
+                and self.bot_manager.get_platform_count() > 0
+                and source != "Platform Loaded"
+            ):
+                return
 
-        # 稍微延迟，确保 context 和环境稳定
-        # 针对极少数环境，2秒可能不足以让平台管理器就绪，增加到 5秒
-        await asyncio.sleep(5)
+            # 稍微延迟，确保 context 和环境稳定
+            # 针对极少数环境，2秒可能不足以让平台管理器就绪，增加到 5秒
+            await asyncio.sleep(5)
 
-        # [加固] 如果在等待期间插件已被卸载（terminate），则直接退出
-        if not self.bot_manager:
-            return
+            # [加固] 如果在等待期间插件已被卸载（terminate），则直接退出
+            if not self.bot_manager:
+                return
 
-        try:
-            # 注册 TraceID 过滤器
-            trace_filter = TraceLogFilter()
-            if not any(isinstance(f, TraceLogFilter) for f in astrbot_logger.filters):
-                astrbot_logger.addFilter(trace_filter)
-                astrbot_logger.info("[Trace] TraceID 日志追踪已启用")
-
-            logger.info(f"正在执行插件初始化 (来源: {source})...")
-            # 检查插件是否被启用 (Fix for empty plugin_set issue)
-            if self.context:
-                config = self.context.get_config()
-                # ... 为空修正逻辑保持不变 ...
-                plugin_set = config.get("plugin_set", [])
-                if (
-                    isinstance(plugin_set, list)
-                    and "astrbot_plugin_qq_group_daily_analysis" not in plugin_set
+            try:
+                # 注册 TraceID 过滤器
+                trace_filter = TraceLogFilter()
+                if not any(
+                    isinstance(f, TraceLogFilter) for f in astrbot_logger.filters
                 ):
-                    # 此时不强制修改 config，但可以记录日志
-                    pass
+                    astrbot_logger.addFilter(trace_filter)
+                    astrbot_logger.info("[Trace] TraceID 日志追踪已启用")
 
-            # 1. 尝试发现 bot 实例（即使暂时没有，后续任务触发时也会再扫一遍）
-            await self.bot_manager.initialize_from_config()
+                logger.info(f"正在执行插件初始化 (来源: {source})...")
 
-            # 2. 注册预览路由器 (WebUI 路由注册不依赖在线机器人)
-            if self.template_preview_router:
-                await self.template_preview_router.ensure_handlers_registered(
-                    self.context
-                )
+                # 1. 尝试发现 bot 实例
+                await self.bot_manager.initialize_from_config()
 
-            # 3. 强制注册定时分析任务 (确保 APScheduler 即使在空载时也有任务占位)
-            if self.auto_scheduler:
-                self.auto_scheduler.schedule_jobs(self.context)
+                # 2. 注册预览路由器
+                if self.template_preview_router:
+                    await self.template_preview_router.ensure_handlers_registered(
+                        self.context
+                    )
 
-            # 4. 始终启动重试管理器
-            if self.retry_manager:
-                await self.retry_manager.start()
+                # 3. 强制注册定时分析任务
+                if self.auto_scheduler:
+                    self.auto_scheduler.schedule_jobs(self.context)
 
-            self._initialized = True
-            self._discovery_run = True
-            logger.info(f"插件任务注册完成 (来源: {source})")
+                # 4. 始终启动重试管理器
+                if self.retry_manager:
+                    await self.retry_manager.start()
 
-        except Exception as e:
-            logger.error(f"插件初始化失败: {e}", exc_info=True)
+                self._initialized = True
+                self._discovery_run = True
+                logger.info(f"插件任务注册完成 (来源: {source})")
+
+            except Exception as e:
+                logger.error(f"插件初始化失败: {e}", exc_info=True)
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
         try:
-            # 取消正在进行的初始化任务
-            if (
-                hasattr(self, "_init_task")
-                and self._init_task
-                and not self._init_task.done()
-            ):
-                self._init_task.cancel()
-
             logger.info("开始清理QQ群日常分析插件资源...")
 
-            # 停止自动调度器
+            # 1. 停止所有后台任务
+            if self._background_tasks:
+                logger.info(f"正在取消 {len(self._background_tasks)} 个后台任务...")
+                for task in self._background_tasks:
+                    if not task.done():
+                        task.cancel()
+
+                # 等待任务结束
+                await asyncio.gather(*self._background_tasks, return_exceptions=True)
+                self._background_tasks.clear()
+
+            # 2. 停止各个组件
             if self.auto_scheduler:
                 logger.info("正在停止自动调度器...")
-                self.auto_scheduler.unschedule_jobs(self.context)
-                logger.info("自动调度器已停止")
+                self.auto_scheduler.schedule_jobs(None)  # type: ignore
 
             if self.retry_manager:
                 await self.retry_manager.stop()
+
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
 
-            # 释放实例属性引用（插件卸载后不再使用）
-            self.auto_scheduler = None
-            self.bot_manager = None
-            self.report_generator = None
-            self.config_manager = None
-            self.message_processing_service = None
-            self.telegram_group_registry = None
-            self.template_preview_router = None
-            self.telegram_template_preview_handler = None
+            # 3. 释放实例属性引用 (使用 type: ignore 允许 None 赋值)
+            self.auto_scheduler = None  # type: ignore
+            self.bot_manager = None  # type: ignore
+            self.report_generator = None  # type: ignore
+            self.config_manager = None  # type: ignore
+            self.message_processing_service = None  # type: ignore
+            self.telegram_group_registry = None  # type: ignore
+            self.template_preview_router = None  # type: ignore
+            self.telegram_template_preview_handler = None  # type: ignore
 
             logger.info("QQ群日常分析插件资源清理完成")
 
@@ -354,27 +362,36 @@ class GroupDailyAnalysis(Star):
         # 2. 将内容准备为文件或数据
         image_file = None
         created_temp = False
+        MAX_PAYLOAD_SIZE = 20 * 1024 * 1024  # 20MB 限制
+
         try:
+            data = None
             if image_url.startswith("base64://"):
-                data = base64.b64decode(image_url[len("base64://") :])
+                base64_str = image_url[len("base64://") :]
+                if len(base64_str) * 3 / 4 > MAX_PAYLOAD_SIZE:
+                    logger.warning("图片上传失败：Base64 负载过大")
+                    return
+                data = base64.b64decode(base64_str)
             elif image_url.startswith("data:"):
                 parts = image_url.split(",", 1)
-                data = base64.b64decode(parts[1]) if len(parts) == 2 else None
+                if len(parts) == 2:
+                    if len(parts[1]) * 3 / 4 > MAX_PAYLOAD_SIZE:
+                        logger.warning("图片上传失败：Data URI 负载过大")
+                        return
+                    data = base64.b64decode(parts[1])
             elif os.path.isfile(image_url):
-                if os.path.isabs(image_url):
-                    image_file = image_url
-                else:
-                    image_file = os.path.abspath(image_url)
-                data = None
-            else:
-                return
+                image_file = os.path.abspath(image_url)
 
             if data and not image_file:
-                # 使用优化的文件名创建临时文件
-                image_file = os.path.join(tempfile.gettempdir(), nice_filename)
-                with open(image_file, "wb") as f:
-                    f.write(data)
-                created_temp = True
+                # 使用 tempfile 生成唯一后缀，防止并发冲突
+                fd, image_file = tempfile.mkstemp(suffix=ext, prefix="group_report_")
+                try:
+                    with os.fdopen(fd, "wb") as f:
+                        f.write(data)
+                    created_temp = True
+                except Exception:
+                    os.close(fd)
+                    raise
 
             if not image_file:
                 return
@@ -475,85 +492,8 @@ class GroupDailyAnalysis(Star):
                 f"📊 已获取{result['messages_count']}条消息，正在生成渲染报告..."
             )
 
-            analysis_result = result["analysis_result"]
-            adapter = result["adapter"]
-            output_format = self.config_manager.get_output_format()
-
-            # 定义头像获取回调 (Infrastructure delegate)
-            async def avatar_getter(user_id: str) -> str | None:
-                return await adapter.get_user_avatar_url(user_id)
-
-            # 定义昵称获取回调
-            async def nickname_getter(user_id: str) -> str | None:
-                try:
-                    member = await adapter.get_member_info(group_id, user_id)
-                    if member:
-                        return member.card or member.nickname
-                except Exception:
-                    pass
-                return None
-
-            if output_format == "image":
-                (
-                    image_url,
-                    html_content,
-                ) = await self.report_generator.generate_image_report(
-                    analysis_result,
-                    group_id,
-                    self.html_render,
-                    avatar_getter=avatar_getter,
-                    nickname_getter=nickname_getter,
-                )
-
-                if image_url:
-                    caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
-                    # 优先使用适配器的 send_image (由插件适配器统一处理 Base64 转换和路径问题)
-                    # 不再使用 yield event.image_result 回退，防止适配器超时回复导致重复发送图片
-                    await adapter.send_image(group_id, image_url, caption=caption)
-
-                    # 上传到群文件/群相册 (属于附加功能，不影响消息发送)
-                    await self._try_upload_image(group_id, image_url, platform_id)
-                elif html_content:
-                    yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
-                    # 使用带提示词的重试任务，确保排队发送时视觉一致
-                    await self.retry_manager.add_task(
-                        html_content,
-                        analysis_result,
-                        group_id,
-                        platform_id,
-                        caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
-                    )
-                else:
-                    text_report = self.report_generator.generate_text_report(
-                        analysis_result
-                    )
-                    yield event.plain_result(
-                        f"⚠️ 图片生成失败，回退文本：\n\n{text_report}"
-                    )
-
-            elif output_format == "pdf":
-                pdf_path = await self.report_generator.generate_pdf_report(
-                    analysis_result,
-                    group_id,
-                    avatar_getter=avatar_getter,
-                    nickname_getter=nickname_getter,
-                )
-                if pdf_path:
-                    if not await adapter.send_file(group_id, pdf_path):
-                        from pathlib import Path
-
-                        yield event.chain_result(
-                            [File(name=Path(pdf_path).name, file=pdf_path)]
-                        )
-                else:
-                    yield event.plain_result("⚠️ PDF 生成失败。")
-
-            else:
-                text_report = self.report_generator.generate_text_report(
-                    analysis_result
-                )
-                if not await adapter.send_text(group_id, text_report):
-                    yield event.plain_result(text_report)
+            async for res in self._send_analysis_report(event, result, trace_id):
+                yield res
 
         except DuplicateGroupTaskError:
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
@@ -562,6 +502,77 @@ class GroupDailyAnalysis(Star):
             yield event.plain_result(
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
+
+    async def _send_analysis_report(
+        self, event: AstrMessageEvent, result: dict, trace_id: str
+    ) -> AsyncGenerator:
+        """处理分析结果的渲染和发送"""
+        group_id = result["group_id"]
+        platform_id = result["platform_id"]
+        analysis_result = result["analysis_result"]
+        adapter = result["adapter"]
+        output_format = self.config_manager.get_output_format()
+
+        # 定义获取回调
+        async def avatar_getter(user_id: str) -> str | None:
+            return await adapter.get_user_avatar_url(user_id)
+
+        async def nickname_getter(user_id: str) -> str | None:
+            try:
+                member = await adapter.get_member_info(group_id, user_id)
+                if member:
+                    return member.card or member.nickname
+            except Exception:
+                pass
+            return None
+
+        if output_format == "image":
+            image_url, html_content = await self.report_generator.generate_image_report(
+                analysis_result,
+                group_id,
+                self.html_render,
+                avatar_getter=avatar_getter,
+                nickname_getter=nickname_getter,
+            )
+
+            if image_url:
+                caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
+                await adapter.send_image(group_id, image_url, caption=caption)
+                await self._try_upload_image(group_id, image_url, platform_id)
+            elif html_content:
+                yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
+                await self.retry_manager.add_task(
+                    html_content,
+                    analysis_result,
+                    group_id,
+                    platform_id,
+                    caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
+                )
+            else:
+                text_report = self.report_generator.generate_text_report(
+                    analysis_result
+                )
+                yield event.plain_result(f"⚠️ 图片生成失败，回退文本：\n\n{text_report}")
+
+        elif output_format == "pdf":
+            pdf_path = await self.report_generator.generate_pdf_report(
+                analysis_result,
+                group_id,
+                avatar_getter=avatar_getter,
+                nickname_getter=nickname_getter,
+            )
+            if pdf_path:
+                if not await adapter.send_file(group_id, pdf_path):
+                    yield event.chain_result(
+                        [File(name=Path(pdf_path).name, file=pdf_path)]
+                    )
+            else:
+                yield event.plain_result("⚠️ PDF 生成失败。")
+
+        else:
+            text_report = self.report_generator.generate_text_report(analysis_result)
+            if not await adapter.send_text(group_id, text_report):
+                yield event.plain_result(text_report)
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
@@ -641,7 +652,10 @@ class GroupDailyAnalysis(Star):
         if parse_error:
             yield event.plain_result(parse_error)
             return
-        assert template_name is not None
+
+        if not template_name:
+            yield event.plain_result(f"❌ 无法解析模板输入: {template_input}")
+            return
 
         if not await self.template_command_service.template_exists(template_name):
             yield event.plain_result(f"❌ 模板 '{template_name}' 不存在")
@@ -702,7 +716,9 @@ class GroupDailyAnalysis(Star):
         yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
         try:
-            result = await PDFInstaller.install_playwright(self.config_manager)
+            result = await PDFInstaller.install_playwright(
+                self.config_manager, task_registry=self._background_tasks
+            )
             yield event.plain_result(result)
 
         except Exception as e:
@@ -728,83 +744,12 @@ class GroupDailyAnalysis(Star):
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
 
-        elif action == "enable":
-            mode = self.config_manager.get_group_list_mode()
-            target_id = event.unified_msg_origin or group_id  # 优先使用 UMO
-
-            if mode == "whitelist":
-                glist = self.config_manager.get_group_list()
-                # 检查 UMO 或 Group ID 是否已在列表中
-                if not self.config_manager.is_group_allowed(target_id):
-                    glist.append(target_id)
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result(
-                        f"✅ 已将当前群加入白名单\nID: {target_id}"
-                    )
-                    self.auto_scheduler.schedule_jobs(self.context)
-                else:
-                    yield event.plain_result("ℹ️ 当前群已在白名单中")
-            elif mode == "blacklist":
-                glist = self.config_manager.get_group_list()
-
-                # 尝试移除 UMO 和 Group ID
-                removed = False
-                if target_id in glist:
-                    glist.remove(target_id)
-                    removed = True
-                if group_id in glist:
-                    glist.remove(group_id)
-                    removed = True
-
-                if removed:
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群从黑名单移除")
-                    self.auto_scheduler.schedule_jobs(self.context)
-                else:
-                    yield event.plain_result("ℹ️ 当前群不在黑名单中")
-            else:
-                yield event.plain_result("ℹ️ 当前为无限制模式，所有群聊默认启用")
-
+        if action == "enable":
+            async for result in self._handle_settings_enable(event, group_id):
+                yield result
         elif action == "disable":
-            mode = self.config_manager.get_group_list_mode()
-            target_id = event.unified_msg_origin or group_id  # 优先使用 UMO
-
-            if mode == "whitelist":
-                glist = self.config_manager.get_group_list()
-
-                # 尝试移除 UMO 和 Group ID
-                removed = False
-                if target_id in glist:
-                    glist.remove(target_id)
-                    removed = True
-                if group_id in glist:
-                    glist.remove(group_id)
-                    removed = True
-
-                if removed:
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result("✅ 已将当前群从白名单移除")
-                    self.auto_scheduler.schedule_jobs(self.context)
-                else:
-                    yield event.plain_result("ℹ️ 当前群不在白名单中")
-            elif mode == "blacklist":
-                glist = self.config_manager.get_group_list()
-                # 检查 UMO 或 Group ID 是否已在列表中
-                if self.config_manager.is_group_allowed(
-                    target_id
-                ):  # 如果允许，说明不在黑名单
-                    glist.append(target_id)
-                    self.config_manager.set_group_list(glist)
-                    yield event.plain_result(
-                        f"✅ 已将当前群加入黑名单\nID: {target_id}"
-                    )
-                    self.auto_scheduler.schedule_jobs(self.context)
-                else:
-                    yield event.plain_result("ℹ️ 当前群已在黑名单中")
-            else:
-                yield event.plain_result(
-                    "ℹ️ 当前为无限制模式，如需禁用请切换到黑名单模式"
-                )
+            async for result in self._handle_settings_disable(event, group_id):
+                yield result
 
         elif action == "reload":
             self.auto_scheduler.schedule_jobs(self.context)
@@ -940,3 +885,69 @@ class GroupDailyAnalysis(Star):
             f"• 参与者: {summary['participants']}\n"
             f"• 高峰时段: {summary['peak_hours']}"
         )
+
+    async def _handle_settings_enable(self, event: AstrMessageEvent, group_id: str):
+        """协助逻辑：处理启用设置的分支逻辑"""
+        mode = self.config_manager.get_group_list_mode()
+        target_id = event.unified_msg_origin or group_id
+
+        if mode == "whitelist":
+            glist = self.config_manager.get_group_list()
+            if not self.config_manager.is_group_allowed(target_id):
+                glist.append(target_id)
+                self.config_manager.set_group_list(glist)
+                yield event.plain_result(f"✅ 已将当前群加入白名单\nID: {target_id}")
+                self.auto_scheduler.schedule_jobs(self.context)
+            else:
+                yield event.plain_result("ℹ️ 当前群已在白名单中")
+        elif mode == "blacklist":
+            glist = self.config_manager.get_group_list()
+            removed = False
+            if target_id in glist:
+                glist.remove(target_id)
+                removed = True
+            if group_id in glist:
+                glist.remove(group_id)
+                removed = True
+
+            if removed:
+                self.config_manager.set_group_list(glist)
+                yield event.plain_result("✅ 已将当前群从黑名单移除")
+                self.auto_scheduler.schedule_jobs(self.context)
+            else:
+                yield event.plain_result("ℹ️ 当前群不在黑名单中")
+        else:
+            yield event.plain_result("ℹ️ 当前为无限制模式，所有群聊默认启用")
+
+    async def _handle_settings_disable(self, event: AstrMessageEvent, group_id: str):
+        """协助逻辑：处理禁用设置的分支逻辑"""
+        mode = self.config_manager.get_group_list_mode()
+        target_id = event.unified_msg_origin or group_id
+
+        if mode == "whitelist":
+            glist = self.config_manager.get_group_list()
+            removed = False
+            if target_id in glist:
+                glist.remove(target_id)
+                removed = True
+            if group_id in glist:
+                glist.remove(group_id)
+                removed = True
+
+            if removed:
+                self.config_manager.set_group_list(glist)
+                yield event.plain_result("✅ 已将当前群从白名单移除")
+                self.auto_scheduler.schedule_jobs(self.context)
+            else:
+                yield event.plain_result("ℹ️ 当前群不在白名单中")
+        elif mode == "blacklist":
+            glist = self.config_manager.get_group_list()
+            if self.config_manager.is_group_allowed(target_id):
+                glist.append(target_id)
+                self.config_manager.set_group_list(glist)
+                yield event.plain_result(f"✅ 已将当前群加入黑名单\nID: {target_id}")
+                self.auto_scheduler.schedule_jobs(self.context)
+            else:
+                yield event.plain_result("ℹ️ 当前群已在黑名单中")
+        else:
+            yield event.plain_result("ℹ️ 当前为无限制模式，如需禁用请切换到黑名单模式")
