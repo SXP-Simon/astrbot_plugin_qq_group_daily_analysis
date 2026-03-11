@@ -5,7 +5,6 @@ PDF工具模块
 
 import asyncio
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -20,11 +19,6 @@ class PDFInstaller:
     由于内核下载耗时较长且受网络波动影响，采用非阻塞的后台任务模式执行。
     """
 
-    # 类级别的线程池，专用于隔离耗时的 IO/Shell 操作
-    _executor = ThreadPoolExecutor(
-        max_workers=1, thread_name_prefix="playwright_install"
-    )
-
     # 静态安装状态追踪
     _install_status: dict[str, Any] = {
         "in_progress": False,
@@ -34,7 +28,9 @@ class PDFInstaller:
     }
 
     @staticmethod
-    async def install_playwright(config_manager: Any) -> str:
+    async def install_playwright(
+        config_manager: Any, task_registry: set[asyncio.Task] | None = None
+    ) -> str:
         """
         异步入口：安装 Playwright 环境。
 
@@ -79,14 +75,16 @@ class PDFInstaller:
                 return f"✅ Playwright 库已就绪。已检测到自定义浏览器 `{custom_path}`，无需额外安装内核。您可以直接开始生成 PDF。"
 
             # 3. 部署浏览器内核
-            return await PDFInstaller.install_system_deps()
+            return await PDFInstaller.install_system_deps(task_registry)
 
         except Exception as e:
             logger.error(f"Playwright 设置过程中出错: {e}")
             return f"❌ 安装过程中出错: {str(e)}"
 
     @staticmethod
-    async def install_system_deps() -> str:
+    async def install_system_deps(
+        task_registry: set[asyncio.Task] | None = None,
+    ) -> str:
         """
         触发浏览器内核的后台异步安装流程。
 
@@ -109,7 +107,10 @@ class PDFInstaller:
             )
 
             logger.info("正在启动后台线程以部署 Chromium 内核...")
-            asyncio.create_task(PDFInstaller._background_playwright_install())
+            task = asyncio.create_task(PDFInstaller._background_playwright_install())
+            if task_registry is not None:
+                task_registry.add(task)
+                task.add_done_callback(task_registry.discard)
 
             return (
                 "🚀 浏览器内核安装任务已成功在后台启动。\n\n"
@@ -176,8 +177,8 @@ class PDFInstaller:
         Returns:
             str: 用户友好的状态文本
         """
-        if config_manager.playwright_available:
-            version = config_manager.playwright_version or "Unknown"
+        if getattr(config_manager, "playwright_available", False):
+            version = getattr(config_manager, "playwright_version", "Unknown")
             status = f"✅ PDF 功能可用 (核心版本: {version})"
 
             if PDFInstaller._install_status["in_progress"]:
