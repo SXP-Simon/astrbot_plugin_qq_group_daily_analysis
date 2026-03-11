@@ -563,11 +563,22 @@ class OneBotAdapter(PlatformAdapter):
             if is_potential_success:
                 logger.warning(
                     f"OneBot 发送群 {group_id} 图片出现疑似超时 ({e})。 "
-                    "这通常是因为图片较大导致上传缓慢。如果群内稍后出现了图片，请忽略随后可能的重试提示。"
+                    "进入 10s 贴身观察期，尝试通过历史回显核实..."
                 )
-                return (
-                    False  # 返回 False，由上层 RetryManager 接管（带 20s 延迟观察期）
-                )
+
+                # 等待 10s (NTQQ 后台上传可能在此时完成)
+                await asyncio.sleep(10)
+
+                # [真相检查] 尝试从历史记录中找回失踪的消息
+                if await self.was_image_sent_recently(
+                    group_id, seconds=300, token=caption
+                ):
+                    logger.info(
+                        f"[OneBot] [真相拦截] 确认群 {group_id} 的超时图片已在后台成功送达。拦截重试。"
+                    )
+                    return True
+
+                return False  # 没找回，返回 False，由上层 RetryManager 接管（带 20s 延迟观察期）
 
             logger.error(f"OneBot 图片发送最终失败: {e}")
             return False
@@ -585,7 +596,7 @@ class OneBotAdapter(PlatformAdapter):
                 history = await self.bot.call_action(
                     "get_group_msg_history",
                     group_id=int(group_id),
-                    count=50,  # 适度缩减扫描深度以提高成功率
+                    count=100,  # 增大扫描深度以应对高频群聊
                 )
             except Exception as e:
                 logger.warning(
