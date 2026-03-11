@@ -4,8 +4,9 @@
 提供用于在插件中跟踪请求的上下文。
 """
 
+import functools
 import uuid
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
@@ -87,14 +88,18 @@ class TraceContext:
             "checkpoints": {k: v.isoformat() for k, v in self._checkpoints.items()},
         }
 
+    _token: Token | None = field(default=None, init=False, repr=False)
+
     def __enter__(self) -> "TraceContext":
         """进入上下文管理器，将当前实例绑定到当前协程上下文。"""
-        _current_trace.set(self)
+        self._token = _current_trace.set(self)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """退出上下文管理器，清理绑定状态。"""
-        _current_trace.set(None)
+        if self._token:
+            _current_trace.reset(self._token)
+            self._token = None
 
     @classmethod
     def current(cls) -> Optional["TraceContext"]:
@@ -112,6 +117,7 @@ class TraceContext:
         group_id: str = "",
         platform: str = "",
         operation: str = "",
+        auto_bind: bool = False,
     ) -> "TraceContext":
         """
         尝试获取现有链路，若不存在则按需创建一个。
@@ -120,6 +126,7 @@ class TraceContext:
             group_id (str): 群组 ID
             platform (str): 平台名称
             operation (str): 操作描述
+            auto_bind (bool): 若新建，是否自动绑定到当前上下文（仅在 non-with 场景有用，谨慎使用）
 
         Returns:
             TraceContext: 活跃或新生成的实例
@@ -128,11 +135,14 @@ class TraceContext:
         if current:
             return current
 
-        return cls(
+        new_ctx = cls(
             group_id=group_id,
             platform=platform,
             operation=operation,
         )
+        if auto_bind:
+            new_ctx._token = _current_trace.set(new_ctx)
+        return new_ctx
 
 
 def get_trace_id() -> str:
@@ -166,6 +176,7 @@ def with_trace(
     """
 
     def decorator(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             # 优先使用装饰器声明的 operation，否则取函数原始名称
             op_name = operation or func.__name__
