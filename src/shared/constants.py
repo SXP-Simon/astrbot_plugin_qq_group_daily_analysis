@@ -71,19 +71,10 @@ PLUGIN_NAME = "astrbot_plugin_qq_group_daily_analysis"
 PLUGIN_VERSION = "2.0.0"
 
 # 平台标识符
-PLATFORM_ONEBOT = "onebot"
-PLATFORM_TELEGRAM = "telegram"
-PLATFORM_DISCORD = "discord"
-PLATFORM_SLACK = "slack"
-PLATFORM_LARK = "lark"
-
 SUPPORTED_PLATFORMS = [
-    PLATFORM_ONEBOT,
-    # 未来平台
-    # PLATFORM_TELEGRAM,
-    # PLATFORM_DISCORD,
-    # PLATFORM_SLACK,
-    # PLATFORM_LARK,
+    Platform.ONEBOT.value,
+    Platform.TELEGRAM.value,
+    Platform.DISCORD.value,
 ]
 
 # 分析默认值
@@ -100,31 +91,6 @@ HOUR_RANGES = {
     "evening": (18, 24),
     "night": (0, 6),
 }
-
-# 报告格式
-REPORT_FORMAT_TEXT = "text"
-REPORT_FORMAT_MARKDOWN = "markdown"
-REPORT_FORMAT_IMAGE = "image"
-REPORT_FORMAT_HTML = "html"
-
-# 消息内容类型
-CONTENT_TYPE_TEXT = "text"
-CONTENT_TYPE_IMAGE = "image"
-CONTENT_TYPE_EMOJI = "emoji"
-CONTENT_TYPE_STICKER = "sticker"
-CONTENT_TYPE_FILE = "file"
-CONTENT_TYPE_AUDIO = "audio"
-CONTENT_TYPE_VIDEO = "video"
-CONTENT_TYPE_REPLY = "reply"
-CONTENT_TYPE_AT = "at"
-CONTENT_TYPE_UNKNOWN = "unknown"
-
-# 分析任务状态
-TASK_STATE_PENDING = "pending"
-TASK_STATE_RUNNING = "running"
-TASK_STATE_COMPLETED = "completed"
-TASK_STATE_FAILED = "failed"
-TASK_STATE_CANCELLED = "cancelled"
 
 # 错误代码
 ERROR_INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
