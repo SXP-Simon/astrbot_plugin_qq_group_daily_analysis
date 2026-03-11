@@ -1,6 +1,6 @@
 <div align="center">
 
-# QQ群日常分析插件
+# QQ群日常分析插件 - 个人修改版
 
 
 [![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.6.6-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
