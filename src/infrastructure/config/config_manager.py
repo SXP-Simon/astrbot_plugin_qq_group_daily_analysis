@@ -433,6 +433,15 @@ class ConfigManager:
         """获取目标群相册名称，空字符串表示默认相册"""
         return self._get_group("qq_group_upload").get("group_album_name", "")
 
+    def get_group_album_strict_mode(self) -> bool:
+        """获取极简模式开关：当未找到指定相册时是否禁止回退到默认相册"""
+        return self._get_group("qq_group_upload").get("group_album_strict_mode", False)
+
+    def set_group_album_strict_mode(self, enabled: bool):
+        """设置群相册上传严格模式"""
+        self._ensure_group("qq_group_upload")["group_album_strict_mode"] = enabled
+        self.config.save_config()
+
     # ========== 增量分析配置 ==========
 
     def get_incremental_enabled(self) -> bool:

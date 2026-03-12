@@ -1318,5 +1318,5 @@ class OneBotAdapter(PlatformAdapter):
                 logger.debug(f"找到群相册: {album_name} [ID: {aid}]")
                 return str(aid)
 
-        logger.info(f"未找到群相册 '{album_name}' (群 {group_id})，将使用默认相册")
+        logger.info(f"未找到群相册 '{album_name}' (群 {group_id})")
         return None
