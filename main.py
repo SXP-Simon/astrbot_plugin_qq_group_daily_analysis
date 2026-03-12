@@ -478,12 +478,12 @@ class GroupDailyAnalysis(Star):
             pass
 
         # 设置 TraceID (语义化格式: manual_群名_HHmm)
-        trace_id = TraceContext.generate(prefix="manual", group_name=group_name or group_id)
+        trace_id = TraceContext.generate(
+            prefix="manual", group_name=group_name or group_id
+        )
         TraceContext.set(trace_id)
 
-        yield event.plain_result(
-            "🔍 正在启动跨平台分析引擎，正在拉取最近消息..."
-        )
+        yield event.plain_result("🔍 正在启动跨平台分析引擎，正在拉取最近消息...")
 
         try:
             # 调用 DDD 应用级服务

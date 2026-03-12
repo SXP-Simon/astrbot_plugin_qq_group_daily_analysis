@@ -113,6 +113,7 @@ class AutoScheduler:
         except Exception as e:
             logger.error(f"❌ 获取平台ID失败: {e}")
             return None
+
     async def _get_group_name_safe(
         self, group_id: str, platform_id: str | None = None
     ) -> str:
