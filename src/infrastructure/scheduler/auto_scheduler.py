@@ -269,7 +269,13 @@ class AutoScheduler:
 
     def unschedule_jobs(self, context):
         """取消定时任务"""
+        if not context or not hasattr(context, "cron_manager") or not context.cron_manager:
+            return
+
         scheduler = context.cron_manager.scheduler
+        if not scheduler:
+            return
+
         for job_id in self.scheduler_job_ids:
             try:
                 if scheduler.get_job(job_id):
