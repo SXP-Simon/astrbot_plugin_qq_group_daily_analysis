@@ -45,9 +45,9 @@ from .src.infrastructure.platform.template_preview import (
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
+from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
 from .src.utils.pdf_utils import PDFInstaller
-from .src.utils.trace_context import TraceContext, TraceLogFilter
 
 
 class GroupDailyAnalysis(Star):
