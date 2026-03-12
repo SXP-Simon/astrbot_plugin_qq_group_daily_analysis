@@ -241,7 +241,7 @@ class GroupDailyAnalysis(Star):
             # 2. 停止各个组件
             if self.auto_scheduler:
                 logger.info("正在停止自动调度器...")
-                self.auto_scheduler.schedule_jobs(None)  # type: ignore
+                self.auto_scheduler.unschedule_jobs(self.context)
 
             if self.retry_manager:
                 await self.retry_manager.stop()
