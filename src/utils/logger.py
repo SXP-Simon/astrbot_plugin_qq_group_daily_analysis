@@ -1,5 +1,7 @@
 from astrbot.api import logger as astrbot_logger
 
+from ..shared.trace_context import TraceContext
+
 
 class PluginLogger:
     """
@@ -14,6 +16,9 @@ class PluginLogger:
         self.prefix = prefix
 
     def _format_msg(self, msg: str) -> str:
+        trace_id = TraceContext.get()
+        if trace_id:
+            return f"[{trace_id}] {self.prefix} {msg}"
         return f"{self.prefix} {msg}"
 
     def info(self, msg: str, *args, **kwargs):
