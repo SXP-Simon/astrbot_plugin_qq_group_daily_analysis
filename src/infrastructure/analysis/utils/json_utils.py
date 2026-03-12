@@ -94,6 +94,7 @@ def parse_json_response(
     Returns:
         (成功标志, 解析后的数据列表, 错误消息)
     """
+    fixed_json_text = None
     try:
         # 1. 提取JSON部分
         json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
@@ -125,9 +126,7 @@ def parse_json_response(
     except json.JSONDecodeError as e:
         error_msg = f"{data_type}JSON解析失败: {e}"
         logger.warning(error_msg)
-        logger.debug(
-            f"修复后的JSON: {fixed_json_text if 'fixed_json_text' in locals() else 'N/A'}"
-        )
+        logger.debug(f"修复后的JSON: {fixed_json_text or 'N/A'}")
         return False, None, error_msg
     except Exception as e:
         error_msg = f"{data_type}解析异常: {e}"
