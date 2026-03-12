@@ -50,13 +50,9 @@ class ReportDispatcher:
             success = await self._dispatch_text(group_id, analysis_result, platform_id)
 
         if success:
-            logger.info(
-                f"[{trace_id}] 群 {group_id} 的报告分发成功"
-            )
+            logger.info(f"[{trace_id}] 群 {group_id} 的报告分发成功")
         else:
-            logger.warning(
-                f"[{trace_id}] 群 {group_id} 的报告分发失败"
-            )
+            logger.warning(f"[{trace_id}] 群 {group_id} 的报告分发失败")
 
     async def _dispatch_image(
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
@@ -64,9 +60,7 @@ class ReportDispatcher:
         trace_id = TraceContext.get()
         # 1. 检查渲染函数
         if not self._html_render_func:
-            logger.warning(
-                f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。"
-            )
+            logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
             return await self._dispatch_text(group_id, analysis_result, platform_id)
 
         # 2. 生成图片
