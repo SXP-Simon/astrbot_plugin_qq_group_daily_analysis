@@ -237,6 +237,8 @@ class AnalysisApplicationService:
                 "analysis_result": analysis_result,
                 "messages_count": len(unified_messages),
                 "adapter": adapter,
+                "group_id": group_id,
+                "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
     # ----------------------------------------------------------------
@@ -592,6 +594,8 @@ class AnalysisApplicationService:
                 "analysis_result": analysis_result,
                 "messages_count": state.total_message_count,
                 "adapter": adapter,
+                "group_id": group_id,
+                "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
     # ----------------------------------------------------------------
