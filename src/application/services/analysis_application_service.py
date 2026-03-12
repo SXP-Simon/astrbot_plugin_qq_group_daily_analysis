@@ -462,6 +462,8 @@ class AnalysisApplicationService:
                 "success": True,
                 "batch_summary": batch.get_summary(),
                 "messages_count": len(unified_messages),
+                "group_id": group_id,
+                "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
     async def execute_incremental_final_report(

@@ -10,8 +10,8 @@ from typing import Any
 from apscheduler.triggers.cron import CronTrigger
 
 from ...application.services.analysis_application_service import DuplicateGroupTaskError
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
-from ...utils.trace_context import TraceContext
 from ..messaging.message_sender import MessageSender
 from ..platform.factory import PlatformAdapterFactory
 from ..reporting.dispatcher import ReportDispatcher

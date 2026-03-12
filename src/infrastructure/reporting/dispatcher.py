@@ -5,8 +5,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
-from ...utils.trace_context import TraceContext
 
 
 class ReportDispatcher:

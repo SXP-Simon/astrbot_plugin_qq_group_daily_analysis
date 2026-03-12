@@ -5,6 +5,7 @@
 """
 
 import functools
+import logging
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
@@ -143,6 +144,52 @@ class TraceContext:
         if auto_bind:
             new_ctx._token = _current_trace.set(new_ctx)
         return new_ctx
+
+    @staticmethod
+    def generate(prefix: str = "") -> str:
+        """
+        [兼容性接口] 生成一个带前缀的唯一追踪 ID。
+
+        Args:
+            prefix (str): 前缀，如 'manual_12345'
+
+        Returns:
+            str: 格式为 'prefix-uuid' 的字符串
+        """
+        uid = str(uuid.uuid4())[:8]
+        return f"{prefix}-{uid}" if prefix else uid
+
+    @classmethod
+    def set(cls, trace_id: str) -> None:
+        """
+        [兼容性接口] 直接设置当前上下文的 TraceID。
+        这会创建一个新的 TraceContext 实例并将其推入 ContextVar。
+
+        Args:
+            trace_id (str): 要设置的追踪 ID 字符串
+        """
+        ctx = cls(trace_id=trace_id)
+        # 注意：此处不手动存储 Token，依靠异步任务结束时 ContextVar 的自动清理。
+        _current_trace.set(ctx)
+
+    @classmethod
+    def get(cls) -> str:
+        """
+        [兼容性接口] 获取当前活跃的追踪 ID 字符串。
+        """
+        return get_trace_id()
+
+
+class TraceLogFilter(logging.Filter):
+    """
+    日志过滤器：自动将当前的 TraceID 注入每一条日志记录中。
+
+    配合日志格式化字符串 `[%(trace_id)s]` 使用。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.trace_id = get_trace_id()
+        return True
 
 
 def get_trace_id() -> str:
