@@ -1,14 +1,18 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.8.5] - fix(OneBot): 表情统计修复和群相册兼容性增强
-*   **🛠️ 健壮性增强**: 正确识别 QQ 表情包 (subType=1) (#99 @nagatoquin33)
-*   **🛠️ 健壮性增强**: 增强群相册兼容性 (#97)
-*   **🐛 去重优化**: 修复可选参数 days 以支持自定义分析天数 (#98)
+## [v4.8.6] - feat: 新增群相册上传严格模式，增强图片发送超时处理
+*   **🛠️ 健壮性增强**: 增强图片发送超时处理
+*   **🛠️ 健壮性增强**: 新增群相册上传严格模式 ([#102](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/issues/102))
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.8.5] - fix(OneBot): 表情统计修复和群相册兼容性增强
+*   **🛠️ 健壮性增强**: 正确识别 QQ 表情包 (subType=1) (#99 @nagatoquin33)
+*   **🛠️ 健壮性增强**: 增强群相册兼容性 (#97)
+*   **🐛 去重优化**: 修复可选参数 days 以支持自定义分析天数 (#98)
 
 ## [v4.8.4] - fix(OneBot): 兼容 napcat 和 llbot 获取历史消息接口
 
