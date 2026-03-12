@@ -1,13 +1,20 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.8.6] - feat: 新增群相册上传严格模式，增强图片发送超时处理
-*   **🛠️ 健壮性增强**: 增强图片发送超时处理
-*   **🛠️ 健壮性增强**: 新增群相册上传严格模式 ([#102](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/issues/102))
+## [v4.8.7] - feat: 语义化 Trace ID 注入与报告标签 ([#103](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/issues/103))
+
+*   **✨ 追踪可读性增强**: [TraceContext] 重构 TraceID 生成，支持包含群名和时间（如 manual_xxx群名称_时分），极大提升日志可读性，用户方便理解。
+*   **✨ 报告发送优化**: [视觉美化] 从用户可见消息（初始提示及图片 Caption）中彻底移除丑陋的 [ID: xxx] 字符串。
+*   **🛠️ 健壮性增强**: [去重增强] 在报告 Caption 中引入基于秒级时间戳的“隐式指纹”，配合共享正则匹配，确保去重逻辑能够正确执行。
+*   **🛠️ 健壮性增强**: [自动分析] 优化自动调度器逻辑，引入群名缓存，使服务端定时任务日志更具业务可读性。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.8.6] - feat: 新增群相册上传严格模式，增强图片发送超时处理
+*   **🛠️ 健壮性增强**: 增强图片发送超时处理
+*   **🛠️ 健壮性增强**: 新增群相册上传严格模式 ([#102](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/issues/102))
 
 ## [v4.8.5] - fix(OneBot): 表情统计修复和群相册兼容性增强
 *   **🛠️ 健壮性增强**: 正确识别 QQ 表情包 (subType=1) (#99 @nagatoquin33)
