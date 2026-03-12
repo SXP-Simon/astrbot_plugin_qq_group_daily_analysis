@@ -466,12 +466,23 @@ class GroupDailyAnalysis(Star):
             yield event.plain_result("❌ 此群未启用日常分析功能")
             return
 
-        # 设置 TraceID
-        trace_id = TraceContext.generate(prefix=f"manual_{group_id}")
+        # 获取群名以生成语义化的 TraceID
+        group_name = ""
+        try:
+            adapter = self.bot_manager.get_adapter(platform_id)
+            if adapter:
+                info = await adapter.get_group_info(group_id)
+                if info and info.group_name:
+                    group_name = info.group_name
+        except Exception:
+            pass
+
+        # 设置 TraceID (语义化格式: manual_群名_HHmm)
+        trace_id = TraceContext.generate(prefix="manual", group_name=group_name or group_id)
         TraceContext.set(trace_id)
 
         yield event.plain_result(
-            f"🔍 正在启动跨平台分析引擎，正在拉取最近消息...\n[ID: {trace_id}]"
+            "🔍 正在启动跨平台分析引擎，正在拉取最近消息..."
         )
 
         try:
@@ -492,7 +503,7 @@ class GroupDailyAnalysis(Star):
                 f"📊 已获取{result['messages_count']}条消息，正在生成渲染报告..."
             )
 
-            async for res in self._send_analysis_report(event, result, trace_id):
+            async for res in self._send_analysis_report(event, result):
                 yield res
 
         except DuplicateGroupTaskError:
@@ -504,7 +515,7 @@ class GroupDailyAnalysis(Star):
             )
 
     async def _send_analysis_report(
-        self, event: AstrMessageEvent, result: dict, trace_id: str
+        self, event: AstrMessageEvent, result: dict
     ) -> AsyncGenerator:
         """处理分析结果的渲染和发送"""
         group_id = result["group_id"]
@@ -536,17 +547,18 @@ class GroupDailyAnalysis(Star):
             )
 
             if image_url:
-                caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
+                caption = TraceContext.make_report_caption()
                 await adapter.send_image(group_id, image_url, caption=caption)
                 await self._try_upload_image(group_id, image_url, platform_id)
             elif html_content:
                 yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
+                caption = TraceContext.make_report_caption()
                 await self.retry_manager.add_task(
                     html_content,
                     analysis_result,
                     group_id,
                     platform_id,
-                    caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
+                    caption=caption,
                 )
             else:
                 text_report = self.report_generator.generate_text_report(

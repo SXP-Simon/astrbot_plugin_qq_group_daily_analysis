@@ -22,6 +22,7 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
+from ....shared.trace_context import REPORT_CAPTION_PATTERN
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 
@@ -644,14 +645,12 @@ class OneBotAdapter(PlatformAdapter):
                     "[OneBot] was_image_sent_recently: 无法确定机器人 ID，历史回显校验可能不准确"
                 )
 
-            # [优化] 如果提供了 token，我们也尝试从 caption 中提取 ID 部分进行更精准匹配
+            # [优化] 从 Caption 中提取基于时间戳的去重 Token
             search_token = None
-            if token and "[ID: " in token:
-                import re
-
-                match = re.search(r"\[ID: ([^\]]+)\]", token)
+            if token:
+                match = REPORT_CAPTION_PATTERN.search(token)
                 if match:
-                    search_token = match.group(0)  # 例如 "[ID: report_XXXX]"
+                    search_token = match.group(0)  # 例如 "| 03-12 17:33:20"
 
             for msg in reversed(messages):
                 msg_time = msg.get("time", 0)
