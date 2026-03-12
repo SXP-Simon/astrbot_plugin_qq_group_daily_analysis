@@ -6,11 +6,19 @@
 
 import functools
 import logging
+import re
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
+
+# Trace ID 中群名的最大长度（平衡可读性和日志宽度）
+_MAX_GROUP_NAME_LEN = 10
+
+# 用于匹配报告 Caption 中去重 Token 的正则模式
+# 格式: "| MM-DD HH:MM:SS"
+REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 # 当前追踪的上下文变量
 _current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
@@ -146,18 +154,51 @@ class TraceContext:
         return new_ctx
 
     @staticmethod
-    def generate(prefix: str = "") -> str:
+    def generate(prefix: str = "", group_name: str = "") -> str:
         """
-        [兼容性接口] 生成一个带前缀的唯一追踪 ID。
+        生成语义化、易读的追踪 ID。
+
+        格式: {来源}_{群名}_{时间点}
+        示例: manual_系统交流群_1733
+
+        由于插件存在任务锁 (DuplicateGroupTaskError)，确保了一个群同一时间只有一个分析任务，
+        因此 时间点 (HHmm) 已足够提供唯一性，无需 UUID 缀。
 
         Args:
-            prefix (str): 前缀，如 'manual_12345'
+            prefix (str): 来源标识，如 'manual', 'group', 'incr', 'report'
+            group_name (str): 可选群名，用于日志中快速识别
 
         Returns:
-            str: 格式为 'prefix-uuid' 的字符串
+            str: 语义化 TraceID 字符串
         """
-        uid = str(uuid.uuid4())[:8]
-        return f"{prefix}-{uid}" if prefix else uid
+        timestamp = datetime.now().strftime("%H%M")
+
+        parts: list[str] = []
+        if prefix:
+            parts.append(prefix)
+        if group_name:
+            # 清理：移除空白符和文件系统不安全字符
+            safe_name = re.sub(r'[\s\n\r\t/\\:*?"<>|\[\]{}]', "", group_name)
+            safe_name = safe_name[:_MAX_GROUP_NAME_LEN]
+            if safe_name:
+                parts.append(safe_name)
+        parts.append(timestamp)
+
+        return "_".join(parts)
+
+    @staticmethod
+    def make_report_caption() -> str:
+        """
+        生成整洁的、面向用户的报告 Caption，包含用于去重的隐式时间戳。
+
+        该时间戳用作图片去重检查的 Token。
+        格式: "📊 每日群聊分析报告已生成 | MM-DD HH:MM:SS"
+
+        Returns:
+            str: 报告 Caption 字符串
+        """
+        ts = datetime.now().strftime("%m-%d %H:%M:%S")
+        return f"📊 每日群聊分析报告已生成 | {ts}"
 
     @classmethod
     def set(cls, trace_id: str) -> None:

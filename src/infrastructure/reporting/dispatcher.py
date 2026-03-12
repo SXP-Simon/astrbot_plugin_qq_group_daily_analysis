@@ -38,7 +38,7 @@ class ReportDispatcher:
         trace_id = TraceContext.get()
         output_format = self.config_manager.get_output_format()
         logger.info(
-            f"[{trace_id}] Dispatching report for group {group_id} (Format: {output_format})"
+            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
         )
 
         success = False
@@ -51,11 +51,11 @@ class ReportDispatcher:
 
         if success:
             logger.info(
-                f"[{trace_id}] Report dispatched successfully for group {group_id}"
+                f"[{trace_id}] 群 {group_id} 的报告分发成功"
             )
         else:
             logger.warning(
-                f"[{trace_id}] Failed to dispatch report for group {group_id}"
+                f"[{trace_id}] 群 {group_id} 的报告分发失败"
             )
 
     async def _dispatch_image(
@@ -65,7 +65,7 @@ class ReportDispatcher:
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(
-                f"[{trace_id}] HTML render function not set, falling back to text."
+                f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。"
             )
             return await self._dispatch_text(group_id, analysis_result, platform_id)
 
@@ -94,7 +94,7 @@ class ReportDispatcher:
 
         # 3. 发送图片
         if image_url:
-            caption = f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]"
+            caption = TraceContext.make_report_caption()
             sent = await self.message_sender.send_image_smart(
                 group_id, image_url, caption, platform_id
             )
@@ -120,7 +120,7 @@ class ReportDispatcher:
                     analysis_result,
                     group_id,
                     platform_id,
-                    caption=f"📊 每日群聊分析报告已生成：\n[ID: {trace_id}]",
+                    caption=TraceContext.make_report_caption(),
                 )
                 return True  # 已加入队列视作处理成功 (不在此处报错)
             else:

@@ -49,6 +49,9 @@ class AutoScheduler:
         self.scheduler_job_ids = []  # 存储已注册的定时任务 ID
         self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
 
+        # Cache: group_id -> group_name (populated lazily)
+        self._group_name_cache: dict[str, str] = {}
+
     def set_bot_instance(self, bot_instance):
         """设置bot实例（保持向后兼容）"""
         self.bot_manager.set_bot_instance(bot_instance)
@@ -110,6 +113,30 @@ class AutoScheduler:
         except Exception as e:
             logger.error(f"❌ 获取平台ID失败: {e}")
             return None
+    async def _get_group_name_safe(
+        self, group_id: str, platform_id: str | None = None
+    ) -> str:
+        """
+        为 TraceID 生成解析可读的群名。
+        使用内存缓存以避免重复的 API 调用。
+        若名称不可用，则回退到 group_id。
+        """
+        if group_id in self._group_name_cache:
+            return self._group_name_cache[group_id]
+
+        try:
+            pid = platform_id or await self.get_platform_id_for_group(group_id)
+            if pid:
+                adapter = self.bot_manager.get_adapter(pid)
+                if adapter:
+                    info = await adapter.get_group_info(group_id)
+                    if info and info.group_name:
+                        self._group_name_cache[group_id] = info.group_name
+                        return info.group_name
+        except Exception:
+            pass
+
+        return group_id
 
     # ================================================================
     # 任务注册与取消
@@ -381,8 +408,9 @@ class AutoScheduler:
     ):
         """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
         try:
-            # 设置 TraceID
-            trace_id = TraceContext.generate(prefix=f"group_{group_id}")
+            # 解析可读群名以生成语义化的 TraceID
+            group_name = await self._get_group_name_safe(group_id, target_platform_id)
+            trace_id = TraceContext.generate(prefix="group", group_name=group_name)
             TraceContext.set(trace_id)
 
             logger.info(
@@ -542,8 +570,9 @@ class AutoScheduler:
     ):
         """为指定群执行增量分析（业务逻辑委派给 AnalysisApplicationService）"""
         try:
-            # 设置 TraceID
-            trace_id = TraceContext.generate(prefix=f"incr_{group_id}")
+            # 解析可读群名以生成语义化的 TraceID
+            group_name = await self._get_group_name_safe(group_id, target_platform_id)
+            trace_id = TraceContext.generate(prefix="incr", group_name=group_name)
             TraceContext.set(trace_id)
 
             logger.info(
@@ -683,8 +712,9 @@ class AutoScheduler:
     ):
         """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
         try:
-            # 设置 TraceID
-            trace_id = TraceContext.generate(prefix=f"report_{group_id}")
+            # 解析可读群名以生成语义化的 TraceID
+            group_name = await self._get_group_name_safe(group_id, target_platform_id)
+            trace_id = TraceContext.generate(prefix="report", group_name=group_name)
             TraceContext.set(trace_id)
 
             logger.info(
