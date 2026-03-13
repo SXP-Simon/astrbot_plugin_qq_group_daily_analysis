@@ -266,7 +266,7 @@ class ConfigManager:
         return ""
 
     def get_golden_quote_analysis_prompt(
-        self, style: str = "golden_quote_prompt"
+        self, style: str = "golden_quote_v2_prompt"
     ) -> str:
         """获取金句分析提示词模板"""
         prompts_config = self._get_group("prompts").get(
@@ -298,7 +298,7 @@ class ConfigManager:
         prompts = self._ensure_group("prompts")
         if "golden_quote_analysis_prompts" not in prompts:
             prompts["golden_quote_analysis_prompts"] = {}
-        prompts["golden_quote_analysis_prompts"]["golden_quote_prompt"] = prompt
+        prompts["golden_quote_analysis_prompts"]["golden_quote_v2_prompt"] = prompt
         self.config.save_config()
 
     def set_output_format(self, format_type: str):

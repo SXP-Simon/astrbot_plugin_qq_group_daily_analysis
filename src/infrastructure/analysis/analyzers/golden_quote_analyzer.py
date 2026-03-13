@@ -53,9 +53,9 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
         if not data:
             return ""
 
-        # 构建消息文本
+        # 构建消息文本 (用 [user_id] 替代 nickname 以确保回填 100% 准确，避免 Emoji 等干扰)
         messages_text = "\n".join(
-            [f"[{msg['time']}] {msg['sender']}: {msg['content']}" for msg in data]
+            [f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}" for msg in data]
         )
 
         max_golden_quotes = self.get_max_count()
@@ -155,17 +155,24 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
             quotes, usage = await self.analyze(interesting_messages, umo, session_id)
 
-            # 回填 User ID
+            # 建立 ID 到昵称的映射表用于恢复显示
+            id_to_nickname = {}
+            for msg in interesting_messages:
+                uid = str(msg.get("user_id", ""))
+                if uid:
+                    id_to_nickname[uid] = msg.get("sender", "")
+
+            # 回填 User ID 并恢复发送者昵称
             for quote in quotes:
-                for msg in interesting_messages:
-                    # 尝试匹配内容和发送者
-                    # 注意：LLM 可能会微调内容，这里使用包含匹配或精确匹配
-                    if (
-                        quote.content in msg["content"]
-                        or msg["content"] in quote.content
-                    ) and quote.sender == msg["sender"]:
-                        quote.user_id = str(msg.get("user_id", ""))
-                        break
+                # 此时 quote.sender 包含的是 Prompt 中的 [user_id]
+                # 有些 LLM 可能会带上中括号，尝试清理
+                potential_id = quote.sender.strip().strip("[]")
+
+                if potential_id in id_to_nickname:
+                    quote.user_id = potential_id
+                    quote.sender = id_to_nickname[potential_id]
+                else:
+                    logger.warning(f"[金句分析] 无法匹配 User ID: {potential_id}，金句将无法显示真实头像。")
 
             return quotes, usage
 
