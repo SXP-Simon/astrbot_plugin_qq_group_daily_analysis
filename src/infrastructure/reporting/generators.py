@@ -295,7 +295,7 @@ class ReportGenerator(IReportGenerator):
 
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
-            processed_detail = await self._process_topic_detail(
+            processed_detail = await self._render_mentions(
                 topic.detail, avatar_getter, nickname_getter, user_analysis
             )
             topics_list.append(
@@ -341,11 +341,15 @@ class ReportGenerator(IReportGenerator):
                 if quote.user_id
                 else None
             )
+            # 处理解析锐评中的用户引用头像
+            processed_reason = await self._render_mentions(
+                quote.reason, avatar_getter, nickname_getter, user_analysis
+            )
             quotes_list.append(
                 {
                     "content": quote.content,
                     "sender": quote.sender,
-                    "reason": quote.reason,
+                    "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
             )
@@ -391,22 +395,22 @@ class ReportGenerator(IReportGenerator):
         logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
         return render_data
 
-    async def _process_topic_detail(
+    async def _render_mentions(
         self,
-        detail: str,
+        text: str,
         avatar_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
     ) -> str:
         """
-        处理话题详情，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
+        处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
         """
         import re
 
         pattern = r"\[(\d+)\]"
-        matches = re.findall(pattern, detail)
+        matches = re.findall(pattern, text)
         if not matches:
-            return detail
+            return text
 
         async def replacer(match):
             uid = match.group(1)
@@ -457,12 +461,12 @@ class ReportGenerator(IReportGenerator):
         # 这里为了保持异步特性，我们需要手动处理
 
         # 1. 找出所有匹配项
-        matches = list(re.finditer(pattern, detail))
+        matches = list(re.finditer(pattern, text))
         if not matches:
-            return detail
+            return text
 
         # 2. 从后往前替换，保持索引正确
-        result = detail
+        result = text
         for match in reversed(matches):
             replacement = await replacer(match)
             start, end = match.span()
