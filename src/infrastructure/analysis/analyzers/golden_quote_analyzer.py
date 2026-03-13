@@ -172,7 +172,9 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
                     quote.user_id = potential_id
                     quote.sender = id_to_nickname[potential_id]
                 else:
-                    logger.warning(f"[金句分析] 无法匹配 User ID: {potential_id}，金句将无法显示真实头像。")
+                    logger.warning(
+                        f"[金句分析] 无法匹配 User ID: {potential_id}，金句将无法显示真实头像。"
+                    )
 
             return quotes, usage
 
