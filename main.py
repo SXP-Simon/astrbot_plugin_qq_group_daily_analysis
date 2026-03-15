@@ -417,11 +417,27 @@ class GroupDailyAnalysis(Star):
             if enable_album and hasattr(adapter, "upload_group_album"):
                 try:
                     album_name = self.config_manager.get_group_album_name()
+                    strict_mode = self.config_manager.get_group_album_strict_mode()
                     album_id = None
-                    if album_name and hasattr(adapter, "find_album_id"):
-                        album_id = await adapter.find_album_id(group_id, album_name)  # type: ignore[attr-defined]
+                    if hasattr(adapter, "find_album_id"):
+                        if album_name:
+                            album_id = await adapter.find_album_id(group_id, album_name)  # type: ignore[attr-defined]
+                            if not album_id and strict_mode:
+                                logger.info(
+                                    f"群相册严格模式开启：在群 {group_id} 中未找到名为 '{album_name}' 的相册，停止上传。"
+                                )
+                                return
+                        elif strict_mode:
+                            logger.info(
+                                f"群相册严格模式开启：未设置目标相册名称，停止上传以防止操作群 {group_id} 的默认相册。"
+                            )
+                            return
                     await adapter.upload_group_album(  # type: ignore[attr-defined]
-                        group_id, image_file, album_id=album_id, album_name=album_name
+                        group_id,
+                        image_file,
+                        album_id=album_id,
+                        album_name=album_name,
+                        strict_mode=strict_mode,
                     )
                 except Exception as e:
                     logger.warning(f"群相册上传失败 (群 {group_id}): {e}")

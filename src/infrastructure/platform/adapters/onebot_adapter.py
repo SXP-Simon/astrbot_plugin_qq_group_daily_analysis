@@ -1134,6 +1134,7 @@ class OneBotAdapter(PlatformAdapter):
         image_path: str,
         album_id: str | None = None,
         album_name: str | None = None,
+        strict_mode: bool = False,
     ) -> bool:
         """
         上传图片到群相册（NapCat 扩展 API）。
@@ -1146,11 +1147,19 @@ class OneBotAdapter(PlatformAdapter):
             image_path: 本地图片文件的绝对路径
             album_id: 目标相册 ID
             album_name: 目标相册名称（部分 API 需要）
+            strict_mode: 严格模式。开启后，当指定了 album_name 但找不到对应相册时将直接终止上传
 
         Returns:
             bool: 上传是否成功
         """
         try:
+            # 严格模式：指定了相册名但未解析到 album_id 时，禁止回退默认相册
+            if strict_mode and album_name and not album_id:
+                logger.info(
+                    f"群相册严格模式开启：未找到目标相册 '{album_name}' (群 {group_id})，停止上传。"
+                )
+                return False
+
             # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
             if not album_id:
                 albums = await self.get_group_album_list(group_id)
