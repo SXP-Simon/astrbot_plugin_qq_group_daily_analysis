@@ -253,7 +253,11 @@ class ReportDispatcher:
                     return
 
             await adapter.upload_group_album(
-                group_id, file_path, album_id=album_id, album_name=album_name
+                group_id,
+                file_path,
+                album_id=album_id,
+                album_name=album_name,
+                strict_mode=strict_mode,
             )
         except Exception as e:
             logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
