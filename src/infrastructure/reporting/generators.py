@@ -29,9 +29,9 @@ class ReportGenerator(IReportGenerator):
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
-        
+
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
-        self._runtime_avatar_cache = {} # user_id -> base64_uri
+        self._runtime_avatar_cache = {}  # user_id -> base64_uri
         self._avatar_session = None
 
     async def generate_image_report(
@@ -536,7 +536,7 @@ class ReportGenerator(IReportGenerator):
         # 0. 检查运行时缓存
         if user_id in self._runtime_avatar_cache:
             return self._runtime_avatar_cache[user_id]
-            
+
         res = await self._get_user_avatar_internal(user_id, avatar_getter)
         self._runtime_avatar_cache[user_id] = res
         return res
@@ -544,11 +544,10 @@ class ReportGenerator(IReportGenerator):
     async def _get_user_avatar_internal(self, user_id: str, avatar_getter=None) -> str:
         """核心头像获取逻辑"""
         import base64
-        
+
         if not self._avatar_session:
             self._avatar_session = aiohttp.ClientSession(
-                trust_env=True, 
-                timeout=aiohttp.ClientTimeout(total=15)
+                trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
             )
 
         try:
@@ -612,16 +611,25 @@ class ReportGenerator(IReportGenerator):
                                     is_valid_image = True
                                 elif content.startswith(b"GIF8"):  # GIF
                                     is_valid_image = True
-                                elif content.startswith(b"RIFF") and b"WEBP" in content[:16]:  # WebP
+                                elif (
+                                    content.startswith(b"RIFF")
+                                    and b"WEBP" in content[:16]
+                                ):  # WebP
                                     is_valid_image = True
 
                                 if is_valid_image:
-                                    await asyncio.to_thread(file_path.write_bytes, content)
+                                    await asyncio.to_thread(
+                                        file_path.write_bytes, content
+                                    )
                                     file_content = content
                                 else:
-                                    logger.warning(f"下载的头像数据格式无效 ({safe_avatar_url})")
+                                    logger.warning(
+                                        f"下载的头像数据格式无效 ({safe_avatar_url})"
+                                    )
                         else:
-                            logger.warning(f"下载头像失败 {safe_avatar_url}: {response.status}")
+                            logger.warning(
+                                f"下载头像失败 {safe_avatar_url}: {response.status}"
+                            )
                 except Exception as e:
                     logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
 
