@@ -434,8 +434,15 @@ class ConfigManager:
         return self._get_group("qq_group_upload").get("group_album_name", "")
 
     def get_group_album_strict_mode(self) -> bool:
-        """获取极简模式开关：当未找到指定相册时是否禁止回退到默认相册"""
-        return self._get_group("qq_group_upload").get("group_album_strict_mode", False)
+        """获取群相册上传严格模式开关。"""
+        group = self._get_group("qq_group_upload")
+        value = group.get("group_album_strict_mode", True)
+
+        # 兼容某些环境下被序列化为字符串的布尔值
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+
+        return bool(value)
 
     def set_group_album_strict_mode(self, enabled: bool):
         """设置群相册上传严格模式"""
