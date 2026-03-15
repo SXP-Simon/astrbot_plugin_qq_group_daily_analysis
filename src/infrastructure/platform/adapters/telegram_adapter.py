@@ -161,7 +161,6 @@ class TelegramAdapter(PlatformAdapter):
         logger.warning("无法从 bot_instance 获取 Telegram 客户端")
         return None
 
-
     # ==================== IMessageRepository ====================
 
     async def fetch_messages(
@@ -299,7 +298,7 @@ class TelegramAdapter(PlatformAdapter):
         # 尝试从 bot 实例获取
         if hasattr(self.bot, "meta") and callable(self.bot.meta):
             try:
-                meta = self.bot.meta() # type: ignore
+                meta = self.bot.meta()  # type: ignore
                 if hasattr(meta, "id"):
                     return str(getattr(meta, "id", "telegram"))
             except Exception:
