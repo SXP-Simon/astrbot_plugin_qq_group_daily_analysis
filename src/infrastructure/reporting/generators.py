@@ -29,6 +29,10 @@ class ReportGenerator(IReportGenerator):
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
+        
+        # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
+        self._runtime_avatar_cache = {} # user_id -> base64_uri
+        self._avatar_session = None
 
     async def generate_image_report(
         self,
@@ -181,6 +185,12 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
             return None, html_content
+        finally:
+            # 清理本次运行的 session 和缓存
+            if self._avatar_session:
+                await self._avatar_session.close()
+                self._avatar_session = None
+            self._runtime_avatar_cache.clear()
 
     async def generate_pdf_report(
         self,
@@ -521,14 +531,25 @@ class ReportGenerator(IReportGenerator):
     async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str:
         """
         获取用户头像的 Base64 Data URI。
-
-        策略：
-        1. 优先使用本地缓存文件
-        2. 下载并保存到 data/plugin_data/.../cache/avatars/
-        3. 读取文件并转换为 Base64，嵌入 HTML
-        这是为了解决 Docker/沙箱环境中渲染器无法访问宿主机 file:// 路径的问题。
+        增加了运行时内存缓存，避免单次生成任务中重复下载。
         """
+        # 0. 检查运行时缓存
+        if user_id in self._runtime_avatar_cache:
+            return self._runtime_avatar_cache[user_id]
+            
+        res = await self._get_user_avatar_internal(user_id, avatar_getter)
+        self._runtime_avatar_cache[user_id] = res
+        return res
+
+    async def _get_user_avatar_internal(self, user_id: str, avatar_getter=None) -> str:
+        """核心头像获取逻辑"""
         import base64
+        
+        if not self._avatar_session:
+            self._avatar_session = aiohttp.ClientSession(
+                trust_env=True, 
+                timeout=aiohttp.ClientTimeout(total=15)
+            )
 
         try:
             # 1. 准备缓存目录
@@ -578,45 +599,31 @@ class ReportGenerator(IReportGenerator):
 
                 # 5. 下载并保存
                 safe_avatar_url = self._safe_url_for_log(avatar_url)
-                async with aiohttp.ClientSession() as client:
-                    try:
-                        async with client.get(
-                            avatar_url, timeout=aiohttp.ClientTimeout(total=5)
-                        ) as response:
-                            if response.status == 200:
-                                content = await response.read()
-                                if content:
-                                    # 校验文件头
-                                    is_valid_image = False
-                                    if content.startswith(b"\xff\xd8"):  # JPEG
-                                        is_valid_image = True
-                                    elif content.startswith(
-                                        b"\x89PNG\r\n\x1a\n"
-                                    ):  # PNG
-                                        is_valid_image = True
-                                    elif content.startswith(b"GIF8"):  # GIF
-                                        is_valid_image = True
-                                    elif (
-                                        content.startswith(b"RIFF")
-                                        and b"WEBP" in content[:16]
-                                    ):  # WebP
-                                        is_valid_image = True
+                try:
+                    async with self._avatar_session.get(avatar_url) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            if content:
+                                # 校验文件头
+                                is_valid_image = False
+                                if content.startswith(b"\xff\xd8"):  # JPEG
+                                    is_valid_image = True
+                                elif content.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
+                                    is_valid_image = True
+                                elif content.startswith(b"GIF8"):  # GIF
+                                    is_valid_image = True
+                                elif content.startswith(b"RIFF") and b"WEBP" in content[:16]:  # WebP
+                                    is_valid_image = True
 
-                                    if is_valid_image:
-                                        await asyncio.to_thread(
-                                            file_path.write_bytes, content
-                                        )
-                                        file_content = content
-                                    else:
-                                        logger.warning(
-                                            f"下载的头像数据格式无效 ({safe_avatar_url})"
-                                        )
-                            else:
-                                logger.warning(
-                                    f"下载头像失败 {safe_avatar_url}: {response.status}"
-                                )
-                    except Exception as e:
-                        logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
+                                if is_valid_image:
+                                    await asyncio.to_thread(file_path.write_bytes, content)
+                                    file_content = content
+                                else:
+                                    logger.warning(f"下载的头像数据格式无效 ({safe_avatar_url})")
+                        else:
+                            logger.warning(f"下载头像失败 {safe_avatar_url}: {response.status}")
+                except Exception as e:
+                    logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
 
             # 6. 转换为 Base64 Data URI
             if file_content:
