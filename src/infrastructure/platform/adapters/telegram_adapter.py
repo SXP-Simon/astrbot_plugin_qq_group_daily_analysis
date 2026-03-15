@@ -6,6 +6,8 @@ Telegram 平台适配器
 """
 
 import asyncio
+import base64
+import os
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -54,7 +56,7 @@ class TelegramAdapter(PlatformAdapter):
 
     def __init__(self, bot_instance: Any, config: dict | None = None):
         super().__init__(bot_instance, config)
-        self._cached_client: ExtBot | None = None
+        self._cached_client: Any = None
         self._context: Context | None = None
 
         # 机器人自身 ID（用于消息过滤）
@@ -118,7 +120,7 @@ class TelegramAdapter(PlatformAdapter):
         return list(set(groups))
 
     @property
-    def _telegram_client(self) -> "ExtBot | None":
+    def _telegram_client(self) -> Any:
         """
         懒加载获取 Telegram 客户端
 
@@ -132,14 +134,14 @@ class TelegramAdapter(PlatformAdapter):
             return None
 
         # 路径 A: bot 本身就是 ExtBot
-        if isinstance(self.bot, ExtBot):
+        if ExtBot is not None and isinstance(self.bot, ExtBot):
             self._cached_client = self.bot
             return self._cached_client
 
         # 路径 B: bot.client
         if hasattr(self.bot, "client"):
             client = self.bot.client
-            if isinstance(client, ExtBot):
+            if ExtBot is not None and isinstance(client, ExtBot):
                 self._cached_client = client
                 return self._cached_client
 
@@ -159,9 +161,6 @@ class TelegramAdapter(PlatformAdapter):
         logger.warning("无法从 bot_instance 获取 Telegram 客户端")
         return None
 
-    def _init_capabilities(self) -> PlatformCapabilities:
-        """返回 Telegram 平台能力声明"""
-        return TELEGRAM_CAPABILITIES
 
     # ==================== IMessageRepository ====================
 
@@ -231,7 +230,8 @@ class TelegramAdapter(PlatformAdapter):
                 for record in history_records:
                     if before_id_int is not None:
                         try:
-                            if int(record.id) >= before_id_int:
+                            rec_id = getattr(record, "id", None)
+                            if rec_id is not None and int(rec_id) >= before_id_int:
                                 continue
                         except (TypeError, ValueError):
                             pass
@@ -299,9 +299,9 @@ class TelegramAdapter(PlatformAdapter):
         # 尝试从 bot 实例获取
         if hasattr(self.bot, "meta") and callable(self.bot.meta):
             try:
-                meta = self.bot.meta()
+                meta = self.bot.meta() # type: ignore
                 if hasattr(meta, "id"):
-                    return meta.id
+                    return str(getattr(meta, "id", "telegram"))
             except Exception:
                 pass
         return "telegram"
@@ -531,9 +531,6 @@ class TelegramAdapter(PlatformAdapter):
                 kwargs["caption"] = caption
 
             # 1. 统一处理输入源 (Base64 / URL / Local File)
-            import base64
-            import os
-            from datetime import datetime
             if image_path.startswith("base64://"):
                 data = base64.b64decode(image_path[len("base64://") :])
                 file_obj = BytesIO(data)
@@ -547,14 +544,17 @@ class TelegramAdapter(PlatformAdapter):
             elif image_path.startswith(("http://", "https://")):
                 try:
                     import aiohttp
+
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(image_path, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                        async with session.get(
+                            image_path, timeout=aiohttp.ClientTimeout(total=30)
+                        ) as resp:
                             if resp.status == 200:
                                 data = await resp.read()
                                 file_obj = BytesIO(data)
                                 is_temp_obj = True
                             else:
-                                file_obj = image_path # 尝试直接发 URL
+                                file_obj = image_path  # 尝试直接发 URL
                 except Exception as e:
                     logger.warning(f"[Telegram] 下载图片失败，尝试直接发送: {e}")
                     file_obj = image_path
@@ -579,7 +579,10 @@ class TelegramAdapter(PlatformAdapter):
         except Exception as e:
             err_msg = str(e)
             # Photo_invalid_dimensions: Telegram 报错提示图片长宽比例或总尺寸不合规
-            if "Photo_invalid_dimensions" in err_msg or "Photo invalid dimensions" in err_msg:
+            if (
+                "Photo_invalid_dimensions" in err_msg
+                or "Photo invalid dimensions" in err_msg
+            ):
                 logger.warning("[Telegram] 图片尺寸超限，正在尝试以文件形式发送...")
                 # 构造一个更有意义的文件名
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -602,10 +605,6 @@ class TelegramAdapter(PlatformAdapter):
             return False
 
         try:
-            import os
-            import base64
-            from io import BytesIO
-
             chat_id, message_thread_id = self._parse_group_id(group_id)
             file_obj: Any = None
             is_temp_obj = False
