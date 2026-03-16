@@ -1237,7 +1237,9 @@ class OneBotAdapter(PlatformAdapter):
                             f"[群分析相册] Base64 接口 2 (upload_group_album) 失败: {e3}"
                         )
                         await self.bot.call_action("upload_qun_album", **params)
-                        logger.info("[群分析相册] Base64 模式 (upload_qun_album) 上传成功")
+                        logger.info(
+                            "[群分析相册] Base64 模式 (upload_qun_album) 上传成功"
+                        )
                         return True
 
         except Exception as e:
@@ -1294,7 +1296,9 @@ class OneBotAdapter(PlatformAdapter):
 
         for action in actions:
             try:
-                logger.debug(f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})...")
+                logger.debug(
+                    f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})..."
+                )
                 result = await self.bot.call_action(
                     action,
                     group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
@@ -1329,7 +1333,9 @@ class OneBotAdapter(PlatformAdapter):
         if not album_name:
             return None
 
-        logger.debug(f"[群分析相册] 正在群 {group_id} 中查找名为 '{album_name}' 的相册...")
+        logger.debug(
+            f"[群分析相册] 正在群 {group_id} 中查找名为 '{album_name}' 的相册..."
+        )
         albums = await self.get_group_album_list(group_id)
         for album in albums:
             name = album.get("name") or album.get("album_name", "")

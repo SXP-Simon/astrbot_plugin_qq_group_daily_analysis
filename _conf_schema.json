@@ -220,6 +220,12 @@
                 "description": "最大金句数量",
                 "default": 5,
                 "hint": "分析报告中显示的最大金句数量，依赖于 LLM 输出的格式化信息质量，模型越好结果越好，可能出现数量不匹配。"
+            },
+            "keep_original_persona": {
+                "description": "是否保持原始人格设定参与回复",
+                "type": "bool",
+                "default": false,
+                "hint": "开启后，若当前会话存在人格设定，将尝试读取其 Prompt 融入系统提示词。尽量保持分析报告的说话倾向与会话人设一致。"
             }
         }
     },

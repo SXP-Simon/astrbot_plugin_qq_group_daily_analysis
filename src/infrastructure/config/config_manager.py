@@ -220,6 +220,10 @@ class ConfigManager:
         """获取金句分析专用 Provider ID"""
         return self._get_group("llm").get("golden_quote_provider_id", "")
 
+    def get_keep_original_persona(self) -> bool:
+        """获取是否保持原始人格设定"""
+        return self._get_group("analysis_features").get("keep_original_persona", False)
+
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
         try:

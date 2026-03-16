@@ -19,7 +19,7 @@ from ..utils.llm_utils import (
 class BaseAnalyzer(ABC):
     """
     基础分析器抽象类
-    定义所有分析器的通用接口和流程
+    定义所有分析器的通用接口 and 流程
     """
 
     def __init__(self, context, config_manager):
@@ -172,10 +172,6 @@ class BaseAnalyzer(ABC):
 
             # 保存调试数据
             debug_mode = self.config_manager.get_debug_mode()
-            logger.info(
-                f"[Debug] debug_mode={debug_mode}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
-            )  # Added log
-
             if debug_mode and session_id and prompt:
                 self._save_debug_data(prompt, session_id)
             elif debug_mode and not session_id:
@@ -193,14 +189,37 @@ class BaseAnalyzer(ABC):
             temperature = self.get_temperature()
             provider_id_key = self.get_provider_id_key()
 
+            # 获取人格设定
+            system_prompt = await self._build_system_prompt(umo)
+
+            # 如果开启了人格设定且成功获取到 Prompt，我们将其注入到主提示词中，以确保最佳效果
+            if system_prompt:
+                logger.info(f"[{self.get_data_type()}分析] 已启用人格设定")
+                # 在主提示词前添加人格说明，并要求 LLM 保持风格
+                prompt = (
+                    f"你可以扮演以下人格：\n{system_prompt}\n\n"
+                    f"请在接下来的分析工作中，保持上述人格的角色定位和说话风格。\n"
+                    "--- 任务开始 ---\n"
+                    f"{prompt}"
+                )
+
+            logger.info(f"[{self.get_data_type()}分析] 开始发起 LLM 请求, umo: {umo}")
+
+            # [Debug] 记录调试信息
+            if debug_mode:
+                logger.debug(
+                    f"[Debug] debug_mode={debug_mode}, umo={umo}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
+                )
+
             response = await call_provider_with_retry(
                 self.context,
                 self.config_manager,
-                prompt,
-                max_tokens,
-                temperature,
-                umo,
-                provider_id_key,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                umo=umo,
+                provider_id_key=provider_id_key,
+                system_prompt=system_prompt,
             )
 
             if response is None:
@@ -274,3 +293,88 @@ class BaseAnalyzer(ABC):
             温度参数
         """
         return 0.6
+
+    async def _build_system_prompt(self, umo: str | None) -> str | None:
+        """
+        构建带有会话人格的系统提示词
+        """
+        keep = self.config_manager.get_keep_original_persona()
+        if not keep or not umo:
+            return None
+
+        # 获取人格管理器
+        persona_mgr = getattr(self.context, "persona_manager", None)
+        if persona_mgr is None:
+            return None
+
+        persona_prompt = None
+        try:
+            # 1. 尝试从 SharedPreferences 获取当前会话选中的人格 ID (类似 /persona 设置的)
+            from astrbot.api import sp
+
+            # resolve_selected_persona 的简化逻辑
+            session_service_config = await sp.get_async(
+                scope="umo", scope_id=str(umo), key="session_service_config", default={}
+            )
+            persona_id = (
+                session_service_config.get("persona_id")
+                if session_service_config
+                else None
+            )
+
+            if persona_id and persona_id != "[%None]":
+                # 获取指定人格
+                persona_obj = await persona_mgr.get_persona(persona_id)
+                persona_prompt = (
+                    persona_obj.system_prompt
+                    if hasattr(persona_obj, "system_prompt")
+                    else None
+                )
+                if persona_prompt:
+                    logger.debug(f"找到会话选定的人格: {persona_id}")
+
+            # 2. 如果没有选定人格，尝试获取当前对话的人格 ID (Dialogue Persona)
+            if not persona_prompt:
+                conv_mgr = getattr(self.context, "conversation_manager", None)
+                if conv_mgr:
+                    curr_conv_id = await conv_mgr.get_curr_conversation_id(umo)
+                    if curr_conv_id:
+                        conv_obj = await conv_mgr.get_conversation(umo, curr_conv_id)
+                        if (
+                            conv_obj
+                            and conv_obj.persona_id
+                            and conv_obj.persona_id != "[%None]"
+                        ):
+                            persona_obj = await persona_mgr.get_persona(
+                                conv_obj.persona_id
+                            )
+                            persona_prompt = (
+                                persona_obj.system_prompt
+                                if hasattr(persona_obj, "system_prompt")
+                                else None
+                            )
+                            if persona_prompt:
+                                logger.debug(
+                                    f"找到对话设定的人格: {conv_obj.persona_id} (conv_id: {curr_conv_id})"
+                                )
+
+            # 3. 如果还是没有，回退到 UMO 默认人格
+            if not persona_prompt:
+                personality = await persona_mgr.get_default_persona_v3(umo)
+                if isinstance(personality, dict):
+                    persona_prompt = personality.get("prompt")
+                else:
+                    persona_prompt = getattr(personality, "prompt", None)
+                if persona_prompt:
+                    logger.debug("使用 UMO 默认人格设定")
+
+        except Exception as e:
+            logger.warning(f"获取人格设定失败 (umo: {umo}): {e}")
+            return None
+
+        if not isinstance(persona_prompt, str) or not persona_prompt.strip():
+            return None
+
+        # 构建系统提示词，要求 LLM 保持人格设定
+        system_prompt = persona_prompt.strip()
+        return system_prompt
