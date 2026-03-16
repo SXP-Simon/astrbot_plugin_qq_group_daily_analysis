@@ -1153,24 +1153,26 @@ class OneBotAdapter(PlatformAdapter):
             bool: 上传是否成功
         """
         try:
+            logger.info(
+                f"[群分析相册] 开始上传流程: 群={group_id}, 图片={image_path}, 目标={album_name or '默认'}"
+            )
             # 严格模式：指定了相册名但未解析到 album_id 时，禁止回退默认相册
             if strict_mode and album_name and not album_id:
                 logger.info(
-                    f"群相册严格模式开启：未找到目标相册 '{album_name}' (群 {group_id})，停止上传。"
+                    f"群分析相册严格模式开启：未找到目标相册 '{album_name}' (群 {group_id})，停止上传。"
                 )
                 return False
 
             # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
             if not album_id:
+                logger.debug("[群分析相册] 未指定 album_id，正在尝试拉取相册列表...")
                 albums = await self.get_group_album_list(group_id)
                 if albums:
                     album_id = str(
                         albums[0].get("album_id") or albums[0].get("id") or ""
                     )
                     if album_id:
-                        logger.debug(
-                            f"未指定有效的相册，自动选择默认相册 ID: {album_id}"
-                        )
+                        logger.debug(f"[群分析相册] 自动选择默认相册 ID: {album_id}")
 
             if not album_id:
                 logger.info(
@@ -1190,14 +1192,16 @@ class OneBotAdapter(PlatformAdapter):
                     params["album_name"] = album_name
 
                 logger.debug(
-                    f"尝试调用 upload_image_to_qun_album (路径模式), 参数: {params}"
+                    f"[群分析相册] 正在调用 upload_image_to_qun_album (路径模式), 参数: {params}"
                 )
                 await self.bot.call_action("upload_image_to_qun_album", **params)
-                logger.info(f"OneBot (路径模式) 群相册上传成功: 群 {group_id}")
+                logger.info(f"[群分析相册] 路径模式上传成功: 群 {group_id}")
                 return True
             except Exception as e1:
                 # 策略 2: 路径失败，尝试 Base64 模式
-                logger.warning(f"路径上传相册失败 ({e1})，尝试 Base64 回退模式...")
+                logger.warning(
+                    f"[群分析相册] 路径模式上传失败 ({e1})，尝试 Base64 回退模式..."
+                )
                 b64_file = await self._get_base64_from_file(image_path)
                 if not b64_file:
                     logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
@@ -1215,21 +1219,25 @@ class OneBotAdapter(PlatformAdapter):
                 try:
                     await self.bot.call_action("upload_image_to_qun_album", **params)
                     logger.info(
-                        "Base64 回退模式 (upload_image_to_qun_album) 群相册上传成功"
+                        "[群分析相册] Base64 模式 (upload_image_to_qun_album) 上传成功"
                     )
                     return True
                 except Exception as e2:
-                    logger.debug(f"Base64 模式 1 失败，尝试模式 2: {e2}")
+                    logger.debug(
+                        f"[群分析相册] Base64 接口 1 (upload_image_to_qun_album) 失败: {e2}"
+                    )
                     try:
                         await self.bot.call_action("upload_group_album", **params)
                         logger.info(
-                            "Base64 回退模式 (upload_group_album) 群相册上传成功"
+                            "[群分析相册] Base64 模式 (upload_group_album) 上传成功"
                         )
                         return True
                     except Exception as e3:
-                        logger.debug(f"Base64 模式 2 失败，尝试模式 3: {e3}")
+                        logger.debug(
+                            f"[群分析相册] Base64 接口 2 (upload_group_album) 失败: {e3}"
+                        )
                         await self.bot.call_action("upload_qun_album", **params)
-                        logger.info("Base64 回退模式 (upload_qun_album) 群相册上传成功")
+                        logger.info("[群分析相册] Base64 模式 (upload_qun_album) 上传成功")
                         return True
 
         except Exception as e:
@@ -1239,9 +1247,9 @@ class OneBotAdapter(PlatformAdapter):
                 or "not support" in error_msg
                 or "不支持" in error_msg
             ):
-                logger.debug(f"当前 OneBot 实现不支持群相册上传 API: {e}")
+                logger.debug(f"当前 OneBot 实现不支持群分析相册上传 API: {e}")
             else:
-                logger.warning(f"OneBot 群相册上传失败: {e}")
+                logger.warning(f"[群分析相册] 上传流程发生异常: {e}")
             return False
 
     async def get_group_album_list(
@@ -1249,7 +1257,7 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
     ) -> list[dict]:
         """
-        获取群相册列表（兼容多种 OneBot 扩展实现）。
+        获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
 
         def extract_list(data: Any) -> list[dict]:
@@ -1286,6 +1294,7 @@ class OneBotAdapter(PlatformAdapter):
 
         for action in actions:
             try:
+                logger.debug(f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})...")
                 result = await self.bot.call_action(
                     action,
                     group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
@@ -1293,10 +1302,12 @@ class OneBotAdapter(PlatformAdapter):
                 if result:
                     albums = extract_list(result)
                     if albums:
-                        logger.debug(f"{action} 成功获取到 {len(albums)} 个相册")
+                        logger.debug(
+                            f"[群分析相册] {action} 成功获取到 {len(albums)} 个相册"
+                        )
                         return albums
             except Exception as e:
-                logger.debug(f"策略 {action} 尝试失败: {e}")
+                logger.debug(f"[群分析相册] 接口 {action} 尝试失败: {e}")
 
         return []
 
@@ -1318,13 +1329,14 @@ class OneBotAdapter(PlatformAdapter):
         if not album_name:
             return None
 
+        logger.debug(f"[群分析相册] 正在群 {group_id} 中查找名为 '{album_name}' 的相册...")
         albums = await self.get_group_album_list(group_id)
         for album in albums:
             name = album.get("name") or album.get("album_name", "")
             aid = album.get("album_id") or album.get("id", "")
             if name == album_name and aid:
-                logger.debug(f"找到群相册: {album_name} [ID: {aid}]")
+                logger.info(f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}")
                 return str(aid)
 
-        logger.info(f"未找到群相册 '{album_name}' (群 {group_id})")
+        logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
         return None
