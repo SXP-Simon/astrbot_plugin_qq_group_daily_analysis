@@ -1,12 +1,15 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.0] - fix(telegram): 增强 telegram 平台的插件可用性
-*   **🛠️ 健壮性增强**: Telegram 平台下 发送长图时触发 Photo_invalid_dimensions 报错提示图片长宽比例或总尺寸不合规时，尝试以文件形式发送
+## [v4.9.1] - feat(persona): 添加分析人格设定的配置选项，并更新相关提示词构建逻辑
+*   **✨ 报告分析逻辑优化**: 允许注入人格，配置项默认关闭
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.0] - fix(telegram): 增强 telegram 平台的插件可用性
+*   **🛠️ 健壮性增强**: Telegram 平台下 发送长图时触发 Photo_invalid_dimensions 报错提示图片长宽比例或总尺寸不合规时，尝试以文件形式发送
 
 ## [v4.8.9] - fix: 群相册严格模式修复 (#111)，尝试解决下载用户头像和重试地狱的问题 （#107）
 
