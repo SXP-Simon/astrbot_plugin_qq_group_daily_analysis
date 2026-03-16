@@ -188,6 +188,7 @@ async def call_provider_with_retry(
     temperature: float,
     umo: str | None = None,
     provider_id_key: str | None = None,
+    system_prompt: str | None = None,
 ) -> Any | None:
     """
     调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
@@ -200,6 +201,7 @@ async def call_provider_with_retry(
         temperature: 采样温度
         umo: 指定使用的模型唯一标识符
         provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'），用于选择特定的 Provider
+        system_prompt: 系统提示词
 
     Returns:
         LLM生成的结果，失败时返回None
@@ -231,6 +233,11 @@ async def call_provider_with_retry(
                 f"[LLM 调用] Prompt 前100字符: {prompt[:100] if prompt else 'None'}..."
             )
 
+            if system_prompt:
+                logger.debug(
+                    f"[LLM 调用] System Prompt 前100字符: {system_prompt[:100]}..."
+                )
+
             # 检查 prompt 是否为空
             if not prompt or not prompt.strip():
                 logger.error(
@@ -253,6 +260,7 @@ async def call_provider_with_retry(
                         prompt=prompt,
                         max_tokens=max_tokens,
                         temperature=temperature,
+                        system_prompt=system_prompt,
                     )
 
                 # 成功记录
