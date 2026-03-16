@@ -1182,7 +1182,7 @@ class OneBotAdapter(PlatformAdapter):
             try:
                 # 尝试 upload_image_to_qun_album
                 params = {
-                    "group_id": str(group_id),
+                    "group_id": int(group_id),
                     "file": image_path,
                     "album_id": str(album_id or ""),
                 }
@@ -1205,7 +1205,7 @@ class OneBotAdapter(PlatformAdapter):
 
                 # 重新尝试多个可能的 API 名
                 params = {
-                    "group_id": str(group_id),
+                    "group_id": int(group_id),
                     "file": b64_file,
                     "album_id": str(album_id or ""),
                 }
@@ -1288,7 +1288,7 @@ class OneBotAdapter(PlatformAdapter):
             try:
                 result = await self.bot.call_action(
                     action,
-                    group_id=str(group_id),  # 对齐文档，使用 string 类型
+                    group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
                 )
                 if result:
                     albums = extract_list(result)
