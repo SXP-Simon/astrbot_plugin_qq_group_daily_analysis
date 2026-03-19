@@ -459,6 +459,7 @@ class GroupDailyAnalysis(Star):
         分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
+        event.should_call_llm(True)  # 阻止默认 LLM 解析
         group_id = self._get_group_id_from_event(event)
         platform_id = self._get_platform_id_from_event(event)
 
@@ -499,7 +500,11 @@ class GroupDailyAnalysis(Star):
         )
         TraceContext.set(trace_id)
 
-        yield event.plain_result("🔍 正在启动跨平台分析引擎，正在拉取最近消息...")
+        # 使用表情回应代替文本回复
+        adapter = self.bot_manager.get_adapter(platform_id)
+        orig_msg_id = getattr(event.message_obj, "message_id", None)
+        if adapter and orig_msg_id:
+            await adapter.set_reaction(event.get_group_id(), orig_msg_id, "🔍")  # 🔍
 
         try:
             # 调用 DDD 应用级服务
@@ -515,9 +520,8 @@ class GroupDailyAnalysis(Star):
                     yield event.plain_result("❌ 分析失败，原因未知")
                 return
 
-            yield event.plain_result(
-                f"📊 已获取{result['messages_count']}条消息，正在生成渲染报告..."
-            )
+            if adapter and orig_msg_id:
+                await adapter.set_reaction(event.get_group_id(), orig_msg_id, "📊")  # 📊
 
             async for res in self._send_analysis_report(event, result):
                 yield res
