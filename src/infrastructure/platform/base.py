@@ -89,3 +89,20 @@ class PlatformAdapter(
             list[dict]: 转换后的平台原生消息字典列表
         """
         raise NotImplementedError
+
+    async def set_reaction(
+        self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True
+    ) -> bool:
+        """
+        对消息添加/移除表情回应。
+
+        Args:
+            group_id (str): 群组/频道 ID
+            message_id (str): 消息 ID
+            emoji (str | int): 表情代码或字符
+            is_add (bool): True 为添加，False 为移除
+
+        Returns:
+            bool: 平台是否支持并成功执行
+        """
+        return False

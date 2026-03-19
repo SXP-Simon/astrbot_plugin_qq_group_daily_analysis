@@ -1346,3 +1346,30 @@ class OneBotAdapter(PlatformAdapter):
 
         logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
         return None
+
+    async def set_reaction(
+        self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True
+    ) -> bool:
+        """
+        OneBot 实现消息回应 (set_msg_emoji_like)。
+        支持 Go-CQHTTP, NapCat, Lagrange 等 OneBot 实现。
+        """
+        try:
+            # 语义化映射：根据用户喜好精细化 OneBot 端的降级
+            emoji_id = str(emoji)
+            if str(emoji) == "🔍":
+                emoji_id = "289"  # 🫣 表情 (表示任务已接收)
+            elif str(emoji) == "📊":
+                emoji_id = "124"  # 👌 表情 (表示任务处理完成)
+
+            await self.bot.call_action(
+                "set_msg_emoji_like",
+                message_id=int(message_id),
+                emoji_id=emoji_id,
+                emoji_type="1",  # 还原为最稳定的系统表情类型
+                set=is_add,
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"OneBot set_reaction 失败 (API 可能不支持): {e}")
+            return False
