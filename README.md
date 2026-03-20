@@ -10,10 +10,10 @@
 <table align="center" style="border: none;">
   <tr>
     <td style="border: none;" align="center">
-      <a href="https://qm.qq.com/q/oTzIrdDBIc"><img src="assets/QQ.png" width="300" alt="QQ Group"></a>
+      <a href="https://qm.qq.com/q/oTzIrdDBIc"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/QQ.png" width="300" alt="QQ Group"></a>
     </td>
     <td style="border: none;" align="center">
-      <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="assets/TG.png" width="300" alt="Telegram Group"></a>
+      <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/TG.png" width="300" alt="Telegram Group"></a>
     </td>
   </tr>
 </table>
