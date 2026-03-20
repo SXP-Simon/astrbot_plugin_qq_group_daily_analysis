@@ -169,6 +169,7 @@ class TelegramAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 100,
         before_id: str | None = None,
+        since_ts: int | None = None,
     ) -> list[UnifiedMessage]:
         """
         获取历史消息。
@@ -190,7 +191,11 @@ class TelegramAdapter(PlatformAdapter):
                 except (TypeError, ValueError):
                     logger.warning(f"[Telegram] before_id invalid: {before_id}")
 
-            cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+            if since_ts and since_ts > 0:
+                # 统一使用 UTC 以兼容数据库记录的时间存储
+                cutoff_time = datetime.fromtimestamp(since_ts, timezone.utc)
+            else:
+                cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
             target_count = max(1, int(max_count))
             page_size = target_count
             current_page = 1

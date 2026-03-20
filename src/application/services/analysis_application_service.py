@@ -287,16 +287,24 @@ class AnalysisApplicationService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            # 2. 拉取消息（使用增量配置的消息数量上限）
+            # 2. 拉取消息，获取进度并确定拉取量
+            last_analyzed_ts = await self.incremental_store.get_last_analyzed_timestamp(
+                group_id
+            )
             days = self.config_manager.get_analysis_days()
-            max_count = self.config_manager.get_incremental_max_messages()
+            # 在增量模式下，拉取上限由安全限制 (Safe Count) 统一控制，确保能追平进度且不溢出
+            max_count = self.config_manager.get_incremental_safe_limit()
 
+            # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
             raw_messages = await adapter.fetch_messages(
-                group_id=group_id, days=days, max_count=max_count
+                group_id=group_id,
+                days=days,
+                max_count=max_count,
+                since_ts=last_analyzed_ts,
             )
 
             if not raw_messages:
-                logger.warning(f"群 {group_id} 增量分析：无法获取消息")
+                logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
                 return {"success": False, "reason": "no_messages"}
 
             # 3. 清理消息
@@ -308,11 +316,7 @@ class AnalysisApplicationService:
                 raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
             )
 
-            # 4. 按时间戳去重：获取最后分析消息时间戳
-            last_analyzed_ts = await self.incremental_store.get_last_analyzed_timestamp(
-                group_id
-            )
-
+            # 5. 二次去重，确保只保留断点之后的真正新消息
             if last_analyzed_ts > 0:
                 unified_messages = [
                     msg for msg in unified_messages if msg.timestamp > last_analyzed_ts
@@ -448,8 +452,15 @@ class AnalysisApplicationService:
 
             # 9. 保存批次并更新最后分析时间戳
             await self.incremental_store.save_batch(batch)
+
+            # 安全更新水位线：取消息最大时间戳，但不能超过当前时间+1分钟，防止未来时间戳毒化导致后续分析死锁
+            import time
+
+            safe_now = int(time.time()) + 60
+            safe_ts = min(last_message_timestamp, safe_now)
+
             await self.incremental_store.update_last_analyzed_timestamp(
-                group_id, last_message_timestamp
+                group_id, safe_ts
             )
 
             logger.info(
