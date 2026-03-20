@@ -521,7 +521,9 @@ class GroupDailyAnalysis(Star):
                 return
 
             if adapter and orig_msg_id:
-                await adapter.set_reaction(event.get_group_id(), orig_msg_id, "📊")  # 📊
+                await adapter.set_reaction(
+                    event.get_group_id(), orig_msg_id, "📊"
+                )  # 📊
 
             async for res in self._send_analysis_report(event, result):
                 yield res
