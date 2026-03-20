@@ -125,7 +125,7 @@ class OneBotAdapter(PlatformAdapter):
                 params = {
                     "group_id": int(group_id),
                     "count": fetch_count,
-                    "reverseOrder": False,  # 关键修复：关闭此属性以启用标准的回滚分页逻辑
+                    "reverseOrder": True,  # 关键：协助分页向上回退拉取历史
                 }
 
                 if current_anchor_id:
@@ -191,16 +191,11 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 mid_val = chunk_earliest_msg.get("message_id")
 
-                # 优先使用 seq_val (针对 LLBot)，如果没有则回退回 ID
-                # 优先使用 seq_val 进行精准的分页位移控制
-                if seq_val is not None:
-                    try:
-                        # 通过 -1 克服 API 的 inclusive (包含) 限制，防止翻页死循环
-                        new_anchor_id = int(seq_val) - 1
-                    except (ValueError, TypeError):
-                        new_anchor_id = seq_val
-                else:
-                    new_anchor_id = mid_val
+                # 重要修复：取消对 ID 的 -1 位移手动操作。
+                # 在 NapCat/NTQQ 中，ID 虽为数字但并不连续。-1 位移会导致“消息不存在”错误。
+                # 即使 API 返回的消息包含锚点本身，上方的 deduplication 逻辑也会将其排除，
+                # 保证翻页能正常向前推进。
+                new_anchor_id = seq_val if seq_val is not None else mid_val
 
                 # 如果消息时间已到达起始点，或者锚点无法继续往前位移，则停止
                 if chunk_earliest_time <= start_timestamp:
