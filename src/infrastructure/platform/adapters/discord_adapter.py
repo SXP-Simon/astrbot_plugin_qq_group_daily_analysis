@@ -109,6 +109,7 @@ class DiscordAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 100,
         before_id: str | None = None,
+        since_ts: int | None = None,
     ) -> list[UnifiedMessage]:
         """
         从 Discord 频道异步拉取历史消息记录。
@@ -143,8 +144,11 @@ class DiscordAdapter(PlatformAdapter):
                 logger.warning(f"频道 {group_id} 不支持历史消息访问。")
                 return []
 
-            end_time = datetime.now()
-            start_time = end_time - timedelta(days=days)
+            if since_ts and since_ts > 0:
+                start_time = datetime.fromtimestamp(since_ts)
+            else:
+                end_time = datetime.now()
+                start_time = end_time - timedelta(days=days)
 
             messages = []
 

@@ -24,6 +24,7 @@ class IMessageRepository(ABC):
         days: int = 1,
         max_count: int = 1000,
         before_id: str | None = None,
+        since_ts: int | None = None,
     ) -> list[UnifiedMessage]:
         """
         获取群组消息历史
@@ -33,6 +34,7 @@ class IMessageRepository(ABC):
             days: 获取最近 N 天的消息
             max_count: 最大消息数量
             before_id: 获取此 ID 之前的消息（用于分页）
+            since_ts: 从指定时间戳开始拉取消息（Unix timestamp），优先级高于 days。
 
         返回:
             统一消息列表，按时间升序排列
