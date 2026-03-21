@@ -182,10 +182,14 @@ class AnalysisApplicationService:
             golden_quote_enabled = (
                 self.config_manager.get_golden_quote_analysis_enabled()
             )
+            chat_quality_enabled = (
+                self.config_manager.get_chat_quality_analysis_enabled()
+            )
 
             topics = []
             user_titles = []
             golden_quotes = []
+            chat_quality_review = None
             total_token_usage = TokenUsage()
 
             # Note: LLMAnalyzer 目前可能只接收 legacy 格式或特定的 UnifiedMessage 适配
@@ -198,7 +202,12 @@ class AnalysisApplicationService:
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
-            if topic_enabled or user_title_enabled or golden_quote_enabled:
+            if (
+                topic_enabled
+                or user_title_enabled
+                or golden_quote_enabled
+                or chat_quality_enabled
+            ):
                 async with self.llm_semaphore:
                     logger.debug(f"[LLM] 已进入分析队列 (群: {group_id})")
                     (
@@ -206,6 +215,7 @@ class AnalysisApplicationService:
                         user_titles,
                         golden_quotes,
                         total_token_usage,
+                        chat_quality_review,
                     ) = await self.llm_analyzer.analyze_all_concurrent(
                         legacy_messages,
                         user_activity,
@@ -214,6 +224,7 @@ class AnalysisApplicationService:
                         topic_enabled=topic_enabled,
                         user_title_enabled=user_title_enabled,
                         golden_quote_enabled=golden_quote_enabled,
+                        chat_quality_enabled=chat_quality_enabled,
                     )
 
             # 回填结果
@@ -225,6 +236,7 @@ class AnalysisApplicationService:
                 "topics": topics,
                 "user_titles": user_titles,
                 "user_analysis": user_activity,
+                "chat_quality_review": chat_quality_review,
             }
 
             # 6. 持久化摘要 (Persistence)
@@ -355,6 +367,9 @@ class AnalysisApplicationService:
             golden_quote_enabled = (
                 self.config_manager.get_golden_quote_analysis_enabled()
             )
+            chat_quality_enabled = (
+                self.config_manager.get_chat_quality_analysis_enabled()
+            )
 
             # 需要将 UnifiedMessage 转换为 legacy 格式供 LLM 分析器使用
             legacy_messages = self.statistics_service._convert_to_legacy_dict(
@@ -364,20 +379,28 @@ class AnalysisApplicationService:
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
-            async with self.llm_semaphore:
-                logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
-                (
-                    topics,
-                    golden_quotes,
-                    token_usage,
-                ) = await self.llm_analyzer.analyze_incremental_concurrent(
-                    legacy_messages,
-                    umo=unified_msg_origin,
-                    topics_per_batch=topics_per_batch,
-                    quotes_per_batch=quotes_per_batch,
-                    topic_enabled=topic_enabled,
-                    golden_quote_enabled=golden_quote_enabled,
-                )
+            topics = []
+            golden_quotes = []
+            token_usage = TokenUsage()
+            chat_quality_review = None
+
+            if topic_enabled or golden_quote_enabled or chat_quality_enabled:
+                async with self.llm_semaphore:
+                    logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
+                    (
+                        topics,
+                        golden_quotes,
+                        token_usage,
+                        chat_quality_review,
+                    ) = await self.llm_analyzer.analyze_incremental_concurrent(
+                        legacy_messages,
+                        umo=unified_msg_origin,
+                        topics_per_batch=topics_per_batch,
+                        quotes_per_batch=quotes_per_batch,
+                        topic_enabled=topic_enabled,
+                        golden_quote_enabled=golden_quote_enabled,
+                        chat_quality_enabled=chat_quality_enabled,
+                    )
 
             # 8. 构建 IncrementalBatch
             # 8a. 转换话题: SummaryTopic -> dict
@@ -424,7 +447,25 @@ class AnalysisApplicationService:
                 "face_details": statistics.emoji_statistics.face_details,
             }
 
-            # 8f. 获取参与者 ID 和最后消息时间戳
+            # 8f. 转换聊天质量锐评: QualityReview -> dict
+            chat_quality_dict = None
+            if chat_quality_review:
+                chat_quality_dict = {
+                    "title": chat_quality_review.title,
+                    "subtitle": chat_quality_review.subtitle,
+                    "dimensions": [
+                        {
+                            "name": d.name,
+                            "percentage": d.percentage,
+                            "comment": d.comment,
+                            "color": d.color,
+                        }
+                        for d in chat_quality_review.dimensions
+                    ],
+                    "summary": chat_quality_review.summary,
+                }
+
+            # 8g. 获取参与者 ID 和最后消息时间戳
             participant_ids = list({msg.sender_id for msg in unified_messages})
             last_message_timestamp = max(
                 (msg.timestamp for msg in unified_messages), default=0
@@ -446,6 +487,7 @@ class AnalysisApplicationService:
                 topics=new_topics,
                 golden_quotes=new_quotes,
                 token_usage=token_usage_dict,
+                chat_quality_review=chat_quality_dict,
                 last_message_timestamp=last_message_timestamp,
                 participant_ids=participant_ids,
             )

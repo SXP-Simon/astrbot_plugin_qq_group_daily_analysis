@@ -164,6 +164,12 @@ class ConfigManager:
             "golden_quote_analysis_enabled", True
         )
 
+    def get_chat_quality_analysis_enabled(self) -> bool:
+        """获取是否启用聊天质量分析"""
+        return self._get_group("analysis_features").get(
+            "chat_quality_analysis_enabled", False
+        )
+
     def get_max_topics(self) -> int:
         """获取最大话题数量"""
         return self._get_group("analysis_features").get("max_topics", 5)
@@ -195,6 +201,10 @@ class ConfigManager:
     def get_user_title_max_tokens(self) -> int:
         """获取用户称号分析最大token数"""
         return self._get_group("llm").get("user_title_max_tokens", 4096)
+
+    def get_quality_max_tokens(self) -> int:
+        """获取聊天质量分析最大token数"""
+        return self._get_group("llm").get("quality_max_tokens", 4096)
 
     def get_debug_mode(self) -> bool:
         """获取是否启用调试模式"""
@@ -276,6 +286,14 @@ class ConfigManager:
         prompts_config = self._get_group("prompts").get(
             "golden_quote_analysis_prompts", {}
         )
+        prompt = prompts_config.get(style, "")
+        if prompt:
+            return prompt
+        return ""
+
+    def get_quality_analysis_prompt(self, style: str = "quality_prompt") -> str:
+        """获取聊天质量分析提示词模板"""
+        prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
         prompt = prompts_config.get(style, "")
         if prompt:
             return prompt
@@ -375,6 +393,13 @@ class ConfigManager:
     def set_golden_quote_analysis_enabled(self, enabled: bool):
         """设置是否启用金句分析"""
         self._ensure_group("analysis_features")["golden_quote_analysis_enabled"] = (
+            enabled
+        )
+        self.config.save_config()
+
+    def set_chat_quality_analysis_enabled(self, enabled: bool):
+        """设置是否启用聊天质量分析"""
+        self._ensure_group("analysis_features")["chat_quality_analysis_enabled"] = (
             enabled
         )
         self.config.save_config()

@@ -640,7 +640,7 @@
             padding: 60px 0;
             border-top: 8px solid var(--c-text);
             font-family: var(--font-mono);
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -772,48 +772,70 @@
         <div class="grid-container">
             <div class="content-card">
                 <div class="activity-wrapper">
-                    {{hourly_chart_html}}
+                    {{hourly_chart_html|safe}}
                 </div>
             </div>
         </div>
 
+        <!-- Chat Quality Review -->
+        {% if chat_quality_html %}
+        <div class="section-label">
+            Quality Analysis <span>STABILITY_METRICS</span>
+        </div>
+        <div class="grid-container">
+            <div style="grid-column: span 12;">
+                {{ chat_quality_html|safe }}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Topics -->
+        {% if topics_html %}
         <div class="section-label">
             Thread Matrix <span>TOPICS_MODULE</span>
         </div>
         <div class="topic-list">
-            {{topics_html}}
+            {{topics_html|safe}}
         </div>
+        {% endif %}
 
         <!-- Titles -->
+        {% if titles_html %}
         <div class="section-label">
             Operator Registry <span>TITLES_MODULE</span>
         </div>
         <div class="grid-container">
             <div class="content-card">
                 <div class="title-grid">
-                    {{titles_html}}
+                    {{titles_html|safe}}
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- Quotes -->
+        {% if quotes_html %}
         <div class="section-label">
             Golden Lines <span>QUOTES_MODULE</span>
         </div>
         <div class="quote-list">
-            {{quotes_html}}
+            {{quotes_html|safe}}
         </div>
+        {% endif %}
 
         <footer>
-            <div>CRT_EXPORT_CHANNEL // QQ群日常分析插件</div>
-            <div class="footer-tokens">
-                <span>Total Tokens // {{total_tokens}}</span>
-                <span>Prompt // {{prompt_tokens}}</span>
-                <span>Completion // {{completion_tokens}}</span>
+            <div class="footer-row">
+                <div>CRT_EXPORT_CHANNEL // QQ群日常分析插件</div>
+                <div class="footer-author">SXP-Simon / astrbot_plugin_qq_group_daily_analysis</div>
             </div>
-            <div class="footer-author">SXP-Simon / astrbot_plugin_qq_group_daily_analysis</div>
-            <div>END_OF_LINE_</div>
+            <div class="footer-row">
+                <div class="footer-tokens">
+                    <span>Total Tokens // {{total_tokens}}</span>
+                    <span>Prompt // {{prompt_tokens}}</span>
+                    <span>Completion // {{completion_tokens}}</span>
+                </div>
+            </div>
+            <div>{{current_datetime}} // END_OF_LINE_</div>
         </footer>
     </div>
 </body>

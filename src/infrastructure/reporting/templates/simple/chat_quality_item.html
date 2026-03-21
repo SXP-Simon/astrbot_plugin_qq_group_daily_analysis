@@ -1,0 +1,21 @@
+<div style="background: #f9f9f9; border-radius: 8px; padding: 12px; margin-bottom: 20px; border: 1px solid #eee;">
+    <h3 style="margin: 0 0 10px; font-size: 1.2em; color: #333; text-align: center;">{{ title }}</h3>
+    {% if subtitle %}<p style="margin: -5px 0 10px; font-size: 0.85em; color: #666; text-align: center;">{{ subtitle }}</p>{% endif %}
+    
+    {% for dimension in dimensions %}
+    <div style="margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 3px;">
+            <span>{{ dimension.name }}</span>
+            <span>{{ dimension.percentage }}%</span>
+        </div>
+        <div style="height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
+            <div style="height: 100%; width: {{ dimension.percentage }}%; background-color: {{ dimension.color }};"></div>
+        </div>
+        <p style="margin: 3px 0 0; font-size: 0.8em; color: #555;">{{ dimension.comment }}</p>
+    </div>
+    {% endfor %}
+    
+    <div style="border-top: 1px solid #eee; margin-top: 10px; padding-top: 8px; font-size: 0.9em; line-height: 1.4; color: #444;">
+        {{ summary }}
+    </div>
+</div>

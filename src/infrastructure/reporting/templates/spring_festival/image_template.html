@@ -633,13 +633,23 @@
         </div>
 
         <div class="sf-main-flow">
-            <!-- 1. Topics: Full Width -->
+            <!-- 0. Chat Quality Analysis -->
+            {% if chat_quality_html %}
             <div class="sf-section-box">
-                <div class="sf-section-title"><span>🏮</span> 核心话题回顾</div>
+                <div class="sf-section-title"><span>🏺</span> 聊天质量锐评</div>
+                {{ chat_quality_html }}
+            </div>
+            {% endif %}
+
+            <!-- 1. Topics: Full Width -->
+            {% if topics_html %}
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>&#127982;</span> 核心话题回顾</div>
                 <div class="sf-topic-list">
                     {{topics_html}}
                 </div>
             </div>
+            {% endif %}
 
             <!-- 2. Chart: Full Width with SF window -->
             <div class="sf-section-box">
@@ -651,22 +661,27 @@
             </div>
 
             <!-- 3. Characters: Masonry 2-Column Grid -->
+            {% if titles_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>🎖️</span> 群友风云榜</div>
                 {{titles_html}}
             </div>
+            {% endif %}
 
             <!-- 4. Quotes: Staggered Timeline -->
+            {% if quotes_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>✨</span> 每日金句回响</div>
                 <div class="sf-quote-timeline">
                     {{quotes_html}}
                 </div>
             </div>
+            {% endif %}
         </div>
 
         <footer>
             <div>宜 · 总结分析 // {{current_datetime}}</div>
+            <div style="font-size: 0.85rem; margin-top: 8px; opacity: 0.7;">Token 消耗：{{total_tokens}} (Prompt: {{prompt_tokens}}, Completion: {{completion_tokens}})</div>
             <div class="sf-footer-tag">SXP-Simon / astrbot_plugin_qq_group_daily_analysis</div>
         </footer>
     </div>
