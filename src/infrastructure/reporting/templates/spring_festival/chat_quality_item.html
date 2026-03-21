@@ -1,0 +1,27 @@
+<div style="background: #fff5f5; border: 2px solid #ff4d4f; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(255, 77, 79, 0.1); position: relative; overflow: hidden;">
+    <div style="position: absolute; top: -10px; right: -10px; opacity: 0.1; font-size: 80px; transform: rotate(15deg);">福</div>
+    
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h3 style="margin: 0; color: #cf1322; font-size: 1.6em; border-bottom: 2px solid #ff4d4f; display: inline-block; padding-bottom: 5px;">{{ title }}</h3>
+        {% if subtitle %}<p style="margin: 8px 0 0; color: #fa541c; font-weight: bold;">{{ subtitle }}</p>{% endif %}
+    </div>
+    
+    <div>
+        {% for dimension in dimensions %}
+        <div style="margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; font-size: 1em; margin-bottom: 6px; color: #333; font-weight: bold;">
+                <span>{{ dimension.name }}</span>
+                <span style="color: #cf1322;">{{ dimension.percentage }}%</span>
+            </div>
+            <div style="height: 12px; background: #ffe8e6; border-radius: 6px; overflow: hidden; border: 1px solid #ffccc7;">
+                <div style="height: 100%; width: {{ dimension.percentage }}%; background: linear-gradient(90deg, #ff4d4f, #cf1322);"></div>
+            </div>
+            <p style="margin: 6px 0 0; font-size: 0.9em; color: #8c8c8c; font-style: italic;">{{ dimension.comment }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div style="margin-top: 15px; padding: 12px; background: #fff1f0; border-radius: 8px; border-left: 4px solid #f5222d; font-size: 0.95em; color: #434343;">
+        {{ summary }}
+    </div>
+</div>

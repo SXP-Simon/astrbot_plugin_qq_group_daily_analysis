@@ -1,0 +1,25 @@
+<div style="background: white; border: 1px solid #ddd; padding: 20px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 5px solid #007bff;">
+    <div style="margin-bottom: 15px;">
+        <h3 style="margin: 0; font-size: 1.5em; color: #222;">{{ title }}</h3>
+        {% if subtitle %}<span style="color: #666; font-size: 0.9em;">{{ subtitle }}</span>{% endif %}
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+        {% for dimension in dimensions %}
+        <div style="margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span style="font-weight: 600;">{{ dimension.name }}</span>
+                <span style="color: #007bff; font-weight: 700;">{{ dimension.percentage }}%</span>
+            </div>
+            <div style="height: 12px; background: #f0f0f0; border-radius: 6px; overflow: hidden;">
+                <div style="height: 100%; width: {{ dimension.percentage }}%; background-color: {{ dimension.color }}; border-radius: 6px;"></div>
+            </div>
+            <p style="margin: 8px 0 0; color: #555; font-size: 0.9em; line-height: 1.5;">{{ dimension.comment }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div style="background: #f8f9fa; border-top: 1px solid #eee; padding: 12px; font-size: 0.95em; color: #333; font-style: italic;">
+        {{ summary }}
+    </div>
+</div>

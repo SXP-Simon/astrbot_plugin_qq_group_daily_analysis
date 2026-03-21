@@ -499,7 +499,7 @@
             display: flex;
             justify-content: space-between;
             font-family: var(--font-mono);
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             color: var(--text-secondary);
         }
 
@@ -543,7 +543,17 @@
                     </div>
                 </div>
 
+                {% if chat_quality_html %}
+                <div>
+                    <div class="section-header">
+                        <span class="prompt">$</span> analyze --quality
+                    </div>
+                    {{ chat_quality_html }}
+                </div>
+                {% endif %}
+
                 <!-- Topics moved into left column -->
+                {% if topics_html %}
                 <div>
                     <div class="section-header">
                         <span class="prompt">$</span> ls ./topics
@@ -552,6 +562,7 @@
                         {{topics_html}}
                     </div>
                 </div>
+                {% endif %}
             </div>
 
             <!-- Right Side: Visuals & Members -->
@@ -571,6 +582,7 @@
                 </div>
 
                 <!-- User Titles grouped here -->
+                {% if titles_html %}
                 <div style="margin-top: 20px;">
                     <div class="section-header">
                         <span class="prompt">$</span> cat ./user_titles
@@ -579,8 +591,10 @@
                         {{titles_html}}
                     </div>
                 </div>
+                {% endif %}
 
                 <!-- Golden Quotes grouped here -->
+                {% if quotes_html %}
                 <div style="margin-top: 20px;">
                     <div class="section-header">
                         <span class="prompt">$</span> grep -r "golden_quotes"
@@ -589,6 +603,7 @@
                         {{quotes_html}}
                     </div>
                 </div>
+                {% endif %}
             </div>
         </div>
 
