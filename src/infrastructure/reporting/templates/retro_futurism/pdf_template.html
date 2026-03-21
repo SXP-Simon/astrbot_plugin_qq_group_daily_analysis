@@ -835,7 +835,7 @@
         <div class="grid-container">
             <div class="content-box">
                 <div class="activity-wrapper">
-                    {{hourly_chart_html}}
+                    {{hourly_chart_html|safe}}
                 </div>
             </div>
         </div>
@@ -845,7 +845,7 @@
             Thread Matrix <span>TOPICS_MODULE</span>
         </div>
         <div class="topic-list">
-            {{topics_html}}
+            {{topics_html|safe}}
         </div>
 
         <!-- Titles -->
@@ -855,7 +855,7 @@
         <div class="grid-container">
             <div class="content-box">
                 <div class="title-grid">
-                    {{titles_html}}
+                    {{titles_html|safe}}
                 </div>
             </div>
         </div>
@@ -865,7 +865,7 @@
             Golden Lines <span>QUOTES_MODULE</span>
         </div>
         <div class="quote-list">
-            {{quotes_html}}
+            {{quotes_html|safe}}
         </div>
 
         <footer>

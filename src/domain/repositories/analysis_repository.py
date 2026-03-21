@@ -5,7 +5,13 @@
 
 from abc import ABC, abstractmethod
 
-from ..models.data_models import GoldenQuote, SummaryTopic, TokenUsage, UserTitle
+from ..models.data_models import (
+    GoldenQuote,
+    QualityReview,
+    SummaryTopic,
+    TokenUsage,
+    UserTitle,
+)
 
 
 class IAnalysisProvider(ABC):
@@ -55,7 +61,14 @@ class IAnalysisProvider(ABC):
         topic_enabled: bool = True,
         user_title_enabled: bool = True,
         golden_quote_enabled: bool = True,
-    ) -> tuple[list[SummaryTopic], list[UserTitle], list[GoldenQuote], TokenUsage]:
+        chat_quality_enabled: bool = False,
+    ) -> tuple[
+        list[SummaryTopic],
+        list[UserTitle],
+        list[GoldenQuote],
+        TokenUsage,
+        QualityReview | None,
+    ]:
         """并发分析所有内容"""
         pass
 
@@ -68,6 +81,7 @@ class IAnalysisProvider(ABC):
         quotes_per_batch: int = 3,
         topic_enabled: bool = True,
         golden_quote_enabled: bool = True,
-    ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage]:
+        chat_quality_enabled: bool = False,
+    ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage, QualityReview | None]:
         """增量模式并发分析"""
         pass
