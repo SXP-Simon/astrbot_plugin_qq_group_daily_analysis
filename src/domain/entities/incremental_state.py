@@ -39,6 +39,7 @@ class IncrementalBatch:
         topics: 本批次提取的话题列表
         golden_quotes: 本批次提取的金句列表
         token_usage: 本批次 token 消耗 {prompt_tokens, completion_tokens, total_tokens}
+        chat_quality_review: 本批次提取的聊天质量锐评
         last_message_timestamp: 本批次最后一条消息的时间戳
         participant_ids: 本批次参与者 ID 列表
     """
@@ -73,6 +74,7 @@ class IncrementalBatch:
     )
 
     # 增量追踪
+    chat_quality_review: dict[str, Any] | None = None
     last_message_timestamp: int = 0
     participant_ids: list[str] = field(default_factory=list)
 
@@ -91,6 +93,7 @@ class IncrementalBatch:
             "topics": self.topics,
             "golden_quotes": self.golden_quotes,
             "token_usage": self.token_usage,
+            "chat_quality_review": self.chat_quality_review,
             "last_message_timestamp": self.last_message_timestamp,
             "participant_ids": self.participant_ids,
         }
@@ -118,6 +121,7 @@ class IncrementalBatch:
                     "total_tokens": 0,
                 },
             ),
+            chat_quality_review=data.get("chat_quality_review"),
             last_message_timestamp=data.get("last_message_timestamp", 0),
             participant_ids=data.get("participant_ids", []),
         )
@@ -170,6 +174,7 @@ class IncrementalState:
     # 合并后的 LLM 分析结果
     topics: list[dict] = field(default_factory=list)
     golden_quotes: list[dict] = field(default_factory=list)
+    chat_quality_review: dict[str, Any] | None = None
 
     # 合并后的统计数据（按小时）
     hourly_message_counts: dict[str, int] = field(default_factory=dict)

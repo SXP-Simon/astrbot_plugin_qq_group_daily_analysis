@@ -34,6 +34,12 @@ class ReportGenerator(IReportGenerator):
         self._runtime_avatar_cache = {}  # user_id -> base64_uri
         self._avatar_session = None
 
+    async def close(self):
+        """关闭资源"""
+        if self._avatar_session:
+            await self._avatar_session.close()
+            self._avatar_session = None
+
     async def generate_image_report(
         self,
         analysis_result: dict,
@@ -64,9 +70,10 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
             )
 
-            # 先渲染HTML模板（使用异步方法）
-            image_template = await self.html_templates.get_image_template_async()
-            html_content = self._render_html_template(image_template, render_payload)
+            # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
+            html_content = self.html_templates.render_template(
+                "image_template.html", **render_payload
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
@@ -221,9 +228,10 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            # 生成 HTML 内容（使用异步方法）
-            pdf_template = await self.html_templates.get_pdf_template_async()
-            html_content = self._render_html_template(pdf_template, render_data)
+            # 生成 HTML 内容（使用 Jinja2 渲染器以支持逻辑标签）
+            html_content = self.html_templates.render_template(
+                "pdf_template.html", **render_data
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
@@ -378,6 +386,37 @@ class ReportGenerator(IReportGenerator):
         )
         logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
+        # 生成聊天质量锐评HTML
+        chat_quality_html = ""
+        chat_quality_review = analysis_result.get("chat_quality_review")
+        if not chat_quality_review and hasattr(stats, "chat_quality_review"):
+            chat_quality_review = stats.chat_quality_review
+
+        if chat_quality_review:
+            # 如果是对象，转为字典（为了统一渲染）
+            if hasattr(chat_quality_review, "dimensions"):
+                review_data = {
+                    "title": chat_quality_review.title,
+                    "subtitle": chat_quality_review.subtitle,
+                    "dimensions": [
+                        {
+                            "name": d.name,
+                            "percentage": d.percentage,
+                            "comment": d.comment,
+                            "color": d.color,
+                        }
+                        for d in chat_quality_review.dimensions
+                    ],
+                    "summary": chat_quality_review.summary,
+                }
+            else:
+                review_data = chat_quality_review
+
+            chat_quality_html = self.html_templates.render_template(
+                "chat_quality_item.html", **review_data
+            )
+            logger.info(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
+
         # 准备最终渲染数据
         render_data = {
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
@@ -391,6 +430,7 @@ class ReportGenerator(IReportGenerator):
             "titles_html": titles_html,
             "quotes_html": quotes_html,
             "hourly_chart_html": hourly_chart_html,
+            "chat_quality_html": chat_quality_html,
             "total_tokens": stats.token_usage.total_tokens
             if stats.token_usage.total_tokens
             else 0,
@@ -495,30 +535,6 @@ class ReportGenerator(IReportGenerator):
         if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
             return True
         return normalized == str(user_id).strip()
-
-    def _render_html_template(self, template: str, data: dict) -> str:
-        """HTML模板渲染，使用 {{key}} 占位符格式
-
-        Args:
-            template: HTML模板字符串
-            data: 渲染数据字典
-        """
-        result = template
-
-        for key, value in data.items():
-            # 统一使用双大括号格式 {{key}}
-            placeholder = "{{" + key + "}}"
-            result = result.replace(placeholder, str(value))
-
-        # 检查是否还有未替换的占位符
-        import re
-
-        if remaining_placeholders := re.findall(r"\{\{[^}]+\}\}", result):
-            logger.warning(
-                f"未替换的占位符 ({len(remaining_placeholders)}个): {remaining_placeholders[:10]}"
-            )
-
-        return result
 
     @staticmethod
     def _safe_url_for_log(url: str | None) -> str:
