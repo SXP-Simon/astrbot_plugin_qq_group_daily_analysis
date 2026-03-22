@@ -1,0 +1,11 @@
+<div style="display: flex; flex-direction: column; gap: 5px;">
+    {% for item in chart_data %}
+    <div style="display: flex; align-items: center;">
+        <span style="width: 50px;">{{ "%02d" | format(item.hour) }}:00</span>
+        <div style="background-color: #eee; flex-grow: 1; height: 10px;">
+            <div style="width: {{ item.percentage }}%; background-color: blue; height: 100%;"></div>
+        </div>
+        <span style="width: 30px; text-align: right;">{{ item.count }}</span>
+    </div>
+    {% endfor %}
+</div>
