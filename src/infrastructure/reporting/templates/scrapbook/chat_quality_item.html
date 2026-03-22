@@ -270,9 +270,9 @@
         {% set tape_rot = loop.cycle('2deg', '-1deg', '3deg', '-2deg', '1deg', '-3deg') %}
         <div class="dim-sticker" style="transform: rotate({{ rot }}); border-color: {{ colors[loop.index0 % colors|length] }};">
             <div class="small-tape" style="transform: translateX(-50%) rotate({{ tape_rot }});"></div>
-            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
-                <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }}; margin-bottom: 0;">{{ dim.name }}</strong>
-                <span style="font-size: 0.86em; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }};">{{ '%.1f'|format(safe_percentage) }}%</span>
+            <div style="margin-bottom: 4px;">
+                <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }}; margin-bottom: 2px; display: block;">{{ dim.name }}</strong>
+                <span style="font-size: 0.86em; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }}; display: block; margin-bottom: 4px;">{{ '%.1f'|format(safe_percentage) }}%</span>
             </div>
             <span>{{ dim.comment }}</span>
         </div>

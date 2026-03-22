@@ -515,12 +515,12 @@
                 <div class="chart-header">
                     <div class="chart-title">24小时活跃度分布</div>
                 </div>
-                {{hourly_chart_html}}
+                {{hourly_chart_html | safe}}
             </div>
-
-            {{topics_html}}
-            {{titles_html}}
-            {{quotes_html}}
+ 
+            {{topics_html | safe}}
+            {{titles_html | safe}}
+            {{quotes_html | safe}}
         </div>
         <div class="footer">
             由 AstrBot QQ群日常分析插件 生成 | {{current_datetime}} | SXP-Simon/astrbot_plugin_qq_group_daily_analysis<br>

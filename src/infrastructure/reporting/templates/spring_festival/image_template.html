@@ -637,43 +637,43 @@
             {% if chat_quality_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>🏺</span> 聊天质量锐评</div>
-                {{ chat_quality_html }}
+                {{ chat_quality_html | safe }}
             </div>
             {% endif %}
-
+ 
             <!-- 1. Topics: Full Width -->
             {% if topics_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>&#127982;</span> 核心话题回顾</div>
                 <div class="sf-topic-list">
-                    {{topics_html}}
+                    {{topics_html | safe}}
                 </div>
             </div>
             {% endif %}
-
+ 
             <!-- 2. Chart: Full Width with SF window -->
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>📈</span> 活跃时序图</div>
                 <div class="sf-window">
                     <div class="sf-window-title">ACTIVITY CHRONICLE</div>
-                    {{hourly_chart_html}}
+                    {{hourly_chart_html | safe}}
                 </div>
             </div>
-
+ 
             <!-- 3. Characters: Masonry 2-Column Grid -->
             {% if titles_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>🎖️</span> 群友风云榜</div>
-                {{titles_html}}
+                {{titles_html | safe}}
             </div>
             {% endif %}
-
+ 
             <!-- 4. Quotes: Staggered Timeline -->
             {% if quotes_html %}
             <div class="sf-section-box">
                 <div class="sf-section-title"><span>✨</span> 每日金句回响</div>
                 <div class="sf-quote-timeline">
-                    {{quotes_html}}
+                    {{quotes_html | safe}}
                 </div>
             </div>
             {% endif %}
