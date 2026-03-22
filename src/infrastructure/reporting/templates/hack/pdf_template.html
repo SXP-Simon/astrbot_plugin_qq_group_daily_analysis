@@ -348,11 +348,11 @@
                 <div class="avoid-break">
                     <div class="section-header"><span class="prompt">$</span> ls ./topics</div>
                     <div class="topic-list">
-                        {{topics_html}}
+                        {{topics_html | safe}}
                     </div>
                 </div>
             </div>
-
+ 
             <!-- Right Column: Chart & People -->
             <div class="right-col">
                 <div class="window avoid-break">
@@ -364,21 +364,21 @@
                         <div class="window-title">activity.log</div>
                     </div>
                     <div class="chart-container">
-                        {{hourly_chart_html}}
+                        {{hourly_chart_html | safe}}
                     </div>
                 </div>
-
+ 
                 <div class="avoid-break">
                     <div class="section-header"><span class="prompt">$</span> cat users</div>
                     <div class="user-grid">
-                        {{titles_html}}
+                        {{titles_html | safe}}
                     </div>
                 </div>
-
+ 
                 <div class="avoid-break">
                     <div class="section-header"><span class="prompt">$</span> grep golden</div>
                     <div class="quote-grid">
-                        {{quotes_html}}
+                        {{quotes_html | safe}}
                     </div>
                 </div>
             </div>

@@ -317,14 +317,15 @@ async def debug_render(
     }
 
     # 3. Initialize Generator
-    generator = ReportGenerator(config_manager)
-
-    # Override internal methods to facilitate debugging without real dependencies
-    generator._get_user_avatar_data = mock_get_user_avatar
+    data_dir = Path("data/debug_data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    generator = ReportGenerator(config_manager, data_dir)
 
     # 4. Prepare Render Data
     # Note: _prepare_render_data handles converting Entities to template-friendly dicts
-    render_payload = await generator._prepare_render_data(analysis_result)
+    render_payload = await generator._prepare_render_data(
+        analysis_result, avatar_url_getter=mock_get_user_avatar
+    )
 
     # Use Jinja2 renderer
     final_html = generator.html_templates.render_template(

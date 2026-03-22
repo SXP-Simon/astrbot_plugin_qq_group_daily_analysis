@@ -336,6 +336,16 @@ python scripts/debug_render.py -t retro_futurism -o my_output.html
 python scripts/debug_render.py -h
 ```
 
+```
+uv run scripts\debug_render.py -t scrapbook -o debug_scrapbook.html
+uv run scripts\debug_render.py -t hack -o debug_hack.html
+uv run scripts\debug_render.py -t retro_futurism -o debug_retro.html
+uv run scripts\debug_render.py -t format -o debug_format.html
+uv run scripts\debug_render.py -t simple -o debug_simple.html
+uv run scripts\debug_render.py -t spring_festival -o debug_spring.html
+```
+
+
 **工具特性：**
 
 - 使用 Mock 数据模拟真实的群聊分析结果
