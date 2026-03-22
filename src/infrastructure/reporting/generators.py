@@ -11,17 +11,22 @@ from datetime import datetime
 from pathlib import Path
 
 import aiohttp
+from diskcache import Cache
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 
+MAX_CONCURRENT_DOWNLOADS = 10
+AVATAR_CACHE_EXPIRE_TIME = 259200
+
 
 class ReportGenerator(IReportGenerator):
     """报告生成器"""
 
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, data_dir):
+        self._avatar_session = None
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
@@ -31,7 +36,10 @@ class ReportGenerator(IReportGenerator):
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
-        self._runtime_avatar_cache = {}  # user_id -> base64_uri
+        self._avatar_cache = Cache(str(data_dir / "avatar"))  # user_id -> base64_uri
+        self._avatar_session_concurrent_semaphore = asyncio.Semaphore(
+            MAX_CONCURRENT_DOWNLOADS
+        )
         self._avatar_session = None
 
     async def generate_image_report(
@@ -39,7 +47,7 @@ class ReportGenerator(IReportGenerator):
         analysis_result: dict,
         group_id: str,
         html_render_func,
-        avatar_getter=None,
+        avatar_url_getter=None,
         nickname_getter=None,
     ) -> tuple[str | None, str | None]:
         """
@@ -49,7 +57,8 @@ class ReportGenerator(IReportGenerator):
             analysis_result: 分析结果字典
             group_id: 群组ID
             html_render_func: HTML渲染函数
-            avatar_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+            avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+            nickname_getter: 昵称获取函数
 
         Returns:
             tuple[str | None, str | None]: (image_url, html_content)
@@ -60,7 +69,7 @@ class ReportGenerator(IReportGenerator):
             render_payload = await self._prepare_render_data(
                 analysis_result,
                 chart_template="activity_chart.html",
-                avatar_getter=avatar_getter,
+                avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
 
@@ -190,13 +199,12 @@ class ReportGenerator(IReportGenerator):
             if self._avatar_session:
                 await self._avatar_session.close()
                 self._avatar_session = None
-            self._runtime_avatar_cache.clear()
 
     async def generate_pdf_report(
         self,
         analysis_result: dict,
         group_id: str,
-        avatar_getter=None,
+        avatar_url_getter=None,
         nickname_getter=None,
     ) -> str | None:
         """生成PDF格式的分析报告"""
@@ -216,7 +224,7 @@ class ReportGenerator(IReportGenerator):
             render_data = await self._prepare_render_data(
                 analysis_result,
                 chart_template="activity_chart_pdf.html",
-                avatar_getter=avatar_getter,
+                avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
@@ -289,7 +297,7 @@ class ReportGenerator(IReportGenerator):
         self,
         analysis_result: dict,
         chart_template: str = "activity_chart.html",
-        avatar_getter=None,
+        avatar_url_getter=None,
         nickname_getter=None,
     ) -> dict:
         """准备渲染数据"""
@@ -306,7 +314,7 @@ class ReportGenerator(IReportGenerator):
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
             processed_detail = await self._render_mentions(
-                topic.detail, avatar_getter, nickname_getter, user_analysis
+                topic.detail, avatar_url_getter, nickname_getter, user_analysis
             )
             topics_list.append(
                 {
@@ -327,7 +335,9 @@ class ReportGenerator(IReportGenerator):
         titles_list = []
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
-            avatar_data = await self._get_user_avatar(str(title.user_id), avatar_getter)
+            avatar_data = await self._get_user_avatar(
+                str(title.user_id), avatar_url_getter
+            )
             title_data = {
                 "name": title.name,
                 "title": title.title,
@@ -347,13 +357,13 @@ class ReportGenerator(IReportGenerator):
         quotes_list = []
         for quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.user_id), avatar_getter)
+                await self._get_user_avatar(str(quote.user_id), avatar_url_getter)
                 if quote.user_id
                 else None
             )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                quote.reason, avatar_getter, nickname_getter, user_analysis
+                quote.reason, avatar_url_getter, nickname_getter, user_analysis
             )
             quotes_list.append(
                 {
@@ -408,7 +418,7 @@ class ReportGenerator(IReportGenerator):
     async def _render_mentions(
         self,
         text: str,
-        avatar_getter,
+        avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
     ) -> str:
@@ -425,7 +435,7 @@ class ReportGenerator(IReportGenerator):
         async def replacer(match):
             uid = match.group(1)
             url = await self._get_user_avatar(
-                uid, avatar_getter
+                uid, avatar_url_getter
             )  # 内部已有缓存，无需顶层并发获取
 
             name = None
@@ -528,139 +538,137 @@ class ReportGenerator(IReportGenerator):
         # Telegram file URL: .../file/bot<token>/<file_path>
         return re.sub(r"/bot[^/]+/", "/bot<redacted>/", url)
 
-    async def _get_user_avatar(self, user_id: str, avatar_getter=None) -> str:
+    async def _get_user_avatar(self, avatar_id: str, avatar_url_getter=None) -> str:
         """
         获取用户头像的 Base64 Data URI。
-        增加了运行时内存缓存，避免单次生成任务中重复下载。
+        使用磁盘缓存，支持跨任务复用。获取失败时不缓存结果，以便后续请求重试。
         """
-        # 0. 检查运行时缓存
-        if user_id in self._runtime_avatar_cache:
-            return self._runtime_avatar_cache[user_id]
+        # 1. 检查缓存 (仅包含成功的头像数据)
+        if avatar_id in self._avatar_cache:
+            return self._avatar_cache[avatar_id]
 
-        res = await self._get_user_avatar_internal(user_id, avatar_getter)
-        self._runtime_avatar_cache[user_id] = res
-        return res
+        # 2. 尝试获取头像字节流
+        avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
 
-    async def _get_user_avatar_internal(self, user_id: str, avatar_getter=None) -> str:
+        if not avatar_bytes:
+            # 获取失败时返回默认头像，但不存入缓存，以便下次重试
+            logger.warning(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
+            return self._get_default_avatar_base64()
+
+        # 3. 获取成功：转换并缓存
+        avatar = self._b64_with_mime(avatar_bytes)
+        if avatar:
+            self._avatar_cache.set(avatar_id, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            return avatar
+
+        # 最终兜底
+        return self._get_default_avatar_base64()
+
+    def _b64_with_mime(self, _bytes: bytes) -> str | None:
+        """将字节数据转换为 Base64 Data URI，并自动识别 MIME 类型。"""
+        try:
+            b64 = base64.b64encode(_bytes).decode("utf-8")
+            # 简单判断 mime type
+            mime = "image/jpeg"
+            if _bytes.startswith(b"\x89PNG"):
+                mime = "image/png"
+            elif _bytes.startswith(b"GIF8"):
+                mime = "image/gif"
+            elif _bytes.startswith(b"RIFF") and b"WEBP" in _bytes[8:16]:
+                mime = "image/webp"
+            elif _bytes.startswith(b"\xff\xd8"):
+                mime = "image/jpeg"
+
+            return f"data:{mime};base64,{b64}"
+        except Exception as e:
+            logger.error(f"base64 转换失败: {e}", exc_info=True)
+        return None
+
+    async def _get_user_avatar_bytes(
+        self, user_id: str, avatar_url_getter=None
+    ) -> bytes | None:
         """核心头像获取逻辑"""
-        import base64
-
+        file_content = None
         if not self._avatar_session:
             self._avatar_session = aiohttp.ClientSession(
                 trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
             )
-
-        try:
-            # 1. 准备缓存目录
-            # 使用 plugin_data 目录以确保持久化和标准结构
-            temp_dir = Path(
-                "data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars"
-            )
-            if not temp_dir.exists():
-                await asyncio.to_thread(temp_dir.mkdir, parents=True, exist_ok=True)
-
-            # 使用小尺寸 (40px) 以优化性能
-            file_name = f"{user_id}_40.jpg"
-            file_path = temp_dir / file_name
-
-            file_content = None
-
-            # 2. 检查缓存
-            if file_path.exists() and file_path.stat().st_size > 0:
-                # 异步读取缓存
+        async with self._avatar_session_concurrent_semaphore:
+            avatar_url = None
+            if avatar_url_getter:
                 try:
-                    file_content = await asyncio.to_thread(file_path.read_bytes)
-                except Exception:
-                    pass
-
-            # 3. 如果无缓存，获取 URL 并下载
-            if not file_content:
-                avatar_url = None
-                if avatar_getter:
-                    try:
-                        # avatar_getter 应该返回 URL
-                        result = await avatar_getter(user_id)
-                        if result and result.startswith("http"):
+                    # avatar_url_getter 应该返回 URL
+                    result = await avatar_url_getter(user_id)
+                    if result:
+                        if result.startswith("http"):
                             avatar_url = result
-                    except Exception as e:
-                        logger.warning(f"使用 custom avatar_getter 获取头像失败: {e}")
-
-                # 4. Fallback URL (仅针对看起来像 QQ 号的 ID)
-                if not avatar_url:
-                    if user_id.isdigit() and 5 <= len(user_id) <= 12:
-                        # 强制使用 spec=40
-                        avatar_url = (
-                            f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
-                        )
-                    else:
-                        # 其他平台若无 URL，无法获取头像
-                        return self._get_default_avatar_base64()
-
-                # 5. 下载并保存
-                safe_avatar_url = self._safe_url_for_log(avatar_url)
-                try:
-                    async with self._avatar_session.get(avatar_url) as response:
-                        if response.status == 200:
-                            content = await response.read()
-                            if content:
-                                # 校验文件头
-                                is_valid_image = False
-                                if content.startswith(b"\xff\xd8"):  # JPEG
-                                    is_valid_image = True
-                                elif content.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
-                                    is_valid_image = True
-                                elif content.startswith(b"GIF8"):  # GIF
-                                    is_valid_image = True
-                                elif (
-                                    content.startswith(b"RIFF")
-                                    and b"WEBP" in content[:16]
-                                ):  # WebP
-                                    is_valid_image = True
-
-                                if is_valid_image:
-                                    await asyncio.to_thread(
-                                        file_path.write_bytes, content
-                                    )
-                                    file_content = content
-                                else:
-                                    logger.warning(
-                                        f"下载的头像数据格式无效 ({safe_avatar_url})"
-                                    )
                         else:
                             logger.warning(
-                                f"下载头像失败 {safe_avatar_url}: {response.status}"
+                                f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
                             )
                 except Exception as e:
-                    logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
+                    logger.warning(f"使用 custom avatar_url_getter 获取头像失败: {e}")
 
-            # 6. 转换为 Base64 Data URI
-            if file_content:
-                b64 = base64.b64encode(file_content).decode("utf-8")
-                # 简单判断 mime type
-                mime = "image/jpeg"
-                if file_content.startswith(b"\x89PNG"):
-                    mime = "image/png"
-                elif file_content.startswith(b"GIF8"):
-                    mime = "image/gif"
-                elif file_content.startswith(b"RIFF"):
-                    mime = "image/webp"
+            if not avatar_url:
+                if user_id.isdigit() and 5 <= len(user_id) <= 12:
+                    # 强制使用 spec=40
+                    avatar_url = (
+                        f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
+                    )
+                else:
+                    # 其他平台若无 URL，无法获取头像
+                    return None
 
-                return f"data:{mime};base64,{b64}"
+            # 5. 下载并保存
+            safe_avatar_url = self._safe_url_for_log(avatar_url)
+            try:
+                async with self._avatar_session.get(avatar_url) as response:
+                    if response.status == 200:
+                        content = await response.read()
+                        if content:
+                            # 校验文件头
+                            is_valid_image = False
+                            if content.startswith(b"\xff\xd8"):  # JPEG
+                                is_valid_image = True
+                            elif content.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
+                                is_valid_image = True
+                            elif content.startswith(b"GIF8"):  # GIF
+                                is_valid_image = True
+                            elif (
+                                content.startswith(b"RIFF") and b"WEBP" in content[:16]
+                            ):  # WebP
+                                is_valid_image = True
 
-            return self._get_default_avatar_base64()
+                            if is_valid_image:
+                                file_content = content
+                            else:
+                                logger.warning(
+                                    f"下载的头像数据格式无效 ({safe_avatar_url})"
+                                )
+                    else:
+                        logger.warning(
+                            f"下载头像失败 {safe_avatar_url}: {response.status}"
+                        )
+            except Exception as e:
+                logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
 
-        except Exception as e:
-            logger.error(f"获取用户头像失败 {user_id}: {e}")
-            return self._get_default_avatar_base64()
+            return file_content
 
     def _get_default_avatar_base64(self) -> str:
         """返回默认头像 (灰色圆形占位符)"""
-        import base64
-
         # 一个简单的灰色圆圈 SVG 转 Base64
         svg = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#ddd"/></svg>'
         b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
         return f"data:image/svg+xml;base64,{b64}"
+
+    def close(self):
+        """释放资源，关闭缓存和 session"""
+        try:
+            if self._avatar_cache:
+                self._avatar_cache.close()
+                logger.debug("头像缓存已关闭")
+        except Exception as e:
+            logger.warning(f"关闭头像缓存失败: {e}")
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
