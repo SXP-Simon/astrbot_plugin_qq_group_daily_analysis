@@ -9,8 +9,9 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
-from diskcache import Cache
+
 import aiohttp
+from diskcache import Cache
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
@@ -23,6 +24,7 @@ AVATAR_CACHE_EXPIRE_TIME = 259200
 
 class ReportGenerator(IReportGenerator):
     """报告生成器"""
+
     def __init__(self, config_manager, data_dir):
         self._avatar_session = None
         self.config_manager = config_manager
@@ -35,16 +37,18 @@ class ReportGenerator(IReportGenerator):
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
         self._avatar_cache = Cache(str(data_dir / "avatar"))  # user_id -> base64_uri
-        self._avatar_session_concurrent_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+        self._avatar_session_concurrent_semaphore = asyncio.Semaphore(
+            MAX_CONCURRENT_DOWNLOADS
+        )
         self._avatar_session = None
 
     async def generate_image_report(
-            self,
-            analysis_result: dict,
-            group_id: str,
-            html_render_func,
-            avatar_url_getter=None,
-            nickname_getter=None,
+        self,
+        analysis_result: dict,
+        group_id: str,
+        html_render_func,
+        avatar_url_getter=None,
+        nickname_getter=None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -144,7 +148,7 @@ class ReportGenerator(IReportGenerator):
                             if isinstance(image_data, bytes):
                                 actual_data_head = image_data[:10]
                             elif isinstance(image_data, str) and os.path.exists(
-                                    image_data
+                                image_data
                             ):
                                 try:
                                     with open(image_data, "rb") as f:
@@ -155,7 +159,7 @@ class ReportGenerator(IReportGenerator):
                             if actual_data_head:
                                 # 检查 magic numbers (JPEG: FF D8, PNG: 89 50 4E 47)
                                 if actual_data_head.startswith(
-                                        b"\xff\xd8"
+                                    b"\xff\xd8"
                                 ) or actual_data_head.startswith(b"\x89PNG"):
                                     is_valid = True
                                 else:
@@ -197,11 +201,11 @@ class ReportGenerator(IReportGenerator):
                 self._avatar_session = None
 
     async def generate_pdf_report(
-            self,
-            analysis_result: dict,
-            group_id: str,
-            avatar_url_getter=None,
-            nickname_getter=None,
+        self,
+        analysis_result: dict,
+        group_id: str,
+        avatar_url_getter=None,
+        nickname_getter=None,
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
@@ -290,11 +294,11 @@ class ReportGenerator(IReportGenerator):
         return report
 
     async def _prepare_render_data(
-            self,
-            analysis_result: dict,
-            chart_template: str = "activity_chart.html",
-            avatar_url_getter=None,
-            nickname_getter=None,
+        self,
+        analysis_result: dict,
+        chart_template: str = "activity_chart.html",
+        avatar_url_getter=None,
+        nickname_getter=None,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -331,7 +335,9 @@ class ReportGenerator(IReportGenerator):
         titles_list = []
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
-            avatar_data = await self._get_user_avatar(str(title.user_id), avatar_url_getter)
+            avatar_data = await self._get_user_avatar(
+                str(title.user_id), avatar_url_getter
+            )
             title_data = {
                 "name": title.name,
                 "title": title.title,
@@ -410,11 +416,11 @@ class ReportGenerator(IReportGenerator):
         return render_data
 
     async def _render_mentions(
-            self,
-            text: str,
-            avatar_url_getter,
-            nickname_getter=None,
-            user_analysis: dict | None = None,
+        self,
+        text: str,
+        avatar_url_getter,
+        nickname_getter=None,
+        user_analysis: dict | None = None,
     ) -> str:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
@@ -535,24 +541,31 @@ class ReportGenerator(IReportGenerator):
     async def _get_user_avatar(self, avatar_id: str, avatar_url_getter=None) -> str:
         """
         获取用户头像的 Base64 Data URI。
-        增加了运行时内存缓存，避免单次生成任务中重复下载。
+        使用磁盘缓存，支持跨任务复用。获取失败时不缓存结果，以便后续请求重试。
         """
-        # 0. 检查运行时缓存
+        # 1. 检查缓存 (仅包含成功的头像数据)
         if avatar_id in self._avatar_cache:
             return self._avatar_cache[avatar_id]
-        else:
-            avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
-            if not avatar_bytes:
-                logger.error(f"获取用户头像失败 {avatar_id}, 服务器返回空内容")
-                return self._get_default_avatar_base64()
-            avatar = await self._b64_with_mime(avatar_bytes)
-            if avatar:
-                self._avatar_cache.set(avatar_id, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
-                return avatar
+
+        # 2. 尝试获取头像字节流
+        avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
+
+        if not avatar_bytes:
+            # 获取失败时返回默认头像，但不存入缓存，以便下次重试
+            logger.warning(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
+            return self._get_default_avatar_base64()
+
+        # 3. 获取成功：转换并缓存
+        avatar = self._b64_with_mime(avatar_bytes)
+        if avatar:
+            self._avatar_cache.set(avatar_id, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            return avatar
+
+        # 最终兜底
         return self._get_default_avatar_base64()
 
-    async def _b64_with_mime(self, _bytes: bytes) -> str | None:
-        import base64
+    def _b64_with_mime(self, _bytes: bytes) -> str | None:
+        """将字节数据转换为 Base64 Data URI，并自动识别 MIME 类型。"""
         try:
             b64 = base64.b64encode(_bytes).decode("utf-8")
             # 简单判断 mime type
@@ -561,14 +574,19 @@ class ReportGenerator(IReportGenerator):
                 mime = "image/png"
             elif _bytes.startswith(b"GIF8"):
                 mime = "image/gif"
-            elif _bytes.startswith(b"RIFF"):
+            elif _bytes.startswith(b"RIFF") and b"WEBP" in _bytes[8:16]:
                 mime = "image/webp"
+            elif _bytes.startswith(b"\xff\xd8"):
+                mime = "image/jpeg"
+
             return f"data:{mime};base64,{b64}"
         except Exception as e:
-            logger.error(f"base64 转换失败")
+            logger.error(f"base64 转换失败: {e}", exc_info=True)
         return None
 
-    async def _get_user_avatar_bytes(self, user_id: str, avatar_url_getter=None) -> bytes | None:
+    async def _get_user_avatar_bytes(
+        self, user_id: str, avatar_url_getter=None
+    ) -> bytes | None:
         """核心头像获取逻辑"""
         file_content = None
         if not self._avatar_session:
@@ -581,8 +599,13 @@ class ReportGenerator(IReportGenerator):
                 try:
                     # avatar_url_getter 应该返回 URL
                     result = await avatar_url_getter(user_id)
-                    if result and result.startswith("http"):
-                        avatar_url = result
+                    if result:
+                        if result.startswith("http"):
+                            avatar_url = result
+                        else:
+                            logger.warning(
+                                f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
+                            )
                 except Exception as e:
                     logger.warning(f"使用 custom avatar_url_getter 获取头像失败: {e}")
 
@@ -612,8 +635,7 @@ class ReportGenerator(IReportGenerator):
                             elif content.startswith(b"GIF8"):  # GIF
                                 is_valid_image = True
                             elif (
-                                    content.startswith(b"RIFF")
-                                    and b"WEBP" in content[:16]
+                                content.startswith(b"RIFF") and b"WEBP" in content[:16]
                             ):  # WebP
                                 is_valid_image = True
 
@@ -634,12 +656,19 @@ class ReportGenerator(IReportGenerator):
 
     def _get_default_avatar_base64(self) -> str:
         """返回默认头像 (灰色圆形占位符)"""
-        import base64
-
         # 一个简单的灰色圆圈 SVG 转 Base64
         svg = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="50" fill="#ddd"/></svg>'
         b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
         return f"data:image/svg+xml;base64,{b64}"
+
+    def close(self):
+        """释放资源，关闭缓存和 session"""
+        try:
+            if self._avatar_cache:
+                self._avatar_cache.close()
+                logger.debug("头像缓存已关闭")
+        except Exception as e:
+            logger.warning(f"关闭头像缓存失败: {e}")
 
     async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
         """将 HTML 内容转换为 PDF 文件"""
@@ -761,7 +790,7 @@ class ReportGenerator(IReportGenerator):
                 except Exception as e:
                     logger.warning(f"浏览器启动失败: {e}")
                     if "Executable doesn't exist" in str(e) or "executable at" in str(
-                            e
+                        e
                     ):
                         logger.error("未找到可用的浏览器。")
                         logger.info(
