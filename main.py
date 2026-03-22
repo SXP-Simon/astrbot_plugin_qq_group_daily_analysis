@@ -255,7 +255,7 @@ class GroupDailyAnalysis(Star):
             self.auto_scheduler = None  # type: ignore
             self.bot_manager = None  # type: ignore
             if self.report_generator:
-                self.report_generator.close()
+                await self.report_generator.close()
             self.report_generator = None  # type: ignore
             self.config_manager = None  # type: ignore
             self.message_processing_service = None  # type: ignore
