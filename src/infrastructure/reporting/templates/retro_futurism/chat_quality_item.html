@@ -139,25 +139,13 @@
 
     <!-- Stacked dimension bar chart -->
     <div class="retro-dimension-bar-container">
-        {% set total = 0 %}
-        {% for dim in dimensions %}
-            {% set total = total + dim.percentage %}
-        {% endfor %}
-
-        {% set scale = 1 %}
-        {% if total > 100 %}
-            {% set scale = 100 / total %}
-        {% elif total > 0 %}
-            {% set scale = 100 / total %}
-        {% endif %}
-
         {% set bg_colors = ['var(--c-accent)', 'var(--c-dec-1)', 'var(--c-dec-3)', 'var(--c-dec-2)', '#FFBA08', '#273C75', '#E07A5F', '#8D99AE'] %}
         {% set txt_colors = ['#ffffff', '#ffffff', '#000000', '#ffffff', '#000000', '#ffffff', '#000000', '#ffffff'] %}
         
         {% for dim in dimensions %}
             {% if dim.percentage > 0 %}
             <div class="retro-dimension-segment"
-                style="width: {{ dim.percentage * scale }}%; background-color: {{ bg_colors[loop.index0 % bg_colors|length] }}; color: {{ txt_colors[loop.index0 % txt_colors|length] }};"
+                style="width: {{ dim.percentage }}%; background-color: {{ bg_colors[loop.index0 % bg_colors|length] }}; color: {{ txt_colors[loop.index0 % txt_colors|length] }};"
                 title="{{ dim.comment }}">
                 <span style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding: 0 5px;">
                     {{ dim.name }} {{ dim.percentage }}%
