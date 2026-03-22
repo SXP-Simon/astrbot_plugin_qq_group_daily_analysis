@@ -91,7 +91,7 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 
 ## 任务目标：
 1. 将聊天内容划分为 3-6 个不同的维度/类别（如：技术探讨、水群闲聊、就业焦虑、深夜发情等）。
-2. 为每个维度计算一个大致的百分比占位（总和为 100%）。
+2. 为每个维度计算一个大致的百分比占位（总和小于等于 100%）。
 3. 为每个维度写一句犀利、幽默、毒舌或温情的点评。
 4. 给出一句总结性的全群表现评价。
 5. 设定一个本次报告的主题标题和副标题。
@@ -153,12 +153,26 @@ class ChatQualityAnalyzer(BaseAnalyzer):
         Returns:
             QualityReview 数据对象
         """
+        # 控制维度占比总和不超过100%
+        total_percentage = sum(
+            max(0.0, min(100.0, float(d.get("percentage", 0))))
+            for d in data.get("dimensions", [])
+        )
+
+        factor = 1.0
+        if total_percentage > 100:
+            factor = 100.0 / total_percentage
+
         dimensions = []
         for d in data.get("dimensions", []):
+            raw_p = float(d.get("percentage", 0))
+
+            final_p = round(max(0.0, min(100.0, raw_p)) * factor, 1)
+
             dimensions.append(
                 QualityDimension(
                     name=d.get("name", "未知"),
-                    percentage=float(d.get("percentage", 0)),
+                    percentage=final_p,
                     comment=d.get("comment", ""),
                 )
             )

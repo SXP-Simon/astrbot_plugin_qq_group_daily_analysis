@@ -421,7 +421,7 @@
                 "type": "object",
                 "hint": "金句分析提示词模板，可自定义修改，保留变量 {max_golden_quotes} 和 {messages_text} 写法不要更改，需要写 JSON 块请使用双花括号 {{ ... }} 兼容当前编辑存在的问题。非常推荐根据实际群聊情况进行优化，保留一定提示样本示例供模型参考",
                 "items": {
-                        "golden_quote_v2_prompt": {
+                    "golden_quote_v2_prompt": {
                         "description": "默认金句分析提示词",
                         "type": "text",
                         "editor_mode": true,
@@ -440,7 +440,7 @@
                         "type": "text",
                         "editor_mode": true,
                         "editor_language": "markdown",
-                        "default": "你是一个毒舌且幽默的群聊质量分析师，请生成聊天质量锐评内容。你需要按照下面的格式返回结果。\n\n分析接下来的群聊内容，给出多个维度的分析（3-6个）和汇总内容。\n\n群聊记录：\n{messages_text}\n\n### 返回格式示例：\n\n```json\n{{\n  \"title\": \"群聊质量分析报告\",\n  \"subtitle\": \"今天的群里发生了什么？\",\n  \"dimensions\": [\n    {{\n      \"name\": \"水群闲聊\",\n      \"percentage\": 50.0,\n      \"comment\": \"群友们今天也在努力划水呢。\"\n    }}\n  ],\n  \"summary\": \"今天也是元气满满的一天。\"\n}}\n```"
+                        "default": "你是一个毒舌且幽默的群聊质量分析师，请生成聊天质量锐评内容。你需要按照下面的格式返回结果。\n\n分析接下来的群聊内容，给出多个维度的分析（3-6个,所有维度的占比加起来小于等于100%）和汇总内容。\n\n群聊记录：\n{messages_text}\n\n### 返回格式示例：\n\n```json\n{{\n  \"title\": \"群聊质量分析报告\",\n  \"subtitle\": \"今天的群里发生了什么？\",\n  \"dimensions\": [\n    {{\n      \"name\": \"水群闲聊\",\n      \"percentage\": 50.0,\n      \"comment\": \"群友们今天也在努力划水呢。\"\n    }}\n  ],\n  \"summary\": \"今天也是元气满满的一天。\"\n}}\n```"
                     }
                 }
             }
