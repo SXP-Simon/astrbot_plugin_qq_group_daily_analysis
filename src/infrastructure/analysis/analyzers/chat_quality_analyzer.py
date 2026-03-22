@@ -155,7 +155,8 @@ class ChatQualityAnalyzer(BaseAnalyzer):
         """
         # 控制维度占比总和不超过100%
         total_percentage = sum(
-            float(d.get("percentage", 0)) for d in data.get("dimensions", [])
+            max(0.0, min(100.0, float(d.get("percentage", 0))))
+            for d in data.get("dimensions", [])
         )
 
         factor = 1.0
@@ -166,7 +167,7 @@ class ChatQualityAnalyzer(BaseAnalyzer):
         for d in data.get("dimensions", []):
             raw_p = float(d.get("percentage", 0))
 
-            final_p = round(raw_p * factor, 1)
+            final_p = round(max(0.0, min(100.0, raw_p)) * factor, 1)
 
             dimensions.append(
                 QualityDimension(
