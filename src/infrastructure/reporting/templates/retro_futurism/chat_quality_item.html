@@ -148,7 +148,7 @@
                 style="width: {{ dim.percentage }}%; background-color: {{ bg_colors[loop.index0 % bg_colors|length] }}; color: {{ txt_colors[loop.index0 % txt_colors|length] }};"
                 title="{{ dim.comment }}">
                 <span style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding: 0 5px;">
-                    {{ dim.name }} {{ dim.percentage }}%
+                    {{ dim.name }}
                 </span>
             </div>
             {% endif %}
@@ -161,6 +161,7 @@
             {% if dim.percentage > 0 %}
             <div class="retro-comment-box">
                 <div class="retro-comment-title">{{ dim.name }}</div>
+                <div style="font-size: 0.85em; font-weight: bold; color: var(--c-dec-2); margin-bottom: 8px;">PROPORTION: {{ dim.percentage }}%</div>
                 <div style="color: var(--c-text);">{{ dim.comment }}</div>
             </div>
             {% endif %}

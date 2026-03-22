@@ -13,3 +13,11 @@ data/t2i_templates/base.html
 .sisyphus/
 data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars/123456789_40.jpg
 data/plugin_data/astrbot_plugin_qq_group_daily_analysis/cache/avatars/987654321_40.jpg
+debug_format.html
+debug_hack.html
+debug_retro.html
+debug_scrapbook.html
+debug_simple.html
+debug_spring_festival.html
+debug_spring.html
+data/debug_data/avatar/cache.db

@@ -1,25 +1,133 @@
-<div style="background: #000; border: 1px solid #0f0; padding: 15px; margin-bottom: 20px; box-shadow: 0 0 10px #0f0; color: #0f0; font-family: 'Consolas', 'Monaco', 'Courier New', monospace;">
-    <div style="text-align: center; margin-bottom: 15px;">
-        <h3 style="margin: 0; color: #0f0;">[ STATUS: {{ title }} ]</h3>
-        {% if subtitle %}<div style="font-size: 0.8em; color: #0c0;"># {{ subtitle }}</div>{% endif %}
+<style>
+    .hack-quality-item {
+        background: #000;
+        border: 2px solid #ff9900;
+        padding: 20px;
+        margin-bottom: 25px;
+        color: #ff9900;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        box-shadow: 0 0 15px rgba(255, 153, 0, 0.2);
+        position: relative;
+    }
+
+    .hack-quality-header {
+        border-bottom: 1px solid #ff9900;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+    }
+
+    .hack-theme-title {
+        font-size: 1.4em;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .hack-time-range {
+        font-size: 0.85em;
+        color: #e68a00;
+    }
+
+    .hack-dimension-bar-container {
+        margin: 20px 0;
+        background: #0d0800;
+        border: 1px solid #ff9900;
+        height: 30px;
+        display: flex;
+        overflow: hidden;
+    }
+
+    .hack-dimension-segment {
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        border-right: 1px solid #ff9900;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+
+    .hack-dimension-segment:last-child {
+        border-right: none;
+    }
+
+    .hack-comments-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .hack-comment-box {
+        border: 1px dashed #ff9900;
+        padding: 10px;
+        font-size: 0.9em;
+        background: rgba(40, 20, 0, 0.5);
+    }
+
+    .hack-comment-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+        display: block;
+        color: #fff;
+        font-size: 0.85em;
+    }
+
+    .hack-summary-section {
+        border-top: 1px solid #ff9900;
+        padding-top: 15px;
+        margin-top: 10px;
+        line-height: 1.5;
+    }
+
+    .hack-summary-label {
+        font-weight: bold;
+        color: #fff;
+        background: #cc7a00;
+        padding: 2px 6px;
+        margin-right: 8px;
+    }
+</style>
+
+<div class="hack-quality-item">
+    <div class="hack-quality-header">
+        <div class="hack-theme-title">> {{ title }}</div>
+        {% if subtitle %}<div class="hack-time-range"># {{ subtitle }}</div>{% endif %}
     </div>
-    
-    <div>
-        {% for dimension in dimensions %}
-        <div style="margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 4px;">
-                <span>> {{ dimension.name }}</span>
-                <span>{{ dimension.percentage }}%</span>
+
+    <div class="hack-dimension-bar-container">
+        {% set bg_colors = ['#ff9900', '#e68a00', '#cc7a00', '#b36b00', '#995c00', '#804d00'] %}
+        {% set txt_colors = ['#000', '#000', '#fff', '#fff', '#fff', '#fff'] %}
+        
+        {% for dim in dimensions %}
+            {% if dim.percentage > 0 %}
+            <div class="hack-dimension-segment"
+                style="width: {{ dim.percentage }}%; background-color: {{ bg_colors[loop.index0 % bg_colors|length] }}; color: {{ txt_colors[loop.index0 % txt_colors|length] }};"
+                title="{{ dim.comment }}">
+                <span style="white-space: nowrap; padding: 0 4px; overflow: hidden; text-overflow: ellipsis;">{{ dim.name }}</span>
             </div>
-            <div style="height: 10px; background: #030; border: 1px solid #0f0; overflow: hidden;">
-                <div style="height: 100%; width: {{ dimension.percentage }}%; background-color: #0f0;"></div>
-            </div>
-            <p style="margin: 4px 0 0 10px; font-size: 0.8em; color: #0a0;">// {{ dimension.comment }}</p>
-        </div>
+            {% endif %}
         {% endfor %}
     </div>
-    
-    <div style="border-top: 1px solid #0f0; margin-top: 10px; padding-top: 10px; line-height: 1.4; color: #0f0;">
-        <span style="font-weight: bold;">[LOG]:</span> {{ summary }}
+
+    <div class="hack-comments-grid">
+        {% for dim in dimensions %}
+            {% if dim.percentage > 0 %}
+            <div class="hack-comment-box">
+                <span class="hack-comment-title">:: {{ dim.name }}</span>
+                <span style="font-size: 0.8em; color: #ff9900; display: block; margin-bottom: 5px; opacity: 0.8;">>> {{ dim.percentage }}%</span>
+                <div>{{ dim.comment }}</div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="hack-summary-section">
+        <span class="hack-summary-label">[SYSTEM_SUMMARY]</span>
+        <span>{{ summary }}</span>
     </div>
 </div>
+
