@@ -233,21 +233,6 @@
     <div class="dimension-bar-container">
         <div class="dimension-bar">
             {% set ns = namespace(total=0) %}
-            {% for dim in dimensions %}
-            {% set safe_percentage = dim.percentage|float %}
-            {% if safe_percentage < 0 %}
-            {% set safe_percentage = 0 %}
-            {% elif safe_percentage > 100 %}
-            {% set safe_percentage = 100 %}
-            {% endif %}
-            {% set ns.total = ns.total + safe_percentage %}
-            {% endfor %}
-
-            {% set scale = 1 %}
-            {% if ns.total > 0 %}
-            {% set scale = 100 / ns.total %}
-            {% endif %}
-
             {% set colors = ['#ffb74d', '#ff8a65', '#ba68c8', '#4db6ac', '#4dd0e1', '#64b5f6', '#81c784', '#e57373'] %}
             {% for dim in dimensions %}
             {% set safe_percentage = dim.percentage|float %}
@@ -258,7 +243,7 @@
             {% endif %}
             {% if safe_percentage > 0 %}
             <div class="dimension-segment"
-                style="width: {{ safe_percentage * scale }}%; background-color: {{ colors[loop.index0 % colors|length] }};"
+                style="width: {{ safe_percentage }}%; background-color: {{ colors[loop.index0 % colors|length] }};"
                 title="{{ dim.comment }}">
                 <span class="segment-label"
                     style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
@@ -287,7 +272,7 @@
             <div class="small-tape" style="transform: translateX(-50%) rotate({{ tape_rot }});"></div>
             <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
                 <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }}; margin-bottom: 0;">{{ dim.name }}</strong>
-                <span style="font-size: 0.86em; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }};">{{ '%.1f'|format(safe_percentage * scale) }}%</span>
+                <span style="font-size: 0.86em; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }};">{{ '%.1f'|format(safe_percentage) }}%</span>
             </div>
             <span>{{ dim.comment }}</span>
         </div>
