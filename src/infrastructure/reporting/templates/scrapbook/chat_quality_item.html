@@ -232,16 +232,14 @@
     <!-- 堆叠柱状图展示各个维度评分，充分利用空间 -->
     <div class="dimension-bar-container">
         <div class="dimension-bar">
-            {% set total = 0 %}
+            {% set ns = namespace(total=0) %}
             {% for dim in dimensions %}
-            {% set total = total + dim.percentage %}
+            {% set ns.total = ns.total + dim.percentage %}
             {% endfor %}
 
             {% set scale = 1 %}
-            {% if total > 100 %}
-            {% set scale = 100 / total %}
-            {% elif total > 0 %}
-            {% set scale = 100 / total %}
+            {% if ns.total > 0 %}
+            {% set scale = 100 / ns.total %}
             {% endif %}
 
             {% set colors = ['#ffb74d', '#ff8a65', '#ba68c8', '#4db6ac', '#4dd0e1', '#64b5f6', '#81c784', '#e57373'] %}
@@ -252,7 +250,7 @@
                 title="{{ dim.comment }}">
                 <span class="segment-label"
                     style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
-                    {{ dim.name }}({{ dim.percentage }})
+                    {{ dim.name }}
                 </span>
             </div>
             {% endif %}
@@ -269,7 +267,10 @@
         {% set tape_rot = loop.cycle('2deg', '-1deg', '3deg', '-2deg', '1deg', '-3deg') %}
         <div class="dim-sticker" style="transform: rotate({{ rot }}); border-color: {{ colors[loop.index0 % colors|length] }};">
             <div class="small-tape" style="transform: translateX(-50%) rotate({{ tape_rot }});"></div>
-            <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }};">{{ dim.name }}</strong> 
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;">
+                <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }}; margin-bottom: 0;">{{ dim.name }}</strong>
+                <span style="font-size: 0.86em; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }};">{{ '%.1f'|format(dim.percentage * scale) }}%</span>
+            </div>
             <span>{{ dim.comment }}</span>
         </div>
         {% endif %}
