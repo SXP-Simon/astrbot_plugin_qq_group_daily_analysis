@@ -42,12 +42,6 @@ class ReportGenerator(IReportGenerator):
         )
         self._avatar_session = None
 
-    async def close(self):
-        """关闭资源"""
-        if self._avatar_session:
-            await self._avatar_session.close()
-            self._avatar_session = None
-
     async def generate_image_report(
         self,
         analysis_result: dict,
@@ -677,8 +671,12 @@ class ReportGenerator(IReportGenerator):
         b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
         return f"data:image/svg+xml;base64,{b64}"
 
-    def close(self):
+    async def close(self):
         """释放资源，关闭缓存和 session"""
+        if self._avatar_session:
+            await self._avatar_session.close()
+            self._avatar_session = None
+
         try:
             if self._avatar_cache:
                 self._avatar_cache.close()
