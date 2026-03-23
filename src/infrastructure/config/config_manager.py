@@ -238,6 +238,10 @@ class ConfigManager:
         """获取是否保持原始人格设定"""
         return self._get_group("analysis_features").get("keep_original_persona", False)
 
+    def get_enable_local_storage(self) -> bool:
+        """获取是否启用本地存储归档"""
+        return self._get_group("report_storage").get("enable_local_storage", True)
+
     def get_report_output_dir(self) -> str:
         """获取报告统一输出目录"""
         try:
@@ -461,6 +465,11 @@ class ConfigManager:
     def set_max_golden_quotes(self, count: int):
         """设置最大金句数量"""
         self._ensure_group("analysis_features")["max_golden_quotes"] = count
+        self.config.save_config()
+
+    def set_enable_local_storage(self, enabled: bool):
+        """设置是否启用本地存储归档"""
+        self._ensure_group("report_storage")["enable_local_storage"] = enabled
         self.config.save_config()
 
     def set_report_output_dir(self, directory: str):

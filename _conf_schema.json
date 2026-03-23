@@ -75,7 +75,7 @@
                     "format"
                 ],
                 "default": "scrapbook",
-                "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
+                "hint": "分析报告使用的HTML模板名称，注意：该外部主题模板仅适用于 image(图片) 和 pdf(PDF文件) 格式，text(文本) 格式无效不会生效。QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
             },
             "debug_mode": {
                 "type": "bool",
@@ -338,6 +338,12 @@
         "type": "object",
         "hint": "统一管理所有格式（图片、文本、PDF）分析报告的本地存档行为",
         "items": {
+            "enable_local_storage": {
+                "type": "bool",
+                "description": "启用本地存储归档",
+                "default": true,
+                "hint": "开启后所有的报告（图片、文本、PDF）生成后都会被长久保存在统一输出目录中；关闭后报告将直接推送至群聊不再留底浪费空间（对纯净群管理员有帮助）。"
+            },
             "report_output_dir": {
                 "type": "string",
                 "description": "报告统一输出目录",

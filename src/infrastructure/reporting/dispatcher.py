@@ -157,13 +157,23 @@ class ReportDispatcher:
         # 3. 发送 PDF (或静默拦截)
         # 注意: PDF 已经在 generate 时由 Generator 持久化了，无需再次存档
         if pdf_path:
+            sent = False
             if silent_mode:
-                logger.info(f"[{trace_id}] 群 {group_id} PDF报告已生成留存，静默模式不推送。")
-                return True
-                
-            sent = await self.message_sender.send_pdf(
-                group_id, pdf_path, "📊 每日群聊分析报告已生成：", platform_id
-            )
+                logger.info(f"[{trace_id}] 群 {group_id} PDF报告静默模式不推送。")
+                sent = True
+            else:
+                sent = await self.message_sender.send_pdf(
+                    group_id, pdf_path, "📊 每日群聊分析报告已生成：", platform_id
+                )
+            
+            # 如果不启用本地存储，且发信结束（或静默阻断），应当清理 Generator 生成出来的临时文件
+            if not self.config_manager.get_enable_local_storage():
+                try:
+                    Path(pdf_path).unlink(missing_ok=True)
+                    logger.debug(f"[{trace_id}] 本地存储归档未启用，清理PDF缓存({pdf_path})")
+                except Exception as e:
+                    pass
+
             if sent:
                 return True
 
@@ -341,6 +351,9 @@ class ReportDispatcher:
 
     def _save_to_local_binary(self, group_id: str, image_url: str, ext: str):
         """将二进制报告（如图片Base64）存留本地硬盘永久归档"""
+        if not self.config_manager.get_enable_local_storage():
+            return
+            
         try:
             image_data = None
             if image_url.startswith("base64://"):
@@ -368,6 +381,9 @@ class ReportDispatcher:
 
     def _save_to_local_text(self, group_id: str, text: str, ext: str):
         """将纯文本报告存留本地硬盘永久归档"""
+        if not self.config_manager.get_enable_local_storage():
+            return
+            
         try:
             save_path = self._get_archive_path(group_id, ext)
             with open(save_path, "w", encoding="utf-8") as f:
