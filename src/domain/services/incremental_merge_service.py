@@ -174,10 +174,14 @@ class IncrementalMergeService:
             # 合并参与者 ID（取并集）
             state.all_participant_ids.update(batch.participant_ids)
 
+            # 收集所有批次的质量锐评（用于最终汇总）
+            if batch.chat_quality_review:
+                state.all_quality_reviews.append(batch.chat_quality_review)
+
             # 记录最后分析消息时间戳（取最大值）
             if batch.last_message_timestamp > state.last_analyzed_message_timestamp:
                 state.last_analyzed_message_timestamp = batch.last_message_timestamp
-                # 更新锐评为最新批次的 (如果有)
+                # 更新锐评为最新批次的 (如果没有汇总分析，则作为兜底)
                 if batch.chat_quality_review:
                     state.chat_quality_review = batch.chat_quality_review
 

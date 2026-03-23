@@ -90,29 +90,28 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 请分析以下群聊记录，输出一份"聊天质量锐评"。
 
 ## 任务目标：
-1. 将聊天内容划分为 3-6 个不同的维度/类别（如：技术探讨、水群闲聊、就业焦虑、深夜发情等）。
-2. 为每个维度计算一个大致的百分比占位（总和小于等于 100%）。
-3. 为每个维度写一句犀利、幽默、毒舌或温情的点评。
-4. 给出一句总结性的全群表现评价。
-5. 设定一个本次报告的主题标题和副标题。
+1. **维度划分**：将聊天内容划分为 3-6 个【高层级、抽象、泛化】的维度（例如：就业焦虑、生涯规划、技术方案研究、情感树洞、无意义水群等）。
+2. **严禁在维度名称（name）中出现任何具体的群聊人物名、项目名、具体的报错内容或细碎的事件点。标题必须保持高度抽象且字数简练（2-6个字）。**
+3. 为每个维度计算一个大致的百分比占位（总和小于等于 100%）。
+4. **点评内容**：为每个维度写一句犀利、幽默、毒舌或温情的点评。具体的吐槽内容、具体的细节事件描述请放在这里。
+5. **全群表现**：给出一句总结性的评价，作为总结标题对应的“金句”。
+6. **主题设定**：设定一个本次报告的主题标题和副标题。
 
 ## 点评风格指南：
-- 语言要接地气，多用互联网黑话。
-- 吐槽要精准，避重就轻。
-- 如果群友在认真讨论技术，可以夸两句但也要带点调侃。
-- 如果群友在无意义水群，请狠狠吐槽。
+- 语言要接地气，多用互联网黑话。吐槽要精准，避重就轻。
+- **只有维度名称（name）需要抽象，点评（comment）和总结（summary）可以非常具体和生动。**
 
 ## 返回格式要求：
 必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。
 
 ```json
 {{
-  "title": "主题标题 (如: 互联网难民收容所)",
-  "subtitle": "副标题 (如: 只要不工作，我们就是最好的朋友)",
+  "title": "今日群聊主题",
+  "subtitle": "副标题",
   "dimensions": [
     {{
-      "name": "维度名称",
-      "percentage": 25.5,
+      "name": "抽象维度名",
+      "percentage": 比例,
       "comment": "维度的毒舌点评"
     }}
   ],
@@ -198,6 +197,120 @@ class ChatQualityAnalyzer(BaseAnalyzer):
             summary=data.get("summary", "今天也是充满活力的一天。"),
         )
 
+    async def summarize_batch_reviews(
+        self,
+        batch_reviews: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[QualityReview | None, TokenUsage]:
+        """
+        汇总多个增量批次的质量报告，生成最终的每日全天总评。
+        """
+        if not batch_reviews:
+            return None, TokenUsage()
+
+        if len(batch_reviews) == 1:
+            return self._build_review_from_dict(batch_reviews[0]), TokenUsage()
+
+        try:
+            # 构建汇总用的提示词
+            reviews_text = ""
+            for i, rev in enumerate(batch_reviews):
+                title = rev.get("title", "未命名")
+                summary = rev.get("summary", "")
+                dims = ", ".join(
+                    [
+                        f"{d.get('name')}({d.get('percentage')}%)"
+                        for d in rev.get("dimensions", [])
+                    ]
+                )
+                reviews_text += f"\n批次 {i + 1} [{title}]:\n- 维度表现: {dims}\n- 核心摘要: {summary}\n"
+
+            prompt_template = self.config_manager.get_quality_summary_prompt()
+
+            if not prompt_template:
+                prompt_template = """你是一个毒舌且幽默的群聊质量分析师。
+你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。
+你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。
+
+## 任务目标：
+1. **全局抽象维度**：根据各批次的维度表现，平衡权重，提取出 3-6 个覆盖全天的【核心、上层抽象】课题维度（如：职场/行业风向、技术架构演进、社畜心理博弈等）。
+2. **严禁在维度名称（name）中出现具体的批次细节。标题必须代表全天的某种趋势。**
+3. **百分比融合**：根据全天笔记的频率和强度，给出一个代表全天整体分布的比例（总和不超过100%）。
+4. **终极点评**：为每个汇总维度写出一句升华后的全天总结性点评。可以融合具体批次中的有趣槽点。
+5. **终极总结**：拟定全天的大型主题标题、副标题，并给出一句霸气的全天表现总结。
+
+## 风格要求：
+- 只有维度名称（name）需要高度概括抽象。
+- 点评（comment）和总结（summary）请尽量生动、毒舌、具体，要把一整天的梗串联起来。
+
+## 返回格式要求：
+必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。
+
+```json
+{{
+  "title": "今日群聊主题",
+  "subtitle": "副标题",
+  "dimensions": [
+    {{
+      "name": "抽象大类标题",
+      "percentage": 比例,
+      "comment": "维度的全天锐评"
+    }}
+  ],
+  "summary": "全天总结金句"
+}}
+```
+"""
+            prompt = prompt_template.format(reviews_text=reviews_text)
+
+            # 调用 LLM 进行汇总
+            system_prompt = await self._build_system_prompt(umo)
+
+            response = await call_provider_with_retry(
+                self.context,
+                self.config_manager,
+                prompt=prompt,
+                max_tokens=self.get_max_tokens(),
+                temperature=0.7,
+                umo=umo,
+                provider_id_key=self.get_provider_id_key(),
+                system_prompt=system_prompt,
+            )
+
+            if response is None:
+                return None, TokenUsage()
+
+            token_usage_dict = extract_token_usage(response)
+            usage = TokenUsage(
+                prompt_tokens=token_usage_dict["prompt_tokens"],
+                completion_tokens=token_usage_dict["completion_tokens"],
+                total_tokens=token_usage_dict["total_tokens"],
+            )
+
+            result_text = extract_response_text(response)
+            if not result_text:
+                return None, usage
+
+            success, parsed_data, error_msg = parse_json_object_response(
+                result_text, "汇总质量分析"
+            )
+
+            if success and parsed_data:
+                review = self._build_review_from_dict(parsed_data)
+                logger.info(
+                    f"聊天质量汇总分析成功，解析到 {len(review.dimensions)} 个汇总维度"
+                )
+                return review, usage
+
+            # 降级：如果汇总失败，返回最新的一个
+            logger.warning(f"聊天质量汇总分析失败，降级使用最新批次: {error_msg}")
+            return self._build_review_from_dict(batch_reviews[-1]), usage
+
+        except Exception as e:
+            logger.error(f"聊天质量汇总分析异常: {e}", exc_info=True)
+            return self._build_review_from_dict(batch_reviews[-1]), TokenUsage()
+
     async def analyze_quality(
         self,
         messages: list[dict],
@@ -258,7 +371,9 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 
             if success and parsed_data:
                 review = self._build_review_from_dict(parsed_data)
-                logger.info(f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度")
+                logger.debug(
+                    f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度"
+                )
                 return review, usage
 
             # 7. 正则降级（使用 extract_quality_with_regex）
@@ -267,7 +382,7 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 
             if regex_data:
                 review = self._build_review_from_dict(regex_data)
-                logger.info(
+                logger.debug(
                     f"聊天质量正则提取成功，获得 {len(review.dimensions)} 个维度"
                 )
                 return review, usage
@@ -277,7 +392,7 @@ class ChatQualityAnalyzer(BaseAnalyzer):
             return None, usage
 
         except Exception as e:
-            logger.error(f"聊天质量分析解析失败: {e}", exc_info=True)
+            logger.error(f"聊天质量分析失败: {e}", exc_info=True)
             return None, TokenUsage()
 
     # Override analyze to bridge the base class interface

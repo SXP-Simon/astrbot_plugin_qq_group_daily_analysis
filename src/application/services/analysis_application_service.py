@@ -583,20 +583,17 @@ class AnalysisApplicationService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            # 6. 执行用户称号 LLM 分析
+            # 6. 执行分析相关的变量准备
             user_titles = []
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+            unified_msg_origin = (
+                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+            )
 
             if user_title_enabled and state.user_activities:
                 max_user_titles = self.config_manager.get_max_user_titles()
                 # 从合并后的 user_activities 中取出 top 用户
                 top_users = state.get_user_activity_ranking(max_user_titles)
-
-                unified_msg_origin = (
-                    f"{platform_id}:GroupMessage:{group_id}"
-                    if platform_id
-                    else group_id
-                )
 
                 try:
                     async with self.llm_semaphore:
@@ -627,6 +624,58 @@ class AnalysisApplicationService:
                     )
                 except Exception as e:
                     logger.error(f"增量最终报告用户称号分析失败: {e}", exc_info=True)
+
+            # 6.5 执行聊天质量汇总分析 (如果有多个批次的质量报告)
+            if (
+                self.config_manager.get_chat_quality_analysis_enabled()
+                and state.all_quality_reviews
+            ):
+                try:
+                    async with self.llm_semaphore:
+                        logger.debug(
+                            f"[LLM] 已进入聊天质量汇总分析队列 (群: {group_id})"
+                        )
+                        (
+                            summarized_review,
+                            quality_token_usage,
+                        ) = await self.llm_analyzer.summarize_quality_reviews(
+                            batch_reviews=state.all_quality_reviews,
+                            umo=unified_msg_origin,
+                        )
+                    if summarized_review:
+                        # 更新 state 中的 review 为汇总后的结果
+                        # 这里我们需要将 QualityReview 对象存回 dict 或直接在后续处理中使用
+                        # build_analysis_result 会使用 state.chat_quality_review
+                        state.chat_quality_review = {
+                            "title": summarized_review.title,
+                            "subtitle": summarized_review.subtitle,
+                            "dimensions": [
+                                {
+                                    "name": d.name,
+                                    "percentage": d.percentage,
+                                    "comment": d.comment,
+                                    "color": d.color,
+                                }
+                                for d in summarized_review.dimensions
+                            ],
+                            "summary": summarized_review.summary,
+                        }
+
+                        # 累加 Token
+                        state.total_token_usage["prompt_tokens"] = (
+                            state.total_token_usage.get("prompt_tokens", 0)
+                            + quality_token_usage.prompt_tokens
+                        )
+                        state.total_token_usage["completion_tokens"] = (
+                            state.total_token_usage.get("completion_tokens", 0)
+                            + quality_token_usage.completion_tokens
+                        )
+                        state.total_token_usage["total_tokens"] = (
+                            state.total_token_usage.get("total_tokens", 0)
+                            + quality_token_usage.total_tokens
+                        )
+                except Exception as e:
+                    logger.error(f"增量最终报告聊天质量汇总失败: {e}", exc_info=True)
 
             # 7. 构建 analysis_result
             analysis_result = self.incremental_merge_service.build_analysis_result(

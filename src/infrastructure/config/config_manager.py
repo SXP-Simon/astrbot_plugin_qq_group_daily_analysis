@@ -291,8 +291,24 @@ class ConfigManager:
             return prompt
         return ""
 
-    def get_quality_analysis_prompt(self, style: str = "quality_prompt") -> str:
+    def get_quality_analysis_prompt(self, style: str = "quality_v2_prompt") -> str:
         """获取聊天质量分析提示词模板"""
+        prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
+        prompt = prompts_config.get(style, "")
+        if prompt:
+            return prompt
+        return ""
+
+    def set_quality_analysis_prompt(self, prompt: str):
+        """设置聊天质量分析提示词模板"""
+        prompts = self._ensure_group("prompts")
+        if "quality_analysis_prompts" not in prompts:
+            prompts["quality_analysis_prompts"] = {}
+        prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
+        self.config.save_config()
+
+    def get_quality_summary_prompt(self, style: str = "quality_summary_prompt") -> str:
+        """获取聊天质量汇总分析提示词模板"""
         prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
         prompt = prompts_config.get(style, "")
         if prompt:
@@ -305,6 +321,14 @@ class ConfigManager:
         if "topic_analysis_prompts" not in prompts:
             prompts["topic_analysis_prompts"] = {}
         prompts["topic_analysis_prompts"]["topic_prompt"] = prompt
+        self.config.save_config()
+
+    def set_quality_summary_prompt(self, prompt: str):
+        """设置聊天质量汇总分析提示词模板"""
+        prompts = self._ensure_group("prompts")
+        if "quality_analysis_prompts" not in prompts:
+            prompts["quality_analysis_prompts"] = {}
+        prompts["quality_analysis_prompts"]["quality_summary_prompt"] = prompt
         self.config.save_config()
 
     def set_user_title_analysis_prompt(self, prompt: str):
