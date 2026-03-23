@@ -49,6 +49,45 @@ class ConfigManager:
         """获取群组列表（用于黑白名单）"""
         return self._get_group("basic").get("group_list", [])
 
+    @staticmethod
+    def _match_umo_rule(rule: str, target: str) -> bool:
+        """
+        匹配目标源(target)是否符合指定规则(rule)
+        支持 UMO 前缀和包含的话题会话的后段(#)提权匹配。
+        """
+        if rule == target:
+            return True
+
+        # 分解目标 UMO
+        target_has_prefix = ":" in target
+        target_simple_id = target.split(":")[-1] if target_has_prefix else target
+        target_parent_id = target_simple_id.split("#", 1)[0] if "#" in target_simple_id else target_simple_id
+        target_has_topic = "#" in target_simple_id
+        target_prefix = target.rsplit(":", 1)[0] if target_has_prefix else ""
+
+        # 分解规则
+        rule_has_prefix = ":" in rule
+        rule_simple_id = rule.split(":")[-1] if rule_has_prefix else rule
+        rule_prefix = rule.rsplit(":", 1)[0] if rule_has_prefix else ""
+
+        if rule_has_prefix:
+            # 规则也带有平台前缀，则双方前缀必须完全一致
+            if not target_has_prefix or rule_prefix != target_prefix:
+                return False
+            # 允许 Telegram 等带后缀的话题会话通过“父 UMO”被包含命中
+            if target_has_topic and rule_simple_id == target_parent_id:
+                return True
+            return False
+        
+        # 规则只是一个单独的不带前缀的纯标识
+        if rule == target_simple_id:
+            return True
+        # 允许单独通过群号父 ID 来命中（如 rule="123", target="telegram2:Msg:123#456"）
+        if target_has_topic and rule == target_parent_id:
+            return True
+            
+        return False
+
     def is_group_allowed(self, group_id_or_umo: str) -> bool:
         """
         根据配置的白/黑名单判断是否允许在该群聊中使用
@@ -64,44 +103,7 @@ class ConfigManager:
         glist = [str(g) for g in self.get_group_list()]
         target = str(group_id_or_umo)
 
-        target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
-            target_simple_id.split("#", 1)[0]
-            if "#" in target_simple_id
-            else target_simple_id
-        )
-
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
-            if ":" in item:
-                if item == target:
-                    return True
-
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
-                # 例如: item=telegram2:GroupMessage:-1001
-                #      target=telegram2:GroupMessage:-1001#2264
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
-            return "#" in target_simple_id and item == target_parent_id
-
-        is_in_list = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+        is_in_list = any(self._match_umo_rule(item, target) for item in glist)
 
         if mode == "whitelist":
             return is_in_list
@@ -164,39 +166,7 @@ class ConfigManager:
         glist = [str(g) for g in self.get_send_report_list()]
         target = str(group_id_or_umo)
 
-        target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
-            target_simple_id.split("#", 1)[0]
-            if "#" in target_simple_id
-            else target_simple_id
-        )
-
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
-            if ":" in item:
-                if item == target:
-                    return True
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            return "#" in target_simple_id and item == target_parent_id
-
-        matched = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+        matched = any(self._match_umo_rule(item, target) for item in glist)
         return matched if mode == "whitelist" else not matched
 
     def get_output_format(self) -> str:

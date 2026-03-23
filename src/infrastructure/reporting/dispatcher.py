@@ -63,7 +63,7 @@ class ReportDispatcher:
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
-            return await self._dispatch_text(group_id, analysis_result, platform_id)
+            return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
         # 2. 生成图片
         image_url = None
@@ -132,7 +132,7 @@ class ReportDispatcher:
 
         # 6. 最终回退：文本报告
         logger.warning(f"[{trace_id}] Falling back to text report.")
-        return await self._dispatch_text(group_id, analysis_result, platform_id)
+        return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
     async def _dispatch_pdf(
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None, silent_mode: bool = False
@@ -171,8 +171,11 @@ class ReportDispatcher:
                 try:
                     Path(pdf_path).unlink(missing_ok=True)
                     logger.debug(f"[{trace_id}] 本地存储归档未启用，清理PDF缓存({pdf_path})")
-                except Exception as e:
-                    pass
+                except OSError as e:
+                    # missing_ok=True 已经忽略文件不存在的情况；其他 OSError 需要记录，避免静默失败
+                    logger.warning(
+                        f"[{trace_id}] 本地存储归档未启用，清理PDF缓存失败({pdf_path}): {e!r}"
+                    )
 
             if sent:
                 return True
