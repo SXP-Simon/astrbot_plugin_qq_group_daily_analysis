@@ -175,6 +175,9 @@ class IncrementalState:
     topics: list[dict] = field(default_factory=list)
     golden_quotes: list[dict] = field(default_factory=list)
     chat_quality_review: dict[str, Any] | None = None
+    all_quality_reviews: list[dict] = field(
+        default_factory=list
+    )  # 存储所有批次的质量锐评，用于最终报告时的汇总分析
 
     # 合并后的统计数据（按小时）
     hourly_message_counts: dict[str, int] = field(default_factory=dict)

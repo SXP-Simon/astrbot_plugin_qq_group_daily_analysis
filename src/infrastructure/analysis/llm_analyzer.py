@@ -164,6 +164,19 @@ class LLMAnalyzer(IAnalysisProvider):
             logger.error(f"金句分析失败: {e}")
             return [], TokenUsage()
 
+    async def summarize_quality_reviews(
+        self,
+        batch_reviews: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[QualityReview | None, TokenUsage]:
+        """
+        汇总多个质量分析报告（增量模式使用）
+        """
+        return await self.chat_quality_analyzer.summarize_batch_reviews(
+            batch_reviews, umo, session_id
+        )
+
     async def analyze_all_concurrent(
         self,
         messages: list[dict],

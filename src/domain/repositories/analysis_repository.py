@@ -85,3 +85,13 @@ class IAnalysisProvider(ABC):
     ) -> tuple[list[SummaryTopic], list[GoldenQuote], TokenUsage, QualityReview | None]:
         """增量模式并发分析"""
         pass
+
+    @abstractmethod
+    async def summarize_quality_reviews(
+        self,
+        batch_reviews: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[QualityReview | None, TokenUsage]:
+        """汇总多个聊天质量报告（增量模式使用）"""
+        pass
