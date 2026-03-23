@@ -504,10 +504,14 @@ class GroupDailyAnalysis(Star):
         )
         TraceContext.set(trace_id)
 
-        # 使用表情回应代替文本回复
+        # 表情回应 或 文本提示（二选一，由配置开关控制）
         adapter = self.bot_manager.get_adapter(platform_id)
         orig_msg_id = getattr(event.message_obj, "message_id", None)
-        if adapter and orig_msg_id:
+        use_text_reply = self.config_manager.get_enable_analysis_reply()
+
+        if use_text_reply:
+            yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
+        elif adapter and orig_msg_id:
             await adapter.set_reaction(event.get_group_id(), orig_msg_id, "🔍")  # 🔍
 
         try:
@@ -524,7 +528,7 @@ class GroupDailyAnalysis(Star):
                     yield event.plain_result("❌ 分析失败，原因未知")
                 return
 
-            if adapter and orig_msg_id:
+            if not use_text_reply and adapter and orig_msg_id:
                 await adapter.set_reaction(
                     event.get_group_id(), orig_msg_id, "📊"
                 )  # 📊
