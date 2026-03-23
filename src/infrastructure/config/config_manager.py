@@ -466,6 +466,15 @@ class ConfigManager:
         """获取是否使用用户群名片"""
         return self._get_group("basic").get("enable_user_card", False)
 
+    def get_enable_analysis_reply(self) -> bool:
+        """获取是否在群分析完成后发送文本回复"""
+        return self._get_group("basic").get("enable_analysis_reply", False)
+
+    def set_enable_analysis_reply(self, enabled: bool):
+        """设置是否在群分析完成后发送文本回复"""
+        self._ensure_group("basic")["enable_analysis_reply"] = enabled
+        self.config.save_config()
+
     # ========== 群文件/群相册上传配置 ==========
 
     def get_enable_group_file_upload(self) -> bool:

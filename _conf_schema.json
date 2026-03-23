@@ -88,6 +88,12 @@
                 "description": "图片传输使用 Base64 编码",
                 "default": true,
                 "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
+            },
+            "enable_analysis_reply": {
+                "type": "bool",
+                "description": "发送文本/表情回复",
+                "default": false,
+                "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。"
             }
         }
     },
