@@ -460,6 +460,9 @@ class BotManager:
         # Discord.py style: client.user.id
         elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
             return str(bot_instance.user.id)
+        # python-telegram-bot style: bot.id
+        elif hasattr(bot_instance, "id") and bot_instance.id:
+            return str(bot_instance.id)
         return None
 
     def validate_for_message_fetching(self, group_id: str) -> bool:
