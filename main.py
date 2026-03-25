@@ -1,5 +1,5 @@
 """
-QQ群日常分析插件
+群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
 重构版本 - 使用模块化架构，支持跨平台
@@ -144,7 +144,7 @@ class GroupDailyAnalysis(Star):
         )
 
         self._initialized = False
-        self._discovery_run = False  # 是否已尝试过运行发现逻辑
+        self._terminating = False  # 生命周期标志
         self._init_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -157,8 +157,6 @@ class GroupDailyAnalysis(Star):
             self._background_tasks.add(self._init_task)
             self._init_task.add_done_callback(self._background_tasks.discard)
         except RuntimeError:
-            # 如果当前没有 running loop (例如在非异步初始化的环境中)，
-            # 则依赖 on_platform_loaded 钩子执行初始化
             self._init_task = None
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
@@ -226,23 +224,30 @@ class GroupDailyAnalysis(Star):
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
+        if self._terminating:
+            return
+        self._terminating = True
+
         try:
-            logger.info("开始清理QQ群日常分析插件资源...")
+            logger.info("开始清理群日常分析插件资源...")
 
             # 1. 停止所有后台任务
             if self._background_tasks:
-                logger.info(f"正在取消 {len(self._background_tasks)} 个后台任务...")
+                logger.info(f"正在取消 {len(self._background_tasks)} 个运行中的任务...")
                 for task in self._background_tasks:
                     if not task.done():
                         task.cancel()
 
-                # 等待任务结束
-                await asyncio.gather(*self._background_tasks, return_exceptions=True)
+                # 等待任务结束，给予 3 秒宽限期
+                try:
+                    await asyncio.wait(list(self._background_tasks), timeout=3.0)
+                except Exception:
+                    pass
                 self._background_tasks.clear()
 
-            # 2. 停止各个组件
+            # 2. 停止各个组件 (顺序：先调度器，后底层服务)
             if self.auto_scheduler:
-                logger.info("正在停止自动调度器...")
+                logger.debug("正在停止自动调度器...")
                 self.auto_scheduler.unschedule_jobs(self.context)
 
             if self.retry_manager:
@@ -251,19 +256,15 @@ class GroupDailyAnalysis(Star):
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
 
-            # 3. 释放实例属性引用 (使用 type: ignore 允许 None 赋值)
-            self.auto_scheduler = None  # type: ignore
-            self.bot_manager = None  # type: ignore
             if self.report_generator:
                 await self.report_generator.close()
-            self.report_generator = None  # type: ignore
-            self.config_manager = None  # type: ignore
-            self.message_processing_service = None  # type: ignore
-            self.telegram_group_registry = None  # type: ignore
-            self.template_preview_router = None  # type: ignore
-            self.telegram_template_preview_handler = None  # type: ignore
 
-            logger.info("QQ群日常分析插件资源清理完成")
+            # 3. [关键修复] 只有在任务全部清理后，才清理引用。
+            # 实际上，在 terminate 结束后，self 本身就会被 GC 释放，
+            # 这里的显式 None 更多是为了协助循环引用清理，但由于异步任务存在竞态，
+            # 我们可以通过 check _terminating 标志位来保护。
+            # 为了彻底解决 #125，我们保留引用，让 GC 自然回收。
+            logger.info("群日常分析插件资源清理完成")
 
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
@@ -463,58 +464,67 @@ class GroupDailyAnalysis(Star):
         分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
-        event.should_call_llm(True)  # 阻止默认 LLM 解析
-        group_id = self._get_group_id_from_event(event)
-        platform_id = self._get_platform_id_from_event(event)
-
-        if not group_id:
-            yield event.plain_result("❌ 请在群聊中使用此命令")
+        if self._terminating:
             return
 
-        # 更新bot实例
-        self.bot_manager.update_from_event(event)
+        current_task = asyncio.current_task()
+        if current_task:
+            self._background_tasks.add(current_task)
 
-        # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
-        check_target = getattr(event, "unified_msg_origin", None)
-        if not check_target:
-            check_target = f"{platform_id}:GroupMessage:{group_id}"
-
-        if not self.config_manager.is_group_allowed(check_target):
-            # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
-            # But if list item HAS colon, we need precise match.
-            # If prompt fails, try simple ID as fallback for permissive cases?
-            # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
-            yield event.plain_result("❌ 此群未启用日常分析功能")
-            return
-
-        # 获取群名以生成语义化的 TraceID
-        group_name = ""
         try:
+            event.should_call_llm(True)  # 阻止默认 LLM 解析
+            group_id = self._get_group_id_from_event(event)
+            platform_id = self._get_platform_id_from_event(event)
+
+            if not group_id:
+                yield event.plain_result("❌ 请在群聊中使用此命令")
+                return
+
+            # 更新bot实例
+            self.bot_manager.update_from_event(event)
+
+            # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
+            check_target = getattr(event, "unified_msg_origin", None)
+            if not check_target:
+                check_target = f"{platform_id}:GroupMessage:{group_id}"
+
+            if not self.config_manager.is_group_allowed(check_target):
+                # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
+                # But if list item HAS colon, we need precise match.
+                # If prompt fails, try simple ID as fallback for permissive cases?
+                # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
+                yield event.plain_result("❌ 此群未启用日常分析功能")
+                return
+
+            # 获取群名以生成语义化的 TraceID
+            group_name = ""
+            try:
+                adapter = self.bot_manager.get_adapter(platform_id)
+                if adapter:
+                    info = await adapter.get_group_info(group_id)
+                    if info and info.group_name:
+                        group_name = info.group_name
+            except Exception:
+                pass
+
+            # 设置 TraceID (语义化格式: manual_群名_HHmm)
+            trace_id = TraceContext.generate(
+                prefix="manual", group_name=group_name or group_id
+            )
+            TraceContext.set(trace_id)
+
+            # 表情回应 或 文本提示（二选一，由配置开关控制）
             adapter = self.bot_manager.get_adapter(platform_id)
-            if adapter:
-                info = await adapter.get_group_info(group_id)
-                if info and info.group_name:
-                    group_name = info.group_name
-        except Exception:
-            pass
+            orig_msg_id = getattr(event.message_obj, "message_id", None)
+            use_text_reply = self.config_manager.get_enable_analysis_reply()
 
-        # 设置 TraceID (语义化格式: manual_群名_HHmm)
-        trace_id = TraceContext.generate(
-            prefix="manual", group_name=group_name or group_id
-        )
-        TraceContext.set(trace_id)
+            if use_text_reply:
+                yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
+            elif adapter and orig_msg_id:
+                await adapter.set_reaction(
+                    event.get_group_id(), orig_msg_id, "🔍"
+                )  # 🔍
 
-        # 表情回应 或 文本提示（二选一，由配置开关控制）
-        adapter = self.bot_manager.get_adapter(platform_id)
-        orig_msg_id = getattr(event.message_obj, "message_id", None)
-        use_text_reply = self.config_manager.get_enable_analysis_reply()
-
-        if use_text_reply:
-            yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
-        elif adapter and orig_msg_id:
-            await adapter.set_reaction(event.get_group_id(), orig_msg_id, "🔍")  # 🔍
-
-        try:
             # 调用 DDD 应用级服务
             result = await self.analysis_service.execute_daily_analysis(
                 group_id=group_id, platform_id=platform_id, manual=True, days=days
@@ -538,16 +548,25 @@ class GroupDailyAnalysis(Star):
 
         except DuplicateGroupTaskError:
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
+        except asyncio.CancelledError:
+            logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
+        finally:
+            if current_task:
+                self._background_tasks.discard(current_task)
 
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict
     ) -> AsyncGenerator:
         """处理分析结果的渲染和发送"""
+        if self._terminating or not self.config_manager:
+            logger.warning("插件正在关闭，停止发送报告")
+            return
+
         group_id = result["group_id"]
         platform_id = result["platform_id"]
         analysis_result = result["analysis_result"]
@@ -755,17 +774,29 @@ class GroupDailyAnalysis(Star):
         安装 PDF 功能依赖（跨平台支持）
         用法: /安装PDF
         """
-        yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
+        if self._terminating:
+            return
+
+        current_task = asyncio.current_task()
+        if current_task:
+            self._background_tasks.add(current_task)
 
         try:
+            yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
+
             result = await PDFInstaller.install_playwright(
                 self.config_manager, task_registry=self._background_tasks
             )
             yield event.plain_result(result)
 
+        except asyncio.CancelledError:
+            logger.info("PDF 安装任务被取消")
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
             yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
+        finally:
+            if current_task:
+                self._background_tasks.discard(current_task)
 
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
