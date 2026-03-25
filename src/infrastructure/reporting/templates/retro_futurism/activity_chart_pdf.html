@@ -4,7 +4,7 @@
     <div class="activity-col">
         <span class="activity-col-count">{{ item.count }}</span>
         <div class="activity-bar-vertical" style="--h: {{ "%.2f"|format(item.percentage) }}%;"></div>
-        <span class="activity-label-hour">{{ "%02d"|format(item.hour) }}:00</span>
+        <span class="activity-label-hour">{{ "%02d"|format(item.hour) }}</span>
     </div>
     {% endfor %}
 </div>

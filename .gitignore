@@ -21,3 +21,10 @@ debug_simple.html
 debug_spring_festival.html
 debug_spring.html
 data/debug_data/avatar/cache.db
+scripts/output_all/debug_format_test_group_*.pdf
+scripts/output_all/debug_hack_test_group_*.pdf
+scripts/output_all/debug_retro_futurism_test_group_*.pdf
+scripts/output_all/debug_scrapbook_test_group_*.pdf
+scripts/output_all/debug_simple_test_group_*.pdf
+scripts/output_all/debug_spring_festival_test_group_*.pdf
+scripts/data/avatar/cache.db
