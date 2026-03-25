@@ -4,6 +4,7 @@
 """
 
 from ....domain.models.data_models import TokenUsage, UserTitle
+from ....domain.services.message_cleaner_service import MessageCleanerService
 from ....utils.logger import logger
 from ..utils.json_utils import extract_user_titles_with_regex
 from .base_analyzer import BaseAnalyzer
@@ -51,12 +52,15 @@ class UserTitleAnalyzer(BaseAnalyzer):
             return ""
 
         # 构建用户数据文本
+        # 应用 sanitize_chat_text 清洗 HTML 标签和 Base64 数据
         users_text = "\n".join(
             [
-                f"- {user['name']} (ID:{user['user_id']}): "
-                f"发言{user['message_count']}条, 平均{user['avg_chars']}字, "
-                f"表情比例{user['emoji_ratio']}, 夜间发言比例{user['night_ratio']}, "
-                f"回复比例{user['reply_ratio']}"
+                (
+                    f"- {MessageCleanerService.sanitize_chat_text(user['name'])} (ID:{user['user_id']}): "
+                    f"发言{user['message_count']}条, 平均{user['avg_chars']}字, "
+                    f"表情比例{user['emoji_ratio']}, 夜间发言比例{user['night_ratio']}, "
+                    f"回复比例{user['reply_ratio']}"
+                )
                 for user in user_summaries
             ]
         )

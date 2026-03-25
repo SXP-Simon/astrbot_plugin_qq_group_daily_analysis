@@ -6,6 +6,7 @@
 from datetime import datetime
 
 from ....domain.models.data_models import GoldenQuote, TokenUsage
+from ....domain.services.message_cleaner_service import MessageCleanerService
 from ....utils.logger import logger
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_golden_quotes_with_regex
@@ -54,8 +55,12 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             return ""
 
         # 构建消息文本 (用 [user_id] 替代 nickname 以确保回填 100% 准确，避免 Emoji 等干扰)
+        # 应用 sanitize_chat_text 清洗 HTML 标签和 Base64 数据
         messages_text = "\n".join(
-            [f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}" for msg in data]
+            [
+                f"[{msg['time']}] [{msg['user_id']}]: {MessageCleanerService.sanitize_chat_text(msg['content'])}"
+                for msg in data
+            ]
         )
 
         max_golden_quotes = self.get_max_count()

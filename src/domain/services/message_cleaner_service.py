@@ -107,3 +107,39 @@ class MessageCleanerService:
                 cleaned_list.append(new_msg)
 
         return cleaned_list
+
+    @staticmethod
+    def sanitize_chat_text(text: str) -> str:
+        """
+        Remove HTML tags, Base64 data URIs, and control characters from chat text
+        before LLM processing.
+
+        This prevents contaminated data from breaking JSON parsing in LLM responses
+        and causing layout issues in rendered HTML reports.
+
+        Args:
+            text: Raw chat message text
+
+        Returns:
+            Cleaned text with only plain content
+        """
+        if not text:
+            return ""
+
+        # Remove Base64 data URIs first (longer pattern, should be removed before tags)
+        text = re.sub(r"data:[^;]+;base64,[A-Za-z0-9+/=]+", "", text)
+
+        # Remove HTML tags (including self-closing and attributes)
+        text = re.sub(r"<[^>]+>", "", text)
+
+        # Remove control characters (ASCII 0x00-0x1F, 0x7F-0x9F)
+        text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
+
+        # Normalize Unicode quotes to ASCII equivalents
+        text = text.replace("\u201c", '"').replace("\u201d", '"')  # " "
+        text = text.replace("\u2018", "'").replace("\u2019", "'")  # ' '
+
+        # Clean up extra whitespace from removals
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text

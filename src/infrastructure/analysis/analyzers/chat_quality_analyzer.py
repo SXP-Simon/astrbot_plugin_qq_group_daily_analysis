@@ -6,6 +6,7 @@
 from datetime import datetime
 
 from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
+from ....domain.services.message_cleaner_service import MessageCleanerService
 from ....utils.logger import logger
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
@@ -79,7 +80,9 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 
             combined_text = "".join(text_parts).strip()
             if combined_text and not combined_text.startswith("/"):
-                text_messages.append(f"[{msg_time}] [{nickname}]: {combined_text}")
+                sanitized_text = MessageCleanerService.sanitize_chat_text(combined_text)
+                if sanitized_text:
+                    text_messages.append(f"[{msg_time}] [{nickname}]: {sanitized_text}")
 
         messages_text = "\n".join(text_messages[:1000])
 

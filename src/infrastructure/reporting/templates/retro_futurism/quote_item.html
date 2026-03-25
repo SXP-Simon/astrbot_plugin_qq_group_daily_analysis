@@ -13,7 +13,7 @@
     <div class="quote-body">
         <div class="quote-content">{{ quote.content }}</div>
         <div class="quote-author">ORIGIN: {{ quote.sender }}</div>
-        <div class="quote-reason-small">ANALYSIS // {{ quote.reason }}</div>
+        <div class="quote-reason-small">ANALYSIS // {{ quote.reason | safe }}</div>
     </div>
 </section>
 {% endfor %}

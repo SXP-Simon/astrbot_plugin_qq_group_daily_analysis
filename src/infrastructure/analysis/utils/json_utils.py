@@ -9,6 +9,57 @@ import re
 from ....utils.logger import logger
 
 
+def _extract_json_balanced(text: str, open_char: str, close_char: str) -> str | None:
+    """
+    Extract the first complete JSON array or object from text, handling strings correctly.
+
+    This function properly handles:
+    - Strings containing ] or } characters
+    - Escaped characters within strings
+    - Nested structures
+
+    Args:
+        text: Text containing JSON
+        open_char: Opening bracket/brace ('[' or '{')
+        close_char: Closing bracket/brace (']' or '}')
+
+    Returns:
+        The extracted JSON string, or None if not found
+    """
+    start = text.find(open_char)
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i, char in enumerate(text[start:], start):
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == "\\":
+            escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return None
+
+
 def fix_json(text: str) -> str:
     """
     修复JSON格式问题，包括中文符号替换
@@ -28,49 +79,32 @@ def fix_json(text: str) -> str:
         text = text.replace("\n", " ").replace("\r", " ")
         text = re.sub(r"\s+", " ", text)
 
-        # 3. 替换中文符号为英文符号（修复）
-        # 中文引号 -> 英文引号
-        text = text.replace("“", '"').replace("”", '"')
-        text = text.replace("‘", "'").replace("’", "'")
-        # 中文逗号 -> 英文逗号
-        text = text.replace("，", ",")
-        # 中文冒号 -> 英文冒号
-        text = text.replace("：", ":")
-        # 中文括号 -> 英文括号
-        text = text.replace("（", "(").replace("）", ")")
-        text = text.replace("【", "[").replace("】", "]")
+        # 3. 替换中文符号为英文符号
+        text = text.replace("\u201c", '"').replace("\u201d", '"')
+        text = text.replace("\u2018", "'").replace("\u2019", "'")
+        text = text.replace("\uff0c", ",")
+        text = text.replace("\uff1a", ":")
+        text = text.replace("\uff08", "(").replace("\uff09", ")")
+        text = text.replace("\u3010", "[").replace("\u3011", "]")
 
-        # 4. 处理字符串内容中的特殊字符
-        # 转义字符串内的双引号
-        def escape_quotes_in_strings(match):
-            content = match.group(1)
-            # 转义内部的双引号
-            content = content.replace('"', '\\"')
-            return f'"{content}"'
-
-        # 先处理字段值中的引号
-        text = re.sub(r'"([^"]*(?:"[^"]*)*)"', escape_quotes_in_strings, text)
-
-        # 5. 修复截断的JSON
+        # 4. 修复截断的JSON
         if not text.endswith("]"):
             last_complete = text.rfind("}")
             if last_complete > 0:
                 text = text[: last_complete + 1] + "]"
 
-        # 6. 修复常见的JSON格式问题
-        # 1. 修复缺失的逗号
+        # 5. 修复缺失的逗号
         text = re.sub(r"}\s*{", "}, {", text)
 
-        # 2. 确保字段名有引号（仅在对象开始或逗号后，避免破坏字符串值）
+        # 6. 确保字段名有引号
         def quote_field_names(match):
             prefix = match.group(1)
             key = match.group(2)
             return f'{prefix}"{key}":'
 
-        # 只在 { 或 , 后面匹配字段名，避免在字符串值中误匹配
         text = re.sub(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:", quote_field_names, text)
 
-        # 3. 移除多余的逗号
+        # 7. 移除多余的逗号
         text = re.sub(r",\s*}", "}", text)
         text = re.sub(r",\s*]", "]", text)
 
@@ -96,14 +130,13 @@ def parse_json_response(
     """
     fixed_json_text = None
     try:
-        # 1. 提取JSON部分
-        json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
-        if not json_match:
+        # 1. 提取JSON数组（使用balanced extraction处理字符串内的]字符）
+        json_text = _extract_json_balanced(result_text, "[", "]")
+        if not json_text:
             error_msg = f"{data_type}响应中未找到JSON格式"
             logger.warning(error_msg)
             return False, None, error_msg
 
-        json_text = json_match.group()
         logger.debug(f"{data_type}分析JSON原文: {json_text[:500]}...")
 
         # 2. 尝试直接解析
@@ -162,17 +195,16 @@ def parse_json_object_response(
         raw_text = re.sub(r"```\s*$", "", raw_text)
         raw_text = raw_text.strip()
 
-        # 2. 提取 JSON 对象
-        json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-        if not json_match:
+        # 2. 提取 JSON 对象（使用balanced extraction处理字符串内的}字符）
+        json_text = _extract_json_balanced(raw_text, "{", "}")
+        if not json_text:
             error_msg = f"{data_type}响应中未找到JSON对象"
             logger.warning(error_msg)
             return False, None, error_msg
 
-        json_text = json_match.group()
         logger.debug(f"{data_type}分析JSON原文: {json_text[:500]}...")
 
-        # 3. 尝试直接解析（保留原始文本，避免中文引号被破坏）
+        # 3. 尝试直接解析
         try:
             data = json.loads(json_text)
             logger.info(f"{data_type}直接解析成功")
@@ -182,10 +214,10 @@ def parse_json_object_response(
 
         # 4. 使用 fix_json 修复后重试
         fixed_json = fix_json(json_text)
-        fixed_match = re.search(r"\{.*\}", fixed_json, re.DOTALL)
-        if fixed_match:
+        fixed_text = _extract_json_balanced(fixed_json, "{", "}")
+        if fixed_text:
             try:
-                data = json.loads(fixed_match.group())
+                data = json.loads(fixed_text)
                 logger.info(f"{data_type}修复后解析成功")
                 return True, data, None
             except json.JSONDecodeError as e:

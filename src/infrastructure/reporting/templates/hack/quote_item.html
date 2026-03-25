@@ -16,7 +16,7 @@
         <div class="quote-body">
             <div class="quote-text">"{{ quote.content }}"</div>
             <div class="quote-author">-- {{ quote.sender }}</div>
-            <div class="comment" style="font-size: 0.8rem;">// Reason: {{ quote.reason }}</div>
+            <div class="comment" style="font-size: 0.8rem;">// Reason: {{ quote.reason | safe }}</div>
         </div>
     </div>
     {% endfor %}
