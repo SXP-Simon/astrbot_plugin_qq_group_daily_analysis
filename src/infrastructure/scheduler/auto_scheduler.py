@@ -149,6 +149,10 @@ class AutoScheduler:
         # 先清理旧任务
         self.unschedule_jobs(context)
 
+        # unschedule_jobs 会将 _terminating 置为 True（用于关闭场景），
+        # 但 schedule_jobs 表示插件仍在运行，需要重置终止标志位
+        self._terminating = False
+
         if not self.config_manager.get_enable_auto_analysis():
             logger.info("自动分析功能未启用，不注册定时任务")
             return
