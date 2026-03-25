@@ -254,7 +254,7 @@ async def main():
             self.dimensions = [
                 MockDimension("讨论活跃度", 85, "大家讨论非常热烈", "#FF5722"),
                 MockDimension("知识共享度", 70, "分享了很多有用的技术信息", "#4CAF50"),
-                MockDimension("情感温度", 92, "群内氛围非常融洽", "#E91E63")
+                MockDimension("情感温度", 92, "群内氛围非常融洽", "#E91E63"),
             ]
             self.summary = "整体聊天的质量很高，技术讨论和日常闲聊达到了完美的平衡。"
 
