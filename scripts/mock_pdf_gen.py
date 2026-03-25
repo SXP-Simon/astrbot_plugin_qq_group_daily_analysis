@@ -92,6 +92,9 @@ class MockConfigManager:
     def get_enable_user_card(self):
         return True
 
+    def get_t2i_max_concurrent(self):
+        return 2
+
     @property
     def playwright_available(self):
         return True
@@ -100,9 +103,9 @@ class MockConfigManager:
         return ""
 
 
-async def mock_get_user_avatar(user_id: str) -> str:
+async def mock_get_user_avatar(avatar_id: str, avatar_url_getter=None) -> str:
     # Return a known avatar URL for testing
-    return f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
+    return f"https://q4.qlogo.cn/headimg_dl?dst_uin={avatar_id}&spec=640"
 
 
 # ==========================================
@@ -111,10 +114,11 @@ async def mock_get_user_avatar(user_id: str) -> str:
 async def main():
     print("Initializing ReportGenerator...")
     config_manager = MockConfigManager()
-    generator = ReportGenerator(config_manager)
+    data_dir = Path(current_dir) / "data"
+    generator = ReportGenerator(config_manager, data_dir)
 
     # Override avatar fetching to avoid real network calls during testing
-    generator._get_user_avatar_data = mock_get_user_avatar
+    generator._get_user_avatar = mock_get_user_avatar
 
     # 1. Mock Analysis Result using Entities
     stats = GroupStatistics(
@@ -235,6 +239,26 @@ async def main():
             prompt_tokens=2000, completion_tokens=1000, total_tokens=3000
         ),
     }
+
+    class MockDimension:
+        def __init__(self, name, percentage, comment, color):
+            self.name = name
+            self.percentage = percentage
+            self.comment = comment
+            self.color = color
+
+    class MockChatQualityReview:
+        def __init__(self):
+            self.title = "今日群聊质量分析"
+            self.subtitle = "基于AI的深度神经网络评估"
+            self.dimensions = [
+                MockDimension("讨论活跃度", 85, "大家讨论非常热烈", "#FF5722"),
+                MockDimension("知识共享度", 70, "分享了很多有用的技术信息", "#4CAF50"),
+                MockDimension("情感温度", 92, "群内氛围非常融洽", "#E91E63")
+            ]
+            self.summary = "整体聊天的质量很高，技术讨论和日常闲聊达到了完美的平衡。"
+
+    analysis_result["chat_quality_review"] = MockChatQualityReview()
 
     print("Generating PDF Report...")
     group_id = "test_group_mock"

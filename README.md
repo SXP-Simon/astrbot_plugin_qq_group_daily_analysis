@@ -307,10 +307,13 @@ src/infrastructure/reporting/templates/your_theme_name/
 
 #### 5. 模板调试工具
 
-PDF 调试模板命令 Docker 下：
+PDF 调试模板命令：
 
 ```bash
+# docker
 docker exec -it astrbot python data/plugins/astrbot_plugin_qq_group_daily_analysis/scripts/mock_pdf_gen.py
+# uv
+uv run --with playwright --with diskcache data\plugins\astrbot_plugin_qq_group_daily_analysis\scripts\mock_pdf_gen.py
 ```
 
 Image 模板调试：
