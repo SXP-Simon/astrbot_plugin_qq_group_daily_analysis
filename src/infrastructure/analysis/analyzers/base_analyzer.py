@@ -4,7 +4,8 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from collections.abc import Sized
+from typing import Generic, TypeVar
 
 from ....domain.models.data_models import TokenUsage
 from ....utils.logger import logger
@@ -13,10 +14,14 @@ from ..utils.llm_utils import (
     call_provider_with_retry,
     extract_response_text,
     extract_token_usage,
+    get_provider_id_with_fallback,
 )
+from ..utils.structured_output_schema import JSONObject, build_response_format
+
+TDataObject = TypeVar("TDataObject")
 
 
-class BaseAnalyzer(ABC):
+class BaseAnalyzer(ABC, Generic[TDataObject]):
     """
     基础分析器抽象类
     定义所有分析器的通用接口 and 流程
@@ -66,7 +71,7 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def build_prompt(self, data: Any) -> str:
+    def build_prompt(self, data: object) -> str:
         """
         构建LLM提示词
 
@@ -93,7 +98,7 @@ class BaseAnalyzer(ABC):
         pass
 
     @abstractmethod
-    def create_data_objects(self, data_list: list[dict]) -> list[Any]:
+    def create_data_objects(self, data_list: list[dict]) -> list[TDataObject]:
         """
         创建数据对象列表
 
@@ -104,6 +109,147 @@ class BaseAnalyzer(ABC):
             数据对象列表
         """
         pass
+
+    def get_response_schema_name(self) -> str:
+        return f"{self.get_data_type()}_output"
+
+    def get_response_schema(self) -> JSONObject | None:
+        return None
+
+    def get_response_format(self) -> JSONObject | None:
+        schema = self.get_response_schema()
+        if not schema:
+            return None
+        return build_response_format(self.get_response_schema_name(), schema)
+
+    def get_schema_retry_max_attempts(self) -> int:
+        """
+        schema 解析失败后的最大重试次数（不含首轮请求）。
+        """
+        return 2
+
+    def get_schema_retry_temperatures(
+        self, base_temperature: float | None
+    ) -> tuple[float, ...]:
+        """
+        schema 解析失败后的温度重试序列（不含首轮请求）。
+        采用动态降温，提高结构化稳定性。
+        """
+        attempts = max(0, self.get_schema_retry_max_attempts())
+        if attempts == 0:
+            return ()
+
+        base = base_temperature if base_temperature is not None else 0.7
+        first_retry = max(0.1, min(2.0, base * 0.5))
+
+        temperatures: list[float] = [round(first_retry, 2), 0.0]
+        if attempts < len(temperatures):
+            temperatures = temperatures[:attempts]
+
+        deduped: list[float] = []
+        for temp in temperatures:
+            if not deduped or deduped[-1] != temp:
+                deduped.append(temp)
+        return tuple(deduped)
+
+    async def _resolve_provider_temperature(
+        self,
+        provider_id_key: str | None,
+        umo: str | None,
+    ) -> float | None:
+        """
+        尝试从当前将要调用的 Provider 配置中解析基础 temperature。
+        """
+        provider_id = await get_provider_id_with_fallback(
+            self.context,
+            self.config_manager,
+            provider_id_key,
+            umo,
+        )
+        if not provider_id:
+            return None
+
+        provider = self.context.get_provider_by_id(provider_id=provider_id)
+        if provider is None:
+            return None
+
+        provider_config_obj = getattr(provider, "provider_config", None)
+        if not isinstance(provider_config_obj, dict):
+            return None
+
+        raw_temperature = provider_config_obj.get("temperature")
+        if raw_temperature is None:
+            custom_extra_body = provider_config_obj.get("custom_extra_body")
+            if isinstance(custom_extra_body, dict):
+                raw_temperature = custom_extra_body.get("temperature")
+
+        if isinstance(raw_temperature, bool):
+            return None
+
+        parsed_temperature: float | None = None
+        if isinstance(raw_temperature, (int, float)):
+            parsed_temperature = float(raw_temperature)
+        elif isinstance(raw_temperature, str):
+            try:
+                parsed_temperature = float(raw_temperature.strip())
+            except ValueError:
+                return None
+
+        if parsed_temperature is None:
+            return None
+
+        return max(0.0, min(2.0, parsed_temperature))
+
+    def parse_structured_response(
+        self, result_text: str
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        """
+        解析结构化响应（默认 JSON 数组解析）。
+        子类可重写此方法定制对象解析逻辑。
+        """
+        return parse_json_response(result_text, self.get_data_type())
+
+    def build_schema_retry_prompt(
+        self,
+        original_prompt: str,
+        previous_output: str,
+        parse_error: str | None,
+        attempt_index: int,
+    ) -> str:
+        """
+        构建结构化失败后的修复重试提示词。
+        """
+        err_text = parse_error or "unknown_parse_error"
+        return (
+            f"{original_prompt}\n\n"
+            "[STRUCTURED OUTPUT RETRY]\n"
+            f"Attempt: {attempt_index}\n"
+            "Your previous output did not satisfy the required strict JSON schema.\n"
+            "Return ONLY valid JSON that strictly matches the schema. "
+            "Do not include markdown, explanation, or extra text.\n"
+            f"Parse error: {err_text}\n"
+            "Previous invalid output:\n"
+            f"{previous_output}"
+        )
+
+    def _try_parse_with_fallback(
+        self, result_text: str
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        """
+        先尝试结构化 JSON 解析（含修复逻辑），失败后立即尝试正则降级。
+        """
+        success, parsed_data, error_msg = self.parse_structured_response(result_text)
+        if success and parsed_data:
+            return True, parsed_data, None
+
+        regex_data = self.extract_with_regex(result_text, self.get_max_count())
+        if regex_data:
+            logger.info(
+                f"{self.get_data_type()}结构化解析失败后，正则降级提取成功，获得 {len(regex_data)} 条数据"
+            )
+            return True, regex_data, None
+
+        return False, None, error_msg
 
     def _save_debug_data(self, prompt: str, session_id: str):
         """
@@ -139,8 +285,8 @@ class BaseAnalyzer(ABC):
             logger.error(f"保存调试数据失败: {e}", exc_info=True)
 
     async def analyze(
-        self, data: Any, umo: str | None = None, session_id: str | None = None
-    ) -> tuple[list[Any], TokenUsage]:
+        self, data: object, umo: str | None = None, session_id: str | None = None
+    ) -> tuple[list[TDataObject], TokenUsage]:
         """
         统一的分析流程
 
@@ -157,9 +303,8 @@ class BaseAnalyzer(ABC):
             logger.debug(
                 f"{self.get_data_type()}分析开始构建prompt，输入数据类型: {type(data)}"
             )
-            logger.debug(
-                f"{self.get_data_type()}分析输入数据长度: {len(data) if hasattr(data, '__len__') else 'N/A'}"
-            )
+            data_length = len(data) if isinstance(data, Sized) else "N/A"
+            logger.debug(f"{self.get_data_type()}分析输入数据长度: {data_length}")
 
             prompt = self.build_prompt(data)
             logger.info(f"开始{self.get_data_type()}分析，构建提示词完成")
@@ -185,9 +330,10 @@ class BaseAnalyzer(ABC):
                 return [], TokenUsage()
 
             # 2. 调用LLM（使用配置的 provider）
-            max_tokens = self.get_max_tokens()
-            temperature = self.get_temperature()
             provider_id_key = self.get_provider_id_key()
+            base_temperature = await self._resolve_provider_temperature(
+                provider_id_key, umo
+            )
 
             # 获取人格设定
             system_prompt = await self._build_system_prompt(umo)
@@ -215,11 +361,10 @@ class BaseAnalyzer(ABC):
                 self.context,
                 self.config_manager,
                 prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
                 umo=umo,
                 provider_id_key=provider_id_key,
                 system_prompt=system_prompt,
+                response_format=self.get_response_format(),
             )
 
             if response is None:
@@ -240,10 +385,50 @@ class BaseAnalyzer(ABC):
             result_text = extract_response_text(response)
             logger.debug(f"{self.get_data_type()}分析原始响应: {result_text[:500]}...")
 
-            # 5. 尝试JSON解析
-            success, parsed_data, error_msg = parse_json_response(
-                result_text, self.get_data_type()
-            )
+            # 5. 尝试结构化解析 + 正则降级解析
+            success, parsed_data, error_msg = self._try_parse_with_fallback(result_text)
+
+            # 5.1 仅在两种解析方式都失败时，进入 schema 修复重试（温度递减）
+            if not success and self.get_response_format() is not None:
+                temperatures = self.get_schema_retry_temperatures(base_temperature)
+                for idx, temperature in enumerate(temperatures, start=1):
+                    retry_prompt = self.build_schema_retry_prompt(
+                        original_prompt=prompt,
+                        previous_output=result_text,
+                        parse_error=error_msg,
+                        attempt_index=idx,
+                    )
+                    logger.warning(
+                        f"{self.get_data_type()}结构化解析失败，触发 schema 修复重试 "
+                        f"(attempt={idx}, temperature={temperature:.1f})"
+                    )
+                    retry_response = await call_provider_with_retry(
+                        self.context,
+                        self.config_manager,
+                        prompt=retry_prompt,
+                        umo=umo,
+                        provider_id_key=provider_id_key,
+                        system_prompt=system_prompt,
+                        response_format=self.get_response_format(),
+                        extra_generate_kwargs={"temperature": temperature},
+                    )
+                    if retry_response is None:
+                        continue
+
+                    retry_result_text = extract_response_text(retry_response)
+                    if not retry_result_text:
+                        continue
+
+                    result_text = retry_result_text
+                    retry_success, retry_parsed_data, retry_error_msg = (
+                        self._try_parse_with_fallback(retry_result_text)
+                    )
+                    if retry_success:
+                        success = True
+                        parsed_data = retry_parsed_data
+                        error_msg = None
+                        break
+                    error_msg = retry_error_msg
 
             if success and parsed_data:
                 # JSON解析成功，创建数据对象
@@ -253,46 +438,15 @@ class BaseAnalyzer(ABC):
                 )
                 return data_objects, token_usage
 
-            # 6. JSON解析失败，使用正则表达式降级
-            logger.warning(
-                f"{self.get_data_type()}JSON解析失败，尝试正则表达式提取: {error_msg}"
+            # 6. 全部尝试失败
+            logger.error(
+                f"{self.get_data_type()}分析失败: JSON解析与正则降级均未成功: {error_msg}"
             )
-            regex_data = self.extract_with_regex(result_text, self.get_max_count())
-
-            if regex_data:
-                logger.info(
-                    f"{self.get_data_type()}正则表达式提取成功，获得 {len(regex_data)} 条数据"
-                )
-                data_objects = self.create_data_objects(regex_data)
-                return data_objects, token_usage
-            else:
-                # 最后的降级方案 - 两种方法都失败
-                logger.error(
-                    f"{self.get_data_type()}分析失败: JSON解析和正则表达式提取均未成功，返回空列表"
-                )
-                return [], token_usage
+            return [], token_usage
 
         except Exception as e:
             logger.error(f"{self.get_data_type()}分析失败: {e}", exc_info=True)
             return [], TokenUsage()
-
-    def get_max_tokens(self) -> int:
-        """
-        获取最大token数，子类可重写
-
-        Returns:
-            最大token数
-        """
-        return 10000
-
-    def get_temperature(self) -> float:
-        """
-        获取温度参数，子类可重写
-
-        Returns:
-            温度参数
-        """
-        return 0.6
 
     async def _build_system_prompt(self, umo: str | None) -> str | None:
         """

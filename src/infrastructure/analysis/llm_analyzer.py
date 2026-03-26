@@ -486,8 +486,6 @@ class LLMAnalyzer(IAnalysisProvider):
         self,
         provider,
         prompt: str,
-        max_tokens: int,
-        temperature: float,
         umo: str | None = None,
         provider_id_key: str | None = None,
     ):
@@ -498,8 +496,6 @@ class LLMAnalyzer(IAnalysisProvider):
         Args:
             provider: LLM服务商实例或None（已弃用，现在使用 provider_id_key）
             prompt: 输入的提示语
-            max_tokens: 最大生成token数
-            temperature: 采样温度
             umo: 指定使用的模型唯一标识符
             provider_id_key: 配置中的 provider_id 键名（可选）
 
@@ -510,8 +506,6 @@ class LLMAnalyzer(IAnalysisProvider):
             self.context,
             self.config_manager,
             prompt,
-            max_tokens,
-            temperature,
             umo,
             provider_id_key,
         )
