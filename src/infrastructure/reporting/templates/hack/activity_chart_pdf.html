@@ -3,7 +3,7 @@
 <div class="activity-col">
     <span class="activity-val-top">{{ item.count }}</span>
     <div class="activity-bar-v" style="--h:{{ "%.2f"|format(item.percentage) }}%;"></div>
-    <span class="activity-tick">{{ "%02d"|format(item.hour) }}:00</span>
+    <span class="activity-tick">{{ "%02d"|format(item.hour) }}</span>
 </div>
 {% endfor %}
 {% else %}

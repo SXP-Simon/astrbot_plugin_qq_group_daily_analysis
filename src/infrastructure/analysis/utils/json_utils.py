@@ -97,7 +97,7 @@ def parse_json_response(
     fixed_json_text = None
     try:
         # 1. 提取JSON部分
-        json_match = re.search(r"\[.*?\]", result_text, re.DOTALL)
+        json_match = re.search(r"\[.*\]", result_text, re.DOTALL)
         if not json_match:
             error_msg = f"{data_type}响应中未找到JSON格式"
             logger.warning(error_msg)
@@ -220,12 +220,12 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
     try:
         # 更强的正则表达式提取话题信息，处理转义字符
         # 匹配每个完整的话题对象
-        topic_pattern = r'\{\s*"topic":\s*"([^"]+)"\s*,\s*"contributors":\s*\[([^\]]+)\]\s*,\s*"detail":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
+        topic_pattern = r'\{\s*"topic":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"contributors":\s*\[(.*?)\],?\s*"detail":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
         matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
         if not matches:
             # 尝试更宽松的匹配
-            topic_pattern = r'"topic":\s*"([^"]+)"[^}]*"contributors":\s*\[([^\]]+)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
+            topic_pattern = r'"topic":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"contributors":\s*\[(.*?)\][^}]*"detail":\s*"([^"]*(?:\\.[^"]*)*)"'
             matches = re.findall(topic_pattern, result_text, re.DOTALL)
 
         topics = []
@@ -274,12 +274,12 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dic
         titles = []
 
         # 正则模式：匹配完整的用户称号对象
-        pattern = r'\{\s*"name":\s*"([^"]+)"\s*,\s*"user_id":\s*"([^"]+)"\s*,\s*"title":\s*"([^"]+)"\s*,\s*"mbti":\s*"([^"]+)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
+        pattern = r'\{\s*"name":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"user_id":\s*"([^"]+)"\s*,\s*"title":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"mbti":\s*"([^"]+)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
         matches = re.findall(pattern, result_text, re.DOTALL)
 
         if not matches:
             # 尝试更宽松的匹配（字段顺序可变）
-            pattern = r'"name":\s*"([^"]+)"[^}]*"user_id":\s*"([^"]+)"[^}]*"title":\s*"([^"]+)"[^}]*"mbti":\s*"([^"]+)"[^}]*"reason":\s*"([^"]*(?:\\.[^"]*)*)"'
+            pattern = r'"name":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"user_id":\s*"([^"]+)"[^}]*"title":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"mbti":\s*"([^"]+)"[^}]*"reason":\s*"([^"]*(?:\\.[^"]*)*)"'
             matches = re.findall(pattern, result_text, re.DOTALL)
 
         for match in matches[:max_count]:
@@ -325,12 +325,12 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[d
         quotes = []
 
         # 正则模式：匹配完整的金句对象
-        pattern = r'\{\s*"content":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"sender":\s*"([^"]+)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
+        pattern = r'\{\s*"content":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"sender":\s*"([^"]*(?:\\.[^"]*)*)"\s*,\s*"reason":\s*"([^"]*(?:\\.[^"]*)*)"\s*\}'
         matches = re.findall(pattern, result_text, re.DOTALL)
 
         if not matches:
             # 尝试更宽松的匹配（字段顺序可变）
-            pattern = r'"content":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"sender":\s*"([^"]+)"[^}]*"reason":\s*"([^"]*(?:\\.[^"]*)*)"'
+            pattern = r'"content":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"sender":\s*"([^"]*(?:\\.[^"]*)*)"[^}]*"reason":\s*"([^"]*(?:\\.[^"]*)*)"'
             matches = re.findall(pattern, result_text, re.DOTALL)
 
         for match in matches[:max_count]:
@@ -372,7 +372,7 @@ def extract_quality_with_regex(result_text: str) -> dict | None:
         summary_m = re.search(r'"summary"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', result_text)
 
         # Extract dimensions array
-        dims_match = re.search(r'"dimensions"\s*:\s*\[(.*?)\]', result_text, re.DOTALL)
+        dims_match = re.search(r'"dimensions"\s*:\s*\[(.*)\]', result_text, re.DOTALL)
         dims = []
         if dims_match:
             dim_objects = re.findall(

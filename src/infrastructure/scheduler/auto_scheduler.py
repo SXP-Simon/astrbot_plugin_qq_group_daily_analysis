@@ -51,6 +51,7 @@ class AutoScheduler:
 
         # Cache: group_id -> group_name (populated lazily)
         self._group_name_cache: dict[str, str] = {}
+        self._terminating = False  # 终止标志位
 
     def set_bot_instance(self, bot_instance):
         """设置bot实例（保持向后兼容）"""
@@ -147,6 +148,10 @@ class AutoScheduler:
         """注册定时任务，根据配置选择传统模式或增量模式"""
         # 先清理旧任务
         self.unschedule_jobs(context)
+
+        # unschedule_jobs 会将 _terminating 置为 True（用于关闭场景），
+        # 但 schedule_jobs 表示插件仍在运行，需要重置终止标志位
+        self._terminating = False
 
         if not self.config_manager.get_enable_auto_analysis():
             logger.info("自动分析功能未启用，不注册定时任务")
@@ -269,6 +274,7 @@ class AutoScheduler:
 
     def unschedule_jobs(self, context):
         """取消定时任务"""
+        self._terminating = True
         if (
             not context
             or not hasattr(context, "cron_manager")
@@ -343,6 +349,8 @@ class AutoScheduler:
 
     async def _run_auto_analysis(self):
         """执行传统自动分析 - 并发处理所有群聊"""
+        if self._terminating:
+            return
         try:
             logger.info("开始执行自动群聊分析（并发模式）")
 
@@ -367,6 +375,9 @@ class AutoScheduler:
 
             analysis_tasks = []
             for gid, pid in target_list:
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续分析任务创建")
+                    break
                 task = asyncio.create_task(
                     throttled_analysis(gid, pid),
                     name=f"analysis_group_{gid}",
@@ -424,6 +435,9 @@ class AutoScheduler:
             trace_id = TraceContext.generate(prefix="group", group_name=group_name)
             TraceContext.set(trace_id)
 
+            if self._terminating:
+                return
+
             logger.info(
                 f"开始为群 {group_id} 执行自动分析 (Platform: {target_platform_id or 'Auto'})"
             )
@@ -478,9 +492,11 @@ class AutoScheduler:
     # ================================================================
 
     async def _run_incremental_analysis(self):
-        """执行增量分析 - 为所有启用的群聊执行一次增量分析批次"""
+        """执行增量分析任务 - 并发处理模式"""
+        if self._terminating:
+            return
         try:
-            logger.info("开始执行增量分析（交错并发模式）")
+            logger.info("开始执行自动增量分析（并发模式）")
 
             enabled_targets = await self._get_enabled_targets()
 
@@ -527,6 +543,9 @@ class AutoScheduler:
 
             analysis_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续增量分析任务创建")
+                    break
                 task = asyncio.create_task(
                     staggered_incremental(idx, gid, pid),
                     name=f"incremental_group_{gid}",
@@ -591,6 +610,9 @@ class AutoScheduler:
             trace_id = TraceContext.generate(prefix="incr", group_name=group_name)
             TraceContext.set(trace_id)
 
+            if self._terminating:
+                return
+
             logger.info(
                 f"开始为群 {group_id} 执行增量分析 "
                 f"(Platform: {target_platform_id or 'Auto'})"
@@ -638,6 +660,8 @@ class AutoScheduler:
 
     async def _run_incremental_final_report(self):
         """基于当天增量累积数据生成并发送最终报告"""
+        if self._terminating:
+            return
         try:
             logger.info("开始生成增量最终报告（交错并发模式）")
 
@@ -669,6 +693,9 @@ class AutoScheduler:
 
             report_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续最终报告任务创建")
+                    break
                 task = asyncio.create_task(
                     staggered_final_report(idx, gid, pid),
                     name=f"final_report_group_{gid}",
@@ -732,6 +759,9 @@ class AutoScheduler:
             group_name = await self._get_group_name_safe(group_id, target_platform_id)
             trace_id = TraceContext.generate(prefix="report", group_name=group_name)
             TraceContext.set(trace_id)
+
+            if self._terminating:
+                return
 
             logger.info(
                 f"开始为群 {group_id} 生成增量最终报告 "
