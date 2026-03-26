@@ -137,8 +137,13 @@ class ConfigManager:
         return val if isinstance(val, list) else ["09:00"]
 
     def get_enable_auto_analysis(self) -> bool:
-        """获取是否启用自动分析"""
-        return self._get_group("auto_analysis").get("enable_auto_analysis", False)
+        """
+        获取是否启用自动分析（兼容旧接口）。
+
+        旧版本使用 auto_analysis.enable_auto_analysis 布尔值；
+        新版本改为由 scheduled_group_list_mode + scheduled_group_list 推导。
+        """
+        return self.is_auto_analysis_enabled()
 
     def get_output_format(self) -> str:
         """获取输出格式"""
@@ -390,14 +395,74 @@ class ConfigManager:
         self.config.save_config()
 
     def set_auto_analysis_time(self, time_val: str | list[str]):
-        """设置自动分析时间"""
+        """设置自动分析时间点"""
         self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
         self.config.save_config()
 
-    def set_enable_auto_analysis(self, enabled: bool):
-        """设置是否启用自动分析"""
-        self._ensure_group("auto_analysis")["enable_auto_analysis"] = enabled
+    def is_auto_analysis_enabled(self) -> bool:
+        """
+        判断自动分析功能是否通过名单“按需开启”。
+        逻辑：如果是白名单模式且名单不为空，或者为黑名单模式，则视为开启。
+        """
+        mode = self.get_scheduled_group_list_mode()
+        lst = self.get_scheduled_group_list()
+        return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
+
+    def get_scheduled_group_list_mode(self) -> str:
+        """获取定时分析名单模式 (whitelist/blacklist)"""
+        return self._get_group("auto_analysis").get(
+            "scheduled_group_list_mode", "whitelist"
+        )
+
+    def set_scheduled_group_list_mode(self, mode: str):
+        """设置定时分析名单模式"""
+        self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
         self.config.save_config()
+
+    def get_scheduled_group_list(self) -> list[str]:
+        """获取定时分析目标群列表"""
+        return self._get_group("auto_analysis").get("scheduled_group_list", [])
+
+    def set_scheduled_group_list(self, groups: list[str]):
+        """设置定时分析目标群列表"""
+        self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
+        self.config.save_config()
+
+    def is_group_in_filtered_list(
+        self, group_umo_or_id: str, mode: str, group_list: list
+    ) -> bool:
+        """
+        通用的名单判定逻辑。
+
+        逻辑如下：
+        - whitelist 模式：
+            - 如果列表为空，则视为“此级别未开启”。
+            - 如果不为空，仅在列表中的通过。
+        - blacklist 模式：
+            - 在列表中的不通过。
+            - 如果列表为空，则全部通过。
+        """
+        group_list = [str(x).strip() for x in group_list]
+        target = str(group_umo_or_id).strip()
+
+        # 兼容 UMO 匹配 (如果列表里写的是 ID，UMO 也能匹配上)
+        def match_umo(umo: str, item: str) -> bool:
+            if umo == item:
+                return True
+            if ":" in umo and umo.split(":")[-1] == item:
+                return True
+            return False
+
+        if mode == "whitelist":
+            if not group_list:
+                # 白名单为空：此级别不开启 (按需开启逻辑)
+                return False
+            return any(match_umo(target, x) for x in group_list)
+        else:  # blacklist
+            if not group_list:
+                # 黑名单为空：全通过
+                return True
+            return not any(match_umo(target, x) for x in group_list)
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
@@ -509,8 +574,25 @@ class ConfigManager:
     # ========== 增量分析配置 ==========
 
     def get_incremental_enabled(self) -> bool:
-        """获取是否启用增量分析模式"""
-        return self._get_group("incremental").get("incremental_enabled", False)
+        """获取是否开启了增量分析（由名单状态决定）"""
+        mode = self.get_incremental_group_list_mode()
+        lst = self.get_incremental_group_list()
+        # 如果是白名单且不为空，或者是黑名单模式，则视为功能“开启”
+        return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
+
+    def get_incremental_group_list_mode(self) -> str:
+        """获取增量分析名单模式 (whitelist/blacklist)"""
+        return self._get_group("incremental").get(
+            "incremental_group_list_mode", "whitelist"
+        )
+
+    def get_incremental_group_list(self) -> list[str]:
+        """获取增量分析群列表"""
+        return self._get_group("incremental").get("incremental_group_list", [])
+
+    def get_incremental_fallback_enabled(self) -> bool:
+        """获取增量分析失败回退到全量分析的开关（默认启用）"""
+        return self._get_group("incremental").get("incremental_fallback_enabled", True)
 
     def get_incremental_report_immediately(self) -> bool:
         """获取是否启用增量分析立即发送报告（调试用）"""
