@@ -49,11 +49,10 @@ class StatisticsService:
                         emoji_statistics.face_details.get(f"emoji_{face_id}", 0) + 1
                     )
                 elif content.type == MessageContentType.IMAGE:
-                    # 检查是否是动画表情（通过raw_data判断，如果适配器提供了）
-                    if content.raw_data and (
-                        "动画表情" in str(content.raw_data)
-                        or "表情" in str(content.raw_data)
-                    ):
+                    # 兼容识别“图片形态的表情”:
+                    # 1) 优先使用 onebot sub_type=1 信号
+                    # 2) 若无该字段，再回退到历史 summary 文本匹配
+                    if self._is_emoji_like_image(content.raw_data):
                         emoji_statistics.mface_count += 1
                 elif content.type in (
                     MessageContentType.VOICE,
@@ -89,6 +88,22 @@ class StatisticsService:
             activity_visualization=activity_visualization,
             token_usage=TokenUsage(),
         )
+
+    @staticmethod
+    def _is_emoji_like_image(raw_data: object) -> bool:
+        """判断 IMAGE 段是否应按表情计数。"""
+        if isinstance(raw_data, dict):
+            sub_type = raw_data.get("sub_type")
+            if sub_type is not None:
+                return str(sub_type) == "1"
+            summary = str(raw_data.get("summary", ""))
+            return "动画表情" in summary or "表情" in summary
+
+        if raw_data is None:
+            return False
+
+        text = str(raw_data)
+        return "动画表情" in text or "表情" in text
 
     def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
         """内部辅助：将 UnifiedMessage 转换为 Legacy Dict 格式，用于兼容可视化组件"""

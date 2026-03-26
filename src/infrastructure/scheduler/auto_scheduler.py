@@ -315,7 +315,9 @@ class AutoScheduler:
 
             # 3. 模式层判定 (增量黑白名单)
             # 3. 模式层判定 (增量黑白名单)
-            if self.config_manager.is_group_in_filtered_list(umo, incr_list_mode, incr_list):
+            if self.config_manager.is_group_in_filtered_list(
+                umo, incr_list_mode, incr_list
+            ):
                 # 如果在增量名单内，则执行增量模式
                 effective_mode = "incremental"
             else:
