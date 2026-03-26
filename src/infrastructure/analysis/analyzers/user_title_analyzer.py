@@ -6,6 +6,7 @@
 from ....domain.models.data_models import TokenUsage, UserTitle
 from ....utils.logger import logger
 from ..utils.json_utils import extract_user_titles_with_regex
+from ..utils.response_validation import validate_user_title_items
 from ..utils.structured_output_schema import JSONObject, build_user_titles_schema
 from .base_analyzer import BaseAnalyzer
 
@@ -139,6 +140,11 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle]):
         except Exception as e:
             logger.error(f"创建用户称号对象失败: {e}")
             return []
+
+    def validate_parsed_data(
+        self, data_list: list[dict]
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        return validate_user_title_items(data_list)
 
     def prepare_user_data(
         self,

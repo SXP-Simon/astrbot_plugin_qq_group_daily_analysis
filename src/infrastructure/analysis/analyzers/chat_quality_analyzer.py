@@ -14,6 +14,7 @@ from ..utils.llm_utils import (
     extract_response_text,
     extract_token_usage,
 )
+from ..utils.response_validation import validate_quality_review_item
 from ..utils.structured_output_schema import JSONObject, build_chat_quality_schema
 from .base_analyzer import BaseAnalyzer
 
@@ -196,6 +197,11 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
             summary=data.get("summary", "今天也是充满活力的一天。"),
         )
 
+    def _validate_review_payload(
+        self, data: dict
+    ) -> tuple[bool, dict | None, str | None]:
+        return validate_quality_review_item(data)
+
     async def _retry_parse_quality_object(
         self,
         *,
@@ -244,11 +250,15 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
                 retry_text, self.get_data_type()
             )
             if retry_success and retry_parsed_data:
-                return retry_parsed_data
+                valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
+                if valid and normalized:
+                    return normalized
 
             retry_regex_data = extract_quality_with_regex(retry_text)
             if retry_regex_data:
-                return retry_regex_data
+                valid, normalized, _ = self._validate_review_payload(retry_regex_data)
+                if valid and normalized:
+                    return normalized
 
         return None
 
@@ -354,11 +364,16 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
             )
 
             if success and parsed_data:
-                review = self._build_review_from_dict(parsed_data)
-                logger.info(
-                    f"聊天质量汇总分析成功，解析到 {len(review.dimensions)} 个汇总维度"
+                valid, normalized, validation_error = self._validate_review_payload(
+                    parsed_data
                 )
-                return review, usage
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.info(
+                        f"聊天质量汇总分析成功，解析到 {len(review.dimensions)} 个汇总维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
 
             repaired_data = await self._retry_parse_quality_object(
                 original_prompt=prompt,
@@ -444,19 +459,29 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
             )
 
             if success and parsed_data:
-                review = self._build_review_from_dict(parsed_data)
-                logger.debug(
-                    f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度"
+                valid, normalized, validation_error = self._validate_review_payload(
+                    parsed_data
                 )
-                return review, usage
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.debug(
+                        f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
 
             regex_data = extract_quality_with_regex(result_text)
             if regex_data:
-                review = self._build_review_from_dict(regex_data)
-                logger.debug(
-                    f"聊天质量首轮结构化失败后，正则提取成功，获得 {len(review.dimensions)} 个维度"
+                valid, normalized, validation_error = self._validate_review_payload(
+                    regex_data
                 )
-                return review, usage
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.debug(
+                        f"聊天质量首轮结构化失败后，正则提取成功，获得 {len(review.dimensions)} 个维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
 
             repaired_data = await self._retry_parse_quality_object(
                 original_prompt=prompt,
