@@ -871,7 +871,7 @@ class GroupDailyAnalysis(Star):
             mode = self.config_manager.get_group_list_mode()
 
             auto_status = (
-                "已启用" if self.config_manager.get_enable_auto_analysis() else "未启用"
+                "已启用" if self.config_manager.is_auto_analysis_enabled() else "未启用"
             )
             auto_time = self.config_manager.get_auto_analysis_time()
 

@@ -3,42 +3,35 @@
 负责用户维度的活跃度分析、发言习惯及活动模式识别。
 """
 
-import re
-from collections import defaultdict
 from datetime import datetime
+from typing import TypedDict
 
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
+
+
+class UserActivityStats(TypedDict):
+    message_count: int
+    char_count: int
+    emoji_count: int
+    nickname: str
+    hours: dict[int, int]
+    reply_count: int
 
 
 class AnalysisDomainService:
     """分析领域服务 - 处理用户画像及行为分析"""
 
-    # Discord 自定义表情正则 <:name:id> 或 <a:name:id>
-    DISCORD_CUSTOM_EMOJI_PATTERN = r"<a?:.+?:\d+>"
-
-    # 简单的 Unicode Emoji 正则范围
-    UNICODE_EMOJI_PATTERN = (
-        r"[\U0001F000-\U0001F9FF]|[\U00002600-\U000026FF]|[\U00002700-\U000027BF]"
-    )
-
     def analyze_user_activity(
-        self, messages: list[UnifiedMessage], bot_self_ids: list[str] = None
-    ) -> dict[str, dict]:
+        self,
+        messages: list[UnifiedMessage],
+        bot_self_ids: list[str] | None = None,
+    ) -> dict[str, UserActivityStats]:
         """
         分析用户活跃度。
 
         基于 UnifiedMessage 计算每个用户的发言数、字数、表情数等。
         """
-        user_stats = defaultdict(
-            lambda: {
-                "message_count": 0,
-                "char_count": 0,
-                "emoji_count": 0,
-                "nickname": "",
-                "hours": defaultdict(int),
-                "reply_count": 0,
-            }
-        )
+        user_stats: dict[str, UserActivityStats] = {}
 
         bot_ids = set(bot_self_ids or [])
 
@@ -49,37 +42,61 @@ class AnalysisDomainService:
             if user_id in bot_ids:
                 continue
 
-            user_stats[user_id]["message_count"] += 1
-            user_stats[user_id]["nickname"] = msg.sender_card or msg.sender_name
+            stats = user_stats.setdefault(
+                user_id,
+                {
+                    "message_count": 0,
+                    "char_count": 0,
+                    "emoji_count": 0,
+                    "nickname": "",
+                    "hours": {},
+                    "reply_count": 0,
+                },
+            )
+            stats["message_count"] += 1
+            stats["nickname"] = msg.sender_card or msg.sender_name
 
             # 统计时间分布
             msg_time = datetime.fromtimestamp(msg.timestamp)
-            user_stats[user_id]["hours"][msg_time.hour] += 1
+            hour = msg_time.hour
+            stats["hours"][hour] = stats["hours"].get(hour, 0) + 1
 
             # 统计内容
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
-                    text = content.text or ""
-                    user_stats[user_id]["char_count"] += len(text)
-
-                    # 统计文本中的表情 (Discord/Unicode)
-                    user_stats[user_id]["emoji_count"] += len(
-                        re.findall(self.DISCORD_CUSTOM_EMOJI_PATTERN, text)
-                    )
-                    user_stats[user_id]["emoji_count"] += len(
-                        re.findall(self.UNICODE_EMOJI_PATTERN, text)
-                    )
+                    stats["char_count"] += len(content.text or "")
 
                 elif content.type == MessageContentType.EMOJI:
-                    user_stats[user_id]["emoji_count"] += 1
+                    stats["emoji_count"] += 1
+
+                elif content.type == MessageContentType.IMAGE:
+                    # 与 GroupStatistics 口径保持一致
+                    if self._is_emoji_like_image(content.raw_data):
+                        stats["emoji_count"] += 1
 
                 elif content.type == MessageContentType.REPLY:
-                    user_stats[user_id]["reply_count"] += 1
+                    stats["reply_count"] += 1
 
-        return dict(user_stats)
+        return user_stats
+
+    @staticmethod
+    def _is_emoji_like_image(raw_data: object) -> bool:
+        """判断 IMAGE 段是否应按表情计数。"""
+        if isinstance(raw_data, dict):
+            sub_type = raw_data.get("sub_type")
+            if sub_type is not None:
+                return str(sub_type) == "1"
+            summary = str(raw_data.get("summary", ""))
+            return "动画表情" in summary or "表情" in summary
+
+        if raw_data is None:
+            return False
+
+        text = str(raw_data)
+        return "动画表情" in text or "表情" in text
 
     def get_top_users(
-        self, user_activity: dict[str, dict], limit: int = 10
+        self, user_activity: dict[str, UserActivityStats], limit: int = 10
     ) -> list[dict]:
         """获取最活跃的用户列表"""
         users = []
@@ -100,7 +117,7 @@ class AnalysisDomainService:
         return users[:limit]
 
     def get_user_activity_pattern(
-        self, user_activity: dict[str, dict], user_id: str
+        self, user_activity: dict[str, UserActivityStats], user_id: str
     ) -> dict:
         """获取并识别指定用户的活动模式"""
         if user_id not in user_activity:
