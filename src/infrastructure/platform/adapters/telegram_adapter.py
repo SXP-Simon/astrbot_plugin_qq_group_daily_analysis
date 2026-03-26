@@ -184,6 +184,9 @@ class TelegramAdapter(PlatformAdapter):
             history_mgr = self._context.message_history_manager
 
             platform_id = self._get_platform_id()
+            logger.info(
+                f"[Telegram] 正在获取群 {group_id} 的历史消息，使用 platform_id: {platform_id}"
+            )
             before_id_int: int | None = None
             if before_id:
                 try:

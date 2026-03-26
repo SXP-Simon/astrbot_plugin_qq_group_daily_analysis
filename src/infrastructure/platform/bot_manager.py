@@ -195,8 +195,22 @@ class BotManager:
         return bool(self._bot_self_ids)
 
     def is_ready_for_auto_analysis(self) -> bool:
-        """检查是否准备好进行自动分析"""
-        return self.has_bot_instance() and self.has_bot_self_id()
+        """检查是否准备好进行了自动分析"""
+        if not self.has_bot_instance():
+            logger.debug("[BotManager] 自动分析就绪检查失败：没有可用的 bot 实例。")
+            return False
+
+        if not self.has_bot_self_id():
+            # 允许在没有配置/自动提取到 ID 的情况下尝试，但记录调试信息
+            # 这有助于诊断某些平台（如 Telegram）自动获取 ID 失败的情况
+            logger.debug(
+                "[BotManager] 自动分析就绪检查警告：bot_self_ids 列表为空。可能会影响消息过滤能力。"
+            )
+            # 为了解决 #128 及其后续反馈，我们将此检查放宽
+            # 只要有 bot 实例就可以尝试运行
+            return True
+
+        return True
 
     def _get_platform_id_from_instance(self, bot_instance):
         """从bot实例获取平台ID"""
@@ -368,6 +382,9 @@ class BotManager:
                 self._platforms[platform_id] = platform
 
                 if bot_client:
+                    logger.info(
+                        f"[BotManager] 为平台 {platform_id} ({platform_name}) 注册 bot 实例"
+                    )
                     self.set_bot_instance(bot_client, platform_id, platform_name)
                     discovered[platform_id] = bot_client
                 else:
