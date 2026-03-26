@@ -375,6 +375,9 @@ class AutoScheduler:
 
             analysis_tasks = []
             for gid, pid in target_list:
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续分析任务创建")
+                    break
                 task = asyncio.create_task(
                     throttled_analysis(gid, pid),
                     name=f"analysis_group_{gid}",
@@ -535,6 +538,9 @@ class AutoScheduler:
 
             analysis_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续增量分析任务创建")
+                    break
                 task = asyncio.create_task(
                     staggered_incremental(idx, gid, pid),
                     name=f"incremental_group_{gid}",
@@ -649,6 +655,8 @@ class AutoScheduler:
 
     async def _run_incremental_final_report(self):
         """基于当天增量累积数据生成并发送最终报告"""
+        if self._terminating:
+            return
         try:
             logger.info("开始生成增量最终报告（交错并发模式）")
 
@@ -680,6 +688,9 @@ class AutoScheduler:
 
             report_tasks = []
             for idx, (gid, pid) in enumerate(target_list):
+                if self._terminating:
+                    logger.info("检测到插件正在停止，取消后续最终报告任务创建")
+                    break
                 task = asyncio.create_task(
                     staggered_final_report(idx, gid, pid),
                     name=f"final_report_group_{gid}",
@@ -743,6 +754,9 @@ class AutoScheduler:
             group_name = await self._get_group_name_safe(group_id, target_platform_id)
             trace_id = TraceContext.generate(prefix="report", group_name=group_name)
             TraceContext.set(trace_id)
+
+            if self._terminating:
+                return
 
             logger.info(
                 f"开始为群 {group_id} 生成增量最终报告 "
