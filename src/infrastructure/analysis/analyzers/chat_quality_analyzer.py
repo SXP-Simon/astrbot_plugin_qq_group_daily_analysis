@@ -14,10 +14,12 @@ from ..utils.llm_utils import (
     extract_response_text,
     extract_token_usage,
 )
+from ..utils.response_validation import validate_quality_review_item
+from ..utils.structured_output_schema import JSONObject, build_chat_quality_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class ChatQualityAnalyzer(BaseAnalyzer):
+class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
     """
     聊天质量分析器
     专门处理群聊质量的锐评和多维度分析
@@ -39,13 +41,11 @@ class ChatQualityAnalyzer(BaseAnalyzer):
         """获取最大维度数量"""
         return 8
 
-    def get_max_tokens(self) -> int:
-        """获取最大token数"""
-        return self.config_manager.get_quality_max_tokens()
+    def get_response_schema_name(self) -> str:
+        return "daily_chat_quality_review"
 
-    def get_temperature(self) -> float:
-        """获取温度参数"""
-        return 0.8
+    def get_response_schema(self) -> JSONObject:
+        return build_chat_quality_schema(self.get_max_count())
 
     def build_prompt(self, data: list[dict]) -> str:
         """
@@ -197,6 +197,71 @@ class ChatQualityAnalyzer(BaseAnalyzer):
             summary=data.get("summary", "今天也是充满活力的一天。"),
         )
 
+    def _validate_review_payload(
+        self, data: dict
+    ) -> tuple[bool, dict | None, str | None]:
+        return validate_quality_review_item(data)
+
+    async def _retry_parse_quality_object(
+        self,
+        *,
+        original_prompt: str,
+        previous_output: str,
+        parse_error: str | None,
+        umo: str | None,
+        system_prompt: str | None,
+        base_temperature: float | None,
+    ) -> dict | None:
+        response_format = self.get_response_format()
+        if response_format is None:
+            return None
+
+        for idx, temperature in enumerate(
+            self.get_schema_retry_temperatures(base_temperature), start=1
+        ):
+            retry_prompt = self.build_schema_retry_prompt(
+                original_prompt=original_prompt,
+                previous_output=previous_output,
+                parse_error=parse_error,
+                attempt_index=idx,
+            )
+            logger.warning(
+                f"聊天质量结构化解析失败，触发 schema 修复重试 "
+                f"(attempt={idx}, temperature={temperature:.1f})"
+            )
+            retry_response = await call_provider_with_retry(
+                self.context,
+                self.config_manager,
+                prompt=retry_prompt,
+                umo=umo,
+                provider_id_key=self.get_provider_id_key(),
+                system_prompt=system_prompt,
+                response_format=response_format,
+                extra_generate_kwargs={"temperature": temperature},
+            )
+            if retry_response is None:
+                continue
+
+            retry_text = extract_response_text(retry_response)
+            if not retry_text:
+                continue
+
+            retry_success, retry_parsed_data, _ = parse_json_object_response(
+                retry_text, self.get_data_type()
+            )
+            if retry_success and retry_parsed_data:
+                valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
+                if valid and normalized:
+                    return normalized
+
+            retry_regex_data = extract_quality_with_regex(retry_text)
+            if retry_regex_data:
+                valid, normalized, _ = self._validate_review_payload(retry_regex_data)
+                if valid and normalized:
+                    return normalized
+
+        return None
+
     async def summarize_batch_reviews(
         self,
         batch_reviews: list[dict],
@@ -266,16 +331,18 @@ class ChatQualityAnalyzer(BaseAnalyzer):
 
             # 调用 LLM 进行汇总
             system_prompt = await self._build_system_prompt(umo)
+            base_temperature = await self._resolve_provider_temperature(
+                self.get_provider_id_key(), umo
+            )
 
             response = await call_provider_with_retry(
                 self.context,
                 self.config_manager,
                 prompt=prompt,
-                max_tokens=self.get_max_tokens(),
-                temperature=0.7,
                 umo=umo,
                 provider_id_key=self.get_provider_id_key(),
                 system_prompt=system_prompt,
+                response_format=self.get_response_format(),
             )
 
             if response is None:
@@ -297,9 +364,29 @@ class ChatQualityAnalyzer(BaseAnalyzer):
             )
 
             if success and parsed_data:
-                review = self._build_review_from_dict(parsed_data)
+                valid, normalized, validation_error = self._validate_review_payload(
+                    parsed_data
+                )
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.info(
+                        f"聊天质量汇总分析成功，解析到 {len(review.dimensions)} 个汇总维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
+
+            repaired_data = await self._retry_parse_quality_object(
+                original_prompt=prompt,
+                previous_output=result_text,
+                parse_error=error_msg,
+                umo=umo,
+                system_prompt=system_prompt,
+                base_temperature=base_temperature,
+            )
+            if repaired_data:
+                review = self._build_review_from_dict(repaired_data)
                 logger.info(
-                    f"聊天质量汇总分析成功，解析到 {len(review.dimensions)} 个汇总维度"
+                    f"聊天质量汇总 schema 修复重试成功，解析到 {len(review.dimensions)} 个汇总维度"
                 )
                 return review, usage
 
@@ -330,6 +417,9 @@ class ChatQualityAnalyzer(BaseAnalyzer):
         try:
             # 1. 获取人格设定
             system_prompt = await self._build_system_prompt(umo)
+            base_temperature = await self._resolve_provider_temperature(
+                self.get_provider_id_key(), umo
+            )
 
             # 2. 构建 prompt
             prompt = self.build_prompt(messages)
@@ -341,11 +431,10 @@ class ChatQualityAnalyzer(BaseAnalyzer):
                 self.context,
                 self.config_manager,
                 prompt=prompt,
-                max_tokens=self.get_max_tokens(),
-                temperature=self.get_temperature(),
                 umo=umo,
                 provider_id_key=self.get_provider_id_key(),
                 system_prompt=system_prompt,
+                response_format=self.get_response_format(),
             )
 
             if response is None:
@@ -370,25 +459,47 @@ class ChatQualityAnalyzer(BaseAnalyzer):
             )
 
             if success and parsed_data:
-                review = self._build_review_from_dict(parsed_data)
-                logger.debug(
-                    f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度"
+                valid, normalized, validation_error = self._validate_review_payload(
+                    parsed_data
                 )
-                return review, usage
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.debug(
+                        f"聊天质量分析成功，解析到 {len(review.dimensions)} 个维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
 
-            # 7. 正则降级（使用 extract_quality_with_regex）
-            logger.warning(f"聊天质量JSON解析失败，尝试正则表达式提取: {error_msg}")
             regex_data = extract_quality_with_regex(result_text)
-
             if regex_data:
-                review = self._build_review_from_dict(regex_data)
+                valid, normalized, validation_error = self._validate_review_payload(
+                    regex_data
+                )
+                if valid and normalized:
+                    review = self._build_review_from_dict(normalized)
+                    logger.debug(
+                        f"聊天质量首轮结构化失败后，正则提取成功，获得 {len(review.dimensions)} 个维度"
+                    )
+                    return review, usage
+                error_msg = validation_error or error_msg
+
+            repaired_data = await self._retry_parse_quality_object(
+                original_prompt=prompt,
+                previous_output=result_text,
+                parse_error=error_msg,
+                umo=umo,
+                system_prompt=system_prompt,
+                base_temperature=base_temperature,
+            )
+            if repaired_data:
+                review = self._build_review_from_dict(repaired_data)
                 logger.debug(
-                    f"聊天质量正则提取成功，获得 {len(review.dimensions)} 个维度"
+                    f"聊天质量 schema 修复重试成功，解析到 {len(review.dimensions)} 个维度"
                 )
                 return review, usage
 
-            # 8. 全部失败
-            logger.error("聊天质量分析失败: JSON解析和正则表达式提取均未成功")
+            # 7. 全部失败
+            logger.error(f"聊天质量分析失败: JSON解析和正则提取均未成功: {error_msg}")
             return None, usage
 
         except Exception as e:
