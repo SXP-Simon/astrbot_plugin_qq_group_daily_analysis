@@ -240,16 +240,35 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
         """
         success, parsed_data, error_msg = self.parse_structured_response(result_text)
         if success and parsed_data:
-            return True, parsed_data, None
+            validated_success, validated_data, validated_error = (
+                self.validate_parsed_data(parsed_data)
+            )
+            if validated_success and validated_data:
+                return True, validated_data, None
+            error_msg = validated_error or error_msg
 
         regex_data = self.extract_with_regex(result_text, self.get_max_count())
         if regex_data:
-            logger.info(
-                f"{self.get_data_type()}结构化解析失败后，正则降级提取成功，获得 {len(regex_data)} 条数据"
+            validated_success, validated_data, validated_error = (
+                self.validate_parsed_data(regex_data)
             )
-            return True, regex_data, None
+            if validated_success and validated_data:
+                logger.info(
+                    f"{self.get_data_type()}结构化解析失败后，正则降级提取成功，获得 {len(validated_data)} 条数据"
+                )
+                return True, validated_data, None
+            error_msg = validated_error or error_msg
 
         return False, None, error_msg
+
+    def validate_parsed_data(
+        self, data_list: list[dict]
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        """
+        解析结果的本地二次校验（默认直接通过）。
+        子类可重写为 Pydantic 校验。
+        """
+        return True, data_list, None
 
     def _save_debug_data(self, prompt: str, session_id: str):
         """
