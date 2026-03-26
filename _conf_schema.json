@@ -2,7 +2,7 @@
     "basic": {
         "description": "基础设置",
         "type": "object",
-        "hint": "群聊分析插件的基础配置项，包括群聊权限、消息数量、输出格式等",
+        "hint": "群聊分析插件的基础配置项，包括群聊权限、消息数量、输出格式等。注意：基础群权限是第一道门槛，不通过就不会进入定时/增量流程。",
         "items": {
             "group_list_mode": {
                 "description": "群聊权限模式",
@@ -13,13 +13,13 @@
                     "none"
                 ],
                 "default": "none",
-                "hint": "whitelist: 仅允许列表内群；blacklist: 拒绝列表内群；none: 不限制"
+                "hint": "先决定“哪些群可以用这个插件”。这是第一道门槛：不通过这里，后面的定时/增量都不会触发。whitelist=只允许列表里的群；blacklist=屏蔽列表里的群；none=所有群都可以。示例：whitelist + [\"onebot:GroupMessage:123456\"] 表示只有这个群能用。"
             },
             "group_list": {
                 "type": "list",
                 "description": "群组白/黑名单列表",
                 "default": [],
-                "hint": "黑白名单模式下使用的群组列表。支持填写 AstrBot UMO (如 xxxxx:GroupMessage:123456) 或 纯群号 (如 123456，将尝试自动匹配)。可以使用 /sid 命令查看当前会话的 UMO。",
+                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号（如 123456）。新手建议优先填完整会话ID，更不容易填错。可用 /sid 获取当前会话ID。",
                 "items": {
                     "type": "string"
                 }
@@ -98,23 +98,36 @@
         }
     },
     "auto_analysis": {
-        "description": "自动分析设置",
+        "description": "定时分析设置",
         "type": "object",
-        "hint": "定时自动分析相关配置，包括启用开关、分析时间和并发数",
+        "hint": "配置每日自动分析的时间点和目标群聊范围。只有先通过基础群权限的群，才会在这里继续判断。",
         "items": {
-            "enable_auto_analysis": {
-                "type": "bool",
-                "description": "启用定时自动分析",
-                "default": false,
-                "hint": "是否在指定时间自动进行群聊分析，启用需要填写下面的机器人ID号，并且确保群聊号在 enabled_groups 配置中，否则获取不到实例，不会自动分析"
-            },
             "auto_analysis_time": {
                 "type": "list",
                 "description": "自动分析时间列表",
                 "default": [
                     "23:00"
                 ],
-                "hint": "每日自动分析的时间点列表，格式HH:MM（例如 23:00 ），支持多个时间点，增量分析也基于此时间点进行分析和报告生成",
+                "hint": "每天几点自动出报告，格式是 HH:MM。可填多个时间，例如 [\"09:00\", \"21:30\"]。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "scheduled_group_list_mode": {
+                "type": "string",
+                "description": "定时分析名单模式",
+                "options": [
+                    "whitelist",
+                    "blacklist"
+                ],
+                "default": "whitelist",
+                "hint": "定时任务要作用到哪些群。whitelist=只跑下面列表里的群；blacklist=除了下面列表，其他都跑。注意：这里只对“已通过基础群权限”的群生效。"
+            },
+            "scheduled_group_list": {
+                "type": "list",
+                "description": "定时分析群列表",
+                "default": [],
+                "hint": "定时任务群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。注意：whitelist + 空列表 = 不会开启定时任务。即使某群在增量名单里，只要不在定时白名单里，也不会自动触发。",
                 "items": {
                     "type": "string"
                 }
@@ -257,13 +270,26 @@
     "incremental": {
         "description": "增量分析设置",
         "type": "object",
-        "hint": "增量分析模式相关配置，启用后插件会在一天内多次进行小规模分析并累积结果，不开启则以基础设置的参数为标准；适合用于消息量特别大的群聊和有足够 Token 折腾的用户，尽力做到原本的单次全量分析模式的上位替代（如果把消息阈值拉到足够大），提升分析覆盖率和24小时活跃图表准确性",
+        "hint": "增量分析通过在活跃时段分步提取摘要，能显著提高分析深度和覆盖率。这里仅决定“已通过前两关的群”是走增量还是普通模式。",
         "items": {
-            "incremental_enabled": {
-                "type": "bool",
-                "description": "启用增量分析模式",
-                "default": false,
-                "hint": "启用后，插件会在一天内多次进行小规模分析并累积结果，最终在报告时间汇总输出。适用于消息量大的群聊，可显著提升分析覆盖率和24小时活跃图表准确性。关闭时保持传统的单次全量分析模式。"
+            "incremental_group_list_mode": {
+                "type": "string",
+                "description": "增量分析名单模式",
+                "options": [
+                    "whitelist",
+                    "blacklist"
+                ],
+                "default": "whitelist",
+                "hint": "哪些群用“增量分析”。whitelist=只有列表里的群用增量；blacklist=除了列表外都用增量。没命中的群会走普通模式。注意：增量名单不负责放行群，只负责选模式。"
+            },
+            "incremental_group_list": {
+                "type": "list",
+                "description": "增量分析群列表",
+                "default": [],
+                "hint": "增量分析群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只有这个群增量。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不用增量，其他群用增量。注意：whitelist + 空列表 = 不启用增量。只有先通过基础群权限 + 定时名单的群，才会在这里判断。",
+                "items": {
+                    "type": "string"
+                }
             },
             "incremental_report_immediately": {
                 "type": "bool",
@@ -324,6 +350,12 @@
                 "description": "多群增量分析交错间隔（秒）",
                 "default": 2,
                 "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。"
+            },
+            "incremental_fallback_enabled": {
+                "type": "bool",
+                "description": "增量失败自动回退全量分析",
+                "default": true,
+                "hint": "建议开启。开启后，如果增量分析失败，会自动改用普通分析，避免当天没报告。"
             }
         }
     },
