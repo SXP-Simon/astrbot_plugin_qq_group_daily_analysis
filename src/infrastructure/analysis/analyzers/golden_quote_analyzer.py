@@ -9,10 +9,11 @@ from ....domain.models.data_models import GoldenQuote, TokenUsage
 from ....utils.logger import logger
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_golden_quotes_with_regex
+from ..utils.structured_output_schema import JSONObject, build_golden_quotes_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class GoldenQuoteAnalyzer(BaseAnalyzer):
+class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote]):
     """
     金句分析器
     专门处理群聊金句的提取和分析
@@ -32,13 +33,11 @@ class GoldenQuoteAnalyzer(BaseAnalyzer):
             return self._incremental_max_count
         return self.config_manager.get_max_golden_quotes()
 
-    def get_max_tokens(self) -> int:
-        """获取最大token数"""
-        return self.config_manager.get_golden_quote_max_tokens()
+    def get_response_schema_name(self) -> str:
+        return "daily_golden_quotes"
 
-    def get_temperature(self) -> float:
-        """获取温度参数"""
-        return 0.7
+    def get_response_schema(self) -> JSONObject:
+        return build_golden_quotes_schema(self.get_max_count())
 
     def build_prompt(self, data: list[dict]) -> str:
         """

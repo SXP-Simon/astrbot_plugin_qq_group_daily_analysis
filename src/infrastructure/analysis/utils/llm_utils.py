@@ -4,12 +4,30 @@ LLM API请求处理工具模块
 """
 
 import asyncio
-from typing import Any
 
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, global_llm_rate_limiter
+from .structured_output_schema import JSONObject
 
 _circuit_breakers = {}
+
+
+def _is_response_format_unsupported_error(error: Exception) -> bool:
+    """
+    判断是否为 Provider/网关不支持 response_format 的兼容性错误。
+    """
+    text = str(error).lower()
+    patterns = [
+        "response_format",
+        "json_schema",
+        "unexpected keyword argument",
+        "extra fields not permitted",
+        "unknown field",
+        "not support",
+        "not supported",
+        "invalid request",
+    ]
+    return any(pattern in text for pattern in patterns)
 
 
 def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
@@ -184,12 +202,12 @@ async def call_provider_with_retry(
     context,
     config_manager,
     prompt: str,
-    max_tokens: int,
-    temperature: float,
     umo: str | None = None,
     provider_id_key: str | None = None,
     system_prompt: str | None = None,
-) -> Any | None:
+    response_format: JSONObject | None = None,
+    extra_generate_kwargs: dict[str, object] | None = None,
+) -> object | None:
     """
     调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
 
@@ -197,11 +215,11 @@ async def call_provider_with_retry(
         context: AstrBot上下文对象
         config_manager: 配置管理器
         prompt: 输入的提示语
-        max_tokens: 最大生成token数
-        temperature: 采样温度
         umo: 指定使用的模型唯一标识符
         provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'），用于选择特定的 Provider
         system_prompt: 系统提示词
+        response_format: 结构化输出约束（OpenAI 风格）
+        extra_generate_kwargs: 传递给 context.llm_generate 的附加参数（用于内部高级重试策略）
 
     Returns:
         LLM生成的结果，失败时返回None
@@ -225,7 +243,8 @@ async def call_provider_with_retry(
 
             logger.info(
                 f"[LLM 调用] 使用 Provider ID: {provider_id} | "
-                f"max_tokens={max_tokens} | temperature={temperature} | "
+                "max_tokens=provider-default | "
+                "temperature=provider-default | "
                 f"prompt长度={len(prompt) if prompt else 0}字符"
             )
 
@@ -255,13 +274,36 @@ async def call_provider_with_retry(
             # 超时由 Provider 内部控制，无需外层 wait_for
             try:
                 async with global_llm_rate_limiter:
-                    llm_resp = await context.llm_generate(
-                        chat_provider_id=provider_id,
-                        prompt=prompt,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        system_prompt=system_prompt,
-                    )
+                    llm_kwargs: dict[str, object] = {
+                        "chat_provider_id": provider_id,
+                        "prompt": prompt,
+                    }
+                    if system_prompt is not None:
+                        llm_kwargs["system_prompt"] = system_prompt
+                    if response_format is not None:
+                        llm_kwargs["response_format"] = response_format
+                    if extra_generate_kwargs:
+                        llm_kwargs.update(extra_generate_kwargs)
+
+                    try:
+                        llm_resp = await context.llm_generate(
+                            **llm_kwargs,
+                        )
+                    except Exception as e:
+                        if (
+                            response_format is not None
+                            and _is_response_format_unsupported_error(e)
+                        ):
+                            logger.warning(
+                                "[LLM 调用] 当前 Provider 可能不支持 response_format，"
+                                "已自动降级为无 schema 约束重试本次请求。"
+                            )
+                            llm_kwargs.pop("response_format", None)
+                            llm_resp = await context.llm_generate(
+                                **llm_kwargs,
+                            )
+                        else:
+                            raise
 
                 # 成功记录
                 cb.record_success()

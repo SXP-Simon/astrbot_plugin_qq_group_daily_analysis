@@ -195,22 +195,6 @@ class ConfigManager:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
         return self._get_group("llm").get("llm_backoff", 2)
 
-    def get_topic_max_tokens(self) -> int:
-        """获取话题分析最大token数"""
-        return self._get_group("llm").get("topic_max_tokens", 12288)
-
-    def get_golden_quote_max_tokens(self) -> int:
-        """获取金句分析最大token数"""
-        return self._get_group("llm").get("golden_quote_max_tokens", 4096)
-
-    def get_user_title_max_tokens(self) -> int:
-        """获取用户称号分析最大token数"""
-        return self._get_group("llm").get("user_title_max_tokens", 4096)
-
-    def get_quality_max_tokens(self) -> int:
-        """获取聊天质量分析最大token数"""
-        return self._get_group("llm").get("quality_max_tokens", 4096)
-
     def get_debug_mode(self) -> bool:
         """获取是否启用调试模式"""
         return self._get_group("basic").get("debug_mode", False)
