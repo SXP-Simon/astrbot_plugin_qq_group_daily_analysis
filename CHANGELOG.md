@@ -1,17 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.8] - feat(HatsuneMiku): 新增了一个名为 HatsuneMiku 的模板 (#134 @Shiitin)
-*   **🐛 黑白名单修复**: 分析名单准入并修复 AstrBot 内置白名单绕过问题 （情况如 #133 所述）
-*   **✨ 新模板 HatsuneMiku**: 感谢 @Shiitin 的贡献，新增了一个名为 HatsuneMiku 的模板，灵感来源于初音未来的可爱风格，适合喜欢二次元风格的用户使用。      
-<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
-
-
-
+## [v4.9.9] - feat(feishu): 尝试接入飞书并且回退黑白名单逻辑，保持旧版本逻辑，插件统一管理
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.8] - feat(HatsuneMiku): 新增了一个名为 HatsuneMiku 的模板 (#134 @Shiitin)
+*   **🐛 黑白名单修复**: 分析名单准入并修复 AstrBot 内置白名单绕过问题 （情况如 #133 所述）
+*   **✨ 新模板 HatsuneMiku**: 感谢 @Shiitin 的贡献，新增了一个名为 HatsuneMiku 的模板，灵感来源于初音未来的可爱风格，适合喜欢二次元风格的用户使用。      
+<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
 
 ## [v4.9.7] - feat(分析配置细粒度化): 引入三层黑白名单机制（基础群分析开关、定时分析、增量分析），支持更细粒度的群级分析控制；修复自动分析生命周期管理情况避免任务被静默跳过
 *   **🐛 自动分析调度修复**: 修复自动分析任务生命周期检查链路，重置 `schedule_jobs` 后 `_terminating` 状态，避免任务被静默跳过；增量分析任务生命周期行为与定时分析保持一致。(#130 @Dongmayyys)
