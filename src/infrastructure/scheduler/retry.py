@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import random
 import time
 from collections.abc import Callable
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 
 import aiohttp
 
+from ...shared.trace_context import REPORT_CAPTION_PATTERN
 from ...utils.logger import logger
 
 
@@ -20,8 +22,9 @@ class RetryTask:
     platform_id: str  # 需要保存 platform_id 以便找回 Bot
     caption: str = ""  # 保存原始消息提示词
     retry_count: int = 0
-    max_retries: int = 3
+    max_retries: int = 2
     created_at: float = 0.0
+    task_key: str = ""
 
     def __post_init__(self):
         if self.created_at == 0.0:
@@ -48,6 +51,9 @@ class RetryManager:
         self.worker_task = None
         self._dlq = []  # 死信队列 (Failures)
         self._active_groups = set()  # 正在处理中的群，防止重试地狱
+        self._active_task_keys = set()  # 任务级去重锁，防止同一报告重复入队
+        self._recent_task_key_ts: dict[str, float] = {}  # 最近完成任务用于短时去重
+        self._dedupe_ttl_seconds = 15 * 60
 
     async def start(self):
         """启动重试工作进程"""
@@ -73,6 +79,8 @@ class RetryManager:
             logger.warning(
                 f"[RetryManager] 停止时仍有 {pending_count} 个任务在队列中 pending"
             )
+        self._active_groups.clear()
+        self._active_task_keys.clear()
 
         logger.info("[RetryManager] 图片重试管理器已停止")
 
@@ -91,9 +99,18 @@ class RetryManager:
             )
             await self.start()
 
-        # 核心去重：如果该群已经在重试流程中，不再重复加入队列
-        if group_id in self._active_groups:
-            logger.debug(f"[RetryManager] 群 {group_id} 已在重试观察期，跳过任务添加")
+        self._cleanup_expired_task_keys()
+        task_key = self._build_task_key(group_id, platform_id, caption, html_content)
+
+        # 任务级去重：同一份报告在观察窗口内只保留一个任务
+        if task_key in self._active_task_keys:
+            logger.debug(f"[RetryManager] 任务 {task_key} 已在重试流程中，跳过重复入队")
+            return
+
+        if task_key in self._recent_task_key_ts:
+            logger.debug(
+                f"[RetryManager] 任务 {task_key} 在去重窗口内已处理过，跳过重复入队"
+            )
             return
 
         task = RetryTask(
@@ -103,9 +120,12 @@ class RetryManager:
             platform_id=platform_id,
             caption=caption,
             created_at=time.time(),
+            task_key=task_key,
         )
+        self._active_task_keys.add(task_key)
+        self._recent_task_key_ts[task_key] = time.time()
         await self.queue.put(task)
-        logger.info(f"[RetryManager] 已添加群 {group_id} 的重试任务")
+        logger.info(f"[RetryManager] 已添加群 {group_id} 的重试任务 (key={task_key})")
 
     async def _worker(self):
         """工作进程主循环：仅负责分发任务到协程，不阻塞"""
@@ -126,11 +146,54 @@ class RetryManager:
                 logger.error(f"[RetryManager] Worker 调度异常: {e}")
                 await asyncio.sleep(1)
 
+    def _cleanup_expired_task_keys(self):
+        """清理过期的去重记录。"""
+        now = time.time()
+        expired_keys = [
+            key
+            for key, ts in self._recent_task_key_ts.items()
+            if now - ts > self._dedupe_ttl_seconds
+        ]
+        for key in expired_keys:
+            self._recent_task_key_ts.pop(key, None)
+
+    def _build_task_key(
+        self, group_id: str, platform_id: str, caption: str, html_content: str
+    ) -> str:
+        """
+        构造用于去重的稳定任务 key。
+
+        优先级：
+        1）优先使用 caption 中的 TraceID 时间戳
+        2）若无则取 HTML 内容的哈希前缀
+        """
+        token = None
+        if caption:
+            match = REPORT_CAPTION_PATTERN.search(caption)
+            if match:
+                token = match.group(0)
+
+        if not token:
+            digest = hashlib.sha1(html_content[:2048].encode("utf-8")).hexdigest()[:16]
+            token = f"html:{digest}"
+
+        return f"{platform_id}:{group_id}:{token}"
+
+    def _mark_task_finished(self, task: RetryTask):
+        """释放任务级去重锁并刷新冷却时间。"""
+        if task.task_key:
+            self._active_task_keys.discard(task.task_key)
+            self._recent_task_key_ts[task.task_key] = time.time()
+
     async def _run_task_with_delay(self, task: RetryTask):
         """异步执行带延迟的单体重试任务"""
         # 锁定该群，防止其他“新”重试任务进入。
         # 如果是重试任务（retry_count > 0），它已经在队列循环中，之前已经释放过锁。
         if task.group_id in self._active_groups and task.retry_count == 0:
+            # 群正在被其它重试任务占用，重新排队避免任务被静默丢弃
+            await asyncio.sleep(5)
+            if self.running:
+                await self.queue.put(task)
             return
         self._active_groups.add(task.group_id)
 
@@ -170,6 +233,7 @@ class RetryManager:
 
             if success:
                 logger.info(f"[RetryManager] 群 {task.group_id} 重试流程圆满完成")
+                self._mark_task_finished(task)
             else:
                 # 3. 失败后续处理
                 task.retry_count += 1
@@ -185,8 +249,10 @@ class RetryManager:
                         f"[RetryManager] 群 {task.group_id} 已达最大重试次数，执行文本回退"
                     )
                     await self._send_fallback_text(task)
+                    self._mark_task_finished(task)
         except Exception as e:
             logger.error(f"[RetryManager] 重试协程发生意外: {e}", exc_info=True)
+            self._mark_task_finished(task)
         finally:
             # 释放群锁
             if task.group_id in self._active_groups:
@@ -208,16 +274,16 @@ class RetryManager:
             }
             logger.debug(f"[RetryManager] 正在重新渲染群 {task.group_id} 的图片...")
 
-            # 修改：return_url=False 获取二进制数据而不是URL
-            # 这对于解决 NTQQ "Timeout" 错误至关重要，因为它避免了 QQ 客户端下载本地/内网 URL 的网络问题
+            # 修改：return_url=False 获取二进制数据而不是 URL
+            # 这可以规避 NTQQ/NT 的“Timeout”假失败，因为下载本地/内网 URL 造成的网络等待会被跳过
             image_data = await self.html_render_func(
                 task.html_content,
                 {},
-                False,  # return_url=False, 获取 bytes
+                False,  # return_url=False，获取 bytes
                 image_options,
             )
 
-            # Fix: html_render might return URL (str) even if return_url=False in some implementations
+            # 修复：某些实现即使 return_url=False 也仍返回 URL 字符串
             if isinstance(image_data, str):
                 if image_data.startswith(("http://", "https://")):
                     logger.warning(
