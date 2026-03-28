@@ -547,6 +547,17 @@ class OneBotAdapter(PlatformAdapter):
                 if image_path.startswith(("http://", "https://", "base64://")):
                     raise e
 
+                error_str = str(e).lower()
+                is_potential_success = (
+                    "timeout" in error_str
+                    or "1200" in error_str
+                    or "网络错误" in error_str
+                )
+                # 关键修复：对疑似成功的超时错误，不做“立即 Base64 补发”。
+                # 直接抛到外层统一进入多轮观察，避免同一份报告短时间内连发。
+                if is_potential_success:
+                    raise e
+
                 logger.warning(f"路径发送图片失败 ({e})，尝试 Base64 回退模式...")
                 b64_str = await self._get_base64_from_file(image_path)
                 if not b64_str:
@@ -574,20 +585,21 @@ class OneBotAdapter(PlatformAdapter):
             if is_potential_success:
                 logger.warning(
                     f"OneBot 发送群 {group_id} 图片出现疑似超时 ({e})。 "
-                    "进入 10s 贴身观察期，尝试通过历史回显核实..."
+                    "进入多轮观察期，尝试通过历史回显核实..."
                 )
 
-                # 等待 10s (NTQQ 后台上传可能在此时完成)
-                await asyncio.sleep(10)
-
-                # [真相检查] 尝试从历史记录中找回失踪的消息
-                if await self.was_image_sent_recently(
-                    group_id, seconds=300, token=caption
-                ):
-                    logger.info(
-                        f"[OneBot] [真相拦截] 确认群 {group_id} 的超时图片已在后台成功送达。拦截重试。"
-                    )
-                    return True
+                # Multi-stage observation. Some OneBot implementations commit
+                # history with delay after timeout-like errors.
+                observe_windows = (10, 20, 30)
+                for wait_seconds in observe_windows:
+                    await asyncio.sleep(wait_seconds)
+                    if await self.was_image_sent_recently(
+                        group_id, seconds=420, token=caption
+                    ):
+                        logger.info(
+                            f"[OneBot] [真相拦截] 群 {group_id} 在 {wait_seconds}s 观察后确认已送达，拦截重试。"
+                        )
+                        return True
 
                 return False  # 没找回，返回 False，由上层 RetryManager 接管（带 20s 延迟观察期）
 
