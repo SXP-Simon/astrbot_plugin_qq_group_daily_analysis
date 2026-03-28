@@ -226,6 +226,7 @@ async def main():
         "simple",
         "spring_festival",
         "format",
+        "HatsuneMiku",
     ]
     for theme in themes:
         await generate_theme(theme)
