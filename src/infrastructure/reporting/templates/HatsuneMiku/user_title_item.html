@@ -1,0 +1,29 @@
+{% if titles %}
+<div style="margin-bottom: 40px;">
+    <div class="section-header">
+        <div class="v-bar"></div>
+        <div class="section-title-text">群友画像</div>
+    </div>
+    <div style="column-count: 2; column-gap: 15px;">
+        {% for title in titles %}
+        <div class="card-common" style="break-inside: avoid; padding: 20px; margin-bottom: 15px; border-top: 3px solid var(--miku-light);">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                <div style="width: 55px; height: 55px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 2px var(--miku-light); overflow: hidden; flex-shrink: 0; background: var(--bg-page-base);">
+                    {% if title.avatar_data %}<img src="{{ title.avatar_data }}" style="width: 100%; height: 100%; object-fit: cover;">{% endif %}
+                </div>
+                <div>
+                    <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-main);">{{ title.name }}</div>
+                    <div style="display: flex; gap: 6px; margin-top: 6px;">
+                        <span style="background: var(--miku-blue); color: var(--miku-dark); font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; font-weight: bold;">{{ title.title }}</span>
+                        <span style="background: var(--miku-pink-light); color: #fff; font-size: 0.75rem; padding: 3px 8px; border-radius: 6px; font-family: var(--font-num); font-weight: bold;">{{ title.mbti }}</span>
+                    </div>
+                </div>
+            </div>
+            <div style="background: var(--bg-page-base); padding: 12px 15px; border-radius: 8px; font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; border: 1px dashed var(--border-miku-light);">
+                {{ title.reason }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
