@@ -87,7 +87,7 @@ class MockConfigManager:
         return 5
 
     def get_report_template(self):
-        return "scrapbook"
+        return "HatsuneMiku"
 
     def get_enable_user_card(self):
         return True

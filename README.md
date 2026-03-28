@@ -16,6 +16,10 @@
       <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/TG.png" width="300" alt="Telegram Group"></a>
     </td>
   </tr>
+  <tr>
+    <td style="border: none;" align="center"><b>QQ群</b></td>
+    <td style="border: none;" align="center"><b>Telegram群</b></td>
+  </tr>
 </table>
 
 
@@ -365,10 +369,11 @@ src/infrastructure/reporting/templates/your_theme_name/
 PDF 调试模板命令：
 
 ```bash
-# docker
-docker exec -it astrbot python data/plugins/astrbot_plugin_qq_group_daily_analysis/scripts/mock_pdf_gen.py
-# uv
-uv run --with playwright --with diskcache data\plugins\astrbot_plugin_qq_group_daily_analysis\scripts\mock_pdf_gen.py
+# 生成所有主题的 PDF (推荐)
+uv run --with playwright --with diskcache scripts\debug_all_pdf_themes.py
+
+# 生成指定主题的 PDF (例如：HatsuneMiku ，可以修改内部代码占位解决)
+uv run --with playwright --with diskcache scripts\mock_pdf_gen.py
 ```
 
 Image 模板调试：
@@ -401,6 +406,7 @@ uv run scripts\debug_render.py -t retro_futurism -o debug_retro.html
 uv run scripts\debug_render.py -t format -o debug_format.html
 uv run scripts\debug_render.py -t simple -o debug_simple.html
 uv run scripts\debug_render.py -t spring_festival -o debug_spring.html
+uv run scripts\debug_render.py -t HatsuneMiku -o debug_miku.html
 ```
 
 

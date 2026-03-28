@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>群聊日常分析看板 · {{current_date}}</title>
-    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
             --miku-base: #39C5BB;
@@ -24,7 +25,8 @@
             --radius: 12px;
             --font-main: 'Noto Sans SC', sans-serif;
             --font-title: 'ZCOOL KuaiLe', cursive;
-            --font-num: 'Share Tech Mono', monospace;
+            --font-num: 'Outfit', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
 
             --border-miku-light: rgba(57, 197, 187, 0.15);
             --border-miku-gradient: linear-gradient(90deg, var(--miku-dark) 0%, var(--miku-base) 100%);
@@ -104,8 +106,9 @@
 
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; position: relative; z-index: 1; }
         .stat-box { background: rgba(255, 255, 255, 0.95); border-radius: var(--radius); padding: 18px; border: 1px solid var(--border-miku-light); box-shadow: 0 4px 12px rgba(57, 197, 187, 0.05); text-align: center; }
-        .stat-num { font-family: var(--font-num); font-size: 2.2rem; color: var(--text-main); font-weight: bold; }
+        .stat-num { font-family: var(--font-num); font-size: 2.2rem; color: var(--text-main); font-weight: 800; }
         .stat-txt { font-size: 0.85rem; color: var(--text-sub); margin-top: 5px; font-weight: bold;}
+        .stat-icon { color: var(--miku-base); width: 18px; height: 18px; margin-bottom: 2px; }
 
         .active-peak-block {
             grid-column: span 12;
@@ -125,11 +128,11 @@
         }
 
         .active-peak-block::after {
-            content: "MIKU"; position: absolute; right: 15px; top: 0; bottom: 0; display: flex; align-items: center; font-family: var(--font-num); font-size: 160px; line-height: 0.73; font-weight: 900; font-style: italic; color: rgba(255, 255, 255, 0.2); z-index: 0; pointer-events: none; letter-spacing: -3px;
+            content: "MIKU"; position: absolute; right: 15px; top: 0; bottom: 0; display: flex; align-items: center; font-family: var(--font-mono); font-size: 160px; line-height: 0.73; font-weight: 900; font-style: italic; color: rgba(255, 255, 255, 0.2); z-index: 0; pointer-events: none; letter-spacing: -3px;
         }
 
-        .peak-label { font-size: 1.1rem; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; z-index: 2;}
-        .peak-time-text { font-family: var(--font-num); font-size: 2.8rem; font-weight: bold; margin-top: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); letter-spacing: 2px; position: relative; z-index: 2;}
+        .peak-label { font-size: 1rem; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; z-index: 2; display: flex; align-items: center; gap: 8px;}
+        .peak-time-text { font-family: var(--font-num); font-size: 2.8rem; font-weight: 800; margin-top: 4px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); letter-spacing: 1px; position: relative; z-index: 2;}
 
         .peak-image-container { height: 100%; width: auto; max-width: 45%; display: flex; align-items: center; justify-content: flex-end; padding: 10px 0; position: relative; z-index: 1; }
         .peak-image-container img { height: 100%; width: auto; object-fit: contain; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
@@ -142,15 +145,14 @@
 
         .footer {
             margin-top: 50px; 
-            background: rgba(224, 242, 241, 0.65); 
-            backdrop-filter: blur(10px); 
-            -webkit-backdrop-filter: blur(10px);
+            background: #e0f2f1; 
             border: 1px solid rgba(57, 197, 187, 0.3);
             border-radius: var(--radius); 
             padding: 20px 30px; 
             position: relative; 
             z-index: 1;
             box-shadow: 0 8px 20px rgba(57, 197, 187, 0.08);
+            page-break-inside: avoid;
         }
         
         .footer-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(57, 197, 187, 0.3); padding-bottom: 15px; margin-bottom: 15px; }
@@ -223,29 +225,29 @@
 
         <div class="stats-row">
             <div class="stat-box">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px;">
-                    <div style="width: 4px; height: 14px; background: var(--miku-base); border-radius: 2px;"></div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
+                    <i data-lucide="message-square" class="stat-icon"></i>
                     <div class="stat-txt" style="margin: 0;">今日消息数</div>
                 </div>
                 <div class="stat-num">{{message_count}}</div>
             </div>
             <div class="stat-box">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px;">
-                    <div style="width: 4px; height: 14px; background: var(--miku-base); border-radius: 2px;"></div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
+                    <i data-lucide="users" class="stat-icon"></i>
                     <div class="stat-txt" style="margin: 0;">活跃成员数</div>
                 </div>
                 <div class="stat-num">{{participant_count}}</div>
             </div>
             <div class="stat-box">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px;">
-                    <div style="width: 4px; height: 14px; background: var(--miku-base); border-radius: 2px;"></div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
+                    <i data-lucide="smile" class="stat-icon"></i>
                     <div class="stat-txt" style="margin: 0;">表情互动</div>
                 </div>
                 <div class="stat-num">{{emoji_count}}</div>
             </div>
             <div class="stat-box">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px;">
-                    <div style="width: 4px; height: 14px; background: var(--miku-base); border-radius: 2px;"></div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
+                    <i data-lucide="type" class="stat-icon"></i>
                     <div class="stat-txt" style="margin: 0;">今日字数累计</div>
                 </div>
                 <div class="stat-num">{{total_characters}}</div>
@@ -254,7 +256,10 @@
 
         <div class="active-peak-block">
             <div>
-                <div class="peak-label">峰值活跃时间段</div>
+                <div class="peak-label">
+                    <i data-lucide="trending-up" style="width: 20px; height: 20px;"></i>
+                    峰值活跃时间段
+                </div>
                 <div class="peak-time-text">{{most_active_period}}</div>
             </div>
             
@@ -279,17 +284,37 @@
         <div class="footer">
             <div class="footer-top">
                 <div class="footer-repo">
-                    Full repository path / <a href="#">SXP-Simon/astrbot_plugin_qq_group_daily_analysis</a>
+                    <svg viewBox="0 0 24 24" fill="var(--miku-dark)" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;">
+                        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis" target="_blank">SXP-Simon/astrbot_plugin_qq_group_daily_analysis</a>
                 </div>
                 <div class="token-data">
-                    Token usage: {{total_tokens}} <span class="token-sub">( P: {{prompt_tokens}} | C: {{completion_tokens}} )</span>
+                    <svg viewBox="0 0 24 24" stroke="var(--text-sub)" stroke-width="2" fill="none" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">
+                        <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                        <path d="M9 9h6v6H9z"></path><path d="M9 1v3"></path><path d="M15 1v3"></path><path d="M9 20v3"></path><path d="M15 20v3"></path><path d="M20 9h3"></path><path d="M20 15h3"></path><path d="M1 9h3"></path><path d="M1 15h3"></path>
+                    </svg>
+                    Token usage: <span style="font-weight: 800;">{{total_tokens}}</span> <span class="token-sub">( P: {{prompt_tokens}} | C: {{completion_tokens}} )</span>
                 </div>
             </div>
             <div class="footer-bottom">
-                <div class="footer-time">{{current_datetime}}</div>
-                <div class="footer-author">Template by shiitin</div>
+                <div class="footer-time">
+                    <svg viewBox="0 0 24 24" stroke="var(--text-sub)" stroke-width="2" fill="none" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">
+                        <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    Generated at {{current_datetime}}
+                </div>
+                <div class="footer-author">
+                    <svg viewBox="0 0 24 24" fill="#ff85a2" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                    </svg>
+                    Template by shiitin
+                </div>
             </div>
         </div>
     </div>
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>
