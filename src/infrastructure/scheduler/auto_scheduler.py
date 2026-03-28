@@ -49,7 +49,7 @@ class AutoScheduler:
         self.scheduler_job_ids = []  # 存储已注册的定时任务 ID
         self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
 
-        # Cache: group_id -> group_name (populated lazily)
+        # 缓存: group_id -> group_name (延迟加载)
         self._group_name_cache: dict[str, str] = {}
         self._terminating = False  # 终止标志位
 
@@ -289,9 +289,12 @@ class AutoScheduler:
         # 获取基础信息
         all_groups = await self._get_all_groups()
 
-        # 预加载所有配置名单和模式
-        sched_list = self.config_manager.get_scheduled_group_list()
-        sched_list_mode = self.config_manager.get_scheduled_group_list_mode()
+        astrbot_config = None
+        if self.plugin_instance and getattr(self.plugin_instance, "context", None):
+            try:
+                astrbot_config = self.plugin_instance.context.get_config()
+            except Exception as e:
+                logger.warning(f"读取 Astr 全局配置失败，默认拒绝调度目标: {e}")
 
         incr_list = self.config_manager.get_incremental_group_list()
         incr_list_mode = self.config_manager.get_incremental_group_list_mode()
@@ -303,13 +306,8 @@ class AutoScheduler:
             group_id = str(group_id_orig)
             umo = f"{platform_id}:GroupMessage:{group_id}"
 
-            # 1. 准入层判定 (基础黑白名单)
-            if not self.config_manager.is_group_allowed(umo):
-                continue
-
-            # 2. 定时层判定 (定时分析黑白名单)
-            if not self.config_manager.is_group_in_filtered_list(
-                umo, sched_list_mode, sched_list
+            if not self.config_manager.is_group_allowed_for_scheduled_task(
+                umo, astrbot_config
             ):
                 continue
 

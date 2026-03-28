@@ -31,3 +31,4 @@ scripts/data/avatar/cache.db
 debug_miku.html
 scripts/output_all/debug_HatsuneMiku_test_group_*.pdf
 scripts/output/mock_report_test_group_mock_*.pdf
+plugin.log

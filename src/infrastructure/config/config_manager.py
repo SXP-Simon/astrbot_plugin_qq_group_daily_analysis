@@ -49,6 +49,34 @@ class ConfigManager:
         """获取群组列表（用于黑白名单）"""
         return self._get_group("basic").get("group_list", [])
 
+    @staticmethod
+    def _match_group_item(item: str, target: str) -> bool:
+        """匹配列表项与 UMO/简单群 ID/话题父 ID。"""
+        item = str(item).strip()
+        target = str(target).strip()
+
+        target_simple_id = target.split(":")[-1] if ":" in target else target
+        target_parent_id = (
+            target_simple_id.split("#", 1)[0]
+            if "#" in target_simple_id
+            else target_simple_id
+        )
+
+        if ":" in item:
+            if item == target:
+                return True
+
+            if "#" in target_simple_id and ":" in target:
+                item_prefix, item_tail = item.rsplit(":", 1)
+                target_prefix, _ = target.rsplit(":", 1)
+                return item_prefix == target_prefix and item_tail == target_parent_id
+            return False
+
+        if item == target_simple_id:
+            return True
+
+        return "#" in target_simple_id and item == target_parent_id
+
     def is_group_allowed(self, group_id_or_umo: str) -> bool:
         """
         根据配置的白/黑名单判断是否允许在该群聊中使用
@@ -61,47 +89,9 @@ class ConfigManager:
         if mode == "none":
             return True
 
-        glist = [str(g) for g in self.get_group_list()]
-        target = str(group_id_or_umo)
-
-        target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
-            target_simple_id.split("#", 1)[0]
-            if "#" in target_simple_id
-            else target_simple_id
-        )
-
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
-            if ":" in item:
-                if item == target:
-                    return True
-
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
-                # 例如: item=telegram2:GroupMessage:-1001
-                #      target=telegram2:GroupMessage:-1001#2264
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
-            return "#" in target_simple_id and item == target_parent_id
-
-        is_in_list = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+        glist = [str(g).strip() for g in self.get_group_list()]
+        target = str(group_id_or_umo).strip()
+        is_in_list = any(self._match_group_item(item, target) for item in glist)
 
         if mode == "whitelist":
             return is_in_list
@@ -109,6 +99,58 @@ class ConfigManager:
             return not is_in_list
 
         return True
+
+    def is_allowed_by_astr_whitelist(
+        self, group_id_or_umo: str, astrbot_config: dict | None
+    ) -> bool:
+        """
+        根据 Astr 全局白名单设置校验群组访问。
+
+        规则与 Astr WhitelistCheckStage 保持一致：
+        - 白名单未启用 -> 允许
+        - 白名单为空 -> 允许
+        - 否则，目标必须匹配 UMO 或群组 ID 格式的条目
+        """
+        if not astrbot_config:
+            return True
+
+        try:
+            platform_settings = astrbot_config.get("platform_settings", {})
+            enable_whitelist = bool(
+                platform_settings.get("enable_id_white_list", False)
+            )
+            whitelist = [
+                str(item).strip()
+                for item in platform_settings.get("id_whitelist", [])
+                if str(item).strip()
+            ]
+
+            if not enable_whitelist or not whitelist:
+                return True
+
+            target = str(group_id_or_umo).strip()
+            return any(self._match_group_item(item, target) for item in whitelist)
+        except Exception as e:
+            logger.warning(f"Astr whitelist check failed, deny by default: {e}")
+            return False
+
+    def is_group_allowed_for_scheduled_task(
+        self, group_id_or_umo: str, astrbot_config: dict | None = None
+    ) -> bool:
+        """定时分析任务的统一准入控制网关。"""
+        target = str(group_id_or_umo).strip()
+
+        if not self.is_allowed_by_astr_whitelist(target, astrbot_config):
+            return False
+
+        if not self.is_group_allowed(target):
+            return False
+
+        return self.is_group_in_filtered_list(
+            target,
+            self.get_scheduled_group_list_mode(),
+            self.get_scheduled_group_list(),
+        )
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""
@@ -135,6 +177,32 @@ class ConfigManager:
                 logger.warning(f"修复配置格式失败: {e}")
             return val_list
         return val if isinstance(val, list) else ["09:00"]
+
+    def is_auto_analysis_enabled(self) -> bool:
+        """检查自动分析总开关是否启用 (根据名单模式和列表内容判断)"""
+        mode = self.get_scheduled_group_list_mode().lower()
+        lst = self.get_scheduled_group_list()
+        return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
+
+    def get_scheduled_group_list_mode(self) -> str:
+        """获取定时分析名单模式 (whitelist/blacklist)"""
+        return self._get_group("auto_analysis").get(
+            "scheduled_group_list_mode", "whitelist"
+        )
+
+    def set_scheduled_group_list_mode(self, mode: str):
+        """设置定时分析名单模式"""
+        self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
+        self.config.save_config()
+
+    def get_scheduled_group_list(self) -> list[str]:
+        """获取定时分析目标群列表"""
+        return self._get_group("auto_analysis").get("scheduled_group_list", [])
+
+    def set_scheduled_group_list(self, groups: list[str]):
+        """设置定时分析目标群列表"""
+        self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
+        self.config.save_config()
 
     def get_enable_auto_analysis(self) -> bool:
         """
@@ -378,40 +446,6 @@ class ConfigManager:
         self._ensure_group("basic")["analysis_days"] = days
         self.config.save_config()
 
-    def set_auto_analysis_time(self, time_val: str | list[str]):
-        """设置自动分析时间点"""
-        self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
-        self.config.save_config()
-
-    def is_auto_analysis_enabled(self) -> bool:
-        """
-        判断自动分析功能是否通过名单“按需开启”。
-        逻辑：如果是白名单模式且名单不为空，或者为黑名单模式，则视为开启。
-        """
-        mode = self.get_scheduled_group_list_mode()
-        lst = self.get_scheduled_group_list()
-        return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
-
-    def get_scheduled_group_list_mode(self) -> str:
-        """获取定时分析名单模式 (whitelist/blacklist)"""
-        return self._get_group("auto_analysis").get(
-            "scheduled_group_list_mode", "whitelist"
-        )
-
-    def set_scheduled_group_list_mode(self, mode: str):
-        """设置定时分析名单模式"""
-        self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
-        self.config.save_config()
-
-    def get_scheduled_group_list(self) -> list[str]:
-        """获取定时分析目标群列表"""
-        return self._get_group("auto_analysis").get("scheduled_group_list", [])
-
-    def set_scheduled_group_list(self, groups: list[str]):
-        """设置定时分析目标群列表"""
-        self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
-        self.config.save_config()
-
     def is_group_in_filtered_list(
         self, group_umo_or_id: str, mode: str, group_list: list
     ) -> bool:
@@ -420,7 +454,7 @@ class ConfigManager:
 
         逻辑如下：
         - whitelist 模式：
-            - 如果列表为空，则视为“此级别未开启”。
+            - 如果列表为空，则视为“此级别不开启”。
             - 如果不为空，仅在列表中的通过。
         - blacklist 模式：
             - 在列表中的不通过。
@@ -428,13 +462,21 @@ class ConfigManager:
         """
         group_list = [str(x).strip() for x in group_list]
         target = str(group_umo_or_id).strip()
+        mode = str(mode).lower()
 
         # 兼容 UMO 匹配 (如果列表里写的是 ID，UMO 也能匹配上)
         def match_umo(umo: str, item: str) -> bool:
             if umo == item:
                 return True
-            if ":" in umo and umo.split(":")[-1] == item:
-                return True
+            if ":" in umo:
+                parts = umo.split(":")
+                simple_id = parts[-1]
+                # 基础 ID 匹配
+                if simple_id == item:
+                    return True
+                # 兼容 Telegram Topic 匹配 (如果 item 是 Parent ID，命中 Topic ID)
+                if "#" in simple_id and simple_id.split("#")[0] == item:
+                    return True
             return False
 
         if mode == "whitelist":
@@ -442,11 +484,20 @@ class ConfigManager:
                 # 白名单为空：此级别不开启 (按需开启逻辑)
                 return False
             return any(match_umo(target, x) for x in group_list)
-        else:  # blacklist
+        elif mode == "blacklist":
             if not group_list:
                 # 黑名单为空：全通过
                 return True
             return not any(match_umo(target, x) for x in group_list)
+        else:
+            # 未知模式：默认不通过 (安全策略)
+            logger.warning(f"未知过滤模式: {mode}, 默认不通过。")
+            return False
+
+    def set_auto_analysis_time(self, time_val: str | list[str]):
+        """设置自动分析时间点"""
+        self._ensure_group("auto_analysis")["auto_analysis_time"] = time_val
+        self.config.save_config()
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
