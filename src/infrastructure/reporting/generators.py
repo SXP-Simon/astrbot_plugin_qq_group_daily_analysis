@@ -612,6 +612,12 @@ class ReportGenerator(IReportGenerator):
                     if result:
                         if result.startswith("http"):
                             avatar_url = result
+                        elif result.startswith("base64://"):
+                            return base64.b64decode(result[len("base64://") :])
+                        elif result.startswith("data:"):
+                            parts = result.split(",", 1)
+                            if len(parts) == 2:
+                                return base64.b64decode(parts[1])
                         else:
                             logger.warning(
                                 f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
