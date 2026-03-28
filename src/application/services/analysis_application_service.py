@@ -155,7 +155,7 @@ class AnalysisApplicationService:
                 logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
                 return {"success": False, "reason": "no_messages"}
 
-            # 3. 清理消息 (过滤指令、机器人消息、噪声)
+            # 3. 清理消息 (Filter commands, bot messages, noise)
             from ...domain.services.message_cleaner_service import MessageCleanerService
 
             cleaner = MessageCleanerService()
@@ -209,8 +209,8 @@ class AnalysisApplicationService:
             chat_quality_review = None
             total_token_usage = TokenUsage()
 
-            # 注意: LLMAnalyzer 目前可能只接收旧版格式或特定的 UnifiedMessage 适配
-            # 暂时转换回旧版格式以确保稳定性，直到 LLMAnalyzer 被重构
+            # Note: LLMAnalyzer 目前可能只接收 legacy 格式或特定的 UnifiedMessage 适配
+            # 暂时转换回 legacy 格式以确保稳定性，直到 LLMAnalyzer 被重构
             legacy_messages = self.statistics_service._convert_to_legacy_dict(
                 unified_messages
             )

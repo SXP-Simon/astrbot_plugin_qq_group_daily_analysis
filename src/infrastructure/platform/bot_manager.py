@@ -510,10 +510,10 @@ class BotManager:
             return str(bot_instance.self_id)
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
-        # Discord.py 风格: client.user.id
+        # Discord.py style: client.user.id
         elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
             return str(bot_instance.user.id)
-        # python-telegram-bot 风格: bot.id
+        # python-telegram-bot style: bot.id
         elif hasattr(bot_instance, "id") and bot_instance.id:
             return str(bot_instance.id)
         return None
