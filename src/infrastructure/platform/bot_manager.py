@@ -134,7 +134,7 @@ class BotManager:
             if not bot_client and hasattr(platform, "bot"):
                 bot_client = platform.bot
             if not bot_client and hasattr(platform, "client"):
-                # AstrBot v4.14.4 DiscordPlatformAdapter uses 'client' attribute
+                # AstrBot v4.14.4 DiscordPlatformAdapter 使用 'client' 属性
                 bot_client = platform.client
 
             if bot_client:
@@ -348,7 +348,7 @@ class BotManager:
                     platform_id = metadata.get("id")
 
             if platform_id:
-                # KNOWLEDGE DISCOVERY: Log metadata for debugging custom IDs
+                # 知识点发现: 记录元数据以调试自定义 ID
                 logger.info(
                     f"[群分析插件 BotManager]: Log metadata for debugging custom IDs ,Platform: {platform_id}, Metadata Type: {getattr(metadata, 'type', 'N/A')}, Metadata Name: {getattr(metadata, 'name', 'N/A')}"
                 )
@@ -474,10 +474,10 @@ class BotManager:
             return str(bot_instance.self_id)
         elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
             return str(bot_instance.user_id)
-        # Discord.py style: client.user.id
+        # Discord.py 风格: client.user.id
         elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
             return str(bot_instance.user.id)
-        # python-telegram-bot style: bot.id
+        # python-telegram-bot 风格: bot.id
         elif hasattr(bot_instance, "id") and bot_instance.id:
             return str(bot_instance.id)
         return None
