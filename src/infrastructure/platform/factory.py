@@ -2,7 +2,9 @@
 平台适配器工厂
 """
 
-from typing import Any
+from __future__ import annotations
+
+from collections.abc import Mapping
 
 from ...utils.logger import logger
 from .base import PlatformAdapter
@@ -27,8 +29,8 @@ class PlatformAdapterFactory:
     def create(
         cls,
         platform_name: str,
-        bot_instance: Any,
-        config: dict = None,
+        bot_instance: object,
+        config: Mapping[str, object] | None = None,
     ) -> PlatformAdapter | None:
         """
         创建平台适配器
@@ -86,6 +88,14 @@ def _register_adapters():
         from .adapters.telegram_adapter import TelegramAdapter
 
         PlatformAdapterFactory.register("telegram", TelegramAdapter)
+    except ImportError:
+        pass
+
+    try:
+        from .adapters.lark_adapter import LarkAdapter
+
+        PlatformAdapterFactory.register("lark", LarkAdapter)
+        PlatformAdapterFactory.register("feishu", LarkAdapter)
     except ImportError:
         pass
 

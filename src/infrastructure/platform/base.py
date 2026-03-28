@@ -3,7 +3,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from collections.abc import Mapping
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
 from ...domain.repositories.message_repository import (
@@ -25,21 +25,33 @@ class PlatformAdapter(
     充当领域层与具体聊天平台（如 OneBot, Discord）之间的中转站。
 
     Attributes:
-        bot (Any): 平台对应的机器人 SDK 实例
+        bot (object): 平台对应的机器人 SDK 实例
         config (dict): 针对该平台的特定配置
     """
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
+    def __init__(
+        self,
+        bot_instance: object,
+        config: Mapping[str, object] | None = None,
+    ):
         """
         初始化平台适配器。
 
         Args:
-            bot_instance (Any): 后端机器人实例
+            bot_instance (object): 后端机器人实例
             config (dict, optional): 平台特定配置项
         """
         self.bot = bot_instance
-        self.config = config or {}
+        self.config: dict[str, object] = dict(config) if config is not None else {}
+        self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
+
+    def set_context(self, context: object) -> None:
+        """
+        可选的上下文注入钩子，供需要访问插件核心服务的适配器使用。
+        """
+        # 具体适配器可覆盖此方法
+        pass
 
     @property
     def capabilities(self) -> PlatformCapabilities:
