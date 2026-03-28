@@ -1,0 +1,43 @@
+<div class="card-common" style="padding: 30px 20px 15px 20px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 180px; gap: 4px;">
+        {# 定义一个从 葱绿 -> 薄荷 -> 鹅黄 -> 蜜桃粉 的完美过渡色板 #}
+        {% set chart_colors = [
+            '#66D1C7', '#6FD3C6', '#79D5C4', '#85D8C3', '#93DAC1', '#A3DDBF',
+            '#B4E0BD', '#C7E2BA', '#DBE5B8', '#EFE8B5', '#FFEAB3', '#FFDF9E',
+            '#FFD38B', '#FFC67A', '#FFB96D', '#FFAC62', '#FFA059', '#FF9552',
+            '#FF8B4D', '#FF834B', '#FF7D4D', '#FF7752', '#FF745A', '#FF7365'
+        ] %}
+        
+        {% for item in chart_data %}
+        {% set h = item.percentage | float %}
+        
+        {# 使用 loop.index0 从色板中依次取色，形成从左到右的全局渐变 #}
+        {% set bar_color = chart_colors[loop.index0 % 24] %}
+        
+        {% set bar_opacity = '1' %}
+        {% if item.count == 0 %}
+            {% set h = '4' %}
+            {% set bar_opacity = '0.3' %}
+            {% set bar_color = 'var(--miku-blue)' %}
+        {% endif %}
+        
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; position: relative;">
+            {% if item.count > 0 %}
+            {# 数字去掉背景框，颜色与柱子保持一致，视觉更通透 #}
+            <span style="font-family: var(--font-num); font-size: 0.8rem; color: {{ bar_color }}; margin-bottom: 6px; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.02);">{{ item.count }}</span>
+            {% endif %}
+            
+            {# 柱状体 #}
+            <div style="width: 100%; height: {{ h }}%; 
+                        background: {{ bar_color }};
+                        border-radius: 4px 4px 1px 1px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                        transition: height 0.3s ease;
+                        opacity: {{ bar_opacity }};"></div>
+            
+            {# X轴标签 #}
+            <span style="margin-top: 10px; font-family: var(--font-num); font-size: 0.75rem; color: var(--text-sub); font-weight: bold;">{{ "%02d"|format(item.hour) }}时</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
