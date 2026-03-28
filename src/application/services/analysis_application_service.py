@@ -134,9 +134,19 @@ class AnalysisApplicationService:
             # 飞书平台在分析前进行一次性权限与成员头像预热，避免报告阶段出现大面积默认头像。
             if hasattr(adapter, "prepare_group_member_cache"):
                 try:
+                    logger.info(
+                        "执行平台成员预检查: group=%s, platform=%s",
+                        group_id,
+                        platform_id or "default",
+                    )
                     ok, err = await adapter.prepare_group_member_cache(group_id)  # type: ignore[attr-defined]
                     if not ok and err:
                         raise ValueError(err)
+                    logger.info(
+                        "平台成员预检查通过: group=%s, platform=%s",
+                        group_id,
+                        platform_id or "default",
+                    )
                 except Exception as e:
                     raise ValueError(
                         f"飞书成员信息预检查失败，请先完成应用权限授权：{e}"
@@ -149,6 +159,14 @@ class AnalysisApplicationService:
 
             raw_messages = await adapter.fetch_messages(
                 group_id=group_id, days=days, max_count=max_count
+            )
+            logger.info(
+                "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
+                group_id,
+                platform_id or "default",
+                len(raw_messages),
+                days,
+                max_count,
             )
 
             if not raw_messages:
@@ -164,6 +182,13 @@ class AnalysisApplicationService:
             # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
             unified_messages = cleaner.clean_messages(
                 raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            )
+            logger.info(
+                "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
+                group_id,
+                platform_id or "default",
+                len(unified_messages),
+                max(len(raw_messages) - len(unified_messages), 0),
             )
 
             # 4. 检查最小消息阈值 (在清理后进行)

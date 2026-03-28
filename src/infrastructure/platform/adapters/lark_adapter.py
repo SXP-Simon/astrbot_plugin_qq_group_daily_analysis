@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import random
 from collections.abc import Generator, Iterator, Mapping
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -142,7 +143,12 @@ class LarkAdapter(PlatformAdapter):
         self._member_name_cache: dict[tuple[str, str], str] = {}
         self._member_avatar_cache: dict[tuple[str, str], str] = {}
         self._permission_checked_groups: set[str] = set()
-        self._permission_error: str | None = None
+        self._permission_error_by_group: dict[str, str | None] = {}
+        logger.info(
+            "飞书适配器初始化完成 (SDK可用=%s, 客户端就绪=%s)",
+            LARK_AVAILABLE,
+            bool(self._lark_client),
+        )
 
     @staticmethod
     def _request_class_or_throw(
@@ -224,6 +230,77 @@ class LarkAdapter(PlatformAdapter):
             avatar, "avatar_640", None
         )
 
+    @staticmethod
+    def _extract_sender_id(item: object) -> str:
+        sender = getattr(item, "sender", None)
+        if sender is None:
+            return ""
+        sender_id = getattr(sender, "id", None)
+        if isinstance(sender_id, str):
+            return sender_id
+        if sender_id is not None:
+            for attr in ("open_id", "user_id", "union_id", "id"):
+                value = getattr(sender_id, attr, None)
+                if value:
+                    return str(value)
+        direct_open_id = getattr(sender, "open_id", None)
+        if direct_open_id:
+            return str(direct_open_id)
+        return ""
+
+    @staticmethod
+    def _extract_sender_display_name(item: object) -> str:
+        sender = getattr(item, "sender", None)
+        if sender is None:
+            return ""
+        for attr in ("sender_name", "name", "nickname"):
+            value = getattr(sender, attr, None)
+            if value:
+                return str(value)
+        sender_id = LarkAdapter._extract_sender_id(item)
+        return sender_id[:8] if sender_id else "Unknown"
+
+    @staticmethod
+    def _pick_post_locale_content(content: dict[str, JSONValue]) -> list[JSONValue]:
+        preferred_locales = ("zh_cn", "zh_tw", "en_us", "ja_jp")
+        for locale in preferred_locales:
+            locale_data = content.get(locale)
+            if isinstance(locale_data, dict):
+                locale_content = locale_data.get("content", [])
+                if isinstance(locale_content, list):
+                    return locale_content
+        for value in content.values():
+            if isinstance(value, dict):
+                locale_content = value.get("content", [])
+                if isinstance(locale_content, list):
+                    return locale_content
+        return []
+
+    @staticmethod
+    def _build_fallback_avatar(user_id: str, nickname: str | None = None) -> str:
+        label_raw = (nickname or user_id or "U").strip()
+        label = label_raw[:1].upper() if label_raw else "U"
+        seed = sum(ord(ch) for ch in user_id)
+        hue = random.Random(seed).randint(0, 359)
+        bg = f"hsl({hue}, 70%, 45%)"
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+            f'<rect width="100" height="100" rx="50" ry="50" fill="{bg}"/>'
+            f'<text x="50" y="57" text-anchor="middle" '
+            'font-size="42" font-family="Arial, sans-serif" fill="#ffffff">'
+            f"{label}</text></svg>"
+        )
+        encoded = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+        return f"data:image/svg+xml;base64,{encoded}"
+
+    @staticmethod
+    def _short_id(raw: str, keep: int = 6) -> str:
+        if not raw:
+            return ""
+        if len(raw) <= keep * 2:
+            return raw
+        return f"{raw[:keep]}...{raw[-keep:]}"
+
     async def prepare_group_member_cache(
         self, group_id: str
     ) -> tuple[bool, str | None]:
@@ -232,41 +309,69 @@ class LarkAdapter(PlatformAdapter):
         该方法用于在分析前一次性确认“成员信息+头像”权限是否齐备。
         """
         if group_id in self._permission_checked_groups:
-            return self._permission_error is None, self._permission_error
+            err = self._permission_error_by_group.get(group_id)
+            logger.debug(
+                "飞书预检查命中缓存: 群=%s, 结果=%s",
+                group_id,
+                err is None,
+            )
+            return err is None, err
+        logger.info("飞书预检查开始: 群=%s", group_id)
         if not LARK_AVAILABLE or not self._lark_client or not self._lark_client.im:
-            self._permission_error = "Lark SDK client is not initialized."
+            self._permission_error_by_group[group_id] = "飞书 SDK 客户端未初始化。"
             self._permission_checked_groups.add(group_id)
-            return False, self._permission_error
+            logger.warning("飞书预检查失败: 群=%s, 原因=SDK或客户端不可用", group_id)
+            return False, self._permission_error_by_group[group_id]
 
         try:
             members = await self.get_member_list(group_id)
             if not members:
-                self._permission_error = (
+                self._permission_error_by_group[group_id] = (
                     f"Cannot list chat members. {self._DEFAULT_SCOPE_HINT}"
                 )
                 self._permission_checked_groups.add(group_id)
-                return False, self._permission_error
+                logger.warning("飞书预检查失败: 群=%s, 原因=未获取到成员列表", group_id)
+                return False, self._permission_error_by_group[group_id]
 
             # 只预热近期活跃用户常见数量，避免在超大群上引入不必要延迟
             target_ids = [m.user_id for m in members[:100]]
             avatar_map = await self.batch_get_avatar_urls(target_ids, size=240)
+            avatar_ok_count = sum(1 for uid in target_ids if avatar_map.get(uid))
             if target_ids and all(not avatar_map.get(uid) for uid in target_ids):
-                self._permission_error = (
+                self._permission_error_by_group[group_id] = (
                     "Fetched members but cannot read avatar URLs. "
                     f"{self._DEFAULT_SCOPE_HINT}"
                 )
                 self._permission_checked_groups.add(group_id)
-                return False, self._permission_error
+                logger.warning(
+                    "飞书预检查失败: 群=%s, 原因=头像预热结果为空 (用户数=%s)",
+                    group_id,
+                    len(target_ids),
+                )
+                return False, self._permission_error_by_group[group_id]
 
-            self._permission_error = None
+            self._permission_error_by_group[group_id] = None
             self._permission_checked_groups.add(group_id)
+            logger.info(
+                "飞书预检查通过: 群=%s (成员=%s, 头像成功=%s/%s)",
+                group_id,
+                len(members),
+                avatar_ok_count,
+                len(target_ids),
+            )
             return True, None
         except Exception as e:
-            self._permission_error = (
-                f"Failed to warm up Lark member cache: {e}. {self._DEFAULT_SCOPE_HINT}"
+            self._permission_error_by_group[group_id] = (
+                f"飞书成员缓存预热失败: {e}. {self._DEFAULT_SCOPE_HINT}"
             )
             self._permission_checked_groups.add(group_id)
-            return False, self._permission_error
+            logger.error(
+                "飞书预检查异常: 群=%s, 错误=%s",
+                group_id,
+                e,
+                exc_info=True,
+            )
+            return False, self._permission_error_by_group[group_id]
 
     async def fetch_messages(
         self,
@@ -277,6 +382,7 @@ class LarkAdapter(PlatformAdapter):
         since_ts: int | None = None,
     ) -> list[UnifiedMessage]:
         if not LARK_AVAILABLE or not self._lark_client or not self._lark_client.im:
+            logger.warning("飞书消息拉取跳过: 群=%s, 原因=SDK或客户端不可用", group_id)
             return []
         now_seconds = int(__import__("time").time())
         start_seconds = (
@@ -287,8 +393,17 @@ class LarkAdapter(PlatformAdapter):
         page_token: str | None = None
         page_size = min(max(max_count, 1), 200)
         seen_ids: set[str] = set()
+        page_index = 0
+        logger.info(
+            "飞书消息拉取开始: 群=%s (天数=%s, 最大条数=%s, since_ts=%s)",
+            group_id,
+            days,
+            max_count,
+            since_ts,
+        )
 
         while len(messages) < max_count:
+            page_index += 1
             ListMessageRequestClass = self._request_class_or_throw(
                 ListMessageRequest, "ListMessageRequest"
             )
@@ -316,13 +431,22 @@ class LarkAdapter(PlatformAdapter):
             response = await self._lark_client.im.v1.message.alist(request)
             if not response.success():
                 logger.warning(
-                    "Lark fetch_messages failed: code=%s, msg=%s",
+                    "飞书消息拉取失败: 群=%s, code=%s, msg=%s",
+                    group_id,
                     response.code,
                     response.msg,
                 )
                 break
 
-            items = (response.data.items if response.data else None) or []
+            items_raw = (response.data.items if response.data else None) or []
+            items: list[object] = items_raw if isinstance(items_raw, list) else []
+            logger.debug(
+                "飞书消息分页: 页=%s, 群=%s, 条数=%s, has_more=%s",
+                page_index,
+                group_id,
+                len(items),
+                bool(response.data and response.data.has_more),
+            )
             if not items:
                 break
 
@@ -346,18 +470,23 @@ class LarkAdapter(PlatformAdapter):
                 break
 
         messages.sort(key=lambda m: m.timestamp)
+        logger.info(
+            "飞书消息拉取完成: 群=%s (消息=%s, 页数=%s, 起始=%s, 结束=%s)",
+            group_id,
+            len(messages),
+            page_index,
+            start_seconds,
+            now_seconds,
+        )
         return messages
 
     def _convert_message(self, item: object, group_id: str) -> UnifiedMessage | None:
         try:
             message_id = str(getattr(item, "message_id", "") or "")
-            sender = getattr(item, "sender", None)
-            sender_id = str(getattr(sender, "id", "") or "")
-            sender_name = (
-                self._member_name_cache.get((group_id, sender_id))
-                or sender_id[:8]
-                or "Unknown"
-            )
+            sender_id = self._extract_sender_id(item)
+            sender_name = self._member_name_cache.get(
+                (group_id, sender_id)
+            ) or self._extract_sender_display_name(item)
             body = getattr(item, "body", None)
             raw_content = str(getattr(body, "content", "") or "")
             msg_type = str(getattr(item, "msg_type", "") or "text")
@@ -373,46 +502,79 @@ class LarkAdapter(PlatformAdapter):
                     contents.append(
                         MessageContent(type=MessageContentType.TEXT, text=text)
                     )
-            elif msg_type in {"post", "image"}:
-                post_content = content.get("content", [])
-                if isinstance(post_content, dict):
-                    # 富文本消息常见结构：{"zh_cn":{"title":"","content":[...]}}
-                    zh_cn = post_content.get("zh_cn", {})
-                    if isinstance(zh_cn, dict):
-                        post_content = zh_cn.get("content", [])
-                if isinstance(post_content, list):
-                    for row in post_content:
-                        if not isinstance(row, list):
+            elif msg_type == "image":
+                image_key = str(content.get("image_key", "")).strip()
+                if image_key:
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.IMAGE,
+                            raw_data={"image_key": image_key},
+                        )
+                    )
+            elif msg_type == "post":
+                post_content = self._pick_post_locale_content(content)
+                for row in post_content:
+                    if not isinstance(row, list):
+                        continue
+                    for seg in row:
+                        if not isinstance(seg, dict):
                             continue
-                        for seg in row:
-                            if not isinstance(seg, dict):
-                                continue
-                            tag = seg.get("tag", "")
-                            if tag == "text":
-                                text = str(seg.get("text", "")).strip()
-                                if text:
-                                    text_parts.append(text)
-                                    contents.append(
-                                        MessageContent(
-                                            type=MessageContentType.TEXT, text=text
-                                        )
-                                    )
-                            elif tag == "at":
-                                at_uid = str(seg.get("user_id", "")).strip()
+                        tag = str(seg.get("tag", "")).strip()
+                        if tag == "text":
+                            text = str(seg.get("text", "")).strip()
+                            if text:
+                                text_parts.append(text)
                                 contents.append(
                                     MessageContent(
-                                        type=MessageContentType.AT, at_user_id=at_uid
+                                        type=MessageContentType.TEXT, text=text
                                     )
                                 )
-                            elif tag == "img":
-                                image_key = str(seg.get("image_key", "")).strip()
-                                if image_key:
-                                    contents.append(
-                                        MessageContent(
-                                            type=MessageContentType.IMAGE,
-                                            raw_data={"image_key": image_key},
-                                        )
+                        elif tag == "at":
+                            at_uid = str(seg.get("user_id", "")).strip()
+                            if at_uid:
+                                contents.append(
+                                    MessageContent(
+                                        type=MessageContentType.AT,
+                                        at_user_id=at_uid,
                                     )
+                                )
+                        elif tag == "img":
+                            image_key = str(seg.get("image_key", "")).strip()
+                            if image_key:
+                                contents.append(
+                                    MessageContent(
+                                        type=MessageContentType.IMAGE,
+                                        raw_data={"image_key": image_key},
+                                    )
+                                )
+                        elif tag == "a":
+                            link_text = str(seg.get("text", "")).strip()
+                            if link_text:
+                                text_parts.append(link_text)
+                                contents.append(
+                                    MessageContent(
+                                        type=MessageContentType.TEXT,
+                                        text=link_text,
+                                    )
+                                )
+                        elif tag == "emoji":
+                            emoji_type = str(seg.get("emoji_type", "")).strip()
+                            if emoji_type:
+                                contents.append(
+                                    MessageContent(
+                                        type=MessageContentType.EMOJI,
+                                        emoji_id=emoji_type,
+                                        raw_data=seg,
+                                    )
+                                )
+            elif msg_type in {"file", "media", "audio", "sticker"}:
+                if raw_content:
+                    contents.append(
+                        MessageContent(
+                            type=MessageContentType.UNKNOWN,
+                            raw_data={"msg_type": msg_type, "content": raw_content},
+                        )
+                    )
             else:
                 if raw_content:
                     contents.append(
@@ -423,10 +585,13 @@ class LarkAdapter(PlatformAdapter):
                     )
 
             if not contents:
+                fallback_text = " ".join(text_parts).strip()
+                if not fallback_text:
+                    fallback_text = f"[{msg_type}]"
                 contents.append(
                     MessageContent(
                         type=MessageContentType.TEXT,
-                        text="".join(text_parts),
+                        text=fallback_text,
                     )
                 )
 
@@ -447,7 +612,7 @@ class LarkAdapter(PlatformAdapter):
                 ),
             )
         except Exception as e:
-            logger.debug(f"Lark convert message error: {e}")
+            logger.debug(f"飞书消息转换失败: {e}")
             return None
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
@@ -533,7 +698,7 @@ class LarkAdapter(PlatformAdapter):
                 response = await self._lark_client.im.v1.message.acreate(request)
             return bool(response.success())
         except Exception as e:
-            logger.error(f"Lark send text failed: {e}")
+            logger.error(f"飞书文本发送失败: {e}")
             return False
 
     async def send_image(
@@ -625,7 +790,7 @@ class LarkAdapter(PlatformAdapter):
                 await self.send_text(group_id, caption)
             return bool(send_resp.success())
         except Exception as e:
-            logger.error(f"Lark send image failed: {e}")
+            logger.error(f"飞书图片发送失败: {e}")
             return False
         finally:
             if temp_path and temp_path.exists():
@@ -689,7 +854,7 @@ class LarkAdapter(PlatformAdapter):
             msg_resp = await self._lark_client.im.v1.message.acreate(msg_req)
             return bool(msg_resp.success())
         except Exception as e:
-            logger.error(f"Lark send file failed: {e}")
+            logger.error(f"飞书文件发送失败: {e}")
             return False
 
     async def send_forward_msg(self, group_id: str, nodes: list[dict]) -> bool:
@@ -732,7 +897,7 @@ class LarkAdapter(PlatformAdapter):
                 platform="lark",
             )
         except Exception as e:
-            logger.debug(f"Lark get group info failed: {e}")
+            logger.debug(f"飞书群信息获取失败: {e}")
             return None
 
     async def get_group_list(self) -> list[str]:
@@ -741,10 +906,17 @@ class LarkAdapter(PlatformAdapter):
 
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         if not self._lark_client or not self._lark_client.im:
+            logger.warning(
+                "飞书成员列表获取跳过: 群=%s, 原因=客户端不可用",
+                group_id,
+            )
             return []
         members: list[UnifiedMember] = []
         page_token: str | None = None
+        page_index = 0
+        logger.debug("飞书成员列表获取开始: 群=%s", group_id)
         while True:
+            page_index += 1
             GetChatMembersRequestClass = self._request_class_or_throw(
                 GetChatMembersRequest, "GetChatMembersRequest"
             )
@@ -764,17 +936,34 @@ class LarkAdapter(PlatformAdapter):
                     str(getattr(response, "msg", "") or ""),
                 ):
                     logger.warning(
-                        "Lark get member list permission denied: code=%s, msg=%s",
+                        "飞书成员列表权限不足: 群=%s, code=%s, msg=%s",
+                        group_id,
                         response.code,
                         response.msg,
                     )
+                else:
+                    logger.warning(
+                        "飞书成员列表获取失败: 群=%s, code=%s, msg=%s",
+                        group_id,
+                        getattr(response, "code", "unknown"),
+                        getattr(response, "msg", "unknown"),
+                    )
                 break
-            items = (response.data.items if response.data else None) or []
+            items_raw = (response.data.items if response.data else None) or []
+            items: list[object] = items_raw if isinstance(items_raw, list) else []
+            logger.debug(
+                "飞书成员分页: 页=%s, 群=%s, 条数=%s",
+                page_index,
+                group_id,
+                len(items),
+            )
             if not items:
                 break
             for item in items:
-                uid = str(item.member_id or "")
-                name = str(item.name or uid)
+                uid_raw = getattr(item, "member_id", None)
+                uid = str(uid_raw or "")
+                name_raw = getattr(item, "name", None)
+                name = str(name_raw or uid)
                 self._member_name_cache[(group_id, uid)] = name
                 members.append(
                     UnifiedMember(
@@ -789,6 +978,12 @@ class LarkAdapter(PlatformAdapter):
                 break
             page_token_raw = getattr(response.data, "page_token", None)
             page_token = str(page_token_raw) if page_token_raw else None
+        logger.info(
+            "飞书成员列表获取完成: 群=%s (成员=%s, 页数=%s)",
+            group_id,
+            len(members),
+            page_index,
+        )
         return members
 
     async def _get_user_profile(self, user_id: str) -> _SDKNode | None:
@@ -811,14 +1006,22 @@ class LarkAdapter(PlatformAdapter):
                     str(getattr(response, "msg", "") or ""),
                 ):
                     logger.warning(
-                        "Lark get user profile permission denied: code=%s, msg=%s",
+                        "飞书用户资料权限不足: 用户=%s, code=%s, msg=%s",
+                        self._short_id(user_id),
                         response.code,
                         response.msg,
+                    )
+                else:
+                    logger.warning(
+                        "飞书用户资料获取失败: 用户=%s, code=%s, msg=%s",
+                        self._short_id(user_id),
+                        getattr(response, "code", "unknown"),
+                        getattr(response, "msg", "unknown"),
                     )
                 return None
             return response.data
         except Exception as e:
-            logger.debug(f"Lark get user profile failed: {e}")
+            logger.debug(f"飞书用户资料获取失败: {e}")
             return None
 
     async def get_member_info(
@@ -842,11 +1045,16 @@ class LarkAdapter(PlatformAdapter):
             )
 
         cached_name = self._member_name_cache.get((group_id, user_id)) or user_id
+        fallback_avatar = self._member_avatar_cache.get((group_id, user_id))
+        if not fallback_avatar:
+            fallback_avatar = self._build_fallback_avatar(user_id, cached_name)
+            self._member_avatar_cache[(group_id, user_id)] = fallback_avatar
+            self._avatar_url_cache[user_id] = fallback_avatar
         return UnifiedMember(
             user_id=user_id,
             nickname=cached_name,
             role="member",
-            avatar_url=self._member_avatar_cache.get((group_id, user_id)),
+            avatar_url=fallback_avatar,
         )
 
     async def get_user_avatar_url(self, user_id: str, size: int = 100) -> str | None:
@@ -858,7 +1066,19 @@ class LarkAdapter(PlatformAdapter):
             if avatar_url:
                 self._avatar_url_cache[user_id] = avatar_url
                 return avatar_url
-        return None
+        cached_name = None
+        for (gid, uid), name in self._member_name_cache.items():
+            if uid == user_id and name:
+                cached_name = name
+                break
+        fallback_avatar = self._build_fallback_avatar(user_id, cached_name)
+        self._avatar_url_cache[user_id] = fallback_avatar
+        logger.debug(
+            "飞书头像使用回退图: 用户=%s, 尺寸=%s",
+            self._short_id(user_id),
+            size,
+        )
+        return fallback_avatar
 
     async def get_user_avatar_data(self, user_id: str, size: int = 100) -> str | None:
         avatar_url = await self.get_user_avatar_url(user_id, size)
@@ -900,14 +1120,24 @@ class LarkAdapter(PlatformAdapter):
     ) -> dict[str, str | None]:
         if not user_ids:
             return {}
+        unique_ids = list(dict.fromkeys(user_ids))
         semaphore = asyncio.Semaphore(8)
+        logger.debug(
+            "飞书批量头像获取开始 (请求=%s, 去重后=%s, 尺寸=%s)",
+            len(user_ids),
+            len(unique_ids),
+            size,
+        )
 
         async def _fetch(uid: str) -> tuple[str, str | None]:
             async with semaphore:
                 return uid, await self.get_user_avatar_url(uid, size)
 
-        pairs = await asyncio.gather(*(_fetch(uid) for uid in user_ids))
-        return dict(pairs)
+        pairs = await asyncio.gather(*(_fetch(uid) for uid in unique_ids))
+        result = dict(pairs)
+        ok_count = sum(1 for _, url in pairs if url)
+        logger.debug("飞书批量头像获取完成 (成功=%s/%s)", ok_count, len(unique_ids))
+        return result
 
     async def set_reaction(
         self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True
