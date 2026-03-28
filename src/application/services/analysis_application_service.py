@@ -4,11 +4,14 @@
 负责协调领域服务、基础设施适配器及持久化层。
 """
 
+from __future__ import annotations
+
 import asyncio
 import datetime as dt
 import time as time_mod
 import weakref
 from collections import defaultdict
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -16,7 +19,10 @@ from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.repositories.report_repository import IReportGenerator
-from ...domain.services.analysis_domain_service import AnalysisDomainService
+from ...domain.services.analysis_domain_service import (
+    AnalysisDomainService,
+    UserActivityStats,
+)
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
@@ -124,6 +130,17 @@ class AnalysisApplicationService:
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
+
+            # 飞书平台在分析前进行一次性权限与成员头像预热，避免报告阶段出现大面积默认头像。
+            if hasattr(adapter, "prepare_group_member_cache"):
+                try:
+                    ok, err = await adapter.prepare_group_member_cache(group_id)  # type: ignore[attr-defined]
+                    if not ok and err:
+                        raise ValueError(err)
+                except Exception as e:
+                    raise ValueError(
+                        f"飞书成员信息预检查失败，请先完成应用权限授权：{e}"
+                    ) from e
 
             # 2. 拉取消息
             if days is None:
@@ -731,7 +748,7 @@ class AnalysisApplicationService:
 
     @staticmethod
     def _convert_user_activity_for_merge(
-        user_activity: dict[str, dict],
+        user_activity: Mapping[str, UserActivityStats],
         messages: list[UnifiedMessage],
     ) -> dict[str, dict]:
         """

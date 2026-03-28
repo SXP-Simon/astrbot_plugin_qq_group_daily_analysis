@@ -3,7 +3,9 @@ Bot实例管理模块 - 基础设施层
 统一管理bot实例的获取、设置和使用
 """
 
-from typing import Any
+from __future__ import annotations
+
+from collections.abc import Mapping
 
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
@@ -19,14 +21,16 @@ class BotManager:
 
     def __init__(self, config_manager):
         self.config_manager = config_manager
-        self._bot_instances = {}  # {platform_id: bot_instance}
-        self._adapters = {}  # {platform_id: PlatformAdapter} - DDD 集成
-        self._platforms = {}  # 存储平台对象以访问配置
-        self._bot_self_ids = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
-        self._context = None
+        self._bot_instances: dict[str, object] = {}  # {platform_id: bot_instance}
+        self._adapters: dict[
+            str, PlatformAdapter
+        ] = {}  # {platform_id: PlatformAdapter} - DDD 集成
+        self._platforms: dict[str, object] = {}  # 存储平台对象以访问配置
+        self._bot_self_ids: list[str] = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
+        self._context: object | None = None
         self._is_initialized = False
         self._default_platform = "default"  # 默认平台
-        self._plugin_instance = None  # 插件实例引用，用于适配器回调
+        self._plugin_instance: object | None = None  # 插件实例引用，用于适配器回调
 
     def set_context(self, context):
         """设置AstrBot上下文，并传递给所有支持的适配器"""
@@ -37,7 +41,7 @@ class BotManager:
             if hasattr(adapter, "set_context"):
                 adapter.set_context(context)
 
-    def set_plugin_instance(self, plugin_instance: Any):
+    def set_plugin_instance(self, plugin_instance: object):
         """设置插件实例引用"""
         self._plugin_instance = plugin_instance
 
@@ -68,7 +72,7 @@ class BotManager:
                 )
                 if adapter:
                     # 如果有 context，传递给适配器
-                    if self._context and hasattr(adapter, "set_context"):
+                    if self._context is not None:
                         adapter.set_context(self._context)
                     self._adapters[platform_id] = adapter
                     logger.debug(
@@ -126,16 +130,19 @@ class BotManager:
         """尝试从已存储的平台对象中刷新 bot 实例 (Lazy Load)"""
         for platform_id, platform in self._platforms.items():
             bot_client = None
+            # Lark 平台优先使用 API client，避免拿到仅支持长连接的 ws client
+            bot_client = getattr(platform, "lark_api", None)
             # 优先尝试 get_client()
-            if hasattr(platform, "get_client"):
-                bot_client = platform.get_client()
+            get_client = getattr(platform, "get_client", None)
+            if not bot_client and callable(get_client):
+                bot_client = get_client()
 
             # 如果 get_client() 返回 None，尝试直接访问属性
-            if not bot_client and hasattr(platform, "bot"):
-                bot_client = platform.bot
-            if not bot_client and hasattr(platform, "client"):
+            if not bot_client:
+                bot_client = getattr(platform, "bot", None)
+            if not bot_client:
                 # AstrBot v4.14.4 DiscordPlatformAdapter 使用 'client' 属性
-                bot_client = platform.client
+                bot_client = getattr(platform, "client", None)
 
             if bot_client:
                 # 检查是否已存在且是否发生变化（防止重复创建适配器）
@@ -146,12 +153,16 @@ class BotManager:
                     continue
 
                 platform_name = None
-                if hasattr(platform, "metadata"):
+                metadata_obj = getattr(platform, "metadata", None)
+                if metadata_obj is not None:
                     # 优先使用 type
-                    if hasattr(platform.metadata, "type"):
-                        platform_name = platform.metadata.type
-                    elif hasattr(platform.metadata, "name"):
-                        platform_name = platform.metadata.name
+                    type_val = getattr(metadata_obj, "type", None)
+                    if isinstance(type_val, str):
+                        platform_name = type_val
+                    else:
+                        name_val = getattr(metadata_obj, "name", None)
+                        if isinstance(name_val, str):
+                            platform_name = name_val
 
                 # 兼容不同版本的元数据获取
                 if not platform_name:
@@ -254,7 +265,7 @@ class BotManager:
 
     # ==================== DDD 集成方法 ====================
 
-    def get_adapter(self, platform_id: str = None) -> PlatformAdapter | None:
+    def get_adapter(self, platform_id: str | None = None) -> PlatformAdapter | None:
         """
         获取指定平台的 PlatformAdapter。
 
@@ -290,13 +301,13 @@ class BotManager:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
         return self._adapters.copy()
 
-    def has_adapter(self, platform_id: str = None) -> bool:
+    def has_adapter(self, platform_id: str | None = None) -> bool:
         """检查指定平台是否有适配器"""
         if platform_id:
             return platform_id in self._adapters
         return bool(self._adapters)
 
-    def can_analyze(self, platform_id: str = None) -> bool:
+    def can_analyze(self, platform_id: str | None = None) -> bool:
         """使用 DDD 能力检查平台是否支持分析"""
         adapter = self.get_adapter(platform_id)
         if adapter:
@@ -309,11 +320,22 @@ class BotManager:
 
         同时为每个发现的 bot 创建对应的 PlatformAdapter。
         """
-        if not self._context or not hasattr(self._context, "platform_manager"):
+        platform_manager = getattr(self._context, "platform_manager", None)
+        get_insts = getattr(platform_manager, "get_insts", None)
+        if self._context is None or not callable(get_insts):
             return {}
 
         # 使用新版 API 获取所有平台实例
-        platforms = self._context.platform_manager.get_insts()
+        raw_platforms = get_insts()
+        if isinstance(raw_platforms, list):
+            platforms: list[object] = raw_platforms
+        elif isinstance(raw_platforms, tuple):
+            platforms = list(raw_platforms)
+        else:
+            logger.warning(
+                "auto_discover_bot_instances: get_insts() returned non-iterable value."
+            )
+            return {}
         discovered = {}
 
         logger.info(
@@ -323,47 +345,61 @@ class BotManager:
         for platform in platforms:
             # 获取bot实例
             bot_client = None
-            if hasattr(platform, "get_client"):
-                bot_client = platform.get_client()
+            bot_client = getattr(platform, "lark_api", None)
+            platform_get_client = getattr(platform, "get_client", None)
+            if not bot_client and callable(platform_get_client):
+                bot_client = platform_get_client()
 
-            if not bot_client and hasattr(platform, "bot"):
-                bot_client = platform.bot
-            if not bot_client and hasattr(platform, "client"):
-                bot_client = platform.client
+            if not bot_client:
+                bot_client = getattr(platform, "bot", None)
+            if not bot_client:
+                bot_client = getattr(platform, "client", None)
 
             # 健壮地获取元数据
             metadata = getattr(platform, "metadata", None)
-            if not metadata and hasattr(platform, "meta"):
+            platform_meta_method = getattr(platform, "meta", None)
+            if not metadata and callable(platform_meta_method):
                 try:
-                    metadata = platform.meta()
+                    metadata = platform_meta_method()
                 except Exception:
                     pass
 
             # 检查是否有有效的元数据和ID
             platform_id = None
             if metadata:
-                if hasattr(metadata, "id"):
-                    platform_id = metadata.id
-                elif isinstance(metadata, dict):
+                metadata_id = getattr(metadata, "id", None)
+                if metadata_id is not None:
+                    platform_id = metadata_id
+                elif isinstance(metadata, Mapping):
                     platform_id = metadata.get("id")
 
             if platform_id:
+                # 确保平台 ID 是 str
+                platform_id = str(platform_id)
+
                 # 知识点发现: 记录元数据以调试自定义 ID
                 logger.info(
-                    f"[群分析插件 BotManager]: Log metadata for debugging custom IDs ,Platform: {platform_id}, Metadata Type: {getattr(metadata, 'type', 'N/A')}, Metadata Name: {getattr(metadata, 'name', 'N/A')}"
+                    f"[群分析插件 BotManager]: Log metadata for debugging custom IDs ,Platform: {platform_id}, Metadata Type: {getattr(metadata, 'type', 'N/A') if not isinstance(metadata, Mapping) else metadata.get('type', 'N/A')}, Metadata Name: {getattr(metadata, 'name', 'N/A') if not isinstance(metadata, Mapping) else metadata.get('name', 'N/A')}"
                 )
 
                 # 从元数据检测平台名称
                 platform_name = None
                 # 优先使用 type
-                if hasattr(metadata, "type"):
-                    platform_name = metadata.type
-                elif isinstance(metadata, dict) and "type" in metadata:
-                    platform_name = metadata["type"]
-                elif hasattr(metadata, "name"):
-                    platform_name = metadata.name
-                elif isinstance(metadata, dict) and "name" in metadata:
-                    platform_name = metadata["name"]
+                type_val = getattr(metadata, "type", None)
+                if isinstance(type_val, str):
+                    platform_name = type_val
+                elif isinstance(metadata, Mapping):
+                    dict_type = metadata.get("type")
+                    if isinstance(dict_type, str):
+                        platform_name = dict_type
+                if not platform_name:
+                    name_val = getattr(metadata, "name", None)
+                    if isinstance(name_val, str):
+                        platform_name = name_val
+                    elif isinstance(metadata, Mapping):
+                        dict_name = metadata.get("name")
+                        if isinstance(dict_name, str):
+                            platform_name = dict_name
 
                 # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
                 if (
@@ -414,7 +450,7 @@ class BotManager:
 
         return discovered
 
-    def get_status_info(self) -> dict[str, Any]:
+    def get_status_info(self) -> dict[str, object]:
         """获取bot管理器状态信息"""
         adapter_info = {}
         for pid, adapter in self._adapters.items():
@@ -501,10 +537,11 @@ class BotManager:
             return True
 
         platform = self._platforms[platform_id]
-        if not hasattr(platform, "config") or not isinstance(platform.config, dict):
+        platform_config = getattr(platform, "config", None)
+        if not isinstance(platform_config, dict):
             return True
 
-        plugin_set = platform.config.get("plugin_set", ["*"])
+        plugin_set = platform_config.get("plugin_set", ["*"])
 
         if plugin_set is None:
             return False
