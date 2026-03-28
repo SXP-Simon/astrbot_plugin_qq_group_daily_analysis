@@ -37,7 +37,6 @@
             color: var(--text-main);
             background-color: var(--bg-page-base);
             
-            /* 背景图：多层叠加，保证通透和细节 */
             background-image: 
                 linear-gradient(rgba(240, 250, 250, 0.95), rgba(240, 250, 250, 0.95)),
                 linear-gradient(rgba(57, 197, 187, 0.04) 1px, transparent 1px),
@@ -63,12 +62,10 @@
             overflow: hidden;
             border: 1px solid var(--border-miku-light);
             z-index: 1;
-            /* 极淡的葱绿波点，消除白底空洞 */
             background-image: radial-gradient(rgba(57, 197, 187, 0.08) 1.5px, transparent 1.5px);
             background-size: 24px 24px;
         }
 
-        /* --- 丰富的背景隐含文字装饰 (极低透明度，不影响阅读) --- */
         .deco-01 {
             position: absolute; top: 40px; right: -20px;
             font-family: var(--font-num); font-size: 16rem;
@@ -100,108 +97,53 @@
             z-index: -1; pointer-events: none;
         }
 
-        /* 头部设计 */
         .header { position: relative; z-index: 1; margin-bottom: 40px; text-align: left; display: flex; justify-content: space-between; align-items: flex-end;}
         .header h1 { font-family: var(--font-title); font-size: 2.8rem; color: var(--accent-dark); margin-bottom: 0; position: relative; display: inline-block;}
-        .header h1::after {
-            content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 8px; background: var(--border-miku-gradient); border-radius: 4px; z-index: -1; opacity: 0.6;
-        }
+        .header h1::after { content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 8px; background: var(--border-miku-gradient); border-radius: 4px; z-index: -1; opacity: 0.6; }
         .date-line { font-family: var(--font-num); color: var(--miku-dark); font-weight: bold; font-size: 1.1rem; }
 
-        /* 统计卡片层 */
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; position: relative; z-index: 1; }
-        .stat-box { 
-            background: rgba(255, 255, 255, 0.95); border-radius: var(--radius); padding: 18px; 
-            border: 1px solid var(--border-miku-light);
-            box-shadow: 0 4px 12px rgba(57, 197, 187, 0.05);
-            text-align: center;
-        }
+        .stat-box { background: rgba(255, 255, 255, 0.95); border-radius: var(--radius); padding: 18px; border: 1px solid var(--border-miku-light); box-shadow: 0 4px 12px rgba(57, 197, 187, 0.05); text-align: center; }
         .stat-num { font-family: var(--font-num); font-size: 2.2rem; color: var(--text-main); font-weight: bold; }
         .stat-txt { font-size: 0.85rem; color: var(--text-sub); margin-top: 5px; font-weight: bold;}
 
-        /* --- 活跃峰值时段块 (核心修改区) --- */
         .active-peak-block {
             grid-column: span 12;
             background: linear-gradient(135deg, var(--miku-base) 0%, var(--miku-light) 100%);
             color: #fff; 
-            
-            /* 修改 1: 设定固定高度，防止被图片拉大 */
             height: 120px; 
-            /* 修改 2: 移除垂直 padding，让内容占满高度 */
             padding: 0 35px; 
-            
             border-radius: var(--radius); 
             margin-bottom: 30px;
-            
-            /* 修改 3: 使用水平 Flex 布局，文字居左，图片居右 */
             display: flex; 
             flex-direction: row; 
             align-items: center; 
             justify-content: space-between;
-            
             position: relative; 
             overflow: hidden; 
             box-shadow: 0 6px 15px rgba(57, 197, 187, 0.15);
         }
 
-        /* 底部 MIKU 字母水印，降低层级 */
         .active-peak-block::after {
-            content: "MIKU";
-            position: absolute;
-            right: 15px; top: 0; bottom: 0;
-            display: flex; align-items: center;
-            font-family: var(--font-num); font-size: 160px; line-height: 0.73; font-weight: 900; font-style: italic;
-            color: rgba(255, 255, 255, 0.2);
-            z-index: 0; pointer-events: none; letter-spacing: -3px;
+            content: "MIKU"; position: absolute; right: 15px; top: 0; bottom: 0; display: flex; align-items: center; font-family: var(--font-num); font-size: 160px; line-height: 0.73; font-weight: 900; font-style: italic; color: rgba(255, 255, 255, 0.2); z-index: 0; pointer-events: none; letter-spacing: -3px;
         }
 
-        /* 文本区域样式 */
         .peak-label { font-size: 1.1rem; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,0.1); position: relative; z-index: 2;}
         .peak-time-text { font-family: var(--font-num); font-size: 2.8rem; font-weight: bold; margin-top: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); letter-spacing: 2px; position: relative; z-index: 2;}
 
-        /* 图片容器样式：顶天立地，完全不拉伸 */
-        .peak-image-container {
-            height: 100%; /* 核心：容器高度占满 */
-            width: auto;
-            max-width: 45%; /* 防止图片太宽挤扁文字 */
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding: 10px 0; /* 上下预留一点点白边好看些 */
-            position: relative;
-            z-index: 1; /* 在水印上方，但在文字下方 */
-        }
+        .peak-image-container { height: 100%; width: auto; max-width: 45%; display: flex; align-items: center; justify-content: flex-end; padding: 10px 0; position: relative; z-index: 1; }
+        .peak-image-container img { height: 100%; width: auto; object-fit: contain; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
 
-        .peak-image-container img {
-            height: 100%; /* 核心：图片高度占满容器 */
-            width: auto; /* 宽度自适应 */
-            object-fit: contain; /* 核心：保持原比例，不拉伸，完整显示在框内 */
-            border-radius: 6px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-        }
-
-        /* 模块标头公共样式 */
         .section-header { display: flex; align-items: center; margin-bottom: 25px; position: relative; z-index: 1; }
-        .v-bar {
-            width: 6px; height: 28px;
-            background: var(--miku-base);
-            border-radius: 3px; margin-right: 12px;
-        }
+        .v-bar { width: 6px; height: 28px; background: var(--miku-base); border-radius: 3px; margin-right: 12px; }
         .section-title-text { font-family: var(--font-main); font-weight: bold; font-size: 1.4rem; color: var(--accent-dark); }
 
-        /* 全局通用卡片 */
-        .card-common {
-            background: rgba(255, 255, 255, 0.95); border-radius: var(--radius); border: 1px solid var(--border-miku-light);
-            padding: 25px; margin-bottom: 30px; position: relative; z-index: 1;
-            box-shadow: 0 4px 12px rgba(57, 197, 187, 0.05);
-        }
+        .card-common { background: rgba(255, 255, 255, 0.95); border-radius: var(--radius); border: 1px solid var(--border-miku-light); padding: 25px; margin-bottom: 30px; position: relative; z-index: 1; box-shadow: 0 4px 12px rgba(57, 197, 187, 0.05); }
 
-        /* --- 完美对齐的透明马卡龙底部栏 --- */
         .footer {
             margin-top: 50px; 
-            /* 使用半透明的马卡龙蓝/葱绿作为底色，告别黑色沉闷 */
             background: rgba(224, 242, 241, 0.65); 
-            backdrop-filter: blur(10px); /* 毛玻璃效果 */
+            backdrop-filter: blur(10px); 
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(57, 197, 187, 0.3);
             border-radius: var(--radius); 
@@ -211,32 +153,59 @@
             box-shadow: 0 8px 20px rgba(57, 197, 187, 0.08);
         }
         
-        .footer-top {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            border-bottom: 1px dashed rgba(57, 197, 187, 0.3); 
-            padding-bottom: 15px; 
-            margin-bottom: 15px;
-        }
-        
-        .footer-bottom {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-        }
-
-        /* 字体颜色适配浅色背景 */
+        .footer-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(57, 197, 187, 0.3); padding-bottom: 15px; margin-bottom: 15px; }
+        .footer-bottom { display: flex; justify-content: space-between; align-items: center; }
         .footer-repo { font-size: 0.95rem; color: var(--text-main); font-weight: bold; }
         .footer-repo a { color: var(--miku-dark); text-decoration: none; font-family: var(--font-num);}
-        
         .token-data { text-align: right; font-family: var(--font-num); color: var(--text-main); font-size: 0.9rem;}
         .token-sub { font-size: 0.8rem; color: var(--text-sub); margin-left: 10px;}
-
         .footer-author { font-family: var(--font-main); font-style: italic; color: var(--miku-dark); font-size: 0.95rem; font-weight: bold;}
         .footer-time { font-family: var(--font-num); font-size: 0.9rem; color: var(--text-sub); }
         
         @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .footer-top, .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; } .token-data { text-align: left; } .active-peak-block { flex-direction: column; height: auto; padding: 25px; align-items: flex-start;} .peak-image-container { max-width: 100%; height: auto; margin-top: 15px; }}
+
+        /* ==================== PDF 打印专用适配 ==================== */
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                padding: 0;
+                background-attachment: scroll; 
+            }
+
+            .container {
+                box-shadow: none; 
+                border: none;
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 20px; 
+            }
+
+            /* 防截断规则：确保 PDF 分页时这些区块不会被拦腰切断 */
+            .header,
+            .stats-row,
+            .active-peak-block,
+            .section-header,
+            .card-common,
+            .footer,
+            .topic-item,
+            .user-card,
+            .quote-wrapper {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+
+            .container,
+            .active-peak-block {
+                overflow: visible !important; 
+            }
+        }
     </style>
 </head>
 
