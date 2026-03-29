@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Night Mode Analysis Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,9 +65,10 @@
         }
 
         .layout {
+            width: min(1200px, 100%);
             max-width: 1200px;
             margin: 0 auto;
-            padding: 60px 40px;
+            padding: clamp(32px, 5vw, 60px) clamp(16px, 4vw, 40px);
         }
 
         /* Terminal Window Style */
@@ -118,11 +120,15 @@
             font-size: 0.8rem;
             color: var(--text-secondary);
             flex: 1;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Top Navigation Bar from Reference */
         .top-nav {
             display: flex;
+            flex-wrap: wrap;
             gap: 20px;
             margin-bottom: 40px;
             font-family: var(--font-mono);
@@ -138,6 +144,10 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            min-width: 0;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .nav-item.active {
@@ -159,6 +169,12 @@
 
         .comment {
             color: var(--text-secondary);
+        }
+
+        .break-safe {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         h1 {
@@ -244,7 +260,7 @@
         /* Main Layout Grid */
         .main-container {
             display: grid;
-            grid-template-columns: 58% 42%;
+            grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr);
             /* Golden ratio-ish split */
             gap: 40px;
             align-items: flex-start;
@@ -254,12 +270,14 @@
             display: flex;
             flex-direction: column;
             gap: 40px;
+            min-width: 0;
         }
 
         .right-col {
             display: flex;
             flex-direction: column;
             gap: 40px;
+            min-width: 0;
         }
 
         .section-header {
@@ -270,6 +288,9 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Code Block Container */
@@ -281,6 +302,8 @@
             font-family: var(--font-mono);
             line-height: 1.6;
             box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.2);
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Chart Styling - Reference inspired */
@@ -386,6 +409,7 @@
             display: flex;
             gap: 20px;
             transition: border-color 0.2s;
+            min-width: 0;
         }
 
         .user-card:hover {
@@ -435,6 +459,7 @@
             padding: 20px;
             border-left: 3px solid var(--accent-orange);
             background: rgba(255, 255, 255, 0.02);
+            min-width: 0;
         }
 
         .topic-title {
@@ -455,6 +480,7 @@
             background: rgba(30, 30, 30, 0.4);
             backdrop-filter: blur(5px);
             margin-bottom: 20px;
+            min-width: 0;
         }
 
         .quote-avatar {
@@ -474,6 +500,7 @@
 
         .quote-body {
             flex: 1;
+            min-width: 0;
         }
 
         .quote-text {
@@ -497,14 +524,51 @@
             padding-top: 40px;
             border-top: 1px solid var(--border-color);
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             font-family: var(--font-mono);
             font-size: 0.9rem;
             color: var(--text-secondary);
+            gap: 20px;
+            min-width: 0;
         }
 
         .footer-token {
             color: var(--accent-green);
+        }
+
+        @media (max-width: 960px) {
+            h1 {
+                font-size: clamp(3rem, 12vw, 5rem);
+            }
+
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .layout {
+                padding: 32px 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quote-item,
+            .user-card {
+                flex-direction: column;
+            }
+
+            footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>

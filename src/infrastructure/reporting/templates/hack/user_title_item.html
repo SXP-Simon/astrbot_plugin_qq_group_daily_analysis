@@ -12,13 +12,13 @@
                 ID_REF</div>
             {% endif %}
         </div>
-        <div class="user-info">
+        <div class="user-info break-safe">
             <h4>{{ title.name }}</h4>
             <div style="margin-bottom: 10px;">
                 <span class="tag mbti">{{ title.mbti }}</span>
                 <span class="tag title">{{ title.title }}</span>
             </div>
-            <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">{{ title.reason }}</div>
+            <div class="break-safe" style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">{{ title.reason }}</div>
         </div>
     </div>
     {% endfor %}

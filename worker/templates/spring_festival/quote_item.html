@@ -16,7 +16,7 @@
         <div class="sf-quote-bubble">
             <div class="sf-quote-content">“{{ quote.content }}”</div>
             <div class="sf-quote-author">—— {{ quote.sender }}</div>
-            <div class="sf-quote-reason">【评语】{{ quote.reason }}</div>
+            <div class="sf-quote-reason">【评语】{{ quote.reason | safe }}</div>
         </div>
     </div>
     {% endfor %}

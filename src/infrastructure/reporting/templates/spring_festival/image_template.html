@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>春节特供 · 群聊日报</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -344,6 +345,8 @@
         .sf-topic-detail {
             line-height: 1.8;
             font-size: 1.1rem;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* User Grid */
@@ -477,6 +480,8 @@
             color: var(--text-main);
             line-height: 1.6;
             text-align: justify;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Vertical Flow Elements */
@@ -497,6 +502,7 @@
             display: flex;
             gap: 20px;
             position: relative;
+            min-width: 0;
         }
 
         .sf-quote-item.sf-right {
@@ -528,6 +534,7 @@
             box-shadow: 6px 6px 0 rgba(183, 28, 28, 0.1);
             background-image: radial-gradient(rgba(183, 28, 28, 0.05) 1px, transparent 1px);
             background-size: 20px 20px;
+            min-width: 0;
         }
 
         .sf-quote-item.sf-right .sf-quote-bubble {
@@ -542,6 +549,8 @@
             color: var(--text-main);
             margin-bottom: 12px;
             line-height: 1.5;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .sf-quote-author {
@@ -557,6 +566,8 @@
             border-top: 1px solid #eee;
             padding-top: 10px;
             text-align: left;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Footer */

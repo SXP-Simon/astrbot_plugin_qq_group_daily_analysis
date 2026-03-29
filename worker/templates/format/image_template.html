@@ -300,6 +300,8 @@
             line-height: 1.6;
             font-size: 0.9em;
             padding-left: 36px;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* User Title Styling */
@@ -388,6 +390,8 @@
             line-height: 1.6;
             margin-bottom: 10px;
             font-style: italic;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Quote Item Styling */
@@ -408,6 +412,8 @@
             line-height: 1.6;
             margin-bottom: 10px;
             font-style: italic;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .quote-author {
@@ -424,9 +430,14 @@
             background: rgba(0, 0, 0, 0.03);
             padding: 5px 10px;
             border-radius: 4px;
-            display: inline-block;
-            float: right;
+            display: block;
+            float: none;
             clear: both;
+            margin-left: auto;
+            max-width: 100%;
+            width: fit-content;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         /* Footer */

@@ -2,10 +2,10 @@
 {% for topic in topics %}
 <section class="topic-item">
     <div class="topic-content">
-        <h3 class="topic-title">{{ topic.topic.topic }}</h3>
-        <div class="topic-meta">SUBJECT ID: #{{ "%02d"|format(loop.index) }} // PARTICIPANTS: {{ topic.contributors }}
+        <h3 class="topic-title break-safe">{{ topic.topic.topic }}</h3>
+        <div class="topic-meta break-safe">SUBJECT ID: #{{ "%02d"|format(loop.index) }} // PARTICIPANTS: {{ topic.contributors }}
         </div>
-        <div class="topic-detail">{{ topic.detail | safe }}</div>
+        <div class="topic-detail break-safe">{{ topic.detail | safe }}</div>
     </div>
 </section>
 {% endfor %}

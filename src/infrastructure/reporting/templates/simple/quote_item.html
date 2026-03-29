@@ -8,7 +8,7 @@
             — {{ quote.sender }}
         </div>
         <div style="text-align: right; font-size: 0.7em; color: #888;">
-            入选理由: {{ quote.reason }}
+            入选理由: {{ quote.reason | safe }}
         </div>
     </div>
     {% endfor %}

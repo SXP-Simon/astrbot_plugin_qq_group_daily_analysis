@@ -10,14 +10,14 @@
             DATA_ERR</div>
         {% endif %}
     </div>
-    <div class="title-info">
+        <div class="title-info break-safe">
         <h4>{{ title.name }}</h4>
         <div class="title-badge">
             <span>{{ title.mbti }}</span>
             <span style="color:var(--c-dec-3);">//</span>
             <span>{{ title.title }}</span>
         </div>
-        <div class="title-reason">{{ title.reason }}</div>
+        <div class="title-reason break-safe">{{ title.reason }}</div>
     </div>
 </div>
 {% endfor %}
