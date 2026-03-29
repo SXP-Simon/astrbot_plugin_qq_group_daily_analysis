@@ -13,9 +13,22 @@ from datetime import datetime
 from typing import Any
 
 from jinja2 import Environment
+from markupsafe import Markup
 
 _MENTION_PATTERN = re.compile(r"\[(\d+)\]")
 _TEMPLATE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_VIEWPORT_META_PATTERN = re.compile(
+    r'<meta\s+name=["\']viewport["\'][^>]*>',
+    re.IGNORECASE,
+)
+_HEAD_OPEN_PATTERN = re.compile(r"<head[^>]*>", re.IGNORECASE)
+_CHARSET_META_PATTERN = re.compile(
+    r'<meta\s+charset=["\'][^"\']+["\'][^>]*>',
+    re.IGNORECASE,
+)
+_DESKTOP_VIEWPORT_META = (
+    '<meta name="viewport" content="width=1280, initial-scale=1.0, viewport-fit=cover">'
+)
 
 
 def normalize_template_name(template_name: str | None) -> str | None:
@@ -40,7 +53,8 @@ def render_report_html(
     render_context = build_render_context(
         env, report_payload, chart_template=chart_template
     )
-    return env.get_template(document_template).render(**render_context)
+    rendered_html = env.get_template(document_template).render(**render_context)
+    return _enforce_desktop_viewport(rendered_html)
 
 
 def build_render_context(
@@ -165,10 +179,10 @@ def _build_quotes_payload(
 def _render_mentions(
     text: str,
     user_directory: dict[str, dict[str, str]],
-) -> str:
+) -> Markup:
     """将 [123456] 替换为受控 HTML 胶囊，其余内容全部转义。"""
     if not text:
-        return ""
+        return Markup("")
 
     result: list[str] = []
     last_end = 0
@@ -184,7 +198,37 @@ def _render_mentions(
         last_end = match.end()
 
     result.append(_escape_text_segment(text[last_end:]))
-    return "".join(result)
+    return Markup("".join(result))
+
+
+def _enforce_desktop_viewport(rendered_html: str) -> str:
+    """统一强制桌面端 viewport，避免移动端按窄屏布局渲染。"""
+    if _VIEWPORT_META_PATTERN.search(rendered_html):
+        return _VIEWPORT_META_PATTERN.sub(
+            _DESKTOP_VIEWPORT_META, rendered_html, count=1
+        )
+
+    charset_match = _CHARSET_META_PATTERN.search(rendered_html)
+    if charset_match:
+        insert_pos = charset_match.end()
+        return (
+            rendered_html[:insert_pos]
+            + "\n    "
+            + _DESKTOP_VIEWPORT_META
+            + rendered_html[insert_pos:]
+        )
+
+    head_match = _HEAD_OPEN_PATTERN.search(rendered_html)
+    if head_match:
+        insert_pos = head_match.end()
+        return (
+            rendered_html[:insert_pos]
+            + "\n    "
+            + _DESKTOP_VIEWPORT_META
+            + rendered_html[insert_pos:]
+        )
+
+    return _DESKTOP_VIEWPORT_META + rendered_html
 
 
 def _escape_text_segment(text: str) -> str:

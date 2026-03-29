@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any
 
 from jinja2 import Environment
+from markupsafe import Markup
 
 _MENTION_PATTERN = re.compile(r"\[(\d+)\]")
 _TEMPLATE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -165,10 +166,10 @@ def _build_quotes_payload(
 def _render_mentions(
     text: str,
     user_directory: dict[str, dict[str, str]],
-) -> str:
+) -> Markup:
     """将 [123456] 替换为受控 HTML 胶囊，其余内容全部转义。"""
     if not text:
-        return ""
+        return Markup("")
 
     result: list[str] = []
     last_end = 0
@@ -184,7 +185,7 @@ def _render_mentions(
         last_end = match.end()
 
     result.append(_escape_text_segment(text[last_end:]))
-    return "".join(result)
+    return Markup("".join(result))
 
 
 def _escape_text_segment(text: str) -> str:
