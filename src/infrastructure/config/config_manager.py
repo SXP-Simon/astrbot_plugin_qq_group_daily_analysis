@@ -22,6 +22,7 @@ class ConfigManager:
     - analysis_features: 分析功能开关
     - incremental: 增量分析设置
     - pdf: PDF 设置
+    - web_report: 网页日报设置
     - prompts: 提示词模板
     """
 
@@ -148,6 +149,28 @@ class ConfigManager:
     def get_output_format(self) -> str:
         """获取输出格式"""
         return self._get_group("basic").get("output_format", "image")
+
+    def get_web_report_enabled(self) -> bool:
+        """获取是否启用网页日报上传。"""
+        return self._get_group("web_report").get("enabled", False)
+
+    def get_web_report_api_base(self) -> str:
+        """获取网页日报 Worker 地址。"""
+        return self._get_group("web_report").get("api_base_url", "")
+
+    def get_web_report_upload_token(self) -> str:
+        """获取网页日报上传鉴权 token。"""
+        return self._get_group("web_report").get("upload_token", "")
+
+    def get_web_report_ttl_days(self) -> int:
+        """获取网页日报保留天数。"""
+        return max(1, int(self._get_group("web_report").get("ttl_days", 7)))
+
+    def get_web_report_timeout_seconds(self) -> int:
+        """获取网页日报上传超时时间。"""
+        return max(
+            5, int(self._get_group("web_report").get("timeout_seconds", 20) or 20)
+        )
 
     def get_min_messages_threshold(self) -> int:
         """获取最小消息阈值"""

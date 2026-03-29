@@ -17,6 +17,7 @@ from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
+from .web_report_payload_builder import WebReportPayloadBuilder
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
@@ -30,6 +31,7 @@ class ReportGenerator(IReportGenerator):
         self.config_manager = config_manager
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
+        self.web_report_payload_builder = WebReportPayloadBuilder(config_manager)
         # 全局 T2I 渲染信号量，保护本地资源
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
@@ -41,6 +43,23 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+
+    async def generate_web_report_payload(
+        self,
+        analysis_result: dict,
+        avatar_url_getter=None,
+        nickname_getter=None,
+    ) -> dict:
+        """生成可上传到 Worker 的结构化网页日报 payload。"""
+
+        async def avatar_data_getter(user_id: str) -> str | None:
+            return await self._get_user_avatar(str(user_id), avatar_url_getter)
+
+        return await self.web_report_payload_builder.build(
+            analysis_result,
+            avatar_data_getter=avatar_data_getter,
+            nickname_getter=nickname_getter,
+        )
 
     async def generate_image_report(
         self,

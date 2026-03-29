@@ -1,0 +1,19 @@
+{
+  "name": "astrbot-daily-report-worker",
+  "private": true,
+  "version": "0.1.0",
+  "cloudflare": {
+    "bindings": {
+      "REPORTS": {
+        "description": "KV Namespace used to store generated web report JSON."
+      },
+      "UPLOAD_TOKEN": {
+        "description": "Shared secret used by the plugin and Worker."
+      }
+    }
+  },
+  "scripts": {
+    "deploy": "python -m pip install --disable-pip-version-check uv >/dev/null && uv run pywrangler deploy",
+    "dev": "uv run pywrangler dev"
+  }
+}

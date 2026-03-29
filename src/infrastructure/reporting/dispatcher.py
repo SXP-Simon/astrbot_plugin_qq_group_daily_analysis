@@ -21,10 +21,15 @@ class ReportDispatcher:
         self.message_sender = message_sender
         self.retry_manager = retry_manager
         self._html_render_func: Callable | None = None
+        self.web_report_publisher = None
 
     def set_html_render(self, render_func: Callable):
         """设置 HTML 渲染函数 (运行时注入)"""
         self._html_render_func = render_func
+
+    def set_web_report_publisher(self, publisher):
+        """设置网页日报发布器。"""
+        self.web_report_publisher = publisher
 
     async def dispatch(
         self,
@@ -46,6 +51,8 @@ class ReportDispatcher:
             success = await self._dispatch_image(group_id, analysis_result, platform_id)
         elif output_format == "pdf":
             success = await self._dispatch_pdf(group_id, analysis_result, platform_id)
+        elif output_format == "web":
+            success = await self._dispatch_web(group_id, analysis_result, platform_id)
         else:
             success = await self._dispatch_text(group_id, analysis_result, platform_id)
 
@@ -171,6 +178,57 @@ class ReportDispatcher:
         except Exception as e:
             logger.error(f"[{TraceContext.get()}] Failed to dispatch text report: {e}")
             return False
+
+    async def _dispatch_web(
+        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+    ) -> bool:
+        trace_id = TraceContext.get()
+        if not self.web_report_publisher:
+            logger.warning(f"[{trace_id}] 未设置网页日报发布器，回退到文本模式。")
+            return await self._dispatch_text(group_id, analysis_result, platform_id)
+
+        try:
+
+            async def avatar_url_getter(user_id: str):
+                if not platform_id:
+                    return None
+                adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+                if adapter and hasattr(adapter, "get_user_avatar_url"):
+                    return await adapter.get_user_avatar_url(user_id, size=40)
+                return None
+
+            async def nickname_getter(user_id: str):
+                if not platform_id:
+                    return None
+                adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+                if adapter and hasattr(adapter, "get_member_info"):
+                    try:
+                        member = await adapter.get_member_info(group_id, user_id)
+                        if member:
+                            return member.card or member.nickname
+                    except Exception:
+                        return None
+                return None
+
+            payload = await self.report_generator.generate_web_report_payload(
+                analysis_result,
+                avatar_url_getter=avatar_url_getter,
+                nickname_getter=nickname_getter,
+            )
+            publish_result = await self.web_report_publisher.publish(payload)
+            if publish_result:
+                return await self.message_sender.send_text(
+                    group_id,
+                    f"🔗 每日群聊分析报告：\n{publish_result.url}",
+                    platform_id,
+                )
+        except Exception as exc:
+            logger.error(f"[{trace_id}] Failed to dispatch web report: {exc}")
+
+        logger.warning(
+            f"[{trace_id}] Web dispatch failed, falling back to text report."
+        )
+        return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     # ================================================================
     # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）

@@ -60,8 +60,14 @@
             "output_format": {
                 "type": "string",
                 "description": "输出格式",
+                "options": [
+                    "image",
+                    "text",
+                    "pdf",
+                    "web"
+                ],
                 "default": "image",
-                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
+                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)、web(网页链接)。使用 web 前还需要在“网页日报设置”里开启并填好 Worker 地址和上传 token。"
             },
             "report_template": {
                 "type": "string",
@@ -358,6 +364,43 @@
                 "description": "PDF文件名格式",
                 "default": "群聊分析报告_{group_id}_{date}.pdf",
                 "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
+            }
+        }
+    },
+    "web_report": {
+        "description": "网页日报设置",
+        "type": "object",
+        "hint": "将结构化日报 JSON 上传到 Cloudflare Worker，并在群里发送网页链接。该功能默认关闭，只有当输出格式设为 web 且这里配置完整时才会生效。",
+        "items": {
+            "enabled": {
+                "type": "bool",
+                "description": "启用网页日报",
+                "default": false,
+                "hint": "开启后，输出格式选择 web 时会上传日报到 Worker 并发送链接。"
+            },
+            "api_base_url": {
+                "type": "string",
+                "description": "Worker 地址",
+                "default": "",
+                "hint": "填写部署后的 Worker 根地址，例如 https://example.workers.dev 或你的自定义域名。"
+            },
+            "upload_token": {
+                "type": "string",
+                "description": "上传 token",
+                "default": "",
+                "hint": "与 Worker 环境变量 UPLOAD_TOKEN 保持一致，用于鉴权上传接口。"
+            },
+            "ttl_days": {
+                "type": "int",
+                "description": "日报保留天数",
+                "default": 7,
+                "hint": "上传到 KV 后保留多少天，过期后链接会自动失效。"
+            },
+            "timeout_seconds": {
+                "type": "int",
+                "description": "上传超时秒数",
+                "default": 20,
+                "hint": "插件上传日报到 Worker 时的请求超时时间。"
             }
         }
     },

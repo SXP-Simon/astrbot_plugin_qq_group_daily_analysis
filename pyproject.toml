@@ -1,0 +1,14 @@
+[project]
+name = "astrbot-plugin-qq-group-daily-analysis-worker"
+version = "0.1.0"
+description = "Cloudflare Python Worker for web reports"
+requires-python = ">=3.12"
+dependencies = [
+    "jinja2>=3.1.6,<4",
+]
+
+[dependency-groups]
+dev = [
+    "workers-py>=1.0.0",
+    "workers-runtime-sdk>=0.0.19",
+]

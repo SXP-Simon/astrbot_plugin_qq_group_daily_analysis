@@ -43,6 +43,7 @@ from .src.infrastructure.platform.template_preview import (
     TemplatePreviewRouter,
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
+from .src.infrastructure.reporting.web_report_publisher import WebReportPublisher
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter
@@ -59,6 +60,7 @@ class GroupDailyAnalysis(Star):
     bot_manager: BotManager
     history_manager: HistoryManager
     report_generator: ReportGenerator
+    web_report_publisher: WebReportPublisher
     telegram_group_registry: TelegramGroupRegistry
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
@@ -86,6 +88,7 @@ class GroupDailyAnalysis(Star):
         self.report_generator = ReportGenerator(
             self.config_manager, StarTools.get_data_dir()
         )
+        self.web_report_publisher = WebReportPublisher(self.config_manager)
 
         # Telegram 注册表 (持久层)
         self.telegram_group_registry = TelegramGroupRegistry(self)
@@ -139,6 +142,7 @@ class GroupDailyAnalysis(Star):
             self.bot_manager,
             self.retry_manager,
             self.report_generator,
+            self.web_report_publisher,
             self.html_render,
             plugin_instance=self,
         )
@@ -630,6 +634,25 @@ class GroupDailyAnalysis(Star):
             else:
                 yield event.plain_result("⚠️ PDF 生成失败。")
 
+        elif output_format == "web":
+            payload = await self.report_generator.generate_web_report_payload(
+                analysis_result,
+                avatar_url_getter=avatar_url_getter,
+                nickname_getter=nickname_getter,
+            )
+            publish_result = await self.web_report_publisher.publish(payload)
+            if publish_result:
+                message = f"🔗 每日群聊分析报告：\n{publish_result.url}"
+                if not await adapter.send_text(group_id, message):
+                    yield event.plain_result(message)
+            else:
+                text_report = self.report_generator.generate_text_report(
+                    analysis_result
+                )
+                yield event.plain_result(
+                    f"⚠️ 网页日报发送失败，回退文本：\n\n{text_report}"
+                )
+
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
             if not await adapter.send_text(group_id, text_report):
@@ -640,7 +663,7 @@ class GroupDailyAnalysis(Star):
     async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
         """
         设置分析报告输出格式（跨平台支持）
-        用法: /设置格式 [image|text|pdf]
+        用法: /设置格式 [image|text|pdf|web]
         """
         group_id = self._get_group_id_from_event(event)
 
@@ -655,19 +678,26 @@ class GroupDailyAnalysis(Star):
                 if self.config_manager.playwright_available
                 else "❌ (需安装 Playwright)"
             )
+            web_status = (
+                "✅"
+                if self.web_report_publisher.is_enabled()
+                and self.web_report_publisher.is_configured()
+                else "⚠️ (需在 WebUI 开启网页日报并填写 Worker 配置)"
+            )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
 可用格式:
 • image - 图片格式 (默认)
 • text - 文本格式
 • pdf - PDF 格式 {pdf_status}
+• web - 网页链接 {web_status}
 
 用法: /设置格式 [格式名称]""")
             return
 
         format_type = format_type.lower()
-        if format_type not in ["image", "text", "pdf"]:
-            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
+        if format_type not in ["image", "text", "pdf", "web"]:
+            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf, web")
             return
 
         if format_type == "pdf" and not self.config_manager.playwright_available:
@@ -675,6 +705,15 @@ class GroupDailyAnalysis(Star):
             return
 
         self.config_manager.set_output_format(format_type)
+        if format_type == "web" and not (
+            self.web_report_publisher.is_enabled()
+            and self.web_report_publisher.is_configured()
+        ):
+            yield event.plain_result(
+                "⚠️ 输出格式已设置为 web，但网页日报功能尚未在 WebUI 配置完成，实际发送时会回退到文本。"
+            )
+            return
+
         yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
 
     @filter.command("设置模板", alias={"set_template"})

@@ -27,6 +27,7 @@ class AutoScheduler:
         bot_manager,
         retry_manager,
         report_generator=None,
+        web_report_publisher=None,
         html_render_func=None,
         plugin_instance: Any | None = None,
     ):
@@ -35,6 +36,7 @@ class AutoScheduler:
         self.bot_manager = bot_manager
         self.retry_manager = retry_manager
         self.report_generator = report_generator
+        self.web_report_publisher = web_report_publisher
         self.html_render_func = html_render_func
         self.plugin_instance = plugin_instance
 
@@ -45,6 +47,8 @@ class AutoScheduler:
         )
         if html_render_func:
             self.report_dispatcher.set_html_render(html_render_func)
+        if web_report_publisher:
+            self.report_dispatcher.set_web_report_publisher(web_report_publisher)
 
         self.scheduler_job_ids = []  # 存储已注册的定时任务 ID
         self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
