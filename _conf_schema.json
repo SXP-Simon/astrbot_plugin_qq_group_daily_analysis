@@ -67,7 +67,7 @@
                     "web"
                 ],
                 "default": "image",
-                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)、web(网页链接)。使用 web 前还需要在“网页日报设置”里开启并填好 Worker 地址和上传 token。"
+                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)、web(网页链接)。使用 web 前还需要在插件配置页的“网页日报设置”里开启并填好 Worker 地址和上传 token。"
             },
             "report_template": {
                 "type": "string",
