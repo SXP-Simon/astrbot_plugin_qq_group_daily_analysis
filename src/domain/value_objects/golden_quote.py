@@ -5,6 +5,7 @@
 它是不可变的，不包含任何平台特定的逻辑。
 """
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 
 
@@ -27,24 +28,27 @@ class GoldenQuote:
     reason: str = ""
     user_id: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """初始化后确保 user_id 类型正确。"""
         if not isinstance(self.user_id, str):
             object.__setattr__(self, "user_id", str(self.user_id))
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GoldenQuote":
+    def from_dict(cls, data: Mapping[str, object]) -> "GoldenQuote":
         """从持久化字典构建金句对象。"""
         user_id = data.get("user_id", "")
+        content_raw = data.get("content", "")
+        sender_raw = data.get("sender", "")
+        reason_raw = data.get("reason", "")
 
         return cls(
-            content=data.get("content", "").strip(),
-            sender=data.get("sender", "").strip(),
-            reason=data.get("reason", "").strip(),
+            content=str(content_raw).strip(),
+            sender=str(sender_raw).strip(),
+            reason=str(reason_raw).strip(),
             user_id=str(user_id) if user_id else "",
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         """转换为持久化字典。"""
         return {
             "content": self.content,
@@ -83,16 +87,16 @@ class GoldenQuoteCollection:
         if quote.is_valid:
             self.quotes.append(quote)
 
-    def add_from_dict(self, data: dict) -> None:
+    def add_from_dict(self, data: Mapping[str, object]) -> None:
         """从原始数据添加金句。"""
         self.add(GoldenQuote.from_dict(data))
 
-    def to_list(self) -> list[dict]:
+    def to_list(self) -> list[dict[str, str]]:
         """导出为字典列表。"""
         return [q.to_dict() for q in self.quotes]
 
     def __len__(self) -> int:
         return len(self.quotes)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[GoldenQuote]:
         return iter(self.quotes)

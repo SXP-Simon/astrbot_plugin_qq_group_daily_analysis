@@ -6,9 +6,21 @@ PDF工具模块
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 from .logger import logger
+
+
+class _BrowserPathConfigLike(Protocol):
+    def get_browser_path(self) -> str | None: ...
+
+
+class _PDFStatusConfigLike(Protocol):
+    @property
+    def playwright_available(self) -> bool: ...
+
+    @property
+    def playwright_version(self) -> str | None: ...
 
 
 class PDFInstaller:
@@ -20,7 +32,7 @@ class PDFInstaller:
     """
 
     # 静态安装状态追踪
-    _install_status: dict[str, Any] = {
+    _install_status: dict[str, bool | str | None] = {
         "in_progress": False,
         "completed": False,
         "failed": False,
@@ -29,7 +41,8 @@ class PDFInstaller:
 
     @staticmethod
     async def install_playwright(
-        config_manager: Any, task_registry: set[asyncio.Task] | None = None
+        config_manager: _BrowserPathConfigLike,
+        task_registry: set[asyncio.Task[None]] | None = None,
     ) -> str:
         """
         异步入口：安装 Playwright 环境。
@@ -40,7 +53,7 @@ class PDFInstaller:
         3. 若无自定义路径，则触发浏览器内核安装。
 
         Args:
-            config_manager (Any): 配置管理实例，用于读取/设置安装状态。
+            config_manager (object): 配置管理实例，用于读取/设置安装状态。
 
         Returns:
             str: 安装阶段提示信息
@@ -79,11 +92,11 @@ class PDFInstaller:
 
         except Exception as e:
             logger.error(f"Playwright 设置过程中出错: {e}")
-            return f"❌ 安装过程中出错: {str(e)}"
+            return f"❌ 安装过程中出错: {e!s}"
 
     @staticmethod
     async def install_system_deps(
-        task_registry: set[asyncio.Task] | None = None,
+        task_registry: set[asyncio.Task[None]] | None = None,
     ) -> str:
         """
         触发浏览器内核的后台异步安装流程。
@@ -167,18 +180,18 @@ class PDFInstaller:
             PDFInstaller._install_status["in_progress"] = False
 
     @staticmethod
-    def get_pdf_status(config_manager: Any) -> str:
+    def get_pdf_status(config_manager: _PDFStatusConfigLike) -> str:
         """
         查询当前系统的 PDF 功能可用性状态描述。
 
         Args:
-            config_manager (Any): 配置管理器，用于读取核心探测开关。
+            config_manager (object): 配置管理器，用于读取核心探测开关。
 
         Returns:
             str: 用户友好的状态文本
         """
-        if getattr(config_manager, "playwright_available", False):
-            version = getattr(config_manager, "playwright_version", "Unknown")
+        if config_manager.playwright_available:
+            version = config_manager.playwright_version
             status = f"✅ PDF 功能可用 (核心版本: {version})"
 
             if PDFInstaller._install_status["in_progress"]:

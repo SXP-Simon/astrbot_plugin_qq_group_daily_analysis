@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 Bot实例管理模块 - 基础设施层
 统一管理bot实例的获取、设置和使用

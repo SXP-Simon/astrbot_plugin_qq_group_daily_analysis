@@ -5,7 +5,13 @@ from __future__ import annotations
 import asyncio
 import os
 
-from astrbot.api.message_components import Image, Node, Nodes, Plain
+from astrbot.api.message_components import (
+    BaseMessageComponent,
+    Image,
+    Node,
+    Nodes,
+    Plain,
+)
 
 
 class TemplateCommandService:
@@ -89,7 +95,7 @@ class TemplateCommandService:
         """构建模板预览的合并消息节点。"""
         node_list = []
 
-        header_content = [
+        header_content: list[BaseMessageComponent] = [
             Plain(
                 f"🎨 可用报告模板列表\n📌 当前使用: {current_template}\n💡 使用 /设置模板 [序号] 切换"
             )
@@ -104,10 +110,17 @@ class TemplateCommandService:
                 else f"({index + 1})"
             )
 
-            node_content = [Plain(f"{num_label} {template_name}{current_mark}")]
+            node_content: list[BaseMessageComponent] = [
+                Plain(f"{num_label} {template_name}{current_mark}")
+            ]
             preview_image_path = self.resolve_template_preview_path(template_name)
             if preview_image_path:
-                node_content.append(Image.fromFileSystem(preview_image_path))
+                node_content.append(
+                    Image(
+                        file=f"file:///{os.path.abspath(preview_image_path)}",
+                        path=preview_image_path,
+                    )
+                )
 
             node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
 

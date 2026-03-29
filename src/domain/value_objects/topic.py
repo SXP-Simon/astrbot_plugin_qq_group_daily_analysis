@@ -5,6 +5,7 @@
 它是不可变的，不包含任何平台特定的逻辑。
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 
@@ -25,7 +26,7 @@ class Topic:
     contributors: tuple[str, ...] = field(default_factory=tuple)
     detail: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """数据规范化。"""
         if not self.name or not self.name.strip():
             object.__setattr__(self, "name", "未知话题")
@@ -34,19 +35,24 @@ class Topic:
             object.__setattr__(self, "contributors", tuple(self.contributors))
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Topic":
+    def from_dict(cls, data: dict[str, object]) -> "Topic":
         """从字典还原话题对象。"""
-        contributors = data.get("contributors", [])
-        if isinstance(contributors, list):
-            contributors = tuple(contributors)
+        contributors_raw = data.get("contributors", [])
+        contributors: tuple[str, ...]
+        if isinstance(contributors_raw, list):
+            contributors = tuple(str(item) for item in contributors_raw)
+        elif isinstance(contributors_raw, tuple):
+            contributors = tuple(str(item) for item in contributors_raw)
+        else:
+            contributors = ()
 
         return cls(
-            name=data.get("topic", data.get("name", "")).strip(),
+            name=str(data.get("topic", data.get("name", ""))).strip(),
             contributors=contributors,
-            detail=data.get("detail", "").strip(),
+            detail=str(data.get("detail", "")).strip(),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """导出为序列化字典。"""
         return {
             "topic": self.name,
@@ -81,16 +87,16 @@ class TopicCollection:
         if topic.is_valid:
             self.topics.append(topic)
 
-    def add_from_dict(self, data: dict) -> None:
+    def add_from_dict(self, data: dict[str, object]) -> None:
         """从原始数据添加。"""
         self.add(Topic.from_dict(data))
 
-    def to_list(self) -> list[dict]:
+    def to_list(self) -> list[dict[str, object]]:
         """导出字典列表。"""
         return [t.to_dict() for t in self.topics]
 
     def __len__(self) -> int:
         return len(self.topics)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Topic]:
         return iter(self.topics)

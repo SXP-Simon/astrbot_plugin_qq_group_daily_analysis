@@ -3,10 +3,9 @@ import base64
 import hashlib
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-
-import aiohttp
+from typing import Protocol, cast
 
 from ...shared.trace_context import REPORT_CAPTION_PATTERN
 from ...utils.logger import logger
@@ -17,7 +16,7 @@ class RetryTask:
     """重试任务数据类"""
 
     html_content: str
-    analysis_result: dict  # 保存原始分析结果，用于文本回退
+    analysis_result: dict[str, object]  # 保存原始分析结果，用于文本回退
     group_id: str
     platform_id: str  # 需要保存 platform_id 以便找回 Bot
     caption: str = ""  # 保存原始消息提示词
@@ -26,9 +25,35 @@ class RetryTask:
     created_at: float = 0.0
     task_key: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.created_at == 0.0:
             self.created_at = time.time()
+
+
+class _AdapterLike(Protocol):
+    async def send_image(
+        self, group_id: str, image_path: str, caption: str = ""
+    ) -> bool: ...
+    async def send_forward_msg(
+        self, group_id: str, nodes: list[Mapping[str, object]]
+    ) -> bool: ...
+    async def send_text(
+        self, group_id: str, text: str, reply_to: str | None = None
+    ) -> bool: ...
+
+
+class _RecentImageProbe(Protocol):
+    async def was_image_sent_recently(
+        self, group_id: str, seconds: int, token: str = ""
+    ) -> bool: ...
+
+
+class _BotManagerLike(Protocol):
+    def get_adapter(self, platform_id: str | None = None) -> _AdapterLike | None: ...
+
+
+class _ReportGeneratorLike(Protocol):
+    def generate_text_report(self, analysis_result: Mapping[str, object]) -> str: ...
 
 
 class RetryManager:
@@ -42,20 +67,28 @@ class RetryManager:
     4. 超过最大重试次数放入死信队列
     """
 
-    def __init__(self, bot_manager, html_render_func: Callable, report_generator=None):
+    def __init__(
+        self,
+        bot_manager: _BotManagerLike,
+        html_render_func: Callable[
+            [str, dict[str, object], bool, dict[str, object] | None],
+            Awaitable[bytes | str | None],
+        ],
+        report_generator: _ReportGeneratorLike | None = None,
+    ):
         self.bot_manager = bot_manager
         self.html_render_func = html_render_func
         self.report_generator = report_generator  # 用于生成文本报告
-        self.queue = asyncio.Queue()
+        self.queue: asyncio.Queue[RetryTask] = asyncio.Queue()
         self.running = False
-        self.worker_task = None
-        self._dlq = []  # 死信队列 (Failures)
-        self._active_groups = set()  # 正在处理中的群，防止重试地狱
-        self._active_task_keys = set()  # 任务级去重锁，防止同一报告重复入队
+        self.worker_task: asyncio.Task[None] | None = None
+        self._dlq: list[RetryTask] = []  # 死信队列 (Failures)
+        self._active_groups: set[str] = set()  # 正在处理中的群，防止重试地狱
+        self._active_task_keys: set[str] = set()  # 任务级去重锁，防止同一报告重复入队
         self._recent_task_key_ts: dict[str, float] = {}  # 最近完成任务用于短时去重
         self._dedupe_ttl_seconds = 15 * 60
 
-    async def start(self):
+    async def start(self) -> None:
         """启动重试工作进程"""
         if self.running:
             return
@@ -63,7 +96,7 @@ class RetryManager:
         self.worker_task = asyncio.create_task(self._worker())
         logger.info("[RetryManager] 图片重试管理器已启动")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """停止重试工作进程"""
         self.running = False
         if self.worker_task:
@@ -87,11 +120,11 @@ class RetryManager:
     async def add_task(
         self,
         html_content: str,
-        analysis_result: dict,
+        analysis_result: dict[str, object],
         group_id: str,
         platform_id: str,
         caption: str = "",
-    ):
+    ) -> None:
         """添加重试任务"""
         if not self.running:
             logger.warning(
@@ -127,7 +160,7 @@ class RetryManager:
         await self.queue.put(task)
         logger.info(f"[RetryManager] 已添加群 {group_id} 的重试任务 (key={task_key})")
 
-    async def _worker(self):
+    async def _worker(self) -> None:
         """工作进程主循环：仅负责分发任务到协程，不阻塞"""
         while self.running:
             try:
@@ -146,7 +179,7 @@ class RetryManager:
                 logger.error(f"[RetryManager] Worker 调度异常: {e}")
                 await asyncio.sleep(1)
 
-    def _cleanup_expired_task_keys(self):
+    def _cleanup_expired_task_keys(self) -> None:
         """清理过期的去重记录。"""
         now = time.time()
         expired_keys = [
@@ -179,13 +212,13 @@ class RetryManager:
 
         return f"{platform_id}:{group_id}:{token}"
 
-    def _mark_task_finished(self, task: RetryTask):
+    def _mark_task_finished(self, task: RetryTask) -> None:
         """释放任务级去重锁并刷新冷却时间。"""
         if task.task_key:
             self._active_task_keys.discard(task.task_key)
             self._recent_task_key_ts[task.task_key] = time.time()
 
-    async def _run_task_with_delay(self, task: RetryTask):
+    async def _run_task_with_delay(self, task: RetryTask) -> None:
         """异步执行带延迟的单体重试任务"""
         # 锁定该群，防止其他“新”重试任务进入。
         # 如果是重试任务（retry_count > 0），它已经在队列循环中，之前已经释放过锁。
@@ -199,8 +232,10 @@ class RetryManager:
 
         try:
             # 1. 策略计算：指数回落 + 抖动
-            jitter = random.uniform(2, 8)
-            delay = 20 * (2**task.retry_count) + jitter
+            jitter: float = random.uniform(2, 8)
+            retry_count = int(task.retry_count)
+            backoff_factor = float(1 << retry_count)
+            delay: float = (20.0 * backoff_factor) + jitter
 
             if task.retry_count == 0:
                 logger.info(
@@ -219,8 +254,9 @@ class RetryManager:
             # 【真相检查 1】：睡醒后先核实群里图片是不是其实已经出来了
             adapter = self.bot_manager.get_adapter(task.platform_id)
             if adapter and hasattr(adapter, "was_image_sent_recently"):
+                probe = cast(_RecentImageProbe, adapter)
                 # 检查过去 5 分钟内的消息回显 (覆盖初发和之前的重试)
-                if await adapter.was_image_sent_recently(
+                if await probe.was_image_sent_recently(
                     task.group_id, seconds=300, token=task.caption
                 ):
                     logger.info(
@@ -258,7 +294,7 @@ class RetryManager:
             if task.group_id in self._active_groups:
                 self._active_groups.discard(task.group_id)
 
-    async def _requeue_after_delay(self, task: RetryTask, delay: float):
+    async def _requeue_after_delay(self, task: RetryTask, delay: float) -> None:
         # 这是一个遗留辅助方法，新逻辑已在 _run_task_with_delay 中处理
         await asyncio.sleep(delay)
         await self.queue.put(task)
@@ -267,7 +303,7 @@ class RetryManager:
         """执行具体的渲染和发送逻辑"""
         try:
             # 1. 尝试渲染
-            image_options = {
+            image_options: dict[str, object] = {
                 "full_page": True,
                 "type": "jpeg",
                 "quality": 85,
@@ -287,17 +323,9 @@ class RetryManager:
             if isinstance(image_data, str):
                 if image_data.startswith(("http://", "https://")):
                     logger.warning(
-                        f"[RetryManager] html_render 返回了 URL 而不是 bytes，尝试下载: {image_data}"
+                        f"[RetryManager] html_render 返回 URL 而非 bytes，当前重试流程不下载远程图: {image_data}"
                     )
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(image_data) as resp:
-                            if resp.status == 200:
-                                image_data = await resp.read()
-                            else:
-                                logger.error(
-                                    f"[RetryManager] 下载重试图片失败: {resp.status}"
-                                )
-                                image_data = None
+                    return False
                 else:
                     # 本地文件路径
                     try:
@@ -335,6 +363,11 @@ class RetryManager:
 
             # 将 bytes 转换为 base64 字符串
             try:
+                if not isinstance(image_data, bytes):
+                    logger.error(
+                        "[RetryManager] 渲染结果不是 bytes，无法进行 Base64 编码"
+                    )
+                    return False
                 base64_str = base64.b64encode(image_data).decode("utf-8")
                 image_file_str = f"base64://{base64_str}"
                 logger.debug(
@@ -355,7 +388,8 @@ class RetryManager:
             # 3. 【临界检查 2】发送图片前最后一次复核 (针对渲染耗时极长产生的盲窗)
             # 例如渲染 10s 期间图片出来了，这里可以最后贴身拦截一次
             if adapter and hasattr(adapter, "was_image_sent_recently"):
-                if await adapter.was_image_sent_recently(
+                probe = cast(_RecentImageProbe, adapter)
+                if await probe.was_image_sent_recently(
                     task.group_id, seconds=120, token=task.caption
                 ):
                     logger.info(
@@ -384,7 +418,7 @@ class RetryManager:
             logger.error(f"[RetryManager] 处理任务时发生意外错误: {e}", exc_info=True)
             return False
 
-    async def _send_fallback_text(self, task: RetryTask):
+    async def _send_fallback_text(self, task: RetryTask) -> None:
         """发送文本回退报告（业务逻辑委派给适配器）"""
         if not self.report_generator:
             logger.warning("[RetryManager] 未配置 ReportGenerator，无法发送文本回退")
@@ -405,7 +439,7 @@ class RetryManager:
                 return
 
             nickname = "AstrBot日常分析"
-            nodes = [
+            nodes: list[Mapping[str, object]] = [
                 {
                     "type": "node",
                     "data": {

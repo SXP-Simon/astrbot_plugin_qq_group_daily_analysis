@@ -14,7 +14,7 @@ from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 class StatisticsService:
     """统计服务 - 处理群聊数据的聚合统计"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.activity_visualizer = ActivityVisualizer()
 
     def calculate_group_statistics(
@@ -27,7 +27,7 @@ class StatisticsService:
         """
         total_chars = 0
         participants = set()
-        hour_counts = defaultdict(int)
+        hour_counts: dict[int, int] = defaultdict(int)
         emoji_statistics = EmojiStatistics()
 
         for msg in messages:
@@ -62,9 +62,7 @@ class StatisticsService:
                     pass
 
         # 找出最活跃时段
-        most_active_hour = (
-            max(hour_counts.items(), key=lambda x: x[1])[0] if hour_counts else 0
-        )
+        most_active_hour = self._most_active_hour(hour_counts)
         most_active_period = (
             f"{most_active_hour:02d}:00-{(most_active_hour + 1) % 24:02d}:00"
         )
@@ -90,6 +88,16 @@ class StatisticsService:
         )
 
     @staticmethod
+    def _most_active_hour(hour_counts: dict[int, int]) -> int:
+        if not hour_counts:
+            return 0
+        return max(hour_counts.items(), key=StatisticsService._hour_count_sort_key)[0]
+
+    @staticmethod
+    def _hour_count_sort_key(item: tuple[int, int]) -> int:
+        return item[1]
+
+    @staticmethod
     def _is_emoji_like_image(raw_data: object) -> bool:
         """判断 IMAGE 段是否应按表情计数。"""
         if isinstance(raw_data, dict):
@@ -105,7 +113,9 @@ class StatisticsService:
         text = str(raw_data)
         return "动画表情" in text or "表情" in text
 
-    def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def _convert_to_legacy_dict(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """内部辅助：将 UnifiedMessage 转换为 Legacy Dict 格式，用于兼容可视化组件"""
         legacy_list = []
         for msg in messages:

@@ -1,12 +1,112 @@
 import base64
 import os
 import tempfile
-from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import Protocol, cast
 
+from ...domain.repositories.report_repository import HtmlRenderFunc, ReportData
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+
+
+class _ConfigLike(Protocol):
+    playwright_available: bool
+
+    def get_output_format(self) -> str: ...
+    def get_enable_group_file_upload(self) -> bool: ...
+    def get_enable_group_album_upload(self) -> bool: ...
+    def get_group_file_folder(self) -> str: ...
+    def get_group_album_name(self) -> str: ...
+    def get_group_album_strict_mode(self) -> bool: ...
+
+
+class _AvatarAdapterLike(Protocol):
+    async def get_user_avatar_url(self, user_id: str, size: int = 40) -> str | None: ...
+
+
+class _BotManagerLike(Protocol):
+    def get_adapter(self, platform_id: str | None = None) -> object | None: ...
+
+
+class _MessageSenderLike(Protocol):
+    @property
+    def bot_manager(self) -> _BotManagerLike: ...
+
+    async def send_image_smart(
+        self,
+        group_id: str,
+        image_url: str,
+        caption: str = "",
+        platform_id: str | None = None,
+    ) -> bool: ...
+    async def send_pdf(
+        self,
+        group_id: str,
+        pdf_path: str,
+        caption: str = "",
+        platform_id: str | None = None,
+    ) -> bool: ...
+    async def send_text(
+        self,
+        group_id: str,
+        text: str,
+        platform_id: str | None = None,
+    ) -> bool: ...
+    def _get_available_platforms(self, group_id: str) -> list[tuple[str, object]]: ...
+
+
+class _ReportGeneratorLike(Protocol):
+    async def generate_image_report(
+        self,
+        analysis_result: ReportData,
+        group_id: str,
+        html_render_func: HtmlRenderFunc,
+        avatar_url_getter: object | None = None,
+        nickname_getter: object | None = None,
+    ) -> tuple[str | None, str | None]: ...
+    async def generate_pdf_report(
+        self,
+        analysis_result: ReportData,
+        group_id: str,
+        avatar_getter: object | None = None,
+        nickname_getter: object | None = None,
+    ) -> str | None: ...
+    def generate_text_report(self, analysis_result: ReportData) -> str: ...
+
+
+class _RetryManagerLike(Protocol):
+    async def add_task(
+        self,
+        html_content: str,
+        analysis_result: dict[str, object],
+        group_id: str,
+        platform_id: str,
+        caption: str = "",
+    ) -> None: ...
+
+
+class _OneBotUploadAdapterLike(Protocol):
+    async def find_or_create_folder(
+        self, group_id: str, folder_name: str
+    ) -> str | None: ...
+    async def upload_group_file_to_folder(
+        self,
+        group_id: str,
+        file_path: str,
+        folder_id: str | None = None,
+    ) -> object: ...
+    async def upload_group_album(
+        self,
+        group_id: str,
+        file_path: str,
+        album_id: str | None = None,
+        album_name: str | None = None,
+        strict_mode: bool = True,
+    ) -> object: ...
+
+
+class _OneBotAlbumLookupLike(Protocol):
+    async def find_album_id(self, group_id: str, album_name: str) -> str | None: ...
 
 
 class ReportDispatcher:
@@ -15,23 +115,29 @@ class ReportDispatcher:
     负责协调报告生成、格式选择、消息发送和失败重试
     """
 
-    def __init__(self, config_manager, report_generator, message_sender, retry_manager):
+    def __init__(
+        self,
+        config_manager: _ConfigLike,
+        report_generator: object,
+        message_sender: object,
+        retry_manager: _RetryManagerLike,
+    ) -> None:
         self.config_manager = config_manager
-        self.report_generator = report_generator
-        self.message_sender = message_sender
+        self.report_generator = cast(_ReportGeneratorLike, report_generator)
+        self.message_sender = cast(_MessageSenderLike, message_sender)
         self.retry_manager = retry_manager
-        self._html_render_func: Callable | None = None
+        self._html_render_func: HtmlRenderFunc | None = None
 
-    def set_html_render(self, render_func: Callable):
+    def set_html_render(self, render_func: HtmlRenderFunc) -> None:
         """设置 HTML 渲染函数 (运行时注入)"""
         self._html_render_func = render_func
 
     async def dispatch(
         self,
         group_id: str,
-        analysis_result: dict[str, Any],
+        analysis_result: dict[str, object],
         platform_id: str | None = None,
-    ):
+    ) -> None:
         """
         分发分析报告
         """
@@ -55,7 +161,10 @@ class ReportDispatcher:
             logger.warning(f"[{trace_id}] 群 {group_id} 的报告分发失败")
 
     async def _dispatch_image(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: dict[str, object],
+        platform_id: str | None,
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查渲染函数
@@ -68,16 +177,17 @@ class ReportDispatcher:
         html_content = None
         try:
             # 定义头像获取回调，请求小尺寸头像以优化性能
-            async def avatar_url_getter(user_id: str):
+            async def avatar_url_getter(user_id: str) -> str | None:
                 if not platform_id:
                     return None
                 adapter = self.message_sender.bot_manager.get_adapter(platform_id)
                 if adapter and hasattr(adapter, "get_user_avatar_url"):
-                    return await adapter.get_user_avatar_url(user_id, size=40)
+                    avatar_adapter = cast(_AvatarAdapterLike, adapter)
+                    return await avatar_adapter.get_user_avatar_url(user_id, size=40)
                 return None
 
             image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result,
+                cast(ReportData, analysis_result),
                 group_id,
                 self._html_render_func,
                 avatar_url_getter=avatar_url_getter,
@@ -127,7 +237,7 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_pdf(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self, group_id: str, analysis_result: dict[str, object], platform_id: str | None
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查 Playwright
@@ -141,7 +251,7 @@ class ReportDispatcher:
         pdf_path = None
         try:
             pdf_path = await self.report_generator.generate_pdf_report(
-                analysis_result, group_id
+                cast(ReportData, analysis_result), group_id
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate PDF report: {e}")
@@ -161,10 +271,12 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_text(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self, group_id: str, analysis_result: dict[str, object], platform_id: str | None
     ) -> bool:
         try:
-            text_report = self.report_generator.generate_text_report(analysis_result)
+            text_report = self.report_generator.generate_text_report(
+                cast(ReportData, analysis_result)
+            )
             return await self.message_sender.send_text(
                 group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
             )
@@ -181,7 +293,7 @@ class ReportDispatcher:
         group_id: str,
         image_url: str,
         platform_id: str | None,
-    ):
+    ) -> None:
         """
         尝试将图片报告上传到群文件和/或群相册。
 
@@ -216,7 +328,12 @@ class ReportDispatcher:
             except OSError:
                 pass
 
-    async def _do_upload_group_file(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_file(
+        self,
+        adapter: _OneBotUploadAdapterLike,
+        group_id: str,
+        file_path: str,
+    ) -> None:
         """上传文件到群文件目录，失败静默"""
         try:
             folder_name = self.config_manager.get_group_file_folder()
@@ -231,7 +348,12 @@ class ReportDispatcher:
         except Exception as e:
             logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
 
-    async def _do_upload_group_album(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_album(
+        self,
+        adapter: _OneBotUploadAdapterLike,
+        group_id: str,
+        file_path: str,
+    ) -> None:
         """上传图片到群相册，失败静默"""
         try:
             album_name = self.config_manager.get_group_album_name()
@@ -239,8 +361,9 @@ class ReportDispatcher:
             album_id = None
 
             if hasattr(adapter, "find_album_id"):
+                album_lookup = cast(_OneBotAlbumLookupLike, adapter)
                 if album_name:
-                    album_id = await adapter.find_album_id(group_id, album_name)
+                    album_id = await album_lookup.find_album_id(group_id, album_name)
                     if not album_id and strict_mode:
                         logger.info(
                             f"群相册严格模式开启：在群 {group_id} 中未找到名为 '{album_name}' 的相册，停止上传。"
@@ -293,11 +416,13 @@ class ReportDispatcher:
             logger.debug(f"保存图片到临时文件失败: {e}")
             return None
 
-    def _get_onebot_adapter(self, platform_id: str | None):
+    def _get_onebot_adapter(
+        self, platform_id: str | None
+    ) -> _OneBotUploadAdapterLike | None:
         """获取 OneBot 适配器，非 OneBot 平台返回 None。"""
         if not platform_id:
             return None
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         if adapter and hasattr(adapter, "upload_group_file_to_folder"):
-            return adapter
+            return cast(_OneBotUploadAdapterLike, adapter)
         return None

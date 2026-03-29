@@ -1,4 +1,7 @@
-﻿default_install_hook_types: [pre-commit, prepare-commit-msg]
+default_language_version:
+  python: python3.12
+
+default_install_hook_types: [pre-commit, prepare-commit-msg]
 ci:
   autofix_commit_msg: ":sparkles: auto fixes by pre-commit hooks"
   autofix_prs: true
@@ -6,20 +9,35 @@ ci:
   autoupdate_schedule: weekly
   autoupdate_commit_msg: ":sparkles: pre-commit autoupdate"
 repos:
-- repo: https://github.com/astral-sh/ruff-pre-commit 
-  # Ruff version.
+- repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.14.1
   hooks:
-    # Run the linter.
     - id: ruff-check
-      types_or: [ python, pyi ]
-      args: [ --fix ]
-    # Run the formatter.
+      types_or: [python, pyi]
+      args: [--fix, --exit-non-zero-on-fix]
     - id: ruff-format
-      types_or: [ python, pyi ]
-      
-- repo: https://github.com/asottile/pyupgrade 
+      types_or: [python, pyi]
+
+- repo: https://github.com/asottile/pyupgrade
   rev: v3.21.0
   hooks:
     - id: pyupgrade
-      args: [--py310-plus]
+      args: [--py312-plus]
+
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.15.0
+  hooks:
+    - id: mypy
+      name: mypy (strict no-any targets)
+      pass_filenames: false
+      args:
+        - --config-file=pyproject.toml
+
+- repo: local
+  hooks:
+    - id: basedpyright
+      name: basedpyright (pylance parity, errors only)
+      language: system
+      pass_filenames: false
+      types_or: [python, pyi]
+      entry: uvx basedpyright --project . --pythonversion 3.12 --level error --baselinefile .basedpyright-baseline.json

@@ -5,9 +5,27 @@
 """
 
 import datetime
-from typing import Any
+from collections.abc import Mapping
+from typing import Protocol, cast
+
+from astrbot.core.utils.plugin_kv_store import SUPPORTED_VALUE_TYPES
 
 from ...utils.logger import logger
+
+
+class _KVStoreLike(Protocol):
+    async def get_kv_data(self, key: str, default: object) -> object: ...
+    async def put_kv_data(self, key: str, value: SUPPORTED_VALUE_TYPES) -> None: ...
+
+
+class _StatsLike(Protocol):
+    message_count: int
+    participant_count: int
+
+
+class _TopicLike(Protocol):
+    topic: str
+    detail: str
 
 
 class HistoryManager:
@@ -19,19 +37,19 @@ class HistoryManager:
     确保即使在 Bot 重启后也能回溯历史数据。
     """
 
-    def __init__(self, star_instance: Any):
+    def __init__(self, star_instance: _KVStoreLike):
         """
         初始化历史记录管理器。
 
         Args:
-            star_instance (Any): Star 插件实例，用于访问底层持久化引擎
+            star_instance (object): Star 插件实例，用于访问底层持久化引擎
         """
-        self.plugin = star_instance
+        self.plugin: _KVStoreLike = star_instance
 
     async def save_analysis(
         self,
         group_id: str,
-        analysis_result: dict[str, Any],
+        analysis_result: Mapping[str, object],
         date_str: str | None = None,
         time_str: str | None = None,
     ) -> bool:
@@ -42,7 +60,7 @@ class HistoryManager:
 
         Args:
             group_id (str): 群组 ID
-            analysis_result (dict[str, Any]): 包含 statistics, topics, user_titles 的完整分析对象
+            analysis_result (Mapping[str, object]): 包含 statistics, topics, user_titles 的完整分析对象
             date_str (str, optional): 归档日期 (YYYY-MM-DD)，缺省为当天
             time_str (str, optional): 归档时间点 (HH-MM)，缺省为当前时刻
 
@@ -61,15 +79,31 @@ class HistoryManager:
 
             # 从分析结果中剥离非持久化字段，提取核心统计元数据
             stats = analysis_result.get("statistics")
-            topics = analysis_result.get("topics", [])
-            user_titles = analysis_result.get("user_titles", [])
+            topics_raw = analysis_result.get("topics")
+            topics: list[object] = (
+                list(topics_raw) if isinstance(topics_raw, list) else []
+            )
+            user_titles_raw = analysis_result.get("user_titles")
+            user_titles: list[object] = (
+                list(user_titles_raw) if isinstance(user_titles_raw, list) else []
+            )
+            typed_stats = cast(_StatsLike, stats) if stats is not None else None
 
-            summary = {
-                "message_count": getattr(stats, "message_count", 0) if stats else 0,
-                "participant_count": getattr(stats, "participant_count", 0)
-                if stats
+            topics_summary: list[dict[str, object]] = []
+            for topic in topics:
+                if not hasattr(topic, "topic") or not hasattr(topic, "detail"):
+                    continue
+                topic_obj = cast(_TopicLike, topic)
+                topics_summary.append(
+                    {"topic": topic_obj.topic, "detail": topic_obj.detail}
+                )
+
+            summary: dict[str, object] = {
+                "message_count": typed_stats.message_count if typed_stats else 0,
+                "participant_count": typed_stats.participant_count
+                if typed_stats
                 else 0,
-                "topics": [{"topic": t.topic, "detail": t.detail} for t in topics],
+                "topics": topics_summary,
                 "user_titles_count": len(user_titles),
                 "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
             }
@@ -87,13 +121,14 @@ class HistoryManager:
 
     async def get_history(
         self, group_id: str, date_str: str, time_str: str
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         """
         根据群组、日期和时间点检索一份历史摘要。
         """
         time_str = time_str.replace(":", "-")
         key = f"analysis_{group_id}_{date_str}_{time_str}"
-        return await self.plugin.get_kv_data(key, None)
+        history = await self.plugin.get_kv_data(key, None)
+        return history if isinstance(history, dict) else None
 
     async def has_history(self, group_id: str, date_str: str, time_str: str) -> bool:
         """

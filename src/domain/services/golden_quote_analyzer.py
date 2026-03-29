@@ -11,13 +11,28 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from ..value_objects.golden_quote import GoldenQuote
 from ..value_objects.unified_message import UnifiedMessage
 
 if TYPE_CHECKING:
     from ..value_objects.statistics import TokenUsage
+
+
+class LegacyGoldenQuote(Protocol):
+    content: str
+    sender: str
+    reason: str
+    user_id: str | None
+
+
+class LegacyGoldenQuoteAnalyzer(Protocol):
+    async def analyze_golden_quotes(
+        self,
+        messages: list[dict[str, object]],
+        unified_msg_origin: str | None,
+    ) -> tuple[list[LegacyGoldenQuote], "TokenUsage"]: ...
 
 
 class IGoldenQuoteAnalyzer(ABC):
@@ -32,7 +47,7 @@ class IGoldenQuoteAnalyzer(ABC):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        unified_msg_origin: str = None,
+        unified_msg_origin: str | None = None,
     ) -> tuple[list[GoldenQuote], "TokenUsage"]:
         """
         分析消息中的金句
@@ -55,7 +70,7 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
     负责 UnifiedMessage 与原始消息格式之间的转换。
     """
 
-    def __init__(self, legacy_analyzer):
+    def __init__(self, legacy_analyzer: LegacyGoldenQuoteAnalyzer):
         """
         初始化适配器
 
@@ -67,7 +82,7 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        unified_msg_origin: str = None,
+        unified_msg_origin: str | None = None,
     ) -> tuple[list[GoldenQuote], "TokenUsage"]:
         """
         分析消息中的金句
@@ -94,10 +109,8 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
         quotes = [
             GoldenQuote(
                 content=q.content,
-                sender_name=q.sender,
-                sender_id=str(q.user_id)
-                if hasattr(q, "user_id") and q.user_id
-                else None,
+                sender=q.sender,
+                user_id=str(q.user_id) if q.user_id else "",
                 reason=q.reason,
             )
             for q in legacy_quotes
@@ -105,7 +118,7 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
 
         return quotes, token_usage
 
-    def _to_raw_message(self, msg: UnifiedMessage) -> dict:
+    def _to_raw_message(self, msg: UnifiedMessage) -> dict[str, object]:
         """
         将 UnifiedMessage 转换为原始消息格式
 
@@ -122,7 +135,7 @@ class GoldenQuoteAnalyzerAdapter(IGoldenQuoteAnalyzer):
 
         return {
             "message_id": msg.message_id,
-            "time": int(msg.timestamp.timestamp()) if msg.timestamp else 0,
+            "time": msg.timestamp,
             "sender": {
                 "user_id": msg.sender_id,
                 "nickname": msg.sender_name,

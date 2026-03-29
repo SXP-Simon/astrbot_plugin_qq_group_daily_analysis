@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 JSON处理工具模块
 提供JSON解析、修复和正则提取功能

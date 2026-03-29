@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 自动调度器模块
 负责定时任务和自动分析功能，支持传统单次分析与增量多次分析两种调度模式。
@@ -5,7 +6,6 @@
 
 import asyncio
 import time as time_mod
-from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -28,7 +28,7 @@ class AutoScheduler:
         retry_manager,
         report_generator=None,
         html_render_func=None,
-        plugin_instance: Any | None = None,
+        plugin_instance: object | None = None,
     ):
         self.config_manager = config_manager
         self.analysis_service = analysis_service
@@ -46,8 +46,10 @@ class AutoScheduler:
         if html_render_func:
             self.report_dispatcher.set_html_render(html_render_func)
 
-        self.scheduler_job_ids = []  # 存储已注册的定时任务 ID
-        self.last_executed_target = None  # 记录上次执行的具体时间点，防止重复执行
+        self.scheduler_job_ids: list[str] = []  # 存储已注册的定时任务 ID
+        self.last_executed_target: str | None = (
+            None  # 记录上次执行的具体时间点，防止重复执行
+        )
 
         # Cache: group_id -> group_name (populated lazily)
         self._group_name_cache: dict[str, str] = {}
@@ -423,7 +425,7 @@ class AutoScheduler:
                 self._perform_auto_analysis_for_group(group_id, target_platform_id),
                 timeout=1200,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 分析超时（20分钟），跳过该群分析")
         except Exception as e:
             logger.error(f"群 {group_id} 分析任务执行失败: {e}")
@@ -586,7 +588,7 @@ class AutoScheduler:
                 timeout=600,
             )
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 增量分析超时（10分钟），跳过")
             return {"success": False, "reason": "timeout"}
         except Exception as e:
@@ -683,7 +685,7 @@ class AutoScheduler:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 最终报告超时（20分钟）")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")

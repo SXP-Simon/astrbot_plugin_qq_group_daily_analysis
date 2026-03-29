@@ -4,6 +4,7 @@
 """
 
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from ...domain.models.data_models import ActivityVisualization
@@ -12,21 +13,21 @@ from ...domain.models.data_models import ActivityVisualization
 class ActivityVisualizer:
     """活跃度可视化器"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     def generate_activity_visualization(
-        self, messages: list[dict]
+        self, messages: Sequence[Mapping[str, object]]
     ) -> ActivityVisualization:
         """生成活跃度可视化数据 - 专注于小时级别分析"""
-        hourly_activity = defaultdict(int)
-        user_activity = defaultdict(int)
-        emoji_activity = defaultdict(int)  # 每小时表情统计
+        hourly_activity: defaultdict[int, int] = defaultdict(int)
+        user_activity: dict[str, dict[str, object]] = {}
+        emoji_activity: defaultdict[int, int] = defaultdict(int)  # 每小时表情统计
 
         # 分析消息数据
         for msg in messages:
             # 时间分析 - 只关注小时
-            msg_time = datetime.fromtimestamp(msg.get("time", 0))
+            msg_time = datetime.fromtimestamp(self._to_int(msg.get("time", 0)))
             hour = msg_time.hour
 
             # # 用户分析
@@ -44,32 +45,43 @@ class ActivityVisualizer:
             # }
 
             # 统计每小时表情数
-            for content in msg.get("message", []):
-                if content.get("type") in ["face", "mface", "bface", "sface"]:
+            raw_message = msg.get("message", [])
+            if not isinstance(raw_message, list):
+                continue
+            for content in raw_message:
+                if not isinstance(content, Mapping):
+                    continue
+                if str(content.get("type", "")) in ["face", "mface", "bface", "sface"]:
                     emoji_activity[hour] += 1
-                elif content.get("type") == "image":
-                    data = content.get("data", {})
-                    summary = data.get("summary", "")
+                elif str(content.get("type", "")) == "image":
+                    raw_data = content.get("data")
+                    if not isinstance(raw_data, Mapping):
+                        continue
+                    summary = str(raw_data.get("summary", ""))
                     if "动画表情" in summary or "表情" in summary:
                         emoji_activity[hour] += 1
 
         # 生成用户活跃度排行
-        user_ranking = []
+        user_ranking: list[dict[str, object]] = []
         for user_id, data in user_activity.items():
             user_ranking.append(
                 {
                     "user_id": user_id,
-                    "nickname": data["nickname"],
-                    "message_count": data["count"],
+                    "nickname": str(data.get("nickname", "")),
+                    "message_count": self._to_int(data.get("count", 0)),
                 }
             )
-        user_ranking.sort(key=lambda x: x["message_count"], reverse=True)
+        user_ranking.sort(key=self._user_ranking_key, reverse=True)
 
         # 找出高峰时段（活跃度最高的3个小时）
-        peak_hours = sorted(hourly_activity.items(), key=lambda x: x[1], reverse=True)[
-            :3
+        peak_hours = [
+            hour
+            for hour, _count in sorted(
+                hourly_activity.items(),
+                key=self._hourly_count_sort_key,
+                reverse=True,
+            )[:3]
         ]
-        peak_hours = [{"hour": hour, "count": count} for hour, count in peak_hours]
 
         return ActivityVisualization(
             hourly_activity=dict(hourly_activity),
@@ -81,9 +93,29 @@ class ActivityVisualizer:
             ),
         )
 
+    @staticmethod
+    def _to_int(value: object) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(float(value))
+            except ValueError:
+                return 0
+        return 0
+
+    def _user_ranking_key(self, item: Mapping[str, object]) -> int:
+        return self._to_int(item.get("message_count", 0))
+
+    @staticmethod
+    def _hourly_count_sort_key(item: tuple[int, int]) -> int:
+        return item[1]
+
     def _generate_hourly_heatmap_data(
-        self, hourly_activity: dict, emoji_activity: dict
-    ) -> dict:
+        self, hourly_activity: Mapping[int, int], emoji_activity: Mapping[int, int]
+    ) -> dict[str, object]:
         """生成小时级热力图数据"""
         # 计算活跃度等级
         max_hourly = max(hourly_activity.values()) if hourly_activity else 1
@@ -103,13 +135,15 @@ class ActivityVisualizer:
             "activity_levels": self._calculate_activity_levels(hourly_activity),
         }
 
-    def _calculate_activity_levels(self, hourly_activity: dict) -> dict:
+    def _calculate_activity_levels(
+        self, hourly_activity: Mapping[int, int]
+    ) -> dict[int, str]:
         """计算活跃度等级"""
         if not hourly_activity:
             return {}
 
         max_count = max(hourly_activity.values())
-        levels = {}
+        levels: dict[int, str] = {}
 
         for hour in range(24):
             count = hourly_activity.get(hour, 0)
@@ -125,9 +159,11 @@ class ActivityVisualizer:
 
         return levels
 
-    def get_hourly_chart_data(self, hourly_activity: dict) -> list[dict]:
+    def get_hourly_chart_data(
+        self, hourly_activity: Mapping[int, int]
+    ) -> list[dict[str, int | float]]:
         """生成每小时活动分布的数据"""
-        chart_data = []
+        chart_data: list[dict[str, int | float]] = []
         max_activity = max(hourly_activity.values()) if hourly_activity else 1
 
         for hour in range(24):

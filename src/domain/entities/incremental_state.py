@@ -15,7 +15,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import cast
 
 
 @dataclass
@@ -55,17 +55,17 @@ class IncrementalBatch:
     hourly_char_counts: dict[str, int] = field(default_factory=dict)
 
     # 用户活跃数据
-    user_stats: dict[str, dict] = field(default_factory=dict)
+    user_stats: dict[str, dict[str, object]] = field(default_factory=dict)
 
     # 表情统计
-    emoji_stats: dict[str, Any] = field(default_factory=dict)
+    emoji_stats: dict[str, object] = field(default_factory=dict)
 
     # LLM 分析结果
-    topics: list[dict] = field(default_factory=list)
-    golden_quotes: list[dict] = field(default_factory=list)
+    topics: list[dict[str, object]] = field(default_factory=list)
+    golden_quotes: list[dict[str, object]] = field(default_factory=list)
 
     # Token 消耗
-    token_usage: dict = field(
+    token_usage: dict[str, int] = field(
         default_factory=lambda: {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -74,11 +74,93 @@ class IncrementalBatch:
     )
 
     # 增量追踪
-    chat_quality_review: dict[str, Any] | None = None
+    chat_quality_review: dict[str, object] | None = None
     last_message_timestamp: int = 0
     participant_ids: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    @staticmethod
+    def _to_str(value: object, default: str = "") -> str:
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return default
+        return str(value)
+
+    @staticmethod
+    def _to_int(value: object, default: int = 0) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
+    def _to_float(value: object, default: float = 0.0) -> float:
+        if isinstance(value, bool):
+            return float(int(value))
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
+    def _to_str_int_dict(value: object) -> dict[str, int]:
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, int] = {}
+        for k, v in value.items():
+            result[str(k)] = IncrementalBatch._to_int(v)
+        return result
+
+    @staticmethod
+    def _to_user_stats(value: object) -> dict[str, dict[str, object]]:
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, dict[str, object]] = {}
+        for user_id, stats in value.items():
+            if isinstance(stats, dict):
+                stats_dict: dict[str, object] = {
+                    str(key): cast(object, val) for key, val in stats.items()
+                }
+                result[str(user_id)] = stats_dict
+            else:
+                result[str(user_id)] = {}
+        return result
+
+    @staticmethod
+    def _to_dict_str_object(value: object) -> dict[str, object]:
+        if not isinstance(value, dict):
+            return {}
+        return {str(k): cast(object, v) for k, v in value.items()}
+
+    @staticmethod
+    def _to_list_dict_str_object(value: object) -> list[dict[str, object]]:
+        if not isinstance(value, list):
+            return []
+        result: list[dict[str, object]] = []
+        for item in value:
+            if isinstance(item, dict):
+                result.append({str(k): cast(object, v) for k, v in item.items()})
+        return result
+
+    @staticmethod
+    def _to_str_list(value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value]
+
+    def to_dict(self) -> dict[str, object]:
         """序列化为字典，用于 KV 存储"""
         return {
             "group_id": self.group_id,
@@ -99,34 +181,31 @@ class IncrementalBatch:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "IncrementalBatch":
+    def from_dict(cls, data: dict[str, object]) -> "IncrementalBatch":
         """从字典反序列化"""
         return cls(
-            group_id=data.get("group_id", ""),
-            batch_id=data.get("batch_id", ""),
-            timestamp=data.get("timestamp", 0.0),
-            messages_count=data.get("messages_count", 0),
-            characters_count=data.get("characters_count", 0),
-            hourly_msg_counts=data.get("hourly_msg_counts", {}),
-            hourly_char_counts=data.get("hourly_char_counts", {}),
-            user_stats=data.get("user_stats", {}),
-            emoji_stats=data.get("emoji_stats", {}),
-            topics=data.get("topics", []),
-            golden_quotes=data.get("golden_quotes", []),
-            token_usage=data.get(
-                "token_usage",
-                {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                },
+            group_id=cls._to_str(data.get("group_id", "")),
+            batch_id=cls._to_str(data.get("batch_id", "")),
+            timestamp=cls._to_float(data.get("timestamp", 0.0)),
+            messages_count=cls._to_int(data.get("messages_count", 0)),
+            characters_count=cls._to_int(data.get("characters_count", 0)),
+            hourly_msg_counts=cls._to_str_int_dict(data.get("hourly_msg_counts", {})),
+            hourly_char_counts=cls._to_str_int_dict(data.get("hourly_char_counts", {})),
+            user_stats=cls._to_user_stats(data.get("user_stats", {})),
+            emoji_stats=cls._to_dict_str_object(data.get("emoji_stats", {})),
+            topics=cls._to_list_dict_str_object(data.get("topics", [])),
+            golden_quotes=cls._to_list_dict_str_object(data.get("golden_quotes", [])),
+            token_usage=cls._to_str_int_dict(data.get("token_usage", {})),
+            chat_quality_review=(
+                cls._to_dict_str_object(data.get("chat_quality_review"))
+                if isinstance(data.get("chat_quality_review"), dict)
+                else None
             ),
-            chat_quality_review=data.get("chat_quality_review"),
-            last_message_timestamp=data.get("last_message_timestamp", 0),
-            participant_ids=data.get("participant_ids", []),
+            last_message_timestamp=cls._to_int(data.get("last_message_timestamp", 0)),
+            participant_ids=cls._to_str_list(data.get("participant_ids", [])),
         )
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> dict[str, object]:
         """获取批次摘要信息"""
         return {
             "batch_id": self.batch_id[:8],
@@ -172,10 +251,10 @@ class IncrementalState:
     window_end: float = 0.0
 
     # 合并后的 LLM 分析结果
-    topics: list[dict] = field(default_factory=list)
-    golden_quotes: list[dict] = field(default_factory=list)
-    chat_quality_review: dict[str, Any] | None = None
-    all_quality_reviews: list[dict] = field(
+    topics: list[dict[str, object]] = field(default_factory=list)
+    golden_quotes: list[dict[str, object]] = field(default_factory=list)
+    chat_quality_review: dict[str, object] | None = None
+    all_quality_reviews: list[dict[str, object]] = field(
         default_factory=list
     )  # 存储所有批次的质量锐评，用于最终报告时的汇总分析
 
@@ -184,16 +263,16 @@ class IncrementalState:
     hourly_character_counts: dict[str, int] = field(default_factory=dict)
 
     # 用户活跃数据
-    user_activities: dict[str, dict] = field(default_factory=dict)
+    user_activities: dict[str, dict[str, object]] = field(default_factory=dict)
 
     # 表情统计
-    emoji_counts: dict[str, Any] = field(default_factory=dict)
+    emoji_counts: dict[str, object] = field(default_factory=dict)
 
     # 汇总统计
     total_message_count: int = 0
     total_character_count: int = 0
     total_analysis_count: int = 0
-    total_token_usage: dict = field(
+    total_token_usage: dict[str, int] = field(
         default_factory=lambda: {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -221,9 +300,13 @@ class IncrementalState:
         """
         if not self.hourly_message_counts:
             return []
+
+        def _hour_count(item: tuple[str, int]) -> int:
+            return item[1]
+
         sorted_hours = sorted(
             self.hourly_message_counts.items(),
-            key=lambda x: x[1],
+            key=_hour_count,
             reverse=True,
         )
         return [int(h) for h, _ in sorted_hours[:top_n]]
@@ -241,7 +324,7 @@ class IncrementalState:
         hour = peak[0]
         return f"{hour:02d}:00-{hour + 1:02d}:00"
 
-    def get_user_activity_ranking(self, top_n: int = 10) -> list[dict]:
+    def get_user_activity_ranking(self, top_n: int = 10) -> list[dict[str, object]]:
         """
         获取用户活跃度排名。
 
@@ -261,7 +344,23 @@ class IncrementalState:
                     "char_count": data.get("char_count", 0),
                 }
             )
-        users.sort(key=lambda x: x["message_count"], reverse=True)
+
+        def _message_count(user: dict[str, object]) -> int:
+            value = user.get("message_count", 0)
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return int(value)
+            if isinstance(value, str):
+                try:
+                    return int(value)
+                except ValueError:
+                    return 0
+            return 0
+
+        users.sort(key=_message_count, reverse=True)
         return users[:top_n]
 
     def get_window_date_str(self) -> str:
@@ -281,7 +380,7 @@ class IncrementalState:
             return end_date
         return f"{start_date} ~ {end_date}"
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> dict[str, object]:
         """
         获取当前增量状态的摘要信息，用于状态查询命令。
 
@@ -308,7 +407,9 @@ class IncrementalState:
 
     @staticmethod
     def is_duplicate_topic(
-        new_topic: dict, existing_topics: list[dict], threshold: float = 0.6
+        new_topic: dict[str, object],
+        existing_topics: list[dict[str, object]],
+        threshold: float = 0.6,
     ) -> bool:
         """
         检测话题是否与已有话题重复。
@@ -324,12 +425,18 @@ class IncrementalState:
         Returns:
             bool: 是否重复
         """
-        new_name = new_topic.get("topic", "")
+        new_name_obj = new_topic.get("topic", "")
+        new_name = new_name_obj if isinstance(new_name_obj, str) else str(new_name_obj)
         if not new_name:
             return False
 
         for existing in existing_topics:
-            existing_name = existing.get("topic", "")
+            existing_name_obj = existing.get("topic", "")
+            existing_name = (
+                existing_name_obj
+                if isinstance(existing_name_obj, str)
+                else str(existing_name_obj)
+            )
             if not existing_name:
                 continue
             similarity = IncrementalState.char_overlap_similarity(
@@ -341,7 +448,9 @@ class IncrementalState:
 
     @staticmethod
     def is_duplicate_quote(
-        new_quote: dict, existing_quotes: list[dict], threshold: float = 0.7
+        new_quote: dict[str, object],
+        existing_quotes: list[dict[str, object]],
+        threshold: float = 0.7,
     ) -> bool:
         """
         检测金句是否与已有金句重复。
@@ -354,12 +463,22 @@ class IncrementalState:
         Returns:
             bool: 是否重复
         """
-        new_content = new_quote.get("content", "")
+        new_content_obj = new_quote.get("content", "")
+        new_content = (
+            new_content_obj
+            if isinstance(new_content_obj, str)
+            else str(new_content_obj)
+        )
         if not new_content:
             return False
 
         for existing in existing_quotes:
-            existing_content = existing.get("content", "")
+            existing_content_obj = existing.get("content", "")
+            existing_content = (
+                existing_content_obj
+                if isinstance(existing_content_obj, str)
+                else str(existing_content_obj)
+            )
             if not existing_content:
                 continue
             similarity = IncrementalState.char_overlap_similarity(

@@ -13,10 +13,52 @@ KV 键设计：
   值: int (epoch timestamp)
 """
 
-from typing import Any
+from typing import Protocol, TypedDict, cast
+
+from astrbot.core.utils.plugin_kv_store import SUPPORTED_VALUE_TYPES
 
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...utils.logger import logger
+
+
+class _KVStoreLike(Protocol):
+    async def get_kv_data(self, key: str, default: object) -> object: ...
+    async def put_kv_data(self, key: str, value: SUPPORTED_VALUE_TYPES) -> None: ...
+
+
+class _BatchIndexEntry(TypedDict):
+    batch_id: str
+    timestamp: float
+
+
+def _to_float(value: object, default: float = 0.0) -> float:
+    if isinstance(value, bool):
+        return float(int(value))
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_str(value: object, default: str = "") -> str:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return default
+    return str(value)
+
+
+def _to_index_entry(value: object) -> _BatchIndexEntry | None:
+    if not isinstance(value, dict):
+        return None
+    batch_id = _to_str(value.get("batch_id", ""))
+    if not batch_id:
+        return None
+    return {"batch_id": batch_id, "timestamp": _to_float(value.get("timestamp", 0.0))}
 
 
 class IncrementalStore:
@@ -36,14 +78,14 @@ class IncrementalStore:
     BATCH_PREFIX = "incr_batch"
     LAST_TS_PREFIX = "incr_last_ts"
 
-    def __init__(self, star_instance: Any):
+    def __init__(self, star_instance: _KVStoreLike):
         """
         初始化批次持久化仓储。
 
         Args:
             star_instance: Star 插件实例，用于访问底层 KV 存储引擎
         """
-        self.plugin = star_instance
+        self.plugin: _KVStoreLike = star_instance
 
     # ================================================================
     # 键构建
@@ -61,11 +103,15 @@ class IncrementalStore:
         """构建最后分析消息时间戳键"""
         return f"{self.LAST_TS_PREFIX}_{group_id}"
 
+    @staticmethod
+    def _index_timestamp(entry: _BatchIndexEntry) -> float:
+        return float(entry["timestamp"])
+
     # ================================================================
     # 批次索引操作
     # ================================================================
 
-    async def _get_index(self, group_id: str) -> list[dict]:
+    async def _get_index(self, group_id: str) -> list[_BatchIndexEntry]:
         """
         获取指定群的批次索引列表。
 
@@ -81,14 +127,19 @@ class IncrementalStore:
             if data is None:
                 return []
             if isinstance(data, list):
-                return data
+                normalized: list[_BatchIndexEntry] = []
+                for item in data:
+                    entry = _to_index_entry(item)
+                    if entry is not None:
+                        normalized.append(entry)
+                return normalized
             logger.warning(f"批次索引数据格式异常 (Key: {key}): {type(data)}")
             return []
         except Exception as e:
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
             return []
 
-    async def _save_index(self, group_id: str, index: list[dict]) -> None:
+    async def _save_index(self, group_id: str, index: list[_BatchIndexEntry]) -> None:
         """
         保存批次索引列表。
 
@@ -98,7 +149,7 @@ class IncrementalStore:
         """
         key = self._index_key(group_id)
         try:
-            await self.plugin.put_kv_data(key, index)
+            await self.plugin.put_kv_data(key, cast(list[object], index))
         except Exception as e:
             logger.error(f"保存批次索引失败 (Key: {key}): {e}", exc_info=True)
             raise
@@ -173,25 +224,23 @@ class IncrementalStore:
         index = await self._get_index(group_id)
 
         # 筛选在窗口范围内的批次
-        matching_entries = [
-            entry
-            for entry in index
-            if window_start <= entry.get("timestamp", 0) <= window_end
+        matching_entries: list[_BatchIndexEntry] = [
+            entry for entry in index if window_start <= entry["timestamp"] <= window_end
         ]
 
         # 按时间戳升序排列
-        matching_entries.sort(key=lambda x: x.get("timestamp", 0))
+        matching_entries.sort(key=self._index_timestamp)
 
         batches: list[IncrementalBatch] = []
         for entry in matching_entries:
-            batch_id = entry.get("batch_id", "")
+            batch_id = entry["batch_id"]
             if not batch_id:
                 continue
 
             batch_key = self._batch_key(group_id, batch_id)
             try:
                 data = await self.plugin.get_kv_data(batch_key, None)
-                if data is not None:
+                if isinstance(data, dict):
                     batch = IncrementalBatch.from_dict(data)
                     batches.append(batch)
                 else:
@@ -231,7 +280,16 @@ class IncrementalStore:
         key = self._last_ts_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, 0)
-            return int(data) if data else 0
+            if isinstance(data, bool):
+                return int(data)
+            if isinstance(data, (int, float)):
+                return int(data)
+            if isinstance(data, str):
+                try:
+                    return int(data)
+                except ValueError:
+                    return 0
+            return 0
         except Exception as e:
             logger.error(f"读取最后分析时间戳失败 (Key: {key}): {e}", exc_info=True)
             return 0
@@ -279,10 +337,10 @@ class IncrementalStore:
             return 0
 
         # 分离过期和保留
-        expired = []
-        retained = []
+        expired: list[_BatchIndexEntry] = []
+        retained: list[_BatchIndexEntry] = []
         for entry in index:
-            if entry.get("timestamp", 0) < before_timestamp:
+            if entry["timestamp"] < before_timestamp:
                 expired.append(entry)
             else:
                 retained.append(entry)
@@ -293,7 +351,7 @@ class IncrementalStore:
         # 删除过期批次数据
         deleted_count = 0
         for entry in expired:
-            batch_id = entry.get("batch_id", "")
+            batch_id = entry["batch_id"]
             if not batch_id:
                 continue
             batch_key = self._batch_key(group_id, batch_id)
@@ -333,7 +391,9 @@ class IncrementalStore:
         index = await self._get_index(group_id)
         return len(index)
 
-    async def get_all_batch_summaries(self, group_id: str) -> list[dict]:
+    async def get_all_batch_summaries(
+        self, group_id: str
+    ) -> list[dict[str, str | float]]:
         """
         获取指定群所有批次的摘要信息（不加载完整数据）。
 
@@ -347,5 +407,8 @@ class IncrementalStore:
         """
         index = await self._get_index(group_id)
         # 按时间戳升序排列
-        index.sort(key=lambda x: x.get("timestamp", 0))
-        return index
+        index.sort(key=self._index_timestamp)
+        return [
+            {"batch_id": item["batch_id"], "timestamp": item["timestamp"]}
+            for item in index
+        ]

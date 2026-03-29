@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 import re
 from collections import Counter
 

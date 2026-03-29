@@ -111,6 +111,10 @@ class GlobalRateLimiter:
     _instance: "GlobalRateLimiter | None" = None
     _semaphore: asyncio.Semaphore | None = None
 
+    @staticmethod
+    def _get_semaphore_limit(semaphore: asyncio.Semaphore) -> int:
+        return semaphore._value
+
     @classmethod
     def get_instance(cls, max_concurrency: int = 3) -> "GlobalRateLimiter":
         """
@@ -126,11 +130,12 @@ class GlobalRateLimiter:
             cls._instance = cls()
             cls._semaphore = asyncio.Semaphore(max_concurrency)
         elif (
-            cls._semaphore is not None and cls._semaphore._value != max_concurrency  # type: ignore
+            cls._semaphore is not None
+            and cls._get_semaphore_limit(cls._semaphore) != max_concurrency
         ):
             # 如果请求的并发数发生变化，重新创建信号量
             logger.info(
-                f"GlobalRateLimiter 重新配置：{cls._semaphore._value} -> {max_concurrency}"
+                f"GlobalRateLimiter 重新配置：{cls._get_semaphore_limit(cls._semaphore)} -> {max_concurrency}"
             )
             cls._semaphore = asyncio.Semaphore(max_concurrency)
         return cls._instance

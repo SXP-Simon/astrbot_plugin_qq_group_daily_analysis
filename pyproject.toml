@@ -1,0 +1,38 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "W",
+  "I",
+  "UP",
+  "B",
+  "C4",
+  "ANN401",
+]
+ignore = ["E501", "UP040", "UP042", "UP046"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["main.py", "src"]
+mypy_path = ["../../../"]
+namespace_packages = true
+explicit_package_bases = true
+strict = true
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+pretty = true
+
+disallow_any_expr = true
+disallow_any_explicit = true
+disallow_any_decorated = true
+disallow_any_generics = true
+disallow_subclassing_any = true

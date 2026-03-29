@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 金句分析模块
 专门处理群聊金句提取和分析
@@ -40,7 +41,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote]):
     def get_response_schema(self) -> JSONObject:
         return build_golden_quotes_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[dict]) -> str:
+    def build_prompt(self, data: object) -> str:
         """
         构建金句分析提示词
 
@@ -50,7 +51,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote]):
         Returns:
             提示词字符串
         """
-        if not data:
+        if not isinstance(data, list) or not data:
             return ""
 
         # 构建消息文本 (用 [user_id] 替代 nickname 以确保回填 100% 准确，避免 Emoji 等干扰)

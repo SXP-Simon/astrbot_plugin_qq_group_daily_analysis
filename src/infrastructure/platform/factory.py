@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 平台适配器工厂
 """

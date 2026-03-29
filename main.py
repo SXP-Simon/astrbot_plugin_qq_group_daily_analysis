@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
@@ -7,8 +8,9 @@
 
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from pathlib import Path
+from typing import cast
 
 from astrbot.api import AstrBotConfig
 from astrbot.api import logger as astrbot_logger
@@ -146,7 +148,8 @@ class GroupDailyAnalysis(Star):
         self._initialized = False
         self._terminating = False  # 生命周期标志
         self._init_lock = asyncio.Lock()
-        self._background_tasks: set[asyncio.Task] = set()
+        self._background_tasks: set[asyncio.Task[object]] = set()
+        self._init_task: asyncio.Task[None] | None
 
         # 异步注册任务，处理插件重载情况
         try:
@@ -222,7 +225,7 @@ class GroupDailyAnalysis(Star):
             except Exception as e:
                 logger.error(f"插件初始化失败: {e}", exc_info=True)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """插件被卸载/停用时调用，清理资源"""
         if self._terminating:
             return
@@ -553,7 +556,7 @@ class GroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
-                f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
+                f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
             )
         finally:
             if current_task:
@@ -586,11 +589,24 @@ class GroupDailyAnalysis(Star):
                 pass
             return None
 
+        async def html_render_func(
+            html_content: str,
+            payload: Mapping[str, object],
+            return_url: bool,
+            image_options: Mapping[str, object],
+        ) -> str:
+            return await self.html_render(
+                tmpl=html_content,
+                data=dict(payload),
+                return_url=return_url,
+                options=dict(image_options),
+            )
+
         if output_format == "image":
             image_url, html_content = await self.report_generator.generate_image_report(
                 analysis_result,
                 group_id,
-                self.html_render,
+                html_render_func,
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
@@ -619,7 +635,7 @@ class GroupDailyAnalysis(Star):
             pdf_path = await self.report_generator.generate_pdf_report(
                 analysis_result,
                 group_id,
-                avatar_url_getter=avatar_url_getter,
+                avatar_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
             if pdf_path:
@@ -785,7 +801,11 @@ class GroupDailyAnalysis(Star):
             yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
 
             result = await PDFInstaller.install_playwright(
-                self.config_manager, task_registry=self._background_tasks
+                self.config_manager,
+                task_registry=cast(
+                    set[asyncio.Task[None]],
+                    self._background_tasks,
+                ),
             )
             yield event.plain_result(result)
 
@@ -793,7 +813,7 @@ class GroupDailyAnalysis(Star):
             logger.info("PDF 安装任务被取消")
         except Exception as e:
             logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
+            yield event.plain_result(f"❌ 安装过程中出现错误: {e!s}")
         finally:
             if current_task:
                 self._background_tasks.discard(current_task)
@@ -850,7 +870,7 @@ class GroupDailyAnalysis(Star):
             except DuplicateGroupTaskError:
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
             except Exception as e:
-                yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
+                yield event.plain_result(f"❌ 自动分析测试失败: {e!s}")
 
         elif action == "incremental_debug":
             current_state = self.config_manager.get_incremental_report_immediately()

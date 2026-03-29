@@ -4,6 +4,7 @@
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 
 from ..models.data_models import (
     GoldenQuote,
@@ -22,7 +23,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_topics(
         self,
-        messages: list[dict],
+        messages: list[dict[str, object]],
         umo: str | None = None,
         session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
@@ -32,10 +33,10 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_user_titles(
         self,
-        messages: list[dict],
-        user_activity: dict,
+        messages: list[dict[str, object]],
+        user_activity: Mapping[str, object],
         umo: str | None = None,
-        top_users: list[dict] | None = None,
+        top_users: list[dict[str, object]] | None = None,
         session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """分析用户称号"""
@@ -44,7 +45,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_golden_quotes(
         self,
-        messages: list[dict],
+        messages: list[dict[str, object]],
         umo: str | None = None,
         session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
@@ -54,10 +55,10 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_all_concurrent(
         self,
-        messages: list[dict],
-        user_activity: dict,
+        messages: list[dict[str, object]],
+        user_activity: Mapping[str, object],
         umo: str | None = None,
-        top_users: list[dict] | None = None,
+        top_users: list[dict[str, object]] | None = None,
         topic_enabled: bool = True,
         user_title_enabled: bool = True,
         golden_quote_enabled: bool = True,
@@ -75,7 +76,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_incremental_concurrent(
         self,
-        messages: list[dict],
+        messages: list[dict[str, object]],
         umo: str | None = None,
         topics_per_batch: int = 3,
         quotes_per_batch: int = 3,
@@ -89,7 +90,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def summarize_quality_reviews(
         self,
-        batch_reviews: list[dict],
+        batch_reviews: list[dict[str, object]],
         umo: str | None = None,
         session_id: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:

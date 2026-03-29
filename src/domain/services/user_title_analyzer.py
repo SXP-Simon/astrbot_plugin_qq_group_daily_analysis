@@ -11,13 +11,32 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Protocol
 
 from ..value_objects.unified_message import UnifiedMessage
 from ..value_objects.user_title import UserTitle
 
 if TYPE_CHECKING:
     from ..value_objects.statistics import TokenUsage
+
+
+class LegacyUserTitle(Protocol):
+    user_id: str
+    name: str
+    title: str
+    mbti: str
+    reason: str
+
+
+class LegacyUserTitleAnalyzer(Protocol):
+    async def analyze_user_titles(
+        self,
+        messages: list[dict[str, object]],
+        user_analysis: Mapping[str, object],
+        unified_msg_origin: str | None,
+        top_users: list[dict[str, object]] | None,
+    ) -> tuple[list[LegacyUserTitle], "TokenUsage"]: ...
 
 
 class IUserTitleAnalyzer(ABC):
@@ -32,9 +51,9 @@ class IUserTitleAnalyzer(ABC):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        user_analysis: dict[str, Any],
-        unified_msg_origin: str = None,
-        top_users: list[dict] = None,
+        user_analysis: Mapping[str, object],
+        unified_msg_origin: str | None = None,
+        top_users: list[dict[str, object]] | None = None,
     ) -> tuple[list[UserTitle], "TokenUsage"]:
         """
         分析用户称号
@@ -59,7 +78,7 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
     负责 UnifiedMessage 与原始消息格式之间的转换。
     """
 
-    def __init__(self, legacy_analyzer):
+    def __init__(self, legacy_analyzer: LegacyUserTitleAnalyzer):
         """
         初始化适配器
 
@@ -71,9 +90,9 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        user_analysis: dict[str, Any],
-        unified_msg_origin: str = None,
-        top_users: list[dict] = None,
+        user_analysis: Mapping[str, object],
+        unified_msg_origin: str | None = None,
+        top_users: list[dict[str, object]] | None = None,
     ) -> tuple[list[UserTitle], "TokenUsage"]:
         """
         分析用户称号
@@ -102,7 +121,7 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
         titles = [
             UserTitle(
                 user_id=str(t.user_id),
-                user_name=t.name,
+                name=t.name,
                 title=t.title,
                 mbti=t.mbti,
                 reason=t.reason,
@@ -112,7 +131,7 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
 
         return titles, token_usage
 
-    def _to_raw_message(self, msg: UnifiedMessage) -> dict:
+    def _to_raw_message(self, msg: UnifiedMessage) -> dict[str, object]:
         """
         将 UnifiedMessage 转换为原始消息格式
 
@@ -129,7 +148,7 @@ class UserTitleAnalyzerAdapter(IUserTitleAnalyzer):
 
         return {
             "message_id": msg.message_id,
-            "time": int(msg.timestamp.timestamp()) if msg.timestamp else 0,
+            "time": msg.timestamp,
             "sender": {
                 "user_id": msg.sender_id,
                 "nickname": msg.sender_name,

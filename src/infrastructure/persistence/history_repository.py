@@ -8,7 +8,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from ...utils.logger import logger
 
@@ -47,7 +47,7 @@ class HistoryRepository:
     def save_analysis_result(
         self,
         group_id: str,
-        result: dict[str, Any],
+        result: dict[str, object],
         date_str: str | None = None,
     ) -> bool:
         """
@@ -55,7 +55,7 @@ class HistoryRepository:
 
         Args:
             group_id (str): 群组标识符
-            result (dict[str, Any]): 包含统计、金句等信息的分析结果字典
+            result (dict[str, object]): 包含统计、金句等信息的分析结果字典
             date_str (str, optional): 关联日期 (YYYY-MM-DD)，默认为执行日
 
         Returns:
@@ -70,10 +70,14 @@ class HistoryRepository:
                 result["timestamp"] = datetime.now().isoformat()
 
             # 结构化存储：二级映射 {date -> result}
-            if "daily" not in history:
-                history["daily"] = {}
+            daily_raw = history.get("daily")
+            if isinstance(daily_raw, dict):
+                daily: dict[str, object] = daily_raw
+            else:
+                daily = {}
+                history["daily"] = daily
 
-            history["daily"][date_str] = result
+            daily[date_str] = result
             history["last_updated"] = datetime.now().isoformat()
 
             # 原子写入（覆盖）
@@ -88,7 +92,7 @@ class HistoryRepository:
             logger.error(f"保存群 {group_id} 的历史记录失败: {e}")
             return False
 
-    def load_group_history(self, group_id: str) -> dict[str, Any]:
+    def load_group_history(self, group_id: str) -> dict[str, object]:
         """
         加载特定群组的完整历史记录字典。
 
@@ -96,13 +100,14 @@ class HistoryRepository:
             group_id (str): 群组标识符
 
         Returns:
-            dict[str, Any]: 历史数据字典，若文件不存在则返回包含空 daily 结构的初始字典
+            dict[str, object]: 历史数据字典，若文件不存在则返回包含空 daily 结构的初始字典
         """
         try:
             history_path = self._get_group_history_path(group_id)
             if history_path.exists():
                 with open(history_path, encoding="utf-8") as f:
-                    return json.load(f)
+                    loaded = json.load(f)  # type: ignore[misc]
+                    return self._to_str_object_dict(cast(object, loaded))
             return {"daily": {}, "group_id": group_id}
         except Exception as e:
             logger.error(f"加载群 {group_id} 的历史记录失败: {e}")
@@ -110,7 +115,7 @@ class HistoryRepository:
 
     def get_analysis_result(
         self, group_id: str, date_str: str
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         """
         获取指定日期已存档的分析结果。
 
@@ -119,12 +124,18 @@ class HistoryRepository:
             date_str (str): 目标日期 (YYYY-MM-DD)
 
         Returns:
-            Optional[dict[str, Any]]: 分析结果字典，未找到则返回 None
+            Optional[dict[str, object]]: 分析结果字典，未找到则返回 None
         """
         history = self.load_group_history(group_id)
-        return history.get("daily", {}).get(date_str)
+        daily_raw = history.get("daily", {})
+        if not isinstance(daily_raw, dict):
+            return None
+        result = daily_raw.get(date_str)
+        return result if isinstance(result, dict) else None
 
-    def get_recent_results(self, group_id: str, limit: int = 7) -> list[dict[str, Any]]:
+    def get_recent_results(
+        self, group_id: str, limit: int = 7
+    ) -> list[dict[str, object]]:
         """
         获取指定群组最近 N 次的分析结果列表。
 
@@ -133,14 +144,19 @@ class HistoryRepository:
             limit (int): 最大返回条数
 
         Returns:
-            list[dict[str, Any]]: 按日期降序排列的结果列表
+            list[dict[str, object]]: 按日期降序排列的结果列表
         """
         history = self.load_group_history(group_id)
-        daily = history.get("daily", {})
+        daily_raw = history.get("daily", {})
+        daily = self._to_str_object_dict(daily_raw)
 
         # 按日期字符串字典序降序排列（YYYY-MM-DD 天然有序）
         sorted_dates = sorted(daily.keys(), reverse=True)[:limit]
-        return [daily[date] for date in sorted_dates]
+        return [
+            value
+            for date in sorted_dates
+            if isinstance((value := daily.get(date)), dict)
+        ]
 
     def has_analysis_for_date(self, group_id: str, date_str: str) -> bool:
         """
@@ -168,7 +184,8 @@ class HistoryRepository:
         """
         try:
             history = self.load_group_history(group_id)
-            daily = history.get("daily", {})
+            daily_raw = history.get("daily", {})
+            daily = self._to_str_object_dict(daily_raw)
 
             # 计算截止日期边界
             from datetime import timedelta
@@ -176,10 +193,10 @@ class HistoryRepository:
             cutoff = (datetime.now() - timedelta(days=keep_days)).strftime("%Y-%m-%d")
 
             # 筛选已过期的日期
-            dates_to_delete = [date for date in daily.keys() if date < cutoff]
+            dates_to_delete = [date for date in daily if date < cutoff]
 
             for date in dates_to_delete:
-                del daily[date]
+                daily.pop(date, None)
 
             if dates_to_delete:
                 history["daily"] = daily
@@ -210,3 +227,9 @@ class HistoryRepository:
         except Exception as e:
             logger.error(f"列出历史记录群组失败: {e}")
             return []
+
+    @staticmethod
+    def _to_str_object_dict(value: object) -> dict[str, object]:
+        if not isinstance(value, dict):
+            return {}
+        return {str(k): cast(object, v) for k, v in value.items()}

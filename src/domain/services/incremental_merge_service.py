@@ -13,6 +13,8 @@
 """
 
 import time
+from collections.abc import Mapping, Sequence
+from typing import cast
 
 from ...domain.entities.incremental_state import IncrementalBatch, IncrementalState
 from ...domain.models.data_models import (
@@ -35,6 +37,50 @@ class IncrementalMergeService:
     将滑动窗口内的多个批次数据合并为报告所需的数据结构，
     确保增量模式下生成的最终报告与传统单次分析报告格式完全一致。
     """
+
+    @staticmethod
+    def _to_int(value: object, default: int = 0) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
+    def _to_float(value: object, default: float = 0.0) -> float:
+        if isinstance(value, bool):
+            return float(int(value))
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
+    def _to_str(value: object, default: str = "") -> str:
+        if value is None:
+            return default
+        return str(value)
+
+    @staticmethod
+    def _to_str_list(value: object) -> list[str]:
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        if isinstance(value, tuple):
+            return [str(item) for item in value]
+        if isinstance(value, set):
+            return [str(item) for item in value]
+        return []
 
     def merge_batches(
         self,
@@ -87,9 +133,12 @@ class IncrementalMergeService:
             # 合并用户统计（按用户累加消息数、字符数等）
             for raw_user_id, stats in batch.user_stats.items():
                 user_id = str(raw_user_id)
+                stats_map = stats
                 if user_id not in state.user_activities:
                     state.user_activities[user_id] = {
-                        "nickname": stats.get("nickname", stats.get("name", user_id)),
+                        "nickname": self._to_str(
+                            stats_map.get("nickname", stats_map.get("name", user_id))
+                        ),
                         "message_count": 0,
                         "char_count": 0,
                         "emoji_count": 0,
@@ -98,54 +147,71 @@ class IncrementalMergeService:
                         "last_message_time": 0,
                     }
                 existing = state.user_activities[user_id]
-                existing["message_count"] += stats.get("message_count", 0)
-                existing["char_count"] += stats.get("char_count", 0)
-                existing["emoji_count"] += stats.get("emoji_count", 0)
-                existing["reply_count"] += stats.get("reply_count", 0)
+                existing["message_count"] = self._to_int(
+                    existing.get("message_count", 0)
+                ) + self._to_int(stats_map.get("message_count", 0))
+                existing["char_count"] = self._to_int(existing.get("char_count", 0)) + (
+                    self._to_int(stats_map.get("char_count", 0))
+                )
+                existing["emoji_count"] = self._to_int(
+                    existing.get("emoji_count", 0)
+                ) + self._to_int(stats_map.get("emoji_count", 0))
+                existing["reply_count"] = self._to_int(
+                    existing.get("reply_count", 0)
+                ) + self._to_int(stats_map.get("reply_count", 0))
 
                 # 合并每小时统计
                 # 兼容旧版本 (active_hours 是 list) 和新版本 (hours 是 dict)
-                batch_hours = stats.get("hours", {})
+                batch_hours = stats_map.get("hours", {})
                 if isinstance(batch_hours, dict):
                     # 现代 schema: hours 是 dict {hour: count}
                     for h_str, h_count in batch_hours.items():
                         h_int = int(h_str)
-                        existing["hours"][h_int] = (
-                            existing["hours"].get(h_int, 0) + h_count
+                        existing_hours = cast(
+                            dict[int, int], existing.setdefault("hours", {})
+                        )
+                        existing_hours[h_int] = existing_hours.get(h_int, 0) + (
+                            self._to_int(h_count, 0)
                         )
                 else:
                     # 兼容旧 schema: 只有 active_hours (list)
-                    active_hours = stats.get("active_hours", [])
+                    active_hours = stats_map.get("active_hours", [])
+                    if not isinstance(active_hours, (list, tuple, set)):
+                        active_hours = []
                     for h in active_hours:
                         h_int = int(h)
-                        existing["hours"][h_int] = existing["hours"].get(h_int, 0) + 1
+                        existing_hours = cast(
+                            dict[int, int], existing.setdefault("hours", {})
+                        )
+                        existing_hours[h_int] = existing_hours.get(h_int, 0) + 1
 
                 # 取最后消息时间的较大值
-                batch_last = stats.get("last_message_time", 0)
-                if batch_last > existing.get("last_message_time", 0):
+                batch_last = self._to_int(stats_map.get("last_message_time", 0))
+                if batch_last > self._to_int(existing.get("last_message_time", 0)):
                     existing["last_message_time"] = batch_last
 
                 # 更新昵称（使用最新批次的有效昵称）
-                nickname = stats.get("nickname", stats.get("name", ""))
+                nickname = self._to_str(
+                    stats_map.get("nickname", stats_map.get("name", ""))
+                )
                 if nickname and str(nickname).strip():
                     existing["nickname"] = nickname
 
             # 合并表情统计（按键累加）
-            for emoji_key, count in batch.emoji_stats.items():
+            for emoji_key, emoji_value in batch.emoji_stats.items():
                 current_val = state.emoji_counts.get(emoji_key, 0)
-                if isinstance(count, dict):
+                if isinstance(emoji_value, dict):
                     # 如果是嵌套字典（如 face_details），则合并内部计数
                     if not isinstance(current_val, dict):
                         current_val = {}
+                    current_val_dict = cast(dict[object, object], current_val)
 
-                    for sub_key, sub_count in count.items():
-                        # 确保 current_val 是字典且 sub_count 是数字
-                        if isinstance(current_val, dict):
-                            current_val[sub_key] = (
-                                current_val.get(sub_key, 0) + sub_count
-                            )
+                    for sub_key, sub_count in emoji_value.items():
+                        current_val_dict[sub_key] = self._to_int(
+                            current_val_dict.get(sub_key, 0)
+                        ) + self._to_int(sub_count)
 
-                    state.emoji_counts[emoji_key] = current_val
+                    state.emoji_counts[emoji_key] = current_val_dict
                 else:
                     # 如果是数值，直接累加
                     if isinstance(current_val, dict):
@@ -153,7 +219,9 @@ class IncrementalMergeService:
                         # 此时保留字典，忽略数字或记录错误，这里选择保留字典
                         continue
 
-                    state.emoji_counts[emoji_key] = current_val + count
+                    state.emoji_counts[emoji_key] = self._to_int(current_val) + (
+                        self._to_int(emoji_value)
+                    )
 
             # 合并话题（去重）
             for topic in batch.topics:
@@ -169,7 +237,7 @@ class IncrementalMergeService:
             for token_key in ("prompt_tokens", "completion_tokens", "total_tokens"):
                 state.total_token_usage[token_key] = state.total_token_usage.get(
                     token_key, 0
-                ) + batch.token_usage.get(token_key, 0)
+                ) + self._to_int(batch.token_usage.get(token_key, 0))
 
             # 合并参与者 ID（取并集）
             state.all_participant_ids.update(batch.participant_ids)
@@ -246,21 +314,30 @@ class IncrementalMergeService:
         chat_quality_review = None
         if state.chat_quality_review:
             review_dict = state.chat_quality_review
-            dimensions_dict = review_dict.get("dimensions", [])
+            dimensions_raw = review_dict.get("dimensions", [])
+            dimensions_dict: list[Mapping[str, object]] = []
+            if isinstance(dimensions_raw, list):
+                dimensions_dict = [
+                    item for item in dimensions_raw if isinstance(item, Mapping)
+                ]
             dimensions = [
                 QualityDimension(
-                    name=d.get("name", "未知"),
-                    percentage=float(d.get("percentage", 0)),
-                    comment=d.get("comment", ""),
-                    color=d.get("color", "#607d8b"),
+                    name=self._to_str(d.get("name", "未知")),
+                    percentage=self._to_float(d.get("percentage", 0)),
+                    comment=self._to_str(d.get("comment", "")),
+                    color=self._to_str(d.get("color", "#607d8b")),
                 )
                 for d in dimensions_dict
             ]
             chat_quality_review = QualityReview(
-                title=review_dict.get("title", "聊天质量锐评"),
-                subtitle=review_dict.get("subtitle", "今天的群里发生了什么？"),
+                title=self._to_str(review_dict.get("title", "聊天质量锐评")),
+                subtitle=self._to_str(
+                    review_dict.get("subtitle", "今天的群里发生了什么？")
+                ),
                 dimensions=dimensions,
-                summary=review_dict.get("summary", "今天也是充满活力的一天。"),
+                summary=self._to_str(
+                    review_dict.get("summary", "今天也是充满活力的一天。")
+                ),
             )
 
         statistics = GroupStatistics(
@@ -301,10 +378,12 @@ class IncrementalMergeService:
         topics = []
         for topic_dict in state.topics:
             topic = SummaryTopic(
-                topic=topic_dict.get("topic", "未知话题"),
-                contributors=topic_dict.get("contributors", []),
-                detail=topic_dict.get("detail", ""),
-                contributor_ids=topic_dict.get("contributor_ids", []),
+                topic=self._to_str(topic_dict.get("topic", "未知话题")),
+                contributors=self._to_str_list(topic_dict.get("contributors", [])),
+                detail=self._to_str(topic_dict.get("detail", "")),
+                contributor_ids=self._to_str_list(
+                    topic_dict.get("contributor_ids", [])
+                ),
             )
             topics.append(topic)
 
@@ -326,9 +405,9 @@ class IncrementalMergeService:
         quotes = []
         for quote_dict in state.golden_quotes:
             quote = GoldenQuote(
-                content=quote_dict.get("content", ""),
-                sender=quote_dict.get("sender", ""),
-                reason=quote_dict.get("reason", ""),
+                content=self._to_str(quote_dict.get("content", "")),
+                sender=self._to_str(quote_dict.get("sender", "")),
+                reason=self._to_str(quote_dict.get("reason", "")),
                 user_id=str(quote_dict.get("user_id", "")),
             )
             quotes.append(quote)
@@ -339,8 +418,8 @@ class IncrementalMergeService:
     def build_analysis_result(
         self,
         state: IncrementalState,
-        user_titles: list | None = None,
-    ) -> dict:
+        user_titles: Sequence[object] | None = None,
+    ) -> Mapping[str, object]:
         """
         从增量状态构建完整的 analysis_result 字典。
 
@@ -364,7 +443,7 @@ class IncrementalMergeService:
         analysis_result = {
             "statistics": statistics,
             "topics": topics,
-            "user_titles": user_titles or [],
+            "user_titles": list(user_titles) if user_titles is not None else [],
             "user_analysis": state.user_activities,
             "chat_quality_review": statistics.chat_quality_review,
         }
@@ -400,10 +479,10 @@ class IncrementalMergeService:
             face_details = {}
 
         return EmojiStatistics(
-            face_count=emoji_counts.get("face_count", 0),
-            mface_count=emoji_counts.get("mface_count", 0),
-            bface_count=emoji_counts.get("bface_count", 0),
-            sface_count=emoji_counts.get("sface_count", 0),
-            other_emoji_count=emoji_counts.get("other_emoji_count", 0),
+            face_count=self._to_int(emoji_counts.get("face_count", 0)),
+            mface_count=self._to_int(emoji_counts.get("mface_count", 0)),
+            bface_count=self._to_int(emoji_counts.get("bface_count", 0)),
+            sface_count=self._to_int(emoji_counts.get("sface_count", 0)),
+            other_emoji_count=self._to_int(emoji_counts.get("other_emoji_count", 0)),
             face_details=face_details,
         )

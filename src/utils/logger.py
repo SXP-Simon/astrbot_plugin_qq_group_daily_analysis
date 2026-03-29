@@ -21,23 +21,23 @@ class PluginLogger:
             return f"[{trace_id}] {self.prefix} {msg}"
         return f"{self.prefix} {msg}"
 
-    def info(self, msg: str, *args, **kwargs):
-        astrbot_logger.info(self._format_msg(msg), *args, **kwargs)
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.info(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
-    def error(self, msg: str, *args, **kwargs):
-        astrbot_logger.error(self._format_msg(msg), *args, **kwargs)
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.error(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
-    def warning(self, msg: str, *args, **kwargs):
-        astrbot_logger.warning(self._format_msg(msg), *args, **kwargs)
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.warning(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
-    def debug(self, msg: str, *args, **kwargs):
-        astrbot_logger.debug(self._format_msg(msg), *args, **kwargs)
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.debug(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
-    def critical(self, msg: str, *args, **kwargs):
-        astrbot_logger.critical(self._format_msg(msg), *args, **kwargs)
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.critical(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
-    def exception(self, msg: str, *args, **kwargs):
-        astrbot_logger.exception(self._format_msg(msg), *args, **kwargs)
+    def exception(self, msg: str, *args: object, **kwargs: object) -> None:
+        astrbot_logger.exception(self._format_msg(msg), *args, **kwargs)  # type: ignore[arg-type]
 
 
 # 导出带前缀的 logger

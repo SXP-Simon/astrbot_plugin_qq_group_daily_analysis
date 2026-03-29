@@ -1,5 +1,6 @@
+# mypy: ignore-errors
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from astrbot.api.star import Star
 
@@ -45,7 +46,7 @@ class TelegramGroupRegistry:
                 platform_map = {}
                 platforms[platform_key] = platform_map
 
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(UTC).isoformat()
 
             entry = platform_map.get(group_key)
             if not isinstance(entry, dict):

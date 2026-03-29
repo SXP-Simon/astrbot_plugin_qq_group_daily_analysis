@@ -18,6 +18,12 @@ class UserActivityStats(TypedDict):
     reply_count: int
 
 
+class UserActivityPattern(TypedDict):
+    most_active_hour: int
+    night_ratio: float
+    hourly_distribution: dict[int, int]
+
+
 class AnalysisDomainService:
     """分析领域服务 - 处理用户画像及行为分析"""
 
@@ -97,9 +103,9 @@ class AnalysisDomainService:
 
     def get_top_users(
         self, user_activity: dict[str, UserActivityStats], limit: int = 10
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """获取最活跃的用户列表"""
-        users = []
+        users: list[dict[str, object]] = []
         for user_id, stats in user_activity.items():
             users.append(
                 {
@@ -113,21 +119,41 @@ class AnalysisDomainService:
             )
 
         # 按消息数量排序
-        users.sort(key=lambda x: x["message_count"], reverse=True)
+        users.sort(key=self._message_count_key, reverse=True)
         return users[:limit]
+
+    @staticmethod
+    def _message_count_key(user: dict[str, object]) -> int:
+        value = user.get("message_count", 0)
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(float(value))
+            except ValueError:
+                return 0
+        return 0
 
     def get_user_activity_pattern(
         self, user_activity: dict[str, UserActivityStats], user_id: str
-    ) -> dict:
+    ) -> UserActivityPattern:
         """获取并识别指定用户的活动模式"""
         if user_id not in user_activity:
-            return {}
+            return {
+                "most_active_hour": 0,
+                "night_ratio": 0.0,
+                "hourly_distribution": {},
+            }
 
         stats = user_activity[user_id]
         hours = stats["hours"]
 
         # 找出最活跃的时间段
-        most_active_hour = max(hours.items(), key=lambda x: x[1])[0] if hours else 0
+        most_active_hour = (
+            max(hours.items(), key=self._hour_count_sort_key)[0] if hours else 0
+        )
 
         # 计算夜间活跃度 (0-6点)
         night_messages = sum(hours[h] for h in range(0, 6))
@@ -140,3 +166,7 @@ class AnalysisDomainService:
             "night_ratio": night_ratio,
             "hourly_distribution": dict(hours),
         }
+
+    @staticmethod
+    def _hour_count_sort_key(item: tuple[int, int]) -> int:
+        return item[1]

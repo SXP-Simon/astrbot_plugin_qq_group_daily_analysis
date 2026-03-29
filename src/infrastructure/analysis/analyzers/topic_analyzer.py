@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 话题分析模块
 专门处理群聊话题分析
@@ -41,7 +42,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic]):
     def get_response_schema(self) -> JSONObject:
         return build_topics_schema(self.get_max_count())
 
-    def build_prompt(self, data: list[dict]) -> str:
+    def build_prompt(self, data: object) -> str:
         """
         构建话题分析提示词
 
@@ -89,7 +90,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic]):
 
                 # 提取文本内容，可能分布在多个 content 中
                 text_parts = []
-                for j, content in enumerate(message_list):
+                for _j, content in enumerate(message_list):
                     if not isinstance(content, dict):
                         continue
 

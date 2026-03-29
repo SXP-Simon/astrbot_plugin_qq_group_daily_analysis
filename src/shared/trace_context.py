@@ -4,14 +4,14 @@
 提供用于在插件中跟踪请求的上下文。
 """
 
-import functools
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import ParamSpec, TypeAlias, TypeVar
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
@@ -21,9 +21,15 @@ _MAX_GROUP_NAME_LEN = 10
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 # 当前追踪的上下文变量
-_current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
+_current_trace: ContextVar["TraceContext | None"] = ContextVar(
     "current_trace", default=None
 )
+
+MetadataValue: TypeAlias = (
+    str | int | float | bool | None | dict[str, "MetadataValue"] | list["MetadataValue"]
+)
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
 
 @dataclass
@@ -40,7 +46,7 @@ class TraceContext:
         platform (str): 当前消息所属平台
         operation (str): 当前执行的操作名称 (如 'DAILY_ANALYSIS')
         start_time (datetime): 追踪开始的具体时刻
-        metadata (dict[str, Any]): 随链路传递的额外上下文数据
+        metadata (dict[str, MetadataValue]): 随链路传递的额外上下文数据
     """
 
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -48,7 +54,7 @@ class TraceContext:
     platform: str = ""
     operation: str = ""
     start_time: datetime = field(default_factory=datetime.now)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, MetadataValue] = field(default_factory=dict)
 
     # 内部计时器，用于多阶段耗时分析
     _checkpoints: dict[str, datetime] = field(default_factory=dict, init=False)
@@ -79,12 +85,12 @@ class TraceContext:
         delta = datetime.now() - start
         return delta.total_seconds() * 1000
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, MetadataValue]:
         """
         将链路快照序列化为字典格式，便于持久化或 JSON 日志输出。
 
         Returns:
-            dict[str, Any]: 序列化后的追踪状态
+            dict[str, MetadataValue]: 序列化后的追踪状态
         """
         return {
             "trace_id": self.trace_id,
@@ -97,26 +103,33 @@ class TraceContext:
             "checkpoints": {k: v.isoformat() for k, v in self._checkpoints.items()},
         }
 
-    _token: Token | None = field(default=None, init=False, repr=False)
+    _token: Token["TraceContext | None"] | None = field(
+        default=None, init=False, repr=False
+    )
 
     def __enter__(self) -> "TraceContext":
         """进入上下文管理器，将当前实例绑定到当前协程上下文。"""
         self._token = _current_trace.set(self)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         """退出上下文管理器，清理绑定状态。"""
         if self._token:
             _current_trace.reset(self._token)
             self._token = None
 
     @classmethod
-    def current(cls) -> Optional["TraceContext"]:
+    def current(cls) -> "TraceContext | None":
         """
         静态获取当前协程活跃的追踪上下文。
 
         Returns:
-            Optional[TraceContext]: 若当前处于追踪链路中则返回实例，否则返回 None
+            TraceContext | None: 若当前处于追踪链路中则返回实例，否则返回 None
         """
         return _current_trace.get()
 
@@ -250,7 +263,10 @@ def with_trace(
     group_id: str = "",
     platform: str = "",
     operation: str = "",
-):
+) -> Callable[
+    [Callable[_P, Awaitable[_R]]],
+    Callable[_P, Awaitable[_R]],
+]:
     """
     装饰器：自动为异步函数包裹追踪上下文。
 
@@ -263,9 +279,8 @@ def with_trace(
         Callable: 装饰后的函数
     """
 
-    def decorator(func):
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+    def decorator(func: Callable[_P, Awaitable[_R]]) -> Callable[_P, Awaitable[_R]]:
+        async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
             # 优先使用装饰器声明的 operation，否则取函数原始名称
             op_name = operation or func.__name__
             with TraceContext(
@@ -275,6 +290,8 @@ def with_trace(
             ):
                 return await func(*args, **kwargs)
 
+        wrapper.__name__ = func.__name__
+        wrapper.__doc__ = func.__doc__
         return wrapper
 
     return decorator

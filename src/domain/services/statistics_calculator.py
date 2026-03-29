@@ -132,7 +132,7 @@ class StatisticsCalculator:
         user_stats: dict[str, UserStatistics],
         limit: int = 10,
         min_messages: int = 5,
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """
         获取基于消息活跃度的前 N 名用户排行。
 
@@ -152,7 +152,9 @@ class StatisticsCalculator:
 
         # 按消息数降序排序
         sorted_users = sorted(
-            eligible_users, key=lambda x: x.message_count, reverse=True
+            eligible_users,
+            key=self._user_message_count_key,
+            reverse=True,
         )
 
         return [
@@ -194,10 +196,15 @@ class StatisticsCalculator:
                     emoji_id = content.emoji_id or "unknown"
                     emoji_details[emoji_id] = emoji_details.get(emoji_id, 0) + 1
 
-                    emoji_type = (
+                    emoji_type_raw = (
                         content.raw_data.get("emoji_type", "standard")
                         if isinstance(content.raw_data, dict)
                         else "standard"
+                    )
+                    emoji_type = (
+                        emoji_type_raw
+                        if isinstance(emoji_type_raw, str)
+                        else str(emoji_type_raw)
                     )
                     if emoji_type == "standard":
                         standard_count += 1
@@ -249,12 +256,16 @@ class StatisticsCalculator:
             user_counts[msg.sender_id] = user_counts.get(msg.sender_id, 0) + 1
 
         # 计算高峰时段（前 3 名）
-        sorted_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)
+        sorted_hours = sorted(hourly.items(), key=self._hour_count_key, reverse=True)
         peak_hours = [h for h, _ in sorted_hours[:3]]
 
         # 用户活跃度排名
-        sorted_users = sorted(user_counts.items(), key=lambda x: x[1], reverse=True)
-        user_ranking = [
+        sorted_users = sorted(
+            user_counts.items(),
+            key=self._user_count_key,
+            reverse=True,
+        )
+        user_ranking: list[dict[str, object]] = [
             {"user_id": uid, "count": count} for uid, count in sorted_users[:20]
         ]
 
@@ -282,7 +293,7 @@ class StatisticsCalculator:
             return "未知"
 
         # 找到高峰时段
-        peak_hour = max(hourly, key=hourly.get)
+        peak_hour = max(hourly.items(), key=self._hour_count_key)[0]
 
         # 分类时间段
         if 6 <= peak_hour < 12:
@@ -293,3 +304,15 @@ class StatisticsCalculator:
             return "晚间 (18:00-24:00)"
         else:
             return "深夜 (0:00-6:00)"
+
+    @staticmethod
+    def _user_message_count_key(user: UserStatistics) -> int:
+        return user.message_count
+
+    @staticmethod
+    def _hour_count_key(item: tuple[int, int]) -> int:
+        return item[1]
+
+    @staticmethod
+    def _user_count_key(item: tuple[str, int]) -> int:
+        return item[1]

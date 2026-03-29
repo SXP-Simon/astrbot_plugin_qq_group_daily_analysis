@@ -46,17 +46,17 @@ class AnalysisTask:
         self.started_at = time.time()
         return True
 
-    def advance_to(self, status: TaskStatus):
+    def advance_to(self, status: TaskStatus) -> None:
         """推进到下一个状态"""
         self.status = status
 
-    def complete(self, result_id: str):
+    def complete(self, result_id: str) -> None:
         """标记任务为已完成"""
         self.status = TaskStatus.COMPLETED
         self.result_id = result_id
         self.completed_at = time.time()
 
-    def fail(self, error: str):
+    def fail(self, error: str) -> None:
         """标记任务为失败"""
         self.status = TaskStatus.FAILED
         self.error_message = error

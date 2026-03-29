@@ -11,13 +11,27 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from ..value_objects.topic import Topic
 from ..value_objects.unified_message import UnifiedMessage
 
 if TYPE_CHECKING:
     from ..value_objects.statistics import TokenUsage
+
+
+class LegacyTopic(Protocol):
+    topic: str
+    contributors: list[str]
+    detail: str
+
+
+class LegacyTopicAnalyzer(Protocol):
+    async def analyze_topics(
+        self,
+        messages: list[dict[str, object]],
+        unified_msg_origin: str | None,
+    ) -> tuple[list[LegacyTopic], "TokenUsage"]: ...
 
 
 class ITopicAnalyzer(ABC):
@@ -32,7 +46,7 @@ class ITopicAnalyzer(ABC):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        unified_msg_origin: str = None,
+        unified_msg_origin: str | None = None,
     ) -> tuple[list[Topic], "TokenUsage"]:
         """
         分析消息中的话题
@@ -55,7 +69,7 @@ class TopicAnalyzerAdapter(ITopicAnalyzer):
     负责 UnifiedMessage 与原始消息格式之间的转换。
     """
 
-    def __init__(self, legacy_analyzer):
+    def __init__(self, legacy_analyzer: LegacyTopicAnalyzer):
         """
         初始化适配器
 
@@ -67,7 +81,7 @@ class TopicAnalyzerAdapter(ITopicAnalyzer):
     async def analyze(
         self,
         messages: list[UnifiedMessage],
-        unified_msg_origin: str = None,
+        unified_msg_origin: str | None = None,
     ) -> tuple[list[Topic], "TokenUsage"]:
         """
         分析消息中的话题
@@ -94,7 +108,7 @@ class TopicAnalyzerAdapter(ITopicAnalyzer):
         topics = [
             Topic(
                 name=t.topic,
-                contributors=t.contributors,
+                contributors=tuple(t.contributors),
                 detail=t.detail,
             )
             for t in legacy_topics
@@ -102,7 +116,7 @@ class TopicAnalyzerAdapter(ITopicAnalyzer):
 
         return topics, token_usage
 
-    def _to_raw_message(self, msg: UnifiedMessage) -> dict:
+    def _to_raw_message(self, msg: UnifiedMessage) -> dict[str, object]:
         """
         将 UnifiedMessage 转换为原始消息格式
 
@@ -119,7 +133,7 @@ class TopicAnalyzerAdapter(ITopicAnalyzer):
 
         return {
             "message_id": msg.message_id,
-            "time": int(msg.timestamp.timestamp()) if msg.timestamp else 0,
+            "time": msg.timestamp,
             "sender": {
                 "user_id": msg.sender_id,
                 "nickname": msg.sender_name,

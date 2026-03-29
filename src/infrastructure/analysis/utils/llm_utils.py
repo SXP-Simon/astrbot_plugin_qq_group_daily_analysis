@@ -1,9 +1,11 @@
+# mypy: ignore-errors
 """
 LLM API请求处理工具模块
 提供LLM调用和token统计功能
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, global_llm_rate_limiter
@@ -144,8 +146,8 @@ async def get_provider_id_with_fallback(
         logger.info(f"[Provider 选择] 开始为 {task_desc} 选择 Provider...")
 
         # 定义回退策略列表
-        strategies = []
-        strategy_names = []
+        strategies: list[Callable[[], Awaitable[str | None]]] = []
+        strategy_names: list[str] = []
 
         # 1. 特定任务的 provider_id
         if provider_id_key:
@@ -153,29 +155,39 @@ async def get_provider_id_with_fallback(
             if hasattr(config_manager, getter_method):
                 specific_provider_id = getattr(config_manager, getter_method)()
                 if specific_provider_id:
-                    strategies.append(
-                        lambda pid=specific_provider_id: _try_get_provider_id_by_id(
+
+                    async def _specific_strategy(
+                        pid: str = specific_provider_id,
+                    ) -> str | None:
+                        return await _try_get_provider_id_by_id(
                             context, pid, f"配置的 {provider_id_key}"
                         )
-                    )
+
+                    strategies.append(_specific_strategy)
                     strategy_names.append(f"1. 配置的 {provider_id_key}")
 
         # 2. 主 LLM provider_id
         main_provider_id = config_manager.get_llm_provider_id()
         if main_provider_id:
-            strategies.append(
-                lambda pid=main_provider_id: _try_get_provider_id_by_id(
-                    context, pid, "主 LLM Provider"
-                )
-            )
+
+            async def _main_strategy(pid: str = main_provider_id) -> str | None:
+                return await _try_get_provider_id_by_id(context, pid, "主 LLM Provider")
+
+            strategies.append(_main_strategy)
             strategy_names.append("2. 主 LLM Provider")
 
         # 3. 当前会话的 Provider
-        strategies.append(lambda: _try_get_session_provider_id(context, umo))
+        async def _session_strategy() -> str | None:
+            return await _try_get_session_provider_id(context, umo)
+
+        strategies.append(_session_strategy)
         strategy_names.append("3. 当前会话 Provider")
 
         # 4. 第一个可用的 Provider
-        strategies.append(lambda: _try_get_first_available_provider_id(context))
+        async def _fallback_strategy() -> str | None:
+            return await _try_get_first_available_provider_id(context)
+
+        strategies.append(_fallback_strategy)
         strategy_names.append("4. 第一个可用 Provider")
 
         # 输出回退策略列表
@@ -229,7 +241,7 @@ async def call_provider_with_retry(
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
 
-    last_exc = None
+    last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
             # 使用新的 provider 选择逻辑，获取 Provider ID
@@ -314,7 +326,7 @@ async def call_provider_with_retry(
                 cb.record_failure()
                 raise e
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             last_exc = e
             logger.warning(f"LLM请求超时: 第{attempt}次 (Provider 内部超时)")
         except Exception as e:

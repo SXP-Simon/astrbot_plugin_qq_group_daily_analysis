@@ -3,6 +3,7 @@
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 
 from ..value_objects.platform_capabilities import PlatformCapabilities
 from ..value_objects.unified_group import UnifiedGroup, UnifiedMember
@@ -79,7 +80,7 @@ class IMessageSender(ABC):
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[Mapping[str, object]],
     ) -> bool:
         """
         发送合并转发消息。

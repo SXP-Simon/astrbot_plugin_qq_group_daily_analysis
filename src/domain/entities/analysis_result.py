@@ -58,7 +58,7 @@ class EmojiStatistics:
     bface_count: int = 0
     sface_count: int = 0
     other_emoji_count: int = 0
-    face_details: dict = field(default_factory=dict)
+    face_details: dict[str, int] = field(default_factory=dict)
 
     @property
     def total_emoji_count(self) -> int:
@@ -75,11 +75,11 @@ class EmojiStatistics:
 class ActivityVisualization:
     """活动可视化数据"""
 
-    hourly_activity: dict = field(default_factory=dict)
-    daily_activity: dict = field(default_factory=dict)
-    user_activity_ranking: list = field(default_factory=list)
-    peak_hours: list = field(default_factory=list)
-    activity_heatmap_data: dict = field(default_factory=dict)
+    hourly_activity: dict[int, int] = field(default_factory=dict)
+    daily_activity: dict[str, int] = field(default_factory=dict)
+    user_activity_ranking: list[dict[str, object]] = field(default_factory=list)
+    peak_hours: list[int] = field(default_factory=list)
+    activity_heatmap_data: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

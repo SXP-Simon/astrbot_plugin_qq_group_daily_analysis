@@ -88,7 +88,9 @@ class PlatformAdapter(
         return self.capabilities.platform_name
 
     @abstractmethod
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """
         将平台无关的统一消息列表转换回当前平台的原生字典格式。
 

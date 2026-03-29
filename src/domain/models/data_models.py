@@ -78,7 +78,9 @@ class EmojiStatistics:
     bface_count: int = 0  # 超级表情数量
     sface_count: int = 0  # 小表情数量
     other_emoji_count: int = 0  # 其他表情数量
-    face_details: dict = field(default_factory=dict)  # 具体表情ID统计 {face_id: count}
+    face_details: dict[str, int] = field(
+        default_factory=dict
+    )  # 具体表情ID统计 {face_id: count}
 
     @property
     def total_emoji_count(self) -> int:
@@ -96,11 +98,13 @@ class EmojiStatistics:
 class ActivityVisualization:
     """活跃度可视化数据结构"""
 
-    hourly_activity: dict = field(default_factory=dict)  # {hour: count}
-    daily_activity: dict = field(default_factory=dict)  # {date: count}
-    user_activity_ranking: list = field(default_factory=list)  # 用户活跃度排行
-    peak_hours: list = field(default_factory=list)  # 高峰时段
-    activity_heatmap_data: dict = field(default_factory=dict)  # 热力图数据
+    hourly_activity: dict[int, int] = field(default_factory=dict)  # {hour: count}
+    daily_activity: dict[str, int] = field(default_factory=dict)  # {date: count}
+    user_activity_ranking: list[dict[str, object]] = field(
+        default_factory=list
+    )  # 用户活跃度排行
+    peak_hours: list[int] = field(default_factory=list)  # 高峰时段
+    activity_heatmap_data: dict[str, object] = field(default_factory=dict)  # 热力图数据
 
 
 @dataclass

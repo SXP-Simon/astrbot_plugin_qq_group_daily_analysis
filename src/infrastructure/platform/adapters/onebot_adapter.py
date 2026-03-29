@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 """
 OneBot v11 平台适配器
 
@@ -7,8 +8,9 @@ OneBot v11 平台适配器
 import asyncio
 import base64
 import os
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta
-from typing import Any
+from typing import cast
 
 import aiohttp
 
@@ -51,7 +53,7 @@ class OneBotAdapter(PlatformAdapter):
     # OneBot 服务支持的头像尺寸像素
     AVAILABLE_SIZES = (40, 100, 140, 160, 640)
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
+    def __init__(self, bot_instance: object, config: dict | None = None):
         """
         初始化 OneBot 适配器。
         """
@@ -70,6 +72,31 @@ class OneBotAdapter(PlatformAdapter):
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
         return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
+
+    @staticmethod
+    def _to_int(value: object, default: int = 0) -> int:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return default
+
+    async def _call_action(self, action: str, **kwargs: object) -> object:
+        """安全调用 OneBot action，避免静态检查直接访问 object 属性报错。"""
+        caller = cast(
+            Callable[..., Awaitable[object]] | None,
+            getattr(self.bot, "call_action", None),
+        )
+        if caller is None:
+            raise AttributeError("bot_instance has no callable 'call_action'")
+        return await caller(action, **kwargs)
 
     # ==================== IMessageRepository 实现 ====================
 
@@ -100,7 +127,7 @@ class OneBotAdapter(PlatformAdapter):
 
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
-            all_raw_messages = []
+            all_raw_messages: list[dict[str, object]] = []
 
             # 确定回溯的起始时间点
             if since_ts and since_ts > 0:
@@ -111,7 +138,7 @@ class OneBotAdapter(PlatformAdapter):
                 start_timestamp = int(start_time_dt.timestamp())
 
             # 使用 message_seq 或 message_id 进行分页回溯拉取
-            current_anchor_id = before_id
+            current_anchor_id: str | None = before_id
 
             logger.info(
                 f"OneBot 开始分页回溯消息: 群 {group_id}, "
@@ -122,24 +149,28 @@ class OneBotAdapter(PlatformAdapter):
             while len(all_raw_messages) < max_count:
                 fetch_count = min(chunk_size, max_count - len(all_raw_messages))
 
-                params = {
+                params: dict[str, int | bool | str] = {
                     "group_id": int(group_id),
                     "count": fetch_count,
                     "reverseOrder": True,  # 关键：协助分页向上回退拉取历史
                 }
 
                 if current_anchor_id:
-                    params["message_seq"] = current_anchor_id
+                    params["message_seq"] = str(current_anchor_id)
 
-                result = await self.bot.call_action("get_group_msg_history", **params)
-
-                if not result or "messages" not in result:
+                result = await self._call_action("get_group_msg_history", **params)
+                if not isinstance(result, dict):
                     logger.debug(
                         f"OneBot 分页拉取：API 调用返回空或无效数据，停止回溯。群: {group_id}"
                     )
                     break
 
-                messages = result.get("messages", [])
+                raw_messages_obj = result.get("messages", [])
+                if not isinstance(raw_messages_obj, list):
+                    break
+                messages: list[dict[str, object]] = [
+                    m for m in raw_messages_obj if isinstance(m, dict)
+                ]
                 if not messages:
                     logger.debug(
                         f"OneBot 分页拉取：获取到 0 条消息，停止回溯。群: {group_id}"
@@ -151,17 +182,19 @@ class OneBotAdapter(PlatformAdapter):
                 # 我们通过比较首尾消息的时间戳，动态识别出本批次中最旧的消息
                 first_msg = messages[0]
                 last_msg = messages[-1]
-                if first_msg.get("time", 0) <= last_msg.get("time", 0):
+                first_time = self._to_int(first_msg.get("time", 0))
+                last_time = self._to_int(last_msg.get("time", 0))
+                if first_time <= last_time:
                     # 正序：首条消息最旧
                     chunk_earliest_msg = first_msg
                 else:
                     # 逆序：末条消息最旧
                     chunk_earliest_msg = last_msg
 
-                chunk_earliest_time = chunk_earliest_msg.get("time", 0)
+                chunk_earliest_time = self._to_int(chunk_earliest_msg.get("time", 0))
 
                 for raw_msg in messages:
-                    msg_time = raw_msg.get("time", 0)
+                    msg_time = self._to_int(raw_msg.get("time", 0))
                     msg_id = str(raw_msg.get("message_id", ""))
 
                     # 基础过滤：去重
@@ -171,7 +204,9 @@ class OneBotAdapter(PlatformAdapter):
                         continue
 
                     # 身份过滤（排除机器人自己）
-                    sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
+                    sender = raw_msg.get("sender", {})
+                    sender_dict = sender if isinstance(sender, dict) else {}
+                    sender_id = str(sender_dict.get("user_id", ""))
                     if sender_id in self.bot_self_ids:
                         continue
 
@@ -210,7 +245,9 @@ class OneBotAdapter(PlatformAdapter):
                     )
                     break
 
-                current_anchor_id = new_anchor_id
+                current_anchor_id = (
+                    str(new_anchor_id) if new_anchor_id is not None else None
+                )
                 logger.debug(
                     f"OneBot 分页拉取进度: 已获取 {len(all_raw_messages)} 条基础/有效消息，下一次锚点: {current_anchor_id}"
                 )
@@ -243,22 +280,32 @@ class OneBotAdapter(PlatformAdapter):
             logger.warning(f"OneBot 分页获取消息失败: {e}")
             return []
 
-    def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
+    def _convert_message(
+        self, raw_msg: dict[str, object], group_id: str
+    ) -> UnifiedMessage | None:
         """内部方法：将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象。"""
         try:
             sender = raw_msg.get("sender", {})
+            if not isinstance(sender, dict):
+                sender = {}
             message_chain = raw_msg.get("message", [])
 
             # 兼容性处理：如果是字符串格式的 message，转换为列表格式
             if isinstance(message_chain, str):
                 message_chain = [{"type": "text", "data": {"text": message_chain}}]
+            if not isinstance(message_chain, list):
+                message_chain = []
 
             contents = []
             text_parts = []
 
             for seg in message_chain:
+                if not isinstance(seg, dict):
+                    continue
                 seg_type = seg.get("type", "")
                 seg_data = seg.get("data", {})
+                if not isinstance(seg_data, dict):
+                    seg_data = {}
 
                 if seg_type == "text":
                     text = seg_data.get("text", "")
@@ -271,14 +318,16 @@ class OneBotAdapter(PlatformAdapter):
                     # QQ 平台: subType=1 表示表情包，通过 raw_data 传递给下游统计
                     sub_type = seg_data.get("subType", seg_data.get("sub_type"))
                     # 安全地转换为整数，防止非数字值导致异常
-                    try:
-                        is_sticker = int(sub_type) == 1
-                    except (TypeError, ValueError):
-                        is_sticker = False
+                    is_sticker = self._to_int(sub_type, 0) == 1
                     # 只在 sub_type 有效时包含在 raw_data 中
-                    raw_data: dict[str, Any] = {"summary": seg_data.get("summary", "")}
+                    raw_data: dict[str, object] = {
+                        "summary": seg_data.get("summary", "")
+                    }
                     if sub_type is not None:
-                        raw_data["sub_type"] = int(sub_type)
+                        try:
+                            raw_data["sub_type"] = int(sub_type)
+                        except (TypeError, ValueError):
+                            pass
                     contents.append(
                         MessageContent(
                             type=MessageContentType.EMOJI
@@ -346,8 +395,9 @@ class OneBotAdapter(PlatformAdapter):
             reply_to = None
             for c in contents:
                 if c.type == MessageContentType.REPLY and c.raw_data:
-                    reply_to = str(c.raw_data.get("reply_id", ""))
-                    break
+                    if isinstance(c.raw_data, dict):
+                        reply_to = str(c.raw_data.get("reply_id", ""))
+                        break
 
             return UnifiedMessage(
                 message_id=str(raw_msg.get("message_id", "")),
@@ -357,7 +407,7 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=group_id,
                 text_content="".join(text_parts),
                 contents=tuple(contents),
-                timestamp=raw_msg.get("time", 0),
+                timestamp=self._to_int(raw_msg.get("time", 0)),
                 platform="onebot",
                 reply_to_id=reply_to,
             )
@@ -366,7 +416,9 @@ class OneBotAdapter(PlatformAdapter):
             logger.debug(f"OneBot _convert_message 错误: {e}")
             return None
 
-    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
+    def convert_to_raw_format(
+        self, messages: list[UnifiedMessage]
+    ) -> list[dict[str, object]]:
         """
         将统一格式转换回 OneBot v11 原生字典格式。
 
@@ -378,7 +430,7 @@ class OneBotAdapter(PlatformAdapter):
         Returns:
             list[dict]: OneBot 格式的消息字典列表
         """
-        raw_messages = []
+        raw_messages: list[dict[str, object]] = []
         for msg in messages:
             message_chain = []
             for content in msg.contents:
@@ -395,23 +447,28 @@ class OneBotAdapter(PlatformAdapter):
                         {"type": "at", "data": {"qq": content.at_user_id or ""}}
                     )
                 elif content.type == MessageContentType.EMOJI:
+                    raw_data = (
+                        content.raw_data if isinstance(content.raw_data, dict) else {}
+                    )
                     face_type = (
-                        content.raw_data.get("face_type", "face")
-                        if content.raw_data
-                        else "face"
+                        str(raw_data.get("face_type", "face")) if raw_data else "face"
                     )
                     message_chain.append(
                         {"type": face_type, "data": {"id": content.emoji_id or ""}}
                     )
                 elif content.type == MessageContentType.REPLY:
-                    reply_id = (
-                        content.raw_data.get("reply_id", "") if content.raw_data else ""
+                    raw_data = (
+                        content.raw_data if isinstance(content.raw_data, dict) else {}
                     )
+                    reply_id = str(raw_data.get("reply_id", "")) if raw_data else ""
                     message_chain.append({"type": "reply", "data": {"id": reply_id}})
                 elif content.type == MessageContentType.FORWARD:
-                    message_chain.append(
-                        {"type": "forward", "data": content.raw_data or {}}
-                    )
+                    forward_data: dict[str, object]
+                    if isinstance(content.raw_data, dict):
+                        forward_data = content.raw_data
+                    else:
+                        forward_data = {}
+                    message_chain.append({"type": "forward", "data": forward_data})
                 elif content.type == MessageContentType.VOICE:
                     message_chain.append(
                         {"type": "record", "data": {"url": content.url or ""}}
@@ -421,9 +478,10 @@ class OneBotAdapter(PlatformAdapter):
                         {"type": "video", "data": {"url": content.url or ""}}
                     )
                 elif content.type == MessageContentType.UNKNOWN and content.raw_data:
-                    message_chain.append(content.raw_data)
+                    if isinstance(content.raw_data, dict):
+                        message_chain.append(content.raw_data)
 
-            raw_msg = {
+            raw_msg: dict[str, object] = {
                 "message_id": msg.message_id,
                 "time": msg.timestamp,
                 "sender": {
@@ -465,7 +523,7 @@ class OneBotAdapter(PlatformAdapter):
             if reply_to:
                 message.insert(0, {"type": "reply", "data": {"id": reply_to}})
 
-            await self.bot.call_action(
+            await self._call_action(
                 "send_group_msg",
                 group_id=int(group_id),
                 message=message,
@@ -495,8 +553,14 @@ class OneBotAdapter(PlatformAdapter):
         try:
             use_base64 = False
             plugin = self.config.get("plugin_instance") if self.config else None
-            if plugin and hasattr(plugin, "config_manager"):
-                use_base64 = plugin.config_manager.get_enable_base64_image()
+            cfg_manager = getattr(plugin, "config_manager", None) if plugin else None
+            get_enable_base64_image = (
+                getattr(cfg_manager, "get_enable_base64_image", None)
+                if cfg_manager
+                else None
+            )
+            if callable(get_enable_base64_image):
+                use_base64 = bool(get_enable_base64_image())
 
             base_message = []
             if caption:
@@ -510,7 +574,7 @@ class OneBotAdapter(PlatformAdapter):
                 if b64_str:
                     message = list(base_message)
                     message.append({"type": "image", "data": {"file": b64_str}})
-                    await self.bot.call_action(
+                    await self._call_action(
                         "send_group_msg",
                         group_id=int(group_id),
                         message=message,
@@ -536,7 +600,7 @@ class OneBotAdapter(PlatformAdapter):
             try:
                 message = list(base_message)
                 message.append({"type": "image", "data": {"file": file_str}})
-                await self.bot.call_action(
+                await self._call_action(
                     "send_group_msg",
                     group_id=int(group_id),
                     message=message,
@@ -566,7 +630,7 @@ class OneBotAdapter(PlatformAdapter):
 
                 message = list(base_message)
                 message.append({"type": "image", "data": {"file": b64_str}})
-                await self.bot.call_action(
+                await self._call_action(
                     "send_group_msg",
                     group_id=int(group_id),
                     message=message,
@@ -616,7 +680,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             # 1. 获取最近的消息历史 (OneBot 标准 API)
             try:
-                history = await self.bot.call_action(
+                history_obj = await self._call_action(
                     "get_group_msg_history",
                     group_id=int(group_id),
                     count=100,  # 增大扫描深度以应对高频群聊
@@ -627,10 +691,17 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 return False  # API 失败时，我们保持谨慎，但不阻止重试
 
-            if not history or "messages" not in history:
-                messages = history if isinstance(history, list) else []
+            if isinstance(history_obj, dict):
+                raw_messages_obj = history_obj.get("messages", [])
+                messages = (
+                    [m for m in raw_messages_obj if isinstance(m, dict)]
+                    if isinstance(raw_messages_obj, list)
+                    else []
+                )
+            elif isinstance(history_obj, list):
+                messages = [m for m in history_obj if isinstance(m, dict)]
             else:
-                messages = history["messages"]
+                messages = []
 
             # 2. 逆序检查
             import time
@@ -650,8 +721,8 @@ class OneBotAdapter(PlatformAdapter):
             if not self_id:
                 # 最后的 API 兜底：尝试从 login_info 获取
                 try:
-                    login_info = await self.bot.call_action("get_login_info")
-                    if login_info and "user_id" in login_info:
+                    login_info = await self._call_action("get_login_info")
+                    if isinstance(login_info, dict) and "user_id" in login_info:
                         self_id = str(login_info["user_id"])
                         # 更新缓存，下次无需重复请求
                         if self_id not in self.bot_self_ids:
@@ -740,7 +811,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             # 策略 1: 优先尝试物理路径
             try:
-                await self.bot.call_action(
+                await self._call_action(
                     "upload_group_file",
                     group_id=int(group_id),
                     file=file_path,
@@ -755,7 +826,7 @@ class OneBotAdapter(PlatformAdapter):
                     logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
                     raise e
 
-                await self.bot.call_action(
+                await self._call_action(
                     "upload_group_file",
                     group_id=int(group_id),
                     file=file_b64,
@@ -770,7 +841,7 @@ class OneBotAdapter(PlatformAdapter):
     async def send_forward_msg(
         self,
         group_id: str,
-        nodes: list[dict],
+        nodes: list[Mapping[str, object]],
     ) -> bool:
         """
         发送群合并转发消息。
@@ -787,15 +858,21 @@ class OneBotAdapter(PlatformAdapter):
 
         try:
             # 兼容处理节点中的 uin -> user_id (有些后端偏好 uin)
+            normalized_nodes: list[dict[str, object]] = []
             for node in nodes:
-                if "data" in node:
-                    if "user_id" in node["data"] and "uin" not in node["data"]:
-                        node["data"]["uin"] = node["data"]["user_id"]
+                normalized_node = dict(node)
+                node_data = normalized_node.get("data")
+                if isinstance(node_data, Mapping):
+                    normalized_data = dict(node_data)
+                    if "user_id" in normalized_data and "uin" not in normalized_data:
+                        normalized_data["uin"] = normalized_data["user_id"]
+                    normalized_node["data"] = normalized_data
+                normalized_nodes.append(normalized_node)
 
-            await self.bot.call_action(
+            await self._call_action(
                 "send_group_forward_msg",
                 group_id=int(group_id),
-                messages=nodes,
+                messages=normalized_nodes,
             )
             return True
         except Exception as e:
@@ -807,12 +884,12 @@ class OneBotAdapter(PlatformAdapter):
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取指定群组的基础元数据。"""
         try:
-            result = await self.bot.call_action(
+            result = await self._call_action(
                 "get_group_info",
                 group_id=int(group_id),
             )
 
-            if not result:
+            if not isinstance(result, dict):
                 return None
 
             return UnifiedGroup(
@@ -829,21 +906,27 @@ class OneBotAdapter(PlatformAdapter):
     async def get_group_list(self) -> list[str]:
         """获取当前机器人已加入的所有群组 ID 列表。"""
         try:
-            result = await self.bot.call_action("get_group_list")
-            return [str(g.get("group_id", "")) for g in result or []]
+            result = await self._call_action("get_group_list")
+            if not isinstance(result, list):
+                return []
+            groups = [g for g in result if isinstance(g, dict)]
+            return [str(g.get("group_id", "")) for g in groups]
         except Exception:
             return []
 
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         """拉取整个群组成员列表。"""
         try:
-            result = await self.bot.call_action(
+            result = await self._call_action(
                 "get_group_member_list",
                 group_id=int(group_id),
             )
 
             members = []
-            for m in result or []:
+            iterable = result if isinstance(result, list) else []
+            for m in iterable:
+                if not isinstance(m, dict):
+                    continue
                 members.append(
                     UnifiedMember(
                         user_id=str(m.get("user_id", "")),
@@ -864,13 +947,13 @@ class OneBotAdapter(PlatformAdapter):
     ) -> UnifiedMember | None:
         """拉取特定群成员的详细名片及角色信息。"""
         try:
-            result = await self.bot.call_action(
+            result = await self._call_action(
                 "get_group_member_info",
                 group_id=int(group_id),
                 user_id=int(user_id),
             )
 
-            if not result:
+            if not isinstance(result, dict):
                 return None
 
             return UnifiedMember(
@@ -944,15 +1027,15 @@ class OneBotAdapter(PlatformAdapter):
             return None
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=5)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.read()
-                        b64 = base64.b64encode(data).decode("utf-8")
-                        content_type = resp.headers.get("Content-Type", "image/png")
-                        return f"data:{content_type};base64,{b64}"
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp,
+            ):
+                if resp.status == 200:
+                    data = await resp.read()
+                    b64 = base64.b64encode(data).decode("utf-8")
+                    content_type = resp.headers.get("Content-Type", "image/png")
+                    return f"data:{content_type};base64,{b64}"
         except Exception as e:
             logger.debug(f"OneBot 头像下载失败: {e}")
         return None
@@ -1012,7 +1095,7 @@ class OneBotAdapter(PlatformAdapter):
                 params["folder"] = folder_id
 
             try:
-                await self.bot.call_action("upload_group_file", **params)
+                await self._call_action("upload_group_file", **params)
                 logger.info(
                     f"OneBot 群文件上传成功: {params['name']} -> 群 {group_id}"
                     + (f" (目录: {folder_id})" if folder_id else " (根目录)")
@@ -1027,7 +1110,7 @@ class OneBotAdapter(PlatformAdapter):
                     raise e
 
                 params["file"] = b64_str
-                await self.bot.call_action("upload_group_file", **params)
+                await self._call_action("upload_group_file", **params)
                 logger.info(f"Base64 回退模式上传群文件成功: {params['name']}")
                 return True
 
@@ -1051,7 +1134,7 @@ class OneBotAdapter(PlatformAdapter):
             str | None: 创建成功时返回 folder_id，失败返回 None
         """
         try:
-            result = await self.bot.call_action(
+            result = await self._call_action(
                 "create_group_file_folder",
                 group_id=int(group_id),
                 name=folder_name,
@@ -1090,7 +1173,7 @@ class OneBotAdapter(PlatformAdapter):
                         API 不可用时返回空列表。
         """
         try:
-            result = await self.bot.call_action(
+            result = await self._call_action(
                 "get_group_root_files",
                 group_id=int(group_id),
             )
@@ -1216,7 +1299,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.debug(
                     f"[群分析相册] 正在调用 upload_image_to_qun_album (路径模式), 参数: {params}"
                 )
-                await self.bot.call_action("upload_image_to_qun_album", **params)
+                await self._call_action("upload_image_to_qun_album", **params)
                 logger.info(f"[群分析相册] 路径模式上传成功: 群 {group_id}")
                 return True
             except Exception as e1:
@@ -1239,7 +1322,7 @@ class OneBotAdapter(PlatformAdapter):
                     params["album_name"] = album_name
 
                 try:
-                    await self.bot.call_action("upload_image_to_qun_album", **params)
+                    await self._call_action("upload_image_to_qun_album", **params)
                     logger.info(
                         "[群分析相册] Base64 模式 (upload_image_to_qun_album) 上传成功"
                     )
@@ -1249,7 +1332,7 @@ class OneBotAdapter(PlatformAdapter):
                         f"[群分析相册] Base64 接口 1 (upload_image_to_qun_album) 失败: {e2}"
                     )
                     try:
-                        await self.bot.call_action("upload_group_album", **params)
+                        await self._call_action("upload_group_album", **params)
                         logger.info(
                             "[群分析相册] Base64 模式 (upload_group_album) 上传成功"
                         )
@@ -1258,7 +1341,7 @@ class OneBotAdapter(PlatformAdapter):
                         logger.debug(
                             f"[群分析相册] Base64 接口 2 (upload_group_album) 失败: {e3}"
                         )
-                        await self.bot.call_action("upload_qun_album", **params)
+                        await self._call_action("upload_qun_album", **params)
                         logger.info(
                             "[群分析相册] Base64 模式 (upload_qun_album) 上传成功"
                         )
@@ -1284,7 +1367,7 @@ class OneBotAdapter(PlatformAdapter):
         获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
 
-        def extract_list(data: Any) -> list[dict]:
+        def extract_list(data: object) -> list[dict]:
             if not data:
                 return []
             if isinstance(data, list):
@@ -1321,7 +1404,7 @@ class OneBotAdapter(PlatformAdapter):
                 logger.debug(
                     f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})..."
                 )
-                result = await self.bot.call_action(
+                result = await self._call_action(
                     action,
                     group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
                 )
@@ -1384,7 +1467,7 @@ class OneBotAdapter(PlatformAdapter):
             elif str(emoji) == "📊":
                 emoji_id = "124"  # 👌 表情 (表示任务处理完成)
 
-            await self.bot.call_action(
+            await self._call_action(
                 "set_msg_emoji_like",
                 message_id=int(message_id),
                 emoji_id=emoji_id,

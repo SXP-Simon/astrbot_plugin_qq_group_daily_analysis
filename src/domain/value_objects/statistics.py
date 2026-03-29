@@ -6,6 +6,36 @@
 """
 
 from dataclasses import dataclass, field
+from typing import TypeAlias
+
+JSONValue: TypeAlias = (
+    str | int | float | bool | None | dict[str, object] | list[object]
+)
+
+
+def _to_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _to_str_object_dict(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            result[key] = item
+    return result
 
 
 @dataclass(frozen=True)
@@ -26,15 +56,15 @@ class TokenUsage:
     total_tokens: int = 0
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TokenUsage":
+    def from_dict(cls, data: dict[str, object]) -> "TokenUsage":
         """从字典还原 TokenUsage 对象。"""
         return cls(
-            prompt_tokens=data.get("prompt_tokens", 0),
-            completion_tokens=data.get("completion_tokens", 0),
-            total_tokens=data.get("total_tokens", 0),
+            prompt_tokens=_to_int(data.get("prompt_tokens", 0)),
+            completion_tokens=_to_int(data.get("completion_tokens", 0)),
+            total_tokens=_to_int(data.get("total_tokens", 0)),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, int]:
         """转换为字典格式，用于序列化。"""
         return {
             "prompt_tokens": self.prompt_tokens,
@@ -88,28 +118,36 @@ class EmojiStatistics:
         )
 
     @classmethod
-    def from_dict(cls, data: dict) -> "EmojiStatistics":
+    def from_dict(cls, data: dict[str, object]) -> "EmojiStatistics":
         """从持久化字典构建统计对象。"""
         details = data.get("face_details", data.get("emoji_details", {}))
         if isinstance(details, dict):
-            details = tuple(details.items())
+            parsed_details = tuple(
+                (str(k), _to_int(v))
+                for k, v in details.items()
+                if isinstance(v, (int, float, str)) and str(v).strip()
+            )
+        else:
+            parsed_details = ()
 
         return cls(
-            standard_emoji_count=data.get(
-                "face_count", data.get("standard_emoji_count", 0)
+            standard_emoji_count=_to_int(
+                data.get("face_count", data.get("standard_emoji_count", 0))
             ),
-            custom_emoji_count=data.get(
-                "mface_count", data.get("custom_emoji_count", 0)
+            custom_emoji_count=_to_int(
+                data.get("mface_count", data.get("custom_emoji_count", 0))
             ),
-            animated_emoji_count=data.get(
-                "bface_count", data.get("animated_emoji_count", 0)
+            animated_emoji_count=_to_int(
+                data.get("bface_count", data.get("animated_emoji_count", 0))
             ),
-            sticker_count=data.get("sface_count", data.get("sticker_count", 0)),
-            other_emoji_count=data.get("other_emoji_count", 0),
-            emoji_details=details,
+            sticker_count=_to_int(
+                data.get("sface_count", data.get("sticker_count", 0))
+            ),
+            other_emoji_count=_to_int(data.get("other_emoji_count", 0)),
+            emoji_details=parsed_details,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """转换为持久化字典，包含向后兼容字段。"""
         return {
             "standard_emoji_count": self.standard_emoji_count,
@@ -139,39 +177,65 @@ class ActivityVisualization:
         daily_activity (tuple[tuple[str, int], ...]): 每日消息数分布
         user_activity_ranking (tuple[dict, ...]): 用户活跃排名数据
         peak_hours (tuple[int, ...]): 高峰小时 ID
-        heatmap_data (tuple[Any, ...]): 热力图原始数据
+        heatmap_data (tuple[object, ...]): 热力图原始数据
     """
 
     hourly_activity: tuple[tuple[int, int], ...] = field(default_factory=tuple)
     daily_activity: tuple[tuple[str, int], ...] = field(default_factory=tuple)
-    user_activity_ranking: tuple[dict, ...] = field(default_factory=tuple)
+    user_activity_ranking: tuple[dict[str, object], ...] = field(default_factory=tuple)
     peak_hours: tuple[int, ...] = field(default_factory=tuple)
-    heatmap_data: tuple = field(default_factory=tuple)
+    heatmap_data: tuple[tuple[str, int], ...] = field(default_factory=tuple)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ActivityVisualization":
+    def from_dict(cls, data: dict[str, object]) -> "ActivityVisualization":
         """从字典反序列话可视化数据。"""
-        hourly = data.get("hourly_activity", {})
-        daily = data.get("daily_activity", {})
-        ranking = data.get("user_activity_ranking", [])
-        peaks = data.get("peak_hours", [])
-        heatmap = data.get("activity_heatmap_data", data.get("heatmap_data", {}))
+        hourly_raw = data.get("hourly_activity", {})
+        daily_raw = data.get("daily_activity", {})
+        ranking_raw = data.get("user_activity_ranking", [])
+        peaks_raw = data.get("peak_hours", [])
+        heatmap_raw = data.get("activity_heatmap_data", data.get("heatmap_data", {}))
+
+        hourly: tuple[tuple[int, int], ...]
+        if isinstance(hourly_raw, dict):
+            hourly = tuple((_to_int(k), _to_int(v)) for k, v in hourly_raw.items())
+        else:
+            hourly = ()
+
+        daily: tuple[tuple[str, int], ...]
+        if isinstance(daily_raw, dict):
+            daily = tuple((str(k), _to_int(v)) for k, v in daily_raw.items())
+        else:
+            daily = ()
+
+        ranking: tuple[dict[str, object], ...]
+        if isinstance(ranking_raw, list):
+            ranking = tuple(item for item in ranking_raw if isinstance(item, dict))
+        else:
+            ranking = ()
+
+        peaks: tuple[int, ...]
+        if isinstance(peaks_raw, list):
+            peaks = tuple(
+                _to_int(p) for p in peaks_raw if isinstance(p, (int, float, str))
+            )
+        else:
+            peaks = ()
+
+        heatmap: tuple[tuple[str, int], ...]
+        if isinstance(heatmap_raw, dict):
+            heatmap = tuple((str(k), _to_int(v)) for k, v in heatmap_raw.items())
+        else:
+            heatmap = ()
 
         return cls(
-            hourly_activity=tuple(hourly.items())
-            if isinstance(hourly, dict)
-            else tuple(hourly),
-            daily_activity=tuple(daily.items())
-            if isinstance(daily, dict)
-            else tuple(daily),
-            user_activity_ranking=tuple(ranking),
-            peak_hours=tuple(peaks),
-            heatmap_data=tuple(heatmap.items())
-            if isinstance(heatmap, dict)
-            else tuple(heatmap),
+            hourly_activity=hourly,
+            daily_activity=daily,
+            user_activity_ranking=ranking,
+            peak_hours=peaks,
+            heatmap_data=heatmap,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """转换为字典。"""
         return {
             "hourly_activity": dict(self.hourly_activity),
@@ -220,29 +284,32 @@ class GroupStatistics:
         return self.emoji_statistics.total_count
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GroupStatistics":
+    def from_dict(cls, data: dict[str, object]) -> "GroupStatistics":
         """由字典数据构建完整的统计模型。"""
-        emoji_data = data.get("emoji_statistics", {})
+        emoji_data_raw = data.get("emoji_statistics", {})
+        emoji_data = _to_str_object_dict(emoji_data_raw)
         if not emoji_data:
             # 向后兼容：从旧版本扁平字段中恢复
             emoji_data = {
                 "face_count": data.get("emoji_count", 0),
             }
 
-        activity_data = data.get("activity_visualization", {})
-        token_data = data.get("token_usage", {})
+        activity_data_raw = data.get("activity_visualization", {})
+        token_data_raw = data.get("token_usage", {})
+        activity_data = _to_str_object_dict(activity_data_raw)
+        token_data = _to_str_object_dict(token_data_raw)
 
         return cls(
-            message_count=data.get("message_count", 0),
-            total_characters=data.get("total_characters", 0),
-            participant_count=data.get("participant_count", 0),
-            most_active_period=data.get("most_active_period", ""),
+            message_count=_to_int(data.get("message_count", 0)),
+            total_characters=_to_int(data.get("total_characters", 0)),
+            participant_count=_to_int(data.get("participant_count", 0)),
+            most_active_period=str(data.get("most_active_period", "") or ""),
             emoji_statistics=EmojiStatistics.from_dict(emoji_data),
             activity_visualization=ActivityVisualization.from_dict(activity_data),
             token_usage=TokenUsage.from_dict(token_data),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """转换为可进行 JSON 序列化的字典。"""
         return {
             "message_count": self.message_count,
@@ -310,7 +377,7 @@ class UserStatistics:
             return 0.0
         return self.reply_count / self.message_count
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """返回详细的用户行为分析字典。"""
         return {
             "user_id": self.user_id,

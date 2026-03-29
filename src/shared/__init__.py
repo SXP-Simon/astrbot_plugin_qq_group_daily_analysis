@@ -6,9 +6,9 @@ from .constants import ContentType, Platform, ReportFormat, TaskStatus
 from .trace_context import TraceContext
 
 __all__ = [
-    "TraceContext",
-    "Platform",
-    "TaskStatus",
     "ContentType",
+    "Platform",
     "ReportFormat",
+    "TaskStatus",
+    "TraceContext",
 ]

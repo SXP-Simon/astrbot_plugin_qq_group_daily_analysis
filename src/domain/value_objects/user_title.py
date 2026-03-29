@@ -5,6 +5,7 @@
 它是不可变的，不包含任何平台特定的逻辑。
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 
@@ -27,25 +28,25 @@ class UserTitle:
     mbti: str = ""
     reason: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """确保 ID 为字符串。"""
         if not isinstance(self.user_id, str):
             object.__setattr__(self, "user_id", str(self.user_id))
 
     @classmethod
-    def from_dict(cls, data: dict) -> "UserTitle":
+    def from_dict(cls, data: dict[str, object]) -> "UserTitle":
         """解析持久化字典。"""
         user_id = data.get("user_id", "")
 
         return cls(
-            name=data.get("name", "").strip(),
+            name=str(data.get("name", "")).strip(),
             user_id=str(user_id),
-            title=data.get("title", "").strip(),
-            mbti=data.get("mbti", "").strip().upper(),
-            reason=data.get("reason", "").strip(),
+            title=str(data.get("title", "")).strip(),
+            mbti=str(data.get("mbti", "")).strip().upper(),
+            reason=str(data.get("reason", "")).strip(),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         """导出字典。"""
         return {
             "name": self.name,
@@ -77,7 +78,7 @@ class UserTitleCollection:
         if title.is_valid:
             self.titles.append(title)
 
-    def add_from_dict(self, data: dict) -> None:
+    def add_from_dict(self, data: dict[str, object]) -> None:
         """解析并添加。"""
         self.add(UserTitle.from_dict(data))
 
@@ -89,12 +90,12 @@ class UserTitleCollection:
                 return title
         return None
 
-    def to_list(self) -> list[dict]:
+    def to_list(self) -> list[dict[str, str]]:
         """导出映射列表。"""
         return [t.to_dict() for t in self.titles]
 
     def __len__(self) -> int:
         return len(self.titles)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[UserTitle]:
         return iter(self.titles)
