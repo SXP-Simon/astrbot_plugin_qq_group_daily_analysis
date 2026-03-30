@@ -522,8 +522,8 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
             elif adapter and orig_msg_id:
                 await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "🔍"
-                )  # 🔍
+                    event.get_group_id(), orig_msg_id, "analysis_started"
+                )
 
             # 调用 DDD 应用级服务
             result = await self.analysis_service.execute_daily_analysis(
@@ -540,8 +540,8 @@ class GroupDailyAnalysis(Star):
 
             if not use_text_reply and adapter and orig_msg_id:
                 await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "📊"
-                )  # 📊
+                    event.get_group_id(), orig_msg_id, "analysis_done"
+                )
 
             async for res in self._send_analysis_report(event, result):
                 yield res

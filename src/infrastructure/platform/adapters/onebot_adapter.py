@@ -1377,12 +1377,13 @@ class OneBotAdapter(PlatformAdapter):
         支持 Go-CQHTTP, NapCat, Lagrange 等 OneBot 实现。
         """
         try:
-            # 语义化映射：根据用户喜好精细化 OneBot 端的降级
-            emoji_id = str(emoji)
-            if str(emoji) == "🔍":
-                emoji_id = "289"  # 🫣 表情 (表示任务已接收)
-            elif str(emoji) == "📊":
-                emoji_id = "124"  # 👌 表情 (表示任务处理完成)
+            reaction_key = str(emoji)
+            emoji_id = {
+                "analysis_started": "289",  # 🫣 表情 (表示任务已接收)
+                "analysis_done": "124",  # 👌 表情 (表示任务处理完成)
+                "🔍": "289",
+                "📊": "124",
+            }.get(reaction_key, reaction_key)
 
             await self.bot.call_action(
                 "set_msg_emoji_like",
