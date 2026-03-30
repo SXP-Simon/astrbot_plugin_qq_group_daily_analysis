@@ -764,11 +764,14 @@ class DiscordAdapter(PlatformAdapter):
             return False
 
         try:
-            # 映射常见的表情 ID 为文字表情，使分析状态在跨平台保持一致
-            mapping = {289: "🔍", 424: "📊", 124: "✅"}
-            emoji_to_use = emoji
-            if isinstance(emoji, int) or (isinstance(emoji, str) and emoji.isdigit()):
-                emoji_to_use = mapping.get(int(emoji), emoji)
+            reaction_key = str(emoji)
+            emoji_to_use = {
+                "analysis_started": "🔍",
+                "analysis_done": "📊",
+                "289": "🔍",
+                "124": "📊",
+                "424": "📊",
+            }.get(reaction_key, reaction_key)
 
             channel_id = int(group_id)
             channel = self._discord_client.get_channel(channel_id)
