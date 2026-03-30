@@ -250,6 +250,30 @@ class ConfigManager:
             "pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf"
         )
 
+    def get_html_output_dir(self) -> str:
+        """获取HTML输出目录"""
+        try:
+            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
+            data_path = Path(get_astrbot_data_path())
+            default_path = data_path / "plugin_data" / plugin_name / "self_hosted_html_reports"
+            return self._get_group("html").get("html_output_dir", str(default_path))
+        except Exception:
+            return self._get_group("html").get(
+                "html_output_dir",
+                "data/plugins/astrbot_plugin_qq_group_daily_analysis/self_hosted_html_reports",
+            )
+
+    def get_html_base_url(self) -> str:
+        """获取HTML外链Base URL"""
+        return self._get_group("html").get("html_base_url", "")
+
+    def get_html_filename_format(self) -> str:
+        """获取HTML文件名格式"""
+        return self._get_group("html").get(
+            "html_filename_format", "群聊分析报告_{group_id}_{date}.html"
+        )
+
+
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
         """获取话题分析提示词模板"""
         prompts_config = self._get_group("prompts").get("topic_analysis_prompts", {})

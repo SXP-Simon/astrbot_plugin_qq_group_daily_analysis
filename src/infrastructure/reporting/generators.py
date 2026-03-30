@@ -254,6 +254,101 @@ class ReportGenerator(IReportGenerator):
             logger.error(f"生成 PDF 报告失败: {e}")
             return None
 
+    async def generate_html_report(
+        self,
+        analysis_result: dict,
+        group_id: str,
+        avatar_url_getter=None,
+        nickname_getter=None,
+    ) -> tuple[str | None, str | None]:
+        """
+        生成HTML格式的分析报告，保存到指定目录
+
+        Args:
+            analysis_result: 分析结果字典
+            group_id: 群组ID
+            avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+            nickname_getter: 昵称获取函数
+
+        Returns:
+            tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
+        """
+        try:
+            import json
+
+            # 确保输出目录存在
+            output_dir = Path(self.config_manager.get_html_output_dir())
+            await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
+
+            # 生成文件名
+            current_date = datetime.now().strftime("%Y%m%d")
+            current_time = datetime.now().strftime("%H%M%S")
+            html_filename = self.config_manager.get_html_filename_format().format(
+                group_id=group_id, date=current_date
+            )
+            # 为避免同一天多次分析覆盖，添加时间戳
+            html_filename_base = html_filename.rsplit('.', 1)[0]
+            html_filename = f"{html_filename_base}_{current_time}.html"
+            json_filename = f"{html_filename_base}_{current_time}.json"
+
+            html_path = output_dir / html_filename
+            json_path = output_dir / json_filename
+
+            # 准备渲染数据
+            render_data = await self._prepare_render_data(
+                analysis_result,
+                chart_template="activity_chart.html",
+                avatar_url_getter=avatar_url_getter,
+                nickname_getter=nickname_getter,
+            )
+            logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
+
+            # 生成 HTML 内容（使用 Jinja2 渲染器，尝试 html_template.html，失败则回退到 image_template.html）
+            html_content = None
+            try:
+                html_content = self.html_templates.render_template(
+                    "html_template.html", **render_data
+                )
+                logger.info("使用 html_template.html 渲染成功")
+            except Exception as e:
+                logger.warning(f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}")
+                html_content = self.html_templates.render_template(
+                    "image_template.html", **render_data
+                )
+                logger.info("使用 image_template.html 渲染成功")
+
+            # 检查HTML内容是否有效
+            if not html_content:
+                logger.error("HTML报告渲染失败：返回空内容")
+                return None, None
+
+            logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
+
+            # 保存 HTML 文件
+            await asyncio.to_thread(
+                html_path.write_text, html_content, encoding="utf-8"
+            )
+            logger.info(f"HTML 报告已保存: {html_path}")
+
+            # 保存原始 JSON 数据
+            json_data = {
+                "analysis_result": analysis_result,
+                "group_id": group_id,
+                "generated_at": datetime.now().isoformat(),
+            }
+            await asyncio.to_thread(
+                json_path.write_text,
+                json.dumps(json_data, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+            logger.info(f"JSON 数据已保存: {json_path}")
+
+            return str(html_path.absolute()), str(json_path.absolute())
+
+        except Exception as e:
+            logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
+            return None, None
+
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
         stats = analysis_result["statistics"]
