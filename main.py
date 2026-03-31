@@ -619,7 +619,7 @@ class GroupDailyAnalysis(Star):
             pdf_path = await self.report_generator.generate_pdf_report(
                 analysis_result,
                 group_id,
-                avatar_url_getter=avatar_url_getter,
+                avatar_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
             if pdf_path:
