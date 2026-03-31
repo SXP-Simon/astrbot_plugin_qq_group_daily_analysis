@@ -217,14 +217,8 @@ class ReportGenerator(IReportGenerator):
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
-            # 获取输出目录。如果未配置，则由 data_dir 推理得出。
-            output_dir = self.config_manager.get_pdf_output_dir()
-            if not output_dir:
-                output_dir = self.data_dir / "reports"
-            else:
-                output_dir = Path(output_dir)
-
-            # 确保输出目录存在 (使用 asyncio.to_thread 避免阻塞)
+            # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
+            output_dir = Path(self.config_manager.get_pdf_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件名
@@ -289,14 +283,8 @@ class ReportGenerator(IReportGenerator):
         try:
             import json
 
-            # 获取输出目录。如果未配置，则由 data_dir 推理得出。
-            output_dir = self.config_manager.get_html_output_dir()
-            if not output_dir:
-                output_dir = self.data_dir / "self_hosted_html_reports"
-            else:
-                output_dir = Path(output_dir)
-
-            # 确保输出目录存在 (使用 asyncio.to_thread 避免阻塞)
+            # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
+            output_dir = Path(self.config_manager.get_html_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件名

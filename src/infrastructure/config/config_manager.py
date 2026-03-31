@@ -226,11 +226,14 @@ class ConfigManager:
         """获取PDF输出目录"""
         try:
             default_path = StarTools.get_data_dir() / "reports"
-            return self._get_group("pdf").get("pdf_output_dir", str(default_path))
+            val = self._get_group("pdf").get("pdf_output_dir")
+            return val if val else str(default_path)
         except Exception:
-            return self._get_group("pdf").get(
-                "pdf_output_dir",
-                "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
+            val = self._get_group("pdf").get("pdf_output_dir")
+            return (
+                val
+                if val
+                else "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports"
             )
 
     def get_bot_self_ids(self) -> list:
@@ -251,11 +254,14 @@ class ConfigManager:
         """获取HTML输出目录"""
         try:
             default_path = StarTools.get_data_dir() / "self_hosted_html_reports"
-            return self._get_group("html").get("html_output_dir", str(default_path))
+            val = self._get_group("html").get("html_output_dir")
+            return val if val else str(default_path)
         except Exception:
-            return self._get_group("html").get(
-                "html_output_dir",
-                "data/plugins/astrbot_plugin_qq_group_daily_analysis/self_hosted_html_reports",
+            val = self._get_group("html").get("html_output_dir")
+            return (
+                val
+                if val
+                else "data/plugins/astrbot_plugin_qq_group_daily_analysis/self_hosted_html_reports"
             )
 
     def get_html_base_url(self) -> str:
