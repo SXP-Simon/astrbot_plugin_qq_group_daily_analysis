@@ -7,7 +7,9 @@ import asyncio
 import base64
 import os
 import re
-from datetime import datetime
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
 
 import aiohttp
@@ -28,6 +30,7 @@ class ReportGenerator(IReportGenerator):
     def __init__(self, config_manager, data_dir):
         self._avatar_session = None
         self.config_manager = config_manager
+        self.data_dir = data_dir
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
         # 全局 T2I 渲染信号量，保护本地资源
@@ -36,7 +39,9 @@ class ReportGenerator(IReportGenerator):
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
-        self._avatar_cache = Cache(str(data_dir / "avatar"))  # user_id -> base64_uri
+        self._avatar_cache = Cache(
+            str(self.data_dir / "avatar")
+        )  # user_id -> base64_uri
         self._avatar_session_concurrent_semaphore = asyncio.Semaphore(
             MAX_CONCURRENT_DOWNLOADS
         )
@@ -205,13 +210,19 @@ class ReportGenerator(IReportGenerator):
         self,
         analysis_result: dict,
         group_id: str,
-        avatar_url_getter=None,
+        avatar_getter=None,
         nickname_getter=None,
     ) -> str | None:
         """生成PDF格式的分析报告"""
         try:
-            # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
-            output_dir = Path(self.config_manager.get_pdf_output_dir())
+            # 获取输出目录。如果未配置，则由 data_dir 推理得出。
+            output_dir = self.config_manager.get_pdf_output_dir()
+            if not output_dir:
+                output_dir = self.data_dir / "reports"
+            else:
+                output_dir = Path(output_dir)
+
+            # 确保输出目录存在 (使用 asyncio.to_thread 避免阻塞)
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件名
@@ -225,7 +236,7 @@ class ReportGenerator(IReportGenerator):
             render_data = await self._prepare_render_data(
                 analysis_result,
                 chart_template="activity_chart_pdf.html",
-                avatar_url_getter=avatar_url_getter,
+                avatar_url_getter=avatar_getter,
                 nickname_getter=nickname_getter,
             )
             logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
@@ -253,6 +264,129 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.error(f"生成 PDF 报告失败: {e}")
             return None
+
+    async def generate_html_report(
+        self,
+        analysis_result: dict,
+        group_id: str,
+        avatar_url_getter=None,
+        nickname_getter=None,
+    ) -> tuple[str | None, str | None]:
+        """
+        生成HTML格式的分析报告，保存到指定目录
+
+        Args:
+            analysis_result: 分析结果字典
+            group_id: 群组ID
+            avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+            nickname_getter: 昵称获取函数
+
+        Returns:
+            tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
+        """
+        try:
+            import json
+
+            # 获取输出目录。如果未配置，则由 data_dir 推理得出。
+            output_dir = self.config_manager.get_html_output_dir()
+            if not output_dir:
+                output_dir = self.data_dir / "self_hosted_html_reports"
+            else:
+                output_dir = Path(output_dir)
+
+            # 确保输出目录存在 (使用 asyncio.to_thread 避免阻塞)
+            await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
+
+            # 生成文件名
+            current_date = datetime.now().strftime("%Y%m%d")
+            current_time = datetime.now().strftime("%H%M%S")
+            html_filename = self.config_manager.get_html_filename_format().format(
+                group_id=group_id, date=current_date
+            )
+            # 为避免同一天多次分析覆盖，添加时间戳
+            html_filename_base = html_filename.rsplit(".", 1)[0]
+            html_filename = f"{html_filename_base}_{current_time}.html"
+            json_filename = f"{html_filename_base}_{current_time}.json"
+
+            html_path = output_dir / html_filename
+            json_path = output_dir / json_filename
+
+            # 准备渲染数据
+            render_data = await self._prepare_render_data(
+                analysis_result,
+                chart_template="activity_chart.html",
+                avatar_url_getter=avatar_url_getter,
+                nickname_getter=nickname_getter,
+            )
+            logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
+
+            # 生成 HTML 内容（使用 Jinja2 渲染器，尝试 html_template.html，失败则回退到 image_template.html）
+            html_content = None
+            try:
+                html_content = self.html_templates.render_template(
+                    "html_template.html", **render_data
+                )
+                logger.info("使用 html_template.html 渲染成功")
+            except Exception as e:
+                logger.warning(
+                    f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
+                )
+                html_content = self.html_templates.render_template(
+                    "image_template.html", **render_data
+                )
+                logger.info("使用 image_template.html 渲染成功")
+
+            # 检查HTML内容是否有效
+            if not html_content:
+                logger.error("HTML报告渲染失败：返回空内容")
+                return None, None
+
+            logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
+
+            # 保存 HTML 文件
+            await asyncio.to_thread(
+                html_path.write_text, html_content, encoding="utf-8"
+            )
+            logger.info(f"HTML 报告已保存: {html_path}")
+
+            def json_default_encoder(obj):
+                if hasattr(obj, "to_dict") and callable(obj.to_dict):
+                    return obj.to_dict()
+                if is_dataclass(obj) and not isinstance(obj, type):
+                    return asdict(obj)
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                if isinstance(obj, Enum):
+                    return obj.value
+                if isinstance(obj, (set, tuple)):
+                    return list(obj)
+                raise TypeError(
+                    f"Object of type {type(obj).__name__} is not JSON serializable"
+                )
+
+            # 保存原始 JSON 数据
+            json_data = {
+                "analysis_result": analysis_result,
+                "group_id": group_id,
+                "generated_at": datetime.now().isoformat(),
+            }
+            await asyncio.to_thread(
+                json_path.write_text,
+                json.dumps(
+                    json_data,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=json_default_encoder,
+                ),
+                encoding="utf-8",
+            )
+            logger.info(f"JSON 数据已保存: {json_path}")
+
+            return str(html_path.absolute()), str(json_path.absolute())
+
+        except Exception as e:
+            logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
+            return None, None
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
@@ -555,7 +689,10 @@ class ReportGenerator(IReportGenerator):
         """
         # 1. 检查缓存 (仅包含成功的头像数据)
         if avatar_id in self._avatar_cache:
-            return self._avatar_cache[avatar_id]
+            data = self._avatar_cache[avatar_id]
+            if isinstance(data, str):
+                return data
+            return str(data)
 
         # 2. 尝试获取头像字节流
         avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
