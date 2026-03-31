@@ -5,6 +5,7 @@
 
 import asyncio
 import base64
+import html
 import os
 import re
 from datetime import datetime
@@ -12,6 +13,7 @@ from pathlib import Path
 
 import aiohttp
 from diskcache import Cache
+from markupsafe import Markup
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
@@ -455,18 +457,19 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
-    ) -> str:
+    ) -> Markup | str:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
         """
-        import re
-
         pattern = r"\[(\d+)\]"
-        matches = re.findall(pattern, text)
-        if not matches:
-            return text
+        if not text:
+            return ""
 
-        async def replacer(match):
+        matches = list(re.finditer(pattern, text))
+        if not matches:
+            return self._escape_text_segment(text)
+
+        async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
             url = await self._get_user_avatar(
                 uid, avatar_url_getter
@@ -504,29 +507,26 @@ class ReportGenerator(IReportGenerator):
             if self._is_placeholder_display_name(name, uid):
                 name = str(uid)
 
-            return (
+            return Markup(
                 f'<span class="user-capsule" style="{capsule_style}">'
-                f'<img src="{url}" style="{img_style}">'
-                f'<span style="{name_style}">{name}</span>'
-                f"</span>"
+                f'<img src="{html.escape(url, quote=True)}" style="{img_style}">'
+                f'<span style="{name_style}">{html.escape(name)}</span>'
+                "</span>"
             )
 
-        # re.sub 不支持异步回调，需要先提取所有 ID 进行处理，或者使用自定义的替换逻辑
-        # 这里为了保持异步特性，我们需要手动处理
+        result: list[Markup | str] = []
+        last_end = 0
+        for match in matches:
+            result.append(self._escape_text_segment(text[last_end : match.start()]))
+            result.append(await render_capsule(match))
+            last_end = match.end()
 
-        # 1. 找出所有匹配项
-        matches = list(re.finditer(pattern, text))
-        if not matches:
-            return text
+        result.append(self._escape_text_segment(text[last_end:]))
+        return Markup("").join(result)
 
-        # 2. 从后往前替换，保持索引正确
-        result = text
-        for match in reversed(matches):
-            replacement = await replacer(match)
-            start, end = match.span()
-            result = result[:start] + replacement + result[end:]
-
-        return result
+    @staticmethod
+    def _escape_text_segment(text: str) -> Markup:
+        return Markup(html.escape(text, quote=False).replace("\n", "<br>"))
 
     @staticmethod
     def _is_placeholder_display_name(name: str | None, user_id: str) -> bool:
