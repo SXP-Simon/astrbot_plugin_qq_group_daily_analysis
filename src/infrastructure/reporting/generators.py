@@ -5,10 +5,13 @@
 
 import asyncio
 import base64
+from enum import Enum
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+
+from dataclasses import asdict, is_dataclass
 
 import aiohttp
 from diskcache import Cache
@@ -330,6 +333,19 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"HTML 报告已保存: {html_path}")
 
+            def json_default_encoder(obj):
+                if hasattr(obj, "to_dict") and callable(obj.to_dict):
+                    return obj.to_dict()
+                if is_dataclass(obj):
+                    return asdict(obj)
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                if isinstance(obj, Enum):
+                    return obj.value
+                if isinstance(obj, (set, tuple)):
+                    return list(obj)
+                raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
+
             # 保存原始 JSON 数据
             json_data = {
                 "analysis_result": analysis_result,
@@ -338,7 +354,7 @@ class ReportGenerator(IReportGenerator):
             }
             await asyncio.to_thread(
                 json_path.write_text,
-                json.dumps(json_data, ensure_ascii=False, indent=2),
+                json.dumps(json_data, ensure_ascii=False, indent=2, default=json_default_encoder),
                 encoding="utf-8"
             )
             logger.info(f"JSON 数据已保存: {json_path}")
