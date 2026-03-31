@@ -579,13 +579,13 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
-    ) -> Markup | str:
+    ) -> Markup:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
         """
         pattern = r"\[(\d+)\]"
         if not text:
-            return ""
+            return Markup("")
 
         matches = list(re.finditer(pattern, text))
         if not matches:
@@ -624,15 +624,17 @@ class ReportGenerator(IReportGenerator):
             name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
             # 3. 最终后备: 确保有头像和名称
-            if not url:
-                url = self._get_default_avatar_base64()
-            if self._is_placeholder_display_name(name, uid):
-                name = str(uid)
+            final_url = url if url else self._get_default_avatar_base64()
+            final_name = (
+                name
+                if (name and not self._is_placeholder_display_name(name, uid))
+                else str(uid)
+            )
 
             return Markup(
                 f'<span class="user-capsule" style="{capsule_style}">'
-                f'<img src="{html.escape(url, quote=True)}" style="{img_style}">'
-                f'<span style="{name_style}">{html.escape(name)}</span>'
+                f'<img src="{html.escape(final_url, quote=True)}" style="{img_style}">'
+                f'<span style="{name_style}">{html.escape(final_name)}</span>'
                 "</span>"
             )
 
