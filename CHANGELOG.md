@@ -1,11 +1,15 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.9] - feat(feishu): 尝试接入飞书并且回退黑白名单逻辑，保持旧版本逻辑，插件统一管理
+## [v4.9.10] - 解决 TG 无法贴表情的 bug，HTML 输出模式，优化渲染
+*   **🐛 TG 贴表情**: @clown145
+*   **✨ 新格式 HTML**: @lekoOwO
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.9] - feat(feishu): 尝试接入飞书并且回退黑白名单逻辑，保持旧版本逻辑，插件统一管理
 
 ## [v4.9.8] - feat(HatsuneMiku): 新增了一个名为 HatsuneMiku 的模板 (#134 @Shiitin)
 *   **🐛 黑白名单修复**: 分析名单准入并修复 AstrBot 内置白名单绕过问题 （情况如 #133 所述）
