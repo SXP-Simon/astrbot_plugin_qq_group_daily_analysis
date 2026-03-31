@@ -211,14 +211,14 @@ class ReportGenerator(IReportGenerator):
         """生成PDF格式的分析报告"""
         try:
             # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
-            output_dir = Path(self.config_manager.get_pdf_output_dir())
+            output_dir = Path(self.config_manager.get_report_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件名 (配置返回无后缀，手动加 .pdf)
             current_date = datetime.now().strftime("%Y%m%d")
-            filename = self.config_manager.get_pdf_filename_format().format(
+            filename = self.config_manager.get_report_filename_format().format(
                 group_id=group_id, date=current_date
-            )
+            ) + ".pdf"
             pdf_path = output_dir / filename
 
             # 准备渲染数据

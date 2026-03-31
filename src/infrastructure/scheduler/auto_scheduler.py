@@ -465,6 +465,10 @@ class AutoScheduler:
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
 
+            # 计算是否应该发送报告 (总开关 && 黑白名单允许)
+            should_send = self.config_manager.get_auto_analysis_send_report() and \
+                          self.config_manager.is_group_allowed_to_send_report(group_id)
+
             # 调度导出并发送报告
             await self.report_dispatcher.dispatch(
                 group_id,
@@ -472,6 +476,7 @@ class AutoScheduler:
                 adapter.platform_id
                 if hasattr(adapter, "platform_id")
                 else target_platform_id,
+                silent_mode=not should_send
             )
 
             logger.info(f"群 {group_id} 自动分析任务执行成功")
@@ -755,12 +760,17 @@ class AutoScheduler:
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
 
+            # 计算是否应该发送报告 (总开关 && 黑白名单允许)
+            should_send = self.config_manager.get_auto_analysis_send_report() and \
+                          self.config_manager.is_group_allowed_to_send_report(group_id)
+
             await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
                 adapter.platform_id
                 if hasattr(adapter, "platform_id")
                 else target_platform_id,
+                silent_mode=not should_send
             )
 
             # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）

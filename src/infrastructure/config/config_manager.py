@@ -49,6 +49,45 @@ class ConfigManager:
         """获取群组列表（用于黑白名单）"""
         return self._get_group("basic").get("group_list", [])
 
+    @staticmethod
+    def _match_umo_rule(rule: str, target: str) -> bool:
+        """
+        匹配目标源(target)是否符合指定规则(rule)
+        支持 UMO 前缀和包含的话题会话的后段(#)提权匹配。
+        """
+        if rule == target:
+            return True
+
+        # 分解目标 UMO
+        target_has_prefix = ":" in target
+        target_simple_id = target.split(":")[-1] if target_has_prefix else target
+        target_parent_id = target_simple_id.split("#", 1)[0] if "#" in target_simple_id else target_simple_id
+        target_has_topic = "#" in target_simple_id
+        target_prefix = target.rsplit(":", 1)[0] if target_has_prefix else ""
+
+        # 分解规则
+        rule_has_prefix = ":" in rule
+        rule_simple_id = rule.split(":")[-1] if rule_has_prefix else rule
+        rule_prefix = rule.rsplit(":", 1)[0] if rule_has_prefix else ""
+
+        if rule_has_prefix:
+            # 规则也带有平台前缀，则双方前缀必须完全一致
+            if not target_has_prefix or rule_prefix != target_prefix:
+                return False
+            # 允许 Telegram 等带后缀的话题会话通过“父 UMO”被包含命中
+            if target_has_topic and rule_simple_id == target_parent_id:
+                return True
+            return False
+        
+        # 规则只是一个单独的不带前缀的纯标识
+        if rule == target_simple_id:
+            return True
+        # 允许单独通过群号父 ID 来命中（如 rule="123", target="telegram2:Msg:123#456"）
+        if target_has_topic and rule == target_parent_id:
+            return True
+            
+        return False
+
     def is_group_allowed(self, group_id_or_umo: str) -> bool:
         """
         根据配置的白/黑名单判断是否允许在该群聊中使用
@@ -64,44 +103,7 @@ class ConfigManager:
         glist = [str(g) for g in self.get_group_list()]
         target = str(group_id_or_umo)
 
-        target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
-            target_simple_id.split("#", 1)[0]
-            if "#" in target_simple_id
-            else target_simple_id
-        )
-
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
-            if ":" in item:
-                if item == target:
-                    return True
-
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
-                # 例如: item=telegram2:GroupMessage:-1001
-                #      target=telegram2:GroupMessage:-1001#2264
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
-            return "#" in target_simple_id and item == target_parent_id
-
-        is_in_list = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+        is_in_list = any(self._match_umo_rule(item, target) for item in glist)
 
         if mode == "whitelist":
             return is_in_list
@@ -144,6 +146,33 @@ class ConfigManager:
         新版本改为由 scheduled_group_list_mode + scheduled_group_list 推导。
         """
         return self.is_auto_analysis_enabled()
+
+    def get_auto_analysis_send_report(self) -> bool:
+        """获取分析完成后是否自动发送报告"""
+        return self._get_group("auto_analysis").get("auto_analysis_send_report", True)
+
+    def get_send_report_mode(self) -> str:
+        """获取发送报告限制模式 (whitelist/blacklist/none)"""
+        return self._get_group("auto_analysis").get("send_report_mode", "none")
+
+    def get_send_report_list(self) -> list[str]:
+        """获取发送报告群组列表（用于黑白名单）"""
+        return self._get_group("auto_analysis").get("send_report_list", [])
+
+    def is_group_allowed_to_send_report(self, group_id_or_umo: str) -> bool:
+        """根据配置的白/黑名单判断是否允许向该群发送自动分析报告"""
+        mode = self.get_send_report_mode().lower()
+        if mode not in ("whitelist", "blacklist", "none"):
+            mode = "none"
+
+        if mode == "none":
+            return True
+
+        glist = [str(g) for g in self.get_send_report_list()]
+        target = str(group_id_or_umo)
+
+        matched = any(self._match_umo_rule(item, target) for item in glist)
+        return matched if mode == "whitelist" else not matched
 
     def get_output_format(self) -> str:
         """获取输出格式"""
@@ -223,18 +252,27 @@ class ConfigManager:
         """获取是否保持原始人格设定"""
         return self._get_group("analysis_features").get("keep_original_persona", False)
 
-    def get_pdf_output_dir(self) -> str:
-        """获取PDF输出目录"""
+    def get_enable_local_storage(self) -> bool:
+        """获取是否启用本地存储归档"""
+        return self._get_group("report_storage").get("enable_local_storage", True)
+
+    def get_report_output_dir(self) -> str:
+        """获取报告统一输出目录"""
         try:
             plugin_name = "astrbot_plugin_qq_group_daily_analysis"
             data_path = Path(get_astrbot_data_path())
             default_path = data_path / "plugin_data" / plugin_name / "reports"
-            return self._get_group("pdf").get("pdf_output_dir", str(default_path))
+            
+            # 优先读新版配置
+            report_storage = self._get_group("report_storage")
+            if "report_output_dir" in report_storage:
+                return report_storage.get("report_output_dir", str(default_path))
+                
+            # 兼容读取旧版配置 pdf_output_dir
+            pdf_group = self._get_group("pdf")
+            return pdf_group.get("pdf_output_dir", str(default_path))
         except Exception:
-            return self._get_group("pdf").get(
-                "pdf_output_dir",
-                "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
-            )
+            return "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports"
 
     def get_bot_self_ids(self) -> list:
         """获取机器人自身的 ID 列表 (兼容 bot_qq_ids)"""
@@ -244,11 +282,17 @@ class ConfigManager:
             ids = basic.get("bot_qq_ids", [])
         return ids
 
-    def get_pdf_filename_format(self) -> str:
-        """获取PDF文件名格式"""
-        return self._get_group("pdf").get(
-            "pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf"
-        )
+    def get_report_filename_format(self) -> str:
+        """获取报告文件名格式 (无后缀)"""
+        
+        report_storage = self._get_group("report_storage")
+        if "report_filename_format" in report_storage:
+            return report_storage.get("report_filename_format", "群聊分析报告_{group_id}_{date}")
+            
+        old_pdf_format = self._get_group("pdf").get("pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf")
+        if old_pdf_format.endswith(".pdf"):
+            return old_pdf_format[:-4]
+        return old_pdf_format
 
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
         """获取话题分析提示词模板"""
@@ -403,6 +447,21 @@ class ConfigManager:
         self._ensure_group("auto_analysis")["scheduled_group_list_mode"] = mode
         self.config.save_config()
 
+    def set_auto_analysis_send_report(self, enabled: bool):
+        """设置是否在分析后自动发送报告"""
+        self._ensure_group("auto_analysis")["auto_analysis_send_report"] = enabled
+        self.config.save_config()
+
+    def set_send_report_mode(self, mode: str):
+        """设置发送报告权限模式"""
+        self._ensure_group("auto_analysis")["send_report_mode"] = mode
+        self.config.save_config()
+
+    def set_send_report_list(self, group_list: list[str]):
+        """设置发送报告黑白名单"""
+        self._ensure_group("auto_analysis")["send_report_list"] = group_list
+        self.config.save_config()
+
     def get_scheduled_group_list(self) -> list[str]:
         """获取定时分析目标群列表"""
         return self._get_group("auto_analysis").get("scheduled_group_list", [])
@@ -429,24 +488,16 @@ class ConfigManager:
         group_list = [str(x).strip() for x in group_list]
         target = str(group_umo_or_id).strip()
 
-        # 兼容 UMO 匹配 (如果列表里写的是 ID，UMO 也能匹配上)
-        def match_umo(umo: str, item: str) -> bool:
-            if umo == item:
-                return True
-            if ":" in umo and umo.split(":")[-1] == item:
-                return True
-            return False
-
         if mode == "whitelist":
             if not group_list:
                 # 白名单为空：此级别不开启 (按需开启逻辑)
                 return False
-            return any(match_umo(target, x) for x in group_list)
+            return any(self._match_umo_rule(x, target) for x in group_list)
         else:  # blacklist
             if not group_list:
                 # 黑名单为空：全通过
                 return True
-            return not any(match_umo(target, x) for x in group_list)
+            return not any(self._match_umo_rule(x, target) for x in group_list)
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
@@ -492,14 +543,19 @@ class ConfigManager:
         self._ensure_group("analysis_features")["max_golden_quotes"] = count
         self.config.save_config()
 
-    def set_pdf_output_dir(self, directory: str):
-        """设置PDF输出目录"""
-        self._ensure_group("pdf")["pdf_output_dir"] = directory
+    def set_enable_local_storage(self, enabled: bool):
+        """设置是否启用本地存储归档"""
+        self._ensure_group("report_storage")["enable_local_storage"] = enabled
         self.config.save_config()
 
-    def set_pdf_filename_format(self, format_str: str):
-        """设置PDF文件名格式"""
-        self._ensure_group("pdf")["pdf_filename_format"] = format_str
+    def set_report_output_dir(self, directory: str):
+        """设置报告产出目录"""
+        self._ensure_group("report_storage")["report_output_dir"] = directory
+        self.config.save_config()
+
+    def set_report_filename_format(self, format_str: str):
+        """设置报告文件名格式"""
+        self._ensure_group("report_storage")["report_filename_format"] = format_str
         self.config.save_config()
 
     def get_report_template(self) -> str:
@@ -664,11 +720,14 @@ class ConfigManager:
 
     def get_browser_path(self) -> str:
         """获取自定义浏览器路径"""
+        report_storage = self._get_group("report_storage")
+        if "browser_path" in report_storage:
+            return report_storage.get("browser_path", "")
         return self._get_group("pdf").get("browser_path", "")
 
     def set_browser_path(self, path: str):
         """设置自定义浏览器路径"""
-        self._ensure_group("pdf")["browser_path"] = path
+        self._ensure_group("report_storage")["browser_path"] = path
         self.config.save_config()
 
     def reload_playwright(self) -> bool:

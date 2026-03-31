@@ -76,7 +76,7 @@
                     "format"
                 ],
                 "default": "scrapbook",
-                "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
+                "hint": "分析报告使用的HTML模板名称，注意：该外部主题模板仅适用于 image(图片) 和 pdf(PDF文件) 格式，text(文本) 格式无效不会生效。QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
             },
             "debug_mode": {
                 "type": "bool",
@@ -129,6 +129,32 @@
                 "description": "定时分析群列表",
                 "default": [],
                 "hint": "定时任务群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。注意：whitelist + 空列表 = 不会开启定时任务。即使某群在增量名单里，只要不在定时白名单里，也不会自动触发。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "auto_analysis_send_report": {
+                "type": "bool",
+                "description": "分析后自动发送报告",
+                "default": true,
+                "hint": "总开关。开启后，分析定时完成后会尝试将报告推送到群聊；关闭后，仅在后台完成数据归档和本地报告生成，绝对不会发送到任何群聊。"
+            },
+            "send_report_mode": {
+                "description": "发送报告组限制模式",
+                "type": "string",
+                "options": [
+                    "whitelist",
+                    "blacklist",
+                    "none"
+                ],
+                "default": "none",
+                "hint": "搭配发信开关使用。whitelist: 仅允许向列表内群聊发送报告；blacklist: 拒绝向列表内群聊发送；none: 不设限制（全发）"
+            },
+            "send_report_list": {
+                "type": "list",
+                "description": "发送群聊白/黑名单列表",
+                "default": [],
+                "hint": "黑白名单模式下使用的群组列表。支持填写 AstrBot UMO (如 xxxxx:GroupMessage:123456) 或纯群号 (如 123456 将尝试匹配)。",
                 "items": {
                     "type": "string"
                 }
@@ -336,28 +362,34 @@
             }
         }
     },
-    "pdf": {
-        "description": "PDF 设置",
+    "report_storage": {
+        "description": "分析报告本地存储设置",
         "type": "object",
-        "hint": "PDF 报告输出相关配置，包括输出目录、浏览器路径和文件名格式",
+        "hint": "统一管理所有格式（图片、文本、PDF）分析报告的本地存档行为",
         "items": {
-            "pdf_output_dir": {
+            "enable_local_storage": {
+                "type": "bool",
+                "description": "启用本地存储归档",
+                "default": true,
+                "hint": "开启后所有的报告（图片、文本、PDF）生成后都会被长久保存在统一输出目录中；关闭后报告将直接推送至群聊不再留底浪费空间（对纯净群管理员有帮助）。"
+            },
+            "report_output_dir": {
                 "type": "string",
-                "description": "PDF输出目录",
+                "description": "报告统一输出目录",
                 "default": "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
-                "hint": "PDF报告文件的保存目录"
+                "hint": "无论是png图片、文本md文档还是pdf，生成后均会存放在此文件夹中长久归档"
+            },
+            "report_filename_format": {
+                "type": "string",
+                "description": "报告文件名格式",
+                "default": "群聊分析报告_{group_id}_{date}",
+                "hint": "报告文件名格式，无需加后缀。支持变量：{group_id}(群号)、{date}(日期)。插件会自动根据生成格式补齐 .png / .md / .pdf 后缀"
             },
             "browser_path": {
                 "type": "string",
-                "description": "自定义浏览器路径",
+                "description": "自定义浏览器路径 (生成 PDF 时使用)",
                 "default": "",
                 "hint": "要填写的话请你清楚自己在干什么。自定义浏览器的可执行文件路径（如 Chrome 或 Edge 的 .exe 文件）。提示：如果是在网页后台设置，则直接输入普通路径即可（如 C:\\Program Files\\...）；如果是手动编辑 config.json 文件，请务必使用双反斜杠 '\\\\' 分隔路径。"
-            },
-            "pdf_filename_format": {
-                "type": "string",
-                "description": "PDF文件名格式",
-                "default": "群聊分析报告_{group_id}_{date}.pdf",
-                "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
             }
         }
     },

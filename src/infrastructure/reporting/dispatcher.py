@@ -3,6 +3,7 @@ import os
 import tempfile
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ...shared.trace_context import TraceContext
@@ -31,6 +32,7 @@ class ReportDispatcher:
         group_id: str,
         analysis_result: dict[str, Any],
         platform_id: str | None = None,
+        silent_mode: bool = False,
     ):
         """
         分发分析报告
@@ -38,16 +40,16 @@ class ReportDispatcher:
         trace_id = TraceContext.get()
         output_format = self.config_manager.get_output_format()
         logger.info(
-            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
+            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format}, 静默: {silent_mode})"
         )
 
         success = False
         if output_format == "image":
-            success = await self._dispatch_image(group_id, analysis_result, platform_id)
+            success = await self._dispatch_image(group_id, analysis_result, platform_id, silent_mode)
         elif output_format == "pdf":
-            success = await self._dispatch_pdf(group_id, analysis_result, platform_id)
+            success = await self._dispatch_pdf(group_id, analysis_result, platform_id, silent_mode)
         else:
-            success = await self._dispatch_text(group_id, analysis_result, platform_id)
+            success = await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
         if success:
             logger.info(f"[{trace_id}] 群 {group_id} 的报告分发成功")
@@ -55,13 +57,13 @@ class ReportDispatcher:
             logger.warning(f"[{trace_id}] 群 {group_id} 的报告分发失败")
 
     async def _dispatch_image(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None, silent_mode: bool = False
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
-            return await self._dispatch_text(group_id, analysis_result, platform_id)
+            return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
         # 2. 生成图片
         image_url = None
@@ -86,8 +88,14 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
             # image_url and html_content remain None
 
-        # 3. 发送图片
+        # 3. 发送图片 (或静默拦截)
         if image_url:
+            # 执行统一本地存档 (PNG)
+            self._save_to_local_binary(group_id, image_url, ".png")
+            if silent_mode:
+                logger.info(f"[{trace_id}] 群 {group_id} 图片报告已归档，静默模式不推送。")
+                return True
+
             caption = TraceContext.make_report_caption()
             sent = await self.message_sender.send_image_smart(
                 group_id, image_url, caption, platform_id
@@ -124,10 +132,10 @@ class ReportDispatcher:
 
         # 6. 最终回退：文本报告
         logger.warning(f"[{trace_id}] Falling back to text report.")
-        return await self._dispatch_text(group_id, analysis_result, platform_id)
+        return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
     async def _dispatch_pdf(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None, silent_mode: bool = False
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查 Playwright
@@ -135,7 +143,7 @@ class ReportDispatcher:
             logger.warning(
                 f"[{trace_id}] Playwright not available, falling back to text."
             )
-            return await self._dispatch_text(group_id, analysis_result, platform_id)
+            return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
         # 2. 生成 PDF
         pdf_path = None
@@ -146,11 +154,29 @@ class ReportDispatcher:
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate PDF report: {e}")
 
-        # 3. 发送 PDF
+        # 3. 发送 PDF (或静默拦截)
+        # 注意: PDF 已经在 generate 时由 Generator 持久化了，无需再次存档
         if pdf_path:
-            sent = await self.message_sender.send_pdf(
-                group_id, pdf_path, "📊 每日群聊分析报告已生成：", platform_id
-            )
+            sent = False
+            if silent_mode:
+                logger.info(f"[{trace_id}] 群 {group_id} PDF报告静默模式不推送。")
+                sent = True
+            else:
+                sent = await self.message_sender.send_pdf(
+                    group_id, pdf_path, "📊 每日群聊分析报告已生成：", platform_id
+                )
+            
+            # 如果不启用本地存储，且发信结束（或静默阻断），应当清理 Generator 生成出来的临时文件
+            if not self.config_manager.get_enable_local_storage():
+                try:
+                    Path(pdf_path).unlink(missing_ok=True)
+                    logger.debug(f"[{trace_id}] 本地存储归档未启用，清理PDF缓存({pdf_path})")
+                except OSError as e:
+                    # missing_ok=True 已经忽略文件不存在的情况；其他 OSError 需要记录，避免静默失败
+                    logger.warning(
+                        f"[{trace_id}] 本地存储归档未启用，清理PDF缓存失败({pdf_path}): {e!r}"
+                    )
+
             if sent:
                 return True
 
@@ -158,13 +184,22 @@ class ReportDispatcher:
         logger.warning(
             f"[{trace_id}] PDF dispatch failed, falling back to text report."
         )
-        return await self._dispatch_text(group_id, analysis_result, platform_id)
+        return await self._dispatch_text(group_id, analysis_result, platform_id, silent_mode)
 
     async def _dispatch_text(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None, silent_mode: bool = False
     ) -> bool:
         try:
+            trace_id = TraceContext.get()
             text_report = self.report_generator.generate_text_report(analysis_result)
+            
+            # 执行本地存档 (Markdown)
+            self._save_to_local_text(group_id, text_report, ".md")
+            
+            if silent_mode:
+                logger.info(f"[{trace_id}] 群 {group_id} 文本报告已归档，静默模式不推送。")
+                return True
+
             return await self.message_sender.send_text(
                 group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
             )
@@ -301,3 +336,61 @@ class ReportDispatcher:
         if adapter and hasattr(adapter, "upload_group_file_to_folder"):
             return adapter
         return None
+
+    # ================================================================
+    # 全局报告本地持久化存储（统一归档）
+    # ================================================================
+
+    def _get_archive_path(self, group_id: str, extension: str) -> str:
+        """获取并创建报告的统一输出归档路径"""
+        output_dir = Path(self.config_manager.get_report_output_dir())
+        output_dir.mkdir(parents=True, exist_ok=True)
+        current_date = datetime.now().strftime("%Y%m%d")
+        
+        base_name = self.config_manager.get_report_filename_format().format(
+            group_id=group_id, date=current_date
+        )
+        return str(output_dir / f"{base_name}{extension}")
+
+    def _save_to_local_binary(self, group_id: str, image_url: str, ext: str):
+        """将二进制报告（如图片Base64）存留本地硬盘永久归档"""
+        if not self.config_manager.get_enable_local_storage():
+            return
+            
+        try:
+            image_data = None
+            if image_url.startswith("base64://"):
+                image_data = base64.b64decode(image_url[len("base64://") :])
+            elif image_url.startswith("data:"):
+                parts = image_url.split(",", 1)
+                if len(parts) == 2:
+                    image_data = base64.b64decode(parts[1])
+            elif os.path.isfile(image_url):
+                with open(image_url, "rb") as f:
+                    image_data = f.read()
+            elif image_url.startswith("file:///"):
+                p = image_url[len("file:///") :]
+                if os.path.isfile(p):
+                    with open(p, "rb") as f:
+                        image_data = f.read()
+
+            if image_data:
+                save_path = self._get_archive_path(group_id, ext)
+                with open(save_path, "wb") as f:
+                    f.write(image_data)
+                logger.debug(f"已持久化归档报告二进制文件至: {save_path}")
+        except Exception as e:
+            logger.warning(f"持久化归档生成文件失败: {e}")
+
+    def _save_to_local_text(self, group_id: str, text: str, ext: str):
+        """将纯文本报告存留本地硬盘永久归档"""
+        if not self.config_manager.get_enable_local_storage():
+            return
+            
+        try:
+            save_path = self._get_archive_path(group_id, ext)
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            logger.debug(f"已持久化归档纯文本报告至: {save_path}")
+        except Exception as e:
+            logger.warning(f"持久化归档生成文件失败: {e}")
