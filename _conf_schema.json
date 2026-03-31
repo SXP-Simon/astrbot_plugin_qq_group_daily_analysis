@@ -61,7 +61,7 @@
                 "type": "string",
                 "description": "输出格式",
                 "default": "image",
-                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
+                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)、html(HTML文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
             },
             "report_template": {
                 "type": "string",
@@ -82,7 +82,7 @@
                 "type": "bool",
                 "description": "调试模式（建议关闭）",
                 "default": false,
-                "hint": "启用后，会在 plugin_data/debug_data 目录下保存每次分析的平台 API 原始历史消息和 Prompt 原文，用于调试和优化提示词。"
+                "hint": "启用后，会在插件数据目录下的 debug_data 目录中保存每次分析的平台 API 原始历史消息和 Prompt 原文，用于调试和优化提示词。"
             },
             "enable_base64_image": {
                 "type": "bool",
@@ -344,8 +344,8 @@
             "pdf_output_dir": {
                 "type": "string",
                 "description": "PDF输出目录",
-                "default": "data/plugins/astrbot_plugin_qq_group_daily_analysis/reports",
-                "hint": "PDF报告文件的保存目录"
+                "default": "",
+                "hint": "PDF报告文件的保存目录。留空则自动使用插件数据目录下的 reports 目录。"
             },
             "browser_path": {
                 "type": "string",
@@ -358,6 +358,31 @@
                 "description": "PDF文件名格式",
                 "default": "群聊分析报告_{group_id}_{date}.pdf",
                 "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
+            }
+        }
+    },
+    "html": {
+        "description": "HTML 设置",
+        "type": "object",
+        "hint": "HTML 报告输出相关配置，包括外链 Base URL 和报告储存目录",
+        "items": {
+            "html_base_url": {
+                "type": "string",
+                "description": "外鏈 Base URL",
+                "default": "",
+                "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。"
+            },
+            "html_output_dir": {
+                "type": "string",
+                "description": "报告储存目录",
+                "default": "",
+                "hint": "HTML报告文件的保存目录，用于存储生成的 HTML 文件和原始 JSON 数据。留空则自动使用插件数据目录下的 self_hosted_html_reports 目录。"
+            },
+            "html_filename_format": {
+                "type": "string",
+                "description": "HTML文件名格式",
+                "default": "群聊分析报告_{group_id}_{date}.html",
+                "hint": "HTML文件名格式，支持变量：{group_id}(群号)、{date}(日期)"
             }
         }
     },
