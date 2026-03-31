@@ -4,10 +4,9 @@
 """
 
 import sys
-from pathlib import Path
 
 from astrbot.api import AstrBotConfig
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.api.star import StarTools
 
 from ...utils.logger import logger
 
@@ -226,9 +225,7 @@ class ConfigManager:
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""
         try:
-            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
-            data_path = Path(get_astrbot_data_path())
-            default_path = data_path / "plugin_data" / plugin_name / "reports"
+            default_path = StarTools.get_data_dir() / "reports"
             return self._get_group("pdf").get("pdf_output_dir", str(default_path))
         except Exception:
             return self._get_group("pdf").get(
@@ -248,6 +245,27 @@ class ConfigManager:
         """获取PDF文件名格式"""
         return self._get_group("pdf").get(
             "pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf"
+        )
+
+    def get_html_output_dir(self) -> str:
+        """获取HTML输出目录"""
+        try:
+            default_path = StarTools.get_data_dir() / "self_hosted_html_reports"
+            return self._get_group("html").get("html_output_dir", str(default_path))
+        except Exception:
+            return self._get_group("html").get(
+                "html_output_dir",
+                "data/plugins/astrbot_plugin_qq_group_daily_analysis/self_hosted_html_reports",
+            )
+
+    def get_html_base_url(self) -> str:
+        """获取HTML外链Base URL"""
+        return self._get_group("html").get("html_base_url", "")
+
+    def get_html_filename_format(self) -> str:
+        """获取HTML文件名格式"""
+        return self._get_group("html").get(
+            "html_filename_format", "群聊分析报告_{group_id}_{date}.html"
         )
 
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:

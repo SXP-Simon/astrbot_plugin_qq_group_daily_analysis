@@ -279,16 +279,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
             session_id: 会话ID
         """
         try:
-            from pathlib import Path
+            from astrbot.api.star import StarTools
 
-            from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
-
-            plugin_name = "astrbot_plugin_qq_group_daily_analysis"
-            base_data_path = get_astrbot_plugin_data_path()
-            if isinstance(base_data_path, str):
-                base_data_path = Path(base_data_path)
-
-            data_path = base_data_path / plugin_name / "debug_data"
+            data_path = StarTools.get_data_dir() / "debug_data"
             data_path.mkdir(parents=True, exist_ok=True)
 
             file_name = f"{session_id}_{self.get_data_type()}.txt"

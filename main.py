@@ -619,7 +619,7 @@ class GroupDailyAnalysis(Star):
             pdf_path = await self.report_generator.generate_pdf_report(
                 analysis_result,
                 group_id,
-                avatar_url_getter=avatar_url_getter,
+                avatar_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
             if pdf_path:
@@ -629,6 +629,31 @@ class GroupDailyAnalysis(Star):
                     )
             else:
                 yield event.plain_result("⚠️ PDF 生成失败。")
+
+        elif output_format == "html":
+            html_path, json_path = await self.report_generator.generate_html_report(
+                analysis_result,
+                group_id,
+                avatar_url_getter=avatar_url_getter,
+                nickname_getter=nickname_getter,
+            )
+            if html_path:
+                # 发送 HTML 文件
+                if not await adapter.send_file(group_id, html_path):
+                    yield event.chain_result(
+                        [File(name=Path(html_path).name, file=html_path)]
+                    )
+
+                # 如果配置了外链 Base URL，则也发送超链接
+                base_url = self.config_manager.get_html_base_url()
+                if base_url:
+                    filename = Path(html_path).name
+                    url = f"{base_url.rstrip('/')}/{filename}"
+                    link_message = f"报告已生成: {url}"
+                    if not await adapter.send_text(group_id, link_message):
+                        yield event.plain_result(link_message)
+            else:
+                yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
@@ -640,7 +665,7 @@ class GroupDailyAnalysis(Star):
     async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
         """
         设置分析报告输出格式（跨平台支持）
-        用法: /设置格式 [image|text|pdf]
+        用法: /设置格式 [image|text|pdf|html]
         """
         group_id = self._get_group_id_from_event(event)
 
@@ -661,13 +686,14 @@ class GroupDailyAnalysis(Star):
 • image - 图片格式 (默认)
 • text - 文本格式
 • pdf - PDF 格式 {pdf_status}
+• html - HTML 格式
 
 用法: /设置格式 [格式名称]""")
             return
 
         format_type = format_type.lower()
-        if format_type not in ["image", "text", "pdf"]:
-            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
+        if format_type not in ["image", "text", "pdf", "html"]:
+            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf, html")
             return
 
         if format_type == "pdf" and not self.config_manager.playwright_available:
