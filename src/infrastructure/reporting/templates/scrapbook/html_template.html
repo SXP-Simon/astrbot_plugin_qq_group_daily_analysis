@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五彩斑斓的一天，来看看群里发生了什么吧！ · {{current_date}}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- 引入手写字体和正文阅读字体 -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            /* 卡通手账调色板 */
+            --bg-paper: #fdfbf7;
+            --ink-primary: #5d4037;
+            /* 像铅笔/墨水的深褐色 */
+            --ink-secondary: #8d6e63;
+
+            --color-yellow: #fff9c4;
+            --color-pink: #ffccbc;
+            --color-blue: #b3e5fc;
+            --color-green: #c8e6c9;
+            --color-purple: #e1bee7;
+
+            --accent-orange: #ff7043;
+
+            /* MBTI 专属高对比色 */
+            --mbti-bg: #ede7f6;
+            --mbti-border: #9575cd;
+            --mbti-text: #512da8;
+
+            /* 称号专属色 */
+            --title-bg: #fffde7;
+            --title-border: #ffb74d;
+            --title-text: #bf360c;
+
+            --font-title: 'ZCOOL KuaiLe', cursive;
+            /* 标题字体 */
+            --font-hand: 'Patrick Hand', "KaiTi", "STKaiti", serif;
+            /* 手写体 */
+            --font-body: 'Noto Sans SC', sans-serif;
+            /* 正文体 */
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* ======= Scrapbook Footer: Sticker Collection ======= */
+        .footer {
+            margin-top: 50px;
+            display: flex;
+            flex-direction: row !important;
+            /* Force horizontal tiling */
+            flex-wrap: nowrap !important;
+            align-items: stretch;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 35px 25px;
+            position: relative;
+            min-height: 160px;
+            /* Space for items and potential characters */
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 15px;
+            border: 2px dashed #eee;
+        }
+
+        .footer-card {
+            background-color: #fff;
+            border: 2px solid var(--ink-primary);
+            padding: 15px;
+            position: relative;
+            box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.08);
+            font-family: var(--font-hand);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 5px;
+            flex: 1;
+            min-width: 0;
+            /* Allow shrinking below content width */
+            text-align: center;
+        }
+
+        .footer-card .card-tape {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.05);
+            /* Sticker tape fallback */
+            z-index: 2;
+        }
+
+        .footer-card .footer-icon {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+            opacity: 0.8;
+        }
+
+        /* Varient 1: Project Info */
+        .footer-card.info-card {
+            background-color: #fffdf0;
+            transform: rotate(-1deg);
+            border-color: #ffb74d;
+        }
+
+        .footer-card.info-card .card-tape {
+            background: rgba(255, 183, 77, 0.4);
+        }
+
+        /* Varient 2: GitHub Repo */
+        .footer-card.repo-card {
+            background-color: #f0f7ff;
+            transform: rotate(1.5deg);
+            border-color: #64b5f6;
+        }
+
+        .footer-card.repo-card .card-tape {
+            background: rgba(100, 181, 246, 0.4);
+        }
+
+        /* Varient 3: AI Stats */
+        .footer-card.stats-card {
+            background-color: #f5f0ff;
+            transform: rotate(-0.5deg);
+            border-color: #9575cd;
+        }
+
+        .footer-card.stats-card .card-tape {
+            background: rgba(149, 117, 205, 0.4);
+        }
+
+        .footer-card-title {
+            font-weight: bold;
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--ink-primary);
+        }
+
+        .footer-card-content {
+            font-size: 0.95rem;
+            color: #666;
+            word-break: break-all;
+        }
+
+        .footer-card-content p {
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        body {
+            font-family: var(--font-body);
+            color: var(--ink-primary);
+            background-color: var(--bg-paper);
+            /* 点阵纸背景纹理 */
+            background-image: radial-gradient(#ddd 2px, transparent 2px);
+            background-size: 20px 20px;
+            min-height: 100vh;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        /* SVG 图标通用样式 */
+        .doodle {
+            width: 1em;
+            height: 1em;
+            fill: currentColor;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+            background: #fff;
+            border: 2px solid var(--ink-primary);
+            border-radius: 20px;
+            padding: 40px;
+            /* Stacked "Paper" Effect: Blue Shadow -> Pink Shadow -> Soft Drop Shadow */
+            box-shadow:
+                8px 8px 0 var(--color-blue),
+                16px 16px 0 var(--color-pink),
+                0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Stitching Effect */
+        .container::before {
+            content: "";
+            position: absolute;
+            top: 12px;
+            bottom: 12px;
+            left: 12px;
+            right: 12px;
+            border: 2px dashed var(--ink-secondary);
+            border-radius: 15px;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        /* ==================== 1. 头部设计 ==================== */
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            position: relative;
+            padding-top: 20px;
+        }
+
+        .title-sticker {
+            display: inline-block;
+            background: #fff;
+            padding: 20px 60px;
+            border: 3px dashed var(--ink-primary);
+            border-radius: 15px;
+            box-shadow: 5px 5px 0 var(--color-blue);
+            transform: rotate(-2deg);
+            position: relative;
+        }
+
+        .title-sticker h1 {
+            font-family: var(--font-title);
+            font-size: 3.2rem;
+            color: var(--accent-orange);
+            margin: 0;
+            -webkit-text-stroke: 1px var(--ink-primary);
+        }
+
+        .date-badge {
+            position: absolute;
+            bottom: -15px;
+            right: -20px;
+            background: var(--color-yellow);
+            padding: 5px 15px;
+            font-family: var(--font-hand);
+            font-size: 1.2rem;
+            box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1);
+            transform: rotate(5deg);
+            border: 1px solid var(--ink-primary);
+        }
+
+        .tape {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 25px;
+            background: rgba(255, 171, 145, 0.7);
+            opacity: 0.8;
+            mask-image: radial-gradient(circle at 5px, transparent 4px, black 5px);
+            mask-size: 10px 100%;
+            mask-repeat: repeat-x;
+        }
+
+        /* ==================== 2. 统计邮票 ==================== */
+        /* ==================== 2. 统计区域 (新版) ==================== */
+        .stats-wrapper {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 40px;
+            align-items: stretch;
+        }
+
+        .stats-grid {
+            flex: 2;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .stamp {
+            width: 100%;
+            height: 100%;
+            background: #fff;
+            padding: 15px;
+            box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.1);
+            border: 2px solid var(--ink-primary);
+            border-radius: 12px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        /* 装饰性背景纹理 */
+        .stamp::after {
+            content: "";
+            position: absolute;
+            top: 5px;
+            bottom: 5px;
+            left: 5px;
+            right: 5px;
+            border: 1px dotted #e0e0e0;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+
+        .stamp:hover {
+            transform: translateY(-2px);
+        }
+
+        .stamp-inner {
+            text-align: center;
+            z-index: 1;
+        }
+
+        .stamp-num {
+            font-family: var(--font-title);
+            font-size: 1.8rem;
+            color: var(--accent-orange);
+            line-height: 1;
+            margin: 5px 0;
+        }
+
+        .stamp-label {
+            font-family: var(--font-hand);
+            font-size: 1rem;
+            color: var(--ink-secondary);
+        }
+
+        /* ==================== 布局容器 ==================== */
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 30px;
+        }
+
+        .section-title {
+            font-family: var(--font-title);
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title .doodle {
+            color: var(--accent-orange);
+            font-size: 1.3em;
+        }
+
+        /* ==================== 3. 图表区 ==================== */
+        .chart-section {
+            grid-column: span 7;
+            background: #fff;
+            border: 2px solid var(--ink-primary);
+            border-radius: 5px 20px 20px 5px;
+            padding: 20px 20px 20px 40px;
+            position: relative;
+            box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .coil {
+            position: absolute;
+            left: 10px;
+            top: 20px;
+            bottom: 20px;
+            width: 10px;
+            background: repeating-linear-gradient(to bottom, #ccc 0, #ccc 2px, transparent 2px, transparent 15px);
+            border-left: 2px solid #999;
+        }
+
+        /* 手绘条形图模拟 */
+        .hand-chart-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .chart-label {
+            width: 50px;
+            font-family: var(--font-hand);
+            font-size: 1.1rem;
+        }
+
+        .chart-bar-box {
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .crayon-bar {
+            height: 14px;
+            border-radius: 7px;
+            border: 1px solid var(--ink-primary);
+            background-image: url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 4L4 0' stroke='rgba(0,0,0,0.1)' stroke-width='1'/%3E%3C/svg%3E");
+        }
+
+        /* ==================== Horizontal Chart Styles ==================== */
+        .chart-section-horizontal {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            height: 220px;
+            padding: 20px 10px 5px 10px;
+            margin-top: 15px;
+            position: relative;
+            border-bottom: 2px solid var(--ink-secondary);
+        }
+
+        .chart-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+            flex: 1;
+            margin: 0 2px;
+            position: relative;
+        }
+
+        .chart-bar-vertical {
+            width: 100%;
+            border-radius: 5px 5px 0 0;
+            min-height: 4px;
+            position: relative;
+            box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
+            transition: height 0.3s ease;
+        }
+
+        .chart-label-xaxis {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: var(--ink-secondary);
+            font-family: var(--font-hand);
+            text-align: center;
+        }
+
+        .chart-value-top {
+            position: absolute;
+            top: -20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: var(--ink-secondary);
+            font-family: var(--font-hand);
+            width: 100%;
+            text-align: center;
+        }
+
+        /* ==================== 4. 活跃时段 ==================== */
+        /* ==================== 4. 活跃时段 (新版) ==================== */
+        .highlight-section {
+            flex: 1;
+            background: var(--color-yellow);
+            padding: 20px;
+            border: 2px solid var(--ink-primary);
+            border-radius: 20px;
+            box-shadow: 6px 6px 0 var(--color-pink);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.2) 0, rgba(255, 255, 255, 0.2) 10px, transparent 10px, transparent 20px);
+        }
+
+        .tape-top {
+            width: 60px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.5);
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .time-big {
+            font-family: var(--font-title);
+            font-size: 2.5rem;
+            color: var(--ink-primary);
+            margin: 10px 0;
+        }
+
+        .time-desc {
+            font-family: var(--font-hand);
+            color: var(--ink-secondary);
+            font-size: 1.5rem;
+        }
+
+        /* ==================== 5. 话题列表 ==================== */
+        .topic-section {
+            grid-column: span 12;
+            background: #fff;
+            padding: 30px 30px 30px 50px;
+            border: 1px solid #ddd;
+            background-image: repeating-linear-gradient(transparent, transparent 39px, #b2ebf2 39px, #b2ebf2 40px);
+            line-height: 40px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+            position: relative;
+        }
+
+        .paper-holes {
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-evenly;
+        }
+
+        .hole {
+            width: 12px;
+            height: 12px;
+            background: var(--bg-paper);
+            border-radius: 50%;
+            box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 话题项样式 - 确保在 image_template 中正确定义 */
+        .topic-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-top: 4px;
+        }
+
+        .check-box {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--ink-primary);
+            margin-right: 15px;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .check-tick {
+            width: 14px;
+            height: 14px;
+            background: var(--accent-orange);
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+
+        .topic-content {
+            line-height: 1.5;
+            padding-top: 6px;
+            flex: 1;
+        }
+
+        .topic-title {
+            font-family: var(--font-title);
+            font-size: 1.5rem;
+            margin-right: 10px;
+            background: linear-gradient(transparent 60%, var(--color-pink) 60%);
+            display: inline-block;
+        }
+
+        .topic-item:nth-child(even) .topic-title {
+            background: linear-gradient(transparent 60%, var(--color-blue) 60%);
+        }
+
+        .topic-item:nth-child(3n) .topic-title {
+            background: linear-gradient(transparent 60%, var(--color-green) 60%);
+        }
+
+        .topic-detail {
+            font-family: var(--font-hand);
+            color: #666;
+            font-size: 1.2rem;
+            margin-top: 8px;
+        }
+
+        /* ==================== 6. 群友画像 ==================== */
+        .user-section {
+            grid-column: span 12;
+            margin-top: 20px;
+        }
+
+        .masonry-grid {
+            column-count: 2;
+            column-gap: 25px;
+        }
+
+        .user-card {
+            break-inside: avoid;
+            background: #fff;
+            border: 2px solid var(--ink-primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            /* Muted shadow for organic feel */
+            box-shadow: 4px 4px 0 rgba(70, 80, 100, 0.1), 3px 3px 0 1px var(--ink-primary);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s;
+            /* Very subtle grain */
+            background-color: #fffbf0;
+        }
+
+        /* Add randomness for authentic scrapbook feel */
+        .user-card:nth-child(even) {
+            transform: rotate(1deg);
+            border-color: var(--color-blue);
+        }
+
+        .user-card:nth-child(3n) {
+            transform: rotate(-1.5deg);
+            border-color: var(--color-pink);
+        }
+
+        .user-card:nth-child(5n) {
+            transform: rotate(0.5deg);
+            border-color: var(--color-green);
+        }
+
+        .user-card:hover {
+            transform: translateY(-4px) rotate(0deg);
+            z-index: 5;
+            box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.15), 6px 6px 0 2px var(--ink-primary);
+        }
+
+        .card-tape {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-2deg);
+            width: 80px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.4);
+            /* Fallback */
+            background-color: var(--color-blue);
+            opacity: 0.8;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            /* Jagged edges for tape look */
+            mask-image: linear-gradient(135deg, transparent 5px, black 0) top left, linear-gradient(-135deg, transparent 5px, black 0) top right, linear-gradient(45deg, transparent 5px, black 0) bottom left, linear-gradient(-45deg, transparent 5px, black 0) bottom right;
+            mask-size: 51% 51%;
+            mask-repeat: no-repeat;
+            -webkit-mask-image: radial-gradient(circle at 2px 2px, transparent 2px, black 2.5px);
+            -webkit-mask-size: 100% 100%;
+            /* Simplify mask for compatibility */
+            /* Simpler tape look since masks can be tricky across renderers */
+            border-left: 2px dashed rgba(255, 255, 255, 0.3);
+            border-right: 2px dashed rgba(255, 255, 255, 0.3);
+        }
+
+        .user-card:nth-child(2n) .card-tape {
+            background-color: var(--color-pink);
+            transform: translateX(-50%) rotate(3deg);
+        }
+
+        .user-card:nth-child(3n) .card-tape {
+            background-color: var(--color-green);
+            transform: translateX(-50%) rotate(-1deg);
+        }
+
+        .user-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 15px;
+            border-bottom: 2px dashed #f0f0f0;
+            padding-bottom: 15px;
+        }
+
+        .u-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid var(--ink-primary);
+            background: #eee;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #aaa;
+        }
+
+        .u-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .u-name {
+            font-family: var(--font-title);
+            font-size: 1.25rem;
+            line-height: 1.2;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 0.85rem;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-family: var(--font-hand);
+            white-space: nowrap;
+            box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+        }
+
+        .badge.title {
+            background: var(--title-bg);
+            color: var(--title-text);
+            border: 1px solid var(--title-border);
+        }
+
+        .badge.mbti {
+            background: var(--mbti-bg);
+            color: var(--mbti-text);
+            border: 1px solid var(--mbti-border);
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        .u-reason {
+            font-family: var(--font-hand);
+            font-size: 1.05rem;
+            color: #444;
+            line-height: 1.6;
+
+            /* Quote Block Style */
+            background: #f8fbff;
+            border-left: 4px solid var(--color-blue);
+            padding: 12px 15px;
+            margin-top: 15px;
+            border-radius: 4px;
+            position: relative;
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        .u-reason::before {
+            content: "";
+            /* Removed big quote mark to clean up */
+        }
+
+        /* ==================== 7. 每日回响 ==================== */
+        .quotes-section {
+            grid-column: span 12;
+            display: flex;
+            flex-direction: column;
+            gap: 35px;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+
+        .quote-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            /* Occupy full width to allow internal flex to handle sizing */
+            max-width: 90%;
+            /* Limit max width */
+            position: relative;
+        }
+
+        .q-flex-container {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .q-user-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+            width: 70px;
+            /* Slightly narrower */
+        }
+
+        .q-avatar-box {
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        .q-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            background: #fff;
+            object-fit: cover;
+            /* Default base shadow */
+            box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        /* Left/Odd: Blue Shadow */
+        .quote-wrapper:nth-child(odd) .q-avatar {
+            box-shadow: 0 0 0 2px var(--color-blue);
+        }
+
+        /* Right/Even: Orange Shadow */
+        .quote-wrapper:nth-child(even) .q-avatar {
+            box-shadow: 0 0 0 2px var(--accent-orange);
+        }
+
+        .q-content-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            align-items: flex-start;
+            /* Default align left */
+        }
+
+        .q-sender-name {
+            font-family: var(--font-hand);
+            font-size: 1.25rem;
+            /* Larger size for cursive font */
+            color: var(--ink-primary);
+            margin-bottom: 2px;
+            /* Reduce margin as underline takes space */
+            margin-left: 10px;
+            line-height: 1.2;
+            position: relative;
+            display: inline-block;
+        }
+
+        /* Underline Element */
+        .q-sender-name::after {
+            content: "";
+            display: block;
+            width: 100%;
+            height: 4px;
+            background: var(--color-blue);
+            opacity: 0.4;
+            /* Marker pen feel */
+            border-radius: 2px;
+            margin-top: -6px;
+            /* Overlap with text bottom */
+        }
+
+        /* Right-aligned layout for even items */
+        .quote-wrapper:nth-child(even) .q-flex-container {
+            flex-direction: row-reverse;
+        }
+
+        .quote-wrapper:nth-child(even) .q-content-col {
+            align-items: flex-end;
+            /* Align right */
+        }
+
+        .quote-wrapper:nth-child(even) .q-sender-name {
+            margin-left: 0;
+            margin-right: 15px;
+            text-align: right;
+        }
+
+        .quote-wrapper:nth-child(even) .q-sender-name::after {
+            background: var(--accent-orange);
+        }
+
+        .quote-wrapper:nth-child(odd) {
+            align-self: flex-start;
+        }
+
+        .quote-wrapper:nth-child(even) {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .q-bubble {
+            background: #fff;
+            border: 2px solid var(--ink-primary);
+            padding: 15px 25px;
+            border-radius: 20px;
+            box-shadow: 4px 4px 0 var(--color-blue);
+            position: relative;
+            z-index: 2;
+            width: fit-content;
+            /* Dynamic width */
+            max-width: 100%;
+        }
+
+        .quote-wrapper:nth-child(odd) .q-bubble {
+            border-top-left-radius: 4px;
+        }
+
+        .quote-wrapper:nth-child(even) .q-bubble {
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 20px;
+            /* Reset bottom right */
+            background: var(--color-yellow);
+            box-shadow: -4px 4px 0 var(--color-pink);
+            text-align: right;
+            border-bottom-left-radius: 20px;
+        }
+
+        .q-content {
+            font-family: var(--font-title);
+            font-size: 1.3rem;
+            line-height: 1.4;
+            margin-bottom: 5px;
+            position: relative;
+        }
+
+        .q-quote-mark {
+            display: none;
+            /* Hide quote mark for cleaner chat look */
+        }
+
+        .q-analysis-note {
+            background: #fffde7;
+            padding: 10px 15px;
+            font-size: 0.9rem;
+            color: #666;
+            width: fit-content;
+            /* Fit content */
+            max-width: 100%;
+            margin-top: -5px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ddd;
+            position: relative;
+            z-index: 1;
+            font-family: var(--font-body);
+            line-height: 1.5;
+            border-radius: 0 0 10px 10px;
+        }
+
+        .quote-wrapper:nth-child(odd) .q-analysis-note {
+            transform: rotate(-1deg) translateX(10px);
+            border-radius: 0 0 10px 10px;
+        }
+
+        .quote-wrapper:nth-child(even) .q-analysis-note {
+            transform: rotate(1deg) translateX(-10px);
+            text-align: left;
+            background: #f3e5f5;
+            border-radius: 0 0 10px 10px;
+        }
+
+        .note-label {
+            font-weight: bold;
+            color: var(--accent-orange);
+            display: block;
+            margin-bottom: 4px;
+            font-family: var(--font-title);
+        }
+
+        @media (max-width: 768px) {
+            .grid-layout {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .masonry-grid {
+                column-count: 1;
+            }
+
+            .stamp {
+                width: 45%;
+            }
+
+            .quote-wrapper {
+                max-width: 100%;
+            }
+
+            .footer {
+                flex-direction: column !important;
+                gap: 15px;
+            }
+        }
+
+        /* Footer Image Styles (Independent of .footer container layout) */
+        .footer-img-left {
+            position: absolute;
+            left: 10px;
+            bottom: 0;
+            height: 140px;
+            width: auto;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .footer-img-right {
+            position: absolute;
+            right: 10px;
+            bottom: 0;
+            height: 140px;
+            width: auto;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        @media (max-width: 768px) {
+            .footer {
+                min-height: auto;
+            }
+
+            .footer-img-left,
+            .footer-img-right {
+                position: static;
+                display: inline-block;
+                height: 100px;
+                margin: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <!-- 1. 头部 -->
+        <div class="header">
+            <div class="title-sticker">
+                <div class="tape"></div>
+                <h1>五彩斑斓的一天，来看看群里发生了什么吧！</h1>
+                <div class="date-badge">{{current_date}}</div>
+            </div>
+        </div>
+
+        <!-- 2. 统计邮票和活跃时段 -->
+        <div class="stats-wrapper">
+            <!-- Left: Stats Grid (2x2) -->
+            <div class="stats-grid">
+                <!-- Chat Icon -->
+                <div class="stamp">
+                    <div class="stamp-inner">
+                        <svg class="doodle" style="font-size: 2.2rem; color: var(--accent-orange);" viewBox="0 0 24 24">
+                            <path
+                                d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+                        </svg>
+                        <div class="stamp-num">{{message_count}}</div>
+                        <div class="stamp-label">消息总数</div>
+                    </div>
+                </div>
+                <!-- Users Icon -->
+                <div class="stamp">
+                    <div class="stamp-inner">
+                        <svg class="doodle" style="font-size: 2.2rem; color: var(--color-green);" viewBox="0 0 24 24">
+                            <path
+                                d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+                        </svg>
+                        <div class="stamp-num">{{participant_count}}</div>
+                        <div class="stamp-label">参与人数</div>
+                    </div>
+                </div>
+                <!-- Emoji Icon -->
+                <div class="stamp">
+                    <div class="stamp-inner">
+                        <svg class="doodle" style="font-size: 2.2rem; color: var(--color-blue);" viewBox="0 0 24 24">
+                            <path
+                                d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+                        </svg>
+                        <div class="stamp-num">{{emoji_count}}</div>
+                        <div class="stamp-label">表情统计</div>
+                    </div>
+                </div>
+                <!-- Text Icon -->
+                <div class="stamp">
+                    <div class="stamp-inner">
+                        <svg class="doodle" style="font-size: 2.2rem; color: var(--color-purple);" viewBox="0 0 24 24">
+                            <path
+                                d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                        </svg>
+                        <div class="stamp-num">{{total_characters}}</div>
+                        <div class="stamp-label">总字符数</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Highlight Time -->
+            <div class="highlight-section">
+                <div class="tape-top" style="background: rgba(255,255,255,0.6);"></div>
+                <div
+                    style="font-family: var(--font-hand); font-size: 1.5rem; color: var(--ink-secondary); margin-bottom: 5px;">
+                    ✨ Highlight Time
+                </div>
+                <div class="time-big">{{most_active_period}}</div>
+                <div class="time-desc">（此刻，世界色彩斑斓）</div>
+            </div>
+        </div>
+
+        <div class="grid-layout">
+
+            <!-- 3. 24小时活跃图表 -->
+            <div class="chart-section" style="grid-column: span 12;">
+                <div class="coil"></div>
+                <div class="section-title">
+                    <svg class="doodle" viewBox="0 0 24 24">
+                        <path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" />
+                    </svg>
+                    24H 活跃轨迹
+                </div>
+                <div style="margin-top: 15px;">
+                    {{hourly_chart_html | safe}}
+                </div>
+            </div>
+
+            {{topics_html | safe}}
+            {{titles_html | safe}}
+            {{quotes_html | safe}}
+
+            <!-- Chat Quality Review -->
+            {% if chat_quality_html %}
+            <div class="quality-section"
+                style="grid-column: span 12; background: #fff; border: 2px solid var(--ink-primary); border-radius: 20px 5px 5px 20px; padding: 30px; position: relative; box-shadow: 6px 6px 0 rgba(0,0,0,0.05); margin-top: 40px;">
+                <div class="tape-top"
+                    style="background: rgba(179, 229, 252, 0.6); width: 100px; height: 25px; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);">
+                </div>
+                <div class="section-title" style="margin-bottom: 20px;">
+                    <svg class="doodle" viewBox="0 0 24 24" style="width: 24px; height: 24px;">
+                        <path fill="currentColor"
+                            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg>
+                    群聊质量锐评
+                </div>
+                {{ chat_quality_html | safe }}
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- Footer: Sticker Collection -->
+        <div class="footer">
+            <!-- Project Sticker -->
+            <div class="footer-card info-card">
+                <div class="card-tape"></div>
+                <div class="footer-card-title">
+                    <svg class="doodle" viewBox="0 0 24 24" style="color: #ff9800;">
+                        <path
+                            d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    Irotoridori no Sekai
+                </div>
+                <div class="footer-card-content">
+                    <p>{{current_datetime}}</p>
+                    <p style="font-size: 0.85em; opacity: 0.7;">AstrBot 群分析总结插件</p>
+                </div>
+            </div>
+
+            <!-- Repository Sticker -->
+            <div class="footer-card repo-card">
+                <div class="card-tape"></div>
+                <div class="footer-card-title">
+                    <svg class="doodle" viewBox="0 0 24 24" style="color: #2196f3;">
+                        <path
+                            d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                    </svg>
+                    Github Repo
+                </div>
+                <div class="footer-card-content">
+                    <p
+                        style="font-family: var(--font-body); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;">
+                        SXP-Simon/astrbot_plugin_qq_group_daily_analysis</p>
+                </div>
+            </div>
+
+            <!-- Stats Sticker -->
+            <div class="footer-card stats-card">
+                <div class="card-tape"></div>
+                <div class="footer-card-title">
+                    <svg class="doodle" viewBox="0 0 24 24" style="color: #673ab7;">
+                        <path
+                            d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+                    </svg>
+                    LLM Token 消耗
+                </div>
+                <div class="footer-card-content">
+                    <p>Total: {{total_tokens}} Tokens</p>
+                    <p>Prompt/Compl: {{prompt_tokens}}/{{completion_tokens}}</p>
+                </div>
+            </div>
+
+            <img src="" class="footer-img-left" alt="Character Left" style="display:none;">
+            <img src="" class="footer-img-right" alt="Character Right" style="display:none;">
+        </div>
+
+    </div>
+</body>
+
+</html>
