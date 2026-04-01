@@ -356,7 +356,7 @@
             "pdf_filename_format": {
                 "type": "string",
                 "description": "PDF文件名格式",
-                "default": "群聊分析报告_{group_id}_{date}.pdf",
+                "default": "群聊分析报告_{group_id}_{date}_{ulid}.pdf",
                 "hint": "PDF文件名格式，支持变量：{group_id}(群号)、{date}(日期)、{ulid}(时间排序ID)，支持子目录/层级。"
             }
         }
@@ -381,7 +381,7 @@
             "html_filename_format": {
                 "type": "string",
                 "description": "HTML文件名格式",
-                "default": "群聊分析报告_{group_id}_{date}.html",
+                "default": "群聊分析报告_{group_id}_{date}_{ulid}.html",
                 "hint": "HTML文件名格式，支持变量：{group_id}(群号)、{date}(日期)、{ulid}(时间排序ID)，支持子目录/层级。"
             }
         }
