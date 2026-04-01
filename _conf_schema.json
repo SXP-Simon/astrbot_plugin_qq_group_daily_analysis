@@ -507,7 +507,7 @@
             "max_concurrent_llm": {
                 "type": "int",
                 "description": "最大 LLM 请求并发数（API 闸口）",
-                "default": 2,
+                "default": 3,
                 "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。"
             },
             "max_concurrent_t2i": {
@@ -515,6 +515,12 @@
                 "description": "最大 T2I渲染并发数",
                 "default": 1,
                 "hint": "限制同时开启的 T2I 渲染进程数。"
+            },
+            "stagger_seconds": {
+                "type": "int",
+                "description": "多群分析交错间隔（秒）",
+                "default": 10,
+                "hint": "当同时启动多个群组的定时分析任务时，每个任务之间的延迟间隔（秒），建议根据实际的 LLM 服务速度填写，过短可能导致请求堆积，过长则分析效率降低。"
             }
         }
     }

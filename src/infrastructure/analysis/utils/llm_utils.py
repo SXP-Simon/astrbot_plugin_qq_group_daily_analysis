@@ -6,7 +6,7 @@ LLM API请求处理工具模块
 import asyncio
 
 from ....utils.logger import logger
-from ....utils.resilience import CircuitBreaker, global_llm_rate_limiter
+from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
 from .structured_output_schema import JSONObject
 
 _circuit_breakers = {}
@@ -273,7 +273,7 @@ async def call_provider_with_retry(
             # 使用全局限流器 + 熔断器记录
             # 超时由 Provider 内部控制，无需外层 wait_for
             try:
-                async with global_llm_rate_limiter:
+                async with GlobalRateLimiter.get_instance().semaphore:
                     llm_kwargs: dict[str, object] = {
                         "chat_provider_id": provider_id,
                         "prompt": prompt,

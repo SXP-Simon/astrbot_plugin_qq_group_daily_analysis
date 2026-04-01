@@ -376,10 +376,17 @@ class AutoScheduler:
                         )
 
             tasks = []
-            for gid, pid, mode in all_targets:
+            stagger = self.config_manager.get_stagger_seconds() or 2
+            # 针对定时大任务加入交错等待，减少瞬间峰值延迟
+            for idx, (gid, pid, mode) in enumerate(all_targets):
                 if self._terminating:
                     logger.info("检测到插件正在停止，取消后续任务创建")
                     break
+
+                # 为前几个任务添加微小的启动间隔，均匀分散 API 压力
+                if idx > 0 and stagger > 0:
+                    await asyncio.sleep(stagger)
+
                 task = asyncio.create_task(
                     dispatch_group(gid, pid, mode),
                     name=f"report_{mode}_{gid}",
@@ -418,13 +425,13 @@ class AutoScheduler:
     ):
         """为指定群执行自动分析（带超时控制）"""
         try:
-            # 为每个群聊设置独立的超时时间（20分钟）
+            # 为每个群聊设置独立的超时时间，适当放宽到 30 分钟以支持大型批次
             await asyncio.wait_for(
                 self._perform_auto_analysis_for_group(group_id, target_platform_id),
-                timeout=1200,
+                timeout=1800,
             )
         except asyncio.TimeoutError:
-            logger.error(f"群 {group_id} 分析超时（20分钟），跳过该群分析")
+            logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
         except Exception as e:
             logger.error(f"群 {group_id} 分析任务执行失败: {e}")
 
@@ -664,7 +671,7 @@ class AutoScheduler:
                 self._perform_incremental_final_report_for_group(
                     group_id, target_platform_id
                 ),
-                timeout=1200,
+                timeout=1800,
             )
 
             # 判定是否需要触发回退 (例如：无增量数据等)
@@ -684,7 +691,7 @@ class AutoScheduler:
             return result
 
         except asyncio.TimeoutError:
-            logger.error(f"群 {group_id} 最终报告超时（20分钟）")
+            logger.error(f"群 {group_id} 最终报告超时（30分钟）")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)

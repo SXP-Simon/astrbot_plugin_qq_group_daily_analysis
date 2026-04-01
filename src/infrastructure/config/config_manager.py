@@ -387,6 +387,10 @@ class ConfigManager:
         """获取全局图片渲染（T2I）最大并发数"""
         return self._get_group("performance").get("max_concurrent_t2i", 1)
 
+    def get_stagger_seconds(self) -> int:
+        """获取多群分析任务启动时的交错间隔（秒）"""
+        return self._get_group("performance").get("stagger_seconds", 2)
+
     def set_max_concurrent_tasks(self, count: int):
         """设置自动分析最大并发数"""
         self._ensure_group("performance")["max_concurrent_groups"] = count

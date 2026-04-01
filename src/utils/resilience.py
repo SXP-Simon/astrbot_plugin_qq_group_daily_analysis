@@ -111,40 +111,50 @@ class GlobalRateLimiter:
     _instance: "GlobalRateLimiter | None" = None
     _semaphore: asyncio.Semaphore | None = None
 
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
     @classmethod
-    def get_instance(cls, max_concurrency: int = 3) -> "GlobalRateLimiter":
+    def get_instance(cls, max_concurrency: int | None = None) -> "GlobalRateLimiter":
         """
         获取或创建限流器单例。
 
         Args:
-            max_concurrency (int): 允许的最大并发行数
+            max_concurrency (int, optional): 允许的最大并发数。如果提供且与当前不同，则重置信号量。
 
         Returns:
             GlobalRateLimiter: 唯一实例
         """
-        if cls._instance is None:
-            cls._instance = cls()
-            cls._semaphore = asyncio.Semaphore(max_concurrency)
-        elif (
-            cls._semaphore is not None and cls._semaphore._value != max_concurrency  # type: ignore
+        instance = cls()
+        if max_concurrency is not None:
+            instance.reconfigure(max_concurrency)
+        elif cls._semaphore is None:
+            # 默认兜底
+            cls._semaphore = asyncio.Semaphore(3)
+        return instance
+
+    def reconfigure(self, max_concurrency: int):
+        """重新配置并发上限。注意：这会替换信号量对象。"""
+        if self._semaphore is None or (
+            hasattr(self._semaphore, "_value")
+            and self._semaphore._value != max_concurrency  # type: ignore
         ):
-            # 如果请求的并发数发生变化，重新创建信号量
-            logger.info(
-                f"GlobalRateLimiter 重新配置：{cls._semaphore._value} -> {max_concurrency}"
+            old_val = (
+                getattr(self._semaphore, "_value", "None")
+                if self._semaphore
+                else "None"
             )
-            cls._semaphore = asyncio.Semaphore(max_concurrency)
-        return cls._instance
+            logger.info(
+                f"GlobalRateLimiter 重新配置并发上限：{old_val} -> {max_concurrency}"
+            )
+            self.__class__._semaphore = asyncio.Semaphore(max_concurrency)
 
     @property
     def semaphore(self) -> asyncio.Semaphore:
         """返回核心的异步信号量对象。"""
         if self._semaphore is None:
-            # 兜底：若直接通过属性访问则初始化默认值
-            self._semaphore = asyncio.Semaphore(3)
+            self.__class__._semaphore = asyncio.Semaphore(3)
+        assert self._semaphore is not None
         return self._semaphore
-
-
-# 导出默认实例：用于 LLM 调用的全局限流
-global_llm_rate_limiter: asyncio.Semaphore = GlobalRateLimiter.get_instance(
-    max_concurrency=3
-).semaphore
