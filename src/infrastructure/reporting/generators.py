@@ -425,9 +425,9 @@ class ReportGenerator(IReportGenerator):
 
         report += "💬 群圣经\n"
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for i, quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            report += f'{i}. "{quote.content}" —— {quote.sender}\n'
-            report += f"   {quote.reason}\n\n"
+        for i, golden_quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
+            report += f'{i}. "{golden_quote.content}" —— {golden_quote.sender}\n'
+            report += f"   {golden_quote.reason}\n\n"
 
         return report
 
@@ -493,20 +493,22 @@ class ReportGenerator(IReportGenerator):
         # 使用Jinja2模板构建金句HTML（批量渲染）
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
-        for quote in stats.golden_quotes[:max_golden_quotes]:
+        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.user_id), avatar_url_getter)
-                if quote.user_id
+                await self._get_user_avatar(
+                    str(golden_quote.user_id), avatar_url_getter
+                )
+                if golden_quote.user_id
                 else None
             )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                quote.reason, avatar_url_getter, nickname_getter, user_analysis
+                golden_quote.reason, avatar_url_getter, nickname_getter, user_analysis
             )
             quotes_list.append(
                 {
-                    "content": quote.content,
-                    "sender": quote.sender,
+                    "content": golden_quote.content,
+                    "sender": golden_quote.sender,
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }

@@ -43,6 +43,7 @@ from .src.infrastructure.platform.template_preview import (
     TemplatePreviewRouter,
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
+from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter
@@ -72,6 +73,7 @@ class GroupDailyAnalysis(Star):
     template_preview_router: TemplatePreviewRouter
     retry_manager: RetryManager
     auto_scheduler: AutoScheduler
+    message_sender: MessageSender
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -132,6 +134,9 @@ class GroupDailyAnalysis(Star):
         # 调度与重试
         self.retry_manager = RetryManager(
             self.bot_manager, self.html_render, self.report_generator
+        )
+        self.message_sender = MessageSender(
+            self.bot_manager, self.config_manager, self.retry_manager
         )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
@@ -641,12 +646,19 @@ class GroupDailyAnalysis(Star):
                 caption = self.report_generator.build_html_caption(html_path)
 
                 # 发送 HTML 文件
-                sent = await self.message_sender.send_file(
-                    group_id,
-                    html_path,
-                    caption=caption,
-                    platform_id=platform_id,
-                )
+                sender = getattr(self, "message_sender", None)
+                if sender:
+                    sent = await sender.send_file(
+                        group_id,
+                        html_path,
+                        caption=caption,
+                        platform_id=platform_id,
+                    )
+                else:
+                    sent = await adapter.send_file(group_id, html_path)
+                    if sent and caption:
+                        await adapter.send_text(group_id, caption)
+
                 if not sent:
                     yield event.chain_result(
                         [File(name=Path(html_path).name, file=html_path)]
