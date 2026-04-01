@@ -638,20 +638,22 @@ class GroupDailyAnalysis(Star):
                 nickname_getter=nickname_getter,
             )
             if html_path:
+                caption = self.report_generator.build_html_caption(html_path)
+
                 # 发送 HTML 文件
-                if not await adapter.send_file(group_id, html_path):
+                sent = await self.message_sender.send_file(
+                    group_id,
+                    html_path,
+                    caption=caption,
+                    platform_id=platform_id,
+                )
+                if not sent:
                     yield event.chain_result(
                         [File(name=Path(html_path).name, file=html_path)]
                     )
 
-                # 如果配置了外链 Base URL，则也发送超链接
-                base_url = self.config_manager.get_html_base_url()
-                if base_url:
-                    filename = Path(html_path).name
-                    url = f"{base_url.rstrip('/')}/{filename}"
-                    link_message = f"报告已生成: {url}"
-                    if not await adapter.send_text(group_id, link_message):
-                        yield event.plain_result(link_message)
+                    if caption:
+                        yield event.plain_result(caption)
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 

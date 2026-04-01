@@ -37,16 +37,40 @@ class MessageSender:
             return False
         return await adapter.send_image(group_id, image_url, caption)
 
-    async def send_pdf(
-        self, group_id: str, pdf_path: str, caption: str = "", platform_id: str = None
+    async def send_file(
+        self,
+        group_id: str,
+        file_path: str,
+        caption: str = "",
+        platform_id: str = None,
     ) -> bool:
-        """发送 PDF 文件"""
+        """发送文件（HTML/PDF/其它文件）。支持可选 caption。"""
         adapter = self.bot_manager.get_adapter(platform_id)
         if not adapter:
             logger.error(f"[MessageSender] 未找到平台 {platform_id} 的适配器")
             return False
-        return await adapter.send_file(group_id, pdf_path)
 
+        # 首先发送文件，本方法的返回值只代表文件是否发送成功。
+        file_sent = await adapter.send_file(group_id, file_path)
+
+        if not file_sent:
+            # 适配器返回 False，表示文件未成功发送
+            return False
+
+        # 文件已成功发送，下面的 caption 发送为尽力而为，不影响整体成功与否。
+        if caption:
+            try:
+                caption_sent = await adapter.send_text(group_id, f"{caption}")
+                if not caption_sent:
+                    logger.warning(
+                        "[MessageSender] 文件已发送，但 caption 发送失败（适配器返回 False）"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"[MessageSender] 文件已发送，但 caption 发送异常: {e}"
+                )
+
+        return True
     def _get_available_platforms(self, group_id: str):
         """获取可用的平台列表 (Helper for Dispatcher)"""
         # 简单实现：返回所有已加载的平台

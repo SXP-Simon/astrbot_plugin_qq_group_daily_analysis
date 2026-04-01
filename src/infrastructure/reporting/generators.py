@@ -378,6 +378,14 @@ class ReportGenerator(IReportGenerator):
             logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
             return None, None
 
+    def build_html_caption(self, html_path: str) -> str:
+        """根据 html_base_url 生成 HTML 报告链接 caption"""
+        base_url = self.config_manager.get_html_base_url()
+        if not base_url or not html_path:
+            return ""
+        filename = Path(html_path).name
+        return f"报告已生成: {base_url.rstrip('/')}/{filename}"
+
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
         stats = analysis_result["statistics"]
