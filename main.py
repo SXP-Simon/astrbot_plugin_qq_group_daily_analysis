@@ -32,6 +32,7 @@ from .src.domain.services.incremental_merge_service import IncrementalMergeServi
 from .src.domain.services.statistics_service import StatisticsService
 from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
+from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.telegram_group_registry import (
@@ -72,6 +73,7 @@ class GroupDailyAnalysis(Star):
     template_preview_router: TemplatePreviewRouter
     retry_manager: RetryManager
     auto_scheduler: AutoScheduler
+    message_sender: MessageSender
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -132,6 +134,9 @@ class GroupDailyAnalysis(Star):
         # 调度与重试
         self.retry_manager = RetryManager(
             self.bot_manager, self.html_render, self.report_generator
+        )
+        self.message_sender = MessageSender(
+            self.bot_manager, self.config_manager, self.retry_manager
         )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
@@ -638,20 +643,29 @@ class GroupDailyAnalysis(Star):
                 nickname_getter=nickname_getter,
             )
             if html_path:
+                caption = self.report_generator.build_html_caption(html_path)
+
                 # 发送 HTML 文件
-                if not await adapter.send_file(group_id, html_path):
+                sender = getattr(self, "message_sender", None)
+                if sender:
+                    sent = await sender.send_file(
+                        group_id,
+                        html_path,
+                        caption=caption,
+                        platform_id=platform_id,
+                    )
+                else:
+                    sent = await adapter.send_file(group_id, html_path)
+                    if sent and caption:
+                        await adapter.send_text(group_id, caption)
+
+                if not sent:
                     yield event.chain_result(
                         [File(name=Path(html_path).name, file=html_path)]
                     )
 
-                # 如果配置了外链 Base URL，则也发送超链接
-                base_url = self.config_manager.get_html_base_url()
-                if base_url:
-                    filename = Path(html_path).name
-                    url = f"{base_url.rstrip('/')}/{filename}"
-                    link_message = f"报告已生成: {url}"
-                    if not await adapter.send_text(group_id, link_message):
-                        yield event.plain_result(link_message)
+                    if caption:
+                        yield event.plain_result(caption)
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
