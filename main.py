@@ -49,6 +49,7 @@ from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
 from .src.utils.pdf_utils import PDFInstaller
+from .src.utils.resilience import GlobalRateLimiter
 
 
 class GroupDailyAnalysis(Star):
@@ -147,6 +148,9 @@ class GroupDailyAnalysis(Star):
             self.html_render,
             plugin_instance=self,
         )
+
+        # 同步全局限流并进行初始化配置
+        GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
 
         self._initialized = False
         self._terminating = False  # 生命周期标志
