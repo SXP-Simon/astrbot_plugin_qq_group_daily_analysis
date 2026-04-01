@@ -9,6 +9,8 @@ import html
 import os
 import re
 from dataclasses import asdict, is_dataclass
+
+import ulid
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
@@ -49,6 +51,72 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+
+    @staticmethod
+    def _sanitize_path_component(name: str) -> str:
+        """消毒单个路径/文件名片段，禁止路径穿越和非法字符。"""
+        # 禁止空组件、相对路径控制符："."、".."
+        if not name or name in {".", ".."}:
+            raise ValueError(f"无效的路径片段: {name!r}")
+
+        # 不允许包含路径分隔符
+        name = name.replace("/", "_")
+        name = name.replace("\\", "_")
+
+        # 去除非打印字符和非法文件名字符
+        name = re.sub(r'[\x00-\x1f<>:"|?*]', "_", name)
+
+        # 保留中文、字母、数字、下划线、横线和点
+        name = name.strip()
+        if not name:
+            raise ValueError("路径片段经过消毒后为空")
+
+        return name
+
+    def _build_safe_report_path(
+        self,
+        output_dir: Path,
+        filename_format: str,
+        group_id: str,
+        date: str,
+    ) -> Path:
+        """根据格式构建安全输出路径，支持子目录和 {ulid}。"""
+        generated_ulid = str(ulid.new())
+        safe_context = {
+            "group_id": group_id,
+            "date": date,
+            "ulid": generated_ulid,
+        }
+
+        try:
+            formatted = filename_format.format(**safe_context)
+        except Exception as e:
+            raise ValueError(f"文件名格式化失败: {e}") from e
+
+        if os.path.isabs(formatted):
+            raise ValueError("文件名格式不得为绝对路径")
+
+        relative_path = Path(formatted)
+        sanitized_parts = []
+        for part in relative_path.parts:
+            if part in {".", ".."}:
+                raise ValueError("路径中不得包含 '.' 或 '..'。")
+            sanitized_parts.append(self._sanitize_path_component(part))
+
+        safe_relative = Path(*sanitized_parts)
+
+        output_dir_resolved = output_dir.resolve(strict=False)
+        target_path = (output_dir_resolved / safe_relative).resolve(strict=False)
+
+        # 防止回退到上级目录
+        if (
+            not str(target_path).startswith(str(output_dir_resolved) + os.sep)
+            and target_path != output_dir_resolved
+        ):
+            raise ValueError("文件路径不在输出目录之内，可能包含路径穿越")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        return target_path
 
     async def generate_image_report(
         self,
@@ -222,12 +290,14 @@ class ReportGenerator(IReportGenerator):
             output_dir = Path(self.config_manager.get_pdf_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件路径，支持 {group_id}/{date}/{ulid} 自定义子目录
             current_date = datetime.now().strftime("%Y%m%d")
-            filename = self.config_manager.get_pdf_filename_format().format(
-                group_id=group_id, date=current_date
+            pdf_path = self._build_safe_report_path(
+                output_dir,
+                self.config_manager.get_pdf_filename_format(),
+                group_id=group_id,
+                date=current_date,
             )
-            pdf_path = output_dir / filename
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
@@ -288,19 +358,22 @@ class ReportGenerator(IReportGenerator):
             output_dir = Path(self.config_manager.get_html_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件路径
             current_date = datetime.now().strftime("%Y%m%d")
-            current_time = datetime.now().strftime("%H%M%S")
-            html_filename = self.config_manager.get_html_filename_format().format(
-                group_id=group_id, date=current_date
+            base_html_path = self._build_safe_report_path(
+                output_dir,
+                self.config_manager.get_html_filename_format(),
+                group_id=group_id,
+                date=current_date,
             )
-            # 为避免同一天多次分析覆盖，添加时间戳
-            html_filename_base = html_filename.rsplit(".", 1)[0]
-            html_filename = f"{html_filename_base}_{current_time}.html"
-            json_filename = f"{html_filename_base}_{current_time}.json"
 
-            html_path = output_dir / html_filename
-            json_path = output_dir / json_filename
+            html_path = base_html_path
+            if not html_path.suffix:
+                html_path = html_path.with_suffix(".html")
+
+            json_path = html_path.with_suffix(".json")
+
+            html_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
