@@ -18,7 +18,7 @@ class MessageSender:
         self.retry_manager = retry_manager
 
     async def send_text(
-        self, group_id: str, text: str, platform_id: str = None
+        self, group_id: str, text: str, platform_id: str | None = None
     ) -> bool:
         """发送文本消息"""
         adapter = self.bot_manager.get_adapter(platform_id)
@@ -28,7 +28,11 @@ class MessageSender:
         return await adapter.send_text(group_id, text)
 
     async def send_image_smart(
-        self, group_id: str, image_url: str, caption: str = "", platform_id: str = None
+        self,
+        group_id: str,
+        image_url: str,
+        caption: str = "",
+        platform_id: str | None = None,
     ) -> bool:
         """智能发送图片，支持自动选择适配器"""
         adapter = self.bot_manager.get_adapter(platform_id)
@@ -42,7 +46,7 @@ class MessageSender:
         group_id: str,
         file_path: str,
         caption: str = "",
-        platform_id: str = None,
+        platform_id: str | None = None,
     ) -> bool:
         """发送文件（HTML/PDF/其它文件）。支持可选 caption。"""
         adapter = self.bot_manager.get_adapter(platform_id)

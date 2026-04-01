@@ -32,6 +32,7 @@ from .src.domain.services.incremental_merge_service import IncrementalMergeServi
 from .src.domain.services.statistics_service import StatisticsService
 from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
+from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.telegram_group_registry import (
@@ -43,7 +44,6 @@ from .src.infrastructure.platform.template_preview import (
     TemplatePreviewRouter,
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
-from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter

@@ -9,14 +9,13 @@ import html
 import os
 import re
 from dataclasses import asdict, is_dataclass
-
-import ulid
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from urllib.parse import quote
 
 import aiohttp
+import ulid
 from diskcache import Cache
 from markupsafe import Markup
 
