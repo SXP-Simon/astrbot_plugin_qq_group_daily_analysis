@@ -3,7 +3,6 @@ import os
 import tempfile
 from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from ...shared.trace_context import TraceContext
@@ -191,7 +190,9 @@ class ReportDispatcher:
             if sent:
                 return True
 
-        logger.warning(f"[{trace_id}] HTML dispatch failed, falling back to text report.")
+        logger.warning(
+            f"[{trace_id}] HTML dispatch failed, falling back to text report."
+        )
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_text(

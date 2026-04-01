@@ -66,11 +66,10 @@ class MessageSender:
                         "[MessageSender] 文件已发送，但 caption 发送失败（适配器返回 False）"
                     )
             except Exception as e:
-                logger.warning(
-                    f"[MessageSender] 文件已发送，但 caption 发送异常: {e}"
-                )
+                logger.warning(f"[MessageSender] 文件已发送，但 caption 发送异常: {e}")
 
         return True
+
     def _get_available_platforms(self, group_id: str):
         """获取可用的平台列表 (Helper for Dispatcher)"""
         # 简单实现：返回所有已加载的平台
