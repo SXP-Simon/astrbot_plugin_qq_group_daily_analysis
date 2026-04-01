@@ -46,6 +46,8 @@ class ReportDispatcher:
             success = await self._dispatch_image(group_id, analysis_result, platform_id)
         elif output_format == "pdf":
             success = await self._dispatch_pdf(group_id, analysis_result, platform_id)
+        elif output_format == "html":
+            success = await self._dispatch_html(group_id, analysis_result, platform_id)
         else:
             success = await self._dispatch_text(group_id, analysis_result, platform_id)
 
@@ -148,8 +150,11 @@ class ReportDispatcher:
 
         # 3. 发送 PDF
         if pdf_path:
-            sent = await self.message_sender.send_pdf(
-                group_id, pdf_path, "📊 每日群聊分析报告已生成：", platform_id
+            sent = await self.message_sender.send_file(
+                group_id,
+                pdf_path,
+                caption="📊 每日群聊分析报告已生成：",
+                platform_id=platform_id,
             )
             if sent:
                 return True
@@ -157,6 +162,36 @@ class ReportDispatcher:
         # 4. 回退：文本报告
         logger.warning(
             f"[{trace_id}] PDF dispatch failed, falling back to text report."
+        )
+        return await self._dispatch_text(group_id, analysis_result, platform_id)
+
+    async def _dispatch_html(
+        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+    ) -> bool:
+        trace_id = TraceContext.get()
+
+        html_path = None
+        try:
+            html_path, json_path = await self.report_generator.generate_html_report(
+                analysis_result, group_id
+            )
+        except Exception as e:
+            logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
+
+        if html_path:
+            caption = self.report_generator.build_html_caption(html_path)
+
+            sent = await self.message_sender.send_file(
+                group_id,
+                html_path,
+                caption=caption,
+                platform_id=platform_id,
+            )
+            if sent:
+                return True
+
+        logger.warning(
+            f"[{trace_id}] HTML dispatch failed, falling back to text report."
         )
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 

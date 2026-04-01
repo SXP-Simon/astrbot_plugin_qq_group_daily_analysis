@@ -12,8 +12,10 @@ from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
+from urllib.parse import quote
 
 import aiohttp
+import ulid
 from diskcache import Cache
 from markupsafe import Markup
 
@@ -48,6 +50,77 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+
+    @staticmethod
+    def _sanitize_path_component(name: str) -> str:
+        """消毒单个路径/文件名片段，禁止路径穿越和非法字符。"""
+        # 禁止空组件、相对路径控制符："."、".."
+        if not name or name in {".", ".."}:
+            raise ValueError(f"无效的路径片段: {name!r}")
+
+        # 不允许包含路径分隔符
+        name = name.replace("/", "_")
+        name = name.replace("\\", "_")
+
+        # 去除非打印字符和非法文件名字符
+        name = re.sub(r'[\x00-\x1f<>:"|?*]', "_", name)
+
+        # 保留中文、字母、数字、下划线、横线和点
+        name = name.strip()
+        if not name:
+            raise ValueError("路径片段经过消毒后为空")
+
+        return name
+
+    def _build_safe_report_path(
+        self,
+        output_dir: Path,
+        filename_format: str,
+        group_id: str,
+        date: str,
+    ) -> Path:
+        """根据格式构建安全输出路径，支持子目录和 {ulid}。"""
+        generated_ulid = str(ulid.new())
+        safe_context = {
+            "group_id": group_id,
+            "date": date,
+            "ulid": generated_ulid,
+        }
+
+        try:
+            formatted = filename_format.format(**safe_context)
+        except Exception as e:
+            raise ValueError(f"文件名格式化失败: {e}") from e
+
+        if os.path.isabs(formatted):
+            raise ValueError("文件名格式不得为绝对路径")
+
+        relative_path = Path(formatted)
+        sanitized_parts = []
+        for part in relative_path.parts:
+            if part in {".", ".."}:
+                raise ValueError("路径中不得包含 '.' 或 '..'。")
+            sanitized_parts.append(self._sanitize_path_component(part))
+
+        safe_relative = Path(*sanitized_parts)
+
+        output_dir_resolved = output_dir.resolve(strict=False)
+        target_path = (output_dir_resolved / safe_relative).resolve(strict=False)
+
+        # 防止回退到上级目录（使用 Path.relative_to 进行目录包含校验）
+        try:
+            target_path.relative_to(output_dir_resolved)
+        except ValueError:
+            raise ValueError("文件路径不在输出目录之内，可能包含路径穿越")
+
+        # 防止与已有文件覆盖（如果用户格式没有唯一标记），追加 ULID 后缀
+        if target_path.exists():
+            suffix = target_path.suffix
+            stem = target_path.stem
+            target_path = target_path.with_name(f"{stem}_{generated_ulid}{suffix}")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        return target_path
 
     async def generate_image_report(
         self,
@@ -221,12 +294,14 @@ class ReportGenerator(IReportGenerator):
             output_dir = Path(self.config_manager.get_pdf_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件路径，支持 {group_id}/{date}/{ulid} 自定义子目录
             current_date = datetime.now().strftime("%Y%m%d")
-            filename = self.config_manager.get_pdf_filename_format().format(
-                group_id=group_id, date=current_date
+            pdf_path = self._build_safe_report_path(
+                output_dir,
+                self.config_manager.get_pdf_filename_format(),
+                group_id=group_id,
+                date=current_date,
             )
-            pdf_path = output_dir / filename
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
@@ -287,19 +362,22 @@ class ReportGenerator(IReportGenerator):
             output_dir = Path(self.config_manager.get_html_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件路径
             current_date = datetime.now().strftime("%Y%m%d")
-            current_time = datetime.now().strftime("%H%M%S")
-            html_filename = self.config_manager.get_html_filename_format().format(
-                group_id=group_id, date=current_date
+            base_html_path = self._build_safe_report_path(
+                output_dir,
+                self.config_manager.get_html_filename_format(),
+                group_id=group_id,
+                date=current_date,
             )
-            # 为避免同一天多次分析覆盖，添加时间戳
-            html_filename_base = html_filename.rsplit(".", 1)[0]
-            html_filename = f"{html_filename_base}_{current_time}.html"
-            json_filename = f"{html_filename_base}_{current_time}.json"
 
-            html_path = output_dir / html_filename
-            json_path = output_dir / json_filename
+            html_path = base_html_path
+            if not html_path.suffix:
+                html_path = html_path.with_suffix(".html")
+
+            json_path = html_path.with_suffix(".json")
+
+            html_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
@@ -378,6 +456,29 @@ class ReportGenerator(IReportGenerator):
             logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
             return None, None
 
+    def build_html_caption(self, html_path: str) -> str:
+        """根据 html_base_url 生成 HTML 报告链接 caption"""
+
+        caption = "📊 每日群聊分析报告已生成"
+        base_url = self.config_manager.get_html_base_url()
+        if not base_url or not html_path:
+            return caption
+
+        # 支持 html_filename_format 中的子目录，保持相对路径
+        output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+            strict=False
+        )
+        try:
+            relative_path = (
+                Path(html_path).resolve(strict=False).relative_to(output_dir)
+            )
+            relative_url = str(relative_path).replace(os.sep, "/")
+        except Exception:
+            relative_url = Path(html_path).name
+
+        encoded_relative_url = quote(relative_url, safe="/")
+        return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
+
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
         stats = analysis_result["statistics"]
@@ -413,9 +514,9 @@ class ReportGenerator(IReportGenerator):
 
         report += "💬 群圣经\n"
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for i, quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            report += f'{i}. "{quote.content}" —— {quote.sender}\n'
-            report += f"   {quote.reason}\n\n"
+        for i, golden_quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
+            report += f'{i}. "{golden_quote.content}" —— {golden_quote.sender}\n'
+            report += f"   {golden_quote.reason}\n\n"
 
         return report
 
@@ -481,20 +582,22 @@ class ReportGenerator(IReportGenerator):
         # 使用Jinja2模板构建金句HTML（批量渲染）
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
-        for quote in stats.golden_quotes[:max_golden_quotes]:
+        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.user_id), avatar_url_getter)
-                if quote.user_id
+                await self._get_user_avatar(
+                    str(golden_quote.user_id), avatar_url_getter
+                )
+                if golden_quote.user_id
                 else None
             )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                quote.reason, avatar_url_getter, nickname_getter, user_analysis
+                golden_quote.reason, avatar_url_getter, nickname_getter, user_analysis
             )
             quotes_list.append(
                 {
-                    "content": quote.content,
-                    "sender": quote.sender,
+                    "content": golden_quote.content,
+                    "sender": golden_quote.sender,
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
