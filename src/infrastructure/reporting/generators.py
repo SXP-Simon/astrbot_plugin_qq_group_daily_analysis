@@ -108,12 +108,17 @@ class ReportGenerator(IReportGenerator):
         output_dir_resolved = output_dir.resolve(strict=False)
         target_path = (output_dir_resolved / safe_relative).resolve(strict=False)
 
-        # 防止回退到上级目录
-        if (
-            not str(target_path).startswith(str(output_dir_resolved) + os.sep)
-            and target_path != output_dir_resolved
-        ):
+        # 防止回退到上级目录（使用 Path.relative_to 进行目录包含校验）
+        try:
+            target_path.relative_to(output_dir_resolved)
+        except ValueError:
             raise ValueError("文件路径不在输出目录之内，可能包含路径穿越")
+
+        # 防止与已有文件覆盖（如果用户格式没有唯一标记），追加 ULID 后缀
+        if target_path.exists():
+            suffix = target_path.suffix
+            stem = target_path.stem
+            target_path = target_path.with_name(f"{stem}_{generated_ulid}{suffix}")
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
         return target_path
@@ -459,9 +464,21 @@ class ReportGenerator(IReportGenerator):
         base_url = self.config_manager.get_html_base_url()
         if not base_url or not html_path:
             return caption
-        filename = Path(html_path).name
-        encoded_filename = quote(filename, safe="")
-        return caption + f"\n{base_url.rstrip('/')}/{encoded_filename}"
+
+        # 支持 html_filename_format 中的子目录，保持相对路径
+        output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+            strict=False
+        )
+        try:
+            relative_path = (
+                Path(html_path).resolve(strict=False).relative_to(output_dir)
+            )
+            relative_url = str(relative_path).replace(os.sep, "/")
+        except Exception:
+            relative_url = Path(html_path).name
+
+        encoded_relative_url = quote(relative_url, safe="/")
+        return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
