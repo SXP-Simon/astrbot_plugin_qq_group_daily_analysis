@@ -380,11 +380,12 @@ class ReportGenerator(IReportGenerator):
 
     def build_html_caption(self, html_path: str) -> str:
         """根据 html_base_url 生成 HTML 报告链接 caption"""
+        caption = "📊 每日群聊分析报告已生成"
         base_url = self.config_manager.get_html_base_url()
         if not base_url or not html_path:
-            return ""
+            return caption
         filename = Path(html_path).name
-        return f"报告已生成: {base_url.rstrip('/')}/{filename}"
+        return caption + f"\n{base_url.rstrip('/')}/{filename}"
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
