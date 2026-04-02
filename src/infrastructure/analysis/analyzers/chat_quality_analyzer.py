@@ -295,7 +295,9 @@ ${messages_text}
                 reviews_text += f"\n批次 {i + 1} [{title}]:\n- 维度表现: {dims}\n- 核心摘要: {summary}\n"
 
             # 获取配置中的汇总提示词模板，如果没有则使用默认模板
-            prompt_template = self.config_manager.get_quality_summary_prompt() or """你是一个毒舌且幽默的群聊质量分析师。
+            prompt_template = (
+                self.config_manager.get_quality_summary_prompt()
+                or """你是一个毒舌且幽默的群聊质量分析师。
 你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。
 你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。
 
@@ -328,6 +330,7 @@ ${messages_text}
 }}
 ```
 """
+            )
             prompt = render_template(prompt_template, reviews_text=reviews_text)
 
             # 调用 LLM 进行汇总
