@@ -95,7 +95,7 @@ class ReportGenerator(IReportGenerator):
         }
 
         try:
-            formatted = render_template(filename_format, **safe_context)
+            formatted = render_template(filename_format, strict=True, **safe_context)
         except Exception as e:
             raise ValueError(f"文件名模板渲染失败: {e}") from e
 
