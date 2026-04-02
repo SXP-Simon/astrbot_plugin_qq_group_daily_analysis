@@ -21,7 +21,7 @@ from markupsafe import Markup
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
-from ...utils.template_utils import render_template
+from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 

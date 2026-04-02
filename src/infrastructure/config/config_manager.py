@@ -9,7 +9,7 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
 from ...utils.logger import logger
-from ...utils.template_utils import upgrade_str_format_template
+from ..utils.template_utils import upgrade_str_format_template
 
 
 class ConfigManager:

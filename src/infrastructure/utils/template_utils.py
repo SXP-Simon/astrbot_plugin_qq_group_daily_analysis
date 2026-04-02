@@ -3,7 +3,7 @@
 import re
 from string import Template
 
-from .logger import logger
+from ...utils.logger import logger
 
 # 统一默认 placeholder
 PLACEHOLDERS = {
@@ -50,7 +50,6 @@ def is_str_format_template(template: str) -> bool:
         pattern = rf"(?<![\{{\$])\{{{key}\}}(?!\}})"
         if re.search(pattern, template):
             return True
-
     return False
 
 
