@@ -39,17 +39,17 @@
 
 #### 当前行为
 
-- 配置加载时，系统会通过 `_validate_umo_groups()` 检测并**记录警告日志**
-- 在运行时，`find_umo_group_for_source()` 和 `get_report_destination_umo()` 会返回**第一个匹配的 Group**
-- "第一个"由配置文件中 Group 的定义顺序决定（上例中为 `tech_all`）
+- 配置加载时，系统会通过 `_validate_umo_groups()` 检测并**记录提示日志**
+- 在运行时，会收集该 UMO 所属的**所有** UMO Group，并将报告广播到它们的 `output_umo`
+- 发送目标会进行去重，避免同一个 UMO 收到重复的消息
 
 #### 最佳实践
 
-**推荐做法**：确保每个 UMO 只属于一个 UMO Group
+**推荐做法**：仍建议每个 UMO 只属于一个 UMO Group
 
 如果确实需要一个 UMO 的报告发送到多个目标：
-1. 只将该 UMO 放入一个 UMO Group
-2. 在应用层实现额外的分发逻辑（例如通过自定义插件）
+1. 将该 UMO 放入多个 UMO Group
+2. 系统会自动向所有匹配的 `output_umo` 发送报告（去重）
 
 ### 2. UMO 既属于 Group 又需要独立报告
 
@@ -65,19 +65,13 @@
 
 #### 当前行为
 
-当前实现中，如果一个 UMO 属于某个 UMO Group：
-- 报告会自动重定向到该 Group 的 `output_umo`
-- **不会**再发送到原始 UMO
-
-这是因为 `get_report_destination_umo()` 会优先返回 Group 的 `output_umo`。
+从 v4.9.13 开始，可以通过配置直接启用“双重发送”：
+- 报告会发送到 Group 的 `output_umo`
+- 如果在 `dual_send_source_umos` 中声明了该 UMO（或所在的 UMO Group），也会发送一份到原始 UMO
 
 #### 解决方案
 
-目前有两种方案：
-
-**方案 1：分离配置（推荐）**
-
-不将需要独立报告的 UMO 加入 UMO Group：
+可以在配置中添加 `umo_groups.dual_send_source_umos`：
 
 ```json
 {
@@ -86,39 +80,22 @@
       {
         "group_id": "tech_all",
         "source_umos": [
-          "onebot:GroupMessage:222222",  // 只包含 B、C
+          "onebot:GroupMessage:222222",
           "onebot:GroupMessage:333333"
         ],
         "output_umo": "onebot:GroupMessage:999999"
       }
-    ]
-  },
-  "auto_analysis": {
-    "scheduled_group_list": [
-      "_umoGroup:tech_all",
-      "onebot:GroupMessage:111111"  // A 单独配置
+    ],
+    "dual_send_source_umos": [
+      "onebot:GroupMessage:222222"
     ]
   }
 }
 ```
 
-这样，群 A 会生成自己的独立报告，而群 B、C 的报告会聚合发送到群 M。
+这样，群 222222 的报告会同时发到 `output_umo`（999999）和它自身。
 
-**方案 2：应用层实现双重发送（高级）**
-
-如果需要真正的"既聚合又独立"，需要在调用方实现额外逻辑：
-
-```python
-# 伪代码示例
-def send_report_with_dual_output(source_umo, report):
-    # 1. 发送到 UMO Group 的 output_umo
-    dest_umo = config.get_report_destination_umo(source_umo)
-    await send_report_to(dest_umo, report)
-
-    # 2. 如果 source_umo 在特殊列表中，也发送到其自身
-    if source_umo in DUAL_OUTPUT_UMOS:
-        await send_report_to(source_umo, report)
-```
+也支持直接写 `_umoGroup:ID`，为整个 Group 成员开启双重发送。
 
 ## 匹配逻辑详解
 
@@ -245,22 +222,22 @@ if len(groups) > 1:
 
 ### 更新的方法文档
 
-#### `get_report_destination_umo(source_umo: str) -> str`
+#### `get_report_destinations(source_umo: str, include_source_if_group_member: bool = True) -> list[str]`
 
 **新增说明**：
-- 明确多重成员关系时返回第一个匹配 Group 的 output_umo
-- 明确不会同时发送到 Group 和原始 UMO
+- 返回所有匹配 UMO Group 的 `output_umo`，按配置顺序去重
+- 当 `include_source_if_group_member=True` 且命中 `dual_send_source_umos` 时，会附加原始 UMO
 
-详见方法文档字符串。
+> 兼容性：`get_report_destination_umo` 仍然存在，但仅返回首个目标。
 
 ## 总结
 
 ### 关键要点
 
-1. **每个 UMO 应只属于一个 UMO Group**（强烈建议）
-2. **如需独立报告，不要将 UMO 加入 Group**，或实现自定义分发逻辑
-3. **关注配置加载时的警告日志**，及时修正配置
-4. **所有匹配逻辑已统一**，行为一致且可预测
+1. **仍建议一个 UMO 只属于一个 UMO Group**，但系统已支持多 Group 广播（去重）
+2. **需要自发+聚合的 UMO** 可以加入 `dual_send_source_umos`
+3. **关注配置加载时的提示日志**，确认是否存在多重成员关系
+4. **所有匹配逻辑统一**，名单过滤与分发行为一致、可预测
 
 ### 未来改进方向
 
