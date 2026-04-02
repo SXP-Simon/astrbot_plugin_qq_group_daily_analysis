@@ -9,6 +9,7 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
 from ...utils.logger import logger
+from ..utils.template_utils import upgrade_str_format_template
 
 
 class ConfigManager:
@@ -332,6 +333,80 @@ class ConfigManager:
         prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
         self.config.save_config()
 
+    def _upgrade_config_item(self, group: str, key: str, setter_func):
+        """升级指定配置项的值（从 str.format -> string.Template），并回写。"""
+        # 如果是 prompts，则先取 prompts 分组，再取子分组 (group)
+        if group in (
+            "quality_analysis_prompts",
+            "topic_analysis_prompts",
+            "user_title_analysis_prompts",
+            "golden_quote_analysis_prompts",
+        ):
+            target_group = self._get_group("prompts").get(group, {})
+        else:
+            target_group = self._get_group(group)
+
+        val = target_group.get(key, "")
+        if not val or not isinstance(val, str):
+            return False
+
+        upgraded_val, upgraded = upgrade_str_format_template(val)
+        if upgraded and upgraded_val != val:
+            setter_func(upgraded_val)
+            logger.info(
+                f"配置项 {group}.{key} 发现旧版语法并已自动升级为 string.Template 格式。"
+            )
+            return True
+        return False
+
+    def upgrade_prompt_templates(self):
+        """启动时调用，扫描并升级所有可配置的模板（含 prompt 和文件名）。"""
+        modified = False
+        # 1. 提示词模板升级
+        modified |= self._upgrade_config_item(
+            "quality_analysis_prompts",
+            "quality_v2_prompt",
+            self.set_quality_analysis_prompt,
+        )
+        modified |= self._upgrade_config_item(
+            "quality_analysis_prompts",
+            "quality_summary_prompt",
+            self.set_quality_summary_prompt,
+        )
+        modified |= self._upgrade_config_item(
+            "topic_analysis_prompts",
+            "topic_prompt",
+            self.set_topic_analysis_prompt,
+        )
+        modified |= self._upgrade_config_item(
+            "user_title_analysis_prompts",
+            "user_title_prompt",
+            self.set_user_title_analysis_prompt,
+        )
+        modified |= self._upgrade_config_item(
+            "golden_quote_analysis_prompts",
+            "golden_quote_v2_prompt",
+            self.set_golden_quote_analysis_prompt,
+        )
+
+        # 2. 文件名格式升级
+        modified |= self._upgrade_config_item(
+            "pdf",
+            "pdf_filename_format",
+            self.set_pdf_filename_format,
+        )
+        modified |= self._upgrade_config_item(
+            "html",
+            "html_filename_format",
+            self.set_html_filename_format,
+        )
+
+        if modified:
+            logger.info(
+                "已完成所有配置模板从 str.format 到 string.Template 的安全迁移。（已自动回写配置）"
+            )
+        return modified
+
     def get_quality_summary_prompt(self, style: str = "quality_summary_prompt") -> str:
         """获取聊天质量汇总分析提示词模板"""
         prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
@@ -540,6 +615,11 @@ class ConfigManager:
     def set_pdf_filename_format(self, format_str: str):
         """设置PDF文件名格式"""
         self._ensure_group("pdf")["pdf_filename_format"] = format_str
+        self.config.save_config()
+
+    def set_html_filename_format(self, format_str: str):
+        """设置HTML文件名格式"""
+        self._ensure_group("html")["html_filename_format"] = format_str
         self.config.save_config()
 
     def get_report_template(self) -> str:

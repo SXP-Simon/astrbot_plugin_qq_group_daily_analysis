@@ -8,6 +8,7 @@ from datetime import datetime
 
 from ....domain.models.data_models import SummaryTopic, TokenUsage
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_topics_with_regex
 from ..utils.response_validation import validate_topic_items
@@ -162,15 +163,14 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic]):
         prompt_template = self.config_manager.get_topic_analysis_prompt()
 
         if prompt_template:
-            # 使用配置中的 prompt 并替换变量
             try:
-                prompt = prompt_template.format(
-                    max_topics=max_topics, messages_text=messages_text
+                prompt = render_template(
+                    prompt_template,
+                    max_topics=max_topics,
+                    messages_text=messages_text,
                 )
                 logger.info("使用配置中的话题分析提示词")
                 return prompt
-            except KeyError as e:
-                logger.warning(f"话题分析提示词变量格式错误: {e}")
             except Exception as e:
                 logger.warning(f"应用话题分析提示词失败: {e}")
 
