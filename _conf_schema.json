@@ -376,7 +376,7 @@
                 "type": "string",
                 "description": "报告储存目录",
                 "default": "",
-                "hint": "HTML报告文件的保存目录，用于存储生成的 HTML 文件和原始 JSON 数据。留空则自动使用插件数据目录下的 self_hosted_html_reports 目录。"
+                "hint": "HTML报告文件的保存目录，用于存储生成的 HTML 文件和原始 JSON 数据。留空则自动使用插件数据目录（astrbot_path/data/plugin_data/astrbot_plugin_qq_group_daily_analysis/）下的 self_hosted_html_reports 目录。"
             },
             "html_filename_format": {
                 "type": "string",
