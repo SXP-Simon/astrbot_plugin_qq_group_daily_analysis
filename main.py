@@ -80,15 +80,28 @@ class GroupDailyAnalysis(Star):
         super().__init__(context)
         self.config = config
 
+        from pathlib import Path
+
+        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
         # 1. 基础设施层
         self.config_manager = ConfigManager(config)
         self.bot_manager = BotManager(self.config_manager)
         self.bot_manager.set_context(context)
         self.bot_manager.set_plugin_instance(self)
         self.history_manager = HistoryManager(self)
-        self.report_generator = ReportGenerator(
-            self.config_manager, StarTools.get_data_dir()
-        )
+
+        try:
+            plugin_data_dir = StarTools.get_data_dir()
+        except Exception:
+            # 回退逻辑：手动构造满足规范的路径
+            plugin_data_dir = (
+                Path(get_astrbot_data_path())
+                / "plugin_data"
+                / "astrbot_plugin_qq_group_daily_analysis"
+            )
+
+        self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
         # Telegram 注册表 (持久层)
         self.telegram_group_registry = TelegramGroupRegistry(self)
