@@ -38,8 +38,45 @@ class ReportDispatcher:
     ):
         """
         分发分析报告
+
+        Args:
+            group_id: 原始分析的群组 ID
+            analysis_result: 分析结果
+            platform_id: 平台 ID
+
+        Note:
+            如果 group_id 对应的 UMO 属于某个 UMO Group，
+            报告将自动发送到该 Group 的 output_umo
         """
         trace_id = TraceContext.get()
+
+        # 检查是否需要重定向到 UMO Group 的 output_umo
+        if platform_id:
+            source_umo = f"{platform_id}:GroupMessage:{group_id}"
+            dest_umo = self.config_manager.get_report_destination_umo(source_umo)
+
+            # 如果目标 UMO 与源 UMO 不同，说明需要重定向
+            if dest_umo != source_umo:
+                logger.info(
+                    f"[{trace_id}] 群 {group_id} 属于 UMO Group，重定向报告至: {dest_umo}"
+                )
+                # 解析目标 UMO 以获取目标群组 ID 和平台 ID
+                try:
+                    parts = dest_umo.split(":")
+                    if len(parts) == 3:
+                        target_platform_id = parts[0]
+                        target_group_id = parts[2]
+                        # 使用目标群组和平台发送报告
+                        group_id = target_group_id
+                        platform_id = target_platform_id
+                        logger.info(
+                            f"[{trace_id}] 报告将发送至: platform={target_platform_id}, group={target_group_id}"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[{trace_id}] 解析目标 UMO 失败: {dest_umo}, 错误: {e}"
+                    )
+
         output_format = self.config_manager.get_output_format()
         logger.info(
             f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"

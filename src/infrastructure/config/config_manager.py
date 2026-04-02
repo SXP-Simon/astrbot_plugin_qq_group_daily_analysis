@@ -983,3 +983,22 @@ class ConfigManager:
             if group:
                 return group.get("source_umos", [])
         return [identifier]
+
+    def get_report_destination_umo(self, source_umo: str) -> str:
+        """
+        获取报告应该发送到的目标 UMO。
+        - 如果 source_umo 属于某个 UMO Group，返回该 Group 的 output_umo
+        - 否则返回原始的 source_umo
+
+        Args:
+            source_umo: 原始消息来源的 UMO，格式如 "platform:MessageType:group_id"
+
+        Returns:
+            目标 UMO（报告发送目标）
+        """
+        group = self.find_umo_group_for_source(source_umo)
+        if group:
+            output_umo = group.get("output_umo")
+            if output_umo:
+                return output_umo
+        return source_umo
