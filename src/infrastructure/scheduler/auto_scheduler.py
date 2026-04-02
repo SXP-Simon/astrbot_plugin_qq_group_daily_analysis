@@ -5,7 +5,7 @@
 
 import asyncio
 import time as time_mod
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -15,6 +15,22 @@ from ...utils.logger import logger
 from ..messaging.message_sender import MessageSender
 from ..platform.factory import PlatformAdapterFactory
 from ..reporting.dispatcher import ReportDispatcher
+
+
+class UMOOutputDestination(TypedDict):
+    """UMO Group 报告输出目标。"""
+
+    platform_id: str
+    group_id: str
+
+
+class UMOGroupTarget(TypedDict):
+    """UMO Group 任务目标。"""
+
+    group_id: str
+    mode: Literal["traditional", "incremental"]
+    sources: list[str]
+    outputs: list[UMOOutputDestination]
 
 
 class AutoScheduler:
@@ -386,9 +402,11 @@ class AutoScheduler:
             valid.append(umo_str)
         return valid
 
-    def _normalize_output_destinations(self, outputs: list[str]) -> list[dict]:
+    def _normalize_output_destinations(
+        self, outputs: list[str]
+    ) -> list[UMOOutputDestination]:
         """将输出 UMO 解析为可发送的目标列表。"""
-        destinations: list[dict] = []
+        destinations: list[UMOOutputDestination] = []
         seen: set[tuple[str, str]] = set()
         for umo in outputs:
             umo_str = str(umo).strip()
@@ -407,7 +425,7 @@ class AutoScheduler:
 
     def _get_umo_group_targets(
         self, mode_filter: str | None = None
-    ) -> list[dict[str, object]]:
+    ) -> list[UMOGroupTarget]:
         """解析配置中声明的 UMO Group 目标。"""
         group_map = self.config_manager.get_umo_group_map()
         if not group_map:
@@ -430,7 +448,7 @@ class AutoScheduler:
             if (gid := self._normalize_group_entry(item, defined_ids))
         }
 
-        targets: list[dict[str, object]] = []
+        targets: list[UMOGroupTarget] = []
 
         for gid, cfg in group_map.items():
             if mode_filter in (None, "traditional"):
@@ -463,7 +481,7 @@ class AutoScheduler:
                         }
                     )
 
-        filtered: list[dict[str, object]] = []
+        filtered: list[UMOGroupTarget] = []
         for t in targets:
             if not t["sources"]:
                 logger.info(f"[UMOGroup] 组 {t['group_id']} 未找到可用来源，跳过该任务")
@@ -522,7 +540,7 @@ class AutoScheduler:
                             gid, pid
                         )
 
-            async def dispatch_umo_group(target: dict):
+            async def dispatch_umo_group(target: UMOGroupTarget):
                 async with sem:
                     return await self._perform_umo_group_analysis_with_timeout(
                         target["group_id"],
@@ -608,7 +626,7 @@ class AutoScheduler:
         self,
         group_id: str,
         source_umos: list[str],
-        output_targets: list[dict],
+        output_targets: list[UMOOutputDestination],
         mode: str,
     ):
         """为 UMO Group 执行聚合分析（带超时控制）。"""
@@ -685,7 +703,7 @@ class AutoScheduler:
         self,
         group_id: str,
         source_umos: list[str],
-        output_targets: list[dict],
+        output_targets: list[UMOOutputDestination],
         mode: str,
     ):
         """为 UMO Group 执行聚合分析并分发报告。"""

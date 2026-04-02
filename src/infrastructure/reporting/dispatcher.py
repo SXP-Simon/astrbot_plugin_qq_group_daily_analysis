@@ -43,9 +43,15 @@ class ReportDispatcher:
         trace_id = TraceContext.get()
         output_format = self.config_manager.get_output_format()
         target_group_id = report_group_id or group_id
-        logger.info(
-            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
-        )
+        if report_group_id:
+            logger.info(
+                f"[{trace_id}] 正在分发报告 (逻辑群: {report_group_id}, "
+                f"发送目标群: {group_id}, 格式: {output_format})"
+            )
+        else:
+            logger.info(
+                f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
+            )
 
         success = False
         if output_format == "image":

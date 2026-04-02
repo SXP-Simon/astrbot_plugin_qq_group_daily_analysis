@@ -68,7 +68,12 @@ class ConfigManager:
         glist = [str(g) for g in self.get_group_list()]
         target = str(group_id_or_umo)
 
-        target_umo_groups = set(self.find_umo_groups_by_source(target))
+        # 仅当名单中包含 UMO Group ID 时才执行反向索引扫描，
+        # 避免普通群号/UMO 场景每次都遍历全部 UMO Group。
+        if any(self.is_umo_group_id(item) for item in glist):
+            target_umo_groups = set(self.find_umo_groups_by_source(target))
+        else:
+            target_umo_groups = set()
 
         target_simple_id = target.split(":")[-1] if ":" in target else target
         target_parent_id = (

@@ -867,9 +867,7 @@ class AnalysisApplicationService:
 
             await self.incremental_store.save_batch(batch)
 
-            import time
-
-            safe_now = int(time.time()) + 60
+            safe_now = int(time_mod.time()) + 60
             for progress_key, ts in source_watermarks.items():
                 safe_ts = min(ts, safe_now)
                 await self.incremental_store.update_last_analyzed_timestamp(
