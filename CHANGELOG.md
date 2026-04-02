@@ -1,13 +1,15 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.11] - feat(HTML): HTML 报告与自建外链吗，将群分析变成可以点击跳转的精美网页链接
-*   **🐛 移动端阅读优化**: force desktop viewport for exported html reports (#147 @clown145)
-*   **✨ 优化 HTML 格式使用体验**: 檔案名稱模板支援 ULID 和資料夾路徑 (#146 @lekoOwO)
+## [v4.9.12] - 移除无效的重试器
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.11] - feat(HTML): HTML 报告与自建外链吗，将群分析变成可以点击跳转的精美网页链接
+*   **🐛 移动端阅读优化**: force desktop viewport for exported html reports (#147 @clown145)
+*   **✨ 优化 HTML 格式使用体验**: 檔案名稱模板支援 ULID 和資料夾路徑 (#146 @lekoOwO)
 
 ## [v4.9.10] - 解决 TG 无法贴表情的 bug，HTML 输出模式，优化渲染
 *   **🐛 TG 贴表情**: @clown145
