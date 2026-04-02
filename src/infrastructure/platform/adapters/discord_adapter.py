@@ -124,7 +124,7 @@ class DiscordAdapter(PlatformAdapter):
             list[UnifiedMessage]: 统一格式的消息对象列表
         """
         if not discord:
-            logger.error("Discord module (py-cord) not found. Cannot fetch messages.")
+            logger.error("未找到 Discord 模块 (py-cord)，无法拉取历史消息。")
             return []
 
         try:

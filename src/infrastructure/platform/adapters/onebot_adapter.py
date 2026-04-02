@@ -22,7 +22,6 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
-from ....shared.trace_context import REPORT_CAPTION_PATTERN
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 
@@ -494,7 +493,7 @@ class OneBotAdapter(PlatformAdapter):
         """
         try:
             use_base64 = False
-            plugin = self.config.get("plugin_instance") if self.config else None
+            plugin: Any = self.config.get("plugin_instance") if self.config else None
             if plugin and hasattr(plugin, "config_manager"):
                 use_base64 = plugin.config_manager.get_enable_base64_image()
 
@@ -574,150 +573,16 @@ class OneBotAdapter(PlatformAdapter):
                 logger.info(f"Base64 回退模式发送图片成功: 群 {group_id}")
                 return True
 
-        except Exception as e:
-            # 识别 OneBot 的“假失败”情况：如果由于图片过大导致超时，其实图片往往已在后台由 OneBot 自动重传并最终会成功。
-            error_str = str(e).lower()
-            # 判定为“疑似成功”的特征：超时、1200、网络错误
-            is_potential_success = (
-                "timeout" in error_str or "1200" in error_str or "网络错误" in error_str
+            await self.bot.call_action(
+                "send_group_msg",
+                group_id=int(group_id),
+                message=message,
             )
+            logger.info(f"Base64 回退模式发送图片成功: 群 {group_id}")
+            return True
 
-            if is_potential_success:
-                logger.warning(
-                    f"OneBot 发送群 {group_id} 图片出现疑似超时 ({e})。 "
-                    "进入多轮观察期，尝试通过历史回显核实..."
-                )
-
-                # Multi-stage observation. Some OneBot implementations commit
-                # history with delay after timeout-like errors.
-                observe_windows = (10, 20, 30)
-                for wait_seconds in observe_windows:
-                    await asyncio.sleep(wait_seconds)
-                    if await self.was_image_sent_recently(
-                        group_id, seconds=420, token=caption
-                    ):
-                        logger.info(
-                            f"[OneBot] [真相拦截] 群 {group_id} 在 {wait_seconds}s 观察后确认已送达，拦截重试。"
-                        )
-                        return True
-
-                return False  # 没找回，返回 False，由上层 RetryManager 接管（带 20s 延迟观察期）
-
-            logger.error(f"OneBot 图片发送最终失败: {e}")
-            return False
-
-    async def was_image_sent_recently(
-        self, group_id: str, seconds: int = 60, token: str | None = None
-    ) -> bool:
-        """
-        [真相检查] 检查最近 X 秒内，机器人是否已经向该群发送过图片。
-        用于判断之前的“超时/1200”错误是否其实已经在后台发送成功。
-        """
-        try:
-            # 1. 获取最近的消息历史 (OneBot 标准 API)
-            try:
-                history = await self.bot.call_action(
-                    "get_group_msg_history",
-                    group_id=int(group_id),
-                    count=100,  # 增大扫描深度以应对高频群聊
-                )
-            except Exception as e:
-                logger.warning(
-                    f"[OneBot] was_image_sent_recently: get_group_msg_history 失败 (可能 API 繁忙): {e}"
-                )
-                return False  # API 失败时，我们保持谨慎，但不阻止重试
-
-            if not history or "messages" not in history:
-                messages = history if isinstance(history, list) else []
-            else:
-                messages = history["messages"]
-
-            # 2. 逆序检查
-            import time
-
-            now = time.time()
-            # 1. 优先从内存缓存中获取机器人 ID
-            self_id = self.bot_self_ids[0] if self.bot_self_ids else ""
-
-            if not self_id:
-                # 尝试从 bot 实例中获取多个可能的 ID 属性
-                self_id = (
-                    str(getattr(self.bot, "self_id", ""))
-                    or str(getattr(self.bot, "uin", ""))
-                    or str(getattr(self.bot, "user_id", ""))
-                )
-
-            if not self_id:
-                # 最后的 API 兜底：尝试从 login_info 获取
-                try:
-                    login_info = await self.bot.call_action("get_login_info")
-                    if login_info and "user_id" in login_info:
-                        self_id = str(login_info["user_id"])
-                        # 更新缓存，下次无需重复请求
-                        if self_id not in self.bot_self_ids:
-                            self.bot_self_ids.append(self_id)
-                        logger.info(f"[OneBot] 成功通过 API 获取到机器人 ID: {self_id}")
-                except Exception as e:
-                    logger.debug(
-                        f"[OneBot] was_image_sent_recently: get_login_info API 调用失败: {e}"
-                    )
-
-            if not self_id:
-                logger.warning(
-                    "[OneBot] was_image_sent_recently: 无法确定机器人 ID，历史回显校验可能不准确"
-                )
-
-            # [优化] 从 Caption 中提取基于时间戳的去重 Token
-            search_token = None
-            if token:
-                match = REPORT_CAPTION_PATTERN.search(token)
-                if match:
-                    search_token = match.group(0)  # 例如 "| 03-12 17:33:20"
-
-            for msg in reversed(messages):
-                msg_time = msg.get("time", 0)
-                # 只检查约定时间范围内的消息
-                if now - msg_time > seconds:
-                    break
-
-                # 检查发送者是否是机器人自己
-                user_id = str(
-                    msg.get("user_id", msg.get("sender", {}).get("user_id", ""))
-                )
-                if user_id not in self.bot_self_ids:
-                    # 如果内存中没有，尝试最后一次实时提取作为兜底
-                    if not self_id or user_id != self_id:
-                        continue
-
-                # 检查消息内容是否包含图片
-                raw_message = msg.get("message", [])
-                # 适配字符串形式或列表形式的消息
-                msg_str = str(raw_message)
-
-                has_image = "[CQ:image" in msg_str or '"type": "image"' in msg_str
-
-                if has_image:
-                    if search_token:
-                        # 精确匹配 TraceID
-                        if search_token in msg_str:
-                            logger.info(
-                                f"[OneBot] [真相检查] 发现匹配 ID ({search_token}) 的历史图片。拦截重复发送。群: {group_id}"
-                            )
-                            return True
-                        else:
-                            logger.debug(
-                                f"[OneBot] [真相检查] 发现机器人发送的图片，但 ID 不匹配。跳过。群: {group_id}"
-                            )
-                    else:
-                        # 广义匹配（回退模式）
-                        logger.info(
-                            f"[OneBot] [真相检查] 发现近期发送过的图片回显 (广义匹配)。无需重试。群: {group_id}"
-                        )
-                        return True
-
-            return False
         except Exception as e:
-            logger.debug(f"回显自检失败: {e}")
+            logger.error(f"OneBot 图片发送最终失败: {e}")
             return False
 
     async def send_file(
@@ -761,10 +626,13 @@ class OneBotAdapter(PlatformAdapter):
                     file=file_b64,
                     name=filename or os.path.basename(file_path),
                 )
-                logger.info(f"Base64 回退模式发送文件成功: {filename or file_path}")
-                return True
+            # ... 实现省略 ...
+            logger.info(
+                f"[OneBot] 文件发送成功（Base64 模式）: {filename or file_path}"
+            )
+            return True
         except Exception as e:
-            logger.error(f"OneBot 文件发送最终失败: {e}")
+            logger.error(f"[OneBot] 文件发送最终失败: {e}")
             return False
 
     async def send_forward_msg(
@@ -774,13 +642,6 @@ class OneBotAdapter(PlatformAdapter):
     ) -> bool:
         """
         发送群合并转发消息。
-
-        Args:
-            group_id (str): 目标群号
-            nodes (list[dict]): 转发节点列表
-
-        Returns:
-            bool: 是否发送成功
         """
         if not hasattr(self.bot, "call_action"):
             return False
@@ -799,7 +660,7 @@ class OneBotAdapter(PlatformAdapter):
             )
             return True
         except Exception as e:
-            logger.warning(f"OneBot 发送合并转发消息失败: {e}")
+            logger.warning(f"[OneBot] 发送合并转发消息失败: {e}")
             return False
 
     # ==================== IGroupInfoRepository 实现 ====================
