@@ -63,7 +63,15 @@ class ReportDispatcher:
                 # 解析目标 UMO 以获取目标群组 ID 和平台 ID
                 try:
                     parts = dest_umo.split(":")
-                    if len(parts) == 3:
+                    if len(parts) != 3:
+                        logger.debug(
+                            f"[{trace_id}] 无法解析目标 UMO '{dest_umo}'，预期格式为 'platform:type:group_id'，"
+                            f"将回退到原始 group_id={group_id} / platform_id={platform_id}"
+                        )
+                        # 回退到调用方传入的 group_id / platform_id
+                        target_platform_id = platform_id
+                        target_group_id = group_id
+                    else:
                         target_platform_id = parts[0]
                         target_group_id = parts[2]
                         # 使用目标群组和平台发送报告

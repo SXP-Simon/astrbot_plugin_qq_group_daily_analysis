@@ -30,16 +30,123 @@ class ConfigManager:
         self._playwright_available = False
         self._playwright_version = None
         self._check_playwright_availability()
+        self._validate_umo_groups()
 
     def _get_group(self, group: str) -> dict:
         """获取指定分组的配置字典，不存在时返回空字典"""
         return self.config.get(group, {})
+
+    def _match_umo_to_source(
+        self, source_umo: str, target_umo: str
+    ) -> bool:
+        """
+        统一的 UMO 匹配逻辑辅助函数。
+
+        检查 target_umo 是否匹配 source_umo（来自 UMO Group 的 source_umos 列表）。
+        支持：
+        - 完整 UMO 匹配
+        - 简单 ID 匹配（例如：source 是完整 UMO，target 是简单 ID）
+        - Telegram 话题父群匹配
+
+        Args:
+            source_umo: 配置中的 UMO（来自 UMO Group）
+            target_umo: 待匹配的 UMO
+
+        Returns:
+            是否匹配
+        """
+        # 完全相同
+        if source_umo == target_umo:
+            return True
+
+        # 提取简单 ID 和父 ID
+        target_simple_id = target_umo.split(":")[-1] if ":" in target_umo else target_umo
+        target_parent_id = (
+            target_simple_id.split("#", 1)[0]
+            if "#" in target_simple_id
+            else target_simple_id
+        )
+
+        source_simple_id = source_umo.split(":")[-1] if ":" in source_umo else source_umo
+        source_parent_id = (
+            source_simple_id.split("#", 1)[0]
+            if "#" in source_simple_id
+            else source_simple_id
+        )
+
+        # 简单 ID 匹配
+        if ":" in source_umo and ":" in target_umo:
+            # 两者都是完整 UMO，比较简单 ID
+            if source_simple_id == target_simple_id:
+                return True
+        elif ":" in source_umo:
+            # source 是完整 UMO，target 是简单 ID
+            if source_simple_id == target_umo:
+                return True
+        elif ":" in target_umo:
+            # target 是完整 UMO，source 是简单 ID
+            if source_umo == target_simple_id:
+                return True
+        else:
+            # 都是简单 ID，已经在开头比较过了
+            pass
+
+        # Telegram 话题父群匹配
+        # 例如：source=telegram2:GroupMessage:-1001，target=telegram2:GroupMessage:-1001#2264
+        if "#" in target_simple_id and ":" in source_umo and ":" in target_umo:
+            source_prefix = source_umo.rsplit(":", 1)[0]
+            target_prefix = target_umo.rsplit(":", 1)[0]
+            if source_prefix == target_prefix and source_simple_id == target_parent_id:
+                return True
+
+        # 简单 ID 的话题父群匹配
+        # 例如：source=-1001，target=-1001#2264
+        if "#" in target_simple_id and source_parent_id == target_parent_id:
+            return True
+
+        return False
 
     def _ensure_group(self, group: str) -> dict:
         """确保指定分组存在并返回其字典引用"""
         if group not in self.config:
             self.config[group] = {}
         return self.config[group]
+
+    def _validate_umo_groups(self):
+        """
+        验证 UMO Group 配置，检查是否有 UMO 属于多个 Group。
+
+        如果发现多重成员关系，记录警告日志。
+        """
+        groups = self.get_umo_groups()
+        if not groups:
+            return
+
+        # 构建 UMO -> [group_ids] 的映射
+        umo_to_groups: dict[str, list[str]] = {}
+
+        for group in groups:
+            group_id = group.get("group_id", "")
+            source_umos = group.get("source_umos", [])
+
+            for source_umo in source_umos:
+                # 对于每个 source_umo，找出所有可能匹配它的其他 UMO
+                # 这里我们需要考虑简单 ID 匹配的情况
+                normalized_key = source_umo  # 使用原始值作为 key
+
+                if normalized_key not in umo_to_groups:
+                    umo_to_groups[normalized_key] = []
+                umo_to_groups[normalized_key].append(group_id)
+
+        # 检查是否有 UMO 属于多个 Group
+        for umo, group_ids in umo_to_groups.items():
+            if len(group_ids) > 1:
+                logger.warning(
+                    f"配置警告：UMO '{umo}' 同时属于多个 UMO Group: {group_ids}。"
+                    f"在使用 find_umo_group_for_source 或 get_report_destination_umo 时，"
+                    f"将使用第一个匹配的 Group ('{group_ids[0]}')。"
+                    f"建议：确保每个 UMO 只属于一个 Group，或明确文档说明优先级规则。"
+                )
 
     def get_group_list_mode(self) -> str:
         """获取群组列表模式 (whitelist/blacklist/none)"""
@@ -91,15 +198,10 @@ class ConfigManager:
                 group = self.get_umo_group_by_id(group_id)
                 if group:
                     source_umos = group.get("source_umos", [])
-                    # 检查完整 UMO 或简单 ID 是否在 source_umos 中
+                    # 使用统一的匹配逻辑
                     for source_umo in source_umos:
-                        if source_umo == target:
+                        if self._match_umo_to_source(source_umo, target):
                             return True
-                        # 支持简单 ID 匹配
-                        if ":" in source_umo:
-                            source_simple_id = source_umo.split(":")[-1]
-                            if source_simple_id == target_simple_id:
-                                return True
                 return False
 
             # 原有的匹配逻辑（处理完整 UMO 和简单 ID）
@@ -599,20 +701,10 @@ class ConfigManager:
                 group = self.get_umo_group_by_id(group_id)
                 if group:
                     source_umos = group.get("source_umos", [])
-                    # 检查完整 UMO 或简单 ID 是否在 source_umos 中
+                    # 使用统一的匹配逻辑
                     for source_umo in source_umos:
-                        if source_umo == umo:
+                        if self._match_umo_to_source(source_umo, umo):
                             return True
-                        # 支持简单 ID 匹配
-                        if ":" in source_umo and ":" in umo:
-                            source_simple_id = source_umo.split(":")[-1]
-                            umo_simple_id = umo.split(":")[-1]
-                            if source_simple_id == umo_simple_id:
-                                return True
-                        elif ":" in source_umo:
-                            source_simple_id = source_umo.split(":")[-1]
-                            if source_simple_id == umo:
-                                return True
                 return False
 
             # 原有的匹配逻辑
@@ -950,13 +1042,45 @@ class ConfigManager:
         return None
 
     def find_umo_group_for_source(self, source_umo: str) -> dict | None:
-        """根据来源 UMO 查找其所属的 UMO Group"""
+        """
+        根据来源 UMO 查找其所属的 UMO Group。
+
+        注意：如果一个 UMO 属于多个 Group，返回第一个匹配的 Group。
+        建议在配置加载时使用 _validate_umo_groups() 检查并警告多重成员关系。
+
+        Args:
+            source_umo: 原始消息来源的 UMO
+
+        Returns:
+            第一个匹配的 UMO Group，如果没有匹配则返回 None
+        """
         groups = self.get_umo_groups()
         for group in groups:
             source_umos = group.get("source_umos", [])
-            if source_umo in source_umos:
-                return group
+            for umo in source_umos:
+                if self._match_umo_to_source(umo, source_umo):
+                    return group
         return None
+
+    def find_all_umo_groups_for_source(self, source_umo: str) -> list[dict]:
+        """
+        根据来源 UMO 查找其所属的所有 UMO Group。
+
+        Args:
+            source_umo: 原始消息来源的 UMO
+
+        Returns:
+            所有匹配的 UMO Group 列表
+        """
+        groups = self.get_umo_groups()
+        matched_groups = []
+        for group in groups:
+            source_umos = group.get("source_umos", [])
+            for umo in source_umos:
+                if self._match_umo_to_source(umo, source_umo):
+                    matched_groups.append(group)
+                    break  # 找到匹配就跳出内层循环
+        return matched_groups
 
     def resolve_umo_group_id(self, identifier: str) -> str | None:
         """
@@ -987,8 +1111,18 @@ class ConfigManager:
     def get_report_destination_umo(self, source_umo: str) -> str:
         """
         获取报告应该发送到的目标 UMO。
+
+        行为说明：
         - 如果 source_umo 属于某个 UMO Group，返回该 Group 的 output_umo
+        - 如果 source_umo 属于多个 UMO Group，返回第一个匹配 Group 的 output_umo
         - 否则返回原始的 source_umo
+
+        注意事项：
+        1. 如果一个 UMO 同时属于多个 Group，将使用第一个匹配的 Group 的 output_umo。
+           配置加载时会通过 _validate_umo_groups() 发出警告。
+        2. 如果一个 UMO 既属于 UMO Group 又需要发送独立报告，当前实现会将报告
+           发送到 Group 的 output_umo 而不是原始 UMO。
+           建议：如需同时发送到 Group 和原始 UMO，应在调用方实现额外逻辑。
 
         Args:
             source_umo: 原始消息来源的 UMO，格式如 "platform:MessageType:group_id"
