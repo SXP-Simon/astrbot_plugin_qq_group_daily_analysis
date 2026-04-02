@@ -52,7 +52,11 @@ class ConfigManager:
     def is_group_allowed(self, group_id_or_umo: str) -> bool:
         """
         根据配置的白/黑名单判断是否允许在该群聊中使用
-        支持传入 simple group_id 或 UMO (Unified Message Origin)
+        支持传入 simple group_id、UMO (Unified Message Origin) 或 UMO Group 引用
+
+        对于普通 UMO，会检查：
+        1. 该 UMO 是否直接在白/黑名单中
+        2. 该 UMO 是否属于某个在白/黑名单中的 UMO Group
         """
         mode = self.get_group_list_mode().lower()
         if mode not in ("whitelist", "blacklist", "none"):
@@ -77,11 +81,33 @@ class ConfigManager:
             target_simple_id: str,
             target_parent_id: str,
         ) -> bool:
+            # 如果列表项是 UMO Group 引用
+            if item.startswith("_umoGroup:"):
+                # 如果目标也是 UMO Group 引用，直接比较
+                if target.startswith("_umoGroup:"):
+                    return item == target
+                # 如果目标是普通 UMO，检查是否属于该 Group
+                group_id = item[len("_umoGroup:"):]
+                group = self.get_umo_group_by_id(group_id)
+                if group:
+                    source_umos = group.get("source_umos", [])
+                    # 检查完整 UMO 或简单 ID 是否在 source_umos 中
+                    for source_umo in source_umos:
+                        if source_umo == target:
+                            return True
+                        # 支持简单 ID 匹配
+                        if ":" in source_umo:
+                            source_simple_id = source_umo.split(":")[-1]
+                            if source_simple_id == target_simple_id:
+                                return True
+                return False
+
+            # 原有的匹配逻辑（处理完整 UMO 和简单 ID）
             if ":" in item:
                 if item == target:
                     return True
 
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
+                # 允许 Telegram 话题会话通过"父 UMO"命中，
                 # 例如: item=telegram2:GroupMessage:-1001
                 #      target=telegram2:GroupMessage:-1001#2264
                 if "#" in target_simple_id:
@@ -102,6 +128,19 @@ class ConfigManager:
             _is_match(item, target, target_simple_id, target_parent_id)
             for item in glist
         )
+
+        # 如果目标不是 UMO Group 引用，还需要检查它是否属于某个被允许的 UMO Group
+        if not target.startswith("_umoGroup:") and not is_in_list:
+            # 查找该 UMO 所属的 UMO Group
+            group = self.find_umo_group_for_source(target)
+            if group:
+                # 检查该 Group 是否在名单中
+                group_ref = f"_umoGroup:{group.get('group_id')}"
+                if any(
+                    _is_match(item, group_ref, "", "")
+                    for item in glist
+                ):
+                    is_in_list = True
 
         if mode == "whitelist":
             return is_in_list
@@ -531,37 +570,79 @@ class ConfigManager:
         self, group_umo_or_id: str, mode: str, group_list: list
     ) -> bool:
         """
-        通用的名单判定逻辑。
+        通用的名单判定逻辑。支持 UMO Group。
 
         逻辑如下：
         - whitelist 模式：
-            - 如果列表为空，则视为“此级别未开启”。
+            - 如果列表为空，则视为"此级别未开启"。
             - 如果不为空，仅在列表中的通过。
         - blacklist 模式：
             - 在列表中的不通过。
             - 如果列表为空，则全部通过。
+
+        对于普通 UMO/ID，会检查：
+        1. 该 UMO/ID 是否直接在名单中
+        2. 该 UMO/ID 是否属于某个在名单中的 UMO Group
         """
         group_list = [str(x).strip() for x in group_list]
         target = str(group_umo_or_id).strip()
 
         # 兼容 UMO 匹配 (如果列表里写的是 ID，UMO 也能匹配上)
         def match_umo(umo: str, item: str) -> bool:
+            # 如果列表项是 UMO Group 引用
+            if item.startswith("_umoGroup:"):
+                # 如果目标也是 UMO Group 引用，直接比较
+                if umo.startswith("_umoGroup:"):
+                    return item == umo
+                # 如果目标是普通 UMO，检查是否属于该 Group
+                group_id = item[len("_umoGroup:"):]
+                group = self.get_umo_group_by_id(group_id)
+                if group:
+                    source_umos = group.get("source_umos", [])
+                    # 检查完整 UMO 或简单 ID 是否在 source_umos 中
+                    for source_umo in source_umos:
+                        if source_umo == umo:
+                            return True
+                        # 支持简单 ID 匹配
+                        if ":" in source_umo and ":" in umo:
+                            source_simple_id = source_umo.split(":")[-1]
+                            umo_simple_id = umo.split(":")[-1]
+                            if source_simple_id == umo_simple_id:
+                                return True
+                        elif ":" in source_umo:
+                            source_simple_id = source_umo.split(":")[-1]
+                            if source_simple_id == umo:
+                                return True
+                return False
+
+            # 原有的匹配逻辑
             if umo == item:
                 return True
             if ":" in umo and umo.split(":")[-1] == item:
                 return True
             return False
 
+        # 直接匹配
+        direct_match = any(match_umo(target, x) for x in group_list)
+
+        # 如果目标不是 UMO Group 引用且没有直接匹配，检查是否属于某个 UMO Group
+        if not target.startswith("_umoGroup:") and not direct_match:
+            group = self.find_umo_group_for_source(target)
+            if group:
+                group_ref = f"_umoGroup:{group.get('group_id')}"
+                if any(match_umo(group_ref, x) for x in group_list):
+                    direct_match = True
+
         if mode == "whitelist":
             if not group_list:
                 # 白名单为空：此级别不开启 (按需开启逻辑)
                 return False
-            return any(match_umo(target, x) for x in group_list)
+            return direct_match
         else:  # blacklist
             if not group_list:
                 # 黑名单为空：全通过
                 return True
-            return not any(match_umo(target, x) for x in group_list)
+            return not direct_match
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
@@ -848,3 +929,76 @@ class ConfigManager:
             logger.info("配置重载完成")
         except Exception as e:
             logger.error(f"重新加载配置失败: {e}")
+
+    # ========== UMO Group 配置 ==========
+
+    def get_umo_groups(self) -> list[dict]:
+        """获取所有 UMO Group 配置"""
+        return self._get_group("umo_groups").get("groups", [])
+
+    def set_umo_groups(self, groups: list[dict]):
+        """设置 UMO Group 列表"""
+        self._ensure_group("umo_groups")["groups"] = groups
+        self.config.save_config()
+
+    def get_umo_group_by_id(self, group_id: str) -> dict | None:
+        """根据 group_id 获取 UMO Group 配置"""
+        groups = self.get_umo_groups()
+        for group in groups:
+            if group.get("group_id") == group_id:
+                return group
+        return None
+
+    def find_umo_group_for_source(self, source_umo: str) -> dict | None:
+        """根据来源 UMO 查找其所属的 UMO Group"""
+        groups = self.get_umo_groups()
+        for group in groups:
+            source_umos = group.get("source_umos", [])
+            if source_umo in source_umos:
+                return group
+        return None
+
+    def resolve_umo_group_id(self, identifier: str) -> str | None:
+        """
+        解析 UMO Group ID 引用。
+        如果 identifier 以 _umoGroup: 开头，则返回对应的 output_umo；
+        否则返回 None。
+        """
+        if identifier.startswith("_umoGroup:"):
+            group_id = identifier[len("_umoGroup:"):]
+            group = self.get_umo_group_by_id(group_id)
+            if group:
+                return group.get("output_umo")
+        return None
+
+    def expand_umo_identifier(self, identifier: str) -> list[str]:
+        """
+        展开 UMO 标识符。
+        - 如果是 _umoGroup: 引用，返回该 Group 的所有 source_umos
+        - 否则返回包含原始标识符的列表
+        """
+        if identifier.startswith("_umoGroup:"):
+            group_id = identifier[len("_umoGroup:"):]
+            group = self.get_umo_group_by_id(group_id)
+            if group:
+                return group.get("source_umos", [])
+        return [identifier]
+
+    def get_report_destination_umo(self, source_umo: str) -> str:
+        """
+        获取报告应该发送到的目标 UMO。
+        - 如果 source_umo 属于某个 UMO Group，返回该 Group 的 output_umo
+        - 否则返回原始的 source_umo
+
+        Args:
+            source_umo: 原始消息来源的 UMO，格式如 "platform:MessageType:group_id"
+
+        Returns:
+            目标 UMO（报告发送目标）
+        """
+        group = self.find_umo_group_for_source(source_umo)
+        if group:
+            output_umo = group.get("output_umo")
+            if output_umo:
+                return output_umo
+        return source_umo

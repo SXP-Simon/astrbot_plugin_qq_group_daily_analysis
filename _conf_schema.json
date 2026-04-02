@@ -523,5 +523,41 @@
                 "hint": "当同时启动多个群组的定时分析任务时，每个任务之间的延迟间隔（秒），建议根据实际的 LLM 服务速度填写，过短可能导致请求堆积，过长则分析效率降低。"
             }
         }
+    },
+    "umo_groups": {
+        "description": "UMO Group 设置",
+        "type": "object",
+        "hint": "UMO Group 可以将多个 UMO (Unified Message Origin) 聚合为一个虚拟群组，用于统一管理和输出分析报告。在所有原有可以设定 UMO 的地方都可以使用 _umoGroup:ID 的形式引用 UMO Group。",
+        "items": {
+            "groups": {
+                "type": "list",
+                "description": "UMO Group 列表",
+                "default": [],
+                "hint": "定义的 UMO Group 列表。每个 Group 包含：group_id (唯一标识)、source_umos (来源 UMO 列表)、output_umo (报告输出目标)。",
+                "items": {
+                    "type": "object",
+                    "items": {
+                        "group_id": {
+                            "type": "string",
+                            "description": "UMO Group ID",
+                            "hint": "唯一标识此 UMO Group 的 ID，使用时以 _umoGroup:ID 的形式引用"
+                        },
+                        "source_umos": {
+                            "type": "list",
+                            "description": "来源 UMO 列表",
+                            "hint": "属于此 Group 的所有 UMO，格式如：onebot:GroupMessage:123456",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "output_umo": {
+                            "type": "string",
+                            "description": "输出 UMO",
+                            "hint": "此 Group 的分析报告将发送到此 UMO，格式如：onebot:GroupMessage:123456"
+                        }
+                    }
+                }
+            }
+        }
     }
 }
