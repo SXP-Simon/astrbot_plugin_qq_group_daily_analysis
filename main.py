@@ -220,6 +220,12 @@ class GroupDailyAnalysis(Star):
 
                 logger.info(f"正在执行插件初始化 (来源: {source})...")
 
+                # 0. 自动升级旧版 prompt 模板（str.format -> string.Template）并回写配置
+                try:
+                    self.config_manager.upgrade_prompt_templates()
+                except Exception as e:
+                    logger.warning(f"自动升级 prompt 模板失败: {e}")
+
                 # 1. 尝试发现 bot 实例
                 await self.bot_manager.initialize_from_config()
 

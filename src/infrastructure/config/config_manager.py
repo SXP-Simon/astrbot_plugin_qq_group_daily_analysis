@@ -9,6 +9,7 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
 from ...utils.logger import logger
+from ...utils.template_utils import upgrade_str_format_template
 
 
 class ConfigManager:
@@ -331,6 +332,56 @@ class ConfigManager:
             prompts["quality_analysis_prompts"] = {}
         prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
         self.config.save_config()
+
+    def _upgrade_prompt_template(self, group: str, style: str, setter_func):
+        """升级指定 prompt 值（从 str.format -> string.Template），并回写配置。"""
+        prompts_config = self._get_group("prompts").get(group, {})
+        prompt = prompts_config.get(style, "")
+        if not prompt:
+            return False
+
+        upgraded_prompt, upgraded = upgrade_str_format_template(prompt)
+        if upgraded and upgraded_prompt != prompt:
+            setter_func(upgraded_prompt)
+            logger.info(
+                f"配置项 {group}.{style} 发现 str.format 模板并已自动升级为 string.Template。"
+            )
+            return True
+        return False
+
+    def upgrade_prompt_templates(self):
+        """启动时调用，扫描并升级所有可配置的 prompt 模板。"""
+        modified = False
+        modified |= self._upgrade_prompt_template(
+            "quality_analysis_prompts",
+            "quality_v2_prompt",
+            self.set_quality_analysis_prompt,
+        )
+        modified |= self._upgrade_prompt_template(
+            "quality_analysis_prompts",
+            "quality_summary_prompt",
+            self.set_quality_summary_prompt,
+        )
+        modified |= self._upgrade_prompt_template(
+            "topic_analysis_prompts",
+            "topic_prompt",
+            self.set_topic_analysis_prompt,
+        )
+        modified |= self._upgrade_prompt_template(
+            "user_title_analysis_prompts",
+            "user_title_prompt",
+            self.set_user_title_analysis_prompt,
+        )
+        modified |= self._upgrade_prompt_template(
+            "golden_quote_analysis_prompts",
+            "golden_quote_v2_prompt",
+            self.set_golden_quote_analysis_prompt,
+        )
+        if modified:
+            logger.info(
+                "已完成提示词模板从 str.format 到 string.Template 的升级。（自动回写配置）"
+            )
+        return modified
 
     def get_quality_summary_prompt(self, style: str = "quality_summary_prompt") -> str:
         """获取聊天质量汇总分析提示词模板"""

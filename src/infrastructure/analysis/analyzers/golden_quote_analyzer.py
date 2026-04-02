@@ -7,6 +7,7 @@ from datetime import datetime
 
 from ....domain.models.data_models import GoldenQuote, TokenUsage
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_golden_quotes_with_regex
 from ..utils.response_validation import validate_golden_quote_items
@@ -64,15 +65,14 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote]):
         prompt_template = self.config_manager.get_golden_quote_analysis_prompt()
 
         if prompt_template:
-            # 使用配置中的 prompt 并替换变量
             try:
-                prompt = prompt_template.format(
-                    max_golden_quotes=max_golden_quotes, messages_text=messages_text
+                prompt = render_template(
+                    prompt_template,
+                    max_golden_quotes=max_golden_quotes,
+                    messages_text=messages_text,
                 )
                 logger.info("使用配置中的金句分析提示词")
                 return prompt
-            except KeyError as e:
-                logger.warning(f"金句分析提示词变量格式错误: {e}")
             except Exception as e:
                 logger.warning(f"应用金句分析提示词失败: {e}")
 
