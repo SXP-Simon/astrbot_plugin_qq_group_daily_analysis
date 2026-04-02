@@ -106,6 +106,18 @@ class ConfigManager:
 
         return False
 
+    @staticmethod
+    def _deduplicate_preserve_order(items: list[str]) -> list[str]:
+        """去重并保留原有顺序。"""
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in items:
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            result.append(item)
+        return result
+
     def _ensure_group(self, group: str) -> dict:
         """确保指定分组存在并返回其字典引用"""
         if group not in self.config:
@@ -142,10 +154,9 @@ class ConfigManager:
         for umo, group_ids in umo_to_groups.items():
             if len(group_ids) > 1:
                 logger.warning(
-                    f"配置警告：UMO '{umo}' 同时属于多个 UMO Group: {group_ids}。"
-                    f"在使用 find_umo_group_for_source 或 get_report_destination_umo 时，"
-                    f"将使用第一个匹配的 Group ('{group_ids[0]}')。"
-                    f"建议：确保每个 UMO 只属于一个 Group，或明确文档说明优先级规则。"
+                    f"配置提示：UMO '{umo}' 同时属于多个 UMO Group: {group_ids}。"
+                    f"系统将向所有匹配的 Group 的 output_umo 广播报告（去重处理），"
+                    f"请确认这是预期行为以避免重复发送。"
                 )
 
     def get_group_list_mode(self) -> str:
@@ -233,16 +244,16 @@ class ConfigManager:
 
         # 如果目标不是 UMO Group 引用，还需要检查它是否属于某个被允许的 UMO Group
         if not target.startswith("_umoGroup:") and not is_in_list:
-            # 查找该 UMO 所属的 UMO Group
-            group = self.find_umo_group_for_source(target)
-            if group:
-                # 检查该 Group 是否在名单中
+            # 查找该 UMO 所属的所有 UMO Group
+            groups = self.find_all_umo_groups_for_source(target)
+            for group in groups:
                 group_ref = f"_umoGroup:{group.get('group_id')}"
                 if any(
                     _is_match(item, group_ref, "", "")
                     for item in glist
                 ):
                     is_in_list = True
+                    break
 
         if mode == "whitelist":
             return is_in_list
@@ -719,11 +730,12 @@ class ConfigManager:
 
         # 如果目标不是 UMO Group 引用且没有直接匹配，检查是否属于某个 UMO Group
         if not target.startswith("_umoGroup:") and not direct_match:
-            group = self.find_umo_group_for_source(target)
-            if group:
+            groups = self.find_all_umo_groups_for_source(target)
+            for group in groups:
                 group_ref = f"_umoGroup:{group.get('group_id')}"
                 if any(match_umo(group_ref, x) for x in group_list):
                     direct_match = True
+                    break
 
         if mode == "whitelist":
             if not group_list:
@@ -1108,6 +1120,77 @@ class ConfigManager:
                 return group.get("source_umos", [])
         return [identifier]
 
+    def get_dual_send_source_umos(self) -> list[str]:
+        """
+        获取需要双重发送的 UMO 列表。
+
+        当这些 UMO 同时属于某个 UMO Group 时，报告会同时发送到
+        Group 的 output_umo 以及这些 UMO 自身。
+        """
+        return self._get_group("umo_groups").get("dual_send_source_umos", [])
+
+    def _should_send_to_source_umo(self, source_umo: str) -> bool:
+        """
+        判断当前 UMO 是否需要在属于 UMO Group 时也发送到自身。
+        支持匹配完整 UMO、简单群号以及 _umoGroup:ID 引用。
+        """
+        candidates = [str(x).strip() for x in self.get_dual_send_source_umos()]
+        for candidate in candidates:
+            if not candidate:
+                continue
+
+            if candidate.startswith("_umoGroup:"):
+                group_id = candidate[len("_umoGroup:"):]
+                group = self.get_umo_group_by_id(group_id)
+                if not group:
+                    continue
+                for umo in group.get("source_umos", []):
+                    if self._match_umo_to_source(umo, source_umo):
+                        return True
+                continue
+
+            if self._match_umo_to_source(candidate, source_umo):
+                return True
+        return False
+
+    def get_report_destinations(
+        self,
+        source_umo: str,
+        include_source_if_group_member: bool = True,
+    ) -> list[str]:
+        """
+        获取报告应该发送到的目标 UMO 列表（可能包含多个）。
+
+        行为说明：
+        - 收集 source_umo 所属的所有 UMO Group 的 output_umo（去重保序）
+        - 如果 source_umo 不属于任何 Group，则默认包含自身
+        - 如果 source_umo 属于 Group 且在 dual_send_source_umos 中，
+          且 include_source_if_group_member 为 True，则附加自身
+        - 如果未能解析出任何目标，最终回退到 source_umo
+        """
+        destinations: list[str] = []
+        groups = self.find_all_umo_groups_for_source(source_umo)
+        for group in groups:
+            output_umo = str(group.get("output_umo", "")).strip()
+            if output_umo:
+                destinations.append(output_umo)
+
+        include_source = False
+        if not groups:
+            include_source = True
+        elif include_source_if_group_member and self._should_send_to_source_umo(
+            source_umo
+        ):
+            include_source = True
+
+        if include_source:
+            destinations.append(source_umo)
+
+        if not destinations:
+            destinations.append(source_umo)
+
+        return self._deduplicate_preserve_order(destinations)
+
     def get_report_destination_umo(self, source_umo: str) -> str:
         """
         获取报告应该发送到的目标 UMO。
@@ -1130,9 +1213,7 @@ class ConfigManager:
         Returns:
             目标 UMO（报告发送目标）
         """
-        group = self.find_umo_group_for_source(source_umo)
-        if group:
-            output_umo = group.get("output_umo")
-            if output_umo:
-                return output_umo
-        return source_umo
+        destinations = self.get_report_destinations(
+            source_umo, include_source_if_group_member=False
+        )
+        return destinations[0] if destinations else source_umo

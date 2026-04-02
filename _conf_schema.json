@@ -557,6 +557,15 @@
                         }
                     }
                 }
+            },
+            "dual_send_source_umos": {
+                "type": "list",
+                "description": "同时发送到自身的 UMO 列表",
+                "default": [],
+                "hint": "当这些 UMO 也属于某个 UMO Group 时，报告会同时发送到 Group 的 output_umo 和这些 UMO 自身。支持填写完整 UMO、简单群号或 _umoGroup:ID。",
+                "items": {
+                    "type": "string"
+                }
             }
         }
     }
