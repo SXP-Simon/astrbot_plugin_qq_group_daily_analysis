@@ -7,6 +7,7 @@ from datetime import datetime
 
 from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
 from ..utils.llm_utils import (
@@ -85,8 +86,10 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
 
         prompt_template = self.config_manager.get_quality_analysis_prompt()
 
-        if not prompt_template:
-            prompt_template = """你是一个毒舌且幽默的群聊质量分析师。
+        if prompt_template:
+            return render_template(prompt_template, messages_text=messages_text)
+
+        prompt_template = """你是一个毒舌且幽默的群聊质量分析师。
 请分析以下群聊记录，输出一份"聊天质量锐评"。
 
 ## 任务目标：
@@ -120,10 +123,10 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
 ```
 
 群聊记录：
-{messages_text}
+${messages_text}
 """
 
-        return prompt_template.format(messages_text=messages_text)
+        return render_template(prompt_template, messages_text=messages_text)
 
     def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
@@ -291,10 +294,10 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
                 )
                 reviews_text += f"\n批次 {i + 1} [{title}]:\n- 维度表现: {dims}\n- 核心摘要: {summary}\n"
 
-            prompt_template = self.config_manager.get_quality_summary_prompt()
-
-            if not prompt_template:
-                prompt_template = """你是一个毒舌且幽默的群聊质量分析师。
+            # 获取配置中的汇总提示词模板，如果没有则使用默认模板
+            prompt_template = (
+                self.config_manager.get_quality_summary_prompt()
+                or """你是一个毒舌且幽默的群聊质量分析师。
 你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。
 你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。
 
@@ -327,7 +330,8 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
 }}
 ```
 """
-            prompt = prompt_template.format(reviews_text=reviews_text)
+            )
+            prompt = render_template(prompt_template, reviews_text=reviews_text)
 
             # 调用 LLM 进行汇总
             system_prompt = await self._build_system_prompt(umo)

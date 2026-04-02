@@ -21,6 +21,7 @@ from markupsafe import Markup
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
+from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 
@@ -94,9 +95,9 @@ class ReportGenerator(IReportGenerator):
         }
 
         try:
-            formatted = filename_format.format(**safe_context)
+            formatted = render_template(filename_format, strict=True, **safe_context)
         except Exception as e:
-            raise ValueError(f"文件名格式化失败: {e}") from e
+            raise ValueError(f"文件名模板渲染失败: {e}") from e
 
         if os.path.isabs(formatted):
             raise ValueError("文件名格式不得为绝对路径")

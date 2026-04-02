@@ -5,6 +5,7 @@
 
 from ....domain.models.data_models import TokenUsage, UserTitle
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils.json_utils import extract_user_titles_with_regex
 from ..utils.response_validation import validate_user_title_items
 from ..utils.structured_output_schema import JSONObject, build_user_titles_schema
@@ -65,13 +66,10 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle]):
         prompt_template = self.config_manager.get_user_title_analysis_prompt()
 
         if prompt_template:
-            # 使用配置中的 prompt 并替换变量
             try:
-                prompt = prompt_template.format(users_text=users_text)
+                prompt = render_template(prompt_template, users_text=users_text)
                 logger.info("使用配置中的用户称号分析提示词")
                 return prompt
-            except KeyError as e:
-                logger.warning(f"用户称号分析提示词变量格式错误: {e}")
             except Exception as e:
                 logger.warning(f"应用用户称号分析提示词失败: {e}")
 
