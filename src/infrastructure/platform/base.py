@@ -4,6 +4,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from typing import Any
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
 from ...domain.repositories.message_repository import (
@@ -25,20 +26,22 @@ class PlatformAdapter(
     充当领域层与具体聊天平台（如 OneBot, Discord）之间的中转站。
 
     Attributes:
-        bot (object): 平台对应的机器人 SDK 实例
+        bot (Any): 平台对应的机器人 SDK 实例，显式标注为 Any 以支持动态属性调用
         config (dict): 针对该平台的特定配置
     """
 
+    bot: Any
+
     def __init__(
         self,
-        bot_instance: object,
-        config: Mapping[str, object] | None = None,
+        bot_instance: Any,
+        config: Mapping[str, Any] | None = None,
     ):
         """
         初始化平台适配器。
 
         Args:
-            bot_instance (object): 后端机器人实例
+            bot_instance (Any): 后端机器人实例
             config (dict, optional): 平台特定配置项
         """
         self.bot = bot_instance
@@ -46,11 +49,13 @@ class PlatformAdapter(
         self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
 
-    def set_context(self, context: object) -> None:
+    def set_context(self, context: Any):
         """
-        可选的上下文注入钩子，供需要访问插件核心服务的适配器使用。
+        设置上下文对象（用于部分需要 ctx 的平台如 Telegram）。
+
+        Args:
+            context (Any): 上下文对象
         """
-        # 具体适配器可覆盖此方法
         pass
 
     @property
@@ -102,6 +107,52 @@ class PlatformAdapter(
         """
         raise NotImplementedError
 
+    async def send_forward_msg(
+        self,
+        group_id: str,
+        nodes: list[dict],
+    ) -> bool:
+        """
+        发送合并转发消息（基类默认实现：转换为格式化文本分段发送）。
+        各适配器可覆盖此方法实现原生合并转发。
+        """
+        if not nodes:
+            return True
+
+        # 万能回退：将节点重新组合成易读的长文本
+        lines = []
+        for node in nodes:
+            data = node.get("data", node)
+            name = data.get("name", "Daily Analysis")
+            content = data.get("content", "")
+            if content:
+                lines.append(f"【{name}】\n{content}")
+
+        full_text = "\n\n".join(lines)
+
+        # 处理超长文本分段（取大部分平台的安全阈值 1800 字符）
+        max_chunk_size = 1800
+        if len(full_text) > max_chunk_size:
+            # 尝试在换行处拆分
+            chunks = []
+            curr = full_text
+            while len(curr) > max_chunk_size:
+                # 寻找最近的换行符
+                split_idx = curr.rfind("\n", 0, max_chunk_size)
+                if split_idx == -1:
+                    split_idx = max_chunk_size
+                chunks.append(curr[:split_idx].strip())
+                curr = curr[split_idx:].strip()
+            if curr:
+                chunks.append(curr)
+
+            for chunk in chunks:
+                if not await self.send_text(group_id, chunk):
+                    return False
+            return True
+        else:
+            return await self.send_text(group_id, full_text)
+
     async def set_reaction(
         self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True
     ) -> bool:
@@ -118,3 +169,43 @@ class PlatformAdapter(
             bool: 平台是否支持并成功执行
         """
         return False
+
+    async def send_text_report(self, group_id: str, content: str) -> bool:
+        """
+        以最适合当前平台的方式发送长文本报告。
+        默认逻辑：将长文本切分为多个节点，然后调用 send_forward_msg。
+        各平台适配器通过实现 send_forward_msg 来决定最终呈现形式（合并转发、分段发送等）。
+        """
+        import re
+
+        try:
+            # 1. 准备节点基础信息
+            self_id = self.bot_self_ids[0] if self.bot_self_ids else "bot"
+            self_name = "分析报告"
+            # 2. 切分文本为逻辑段落（按标题、空行切分）
+            raw_content = str(content)
+            sections = re.split(r"\n+(?=[🎯📊💬🏆])|\n{2,}", raw_content.strip())
+            nodes = []
+
+            for sec in sections:
+                if not sec.strip():
+                    continue
+                nodes.append(
+                    {
+                        "type": "node",
+                        "data": {
+                            "name": self_name,
+                            "uin": self_id,
+                            "content": sec.strip(),
+                        },
+                    }
+                )
+
+            if not nodes:
+                return await self.send_text(group_id, raw_content)
+
+            # 3. 尝试发送转发消息/长消息链
+            return await self.send_forward_msg(group_id, nodes)
+        except Exception:
+            # 兜底：直接发送
+            return await self.send_text(group_id, str(content))

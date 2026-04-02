@@ -15,11 +15,15 @@ class ReportDispatcher:
     负责协调报告生成、格式选择、消息发送和失败重试
     """
 
-    def __init__(self, config_manager, report_generator, message_sender, retry_manager):
+    def __init__(
+        self,
+        config_manager,
+        report_generator,
+        message_sender,
+    ):
         self.config_manager = config_manager
         self.report_generator = report_generator
         self.message_sender = message_sender
-        self.retry_manager = retry_manager
         self._html_render_func: Callable | None = None
 
     def set_html_render(self, render_func: Callable):
@@ -88,44 +92,21 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
             # image_url and html_content remain None
 
-        # 3. 发送图片
+        # 4. 发送图片
         if image_url:
             caption = TraceContext.make_report_caption()
             sent = await self.message_sender.send_image_smart(
                 group_id, image_url, caption, platform_id
             )
             if sent:
-                # 4. 发送成功后，尝试上传到群文件/群相册（静默处理）
+                # 5. 发送成功后，尝试上传到群文件/群相册（静默处理）
                 await self._try_upload_image(group_id, image_url, platform_id)
                 return True
 
-        # 5. 发送失败或生成失败的处理 -> 加入重试队列
-        if html_content:
-            logger.warning(
-                f"[{trace_id}] Image dispatch failed, adding to retry queue..."
-            )
-            # 尝试获取 platform_id 如果没有提供
-            if not platform_id:
-                platforms = self.message_sender._get_available_platforms(group_id)
-                if platforms:
-                    platform_id = platforms[0][0]  # use first available
-
-            if platform_id:
-                await self.retry_manager.add_task(
-                    html_content,
-                    analysis_result,
-                    group_id,
-                    platform_id,
-                    caption=TraceContext.make_report_caption(),
-                )
-                return True  # 已加入队列视作处理成功 (不在此处报错)
-            else:
-                logger.error(
-                    f"[{trace_id}] Cannot add to retry queue: No platform_id available."
-                )
-
-        # 6. 最终回退：文本报告
-        logger.warning(f"[{trace_id}] Falling back to text report.")
+        # 6. 最终回退：如果图片发送失败（包括生成失败或发送接口报错），直接尝试发送文本报告
+        logger.warning(
+            f"[{trace_id}] Image dispatch failed, falling back to text report."
+        )
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_pdf(
@@ -198,13 +179,20 @@ class ReportDispatcher:
     async def _dispatch_text(
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
     ) -> bool:
+        """分发文本报告"""
+        logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
+        text_report = self.report_generator.generate_text_report(analysis_result)
+        adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+        # 尝试通过适配器发送文本报告
+        logger.info(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
         try:
-            text_report = self.report_generator.generate_text_report(analysis_result)
+            if adapter and await adapter.send_text_report(group_id, text_report):
+                return True
             return await self.message_sender.send_text(
                 group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
             )
         except Exception as e:
-            logger.error(f"[{TraceContext.get()}] Failed to dispatch text report: {e}")
+            logger.error(f"[分发器] 发送文本报告最终失败。群: {group_id}, 错误: {e}")
             return False
 
     # ================================================================

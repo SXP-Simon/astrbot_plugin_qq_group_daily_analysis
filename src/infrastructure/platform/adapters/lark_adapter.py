@@ -857,23 +857,6 @@ class LarkAdapter(PlatformAdapter):
             logger.error(f"飞书文件发送失败: {e}")
             return False
 
-    async def send_forward_msg(self, group_id: str, nodes: list[dict]) -> bool:
-        if not nodes:
-            return True
-        chunks: list[str] = ["📊 群分析报告摘要"]
-        for node in nodes:
-            data = node.get("data", node)
-            name = str(data.get("name", "AstrBot"))
-            content = data.get("content", "")
-            if isinstance(content, list):
-                text_parts = []
-                for seg in content:
-                    if isinstance(seg, dict) and seg.get("type") == "text":
-                        text_parts.append(str(seg.get("data", {}).get("text", "")))
-                content = "".join(text_parts)
-            chunks.append(f"[{name}] {content}")
-        return await self.send_text(group_id, "\n".join(chunks))
-
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         if not self._lark_client or not self._lark_client.im:
             return None

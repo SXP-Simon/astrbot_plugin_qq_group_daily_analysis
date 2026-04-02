@@ -12,10 +12,9 @@ class MessageSender:
     封装了 PlatformAdapter 的底层调用，提供更高层的发送接口
     """
 
-    def __init__(self, bot_manager, config_manager, retry_manager):
+    def __init__(self, bot_manager, config_manager):
         self.bot_manager = bot_manager
         self.config_manager = config_manager
-        self.retry_manager = retry_manager
 
     async def send_text(
         self, group_id: str, text: str, platform_id: str | None = None

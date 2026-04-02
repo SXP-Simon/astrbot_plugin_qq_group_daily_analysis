@@ -45,7 +45,6 @@ from .src.infrastructure.platform.template_preview import (
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
-from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
 from .src.utils.pdf_utils import PDFInstaller
@@ -72,7 +71,6 @@ class GroupDailyAnalysis(Star):
     template_command_service: TemplateCommandService
     telegram_template_preview_handler: TelegramTemplatePreviewHandler
     template_preview_router: TemplatePreviewRouter
-    retry_manager: RetryManager
     auto_scheduler: AutoScheduler
     message_sender: MessageSender
 
@@ -145,18 +143,12 @@ class GroupDailyAnalysis(Star):
             handlers=[self.telegram_template_preview_handler]
         )
 
-        # 调度与重试
-        self.retry_manager = RetryManager(
-            self.bot_manager, self.html_render, self.report_generator
-        )
-        self.message_sender = MessageSender(
-            self.bot_manager, self.config_manager, self.retry_manager
-        )
+        # 调度与发送
+        self.message_sender = MessageSender(self.bot_manager, self.config_manager)
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.analysis_service,
             self.bot_manager,
-            self.retry_manager,
             self.report_generator,
             self.html_render,
             plugin_instance=self,
@@ -239,10 +231,6 @@ class GroupDailyAnalysis(Star):
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
 
-                # 4. 始终启动重试管理器
-                if self.retry_manager:
-                    await self.retry_manager.start()
-
                 self._initialized = True
                 self._discovery_run = True
                 logger.info(f"插件任务注册完成 (来源: {source})")
@@ -277,9 +265,6 @@ class GroupDailyAnalysis(Star):
             if self.auto_scheduler:
                 logger.debug("正在停止自动调度器...")
                 self.auto_scheduler.unschedule_jobs(self.context)
-
-            if self.retry_manager:
-                await self.retry_manager.stop()
 
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
@@ -625,23 +610,16 @@ class GroupDailyAnalysis(Star):
 
             if image_url:
                 caption = TraceContext.make_report_caption()
-                await adapter.send_image(group_id, image_url, caption=caption)
-                await self._try_upload_image(group_id, image_url, platform_id)
-            elif html_content:
-                yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
-                caption = TraceContext.make_report_caption()
-                await self.retry_manager.add_task(
-                    html_content,
-                    analysis_result,
-                    group_id,
-                    platform_id,
-                    caption=caption,
-                )
-            else:
-                text_report = self.report_generator.generate_text_report(
-                    analysis_result
-                )
-                yield event.plain_result(f"⚠️ 图片生成失败，回退文本：\n\n{text_report}")
+                sent = await adapter.send_image(group_id, image_url, caption=caption)
+                if sent:
+                    await self._try_upload_image(group_id, image_url, platform_id)
+                    return  # 成功发送
+
+            # 如果图片生成或发送失败，直接回退到文本
+            logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
+            text_report = self.report_generator.generate_text_report(analysis_result)
+            await adapter.send_text_report(group_id, text_report)
+            return
 
         elif output_format == "pdf":
             pdf_path = await self.report_generator.generate_pdf_report(
@@ -694,8 +672,7 @@ class GroupDailyAnalysis(Star):
 
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
-            if not await adapter.send_text(group_id, text_report):
-                yield event.plain_result(text_report)
+            await adapter.send_text_report(group_id, text_report)
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
