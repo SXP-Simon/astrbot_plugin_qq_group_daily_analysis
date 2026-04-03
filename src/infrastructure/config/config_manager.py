@@ -3,6 +3,7 @@
 负责处理插件配置和PDF依赖检查
 """
 
+import re
 import sys
 
 from astrbot.api import AstrBotConfig
@@ -24,6 +25,9 @@ class ConfigManager:
     - pdf: PDF 设置
     - prompts: 提示词模板
     """
+
+    UMO_GROUP_PREFIX = "umoGroup:"
+    UMO_GROUP_ID_INVALID_PATTERN = re.compile(r'[\\/:*?"<>|.;\s\x00-\x1f]')
 
     def __init__(self, config: AstrBotConfig):
         self.config = config
@@ -64,6 +68,13 @@ class ConfigManager:
         glist = [str(g) for g in self.get_group_list()]
         target = str(group_id_or_umo)
 
+        # 仅当名单中包含 UMO Group ID 时才执行反向索引扫描，
+        # 避免普通群号/UMO 场景每次都遍历全部 UMO Group。
+        if any(self.is_umo_group_id(item) for item in glist):
+            target_umo_groups = set(self.find_umo_groups_by_source(target))
+        else:
+            target_umo_groups = set()
+
         target_simple_id = target.split(":")[-1] if ":" in target else target
         target_parent_id = (
             target_simple_id.split("#", 1)[0]
@@ -77,6 +88,9 @@ class ConfigManager:
             target_simple_id: str,
             target_parent_id: str,
         ) -> bool:
+            if self.is_umo_group_id(item):
+                normalized = self.normalize_umo_group_id(item)
+                return normalized in target_umo_groups
             if ":" in item:
                 if item == target:
                     return True
@@ -744,6 +758,114 @@ class ConfigManager:
     def get_incremental_stagger_seconds(self) -> int:
         """获取多群增量分析的交错间隔（秒），避免 API 压力"""
         return self._get_group("incremental").get("incremental_stagger_seconds", 30)
+
+    # ========== UMO Group 配置 ==========
+
+    def normalize_umo_group_id(self, group_id: str | None) -> str | None:
+        """规范化 UMO Group ID，自动补全前缀。"""
+        if not group_id or not isinstance(group_id, str):
+            return None
+        group_id = group_id.strip()
+        if not group_id:
+            return None
+        normalized = (
+            group_id
+            if group_id.startswith(self.UMO_GROUP_PREFIX)
+            else f"{self.UMO_GROUP_PREFIX}{group_id}"
+        )
+
+        raw_id = normalized[len(self.UMO_GROUP_PREFIX) :]
+        if not raw_id or self.UMO_GROUP_ID_INVALID_PATTERN.search(raw_id):
+            logger.warning(f"UMO Group ID 包含非法字符，已忽略: {group_id}")
+            return None
+        return normalized
+
+    def is_umo_group_id(self, value: str | None) -> bool:
+        """判断字符串是否表示 UMO Group ID。"""
+        if not value or not isinstance(value, str):
+            return False
+        return value.strip().startswith(self.UMO_GROUP_PREFIX)
+
+    def parse_umo_string(self, umo: str) -> tuple[str | None, str | None]:
+        """
+        解析 UMO 字符串，返回 (platform_id, session_id)。
+        如果格式不合法，返回 (None, None)。
+        """
+        if not umo or not isinstance(umo, str):
+            return None, None
+        parts = umo.split(":", 2)
+        if len(parts) < 3:
+            return None, None
+        platform_id = parts[0].strip()
+        session_id = parts[2].strip()
+        if not platform_id or not session_id:
+            return None, None
+        return platform_id, session_id
+
+    def get_umo_groups(self) -> list[dict]:
+        """获取 UMO Group 配置列表。"""
+        groups = self._get_group("umo_groups")
+        if isinstance(groups, list):
+            cleaned: list[dict] = []
+            for item in groups:
+                if not isinstance(item, dict):
+                    continue
+                entry = item.copy()
+                entry.pop("__template_key", None)
+                cleaned.append(entry)
+            return cleaned
+        return []
+
+    def get_umo_group_map(self) -> dict[str, dict]:
+        """以规范化 ID 为键的 UMO Group 映射。"""
+        mapping: dict[str, dict] = {}
+        for item in self.get_umo_groups():
+            if not isinstance(item, dict):
+                continue
+            group_id = self.normalize_umo_group_id(item.get("id"))
+            if not group_id:
+                continue
+            mapping[group_id] = item
+        return mapping
+
+    def get_umo_group(self, group_id: str) -> dict | None:
+        """根据 ID 获取单个 UMO Group 配置。"""
+        normalized = self.normalize_umo_group_id(group_id)
+        if not normalized:
+            return None
+        return self.get_umo_group_map().get(normalized)
+
+    def get_umo_group_sources(self, group_id: str) -> list[str]:
+        """获取指定 UMO Group 的来源 UMO 列表。"""
+        group = self.get_umo_group(group_id)
+        if not group:
+            return []
+        sources = group.get("source_umos", [])
+        if isinstance(sources, list):
+            return [str(x).strip() for x in sources if str(x).strip()]
+        return []
+
+    def get_umo_group_outputs(self, group_id: str) -> list[str]:
+        """获取指定 UMO Group 的输出 UMO 列表。"""
+        group = self.get_umo_group(group_id)
+        if not group:
+            return []
+        outputs = group.get("output_umos", [])
+        if isinstance(outputs, list):
+            return [str(x).strip() for x in outputs if str(x).strip()]
+        return []
+
+    def find_umo_groups_by_source(self, source_umo: str) -> list[str]:
+        """查找包含指定来源 UMO 的所有 UMO Group ID（规范化）。"""
+        source_norm = str(source_umo).strip()
+        if not source_norm:
+            return []
+        result: list[str] = []
+        for gid, group in self.get_umo_group_map().items():
+            sources = group.get("source_umos", []) or []
+            if any(source_norm == str(s).strip() for s in sources):
+                result.append(gid)
+        return result
 
     @property
     def playwright_available(self) -> bool:

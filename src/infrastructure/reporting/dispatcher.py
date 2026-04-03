@@ -35,23 +35,37 @@ class ReportDispatcher:
         group_id: str,
         analysis_result: dict[str, Any],
         platform_id: str | None = None,
+        report_group_id: str | None = None,
     ):
         """
         分发分析报告
         """
         trace_id = TraceContext.get()
         output_format = self.config_manager.get_output_format()
-        logger.info(
-            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
-        )
+        target_group_id = report_group_id or group_id
+        if report_group_id:
+            logger.info(
+                f"[{trace_id}] 正在分发报告 (逻辑群: {report_group_id}, "
+                f"发送目标群: {group_id}, 格式: {output_format})"
+            )
+        else:
+            logger.info(
+                f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
+            )
 
         success = False
         if output_format == "image":
-            success = await self._dispatch_image(group_id, analysis_result, platform_id)
+            success = await self._dispatch_image(
+                group_id, analysis_result, platform_id, target_group_id
+            )
         elif output_format == "pdf":
-            success = await self._dispatch_pdf(group_id, analysis_result, platform_id)
+            success = await self._dispatch_pdf(
+                group_id, analysis_result, platform_id, target_group_id
+            )
         elif output_format == "html":
-            success = await self._dispatch_html(group_id, analysis_result, platform_id)
+            success = await self._dispatch_html(
+                group_id, analysis_result, platform_id, target_group_id
+            )
         else:
             success = await self._dispatch_text(group_id, analysis_result, platform_id)
 
@@ -61,7 +75,11 @@ class ReportDispatcher:
             logger.warning(f"[{trace_id}] 群 {group_id} 的报告分发失败")
 
     async def _dispatch_image(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: dict[str, Any],
+        platform_id: str | None,
+        report_group_id: str | None = None,
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查渲染函数
@@ -84,7 +102,7 @@ class ReportDispatcher:
 
             image_url, html_content = await self.report_generator.generate_image_report(
                 analysis_result,
-                group_id,
+                report_group_id or group_id,
                 self._html_render_func,
                 avatar_url_getter=avatar_url_getter,
             )
@@ -110,7 +128,11 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_pdf(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: dict[str, Any],
+        platform_id: str | None,
+        report_group_id: str | None = None,
     ) -> bool:
         trace_id = TraceContext.get()
         # 1. 检查 Playwright
@@ -124,7 +146,7 @@ class ReportDispatcher:
         pdf_path = None
         try:
             pdf_path = await self.report_generator.generate_pdf_report(
-                analysis_result, group_id
+                analysis_result, report_group_id or group_id
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate PDF report: {e}")
@@ -147,14 +169,18 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_html(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: dict[str, Any],
+        platform_id: str | None,
+        report_group_id: str | None = None,
     ) -> bool:
         trace_id = TraceContext.get()
 
         html_path = None
         try:
             html_path, json_path = await self.report_generator.generate_html_report(
-                analysis_result, group_id
+                analysis_result, report_group_id or group_id
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
