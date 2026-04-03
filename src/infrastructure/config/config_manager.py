@@ -806,7 +806,14 @@ class ConfigManager:
         """获取 UMO Group 配置列表。"""
         groups = self._get_group("umo_groups")
         if isinstance(groups, list):
-            return groups
+            cleaned: list[dict] = []
+            for item in groups:
+                if not isinstance(item, dict):
+                    continue
+                entry = item.copy()
+                entry.pop("__template_key", None)
+                cleaned.append(entry)
+            return cleaned
         return []
 
     def get_umo_group_map(self) -> dict[str, dict]:

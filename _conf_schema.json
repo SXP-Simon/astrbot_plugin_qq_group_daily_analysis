@@ -100,32 +100,35 @@
     },
     "umo_groups": {
         "description": "UMO 分组",
-        "type": "list",
+        "type": "template_list",
         "hint": "将多个群的 UMO 组合为一个 UMO Group，用于聚合分析和指定输出 UMO。UMO Group ID 会以 umoGroup:ID 的形式在其他配置中引用。",
         "default": [],
-        "items": {
-            "type": "object",
-            "items": {
-                "id": {
-                    "type": "string",
-                    "description": "UMO Group ID",
-                    "hint": "用于标识此 UMO Group，引用时以 umoGroup:ID 的形式填写。仅允许字母、数字、下划线、短横线，禁止包含空格、点号、分号等特殊字符。"
-                },
-                "source_umos": {
-                    "type": "list",
-                    "description": "来源 UMO 列表",
-                    "hint": "参与聚合分析的来源 UMO，格式为 platform:GroupMessage:session_id。",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "output_umos": {
-                    "type": "list",
-                    "description": "输出 UMO 列表",
-                    "hint": "聚合报告要发送到的目标 UMO，支持填写多个 UMO。",
-                    "default": [],
-                    "items": {
-                        "type": "string"
+        "templates": {
+            "umo_group": {
+                "name": "UMO 组合",
+                "hint": "一个 UMO 组合，用于配置来源 UMO 与输出 UMO。",
+                "items": {
+                    "id": {
+                        "type": "string",
+                        "description": "UMO Group ID",
+                        "hint": "用于标识此 UMO Group，引用时以 umoGroup:ID 的形式填写。仅允许字母、数字、下划线、短横线，禁止包含空格、点号、分号等特殊字符。"
+                    },
+                    "source_umos": {
+                        "type": "list",
+                        "description": "来源 UMO 列表",
+                        "hint": "参与聚合分析的来源 UMO。",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "output_umos": {
+                        "type": "list",
+                        "description": "输出 UMO 列表",
+                        "hint": "聚合报告要发送到的目标 UMO，支持填写多个 UMO。",
+                        "default": [],
+                        "items": {
+                            "type": "string"
+                        }
                     }
                 }
             }
