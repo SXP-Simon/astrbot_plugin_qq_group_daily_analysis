@@ -1,0 +1,53 @@
+<div class="chart-container">
+    <div style="display: flex; align-items: stretch; height: 220px; gap: 5px; padding: 20px 0 10px;">
+        {% for hour_data in chart_data %}
+        {% set ratio = loop.index0 / ((chart_data|length - 1) if (chart_data|length - 1) > 0 else 1) %}
+        {% if ratio < 0.3333 %}
+            {% set local_ratio = ratio / 0.3333 %}
+            {% set top_red = (210 + local_ratio * 45)|round|int %}
+            {% set top_green = (225 + local_ratio * 15)|round|int %}
+            {% set top_blue = (255 - local_ratio * 25)|round|int %}
+            {% set bottom_red = (170 + local_ratio * 85)|round|int %}
+            {% set bottom_green = (190 - local_ratio * 5)|round|int %}
+            {% set bottom_blue = (255 - local_ratio * 55)|round|int %}
+        {% elif ratio < 0.6666 %}
+            {% set local_ratio = (ratio - 0.3333) / 0.3333 %}
+            {% set top_red = (255 - local_ratio * 20)|round|int %}
+            {% set top_green = (240 + local_ratio * 15)|round|int %}
+            {% set top_blue = (230 + local_ratio * 10)|round|int %}
+            {% set bottom_red = (255 - local_ratio * 105)|round|int %}
+            {% set bottom_green = (185 + local_ratio * 45)|round|int %}
+            {% set bottom_blue = 200 %}
+        {% else %}
+            {% set local_ratio = (ratio - 0.6666) / 0.3334 %}
+            {% set top_red = (235 - local_ratio * 25)|round|int %}
+            {% set top_green = (255 - local_ratio * 30)|round|int %}
+            {% set top_blue = (240 + local_ratio * 15)|round|int %}
+            {% set bottom_red = (150 + local_ratio * 20)|round|int %}
+            {% set bottom_green = (230 - local_ratio * 40)|round|int %}
+            {% set bottom_blue = (200 + local_ratio * 55)|round|int %}
+        {% endif %}
+        {% set count_red = (bottom_red * 0.7)|round|int %}
+        {% set count_green = (bottom_green * 0.7)|round|int %}
+        {% set count_blue = (bottom_blue * 0.7)|round|int %} <div
+            style="flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; height: 100%;">
+            <div
+                style="flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: end;">
+                <span
+                    style="font-size: 10px; font-weight: 700; color: rgb({{ count_red }}, {{ count_green }}, {{ count_blue }}); margin-bottom: 4px; line-height: 1; white-space: nowrap; text-shadow: 0 1px 0 rgba(255,255,255,0.65);">{{hour_data.count}}</span>
+                <div style="
+                    background: linear-gradient(180deg, rgb({{ top_red }}, {{ top_green }}, {{ top_blue }}) 0%, rgb({{ bottom_red }}, {{ bottom_green }}, {{ bottom_blue }}) 100%);
+                    width: calc(100% - 4px);
+                    height: {{hour_data.percentage}}%;
+                    border-radius: 10px 10px 0 0;
+                    transition: all 0.3s ease;
+                    min-height: 5px;
+                    box-shadow: 0 6px 14px rgba({{ bottom_red }}, {{ bottom_green }}, {{ bottom_blue }}, 0.14);
+                    border: none;
+                " title="{{hour_data.hour}}时 - {{hour_data.count}}条消息"></div>
+            </div>
+            <span style="font-size: 10px; color: #9a8aa3; margin-top: 8px; line-height: 1;">{{hour_data.hour}}</span>
+    </div>
+    {% endfor %}
+</div>
+</div>

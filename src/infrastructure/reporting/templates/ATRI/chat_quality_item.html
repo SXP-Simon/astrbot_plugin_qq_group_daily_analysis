@@ -1,0 +1,155 @@
+<style>
+    .quality-card {
+        position: relative;
+        padding: 24px 24px 20px;
+        border-radius: 24px;
+        background: linear-gradient(90deg, rgba(255,240,230,0.95) 0%, rgba(255,255,255,0.98) 100%) !important;
+        border: 1px solid rgba(112, 189, 236, 0.22);
+        box-shadow: 0 18px 40px rgba(86, 161, 205, 0.14);
+        overflow: hidden;
+    }
+
+    .quality-card::before {
+        content: "锐评";
+        position: absolute;
+        top: 14px;
+        right: 18px;
+        font-size: 46px;
+        font-weight: 700;
+        color: rgba(83, 171, 219, 0.08);
+        letter-spacing: 4px;
+    }
+
+    .quality-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 16px;
+        margin-bottom: 18px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .quality-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: #2a6587;
+        margin-bottom: 4px;
+    }
+
+    .quality-subtitle {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(117, 203, 244, 0.16);
+        color: #5492b7;
+        font-size: 14px;
+    }
+
+    .quality-bars {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 16px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .quality-bar-row {
+        display: grid;
+        grid-template-columns: 94px 1fr 54px;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .quality-bar-label {
+        font-size: 14px;
+        color: #52768d;
+        font-weight: 600;
+    }
+
+    .quality-bar-track {
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(126, 199, 235, 0.16);
+        overflow: hidden;
+    }
+
+    .quality-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        box-shadow: 0 6px 12px rgba(100, 167, 209, 0.2);
+    }
+
+    .quality-bar-value {
+        text-align: right;
+        font-size: 13px;
+        color: #5d88a3;
+        font-weight: 700;
+    }
+
+    .quality-comment-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+        position: relative;
+        z-index: 1;
+    }
+
+    .quality-comment {
+        padding: 14px 14px 12px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.74);
+        border: 1px dashed rgba(113, 191, 237, 0.34);
+    }
+
+    .quality-comment strong {
+        display: inline-block;
+        margin-bottom: 6px;
+        color: #3f84ad;
+    }
+
+    .quality-summary {
+        position: relative;
+        z-index: 1;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.65);
+        color: #4f7389;
+        line-height: 1.8;
+        border: 1px solid rgba(112, 189, 236, 0.2);
+    }
+</style>
+
+<div class="quality-card">
+    <div class="quality-head">
+        <div>
+            <div class="quality-title">{{ title }}</div>
+            <div class="quality-subtitle">{{ subtitle }}</div>
+        </div>
+    </div>
+
+    <div class="quality-bars">
+        {% for dim in dimensions %}
+        <div class="quality-bar-row">
+            <div class="quality-bar-label">{{ dim.name }}</div>
+            <div class="quality-bar-track">
+                <div class="quality-bar-fill" style="width: {{ dim.percentage }}%; background: linear-gradient(90deg, {{ dim.color }}, color-mix(in srgb, {{ dim.color }} 65%, white));"></div>
+            </div>
+            <div class="quality-bar-value">{{ dim.percentage }}%</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="quality-comment-grid">
+        {% for dim in dimensions %}
+        <div class="quality-comment">
+            <strong>{{ dim.name }}</strong>
+            <div>{{ dim.comment }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="quality-summary">{{ summary }}</div>
+</div>
