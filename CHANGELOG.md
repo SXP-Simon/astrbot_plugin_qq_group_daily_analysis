@@ -1,11 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.12] - 移除无效的重试器
+## [v4.9.13] - feat(ATRI): ATRI 模板 (@Liangyu-G)
+*   **✨ 新模板 ATRI**: 感谢 @Liangyu-G 的贡献，新增了一个名为 ATRI 的模板，灵感来源于 ATRI 的可爱风格，适合喜欢二次元风格的用户使用。（“她太可爱了，就是太可爱了，那个剧情也特别好，但她真的太可爱了。在聊天的过程中，Soulter不止一次和我强调了亚托莉可爱这一点，甚至一度说不出其他话了”
+）
+<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.12] - 移除无效的重试器
 
 ## [v4.9.11] - feat(HTML): HTML 报告与自建外链吗，将群分析变成可以点击跳转的精美网页链接
 *   **🐛 移动端阅读优化**: force desktop viewport for exported html reports (#147 @clown145)
