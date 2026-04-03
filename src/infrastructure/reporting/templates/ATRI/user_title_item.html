@@ -1,0 +1,39 @@
+{% set title_emojis = [
+    'https://tc.ciallo.ccwu.cc/file/1775132813334_1774881267181_得意.gif',
+    'https://tc.ciallo.ccwu.cc/file/1775132808652_1774881267385_得意-1.gif',
+    'https://tc.ciallo.ccwu.cc/file/1775132804506_1774881263342_观察.gif',
+    'https://tc.ciallo.ccwu.cc/file/1775132811492_1774881264336_不要.gif'
+] %}
+{% set title_badge_colors = [
+    {'bg': 'linear-gradient(135deg, #ffcadf 0%, #ffc1cc 45%, #ffd9b8 100%)', 'text': '#b85c7b', 'shadow': 'rgba(255, 177, 203, 0.28)', 'border': 'rgba(255, 184, 210, 0.72)'},
+    {'bg': 'linear-gradient(135deg, #bfe7ff 0%, #c8dbff 48%, #d8ccff 100%)', 'text': '#5d71b8', 'shadow': 'rgba(168, 198, 255, 0.26)', 'border': 'rgba(173, 204, 255, 0.74)'},
+    {'bg': 'linear-gradient(135deg, #c7f3df 0%, #d3f1ff 50%, #e1ddff 100%)', 'text': '#4e8e88', 'shadow': 'rgba(161, 232, 205, 0.24)', 'border': 'rgba(178, 230, 214, 0.72)'},
+    {'bg': 'linear-gradient(135deg, #ffe5b7 0%, #ffd6c7 48%, #ffd7ef 100%)', 'text': '#b57752', 'shadow': 'rgba(255, 210, 163, 0.28)', 'border': 'rgba(255, 214, 178, 0.76)'}
+] %}
+{% for title in titles %}
+{% set badge = title_badge_colors[loop.index0 % (title_badge_colors|length)] %}
+<li class="item item-with-emoji">
+    <div class="item-main">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            {% if title.avatar_data %}
+            <img src="{{ title.avatar_data }}" 
+                 alt="头像" 
+                 style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid #667eea;">
+            {% endif %}
+            <div style="flex: 1;">
+                <div class="item-title">
+                    {{ title.name }}
+                    <span style="display: inline-flex; align-items: center; margin-left: 10px; padding: 5px 10px; border-radius: 999px; font-size: 0.78em; font-weight: 700; letter-spacing: 0.2px; color: {{ badge.text }}; background: {{ badge.bg }}; border: 1px solid {{ badge.border }}; box-shadow: 0 6px 14px {{ badge.shadow }}, inset 0 1px 0 rgba(255,255,255,0.55); vertical-align: middle;">
+                        {{ title.title }}
+                    </span>
+                </div>
+                <div class="item-content">
+                    <p><strong>MBTI:</strong> {{ title.mbti }}</p>
+                    <p><strong>称号理由:</strong> {{ title.reason }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <img class="item-emoji title-emoji" src="{{ title_emojis | random }}" alt="称号表情">
+</li>
+{% endfor %}
