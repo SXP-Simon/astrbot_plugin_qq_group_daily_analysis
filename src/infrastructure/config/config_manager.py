@@ -61,47 +61,10 @@ class ConfigManager:
         if mode == "none":
             return True
 
-        glist = [str(g) for g in self.get_group_list()]
-        target = str(group_id_or_umo)
+        glist = [str(g).strip() for g in self.get_group_list()]
+        target = str(group_id_or_umo).strip()
 
-        target_simple_id = target.split(":")[-1] if ":" in target else target
-        target_parent_id = (
-            target_simple_id.split("#", 1)[0]
-            if "#" in target_simple_id
-            else target_simple_id
-        )
-
-        def _is_match(
-            item: str,
-            target: str,
-            target_simple_id: str,
-            target_parent_id: str,
-        ) -> bool:
-            if ":" in item:
-                if item == target:
-                    return True
-
-                # 允许 Telegram 话题会话通过“父 UMO”命中，
-                # 例如: item=telegram2:GroupMessage:-1001
-                #      target=telegram2:GroupMessage:-1001#2264
-                if "#" in target_simple_id:
-                    if ":" not in target:
-                        return False
-                    item_prefix, item_tail = item.rsplit(":", 1)
-                    target_prefix, _ = target.rsplit(":", 1)
-                    return (
-                        item_prefix == target_prefix and item_tail == target_parent_id
-                    )
-                return False
-            if item == target_simple_id:
-                return True
-            # 允许 Telegram 话题会话通过父群 ID 命中简单群号白/黑名单
-            return "#" in target_simple_id and item == target_parent_id
-
-        is_in_list = any(
-            _is_match(item, target, target_simple_id, target_parent_id)
-            for item in glist
-        )
+        is_in_list = any(self._is_group_match(target, item) for item in glist)
 
         if mode == "whitelist":
             return is_in_list
@@ -109,6 +72,48 @@ class ConfigManager:
             return not is_in_list
 
         return True
+
+    def _is_group_match(self, target: str, item: str) -> bool:
+        """
+        核心匹配逻辑：判断名单中的 item 是否匹配目标的 target (Unified Message Origin, UMO 或 纯 ID)。
+        支持处理 Telegram 话题 (#) 和 独立隔离会话 (_) 的双向穿透匹配。
+        """
+        if item == target:
+            return True
+
+        # 分解目标 UMO 的前缀和 ID 部分 (如 default:GroupMessage:ID)
+        if ":" in target:
+            target_prefix, target_id = target.rsplit(":", 1)
+        else:
+            target_prefix, target_id = "", target
+
+        # 生成目标 ID 的所有“穿透”候选 (处理隔离模式和话题)
+        candidates = {target_id}
+        if "#" in target_id:
+            candidates.add(target_id.split("#", 1)[0])
+        if "_" in target_id:
+            for part in target_id.split("_"):
+                candidates.add(part)
+
+        # 检查名单项 (item) 的格式
+        if ":" in item:
+            i_prefix, i_id = item.rsplit(":", 1)
+            # 名单项带前缀时，前缀必须匹配 (如果 target 本身没前缀，则允许作为跨平台通用 ID 匹配)
+            if target_prefix and i_prefix != target_prefix:
+                return False
+        else:
+            i_id = item
+
+        # [修复] 名单项 ID 也可能包含复合形式 (如 UserId_GroupId)，需要拆解匹配
+        item_variants = {i_id}
+        if "#" in i_id:
+            item_variants.add(i_id.split("#", 1)[0])
+        if "_" in i_id:
+            for part in i_id.split("_"):
+                item_variants.add(part)
+
+        # 只要两边的 ID “核心部分”存在交集，即视为匹配成功
+        return not item_variants.isdisjoint(candidates)
 
     def get_max_messages(self) -> int:
         """获取最大消息数量"""
@@ -544,24 +549,16 @@ class ConfigManager:
         group_list = [str(x).strip() for x in group_list]
         target = str(group_umo_or_id).strip()
 
-        # 兼容 UMO 匹配 (如果列表里写的是 ID，UMO 也能匹配上)
-        def match_umo(umo: str, item: str) -> bool:
-            if umo == item:
-                return True
-            if ":" in umo and umo.split(":")[-1] == item:
-                return True
-            return False
-
         if mode == "whitelist":
             if not group_list:
                 # 白名单为空：此级别不开启 (按需开启逻辑)
                 return False
-            return any(match_umo(target, x) for x in group_list)
+            return any(self._is_group_match(target, item) for item in group_list)
         else:  # blacklist
             if not group_list:
                 # 黑名单为空：全通过
                 return True
-            return not any(match_umo(target, x) for x in group_list)
+            return not any(self._is_group_match(target, item) for item in group_list)
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""
