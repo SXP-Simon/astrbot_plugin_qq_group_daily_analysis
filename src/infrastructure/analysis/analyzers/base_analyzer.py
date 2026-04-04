@@ -308,6 +308,24 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
         except Exception as e:
             logger.error(f"保存调试数据失败: {e}", exc_info=True)
 
+    def _apply_persona_reinforcement(
+        self, prompt: str, system_prompt: str | None
+    ) -> str:
+        """
+        核心的人格强化注入逻辑。采用首尾双重注入（双倍强度）。
+        """
+        if not system_prompt or not system_prompt.strip():
+            return prompt
+
+        logger.info(f"[{self.get_data_type()}分析] 已启用人格设定（首尾双倍强度强化）")
+        return (
+            f"【角色设定激活】\n你接下来的分析回复必须全程严格保持以下人格设定：\n{system_prompt}\n\n"
+            "--- 任务指令与数据开始 ---\n"
+            f"{prompt}\n"
+            "--- 任务指令与数据结束 ---\n\n"
+            f"【再次强制强调：请务必沉浸并以此人设口吻进行输出】\n{system_prompt}，并且严格遵守任务指令部分的要求进行分析输出。"
+        )
+
     async def analyze(
         self, data: object, umo: str | None = None, session_id: str | None = None
     ) -> tuple[list[TDataObject], TokenUsage]:
@@ -362,16 +380,8 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
             # 获取人格设定
             system_prompt = await self._build_system_prompt(umo)
 
-            # 如果开启了人格设定且成功获取到 Prompt，我们将其注入到主提示词中，以确保最佳效果
-            if system_prompt:
-                logger.info(f"[{self.get_data_type()}分析] 已启用人格设定")
-                # 在主提示词前添加人格说明，并要求 LLM 保持风格
-                prompt = (
-                    f"你可以扮演以下人格：\n{system_prompt}\n\n"
-                    f"请在接下来的分析工作中，保持上述人格的角色定位和说话风格。\n"
-                    "--- 任务开始 ---\n"
-                    f"{prompt}"
-                )
+            # 应用人格强化注入
+            prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
             logger.info(f"[{self.get_data_type()}分析] 开始发起 LLM 请求, umo: {umo}")
 
