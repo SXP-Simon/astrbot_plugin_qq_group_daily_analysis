@@ -20,7 +20,7 @@ from ..utils.structured_output_schema import JSONObject, build_chat_quality_sche
 from .base_analyzer import BaseAnalyzer
 
 
-class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
+class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[dict]]):
     """
     聊天质量分析器
     专门处理群聊质量的锐评和多维度分析
@@ -89,8 +89,7 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview]):
         if prompt_template:
             return render_template(prompt_template, messages_text=messages_text)
 
-        prompt_template = """你是一个毒舌且幽默的群聊质量分析师。
-请分析以下群聊记录，输出一份"聊天质量锐评"。
+        prompt_template = """请分析以下群聊记录，输出一份"聊天质量锐评"。
 
 ## 任务目标：
 1. **维度划分**：将聊天内容划分为 3-6 个【高层级、抽象、泛化】的维度（例如：就业焦虑、生涯规划、技术方案研究、情感树洞、无意义水群等）。
@@ -297,8 +296,7 @@ ${messages_text}
             # 获取配置中的汇总提示词模板，如果没有则使用默认模板
             prompt_template = (
                 self.config_manager.get_quality_summary_prompt()
-                or """你是一个毒舌且幽默的群聊质量分析师。
-你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。
+                or """你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。
 你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。
 
 ## 任务目标：
@@ -310,7 +308,7 @@ ${messages_text}
 
 ## 风格要求：
 - 只有维度名称（name）需要高度概括抽象。
-- 点评（comment）和总结（summary）请尽量生动、毒舌、具体，要把一整天的梗串联起来。
+- 点评（comment）和总结（summary）请尽量生动、具体，要把一整天的梗串联起来。
 
 ## 返回格式要求：
 必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。
@@ -338,6 +336,9 @@ ${messages_text}
             base_temperature = await self._resolve_provider_temperature(
                 self.get_provider_id_key(), umo
             )
+
+            # 应用人设强化注入
+            prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
             response = await call_provider_with_retry(
                 self.context,
@@ -429,6 +430,9 @@ ${messages_text}
             prompt = self.build_prompt(messages)
             if not prompt:
                 return None, TokenUsage()
+
+            # 应用人设强化注入
+            prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
             # 3. 调用 LLM
             response = await call_provider_with_retry(

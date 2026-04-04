@@ -12,7 +12,7 @@ from ..utils.structured_output_schema import JSONObject, build_user_titles_schem
 from .base_analyzer import BaseAnalyzer
 
 
-class UserTitleAnalyzer(BaseAnalyzer[UserTitle]):
+class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
     """
     用户称号分析器
     专门处理用户称号分配和MBTI类型分析

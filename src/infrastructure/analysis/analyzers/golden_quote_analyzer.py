@@ -15,7 +15,7 @@ from ..utils.structured_output_schema import JSONObject, build_golden_quotes_sch
 from .base_analyzer import BaseAnalyzer
 
 
-class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote]):
+class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
     """
     金句分析器
     专门处理群聊金句的提取和分析

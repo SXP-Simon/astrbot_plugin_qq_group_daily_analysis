@@ -16,7 +16,7 @@ from ..utils.structured_output_schema import JSONObject, build_topics_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class TopicAnalyzer(BaseAnalyzer[SummaryTopic]):
+class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
     """
     话题分析器
     专门处理群聊话题的提取和分析
