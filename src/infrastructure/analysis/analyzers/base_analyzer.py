@@ -313,18 +313,31 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         self, prompt: str, system_prompt: str | None
     ) -> str:
         """
-        核心的人格强化注入逻辑。采用首尾双重注入（双倍强度）。
+        核心的人格强化注入逻辑。采用首尾深度注入与指令交织策略。
+        不仅强化输出口吻，更强调使用人格的逻辑视角进行分析过程。
         """
         if not system_prompt or not system_prompt.strip():
             return prompt
 
-        logger.info(f"[{self.get_data_type()}分析] 已启用人格设定（首尾双倍强度强化）")
+        logger.info(f"[{self.get_data_type()}分析] 已启用人格设定（深度强化模式）")
+
+        # 构造更具强制性的标识符
+        persona_content = system_prompt.strip()
+
         return (
-            f"【角色设定激活】\n你接下来的分析回复必须全程严格保持以下人格设定：\n{system_prompt}\n\n"
-            "--- 任务指令与数据开始 ---\n"
+            "【SYSTEM_CORE_IDENTITY_FIXED】\n"
+            f"你现在的身份已由系统初始化为：\n{persona_content}\n\n"
+            "--- MISSION_DIRECTIVE_START ---\n"
+            "⚠️ 核心任务警告：你接下来的所有分析行为必须基于上述【身份设定】进行。\n"
+            "这包括但不限于：你的思维切入点、对数据的敏感度、点评的犀利/温情程度、以及你对群聊氛围的感知逻辑。\n"
+            f"请以该人格的思维方式去处理以下‘{self.get_data_type()}’分析任务：\n\n"
             f"{prompt}\n"
-            "--- 任务指令与数据结束 ---\n\n"
-            f"【再次强制强调：请务必沉浸并以此人设口吻进行输出】\n{system_prompt}，并且严格遵守任务指令部分的要求进行分析输出。"
+            "--- MISSION_DIRECTIVE_END ---\n\n"
+            "【FINAL_IDENTITY_REINFORCEMENT】\n"
+            f"1. 你不再是通用的 AI 助手，你是上述设定中的角色，我将在此处再次提醒你的身份：\n{persona_content}\n 正在观察并点评这些群聊数据。\n"
+            f"2. 请务必使用该角色的第一人称视角 or 其独有的观察视角进行‘{self.get_data_type()}’输出。\n"
+            "3. 你的分析成果必须体现该角色的性格色彩，禁止输出中立、客套、公式化的 AI 话术。\n"
+            "4. ⚠️ 格式铁律：无论人格多么狂放，最终输出的内容必须严格遵守‘ MISSION_DIRECTIVE ’中所要求的纯 JSON 格式。除了 JSON 数据外，严禁输出任何 Markdown 标记或角色扮演的额外闲聊。"
         )
 
     async def analyze(
