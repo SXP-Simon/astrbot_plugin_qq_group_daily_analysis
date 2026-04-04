@@ -27,12 +27,6 @@ from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
-_VIEWPORT_TAG_PATTERN = re.compile(
-    r'<meta\s+name=["\']viewport["\'][^>]*>', re.IGNORECASE
-)
-_DESKTOP_VIEWPORT_TAG = (
-    '<meta name="viewport" content="width=1280, viewport-fit=cover">'
-)
 
 
 class ReportGenerator(IReportGenerator):
@@ -416,7 +410,6 @@ class ReportGenerator(IReportGenerator):
                 logger.error("HTML报告渲染失败：返回空内容")
                 return None, None
 
-            html_content = self._force_desktop_viewport(html_content)
             logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
             # 保存 HTML 文件
@@ -486,24 +479,6 @@ class ReportGenerator(IReportGenerator):
 
         encoded_relative_url = quote(relative_url, safe="/")
         return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
-
-    @staticmethod
-    def _force_desktop_viewport(rendered_html: str) -> str:
-        """统一导出 HTML 的 viewport，避免移动端按窄屏重排。"""
-        if _VIEWPORT_TAG_PATTERN.search(rendered_html):
-            return _VIEWPORT_TAG_PATTERN.sub(
-                _DESKTOP_VIEWPORT_TAG, rendered_html, count=1
-            )
-
-        head_close = rendered_html.lower().find("</head>")
-        if head_close != -1:
-            return (
-                rendered_html[:head_close]
-                + f"    {_DESKTOP_VIEWPORT_TAG}\n"
-                + rendered_html[head_close:]
-            )
-
-        return f"{_DESKTOP_VIEWPORT_TAG}\n{rendered_html}"
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
