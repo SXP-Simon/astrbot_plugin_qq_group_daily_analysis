@@ -19,9 +19,10 @@ from ..utils.llm_utils import (
 from ..utils.structured_output_schema import JSONObject, build_response_format
 
 TDataObject = TypeVar("TDataObject")
+TInputData = TypeVar("TInputData")
 
 
-class BaseAnalyzer(ABC, Generic[TDataObject]):
+class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
     """
     基础分析器抽象类
     定义所有分析器的通用接口 and 流程
@@ -71,7 +72,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
         pass
 
     @abstractmethod
-    def build_prompt(self, data: object) -> str:
+    def build_prompt(self, data: TInputData) -> str:
         """
         构建LLM提示词
 
@@ -327,7 +328,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
         )
 
     async def analyze(
-        self, data: object, umo: str | None = None, session_id: str | None = None
+        self, data: TInputData, umo: str | None = None, session_id: str | None = None
     ) -> tuple[list[TDataObject], TokenUsage]:
         """
         统一的分析流程
