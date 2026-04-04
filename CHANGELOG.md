@@ -1,14 +1,22 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.13] - feat(ATRI): ATRI 模板 (@Liangyu-G)
-*   **✨ 新模板 ATRI**: 感谢 @Liangyu-G 的贡献，新增了一个名为 ATRI 的模板，灵感来源于 ATRI 的可爱风格，适合喜欢二次元风格的用户使用。（“她太可爱了，就是太可爱了，那个剧情也特别好，但她真的太可爱了。在聊天的过程中，Soulter不止一次和我强调了亚托莉可爱这一点，甚至一度说不出其他话了”
-）
-<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
+## [v4.9.14] - feat(persona): 分析器人格增强和使用体验优化，可视化选择人格配置
+*   **🐛 黑白名单处理**: 修复插件在独立会话模式下无法识别群号白名单的问题 (#156)
+*   **✨ 人格增强分析**: 分析器人格增强和使用体验优化，可视化选择人格配置
+*   **🛠️ 健壮性增强**: 回退 (befcc2ad) 所有模板的强制桌面端视宽注入
+
+
+
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.13] - feat(ATRI): ATRI 模板 (@Liangyu-G)
+*   **✨ 新模板 ATRI**: 感谢 @Liangyu-G 的贡献，新增了一个名为 ATRI 的模板，灵感来源于 ATRI 的可爱风格，适合喜欢二次元风格的用户使用。（“她太可爱了，就是太可爱了，那个剧情也特别好，但她真的太可爱了。在聊天的过程中，Soulter不止一次和我强调了亚托莉可爱这一点，甚至一度说不出其他话了”
+）
+<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
 
 ## [v4.9.12] - 移除无效的重试器
 
