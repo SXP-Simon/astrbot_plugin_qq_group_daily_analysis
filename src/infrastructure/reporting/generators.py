@@ -465,15 +465,18 @@ class ReportGenerator(IReportGenerator):
         if not base_url or not html_path:
             return None
 
-        output_dir = Path(self.config_manager.get_html_output_dir()).resolve(strict=False)
+        output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+            strict=False
+        )
         try:
             # 计算相对路径，统一斜杠
-            relative_path = Path(html_path).resolve(strict=False).relative_to(output_dir)
+            relative_path = (
+                Path(html_path).resolve(strict=False).relative_to(output_dir)
+            )
             relative_url = str(relative_path).replace(os.sep, "/")
         except Exception:
             relative_url = Path(html_path).name
 
-        from urllib.parse import quote
         encoded_relative_url = quote(relative_url, safe="/")
         return f"{base_url.rstrip('/')}/{encoded_relative_url}"
 
@@ -490,22 +493,23 @@ class ReportGenerator(IReportGenerator):
             return
 
         try:
-            output_dir = Path(self.config_manager.get_html_output_dir()).resolve(strict=False)
+            output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+                strict=False
+            )
             newurl_dir = output_dir / "NewUrl"
-            
+
             # 验证目录是否存在，不存在则新建
             if not newurl_dir.exists():
                 await asyncio.to_thread(newurl_dir.mkdir, parents=True, exist_ok=True)
-            
+
             txt_path = newurl_dir / f"newurl{group_id}.txt"
-            
+
             # 异步覆盖写入文本文件
             await asyncio.to_thread(txt_path.write_text, url, encoding="utf-8")
             logger.info(f"已更新最新报告 URL 至: {txt_path}")
-            
+
         except Exception as e:
             logger.error(f"保存 URL 到 TXT 失败: {e}")
-
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
