@@ -458,8 +458,8 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
             return None, None
-
-        def get_report_url(self, html_path: str) -> str | None:
+        
+    def get_report_url(self, html_path: str) -> str | None:
         """提取并拼接纯净的报告 URL"""
         base_url = self.config_manager.get_html_base_url()
         if not base_url or not html_path:
