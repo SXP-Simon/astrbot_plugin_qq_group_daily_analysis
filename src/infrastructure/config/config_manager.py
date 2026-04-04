@@ -225,8 +225,20 @@ class ConfigManager:
         return self._get_group("llm").get("golden_quote_provider_id", "")
 
     def get_keep_original_persona(self) -> bool:
-        """获取是否保持原始人格设定"""
+        """获取是否继承会话原始人格设定"""
         return self._get_group("analysis_features").get("keep_original_persona", False)
+
+    def get_use_plugin_specific_persona(self) -> bool:
+        """获取是否强制使用插件指定的人格设定"""
+        return self._get_group("analysis_features").get(
+            "use_plugin_specific_persona", False
+        )
+
+    def get_plugin_specific_persona_id(self) -> str:
+        """获取插件指定的全局人格 ID (通过 select_persona 接口选择)"""
+        return self._get_group("analysis_features").get(
+            "plugin_specific_persona_id", ""
+        )
 
     def get_pdf_output_dir(self) -> str:
         """获取PDF输出目录"""

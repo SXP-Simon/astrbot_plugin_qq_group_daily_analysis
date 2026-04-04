@@ -474,85 +474,115 @@ class BaseAnalyzer(ABC, Generic[TDataObject]):
 
     async def _build_system_prompt(self, umo: str | None) -> str | None:
         """
-        构建带有会话人格的系统提示词
-        """
-        keep = self.config_manager.get_keep_original_persona()
-        if not keep or not umo:
-            return None
+        构建带有会话人格的系统提示词，优先级如下：
+        1. 插件指定的全局人格 (若核心开关开启)
+        2. 会话/对话选定的人格 (若开启了继承开关)
+        3. 当前 UMO 的默认人格 (若开启了继承开关)
 
-        # 获取人格管理器
+        Args:
+            umo: 用户模型对象标识，用于定位会话上下文
+
+        Returns:
+            最终生成的 System Prompt 字符串，若无则返回 None
+        """
+        # 获取配置
+        use_specific = self.config_manager.get_use_plugin_specific_persona()
+        specific_id = self.config_manager.get_plugin_specific_persona_id()
+        keep_original = self.config_manager.get_keep_original_persona()
+
+        # 获取 AstrBot 核心的人格管理器
         persona_mgr = getattr(self.context, "persona_manager", None)
         if persona_mgr is None:
             return None
 
         persona_prompt = None
-        try:
-            # 1. 尝试从 SharedPreferences 获取当前会话选中的人格 ID (类似 /persona 设置的)
-            from astrbot.api import sp
 
-            # resolve_selected_persona 的简化逻辑
-            session_service_config = await sp.get_async(
-                scope="umo", scope_id=str(umo), key="session_service_config", default={}
-            )
-            persona_id = (
-                session_service_config.get("persona_id")
-                if session_service_config
-                else None
-            )
-
-            if persona_id and persona_id != "[%None]":
-                # 获取指定人格
-                persona_obj = await persona_mgr.get_persona(persona_id)
+        # --- 优先级 1: 插件指定的全局固定人格 ---
+        # 适用于希望所有分析报告都呈现同一种风格的情况
+        if use_specific and specific_id:
+            try:
+                persona_obj = await persona_mgr.get_persona(specific_id)
                 persona_prompt = (
                     persona_obj.system_prompt
                     if hasattr(persona_obj, "system_prompt")
                     else None
                 )
                 if persona_prompt:
-                    logger.debug(f"找到会话选定的人格: {persona_id}")
+                    logger.debug(f"已应用插件指定的全局强制人格设定: {specific_id}")
+            except Exception as e:
+                logger.warning(f"获取插件指定人格失败 (ID: {specific_id}): {e}")
 
-            # 2. 如果没有选定人格，尝试获取当前对话的人格 ID (Dialogue Persona)
-            if not persona_prompt:
-                conv_mgr = getattr(self.context, "conversation_manager", None)
-                if conv_mgr:
-                    curr_conv_id = await conv_mgr.get_curr_conversation_id(umo)
-                    if curr_conv_id:
-                        conv_obj = await conv_mgr.get_conversation(umo, curr_conv_id)
-                        if (
-                            conv_obj
-                            and conv_obj.persona_id
-                            and conv_obj.persona_id != "[%None]"
-                        ):
-                            persona_obj = await persona_mgr.get_persona(
-                                conv_obj.persona_id
+        # --- 优先级 2: 继承当前会话/群聊的原始人格 ---
+        # 只有在未开启“强制人格”且开启了“继承设定”时生效
+        if not persona_prompt and keep_original and umo:
+            try:
+                # 2.1 尝试获取 SharedPreferences 中会话绑定的 Persona ID (通常是 /persona 命令设置的)
+                from astrbot.api import sp
+
+                session_service_config = await sp.get_async(
+                    scope="umo",
+                    scope_id=str(umo),
+                    key="session_service_config",
+                    default={},
+                )
+                persona_id = (
+                    session_service_config.get("persona_id")
+                    if session_service_config
+                    else None
+                )
+
+                if persona_id and persona_id != "[%None]":
+                    persona_obj = await persona_mgr.get_persona(persona_id)
+                    persona_prompt = (
+                        persona_obj.system_prompt
+                        if hasattr(persona_obj, "system_prompt")
+                        else None
+                    )
+                    if persona_prompt:
+                        logger.debug(f"继承到会话选定人格: {persona_id}")
+
+                # 2.2 若无会话绑定，尝试获取当前对话(Dialogue)级别的人格
+                if not persona_prompt:
+                    conv_mgr = getattr(self.context, "conversation_manager", None)
+                    if conv_mgr:
+                        curr_conv_id = await conv_mgr.get_curr_conversation_id(umo)
+                        if curr_conv_id:
+                            conv_obj = await conv_mgr.get_conversation(
+                                umo, curr_conv_id
                             )
-                            persona_prompt = (
-                                persona_obj.system_prompt
-                                if hasattr(persona_obj, "system_prompt")
-                                else None
-                            )
-                            if persona_prompt:
-                                logger.debug(
-                                    f"找到对话设定的人格: {conv_obj.persona_id} (conv_id: {curr_conv_id})"
+                            if (
+                                conv_obj
+                                and conv_obj.persona_id
+                                and conv_obj.persona_id != "[%None]"
+                            ):
+                                persona_obj = await persona_mgr.get_persona(
+                                    conv_obj.persona_id
                                 )
+                                persona_prompt = (
+                                    persona_obj.system_prompt
+                                    if hasattr(persona_obj, "system_prompt")
+                                    else None
+                                )
+                                if persona_prompt:
+                                    logger.debug(
+                                        f"继承到对话(Dialogue)设定人格: {conv_obj.persona_id}"
+                                    )
 
-            # 3. 如果还是没有，回退到 UMO 默认人格
-            if not persona_prompt:
-                personality = await persona_mgr.get_default_persona_v3(umo)
-                if isinstance(personality, dict):
-                    persona_prompt = personality.get("prompt")
-                else:
-                    persona_prompt = getattr(personality, "prompt", None)
-                if persona_prompt:
-                    logger.debug("使用 UMO 默认人格设定")
+                # 2.3 若仍无结果，尝试获取 UMO 设定的默认人格
+                if not persona_prompt:
+                    personality = await persona_mgr.get_default_persona_v3(umo)
+                    if isinstance(personality, dict):
+                        persona_prompt = personality.get("prompt")
+                    else:
+                        persona_prompt = getattr(personality, "prompt", None)
+                    if persona_prompt:
+                        logger.debug("继承到 UMO 默认人格设定")
 
-        except Exception as e:
-            logger.warning(f"获取人格设定失败 (umo: {umo}): {e}")
-            return None
+            except Exception as e:
+                logger.warning(f"分析人格回溯识别失败 (umo: {umo}): {e}")
 
+        # 检查生成结果
         if not isinstance(persona_prompt, str) or not persona_prompt.strip():
             return None
 
-        # 构建系统提示词，要求 LLM 保持人格设定
-        system_prompt = persona_prompt.strip()
-        return system_prompt
+        return persona_prompt.strip()
