@@ -672,13 +672,16 @@ class GroupDailyAnalysis(Star):
         format_display_names = {
             "image": "图片格式 (默认)",
             "text": "文本格式",
-            "html": "交互式 HTML 网页"
+            "html": "交互式 HTML 网页",
         }
 
         if not format_input:
             current_format = self.config_manager.get_output_format()
             format_list_str = "\n".join(
-                [f"【{i}】{f} - {format_display_names[f]}" for i, f in enumerate(available_formats, start=1)]
+                [
+                    f"【{i}】{f} - {format_display_names[f]}"
+                    for i, f in enumerate(available_formats, start=1)
+                ]
             )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
@@ -694,7 +697,7 @@ class GroupDailyAnalysis(Star):
             idx = int(format_input) - 1
             if 0 <= idx < len(available_formats):
                 target_format = available_formats[idx]
-        
+
         # 尝试按名称选择
         if not target_format:
             input_lower = format_input.lower()
@@ -702,7 +705,9 @@ class GroupDailyAnalysis(Star):
                 target_format = input_lower
 
         if not target_format:
-            yield event.plain_result(f"❌ 无效的格式类型 '{format_input}'。可用: {', '.join(available_formats)} 或序号 1-{len(available_formats)}")
+            yield event.plain_result(
+                f"❌ 无效的格式类型 '{format_input}'。可用: {', '.join(available_formats)} 或序号 1-{len(available_formats)}"
+            )
             return
 
         try:
