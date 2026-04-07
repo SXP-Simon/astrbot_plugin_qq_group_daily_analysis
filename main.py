@@ -47,7 +47,6 @@ from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
-from .src.utils.pdf_utils import PDFInstaller
 from .src.utils.resilience import GlobalRateLimiter
 
 
@@ -621,21 +620,6 @@ class GroupDailyAnalysis(Star):
             await adapter.send_text_report(group_id, text_report)
             return
 
-        elif output_format == "pdf":
-            pdf_path = await self.report_generator.generate_pdf_report(
-                analysis_result,
-                group_id,
-                avatar_getter=avatar_url_getter,
-                nickname_getter=nickname_getter,
-            )
-            if pdf_path:
-                if not await adapter.send_file(group_id, pdf_path):
-                    yield event.chain_result(
-                        [File(name=Path(pdf_path).name, file=pdf_path)]
-                    )
-            else:
-                yield event.plain_result("⚠️ PDF 生成失败。")
-
         elif output_format == "html":
             html_path, json_path = await self.report_generator.generate_html_report(
                 analysis_result,
@@ -689,29 +673,19 @@ class GroupDailyAnalysis(Star):
 
         if not format_type:
             current_format = self.config_manager.get_output_format()
-            pdf_status = (
-                "✅"
-                if self.config_manager.playwright_available
-                else "❌ (需安装 Playwright)"
-            )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
 可用格式:
 • image - 图片格式 (默认)
 • text - 文本格式
-• pdf - PDF 格式 {pdf_status}
 • html - HTML 格式
 
 用法: /设置格式 [格式名称]""")
             return
 
         format_type = format_type.lower()
-        if format_type not in ["image", "text", "pdf", "html"]:
-            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf, html")
-            return
-
-        if format_type == "pdf" and not self.config_manager.playwright_available:
-            yield event.plain_result("❌ PDF 格式不可用，请使用 /安装PDF 命令安装依赖")
+        if format_type not in ["image", "text", "html"]:
+            yield event.plain_result("❌ 无效的格式类型，支持: image, text, html")
             return
 
         self.config_manager.set_output_format(format_type)
@@ -807,37 +781,6 @@ class GroupDailyAnalysis(Star):
         )
         yield event.chain_result([preview_nodes])
 
-    @filter.command("安装PDF", alias={"install_pdf"})
-    @filter.permission_type(PermissionType.ADMIN)
-    async def install_pdf_deps(self, event: AstrMessageEvent):
-        """
-        安装 PDF 功能依赖（跨平台支持）
-        用法: /安装PDF
-        """
-        if self._terminating:
-            return
-
-        current_task = asyncio.current_task()
-        if current_task:
-            self._background_tasks.add(current_task)
-
-        try:
-            yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
-
-            result = await PDFInstaller.install_playwright(
-                self.config_manager, task_registry=self._background_tasks
-            )
-            yield event.plain_result(result)
-
-        except asyncio.CancelledError:
-            logger.info("PDF 安装任务被取消")
-        except Exception as e:
-            logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
-        finally:
-            if current_task:
-                self._background_tasks.discard(current_task)
-
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analysis_settings(self, event: AstrMessageEvent, action: str = "status"):
@@ -915,7 +858,6 @@ class GroupDailyAnalysis(Star):
             )
             auto_time = self.config_manager.get_auto_analysis_time()
 
-            pdf_status = PDFInstaller.get_pdf_status(self.config_manager)
             output_format = self.config_manager.get_output_format()
             min_threshold = self.config_manager.get_min_messages_threshold()
 
@@ -941,12 +883,11 @@ class GroupDailyAnalysis(Star):
 • 增量分析: {incremental_status_text}
 • 调试模式: {debug_status} (增量立即报告)
 • 输出格式: {output_format}
-• PDF 功能: {pdf_status}
 • 最小消息数: {min_threshold}
 
 💡 可用命令: enable, disable, status, reload, test, incremental_debug
-💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
-💡 其他命令: /设置格式, /安装PDF, /增量状态""")
+💡 支持的输出格式: image, text (图片包含活跃度可视化)
+💡 其他命令: /设置格式, /增量状态""")
 
     @filter.command("增量状态", alias={"incremental_status"})
     @filter.permission_type(PermissionType.ADMIN)

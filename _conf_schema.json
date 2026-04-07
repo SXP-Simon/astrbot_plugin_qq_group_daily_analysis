@@ -61,7 +61,7 @@
                 "type": "string",
                 "description": "输出格式",
                 "default": "image",
-                "hint": "分析报告的输出格式：image(图片)、text(文本)、pdf(PDF文件)、html(HTML文件)。使用 PDF 需要额外配置，根据文件中的 PDF_功能说明.md 进行配置"
+                "hint": "分析报告的输出格式：image(图片)、text(文本)、html(HTML文件)。"
             },
             "report_template": {
                 "type": "string",
@@ -347,31 +347,6 @@
                 "description": "增量失败自动回退全量分析",
                 "default": true,
                 "hint": "建议开启。开启后，如果增量分析失败，会自动改用普通分析，避免当天没报告。"
-            }
-        }
-    },
-    "pdf": {
-        "description": "PDF 设置",
-        "type": "object",
-        "hint": "PDF 报告输出相关配置，包括输出目录、浏览器路径和文件名格式",
-        "items": {
-            "pdf_output_dir": {
-                "type": "string",
-                "description": "PDF输出目录",
-                "default": "",
-                "hint": "PDF报告文件的保存目录。留空则自动使用插件数据目录下的 reports 目录。"
-            },
-            "browser_path": {
-                "type": "string",
-                "description": "自定义浏览器路径",
-                "default": "",
-                "hint": "要填写的话请你清楚自己在干什么。自定义浏览器的可执行文件路径（如 Chrome 或 Edge 的 .exe 文件）。提示：如果是在网页后台设置，则直接输入普通路径即可（如 C:\\Program Files\\...）；如果是手动编辑 config.json 文件，请务必使用双反斜杠 '\\\\' 分隔路径。"
-            },
-            "pdf_filename_format": {
-                "type": "string",
-                "description": "PDF文件名格式",
-                "default": "群聊分析报告_${group_id}_${date}_${ulid}.pdf",
-                "hint": "PDF文件名格式，支持变量：${group_id}(群号)、${date}(日期)、${ulid}(时间排序ID)，支持子目录/层级。"
             }
         }
     },
