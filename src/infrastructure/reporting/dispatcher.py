@@ -93,15 +93,19 @@ class ReportDispatcher:
             # image_url and html_content remain None
 
         # 4. 发送图片
+        sent = False
         if image_url:
             caption = TraceContext.make_report_caption()
             sent = await self.message_sender.send_image_smart(
                 group_id, image_url, caption, platform_id
             )
-            if sent:
-                # 5. 发送成功后，尝试上传到群文件/群相册（静默处理）
-                await self._try_upload_image(group_id, image_url, platform_id)
-                return True
+
+            # 5. 尝试上传到群文件/群相册（静默处理）
+            # 无论消息发送是否成功（如超时回退），只要图片生成了，就尝试备份到群文件
+            await self._try_upload_image(group_id, image_url, platform_id)
+
+        if sent:
+            return True
 
         # 6. 最终回退：如果图片发送失败（包括生成失败或发送接口报错），直接尝试发送文本报告
         logger.warning(
