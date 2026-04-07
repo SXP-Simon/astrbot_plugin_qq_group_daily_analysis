@@ -429,7 +429,11 @@ class ConfigManager:
 
     def set_output_format(self, format_type: str):
         """设置输出格式"""
-        self._ensure_group("basic")["output_format"] = format_type
+        valid_formats = ["image", "text", "html"]
+        if format_type.lower() not in valid_formats:
+            raise ValueError(f"无效的输出格式: {format_type}。有效选项: {valid_formats}")
+            
+        self._ensure_group("basic")["output_format"] = format_type.lower()
         self.config.save_config()
 
     def set_group_list_mode(self, mode: str):
