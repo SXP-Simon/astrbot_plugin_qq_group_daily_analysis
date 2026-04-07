@@ -660,36 +660,56 @@ class GroupDailyAnalysis(Star):
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
+    async def set_output_format(self, event: AstrMessageEvent, format_input: str = ""):
         """
         设置分析报告输出格式（跨平台支持）
-        用法: /设置格式 [image|text|pdf|html]
+        用法: /设置格式 [格式名称或序号]
         """
-        group_id = self._get_group_id_from_event(event)
+        # 命令由插件处理，禁用默认 LLM 回退。
+        event.should_call_llm(True)
 
-        if not group_id:
-            yield event.plain_result("❌ 请在群聊中使用此命令")
-            return
+        available_formats = ["image", "text", "html"]
+        format_display_names = {
+            "image": "图片格式 (默认)",
+            "text": "文本格式",
+            "html": "交互式 HTML 网页"
+        }
 
-        if not format_type:
+        if not format_input:
             current_format = self.config_manager.get_output_format()
+            format_list_str = "\n".join(
+                [f"【{i}】{f} - {format_display_names[f]}" for i, f in enumerate(available_formats, start=1)]
+            )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
 可用格式:
-• image - 图片格式 (默认)
-• text - 文本格式
-• html - HTML 格式
+{format_list_str}
 
-用法: /设置格式 [格式名称]""")
+用法: /设置格式 [名称或序号]""")
             return
 
-        format_type = format_type.lower()
-        if format_type not in ["image", "text", "html"]:
-            yield event.plain_result("❌ 无效的格式类型，支持: image, text, html")
+        target_format = None
+        # 尝试由序号选择
+        if format_input.isdigit():
+            idx = int(format_input) - 1
+            if 0 <= idx < len(available_formats):
+                target_format = available_formats[idx]
+        
+        # 尝试按名称选择
+        if not target_format:
+            input_lower = format_input.lower()
+            if input_lower in available_formats:
+                target_format = input_lower
+
+        if not target_format:
+            yield event.plain_result(f"❌ 无效的格式类型 '{format_input}'。可用: {', '.join(available_formats)} 或序号 1-{len(available_formats)}")
             return
 
-        self.config_manager.set_output_format(format_type)
-        yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
+        try:
+            self.config_manager.set_output_format(target_format)
+            yield event.plain_result(f"✅ 输出格式已设置为: {target_format}")
+        except Exception as e:
+            yield event.plain_result(f"❌ 设置失败: {e}")
 
     @filter.command("设置模板", alias={"set_template"})
     @filter.permission_type(PermissionType.ADMIN)
