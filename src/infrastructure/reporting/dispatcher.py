@@ -48,8 +48,6 @@ class ReportDispatcher:
         success = False
         if output_format == "image":
             success = await self._dispatch_image(group_id, analysis_result, platform_id)
-        elif output_format == "pdf":
-            success = await self._dispatch_pdf(group_id, analysis_result, platform_id)
         elif output_format == "html":
             success = await self._dispatch_html(group_id, analysis_result, platform_id)
         else:
@@ -110,43 +108,6 @@ class ReportDispatcher:
         # 6. 最终回退：如果图片发送失败（包括生成失败或发送接口报错），直接尝试发送文本报告
         logger.warning(
             f"[{trace_id}] Image dispatch failed, falling back to text report."
-        )
-        return await self._dispatch_text(group_id, analysis_result, platform_id)
-
-    async def _dispatch_pdf(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
-    ) -> bool:
-        trace_id = TraceContext.get()
-        # 1. 检查 Playwright
-        if not self.config_manager.playwright_available:
-            logger.warning(
-                f"[{trace_id}] Playwright not available, falling back to text."
-            )
-            return await self._dispatch_text(group_id, analysis_result, platform_id)
-
-        # 2. 生成 PDF
-        pdf_path = None
-        try:
-            pdf_path = await self.report_generator.generate_pdf_report(
-                analysis_result, group_id
-            )
-        except Exception as e:
-            logger.error(f"[{trace_id}] Failed to generate PDF report: {e}")
-
-        # 3. 发送 PDF
-        if pdf_path:
-            sent = await self.message_sender.send_file(
-                group_id,
-                pdf_path,
-                caption="📊 每日群聊分析报告已生成：",
-                platform_id=platform_id,
-            )
-            if sent:
-                return True
-
-        # 4. 回退：文本报告
-        logger.warning(
-            f"[{trace_id}] PDF dispatch failed, falling back to text report."
         )
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 

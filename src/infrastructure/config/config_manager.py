@@ -1,9 +1,7 @@
 """
 配置管理模块 - 基础设施层
-负责处理插件配置和PDF依赖检查
+负责处理插件配置
 """
-
-import sys
 
 from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
@@ -21,15 +19,11 @@ class ConfigManager:
     - llm: LLM 设置
     - analysis_features: 分析功能开关
     - incremental: 增量分析设置
-    - pdf: PDF 设置
     - prompts: 提示词模板
     """
 
     def __init__(self, config: AstrBotConfig):
         self.config = config
-        self._playwright_available = False
-        self._playwright_version = None
-        self._check_playwright_availability()
 
     def _get_group(self, group: str) -> dict:
         """获取指定分组的配置字典，不存在时返回空字典"""
@@ -240,26 +234,6 @@ class ConfigManager:
             "plugin_specific_persona_id", ""
         )
 
-    def get_pdf_output_dir(self) -> str:
-        """获取PDF输出目录"""
-        from pathlib import Path
-
-        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
-        try:
-            default_path = StarTools.get_data_dir() / "reports"
-            val = self._get_group("pdf").get("pdf_output_dir")
-            return val if val else str(default_path)
-        except Exception:
-            val = self._get_group("pdf").get("pdf_output_dir")
-            fallback_path = (
-                Path(get_astrbot_data_path())
-                / "plugin_data"
-                / "astrbot_plugin_qq_group_daily_analysis"
-                / "reports"
-            )
-            return val if val else str(fallback_path)
-
     def get_bot_self_ids(self) -> list:
         """获取机器人自身的 ID 列表 (兼容 bot_qq_ids)"""
         basic = self._get_group("basic")
@@ -267,12 +241,6 @@ class ConfigManager:
         if not ids:
             ids = basic.get("bot_qq_ids", [])
         return ids
-
-    def get_pdf_filename_format(self) -> str:
-        """获取PDF文件名格式"""
-        return self._get_group("pdf").get(
-            "pdf_filename_format", "群聊分析报告_{group_id}_{date}.pdf"
-        )
 
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
@@ -407,11 +375,6 @@ class ConfigManager:
         )
 
         # 2. 文件名格式升级
-        modified |= self._upgrade_config_item(
-            "pdf",
-            "pdf_filename_format",
-            self.set_pdf_filename_format,
-        )
         modified |= self._upgrade_config_item(
             "html",
             "html_filename_format",
@@ -616,16 +579,6 @@ class ConfigManager:
         self._ensure_group("analysis_features")["max_golden_quotes"] = count
         self.config.save_config()
 
-    def set_pdf_output_dir(self, directory: str):
-        """设置PDF输出目录"""
-        self._ensure_group("pdf")["pdf_output_dir"] = directory
-        self.config.save_config()
-
-    def set_pdf_filename_format(self, format_str: str):
-        """设置PDF文件名格式"""
-        self._ensure_group("pdf")["pdf_filename_format"] = format_str
-        self.config.save_config()
-
     def set_html_filename_format(self, format_str: str):
         """设置HTML文件名格式"""
         self._ensure_group("html")["html_filename_format"] = format_str
@@ -753,94 +706,6 @@ class ConfigManager:
     def get_incremental_stagger_seconds(self) -> int:
         """获取多群增量分析的交错间隔（秒），避免 API 压力"""
         return self._get_group("incremental").get("incremental_stagger_seconds", 30)
-
-    @property
-    def playwright_available(self) -> bool:
-        """检查playwright是否可用"""
-        return self._playwright_available
-
-    @property
-    def playwright_version(self) -> str | None:
-        """获取playwright版本"""
-        return self._playwright_version
-
-    def _check_playwright_availability(self):
-        """检查 playwright 可用性"""
-        try:
-            import importlib.util
-
-            if importlib.util.find_spec("playwright") is None:
-                raise ImportError
-
-            import playwright
-            from playwright.async_api import async_playwright  # noqa: F401
-
-            self._playwright_available = True
-
-            try:
-                self._playwright_version = playwright.__version__
-                logger.info(f"使用 playwright {self._playwright_version} 作为 PDF 引擎")
-            except AttributeError:
-                self._playwright_version = "unknown"
-                logger.info("使用 playwright (版本未知) 作为 PDF 引擎")
-
-        except ImportError:
-            self._playwright_available = False
-            self._playwright_version = None
-            logger.warning(
-                "playwright 未安装，PDF 功能将不可用。请使用 pip install playwright 安装，并运行 playwright install chromium"
-            )
-
-    def get_browser_path(self) -> str:
-        """获取自定义浏览器路径"""
-        return self._get_group("pdf").get("browser_path", "")
-
-    def set_browser_path(self, path: str):
-        """设置自定义浏览器路径"""
-        self._ensure_group("pdf")["browser_path"] = path
-        self.config.save_config()
-
-    def reload_playwright(self) -> bool:
-        """重新加载 playwright 模块"""
-        try:
-            logger.info("开始重新加载 playwright 模块...")
-
-            modules_to_remove = [
-                mod for mod in sys.modules.keys() if mod.startswith("playwright")
-            ]
-            logger.info(f"移除模块: {modules_to_remove}")
-            for mod in modules_to_remove:
-                del sys.modules[mod]
-
-            try:
-                import playwright
-
-                self._playwright_available = True
-                try:
-                    self._playwright_version = playwright.__version__
-                    logger.info(
-                        f"重新加载成功，playwright 版本: {self._playwright_version}"
-                    )
-                except AttributeError:
-                    self._playwright_version = "unknown"
-                    logger.info("重新加载成功，playwright 版本未知")
-
-                return True
-
-            except ImportError:
-                logger.info("playwright 重新导入可能需要重启 AstrBot")
-                self._playwright_available = False
-                self._playwright_version = None
-                return False
-            except Exception:
-                logger.info("playwright 重新导入失败")
-                self._playwright_available = False
-                self._playwright_version = None
-                return False
-
-        except Exception as e:
-            logger.error(f"重新加载 playwright 时出错: {e}")
-            return False
 
     def save_config(self):
         """保存配置到AstrBot配置系统"""

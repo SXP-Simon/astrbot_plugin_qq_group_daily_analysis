@@ -25,17 +25,22 @@ class IReportGenerator(ABC):
         pass
 
     @abstractmethod
-    async def generate_pdf_report(
+    async def generate_html_report(
         self,
         analysis_result: dict,
         group_id: str,
-        avatar_getter: Any = None,
+        avatar_url_getter: Any = None,
         nickname_getter: Any = None,
-    ) -> str | None:
-        """生成 PDF 报告"""
+    ) -> tuple[str | None, str | None]:
+        """生成 HTML 报告"""
         pass
 
     @abstractmethod
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本报告"""
+        pass
+
+    @abstractmethod
+    async def close(self):
+        """释放资源"""
         pass

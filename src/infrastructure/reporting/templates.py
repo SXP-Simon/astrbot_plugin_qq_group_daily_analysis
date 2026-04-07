@@ -91,29 +91,6 @@ class HTMLTemplates:
             logger.error(f"加载图片模板失败: {e}")
             return ""
 
-    async def get_pdf_template_async(self) -> str:
-        """获取PDF报告的HTML模板（异步版本，返回原始模板字符串）"""
-        try:
-            env = await self._get_env_async()
-            template = env.get_template("pdf_template.html")
-            return await asyncio.to_thread(
-                self._read_template_file_sync, template.filename
-            )
-        except Exception as e:
-            logger.error(f"加载PDF模板失败: {e}")
-            return ""
-
-    def get_pdf_template(self) -> str:
-        """获取PDF报告的HTML模板（同步版本，向后兼容）"""
-        try:
-            env = self._get_env()
-            template = env.get_template("pdf_template.html")
-            with open(template.filename, encoding="utf-8") as f:
-                return f.read()
-        except Exception as e:
-            logger.error(f"加载PDF模板失败: {e}")
-            return ""
-
     def render_template(self, template_name: str, **kwargs) -> str:
         """渲染指定的模板文件
 
