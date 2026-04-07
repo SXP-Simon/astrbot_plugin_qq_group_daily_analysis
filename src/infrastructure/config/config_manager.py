@@ -431,8 +431,10 @@ class ConfigManager:
         """设置输出格式"""
         valid_formats = ["image", "text", "html"]
         if format_type.lower() not in valid_formats:
-            raise ValueError(f"无效的输出格式: {format_type}。有效选项: {valid_formats}")
-            
+            raise ValueError(
+                f"无效的输出格式: {format_type}。有效选项: {valid_formats}"
+            )
+
         self._ensure_group("basic")["output_format"] = format_type.lower()
         self.config.save_config()
 
