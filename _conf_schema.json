@@ -364,7 +364,7 @@
                 "type": "string",
                 "description": "外鏈 Base URL",
                 "default": "",
-                "hint": "用于生成外链的 Base URL（可留空）。如果开启图床上传，此处同时作为图床站点根地址使用，应填写站点根 URL（如 https://tc.ciallo.ccwu.cc），不要带 /upload 或 /file。"
+                "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。如果开启图床上传，此处同时作为图床站点根地址使用，应填写站点根 URL（如 https://your-imgbed.example.com），不要带 /upload 或 /file。"
             },
             "html_upload_enabled": {
                 "type": "bool",
