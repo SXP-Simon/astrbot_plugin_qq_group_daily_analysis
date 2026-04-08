@@ -7,6 +7,7 @@ from typing import Any
 
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .html_publisher import HtmlReportPublisher
 
 
 class ReportDispatcher:
@@ -24,6 +25,7 @@ class ReportDispatcher:
         self.config_manager = config_manager
         self.report_generator = report_generator
         self.message_sender = message_sender
+        self.html_report_publisher = HtmlReportPublisher(config_manager, message_sender)
         self._html_render_func: Callable | None = None
 
     def set_html_render(self, render_func: Callable):
@@ -125,12 +127,9 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 
         if html_path:
-            caption = self.report_generator.build_html_caption(html_path)
-
-            sent = await self.message_sender.send_file(
+            sent = await self.html_report_publisher.publish(
                 group_id,
                 html_path,
-                caption=caption,
                 platform_id=platform_id,
             )
             if sent:

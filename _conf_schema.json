@@ -364,7 +364,33 @@
                 "type": "string",
                 "description": "外鏈 Base URL",
                 "default": "",
-                "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。"
+                "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。如果开启图床上传，此处同时作为图床站点根地址使用，应填写站点根 URL（如 https://your-imgbed.example.com），不要带 /upload 或 /file。"
+            },
+            "html_upload_enabled": {
+                "type": "bool",
+                "description": "上传 HTML 到图床",
+                "default": false,
+                "hint": "开启后，HTML 报告生成后会先上传到图床，成功时直接发送外链；失败则回退为发送本地 HTML 文件。"
+            },
+            "html_upload_token": {
+                "type": "string",
+                "description": "图床上传 Token",
+                "default": "",
+                "hint": "图床 API Token。仅在开启“上传 HTML 到图床”后生效，插件会使用 Authorization: Bearer <token> 方式上传。"
+            },
+            "html_upload_channel": {
+                "type": "string",
+                "description": "图床上传渠道",
+                "options": [
+                    "default",
+                    "telegram",
+                    "cfr2",
+                    "s3",
+                    "discord",
+                    "huggingface"
+                ],
+                "default": "default",
+                "hint": "图床上传渠道。请确保所选渠道已在图床中可用；不确定时用 default。"
             },
             "html_output_dir": {
                 "type": "string",

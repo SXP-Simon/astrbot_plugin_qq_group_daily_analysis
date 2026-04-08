@@ -266,6 +266,18 @@ class ConfigManager:
         """获取HTML外链Base URL"""
         return self._get_group("html").get("html_base_url", "")
 
+    def get_html_upload_enabled(self) -> bool:
+        """获取是否启用 HTML 图床上传"""
+        return bool(self._get_group("html").get("html_upload_enabled", False))
+
+    def get_html_upload_token(self) -> str:
+        """获取 HTML 图床上传 Token"""
+        return self._get_group("html").get("html_upload_token", "")
+
+    def get_html_upload_channel(self) -> str:
+        """获取 HTML 图床上传渠道"""
+        return self._get_group("html").get("html_upload_channel", "default")
+
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
         return self._get_group("html").get(
