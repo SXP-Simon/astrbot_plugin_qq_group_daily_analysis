@@ -33,6 +33,7 @@ from .src.domain.services.statistics_service import StatisticsService
 from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.messaging.message_sender import MessageSender
+from .src.infrastructure.reporting.html_publisher import HtmlReportPublisher
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.telegram_group_registry import (
@@ -72,6 +73,7 @@ class GroupDailyAnalysis(Star):
     template_preview_router: TemplatePreviewRouter
     auto_scheduler: AutoScheduler
     message_sender: MessageSender
+    html_report_publisher: HtmlReportPublisher
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -144,6 +146,9 @@ class GroupDailyAnalysis(Star):
 
         # 调度与发送
         self.message_sender = MessageSender(self.bot_manager, self.config_manager)
+        self.html_report_publisher = HtmlReportPublisher(
+            self.config_manager, self.message_sender
+        )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.analysis_service,
@@ -628,23 +633,14 @@ class GroupDailyAnalysis(Star):
                 nickname_getter=nickname_getter,
             )
             if html_path:
-                caption = self.report_generator.build_html_caption(html_path)
-
-                # 发送 HTML 文件
-                sender = getattr(self, "message_sender", None)
-                if sender:
-                    sent = await sender.send_file(
-                        group_id,
-                        html_path,
-                        caption=caption,
-                        platform_id=platform_id,
-                    )
-                else:
-                    sent = await adapter.send_file(group_id, html_path)
-                    if sent and caption:
-                        await adapter.send_text(group_id, caption)
+                sent = await self.html_report_publisher.publish(
+                    group_id,
+                    html_path,
+                    platform_id=platform_id,
+                )
 
                 if not sent:
+                    caption = self.html_report_publisher.build_caption(html_path)
                     yield event.chain_result(
                         [File(name=Path(html_path).name, file=html_path)]
                     )

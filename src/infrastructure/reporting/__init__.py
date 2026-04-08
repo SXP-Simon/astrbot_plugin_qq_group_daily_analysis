@@ -4,6 +4,7 @@
 """
 
 from .generators import ReportGenerator
+from .html_publisher import HtmlReportPublisher
 from .templates import HTMLTemplates
 
-__all__ = ["ReportGenerator", "HTMLTemplates"]
+__all__ = ["ReportGenerator", "HTMLTemplates", "HtmlReportPublisher"]
