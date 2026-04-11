@@ -116,7 +116,7 @@ class ReportDispatcher:
     ) -> bool:
         trace_id = TraceContext.get()
 
-        logger.warn(''逻辑判断被加载'')
+        logger.warn("逻辑判断被加载")
 
         html_path = None
         try:
