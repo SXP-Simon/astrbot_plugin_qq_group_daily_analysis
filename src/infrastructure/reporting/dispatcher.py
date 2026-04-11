@@ -125,6 +125,26 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 
         if html_path:
+            is_only_url = self.config_manager.get_html_only_url()
+            base_url = self.config_manager.get_html_base_url()
+
+            if is_only_url:
+                if base_url and base_url.strip():
+                    filename = os.path.basename(html_path)
+                    report_url = f"{base_url.rstrip('/')}/{filename}"
+                    
+                    sent = await self.message_sender.send_text(
+                        group_id, 
+                        f"📊 今日群聊分析报告已生成：\n{report_url}", 
+                        platform_id
+                    )
+                    if sent:
+                        return True
+                else:
+                    logger.warning(
+                        f"[{trace_id}] 群 {group_id} 开启了仅发送外链，但未配置 html_base_url，已进行降级，回退至发送 HTML 文件。"
+                    )
+
             caption = self.report_generator.build_html_caption(html_path)
 
             sent = await self.message_sender.send_file(
