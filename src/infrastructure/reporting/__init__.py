@@ -1,6 +1,6 @@
 """
 报告生成模块
-包含HTML、PDF、文本报告生成功能
+包含HTML、图片、文本报告生成功能
 """
 
 from .generators import ReportGenerator

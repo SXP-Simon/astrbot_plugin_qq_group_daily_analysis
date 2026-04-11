@@ -1,0 +1,33 @@
+{% if titles %}
+<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+    {% for title in titles %}
+    <div class="card-common" style="padding: 24px; margin-bottom: 0; border-top: 4px solid var(--miku-light); display: flex; flex-direction: column; gap: 15px;">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(57,197,187,0.2); overflow: hidden; flex-shrink: 0; background: var(--bg-page-base);">
+                {% if title.avatar_data %}
+                    <img src="{{ title.avatar_data }}" style="width: 100%; height: 100%; object-fit: cover;">
+                {% else %}
+                    <div style="width: 100%; height: 100%; background: var(--miku-blue); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                        {{ title.name[0] if title.name else '?' }}
+                    </div>
+                {% endif %}
+            </div>
+            <div style="flex: 1; overflow: hidden;">
+                <div style="font-weight: 800; font-size: 1.15rem; color: var(--accent-dark); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ title.name }}</div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <span style="background: var(--miku-blue); color: var(--miku-dark); font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-weight: 800; border: 1px solid rgba(57,197,187,0.3);">{{ title.title }}</span>
+                    {% if title.mbti %}
+                    <span style="background: var(--miku-pink-light); color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; font-family: var(--font-num); font-weight: 800; box-shadow: 0 2px 5px rgba(255,107,149,0.2);">{{ title.mbti }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div style="background: var(--bg-page-base); padding: 15px; border-radius: 12px; font-size: 0.95rem; color: var(--text-sub); line-height: 1.6; border: 1px dashed var(--border-miku-light); position: relative; flex: 1;">
+            {{ title.reason }}
+            <svg viewBox="0 0 24 24" fill="var(--miku-base)" style="position: absolute; right: 8px; bottom: 8px; width: 16px; height: 16px; opacity: 0.2;">
+                <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.75-2-2-2H4c-1.25 0-2 .75-2 2v5c0 1.25.75 2 2 2h3c0 4-4 6-4 6Zm11 0c3 0 7-1 7-8V5c0-1.25-.75-2-2-2h-4c-1.25 0-2 .75-2 2v5c0 1.25.75 2 2 2h3c0 4-4 6-4 6Z"/>
+            </svg>        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

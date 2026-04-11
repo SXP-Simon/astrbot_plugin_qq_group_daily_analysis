@@ -1,0 +1,1925 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATRI 群聊日报 · {{ current_date }}</title>
+    <style>
+        @font-face {
+            font-family: 'LXGW WenKai';
+            src: url('https://tc.ciallo.ccwu.cc/file/1775130743963_1774880718993_LXGWWenKai-Regular.woff2') format('woff2');
+            font-weight: 400;
+        }
+
+        @font-face {
+            font-family: 'LXGW WenKai';
+            src: url('https://tc.ciallo.ccwu.cc/file/1775130739223_1774880715380_LXGWWenKai-Medium.woff2') format('woff2');
+            font-weight: 600;
+        }
+
+        @font-face {
+            font-family: 'LXGW WenKai Mono';
+            src: url('https://tc.ciallo.ccwu.cc/file/1775130738049_1774880717027_LXGWWenKaiMono-Regular.woff2') format('woff2');
+            font-weight: 400;
+        }
+
+        :root {
+            --sky: #8fc5ff;
+            --sea: #6d9afa;
+            --deep: #5A4C5A;
+            --foam: #f5f8ff;
+            --paper: #fffdfc;
+            --blossom: #ffb3c6;
+            --peach: #ffd3b6;
+            --mint: #a8e6cf;
+            --lilac: #dcd3ff;
+            --lemon: #fff3b0;
+            --card: rgba(255, 255, 255, 0.85);
+            --card-strong: rgba(255, 255, 255, 0.95);
+            --border: rgba(255, 255, 255, 0.9);
+            --shadow: rgba(90, 76, 90, 0.08);
+            --text-main: #5E5358;
+            --text-sub: #8D818A;
+            --accent: #ffbaba;
+            --quote: #dcd3ff;
+            --radius-xl: 28px;
+            --radius-lg: 22px;
+            --radius-md: 18px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'LXGW WenKai', 'Microsoft YaHei', sans-serif;
+            color: var(--text-main);
+            background: transparent;
+        }
+
+        .page {
+            max-width: 1020px;
+            margin: 0 auto;
+            position: relative;
+            border-radius: var(--radius-xl);
+            padding: 36px 18px 60px;
+            background-color: #dff4ff;
+            background-image:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(242, 251, 255, 0.94)),
+                linear-gradient(rgba(239, 250, 255, 0.72), rgba(239, 250, 255, 0.92)),
+                radial-gradient(circle at 15% 12%, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0) 26%),
+                linear-gradient(rgba(117, 193, 240, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(117, 193, 240, 0.08) 1px, transparent 1px),
+                url('https://tc.ciallo.ccwu.cc/file/1775130588385_1774881257527_bg1.webp');
+            background-size: auto, auto, auto, 26px 26px, 26px 26px, cover;
+            background-position: center, center, center, center, center, center;
+            border: 1px solid var(--border);
+            box-shadow: 0 24px 70px var(--shadow);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .page::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at top right, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0) 25%),
+                radial-gradient(circle at bottom left, rgba(116, 200, 243, 0.16), rgba(116, 200, 243, 0) 33%),
+                radial-gradient(circle at 20% 30%, rgba(118, 196, 240, 0.1) 0 2px, transparent 2px 100%);
+            background-size: auto, auto, 22px 22px;
+            pointer-events: none;
+        }
+
+        .page::after {
+            content: "ATRI";
+            position: absolute;
+            right: 40px;
+            top: 10px;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 156px;
+            line-height: 1;
+            letter-spacing: 6px;
+            color: rgba(75, 169, 220, 0.35);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .deco-bubble,
+        .deco-bubble-2,
+        .deco-ring,
+        .deco-character,
+        .float-sticker {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        .deco-bubble {
+            width: 240px;
+            height: 240px;
+            right: -60px;
+            top: -70px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.86), rgba(143, 216, 255, 0.14) 58%, rgba(143, 216, 255, 0) 72%);
+            opacity: 0.7;
+        }
+
+        .deco-bubble-2 {
+            width: 170px;
+            height: 170px;
+            left: -40px;
+            bottom: 130px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.82), rgba(114, 200, 244, 0.14) 60%, rgba(114, 200, 244, 0) 76%);
+            opacity: 0.5;
+        }
+
+        .deco-ring {
+            right: 76px;
+            top: 124px;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 2px dashed rgba(114, 200, 244, 0.24);
+            opacity: 0.9;
+        }
+
+        .deco-character {
+            right: -8px;
+            bottom: -18px;
+            width: 440px;
+            opacity: 0.68;
+            z-index: 0;
+            filter: brightness(1.18) saturate(1.12) contrast(1.03) drop-shadow(0 24px 48px rgba(69, 152, 205, 0.2));
+        }
+
+        .bottom-showcase {
+            position: absolute;
+            right: 18px;
+            bottom: 0;
+            width: 430px;
+            height: 330px;
+            border-radius: 36px;
+            background:
+                radial-gradient(circle at 58% 34%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 34%),
+                radial-gradient(circle at 50% 60%, rgba(123, 206, 245, 0.3), rgba(123, 206, 245, 0) 64%);
+            filter: blur(8px);
+            opacity: 1;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .float-sticker {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(240, 249, 255, 0.78));
+            border: 1px solid rgba(149, 210, 242, 0.34);
+            box-shadow: 0 10px 24px rgba(83, 155, 195, 0.12);
+            color: var(--sea);
+            opacity: 0.92;
+            z-index: 1;
+        }
+
+        .float-sticker .icon-svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .icon-svg {
+            width: 1em;
+            height: 1em;
+            display: inline-block;
+            vertical-align: middle;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            flex: 0 0 auto;
+        }
+
+        .sticker-heart {
+            top: 5%;
+            left: -14px;
+            color: #ff90b3;
+        }
+
+        .sticker-star {
+            top: 8%;
+            right: -10px;
+            color: #7bcdf3;
+        }
+
+        .sticker-bow {
+            top: 12%;
+            left: 18px;
+            color: #ff9ec4;
+        }
+
+        .sticker-note {
+            top: 18%;
+            right: 12px;
+            color: #8fc8ff;
+        }
+
+        .sticker-cloud {
+            top: 20%;
+            left: -8px;
+            color: #a5d8ff;
+        }
+
+        .sticker-fish {
+            top: 28%;
+            left: 10px;
+            color: #7fcff3;
+        }
+
+        .sticker-shell {
+            top: 28%;
+            right: -5px;
+            color: #9dcfff;
+        }
+
+        .sticker-heart-2 {
+            top: 36%;
+            left: -8px;
+            color: #ff9fc0;
+        }
+
+        .sticker-star-2 {
+            top: 38%;
+            right: 14px;
+            color: #ffd79c;
+        }
+
+        .sticker-cherry {
+            top: 44%;
+            left: -12px;
+            color: #ff9bb8;
+        }
+
+        .sticker-sparkle {
+            top: 48%;
+            right: 20px;
+            color: #78c7f0;
+        }
+
+        .sticker-wand {
+            top: 52%;
+            left: 10px;
+            color: #ffd38f;
+        }
+
+        .sticker-smile {
+            top: 60%;
+            left: -18px;
+            color: #8ac7ff;
+        }
+
+        .sticker-cat {
+            top: 58%;
+            right: -12px;
+            color: #ffb2cf;
+        }
+
+        .sticker-ribbon {
+            top: 68%;
+            left: 12px;
+            color: #a9b8ff;
+        }
+
+        .sticker-moon-2 {
+            top: 68%;
+            right: 15px;
+            color: #88cfff;
+        }
+
+        .sticker-flower-2 {
+            top: 76%;
+            left: -6px;
+            color: #ffb0c8;
+        }
+
+        .sticker-sparkle-2 {
+            top: 78%;
+            right: -5px;
+            color: #a9b9ff;
+        }
+
+        .sticker-gift {
+            top: 84%;
+            left: 24px;
+            color: #8fd4ff;
+        }
+
+        .inner {
+            position: relative;
+            z-index: 1;
+            padding: 34px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+            padding: 30px 32px 28px;
+            border-radius: var(--radius-lg);
+            background:
+                linear-gradient(120deg, rgba(44, 118, 161, 0.78) 0%, rgba(88, 176, 221, 0.62) 56%, rgba(174, 226, 247, 0.38) 100%),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 50%),
+                url('https://tc.ciallo.ccwu.cc/file/1775130588385_1774881257527_bg1.webp') center center / cover no-repeat;
+            color: #fff;
+            box-shadow: 0 16px 40px rgba(77, 163, 210, 0.18);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 28px;
+        }
+
+        .header::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%),
+                radial-gradient(circle at 84% 24%, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0) 20%);
+        }
+
+        .header-copy,
+        .date-box {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-copy {
+            max-width: 64%;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            margin-bottom: 12px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.1));
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 4px rgba(255, 255, 255, 0.3);
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 38px;
+            line-height: 1.2;
+            font-weight: 600;
+        }
+
+        .header-subtitle {
+            margin-top: 12px;
+            font-size: 15px;
+            line-height: 1.8;
+            color: rgba(255, 255, 255, 0.92);
+        }
+
+        .date-box {
+            min-width: 220px;
+            padding: 18px 24px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1));
+            backdrop-filter: blur(16px);
+            border: 1.5px solid rgba(255, 255, 255, 0.6);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                inset 0 2px 8px rgba(255, 255, 255, 0.4);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .date-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.25), transparent);
+            pointer-events: none;
+        }
+
+        .date-label {
+            position: relative;
+            font-size: 11px;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.95);
+            font-weight: 600;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+        }
+
+        .date-divider {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 8px 0 6px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 11px;
+            letter-spacing: 3px;
+            position: relative;
+        }
+
+        .date-divider::before,
+        .date-divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        }
+
+        .date-main {
+            position: relative;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 15px;
+            line-height: 1.7;
+            letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.98);
+            font-weight: 600;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+
+        .glass-card {
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            background: var(--card);
+            box-shadow: 0 10px 30px rgba(75, 148, 196, 0.08);
+            backdrop-filter: blur(5px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Removed .glass-card::before decorator to wrap titles instead */
+
+        .glass-card::after {
+            content: "✦";
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            font-size: 14px;
+            color: rgba(92, 173, 217, 0.36);
+            pointer-events: none;
+        }
+
+        .hero-card {
+            padding: 28px 28px 22px;
+            padding-right: 200px;
+            min-height: 250px;
+            background: linear-gradient(135deg, rgba(255, 230, 234, 0.9), rgba(255, 240, 245, 0.7));
+            border: 2px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .hero-card::before {
+            content: "";
+            position: absolute;
+            right: -40px;
+            top: -30px;
+            width: 180px;
+            height: 180px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 70%);
+        }
+
+        .hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 24px 8px 8px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.3));
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 8px 24px rgba(70, 110, 150, 0.06), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+            color: var(--deep);
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .hero-label .icon-svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .hero-title {
+            margin: 0;
+            font-size: 34px;
+            line-height: 1.25;
+            color: var(--text-main);
+        }
+
+        .hero-desc {
+            margin-top: 14px;
+            color: var(--text-sub);
+            line-height: 1.9;
+            font-size: 15px;
+            max-width: 100%;
+        }
+
+        .hero-character {
+            position: absolute;
+            right: 10px;
+            bottom: 0;
+            width: 205px;
+            filter: drop-shadow(0 14px 24px rgba(73, 145, 186, 0.16));
+            z-index: 0;
+            opacity: 0.96;
+        }
+
+        .hero-card>*:not(.hero-character) {
+            position: relative;
+            z-index: 1;
+        }
+
+        .peak-card {
+            background: linear-gradient(140deg, #74c8f3, #dcd3ff);
+            color: #fff;
+            padding: 24px;
+            padding-right: 175px;
+            min-height: 250px;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 14px 35px rgba(116, 200, 243, 0.25);
+        }
+
+        .peak-card::after {
+            content: "ACTIVE";
+            position: absolute;
+            right: 8px;
+            bottom: -8px;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 72px;
+            color: rgba(255, 255, 255, 0.12);
+            letter-spacing: 2px;
+        }
+
+        .peak-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .peak-meta {
+            position: relative;
+            z-index: 1;
+            max-width: 100%;
+        }
+
+        .peak-caption {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.3));
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 24px rgba(70, 110, 150, 0.06), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+            color: var(--deep);
+            font-size: 13px;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .peak-date-subtitle {
+            font-size: 12px;
+            letter-spacing: 0.5px;
+            opacity: 0.88;
+            margin-top: 4px;
+            font-family: 'LXGW WenKai Mono', monospace;
+        }
+
+        .peak-time {
+            margin-top: 16px;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 32px;
+            font-weight: 600;
+            line-height: 1.3;
+            max-width: 140px;
+            white-space: nowrap;
+            word-break: keep-all;
+        }
+
+        .peak-note {
+            margin-top: 28px;
+            max-width: 100%;
+            line-height: 1.8;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.95);
+        }
+
+        .peak-image {
+            position: absolute;
+            right: 6px;
+            bottom: -30px;
+            width: 205px;
+            opacity: 0.72;
+            filter: drop-shadow(0 16px 28px rgba(27, 89, 122, 0.18));
+            z-index: 0;
+        }
+
+        .peak-card>*:not(.peak-image) {
+            position: relative;
+            z-index: 1;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: var(--radius-md);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 20px rgba(85, 126, 169, 0.08);
+            position: relative;
+        }
+
+        .stat-card:nth-child(1) {
+            background: linear-gradient(135deg, rgba(255, 230, 234, 0.9), rgba(255, 255, 255, 0.8));
+        }
+
+        .stat-card:nth-child(2) {
+            background: linear-gradient(135deg, rgba(220, 245, 255, 0.9), rgba(255, 255, 255, 0.8));
+        }
+
+        .stat-card:nth-child(3) {
+            background: linear-gradient(135deg, rgba(255, 249, 215, 0.9), rgba(255, 255, 255, 0.8));
+        }
+
+        .stat-card:nth-child(4) {
+            background: linear-gradient(135deg, rgba(240, 235, 255, 0.9), rgba(255, 255, 255, 0.8));
+        }
+
+        .stat-icon {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1.5px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+            flex: 0 0 36px;
+        }
+
+        .stat-card:nth-child(1) .stat-icon {
+            color: #ff8eaa;
+        }
+
+        .stat-card:nth-child(2) .stat-icon {
+            color: #72bcf5;
+        }
+
+        .stat-card:nth-child(3) .stat-icon {
+            color: #f5b742;
+        }
+
+        .stat-card:nth-child(4) .stat-icon {
+            color: #aa8af5;
+        }
+
+        .stat-icon .icon-svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .stat-copy {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .stat-value {
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1;
+        }
+
+        .stat-label {
+            color: var(--text-sub);
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .section {
+            margin-bottom: 24px;
+            padding: 24px;
+            border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 12px 28px rgba(85, 126, 169, 0.05);
+            backdrop-filter: blur(8px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Removed .section::before */
+
+
+
+        .tide-section {
+            background: linear-gradient(180deg, rgba(200, 245, 230, 0.9), rgba(220, 250, 240, 0.85)), radial-gradient(circle, rgba(130, 220, 185, 0.35) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .topic-section {
+            background: linear-gradient(180deg, rgba(255, 215, 225, 0.9), rgba(255, 235, 242, 0.85)), radial-gradient(circle, rgba(255, 150, 180, 0.35) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .title-section {
+            background: linear-gradient(180deg, rgba(255, 240, 180, 0.9), rgba(255, 250, 215, 0.85)), radial-gradient(circle, rgba(255, 220, 100, 0.35) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .quote-section {
+            background: linear-gradient(180deg, rgba(215, 190, 255, 0.95), rgba(225, 205, 255, 0.9)), radial-gradient(circle, rgba(180, 140, 255, 0.35) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .review-section {
+            background: linear-gradient(180deg, rgba(255, 205, 175, 0.95), rgba(255, 225, 195, 0.9)), radial-gradient(circle, rgba(255, 180, 140, 0.45) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .token-section {
+            background: linear-gradient(180deg, rgba(180, 228, 255, 0.95), rgba(210, 240, 255, 0.9)), radial-gradient(circle, rgba(120, 185, 255, 0.45) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 18px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-title-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 24px 8px 8px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.35));
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(70, 110, 150, 0.06), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+            position: relative;
+            z-index: 2;
+        }
+
+        .section-kawaii {
+            width: 28px;
+            height: 28px;
+            object-fit: cover;
+            margin-left: 6px;
+            vertical-align: middle;
+            border-radius: 8px;
+            border: 1.5px solid #fff;
+            background: #fff;
+            box-shadow: 0 4px 8px rgba(112, 176, 211, 0.18);
+        }
+
+        .section-title-wrap>div:last-child {
+            position: relative;
+        }
+
+        .section-title-wrap>div:last-child::after {
+            content: "memo";
+            position: absolute;
+            right: -52px;
+            top: -8px;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: rgba(91, 160, 201, 0.58);
+        }
+
+        .section-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(117, 193, 240, 0.18), rgba(255, 255, 255, 0.92));
+            color: var(--sea);
+        }
+
+        .section-icon .icon-svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .section-title {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        .section-sub {
+            color: var(--text-sub);
+            font-size: 13px;
+        }
+
+        .section-badge {
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(116, 200, 243, 0.12);
+            color: var(--deep);
+            font-size: 12px;
+            box-shadow: 0 6px 12px rgba(81, 155, 195, 0.08);
+        }
+
+        .hero-kawaii {
+            width: 22px;
+            height: 22px;
+            object-fit: cover;
+            margin-left: 2px;
+            border-radius: 6px;
+            border: 1.5px solid #fff;
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(112, 176, 211, 0.18);
+        }
+
+        .badge-kawaii {
+            width: 22px;
+            height: 22px;
+            object-fit: cover;
+            margin-left: 6px;
+            vertical-align: middle;
+            border-radius: 6px;
+            border: 1.5px solid #fff;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(112, 176, 211, 0.12);
+        }
+
+        .html-slot>*:first-child {
+            margin-top: 0 !important;
+        }
+
+        .html-slot .chart-container {
+            padding: 0;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .tide-section .html-slot .chart-container {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4)) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+            padding: 24px !important;
+            border-radius: 20px !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), inset 0 2px 6px rgba(255, 255, 255, 0.6) !important;
+            margin-top: 12px !important;
+        }
+
+        .html-slot .item {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4)) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+            border-radius: 20px !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), inset 0 2px 6px rgba(255, 255, 255, 0.6) !important;
+            margin: 12px 0 !important;
+            padding: 16px 20px !important;
+            position: relative;
+            overflow: visible;
+        }
+
+        .html-slot .item::before {
+            content: "";
+            position: absolute;
+            right: 60px;
+            top: -6px;
+            width: 48px;
+            height: 12px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 4px 10px rgba(52, 60, 65, 0.06);
+        }
+
+        .tide-section .html-slot .item::before {
+            background: rgba(168, 230, 207, 0.6);
+        }
+
+        .topic-section .html-slot .item::before {
+            background: rgba(255, 179, 198, 0.6);
+        }
+
+        .title-section .html-slot .item::before {
+            background: rgba(255, 243, 176, 0.8);
+        }
+
+        .quote-section .html-slot .item::before {
+            background: rgba(220, 211, 255, 0.6);
+        }
+
+        .review-section .html-slot .item::before {
+            background: rgba(255, 211, 182, 0.6);
+        }
+
+        .token-section .html-slot .item::before {
+            background: rgba(143, 197, 255, 0.6);
+        }
+
+        .html-slot .item::before {
+            content: "";
+            position: absolute;
+            right: 60px;
+            top: -6px;
+            width: 48px;
+            height: 12px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 4px 10px rgba(52, 60, 65, 0.06);
+        }
+
+        .tide-section .html-slot .item::before {
+            background: rgba(168, 230, 207, 0.6);
+        }
+
+        .topic-section .html-slot .item::before {
+            background: rgba(255, 179, 198, 0.6);
+        }
+
+        .title-section .html-slot .item::before {
+            background: rgba(255, 243, 176, 0.8);
+        }
+
+        .quote-section .html-slot .item::before {
+            background: rgba(220, 211, 255, 0.6);
+        }
+
+        .review-section .html-slot .item::before {
+            background: rgba(255, 211, 182, 0.6);
+        }
+
+        .token-section .html-slot .item::before {
+            background: rgba(143, 197, 255, 0.6);
+        }
+
+        .html-slot .item:nth-child(odd) {}
+
+        .html-slot .item:nth-child(even) {}
+
+        .html-slot .item-with-emoji {
+            position: relative;
+            display: block;
+            min-height: 80px;
+        }
+
+        .html-slot .item-main {
+            padding-right: 76px;
+            min-width: 0;
+        }
+
+        .html-slot .item-content {
+            line-height: 1.7;
+        }
+
+        .html-slot .item-content p {
+            margin: 4px 0;
+        }
+
+        .html-slot .item-content strong {
+            color: var(--sea) !important;
+        }
+
+        .html-slot .item-emoji {
+            position: absolute;
+            right: 14px;
+            bottom: 12px;
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 2px solid #fff;
+            background: #fff;
+            opacity: 0.95;
+            box-shadow: 0 4px 10px rgba(71, 147, 190, 0.16);
+        }
+
+        .html-slot .item-title {
+            color: var(--deep) !important;
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .html-slot .item-content,
+        .html-slot .item-content p,
+        .html-slot p,
+        .html-slot span {
+            color: var(--text-sub) !important;
+        }
+
+        .title-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px 20px;
+            align-items: stretch;
+        }
+
+        .title-grid .item {
+            margin: 0 !important;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .title-grid .item-with-emoji {
+            min-height: 0;
+            height: 100%;
+        }
+
+        .title-grid .item-main {
+            padding-right: 72px;
+        }
+
+        .title-grid .item-content p {
+            margin: 6px 0;
+        }
+
+
+
+        .quote-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            margin-bottom: 14px;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.35));
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 8px 24px rgba(70, 110, 150, 0.06), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+            position: relative;
+            z-index: 2;
+        }
+
+        .q-flex-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .q-user-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+            width: 44px;
+        }
+
+        .q-avatar-box {
+            position: relative;
+            margin-bottom: 4px;
+        }
+
+        .q-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            background: #fff;
+            object-fit: cover;
+            box-shadow: 0 4px 10px rgba(91, 160, 201, 0.16);
+        }
+
+        .quote-wrapper:nth-child(odd) .q-avatar {
+            box-shadow: 0 0 0 2px var(--sky);
+        }
+
+        .quote-wrapper:nth-child(even) .q-avatar {
+            box-shadow: 0 0 0 2px var(--quote);
+        }
+
+        .q-content-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            align-items: flex-start;
+        }
+
+        .q-sender-name {
+            font-size: 13px;
+            color: var(--text-sub);
+            margin-bottom: 4px;
+            margin-left: 6px;
+        }
+
+        .quote-wrapper:nth-child(even) .q-flex-container {
+            flex-direction: row-reverse;
+        }
+
+        .quote-wrapper:nth-child(even) .q-content-col {
+            align-items: flex-end;
+        }
+
+        .quote-wrapper:nth-child(even) .q-sender-name {
+            margin-left: 0;
+            margin-right: 6px;
+        }
+
+        .q-bubble-wrap {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            max-width: 100%;
+        }
+
+        .quote-wrapper:nth-child(even) .q-bubble-wrap {
+            flex-direction: row-reverse;
+        }
+
+        .q-bubble {
+            background: linear-gradient(90deg, rgba(246, 238, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+            border: 1px solid var(--border);
+            padding: 10px 16px;
+            border-radius: 18px;
+            box-shadow: 0 4px 12px rgba(74, 145, 188, 0.08);
+            position: relative;
+            width: fit-content;
+            border-top-left-radius: 4px;
+            z-index: 1;
+        }
+
+        .quote-wrapper:nth-child(even) .q-bubble {
+            border-top-left-radius: 18px;
+            border-top-right-radius: 4px;
+            background: linear-gradient(90deg, rgba(246, 238, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+        }
+
+        .q-content {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-main);
+            word-break: break-word;
+        }
+
+        .q-analysis-note {
+            background: linear-gradient(90deg, rgba(246, 238, 255, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%);
+            padding: 8px 14px;
+            font-size: 13px;
+            color: var(--text-sub);
+            width: fit-content;
+            max-width: 90%;
+            margin-top: 6px;
+            box-shadow: 0 2px 8px rgba(74, 145, 188, 0.05);
+            border: 1px solid rgba(117, 193, 240, 0.15);
+            border-radius: 12px;
+            border-top-left-radius: 4px;
+            line-height: 1.5;
+        }
+
+        .quote-wrapper:nth-child(even) .q-analysis-note {
+            background: linear-gradient(90deg, rgba(246, 238, 255, 0.95) 0%, rgba(255, 255, 255, 0.95) 100%);
+            border-top-left-radius: 12px;
+            border-top-right-radius: 4px;
+            text-align: right;
+        }
+
+        .note-label {
+            font-weight: 600;
+            color: var(--sea);
+            margin-right: 4px;
+        }
+
+        .quote-floating-emoji {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 2px solid #fff;
+            background: #fff;
+            opacity: 0.95;
+            box-shadow: 0 4px 10px rgba(71, 147, 190, 0.16);
+            flex-shrink: 0;
+            margin-bottom: 2px;
+        }
+
+        .quote-section::before {
+            content: "";
+            position: absolute;
+            right: 22px;
+            top: 18px;
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, rgba(140, 216, 255, 0.26), rgba(140, 216, 255, 0) 72%);
+            pointer-events: none;
+        }
+
+        .token-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-top: 6px;
+        }
+
+        .token-card {
+            padding: 16px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4));
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+            position: relative;
+            z-index: 1;
+        }
+
+        .token-card:nth-child(even) {}
+
+        .token-label {
+            color: var(--text-sub);
+            font-size: 13px;
+        }
+
+        .token-value {
+            margin-top: 8px;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 24px;
+            color: var(--deep);
+        }
+
+        .footer {
+            margin-top: 24px;
+            width: calc(100% - 34%);
+            max-width: calc(100% - 34%);
+            padding: 24px;
+            border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 12px 28px rgba(85, 126, 169, 0.05);
+            backdrop-filter: blur(8px);
+            background: linear-gradient(180deg, rgba(180, 228, 255, 0.95), rgba(210, 240, 255, 0.9)), radial-gradient(circle, rgba(120, 185, 255, 0.45) 2px, transparent 2px);
+            background-size: auto, 24px 24px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 40px;
+            color: var(--text-sub);
+            position: relative;
+            z-index: 1;
+            margin-right: auto;
+        }
+
+        .footer-repo {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--deep);
+            text-decoration: none;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 11px;
+            font-weight: 600;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .footer-repo:hover {
+            opacity: 1;
+        }
+
+
+
+        .token-section {
+            width: calc(100% - 34%);
+            max-width: calc(100% - 34%);
+            padding-right: 24px;
+            min-height: 210px;
+            margin-right: auto;
+        }
+
+        .token-section .section-header,
+        .token-section .token-grid,
+        .footer-left {
+            position: relative;
+            z-index: 1;
+        }
+
+        .token-section .section-header,
+        .token-section .token-grid {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .footer-left strong {
+            color: var(--deep);
+        }
+
+        .footer-left {
+            flex: 0 0 auto;
+        }
+
+        .footer-left {
+            max-width: 420px;
+        }
+
+        .page-watermark {
+            position: absolute;
+            bottom: 40px;
+            right: 44px;
+            text-align: right;
+            font-family: 'LXGW WenKai Mono', monospace;
+            font-size: 13px;
+            color: var(--text-sub);
+            z-index: 20;
+            line-height: 1.6;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8), 0 0 8px rgba(255, 255, 255, 1);
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 860px) {
+
+            .token-section,
+            .footer {
+                width: 100%;
+                max-width: 100%;
+                padding-right: 24px;
+            }
+
+            .hero-grid,
+            .stats-grid,
+            .token-grid,
+            .title-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .header-copy,
+            .hero-desc,
+            .peak-note {
+                max-width: 100%;
+            }
+
+            .hero-card {
+                padding-right: 184px;
+                transform: none;
+            }
+
+            .hero-character {
+                right: 2px;
+                width: 180px;
+            }
+
+            .peak-card {
+                padding-right: 154px;
+            }
+
+            .peak-image {
+                right: 0;
+                width: 170px;
+            }
+
+            .section,
+            .stat-card,
+            .token-card,
+            .html-slot .item,
+            .section-badge,
+            .peak-card {
+                transform: none;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 16px 10px 32px;
+            }
+
+            .inner {
+                padding: 16px;
+            }
+
+            .hero-grid,
+            .stats-grid,
+            .token-grid,
+            .title-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .html-slot .item-with-emoji {
+                display: block;
+            }
+
+            .html-slot .item-main {
+                padding-right: 64px;
+            }
+
+            .html-slot .item-emoji {
+                right: 12px;
+                bottom: 12px;
+                width: 44px;
+                height: 44px;
+            }
+
+            .hero-character,
+            .peak-image,
+            .deco-character,
+            .deco-ring,
+            .float-sticker {
+                display: none;
+            }
+
+            .footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .footer-right {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <svg width="0" height="0" style="position:absolute;visibility:hidden;pointer-events:none" aria-hidden="true"
+        focusable="false">
+        <symbol id="icon-heart" viewBox="0 0 24 24">
+            <path
+                d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5C2 10.79 3.5 12.54 5 14l7 7Z" />
+        </symbol>
+        <symbol id="icon-star" viewBox="0 0 24 24">
+            <path
+                d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.596 1.16l5.166.751a.53.53 0 0 1 .294.904l-3.738 3.643a2.12 2.12 0 0 0-.61 1.875l.882 5.145a.53.53 0 0 1-.768.559l-4.62-2.43a2.12 2.12 0 0 0-1.973 0l-4.62 2.43a.53.53 0 0 1-.768-.559l.882-5.145a2.12 2.12 0 0 0-.61-1.875L2.16 9.79a.53.53 0 0 1 .294-.904l5.166-.75a2.12 2.12 0 0 0 1.596-1.161z" />
+        </symbol>
+        <symbol id="icon-sparkles" viewBox="0 0 24 24">
+            <path
+                d="M9.94 15.5A2 2 0 0 0 8.5 14.06L4 12.94l4.5-1.12A2 2 0 0 0 9.94 10.38L11.06 5.88l1.12 4.5a2 2 0 0 0 1.44 1.44l4.5 1.12-4.5 1.12a2 2 0 0 0-1.44 1.44l-1.12 4.5z" />
+            <path d="M20 3v4" />
+            <path d="M22 5h-4" />
+            <path d="M4 17v2" />
+            <path d="M5 18H3" />
+        </symbol>
+        <symbol id="icon-flower-2" viewBox="0 0 24 24">
+            <path d="M12 7.5c0-2 1.5-4.5 4-4.5 1.7 0 3 1.3 3 3 0 2.5-2.5 4-4.5 4" />
+            <path d="M12 7.5C12 5.5 10.5 3 8 3 6.3 3 5 4.3 5 6c0 2.5 2.5 4 4.5 4" />
+            <path d="M12 16.5c0 2-1.5 4.5-4 4.5-1.7 0-3-1.3-3-3 0-2.5 2.5-4 4.5-4" />
+            <path d="M12 16.5c0 2 1.5 4.5 4 4.5 1.7 0 3-1.3 3-3 0-2.5-2.5-4-4.5-4" />
+            <circle cx="12" cy="12" r="3" />
+        </symbol>
+        <symbol id="icon-moon-star" viewBox="0 0 24 24">
+            <path d="M12 3a6 6 0 1 0 9 9 9 9 0 1 1-9-9" />
+            <path d="M19 3v4" />
+            <path d="M21 5h-4" />
+        </symbol>
+        <symbol id="icon-heart-handshake" viewBox="0 0 24 24">
+            <path d="M19 5c-1.5-1.5-4-1.5-5.5 0L12 6.5 10.5 5C9 3.5 6.5 3.5 5 5s-1.5 4 0 5.5l1.5 1.5" />
+            <path d="M12 21l-6.4-6.4a2 2 0 0 1 2.8-2.8l2.1 2.1" />
+            <path d="M12 21l6.4-6.4a2 2 0 0 0-2.8-2.8l-1.2 1.2" />
+            <path d="m10.5 13.5 2 2a2.12 2.12 0 0 0 3 0l2-2" />
+        </symbol>
+        <symbol id="icon-shell" viewBox="0 0 24 24">
+            <path d="M12 21c-4.97 0-9-4.03-9-9a9 9 0 0 1 18 0c0 4.97-4.03 9-9 9Z" />
+            <path d="M12 12a9 9 0 0 0-9 9" />
+            <path d="M12 12a9 9 0 0 1 9 9" />
+            <path d="M12 3v18" />
+        </symbol>
+        <symbol id="icon-gem" viewBox="0 0 24 24">
+            <path d="M6 3h12l4 6-10 12L2 9l4-6Z" />
+            <path d="M2 9h20" />
+            <path d="m8 3 4 6 4-6" />
+            <path d="m8 21 4-12 4 12" />
+        </symbol>
+        <symbol id="icon-badge-help" viewBox="0 0 24 24">
+            <path d="M12 15h.01" />
+            <path d="M12 11a2 2 0 1 0-2-2" />
+            <path d="M10 13a2 2 0 0 1 2-2" />
+            <path
+                d="M12 3l2.4 2.4 3.4-.4.4 3.4L21 12l-2.8 3.6-.4 3.4-3.4-.4L12 21l-2.4-2.4-3.4.4-.4-3.4L3 12l2.8-3.6.4-3.4 3.4.4Z" />
+        </symbol>
+        <symbol id="icon-gift" viewBox="0 0 24 24">
+            <path d="M20 12v8H4v-8" />
+            <path d="M2 7h20v5H2z" />
+            <path d="M12 22V7" />
+            <path d="M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7Z" />
+            <path d="M12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7Z" />
+        </symbol>
+        <symbol id="icon-wand-sparkles" viewBox="0 0 24 24">
+            <path d="m7 21 9.6-9.6" />
+            <path d="m15.5 5.5 3 3" />
+            <path d="m8.5 12.5-3-3" />
+            <path d="M14 4V2" />
+            <path d="M20 10h2" />
+            <path d="M17 7h2" />
+            <path d="M4 14H2" />
+        </symbol>
+        <symbol id="icon-notebook-pen" viewBox="0 0 24 24">
+            <path d="M12 20h-7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4" />
+            <path d="M8 4v16" />
+            <path d="M8 8H6" />
+            <path d="M8 12H6" />
+            <path d="M8 16H6" />
+            <path d="m17 21 4-4" />
+            <path d="M17 17v4h4" />
+        </symbol>
+        <symbol id="icon-cloud" viewBox="0 0 24 24">
+            <path d="M17.5 19H9a5 5 0 1 1 .95-9.91A6 6 0 1 1 17.5 19Z" />
+        </symbol>
+        <symbol id="icon-fish" viewBox="0 0 24 24">
+            <path d="M6.5 12s2.5-4 7.5-4c3.5 0 5 2 6 4-1 2-2.5 4-6 4-5 0-7.5-4-7.5-4Z" />
+            <path d="M18 12h.01" />
+            <path d="M6 12 3 9v6l3-3" />
+        </symbol>
+        <symbol id="icon-message-circle" viewBox="0 0 24 24">
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+        </symbol>
+        <symbol id="icon-users" viewBox="0 0 24 24">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </symbol>
+        <symbol id="icon-text" viewBox="0 0 24 24">
+            <path d="M17 6.1H3" />
+            <path d="M21 12.1H3" />
+            <path d="M15.1 18H3" />
+        </symbol>
+        <symbol id="icon-smile" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M8 15s1.5 2 4 2 4-2 4-2" />
+            <path d="M9 9h.01" />
+            <path d="M15 9h.01" />
+        </symbol>
+        <symbol id="icon-bar-chart-3" viewBox="0 0 24 24">
+            <path d="M3 3v18h18" />
+            <path d="M18 17V9" />
+            <path d="M13 17V5" />
+            <path d="M8 17v-3" />
+        </symbol>
+        <symbol id="icon-flame" viewBox="0 0 24 24">
+            <path d="M8.5 14.5A3.5 3.5 0 1 0 12 8c0 3-2 4-2 6.5" />
+            <path d="M12 2s5 3 5 9a5 5 0 1 1-10 0c0-3 1.5-5.5 5-9Z" />
+        </symbol>
+        <symbol id="icon-badge-check" viewBox="0 0 24 24">
+            <path
+                d="m12 3 2.4 2.4 3.4-.4.4 3.4L21 12l-2.8 3.6-.4 3.4-3.4-.4L12 21l-2.4-2.4-3.4.4-.4-3.4L3 12l2.8-3.6.4-3.4 3.4.4Z" />
+            <path d="m9 12 2 2 4-4" />
+        </symbol>
+        <symbol id="icon-quote" viewBox="0 0 24 24">
+            <path d="M16 3h5v6h-5z" />
+            <path d="M3 3h5v6H3z" />
+            <path d="M21 9c0 6-3 9-7 11" />
+            <path d="M8 9c0 6-3 9-7 11" />
+        </symbol>
+    </svg>
+    <div class="page">
+        <div class="deco-bubble"></div>
+        <div class="deco-bubble-2"></div>
+        <div class="deco-ring"></div>
+        <div class="bottom-showcase"></div>
+        <div class="float-sticker sticker-heart"><svg class="icon-svg">
+                <use href="#icon-heart"></use>
+            </svg></div>
+        <div class="float-sticker sticker-star"><svg class="icon-svg">
+                <use href="#icon-star"></use>
+            </svg></div>
+        <div class="float-sticker sticker-smile"><svg class="icon-svg">
+                <use href="#icon-sparkles"></use>
+            </svg></div>
+        <div class="float-sticker sticker-cherry"><svg class="icon-svg">
+                <use href="#icon-flower-2"></use>
+            </svg></div>
+        <div class="float-sticker sticker-sparkle"><svg class="icon-svg">
+                <use href="#icon-moon-star"></use>
+            </svg></div>
+        <div class="float-sticker sticker-bow"><svg class="icon-svg">
+                <use href="#icon-heart-handshake"></use>
+            </svg></div>
+        <div class="float-sticker sticker-shell"><svg class="icon-svg">
+                <use href="#icon-shell"></use>
+            </svg></div>
+        <div class="float-sticker sticker-ribbon"><svg class="icon-svg">
+                <use href="#icon-gem"></use>
+            </svg></div>
+        <div class="float-sticker sticker-cat"><svg class="icon-svg">
+                <use href="#icon-badge-check"></use>
+            </svg></div>
+        <div class="float-sticker sticker-gift"><svg class="icon-svg">
+                <use href="#icon-gift"></use>
+            </svg></div>
+        <div class="float-sticker sticker-wand"><svg class="icon-svg">
+                <use href="#icon-wand-sparkles"></use>
+            </svg></div>
+        <div class="float-sticker sticker-note"><svg class="icon-svg">
+                <use href="#icon-notebook-pen"></use>
+            </svg></div>
+        <div class="float-sticker sticker-cloud"><svg class="icon-svg">
+                <use href="#icon-cloud"></use>
+            </svg></div>
+        <div class="float-sticker sticker-star-2"><svg class="icon-svg">
+                <use href="#icon-star"></use>
+            </svg></div>
+        <div class="float-sticker sticker-heart-2"><svg class="icon-svg">
+                <use href="#icon-heart"></use>
+            </svg></div>
+        <div class="float-sticker sticker-fish"><svg class="icon-svg">
+                <use href="#icon-fish"></use>
+            </svg></div>
+        <div class="float-sticker sticker-sparkle-2"><svg class="icon-svg">
+                <use href="#icon-sparkles"></use>
+            </svg></div>
+        <div class="float-sticker sticker-flower-2"><svg class="icon-svg">
+                <use href="#icon-flower-2"></use>
+            </svg></div>
+        <div class="float-sticker sticker-moon-2"><svg class="icon-svg">
+                <use href="#icon-moon-star"></use>
+            </svg></div>
+        <img class="deco-character" src="https://tc.ciallo.ccwu.cc/file/1775130613783_1774881310058_atri3.webp"
+            alt="ATRI decor">
+
+        <div class="inner">
+            <header class="header">
+                <div class="header-copy">
+                    <div class="eyebrow">A.T.R.I · Daily Communication Report</div>
+                    <h1>亚托莉的群聊观测日志</h1>
+                    <div class="header-subtitle">
+                        主人，今天群里的大家也超级精神呢！身为高性能的亚托莉，已经把所有闪闪发光的聊天记忆，像打捞海底宝藏一样全都收集好啦！
+                    </div>
+                </div>
+                <div class="date-box">
+                    <div class="date-label">REPORT GENERATED</div>
+                    <div class="date-divider">✦</div>
+                    <div class="date-main">{{ current_date }}<br>{{ current_datetime }}</div>
+                </div>
+            </header>
+
+            <section class="hero-grid">
+                <div class="glass-card hero-card">
+                    <div class="hero-label">
+                        <div class="section-icon">
+                            <svg class="icon-svg">
+                                <use href="#icon-sparkles"></use>
+                            </svg>
+                        </div>
+                        Overview
+                        <img class="hero-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130600453_1774881268554_可爱.webp"
+                            alt="cute icon">
+                    </div>
+                    <h2 class="hero-title">来看看今天<br>都发生了什<br>么吧！</h2>
+                    <div class="hero-desc">
+                        报告主人！今天一共捕获了 <strong>{{ message_count }}</strong> 条消息，有 <strong>{{ participant_count }}</strong>
+                        位群友浮出水面参与了互动哦！我都仔细做好了备忘录哦，哼哼！
+                    </div>
+                    <img class="hero-character"
+                        src="https://tc.ciallo.ccwu.cc/file/1775130626446_1774881312214_atri1.webp"
+                        alt="ATRI main">
+                </div>
+
+                <div class="peak-card glass-card">
+                    <div class="peak-top">
+                        <div class="peak-meta">
+                            <div class="peak-caption">MOST ACTIVE PERIOD</div>
+                            <div class="peak-date-subtitle">{{ current_datetime }}</div>
+                            <div class="peak-time">{{ most_active_period }}</div>
+                            <div class="peak-note">
+                                这段时间的心跳值达到最高峰！大家的讨论就像退缩时沙滩上的贝壳一样密集，是今天最棒的高光时刻！
+                            </div>
+                        </div>
+                    </div>
+                    <img class="peak-image"
+                        src="https://tc.ciallo.ccwu.cc/file/1775130623112_1774881319340_atri4.webp"
+                        alt="ATRI peak">
+                </div>
+            </section>
+
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon"><svg class="icon-svg">
+                            <use href="#icon-message-circle"></use>
+                        </svg></div>
+                    <div class="stat-copy">
+                        <div class="stat-value">{{ message_count }}</div>
+                        <div class="stat-label">消息总数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><svg class="icon-svg">
+                            <use href="#icon-users"></use>
+                        </svg></div>
+                    <div class="stat-copy">
+                        <div class="stat-value">{{ participant_count }}</div>
+                        <div class="stat-label">参与人数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><svg class="icon-svg">
+                            <use href="#icon-text"></use>
+                        </svg></div>
+                    <div class="stat-copy">
+                        <div class="stat-value">{{ total_characters }}</div>
+                        <div class="stat-label">总字符数</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon"><svg class="icon-svg">
+                            <use href="#icon-smile"></use>
+                        </svg></div>
+                    <div class="stat-copy">
+                        <div class="stat-value">{{ emoji_count }}</div>
+                        <div class="stat-label">表情数量</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-card section tide-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-bar-chart-3"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">心跳潮汐<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130585446_1774881263342_观察.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">一整天的心跳节拍，由亚托莉为您完美记录</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">TIDE CHART <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130609119_1774881269400_可爱-1.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="html-slot">{{ hourly_chart_html | safe }}</div>
+            </section>
+
+            <section class="glass-card section topic-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-flame"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">高亮记忆碎片<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130581843_1774881262835_疑惑.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">亚托莉捕获的最亮眼的记忆碎片！</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">TOPIC BOARD <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130585446_1774881263342_观察.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="html-slot">{{ topics_html | safe }}</div>
+            </section>
+
+            <section class="glass-card section title-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-badge-check"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">神人名片颁发<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130598778_1774881267181_得意.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">颁发给各位的高性能称号！</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">SPOTLIGHT <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130599184_1774881267385_得意-1.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="html-slot title-grid">{{ titles_html | safe }}</div>
+            </section>
+
+            <section class="glass-card section quote-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-quote"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">亚托莉的宝藏瓶<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130605165_1774881270686_爱心.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">亚托莉偷偷记在小本子上的宝藏名言！</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">PRECIOUS WORDS <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130588642_1774881263748_可爱-3.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="html-slot">{{ quotes_html | safe }}</div>
+            </section>
+
+            {% if chat_quality_html %}
+            <section class="glass-card section review-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-flower-2"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">亚托莉观测报告<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130609119_1774881269400_可爱-1.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">来自高性能亚托莉的每日特别观测报告！</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">GROUP VIBE <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130585446_1774881263342_观察.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="html-slot">{{ chat_quality_html | safe }}</div>
+            </section>
+            {% endif %}
+
+            <section class="glass-card section token-section">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <div class="section-icon"><svg class="icon-svg">
+                                <use href="#icon-sparkles"></use>
+                            </svg></div>
+                        <div>
+                            <h3 class="section-title">能量解析雷达<img class="section-kawaii"
+                                    src="https://tc.ciallo.ccwu.cc/file/1775130591277_1774881264350_睡觉.webp"
+                                    alt="kawaii icon"></h3>
+                            <div class="section-sub">维持亚托莉运行与心跳的能量消耗~</div>
+                        </div>
+                    </div>
+                    <div class="section-badge">ENERGY COST <img class="badge-kawaii"
+                            src="https://tc.ciallo.ccwu.cc/file/1775130591487_1774881264336_不要.webp"
+                            alt="badge icon"></div>
+                </div>
+                <div class="token-grid">
+                    <div class="token-card">
+                        <div class="token-label">总消耗</div>
+                        <div class="token-value">{{ total_tokens }}</div>
+                    </div>
+                    <div class="token-card">
+                        <div class="token-label">提示词 Token</div>
+                        <div class="token-value">{{ prompt_tokens }}</div>
+                    </div>
+                    <div class="token-card">
+                        <div class="token-label">生成内容 Token</div>
+                        <div class="token-value">{{ completion_tokens }}</div>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="footer" style="padding-right: 120px;">
+                <div class="footer-left">
+                    <div style="display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px;">
+                        <strong style="display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+                            <svg class="icon-svg" style="width: 14px; height: 14px; fill: var(--deep);">
+                                <use href="#icon-heart"></use>
+                            </svg>
+                            ATRI | Template by Liangyu-G
+                        </strong>
+                        <a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis" target="_blank" class="footer-repo">
+                            <svg viewBox="0 0 16 16" width="14" height="14" fill="var(--deep)"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+                            <span>SXP-Simon/astrbot_plugin_qq_group_daily_analysis</span>
+                        </a>
+                    </div>
+                    <div style="font-size: 13px; opacity: 0.85;">亚托莉会永远把大家珍贵的聊天记忆藏在海底哦。</div>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+</body>
+
+</html>

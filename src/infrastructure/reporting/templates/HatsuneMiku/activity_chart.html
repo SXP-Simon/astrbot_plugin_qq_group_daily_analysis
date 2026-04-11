@@ -1,0 +1,45 @@
+<div style="display: flex; flex-direction: column; gap: 12px; width: 100%; min-width: 600px;">
+    {# 柱状图主体层：确保底部对齐 #}
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 160px; gap: 4px; padding-bottom: 5px; border-bottom: 2px solid rgba(57, 197, 187, 0.1);">
+        {% set chart_colors = [
+            '#66D1C7', '#6FD3C6', '#79D5C4', '#85D8C3', '#93DAC1', '#A3DDBF',
+            '#B4E0BD', '#C7E2BA', '#DBE5B8', '#EFE8B5', '#FFEAB3', '#FFDF9E',
+            '#FFD38B', '#FFC67A', '#FFB96D', '#FFAC62', '#FFA059', '#FF9552',
+            '#FF8B4D', '#FF834B', '#FF7D4D', '#FF7752', '#FF745A', '#FF7365'
+        ] %}
+        
+        {% for item in chart_data %}
+        {% set h = item.percentage | float %}
+        {% set bar_color = chart_colors[loop.index0 % 24] %}
+        {% set bar_opacity = '1' %}
+        {% if item.count == 0 %}
+            {% set h = '4' %}
+            {% set bar_opacity = '0.3' %}
+            {% set bar_color = 'var(--miku-blue)' %}
+        {% endif %}
+        
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;">
+            {% if item.count > 0 %}
+            <span style="font-family: var(--font-num); font-size: 0.75rem; color: {{ bar_color }}; margin-bottom: 4px; font-weight: 800;">{{ item.count }}</span>
+            {% endif %}
+            
+            <div style="width: 100%; height: {{ h }}%; 
+                        background: {{ bar_color }};
+                        border-radius: 4px 4px 1px 1px;
+                        opacity: {{ bar_opacity }};
+                        transition: height 0.3s ease;"></div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# X轴标签层：独立容器确保水平对齐且不换行 #}
+    <div style="display: flex; justify-content: space-between; gap: 4px;">
+        {% for item in chart_data %}
+        <div style="flex: 1; text-align: center;">
+            <span style="font-family: var(--font-num); font-size: 0.7rem; color: var(--text-sub); font-weight: bold; white-space: nowrap; display: inline-block;">
+                {{ "%02d"|format(item.hour) }}{% if loop.index0 % 4 == 0 or loop.last %}时{% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>

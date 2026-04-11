@@ -1,5 +1,5 @@
 """
-QQ群日常分析插件
+群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
 重构版本 - 使用模块化架构，支持跨平台
@@ -32,6 +32,7 @@ from .src.domain.services.incremental_merge_service import IncrementalMergeServi
 from .src.domain.services.statistics_service import StatisticsService
 from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
+from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.telegram_group_registry import (
@@ -44,10 +45,9 @@ from .src.infrastructure.platform.template_preview import (
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
-from .src.infrastructure.scheduler.retry import RetryManager
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
-from .src.utils.pdf_utils import PDFInstaller
+from .src.utils.resilience import GlobalRateLimiter
 
 
 class GroupDailyAnalysis(Star):
@@ -70,12 +70,16 @@ class GroupDailyAnalysis(Star):
     template_command_service: TemplateCommandService
     telegram_template_preview_handler: TelegramTemplatePreviewHandler
     template_preview_router: TemplatePreviewRouter
-    retry_manager: RetryManager
     auto_scheduler: AutoScheduler
+    message_sender: MessageSender
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
+
+        from pathlib import Path
+
+        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
         # 1. 基础设施层
         self.config_manager = ConfigManager(config)
@@ -83,9 +87,18 @@ class GroupDailyAnalysis(Star):
         self.bot_manager.set_context(context)
         self.bot_manager.set_plugin_instance(self)
         self.history_manager = HistoryManager(self)
-        self.report_generator = ReportGenerator(
-            self.config_manager, StarTools.get_data_dir()
-        )
+
+        try:
+            plugin_data_dir = StarTools.get_data_dir()
+        except Exception:
+            # 回退逻辑：手动构造满足规范的路径
+            plugin_data_dir = (
+                Path(get_astrbot_data_path())
+                / "plugin_data"
+                / "astrbot_plugin_qq_group_daily_analysis"
+            )
+
+        self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
         # Telegram 注册表 (持久层)
         self.telegram_group_registry = TelegramGroupRegistry(self)
@@ -129,22 +142,22 @@ class GroupDailyAnalysis(Star):
             handlers=[self.telegram_template_preview_handler]
         )
 
-        # 调度与重试
-        self.retry_manager = RetryManager(
-            self.bot_manager, self.html_render, self.report_generator
-        )
+        # 调度与发送
+        self.message_sender = MessageSender(self.bot_manager, self.config_manager)
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.analysis_service,
             self.bot_manager,
-            self.retry_manager,
             self.report_generator,
             self.html_render,
             plugin_instance=self,
         )
 
+        # 同步全局限流并进行初始化配置
+        GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
+
         self._initialized = False
-        self._discovery_run = False  # 是否已尝试过运行发现逻辑
+        self._terminating = False  # 生命周期标志
         self._init_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -157,8 +170,6 @@ class GroupDailyAnalysis(Star):
             self._background_tasks.add(self._init_task)
             self._init_task.add_done_callback(self._background_tasks.discard)
         except RuntimeError:
-            # 如果当前没有 running loop (例如在非异步初始化的环境中)，
-            # 则依赖 on_platform_loaded 钩子执行初始化
             self._init_task = None
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
@@ -200,6 +211,12 @@ class GroupDailyAnalysis(Star):
 
                 logger.info(f"正在执行插件初始化 (来源: {source})...")
 
+                # 0. 自动升级旧版 prompt 模板（str.format -> string.Template）并回写配置
+                try:
+                    self.config_manager.upgrade_prompt_templates()
+                except Exception as e:
+                    logger.warning(f"自动升级 prompt 模板失败: {e}")
+
                 # 1. 尝试发现 bot 实例
                 await self.bot_manager.initialize_from_config()
 
@@ -213,10 +230,6 @@ class GroupDailyAnalysis(Star):
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
 
-                # 4. 始终启动重试管理器
-                if self.retry_manager:
-                    await self.retry_manager.start()
-
                 self._initialized = True
                 self._discovery_run = True
                 logger.info(f"插件任务注册完成 (来源: {source})")
@@ -226,44 +239,44 @@ class GroupDailyAnalysis(Star):
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
+        if self._terminating:
+            return
+        self._terminating = True
+
         try:
-            logger.info("开始清理QQ群日常分析插件资源...")
+            logger.info("开始清理群日常分析插件资源...")
 
             # 1. 停止所有后台任务
             if self._background_tasks:
-                logger.info(f"正在取消 {len(self._background_tasks)} 个后台任务...")
+                logger.info(f"正在取消 {len(self._background_tasks)} 个运行中的任务...")
                 for task in self._background_tasks:
                     if not task.done():
                         task.cancel()
 
-                # 等待任务结束
-                await asyncio.gather(*self._background_tasks, return_exceptions=True)
+                # 等待任务结束，给予 3 秒宽限期
+                try:
+                    await asyncio.wait(list(self._background_tasks), timeout=3.0)
+                except Exception:
+                    pass
                 self._background_tasks.clear()
 
-            # 2. 停止各个组件
+            # 2. 停止各个组件 (顺序：先调度器，后底层服务)
             if self.auto_scheduler:
-                logger.info("正在停止自动调度器...")
+                logger.debug("正在停止自动调度器...")
                 self.auto_scheduler.unschedule_jobs(self.context)
-
-            if self.retry_manager:
-                await self.retry_manager.stop()
 
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
 
-            # 3. 释放实例属性引用 (使用 type: ignore 允许 None 赋值)
-            self.auto_scheduler = None  # type: ignore
-            self.bot_manager = None  # type: ignore
             if self.report_generator:
-                self.report_generator.close()
-            self.report_generator = None  # type: ignore
-            self.config_manager = None  # type: ignore
-            self.message_processing_service = None  # type: ignore
-            self.telegram_group_registry = None  # type: ignore
-            self.template_preview_router = None  # type: ignore
-            self.telegram_template_preview_handler = None  # type: ignore
+                await self.report_generator.close()
 
-            logger.info("QQ群日常分析插件资源清理完成")
+            # 3. [关键修复] 只有在任务全部清理后，才清理引用。
+            # 实际上，在 terminate 结束后，self 本身就会被 GC 释放，
+            # 这里的显式 None 更多是为了协助循环引用清理，但由于异步任务存在竞态，
+            # 我们可以通过 check _terminating 标志位来保护。
+            # 为了彻底解决 #125，我们保留引用，让 GC 自然回收。
+            logger.info("群日常分析插件资源清理完成")
 
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
@@ -463,54 +476,67 @@ class GroupDailyAnalysis(Star):
         分析群聊日常活动（跨平台支持）
         用法: /群分析 [天数]
         """
-        event.should_call_llm(True)  # 阻止默认 LLM 解析
-        group_id = self._get_group_id_from_event(event)
-        platform_id = self._get_platform_id_from_event(event)
-
-        if not group_id:
-            yield event.plain_result("❌ 请在群聊中使用此命令")
+        if self._terminating:
             return
 
-        # 更新bot实例
-        self.bot_manager.update_from_event(event)
+        current_task = asyncio.current_task()
+        if current_task:
+            self._background_tasks.add(current_task)
 
-        # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
-        check_target = getattr(event, "unified_msg_origin", None)
-        if not check_target:
-            check_target = f"{platform_id}:GroupMessage:{group_id}"
-
-        if not self.config_manager.is_group_allowed(check_target):
-            # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
-            # But if list item HAS colon, we need precise match.
-            # If prompt fails, try simple ID as fallback for permissive cases?
-            # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
-            yield event.plain_result("❌ 此群未启用日常分析功能")
-            return
-
-        # 获取群名以生成语义化的 TraceID
-        group_name = ""
         try:
+            event.should_call_llm(True)  # 阻止默认 LLM 解析
+            group_id = self._get_group_id_from_event(event)
+            platform_id = self._get_platform_id_from_event(event)
+
+            if not group_id:
+                yield event.plain_result("❌ 请在群聊中使用此命令")
+                return
+
+            # 更新bot实例
+            self.bot_manager.update_from_event(event)
+
+            # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
+            check_target = getattr(event, "unified_msg_origin", None)
+            if not check_target:
+                check_target = f"{platform_id}:GroupMessage:{group_id}"
+
+            if not self.config_manager.is_group_allowed(check_target):
+                # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
+                # But if list item HAS colon, we need precise match.
+                # If prompt fails, try simple ID as fallback for permissive cases?
+                # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
+                yield event.plain_result("❌ 此群未启用日常分析功能")
+                return
+
+            # 获取群名以生成语义化的 TraceID
+            group_name = ""
+            try:
+                adapter = self.bot_manager.get_adapter(platform_id)
+                if adapter:
+                    info = await adapter.get_group_info(group_id)
+                    if info and info.group_name:
+                        group_name = info.group_name
+            except Exception:
+                pass
+
+            # 设置 TraceID (语义化格式: manual_群名_HHmm)
+            trace_id = TraceContext.generate(
+                prefix="manual", group_name=group_name or group_id
+            )
+            TraceContext.set(trace_id)
+
+            # 表情回应 或 文本提示（二选一，由配置开关控制）
             adapter = self.bot_manager.get_adapter(platform_id)
-            if adapter:
-                info = await adapter.get_group_info(group_id)
-                if info and info.group_name:
-                    group_name = info.group_name
-        except Exception:
-            pass
+            orig_msg_id = getattr(event.message_obj, "message_id", None)
+            use_text_reply = self.config_manager.get_enable_analysis_reply()
 
-        # 设置 TraceID (语义化格式: manual_群名_HHmm)
-        trace_id = TraceContext.generate(
-            prefix="manual", group_name=group_name or group_id
-        )
-        TraceContext.set(trace_id)
+            if use_text_reply:
+                yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
+            elif adapter and orig_msg_id:
+                await adapter.set_reaction(
+                    event.get_group_id(), orig_msg_id, "analysis_started"
+                )
 
-        # 使用表情回应代替文本回复
-        adapter = self.bot_manager.get_adapter(platform_id)
-        orig_msg_id = getattr(event.message_obj, "message_id", None)
-        if adapter and orig_msg_id:
-            await adapter.set_reaction(event.get_group_id(), orig_msg_id, "🔍")  # 🔍
-
-        try:
             # 调用 DDD 应用级服务
             result = await self.analysis_service.execute_daily_analysis(
                 group_id=group_id, platform_id=platform_id, manual=True, days=days
@@ -524,26 +550,35 @@ class GroupDailyAnalysis(Star):
                     yield event.plain_result("❌ 分析失败，原因未知")
                 return
 
-            if adapter and orig_msg_id:
+            if not use_text_reply and adapter and orig_msg_id:
                 await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "📊"
-                )  # 📊
+                    event.get_group_id(), orig_msg_id, "analysis_done"
+                )
 
             async for res in self._send_analysis_report(event, result):
                 yield res
 
         except DuplicateGroupTaskError:
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
+        except asyncio.CancelledError:
+            logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
+        finally:
+            if current_task:
+                self._background_tasks.discard(current_task)
 
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict
     ) -> AsyncGenerator:
         """处理分析结果的渲染和发送"""
+        if self._terminating or not self.config_manager:
+            logger.warning("插件正在关闭，停止发送报告")
+            return
+
         group_id = result["group_id"]
         platform_id = result["platform_id"]
         analysis_result = result["analysis_result"]
@@ -574,85 +609,112 @@ class GroupDailyAnalysis(Star):
 
             if image_url:
                 caption = TraceContext.make_report_caption()
-                await adapter.send_image(group_id, image_url, caption=caption)
-                await self._try_upload_image(group_id, image_url, platform_id)
-            elif html_content:
-                yield event.plain_result("⚠️ 群分析报告图片发送失败，自动重试中。")
-                caption = TraceContext.make_report_caption()
-                await self.retry_manager.add_task(
-                    html_content,
-                    analysis_result,
-                    group_id,
-                    platform_id,
-                    caption=caption,
-                )
-            else:
-                text_report = self.report_generator.generate_text_report(
-                    analysis_result
-                )
-                yield event.plain_result(f"⚠️ 图片生成失败，回退文本：\n\n{text_report}")
+                sent = await adapter.send_image(group_id, image_url, caption=caption)
+                if sent:
+                    await self._try_upload_image(group_id, image_url, platform_id)
+                    return  # 成功发送
 
-        elif output_format == "pdf":
-            pdf_path = await self.report_generator.generate_pdf_report(
+            # 如果图片生成或发送失败，直接回退到文本
+            logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
+            text_report = self.report_generator.generate_text_report(analysis_result)
+            await adapter.send_text_report(group_id, text_report)
+            return
+
+        elif output_format == "html":
+            html_path, json_path = await self.report_generator.generate_html_report(
                 analysis_result,
                 group_id,
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
-            if pdf_path:
-                if not await adapter.send_file(group_id, pdf_path):
-                    yield event.chain_result(
-                        [File(name=Path(pdf_path).name, file=pdf_path)]
+            if html_path:
+                caption = self.report_generator.build_html_caption(html_path)
+
+                # 发送 HTML 文件
+                sender = getattr(self, "message_sender", None)
+                if sender:
+                    sent = await sender.send_file(
+                        group_id,
+                        html_path,
+                        caption=caption,
+                        platform_id=platform_id,
                     )
+                else:
+                    sent = await adapter.send_file(group_id, html_path)
+                    if sent and caption:
+                        await adapter.send_text(group_id, caption)
+
+                if not sent:
+                    yield event.chain_result(
+                        [File(name=Path(html_path).name, file=html_path)]
+                    )
+
+                    if caption:
+                        yield event.plain_result(caption)
             else:
-                yield event.plain_result("⚠️ PDF 生成失败。")
+                yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
-            if not await adapter.send_text(group_id, text_report):
-                yield event.plain_result(text_report)
+            await adapter.send_text_report(group_id, text_report)
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def set_output_format(self, event: AstrMessageEvent, format_type: str = ""):
+    async def set_output_format(self, event: AstrMessageEvent, format_input: str = ""):
         """
         设置分析报告输出格式（跨平台支持）
-        用法: /设置格式 [image|text|pdf]
+        用法: /设置格式 [格式名称或序号]
         """
-        group_id = self._get_group_id_from_event(event)
+        # 命令由插件处理，禁用默认 LLM 回退。
+        event.should_call_llm(True)
 
-        if not group_id:
-            yield event.plain_result("❌ 请在群聊中使用此命令")
-            return
+        available_formats = ["image", "text", "html"]
+        format_display_names = {
+            "image": "图片格式 (默认)",
+            "text": "文本格式",
+            "html": "交互式 HTML 网页",
+        }
 
-        if not format_type:
+        if not format_input:
             current_format = self.config_manager.get_output_format()
-            pdf_status = (
-                "✅"
-                if self.config_manager.playwright_available
-                else "❌ (需安装 Playwright)"
+            format_list_str = "\n".join(
+                [
+                    f"【{i}】{f} - {format_display_names[f]}"
+                    for i, f in enumerate(available_formats, start=1)
+                ]
             )
             yield event.plain_result(f"""📊 当前输出格式: {current_format}
 
 可用格式:
-• image - 图片格式 (默认)
-• text - 文本格式
-• pdf - PDF 格式 {pdf_status}
+{format_list_str}
 
-用法: /设置格式 [格式名称]""")
+用法: /设置格式 [名称或序号]""")
             return
 
-        format_type = format_type.lower()
-        if format_type not in ["image", "text", "pdf"]:
-            yield event.plain_result("❌ 无效的格式类型，支持: image, text, pdf")
+        target_format = None
+        # 尝试由序号选择
+        if format_input.isdigit():
+            idx = int(format_input) - 1
+            if 0 <= idx < len(available_formats):
+                target_format = available_formats[idx]
+
+        # 尝试按名称选择
+        if not target_format:
+            input_lower = format_input.lower()
+            if input_lower in available_formats:
+                target_format = input_lower
+
+        if not target_format:
+            yield event.plain_result(
+                f"❌ 无效的格式类型 '{format_input}'。可用: {', '.join(available_formats)} 或序号 1-{len(available_formats)}"
+            )
             return
 
-        if format_type == "pdf" and not self.config_manager.playwright_available:
-            yield event.plain_result("❌ PDF 格式不可用，请使用 /安装PDF 命令安装依赖")
-            return
-
-        self.config_manager.set_output_format(format_type)
-        yield event.plain_result(f"✅ 输出格式已设置为: {format_type}")
+        try:
+            self.config_manager.set_output_format(target_format)
+            yield event.plain_result(f"✅ 输出格式已设置为: {target_format}")
+        except Exception as e:
+            yield event.plain_result(f"❌ 设置失败: {e}")
 
     @filter.command("设置模板", alias={"set_template"})
     @filter.permission_type(PermissionType.ADMIN)
@@ -744,25 +806,6 @@ class GroupDailyAnalysis(Star):
         )
         yield event.chain_result([preview_nodes])
 
-    @filter.command("安装PDF", alias={"install_pdf"})
-    @filter.permission_type(PermissionType.ADMIN)
-    async def install_pdf_deps(self, event: AstrMessageEvent):
-        """
-        安装 PDF 功能依赖（跨平台支持）
-        用法: /安装PDF
-        """
-        yield event.plain_result("🔄 开始安装 PDF 功能依赖，请稍候...")
-
-        try:
-            result = await PDFInstaller.install_playwright(
-                self.config_manager, task_registry=self._background_tasks
-            )
-            yield event.plain_result(result)
-
-        except Exception as e:
-            logger.error(f"安装 PDF 依赖失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 安装过程中出现错误: {str(e)}")
-
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analysis_settings(self, event: AstrMessageEvent, action: str = "status"):
@@ -836,11 +879,10 @@ class GroupDailyAnalysis(Star):
             mode = self.config_manager.get_group_list_mode()
 
             auto_status = (
-                "已启用" if self.config_manager.get_enable_auto_analysis() else "未启用"
+                "已启用" if self.config_manager.is_auto_analysis_enabled() else "未启用"
             )
             auto_time = self.config_manager.get_auto_analysis_time()
 
-            pdf_status = PDFInstaller.get_pdf_status(self.config_manager)
             output_format = self.config_manager.get_output_format()
             min_threshold = self.config_manager.get_min_messages_threshold()
 
@@ -866,12 +908,11 @@ class GroupDailyAnalysis(Star):
 • 增量分析: {incremental_status_text}
 • 调试模式: {debug_status} (增量立即报告)
 • 输出格式: {output_format}
-• PDF 功能: {pdf_status}
 • 最小消息数: {min_threshold}
 
 💡 可用命令: enable, disable, status, reload, test, incremental_debug
-💡 支持的输出格式: image, text, pdf (图片和PDF包含活跃度可视化)
-💡 其他命令: /设置格式, /安装PDF, /增量状态""")
+💡 支持的输出格式: image, text (图片包含活跃度可视化)
+💡 其他命令: /设置格式, /增量状态""")
 
     @filter.command("增量状态", alias={"incremental_status"})
     @filter.permission_type(PermissionType.ADMIN)

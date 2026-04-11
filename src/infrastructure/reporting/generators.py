@@ -5,16 +5,23 @@
 
 import asyncio
 import base64
+import html
 import os
 import re
-from datetime import datetime
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
+from urllib.parse import quote
 
 import aiohttp
+import ulid
 from diskcache import Cache
+from markupsafe import Markup
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
+from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
 from .templates import HTMLTemplates
 
@@ -28,6 +35,7 @@ class ReportGenerator(IReportGenerator):
     def __init__(self, config_manager, data_dir):
         self._avatar_session = None
         self.config_manager = config_manager
+        self.data_dir = data_dir
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)  # 实例化HTML模板管理器
         # 全局 T2I 渲染信号量，保护本地资源
@@ -36,11 +44,84 @@ class ReportGenerator(IReportGenerator):
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
-        self._avatar_cache = Cache(str(data_dir / "avatar"))  # user_id -> base64_uri
+        self._avatar_cache = Cache(
+            str(self.data_dir / "avatar")
+        )  # user_id -> base64_uri
         self._avatar_session_concurrent_semaphore = asyncio.Semaphore(
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+
+    @staticmethod
+    def _sanitize_path_component(name: str) -> str:
+        """消毒单个路径/文件名片段，禁止路径穿越和非法字符。"""
+        # 禁止空组件、相对路径控制符："."、".."
+        if not name or name in {".", ".."}:
+            raise ValueError(f"无效的路径片段: {name!r}")
+
+        # 不允许包含路径分隔符
+        name = name.replace("/", "_")
+        name = name.replace("\\", "_")
+
+        # 去除非打印字符和非法文件名字符
+        name = re.sub(r'[\x00-\x1f<>:"|?*]', "_", name)
+
+        # 保留中文、字母、数字、下划线、横线和点
+        name = name.strip()
+        if not name:
+            raise ValueError("路径片段经过消毒后为空")
+
+        return name
+
+    def _build_safe_report_path(
+        self,
+        output_dir: Path,
+        filename_format: str,
+        group_id: str,
+        date: str,
+    ) -> Path:
+        """根据格式构建安全输出路径，支持子目录和 {ulid}。"""
+        generated_ulid = str(ulid.new())
+        safe_context = {
+            "group_id": group_id,
+            "date": date,
+            "ulid": generated_ulid,
+        }
+
+        try:
+            formatted = render_template(filename_format, strict=True, **safe_context)
+        except Exception as e:
+            raise ValueError(f"文件名模板渲染失败: {e}") from e
+
+        if os.path.isabs(formatted):
+            raise ValueError("文件名格式不得为绝对路径")
+
+        relative_path = Path(formatted)
+        sanitized_parts = []
+        for part in relative_path.parts:
+            if part in {".", ".."}:
+                raise ValueError("路径中不得包含 '.' 或 '..'。")
+            sanitized_parts.append(self._sanitize_path_component(part))
+
+        safe_relative = Path(*sanitized_parts)
+
+        output_dir_resolved = output_dir.resolve(strict=False)
+        target_path = (output_dir_resolved / safe_relative).resolve(strict=False)
+
+        # 防止回退到上级目录（使用 Path.relative_to 进行目录包含校验）
+        try:
+            target_path.relative_to(output_dir_resolved)
+        except ValueError:
+            raise ValueError("文件路径不在输出目录之内，可能包含路径穿越")
+
+        # 防止与已有文件覆盖（如果用户格式没有唯一标记），追加 ULID 后缀
+        if target_path.exists():
+            suffix = target_path.suffix
+            stem = target_path.stem
+            target_path = target_path.with_name(f"{stem}_{generated_ulid}{suffix}")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        return target_path
 
     async def generate_image_report(
         self,
@@ -73,9 +154,10 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
             )
 
-            # 先渲染HTML模板（使用异步方法）
-            image_template = await self.html_templates.get_image_template_async()
-            html_content = self._render_html_template(image_template, render_payload)
+            # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
+            html_content = self.html_templates.render_template(
+                "image_template.html", **render_payload
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
@@ -200,57 +282,148 @@ class ReportGenerator(IReportGenerator):
                 await self._avatar_session.close()
                 self._avatar_session = None
 
-    async def generate_pdf_report(
+    async def generate_html_report(
         self,
         analysis_result: dict,
         group_id: str,
         avatar_url_getter=None,
         nickname_getter=None,
-    ) -> str | None:
-        """生成PDF格式的分析报告"""
+    ) -> tuple[str | None, str | None]:
+        """
+        生成HTML格式的分析报告，保存到指定目录
+
+        Args:
+            analysis_result: 分析结果字典
+            group_id: 群组ID
+            avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
+            nickname_getter: 昵称获取函数
+
+        Returns:
+            tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
+        """
         try:
+            import json
+
             # 确保输出目录存在（使用 asyncio.to_thread 避免阻塞）
-            output_dir = Path(self.config_manager.get_pdf_output_dir())
+            output_dir = Path(self.config_manager.get_html_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
-            # 生成文件名
+            # 生成文件路径
             current_date = datetime.now().strftime("%Y%m%d")
-            filename = self.config_manager.get_pdf_filename_format().format(
-                group_id=group_id, date=current_date
+            base_html_path = self._build_safe_report_path(
+                output_dir,
+                self.config_manager.get_html_filename_format(),
+                group_id=group_id,
+                date=current_date,
             )
-            pdf_path = output_dir / filename
+
+            html_path = base_html_path
+            if not html_path.suffix:
+                html_path = html_path.with_suffix(".html")
+
+            json_path = html_path.with_suffix(".json")
+
+            html_path.parent.mkdir(parents=True, exist_ok=True)
 
             # 准备渲染数据
             render_data = await self._prepare_render_data(
                 analysis_result,
-                chart_template="activity_chart_pdf.html",
+                chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
             )
-            logger.info(f"PDF 渲染数据准备完成，包含 {len(render_data)} 个字段")
+            logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            # 生成 HTML 内容（使用异步方法）
-            pdf_template = await self.html_templates.get_pdf_template_async()
-            html_content = self._render_html_template(pdf_template, render_data)
+            # 生成 HTML 内容（使用 Jinja2 渲染器，尝试 html_template.html，失败则回退到 image_template.html）
+            html_content = None
+            try:
+                html_content = self.html_templates.render_template(
+                    "html_template.html", **render_data
+                )
+                logger.info("使用 html_template.html 渲染成功")
+            except Exception as e:
+                logger.warning(
+                    f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
+                )
+                html_content = self.html_templates.render_template(
+                    "image_template.html", **render_data
+                )
+                logger.info("使用 image_template.html 渲染成功")
 
             # 检查HTML内容是否有效
             if not html_content:
-                logger.error("PDF报告HTML渲染失败：返回空内容")
-                return None
+                logger.error("HTML报告渲染失败：返回空内容")
+                return None, None
 
             logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
-            # 转换为 PDF
-            success = await self._html_to_pdf(html_content, str(pdf_path))
+            # 保存 HTML 文件
+            await asyncio.to_thread(
+                html_path.write_text, html_content, encoding="utf-8"
+            )
+            logger.info(f"HTML 报告已保存: {html_path}")
 
-            if success:
-                return str(pdf_path.absolute())
-            else:
-                return None
+            def json_default_encoder(obj):
+                if hasattr(obj, "to_dict") and callable(obj.to_dict):
+                    return obj.to_dict()
+                if is_dataclass(obj) and not isinstance(obj, type):
+                    return asdict(obj)
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                if isinstance(obj, Enum):
+                    return obj.value
+                if isinstance(obj, (set, tuple)):
+                    return list(obj)
+                raise TypeError(
+                    f"Object of type {type(obj).__name__} is not JSON serializable"
+                )
+
+            # 保存原始 JSON 数据
+            json_data = {
+                "analysis_result": analysis_result,
+                "group_id": group_id,
+                "generated_at": datetime.now().isoformat(),
+            }
+            await asyncio.to_thread(
+                json_path.write_text,
+                json.dumps(
+                    json_data,
+                    ensure_ascii=False,
+                    indent=2,
+                    default=json_default_encoder,
+                ),
+                encoding="utf-8",
+            )
+            logger.info(f"JSON 数据已保存: {json_path}")
+
+            return str(html_path.absolute()), str(json_path.absolute())
 
         except Exception as e:
-            logger.error(f"生成 PDF 报告失败: {e}")
-            return None
+            logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
+            return None, None
+
+    def build_html_caption(self, html_path: str) -> str:
+        """根据 html_base_url 生成 HTML 报告链接 caption"""
+
+        caption = "📊 每日群聊分析报告已生成"
+        base_url = self.config_manager.get_html_base_url()
+        if not base_url or not html_path:
+            return caption
+
+        # 支持 html_filename_format 中的子目录，保持相对路径
+        output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+            strict=False
+        )
+        try:
+            relative_path = (
+                Path(html_path).resolve(strict=False).relative_to(output_dir)
+            )
+            relative_url = str(relative_path).replace(os.sep, "/")
+        except Exception:
+            relative_url = Path(html_path).name
+
+        encoded_relative_url = quote(relative_url, safe="/")
+        return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
@@ -287,9 +460,9 @@ class ReportGenerator(IReportGenerator):
 
         report += "💬 群圣经\n"
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for i, quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            report += f'{i}. "{quote.content}" —— {quote.sender}\n'
-            report += f"   {quote.reason}\n\n"
+        for i, golden_quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
+            report += f'{i}. "{golden_quote.content}" —— {golden_quote.sender}\n'
+            report += f"   {golden_quote.reason}\n\n"
 
         return report
 
@@ -355,20 +528,22 @@ class ReportGenerator(IReportGenerator):
         # 使用Jinja2模板构建金句HTML（批量渲染）
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
-        for quote in stats.golden_quotes[:max_golden_quotes]:
+        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
-                await self._get_user_avatar(str(quote.user_id), avatar_url_getter)
-                if quote.user_id
+                await self._get_user_avatar(
+                    str(golden_quote.user_id), avatar_url_getter
+                )
+                if golden_quote.user_id
                 else None
             )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                quote.reason, avatar_url_getter, nickname_getter, user_analysis
+                golden_quote.reason, avatar_url_getter, nickname_getter, user_analysis
             )
             quotes_list.append(
                 {
-                    "content": quote.content,
-                    "sender": quote.sender,
+                    "content": golden_quote.content,
+                    "sender": golden_quote.sender,
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
@@ -388,6 +563,37 @@ class ReportGenerator(IReportGenerator):
         )
         logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
+        # 生成聊天质量锐评HTML
+        chat_quality_html = ""
+        chat_quality_review = analysis_result.get("chat_quality_review")
+        if not chat_quality_review and hasattr(stats, "chat_quality_review"):
+            chat_quality_review = stats.chat_quality_review
+
+        if chat_quality_review:
+            # 如果是对象，转为字典（为了统一渲染）
+            if hasattr(chat_quality_review, "dimensions"):
+                review_data = {
+                    "title": chat_quality_review.title,
+                    "subtitle": chat_quality_review.subtitle,
+                    "dimensions": [
+                        {
+                            "name": d.name,
+                            "percentage": d.percentage,
+                            "comment": d.comment,
+                            "color": d.color,
+                        }
+                        for d in chat_quality_review.dimensions
+                    ],
+                    "summary": chat_quality_review.summary,
+                }
+            else:
+                review_data = chat_quality_review
+
+            chat_quality_html = self.html_templates.render_template(
+                "chat_quality_item.html", **review_data
+            )
+            logger.info(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
+
         # 准备最终渲染数据
         render_data = {
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
@@ -401,6 +607,7 @@ class ReportGenerator(IReportGenerator):
             "titles_html": titles_html,
             "quotes_html": quotes_html,
             "hourly_chart_html": hourly_chart_html,
+            "chat_quality_html": chat_quality_html,
             "total_tokens": stats.token_usage.total_tokens
             if stats.token_usage.total_tokens
             else 0,
@@ -421,18 +628,19 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
-    ) -> str:
+    ) -> Markup:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
         """
-        import re
-
         pattern = r"\[(\d+)\]"
-        matches = re.findall(pattern, text)
-        if not matches:
-            return text
+        if not text:
+            return Markup("")
 
-        async def replacer(match):
+        matches = list(re.finditer(pattern, text))
+        if not matches:
+            return self._escape_text_segment(text)
+
+        async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
             url = await self._get_user_avatar(
                 uid, avatar_url_getter
@@ -465,34 +673,33 @@ class ReportGenerator(IReportGenerator):
             name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
             # 3. 最终后备: 确保有头像和名称
-            if not url:
-                url = self._get_default_avatar_base64()
-            if self._is_placeholder_display_name(name, uid):
-                name = str(uid)
-
-            return (
-                f'<span class="user-capsule" style="{capsule_style}">'
-                f'<img src="{url}" style="{img_style}">'
-                f'<span style="{name_style}">{name}</span>'
-                f"</span>"
+            final_url = url if url else self._get_default_avatar_base64()
+            final_name = (
+                name
+                if (name and not self._is_placeholder_display_name(name, uid))
+                else str(uid)
             )
 
-        # re.sub 不支持异步回调，需要先提取所有 ID 进行处理，或者使用自定义的替换逻辑
-        # 这里为了保持异步特性，我们需要手动处理
+            return Markup(
+                f'<span class="user-capsule" style="{capsule_style}">'
+                f'<img src="{html.escape(final_url, quote=True)}" style="{img_style}">'
+                f'<span style="{name_style}">{html.escape(final_name)}</span>'
+                "</span>"
+            )
 
-        # 1. 找出所有匹配项
-        matches = list(re.finditer(pattern, text))
-        if not matches:
-            return text
+        result: list[Markup | str] = []
+        last_end = 0
+        for match in matches:
+            result.append(self._escape_text_segment(text[last_end : match.start()]))
+            result.append(await render_capsule(match))
+            last_end = match.end()
 
-        # 2. 从后往前替换，保持索引正确
-        result = text
-        for match in reversed(matches):
-            replacement = await replacer(match)
-            start, end = match.span()
-            result = result[:start] + replacement + result[end:]
+        result.append(self._escape_text_segment(text[last_end:]))
+        return Markup("").join(result)
 
-        return result
+    @staticmethod
+    def _escape_text_segment(text: str) -> Markup:
+        return Markup(html.escape(text, quote=False).replace("\n", "<br>"))
 
     @staticmethod
     def _is_placeholder_display_name(name: str | None, user_id: str) -> bool:
@@ -505,30 +712,6 @@ class ReportGenerator(IReportGenerator):
         if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
             return True
         return normalized == str(user_id).strip()
-
-    def _render_html_template(self, template: str, data: dict) -> str:
-        """HTML模板渲染，使用 {{key}} 占位符格式
-
-        Args:
-            template: HTML模板字符串
-            data: 渲染数据字典
-        """
-        result = template
-
-        for key, value in data.items():
-            # 统一使用双大括号格式 {{key}}
-            placeholder = "{{" + key + "}}"
-            result = result.replace(placeholder, str(value))
-
-        # 检查是否还有未替换的占位符
-        import re
-
-        if remaining_placeholders := re.findall(r"\{\{[^}]+\}\}", result):
-            logger.warning(
-                f"未替换的占位符 ({len(remaining_placeholders)}个): {remaining_placeholders[:10]}"
-            )
-
-        return result
 
     @staticmethod
     def _safe_url_for_log(url: str | None) -> str:
@@ -545,7 +728,10 @@ class ReportGenerator(IReportGenerator):
         """
         # 1. 检查缓存 (仅包含成功的头像数据)
         if avatar_id in self._avatar_cache:
-            return self._avatar_cache[avatar_id]
+            data = self._avatar_cache[avatar_id]
+            if isinstance(data, str):
+                return data
+            return str(data)
 
         # 2. 尝试获取头像字节流
         avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
@@ -602,6 +788,12 @@ class ReportGenerator(IReportGenerator):
                     if result:
                         if result.startswith("http"):
                             avatar_url = result
+                        elif result.startswith("base64://"):
+                            return base64.b64decode(result[len("base64://") :])
+                        elif result.startswith("data:"):
+                            parts = result.split(",", 1)
+                            if len(parts) == 2:
+                                return base64.b64decode(parts[1])
                         else:
                             logger.warning(
                                 f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
@@ -661,179 +853,15 @@ class ReportGenerator(IReportGenerator):
         b64 = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
         return f"data:image/svg+xml;base64,{b64}"
 
-    def close(self):
+    async def close(self):
         """释放资源，关闭缓存和 session"""
+        if self._avatar_session:
+            await self._avatar_session.close()
+            self._avatar_session = None
+
         try:
             if self._avatar_cache:
                 self._avatar_cache.close()
                 logger.debug("头像缓存已关闭")
         except Exception as e:
             logger.warning(f"关闭头像缓存失败: {e}")
-
-    async def _html_to_pdf(self, html_content: str, output_path: str) -> bool:
-        """将 HTML 内容转换为 PDF 文件"""
-        try:
-            # 动态导入 playwright
-            try:
-                from playwright.async_api import async_playwright  # type: ignore
-            except ImportError:
-                logger.error("playwright 未安装，无法生成 PDF")
-                logger.info("💡 请尝试运行: pip install playwright")
-                return False
-
-            import os
-            import sys
-
-            logger.info("启动浏览器进行 PDF 转换 (使用 Playwright)")
-
-            async with async_playwright() as p:
-                browser = None
-
-                executable_path = None
-
-                # 0. 优先检查配置的自定义路径
-                custom_browser_path = self.config_manager.get_browser_path()
-                if custom_browser_path:
-                    if Path(custom_browser_path).exists():
-                        logger.info(
-                            f"使用配置的自定义浏览器路径: {custom_browser_path}"
-                        )
-                        executable_path = custom_browser_path
-                    else:
-                        logger.warning(
-                            f"配置的浏览器路径不存在: {custom_browser_path}，尝试自动检测..."
-                        )
-
-                # 1. 如果没有自定义路径，尝试自动检测系统浏览器
-                if not executable_path:
-                    system_browser_paths = []
-                    if sys.platform.startswith("win"):
-                        username = os.environ.get("USERNAME", "")
-                        local_app_data = os.environ.get(
-                            "LOCALAPPDATA", rf"C:\Users\{username}\AppData\Local"
-                        )
-                        program_files = os.environ.get(
-                            "ProgramFiles", r"C:\Program Files"
-                        )
-                        program_files_x86 = os.environ.get(
-                            "ProgramFiles(x86)", r"C:\Program Files (x86)"
-                        )
-
-                        system_browser_paths = [
-                            os.path.join(
-                                program_files, r"Google\Chrome\Application\chrome.exe"
-                            ),
-                            os.path.join(
-                                program_files_x86,
-                                r"Google\Chrome\Application\chrome.exe",
-                            ),
-                            os.path.join(
-                                local_app_data, r"Google\Chrome\Application\chrome.exe"
-                            ),
-                            os.path.join(
-                                program_files_x86,
-                                r"Microsoft\Edge\Application\msedge.exe",
-                            ),
-                            os.path.join(
-                                program_files, r"Microsoft\Edge\Application\msedge.exe"
-                            ),
-                        ]
-                    elif sys.platform.startswith("linux"):
-                        system_browser_paths = [
-                            "/usr/bin/google-chrome",
-                            "/usr/bin/google-chrome-stable",
-                            "/usr/bin/chromium",
-                            "/usr/bin/chromium-browser",
-                            "/snap/bin/chromium",
-                        ]
-                    elif sys.platform.startswith("darwin"):
-                        system_browser_paths = [
-                            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-                            "/Applications/Chromium.app/Contents/MacOS/Chromium",
-                        ]
-
-                    # 尝试找到可用的系统浏览器
-                    for path in system_browser_paths:
-                        if Path(path).exists():
-                            executable_path = path
-                            logger.info(f"使用系统浏览器: {path}")
-                            break
-
-                # 定义默认启动参数
-                launch_kwargs = {
-                    "headless": True,
-                    "args": [
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--font-render-hinting=none",
-                    ],
-                }
-
-                if executable_path:
-                    launch_kwargs["executable_path"] = executable_path
-                    launch_kwargs["channel"] = (
-                        "chrome" if "chrome" in executable_path.lower() else "msedge"
-                    )
-
-                try:
-                    if executable_path:
-                        # 如果指定了路径，通常使用 chromium 启动
-                        browser = await p.chromium.launch(**launch_kwargs)
-                    else:
-                        # 尝试直接启动，依赖 playwright install
-                        logger.info("尝试启动 Playwright 托管的浏览器...")
-                        browser = await p.chromium.launch(
-                            headless=True, args=launch_kwargs["args"]
-                        )
-
-                except Exception as e:
-                    logger.warning(f"浏览器启动失败: {e}")
-                    if "Executable doesn't exist" in str(e) or "executable at" in str(
-                        e
-                    ):
-                        logger.error("未找到可用的浏览器。")
-                        logger.info(
-                            "💡 请确保已安装 Playwright 浏览器: playwright install chromium"
-                        )
-                        logger.info("💡 或者安装 Google Chrome / Microsoft Edge")
-                    return False
-
-                if not browser:
-                    return False
-
-                try:
-                    context = await browser.new_context(device_scale_factor=1)
-                    page = await context.new_page()
-
-                    # 设置页面内容
-                    await page.set_content(
-                        html_content, wait_until="networkidle", timeout=60000
-                    )
-
-                    # 生成 PDF
-                    logger.info("开始生成 PDF...")
-                    await page.pdf(
-                        path=output_path,
-                        format="A4",
-                        print_background=True,
-                        margin={
-                            "top": "10mm",
-                            "right": "10mm",
-                            "bottom": "10mm",
-                            "left": "10mm",
-                        },
-                    )
-                    logger.info(f"PDF 生成成功: {output_path}")
-                    return True
-
-                except Exception as e:
-                    logger.error(f"PDF 生成过程出错: {e}")
-                    return False
-                finally:
-                    if browser:
-                        await browser.close()
-
-        except Exception as e:
-            logger.error(f"Playwright 运行出错: {e}")
-            return False

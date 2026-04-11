@@ -49,17 +49,18 @@ astrbot_path.get_astrbot_data_path = lambda: Path(".")
 sys.modules["astrbot.core.utils"] = astrbot_core_utils
 sys.modules["astrbot.core.utils.astrbot_path"] = astrbot_path
 
-from src.domain.entities.analysis_result import (  # noqa: E402
+from src.domain.models.data_models import (  # noqa: E402
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
     GroupStatistics,
+    QualityDimension,
+    QualityReview,
     SummaryTopic,
     TokenUsage,
     UserTitle,
 )
 from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
-from src.infrastructure.reporting.templates import HTMLTemplates  # noqa: E402
 
 
 class MockConfigManager:
@@ -94,6 +95,12 @@ class MockConfigManager:
     def get_browser_path(self) -> str:
         return ""
 
+    def get_t2i_max_concurrent(self) -> int:
+        return 4
+
+    def get_llm_max_concurrent(self) -> int:
+        return 2
+
 
 async def mock_get_user_avatar(user_id: str) -> str:
     # Return a known avatar URL for testing
@@ -106,18 +113,53 @@ async def debug_render(
     # 1. Setup Mock Data
     config_manager = MockConfigManager(template_name)
 
-    # 2. Mock Analysis Result using Entities
+    # 2. Mock Analysis Result using Data Models
     stats = GroupStatistics(
         message_count=1250,
         total_characters=45000,
         participant_count=42,
         most_active_period="20:00 - 22:00",
+        golden_quotes=[],  # Will be filled later
         emoji_count=156,
         emoji_statistics=EmojiStatistics(face_count=100, mface_count=56),
         activity_visualization=ActivityVisualization(
             hourly_activity={
                 i: (10 + i * 5 if i < 12 else 100 - i * 2) for i in range(24)
             }
+        ),
+        token_usage=TokenUsage(
+            prompt_tokens=1500, completion_tokens=800, total_tokens=2300
+        ),
+        chat_quality_review=QualityReview(
+            title="互联网难民收容所",
+            subtitle="只要不工作，我们就是最好的朋友",
+            dimensions=[
+                QualityDimension(
+                    "水群闲聊",
+                    44.0,
+                    "这里的群友不生产代码，只生产各种表情包和废话，建议送去加个班。",
+                    "#607d8b",
+                ),
+                QualityDimension(
+                    "技术探讨",
+                    25.5,
+                    "偶尔冒出的技术术语像是在荒漠里发现绿洲，虽然很快就被废话淹没了。",
+                    "#2196f3",
+                ),
+                QualityDimension(
+                    "深夜发情",
+                    15.0,
+                    "凌晨三点的群聊内容需要打上 R18 标签，建议各位群友早点休息。",
+                    "#f44336",
+                ),
+                QualityDimension(
+                    "就业焦虑",
+                    10.5,
+                    "谈到工作时群里笼罩着一股淡淡的忧伤，大家都在比谁的工位更像牢房。",
+                    "#ff9800",
+                ),
+            ],
+            summary="今天也是充满活力（或者说充满废话）的一天，继续保持这份不求上进的快乐吧。",
         ),
     )
 
@@ -257,9 +299,7 @@ async def debug_render(
     ]
 
     stats.golden_quotes = golden_quotes
-    stats.token_usage = TokenUsage(
-        prompt_tokens=1500, completion_tokens=800, total_tokens=2300
-    )
+    # token_usage already set in constructor
 
     analysis_result = {
         "statistics": stats,
@@ -270,36 +310,34 @@ async def debug_render(
             "987654321": {"nickname": "李四"},
             "112233445": {"nickname": "潜水员"},
         },
+        "chat_quality_review": stats.chat_quality_review,
         "analysis_date": "2026年02月11日",
         "group_id": "123456",
         "group_name": "测试群组",
     }
 
     # 3. Initialize Generator
-    generator = ReportGenerator(config_manager)
-
-    # Override internal methods to facilitate debugging without real dependencies
-    generator._get_user_avatar_data = mock_get_user_avatar
+    data_dir = Path("data/debug_data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    generator = ReportGenerator(config_manager, data_dir)
 
     # 4. Prepare Render Data
     # Note: _prepare_render_data handles converting Entities to template-friendly dicts
-    render_payload = await generator._prepare_render_data(analysis_result)
+    render_payload = await generator._prepare_render_data(
+        analysis_result, avatar_url_getter=mock_get_user_avatar
+    )
 
-    # 5. Render Main Template
-    html_templates = HTMLTemplates(config_manager)
-    # Get image template string
-    raw_template = html_templates.get_image_template()
-
-    if not raw_template:
-        print(f"[ERROR] Failed to load template for '{template_name}'")
-        return
-
-    # Use generator's internal renderer
-    final_html = generator._render_html_template(raw_template, render_payload)
+    # Use Jinja2 renderer
+    final_html = generator.html_templates.render_template(
+        "image_template.html", **render_payload
+    )
 
     # 6. Save to file
     output_path = Path(output_file)
     output_path.write_text(final_html, encoding="utf-8")
+
+    # 7. Close generator
+    await generator.close()
 
     print(
         f"Successfully rendered template '{template_name}' to {output_path.absolute()}"

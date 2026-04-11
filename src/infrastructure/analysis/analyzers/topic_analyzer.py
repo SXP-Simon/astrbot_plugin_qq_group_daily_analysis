@@ -8,12 +8,15 @@ from datetime import datetime
 
 from ....domain.models.data_models import SummaryTopic, TokenUsage
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_topics_with_regex
+from ..utils.response_validation import validate_topic_items
+from ..utils.structured_output_schema import JSONObject, build_topics_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class TopicAnalyzer(BaseAnalyzer):
+class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
     """
     话题分析器
     专门处理群聊话题的提取和分析
@@ -33,13 +36,11 @@ class TopicAnalyzer(BaseAnalyzer):
             return self._incremental_max_count
         return self.config_manager.get_max_topics()
 
-    def get_max_tokens(self) -> int:
-        """获取最大token数"""
-        return self.config_manager.get_topic_max_tokens()
+    def get_response_schema_name(self) -> str:
+        return "daily_topics"
 
-    def get_temperature(self) -> float:
-        """获取温度参数"""
-        return 0.6
+    def get_response_schema(self) -> JSONObject:
+        return build_topics_schema(self.get_max_count())
 
     def build_prompt(self, data: list[dict]) -> str:
         """
@@ -162,15 +163,14 @@ class TopicAnalyzer(BaseAnalyzer):
         prompt_template = self.config_manager.get_topic_analysis_prompt()
 
         if prompt_template:
-            # 使用配置中的 prompt 并替换变量
             try:
-                prompt = prompt_template.format(
-                    max_topics=max_topics, messages_text=messages_text
+                prompt = render_template(
+                    prompt_template,
+                    max_topics=max_topics,
+                    messages_text=messages_text,
                 )
                 logger.info("使用配置中的话题分析提示词")
                 return prompt
-            except KeyError as e:
-                logger.warning(f"话题分析提示词变量格式错误: {e}")
             except Exception as e:
                 logger.warning(f"应用话题分析提示词失败: {e}")
 
@@ -262,6 +262,11 @@ class TopicAnalyzer(BaseAnalyzer):
         except Exception as e:
             logger.error(f"创建话题对象失败: {e}", exc_info=True)
             return []
+
+    def validate_parsed_data(
+        self, data_list: list[dict]
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        return validate_topic_items(data_list)
 
     def extract_text_messages(self, messages: list[dict]) -> list[dict]:
         """

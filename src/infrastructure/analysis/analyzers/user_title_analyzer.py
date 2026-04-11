@@ -5,11 +5,14 @@
 
 from ....domain.models.data_models import TokenUsage, UserTitle
 from ....utils.logger import logger
+from ...utils.template_utils import render_template
 from ..utils.json_utils import extract_user_titles_with_regex
+from ..utils.response_validation import validate_user_title_items
+from ..utils.structured_output_schema import JSONObject, build_user_titles_schema
 from .base_analyzer import BaseAnalyzer
 
 
-class UserTitleAnalyzer(BaseAnalyzer):
+class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
     """
     用户称号分析器
     专门处理用户称号分配和MBTI类型分析
@@ -27,13 +30,11 @@ class UserTitleAnalyzer(BaseAnalyzer):
         """获取最大用户称号数量"""
         return self.config_manager.get_max_user_titles()
 
-    def get_max_tokens(self) -> int:
-        """获取最大token数"""
-        return self.config_manager.get_user_title_max_tokens()
+    def get_response_schema_name(self) -> str:
+        return "daily_user_titles"
 
-    def get_temperature(self) -> float:
-        """获取温度参数"""
-        return 0.5
+    def get_response_schema(self) -> JSONObject:
+        return build_user_titles_schema(self.get_max_count())
 
     def build_prompt(self, data: dict) -> str:
         """
@@ -65,13 +66,10 @@ class UserTitleAnalyzer(BaseAnalyzer):
         prompt_template = self.config_manager.get_user_title_analysis_prompt()
 
         if prompt_template:
-            # 使用配置中的 prompt 并替换变量
             try:
-                prompt = prompt_template.format(users_text=users_text)
+                prompt = render_template(prompt_template, users_text=users_text)
                 logger.info("使用配置中的用户称号分析提示词")
                 return prompt
-            except KeyError as e:
-                logger.warning(f"用户称号分析提示词变量格式错误: {e}")
             except Exception as e:
                 logger.warning(f"应用用户称号分析提示词失败: {e}")
 
@@ -140,6 +138,11 @@ class UserTitleAnalyzer(BaseAnalyzer):
         except Exception as e:
             logger.error(f"创建用户称号对象失败: {e}")
             return []
+
+    def validate_parsed_data(
+        self, data_list: list[dict]
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        return validate_user_title_items(data_list)
 
     def prepare_user_data(
         self,

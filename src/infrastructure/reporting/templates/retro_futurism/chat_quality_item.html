@@ -1,0 +1,176 @@
+<style>
+    .retro-quality-item {
+        background: #FFFFFF;
+        border: 3px solid var(--c-text);
+        padding: 24px;
+        margin-bottom: 25px;
+        font-family: var(--font-mono);
+        color: var(--c-text);
+        box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.1);
+        position: relative;
+    }
+
+    .retro-quality-item::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 6px;
+        background: repeating-linear-gradient(90deg, var(--c-accent), var(--c-accent) 15px, var(--c-dec-3) 15px, var(--c-dec-3) 30px);
+    }
+
+    .retro-quality-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 20px;
+        border-bottom: 2px solid var(--c-text);
+        padding-bottom: 10px;
+        margin-top: 15px;
+    }
+
+    .retro-theme-title {
+        font-family: var(--font-display);
+        font-size: 2em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--c-dec-1);
+    }
+
+    .retro-time-range {
+        font-size: 1.1em;
+        font-weight: bold;
+        background: var(--c-dec-3);
+        color: #fff;
+        padding: 4px 10px;
+        border: 2px solid var(--c-text);
+        box-shadow: 2px 2px 0 var(--c-text);
+    }
+
+    .retro-dimension-bar-container {
+        margin: 25px 0;
+        background: #EEEEEE;
+        border: 2px solid var(--c-text);
+        height: 40px;
+        display: flex;
+        width: 100%;
+        position: relative;
+        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .retro-dimension-segment {
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        border-right: 2px solid var(--c-text);
+        white-space: nowrap;
+        font-size: 0.9em;
+        font-weight: bold;
+        transition: filter 0.2s;
+    }
+    
+    .retro-dimension-segment:hover {
+        filter: brightness(1.1);
+    }
+
+    .retro-dimension-segment:last-child {
+        border-right: none;
+    }
+
+    .retro-comments-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+
+    .retro-comment-box {
+        background: #FAFAFA;
+        border: 2px solid var(--c-text);
+        border-top: 4px solid var(--c-dec-2);
+        padding: 15px;
+        font-size: 0.95em;
+        line-height: 1.5;
+        box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+
+    .retro-comment-title {
+        display: inline-block;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: var(--c-dec-1);
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--c-grid);
+        padding-bottom: 4px;
+        width: 100%;
+    }
+
+    .retro-summary-section {
+        margin-top: 25px;
+        padding: 18px;
+        background: var(--c-dec-1);
+        color: #fff;
+        border: 3px solid var(--c-text);
+        font-size: 1.1em;
+        line-height: 1.6;
+        position: relative;
+        box-shadow: 4px 4px 0 var(--c-text);
+    }
+
+    .retro-summary-label {
+        background: var(--c-accent);
+        color: #fff;
+        padding: 4px 12px;
+        font-weight: bold;
+        margin-right: 15px;
+        display: inline-block;
+        font-family: var(--font-display);
+        letter-spacing: 1px;
+        border: 2px solid #fff;
+    }
+</style>
+
+<div class="retro-quality-item">
+    <div class="retro-quality-header">
+        <div class="retro-theme-title">{{ title }}</div>
+        {% if subtitle %}<div class="retro-time-range">{{ subtitle }}</div>{% endif %}
+    </div>
+
+    <!-- Stacked dimension bar chart -->
+    <div class="retro-dimension-bar-container">
+        {% set bg_colors = ['var(--c-accent)', 'var(--c-dec-1)', 'var(--c-dec-3)', 'var(--c-dec-2)', '#FFBA08', '#273C75', '#E07A5F', '#8D99AE'] %}
+        {% set txt_colors = ['#ffffff', '#ffffff', '#000000', '#ffffff', '#000000', '#ffffff', '#000000', '#ffffff'] %}
+        
+        {% for dim in dimensions %}
+            {% if dim.percentage > 0 %}
+            <div class="retro-dimension-segment"
+                style="width: {{ dim.percentage }}%; background-color: {{ bg_colors[loop.index0 % bg_colors|length] }}; color: {{ txt_colors[loop.index0 % txt_colors|length] }};"
+                title="{{ dim.comment }}">
+                <span style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; padding: 0 5px;">
+                    {{ dim.name }}
+                </span>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Dimension comments adapted to a retro dual-column layout -->
+    <div class="retro-comments-grid">
+        {% for dim in dimensions %}
+            {% if dim.percentage > 0 %}
+            <div class="retro-comment-box">
+                <div class="retro-comment-title">{{ dim.name }}</div>
+                <div style="font-size: 0.85em; font-weight: bold; color: var(--c-dec-2); margin-bottom: 8px;">PROPORTION: {{ dim.percentage }}%</div>
+                <div style="color: var(--c-text);">{{ dim.comment }}</div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- System Summary Section -->
+    <div class="retro-summary-section">
+        <span class="retro-summary-label">OVERVIEW</span>
+        <span>{{ summary }}</span>
+    </div>
+</div>

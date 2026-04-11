@@ -124,7 +124,7 @@ class DiscordAdapter(PlatformAdapter):
             list[UnifiedMessage]: 统一格式的消息对象列表
         """
         if not discord:
-            logger.error("Discord module (py-cord) not found. Cannot fetch messages.")
+            logger.error("未找到 Discord 模块 (py-cord)，无法拉取历史消息。")
             return []
 
         try:
@@ -764,11 +764,14 @@ class DiscordAdapter(PlatformAdapter):
             return False
 
         try:
-            # 映射常见的表情 ID 为文字表情，使分析状态在跨平台保持一致
-            mapping = {289: "🔍", 424: "📊", 124: "✅"}
-            emoji_to_use = emoji
-            if isinstance(emoji, int) or (isinstance(emoji, str) and emoji.isdigit()):
-                emoji_to_use = mapping.get(int(emoji), emoji)
+            reaction_key = str(emoji)
+            emoji_to_use = {
+                "analysis_started": "🔍",
+                "analysis_done": "📊",
+                "289": "🔍",
+                "124": "📊",
+                "424": "📊",
+            }.get(reaction_key, reaction_key)
 
             channel_id = int(group_id)
             channel = self._discord_client.get_channel(channel_id)

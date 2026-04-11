@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.9.3-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.9.15-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -16,6 +16,10 @@
       <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/TG.png" width="300" alt="Telegram Group"></a>
     </td>
   </tr>
+  <tr>
+    <td style="border: none;" align="center"><b>QQ群</b></td>
+    <td style="border: none;" align="center"><b>Telegram群</b></td>
+  </tr>
 </table>
 
 
@@ -23,6 +27,42 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
+
+
+
+## 效果
+
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Scrapbook (默认)</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="scrapbook" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Retro Futurism</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="retro_futurism" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>HatsuneMiku</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Hack</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="hack" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>ATRI</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
+    </td>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>Simple</b></p>
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/format-demo.jpg" alt="simple" width="100%">
+    </td>
+  </tr>
+</table>
+
 
 
 
@@ -37,7 +77,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
     - **精美图片**: 生成美观的可视化报告
-    - **PDF报告**: 生成专业的PDF格式分析报告（需配置）
+    - **HTML报告**: 生成清晰的HTML格式分析报告，可以进一步配置为外链形式发送
     - **QQ群**: 支持上传到群相册和群文件，查阅黑历史友好
 - **详细数据**: 包含消息统计、时间分布、关键词、金句等
 
@@ -81,6 +121,21 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 >
 > **自部署 T2I 文档**：docs.astrbot.app/others/self-host-t2i.html
 
+> [!IMPORTANT]
+>
+> Feishu / Lark 集成说明
+>
+> 本插件通过 `LarkAdapter` 复用 AstrBot 已有的 `lark_oapi` 生态能力，在获得授权后即可对 Feishu 群聊执行完整的消息采集与分析。
+>
+> - **一次性授权**：在飞书开放平台中为你的应用补齐如下权限（仅需在初次部署时授予）：
+>   - `im:message:readonly`、`im:chat:readonly`（读取群消息/群信息）
+>   - `contact:contact.base:readonly`（拉取用户昵称/头像；缺少该权限会导致头像永远显示默认）
+>   - 发送需要的附加 scope（如 `im:message:send` / `im:message:receive_v1` / 上传相关的 `im:resource` 系列）
+>   - **用户头像保障**：插件在分析前会调用 `LarkAdapter.prepare_group_member_cache`，一次性批量拉取最多 100 名活跃成员的头像并在缓存中保留，让后续分析阶段不再遇到“未授权头像”。
+>   - **令牌与长时运行**：飞书的 `tenant_access_token` 有 2 小时有效期，分析任务运行时间若超过此周期，请确保你的 Bot 框架会自动刷新令牌（通常是 SDK 默认行为）。
+> 读取 Feishu 配置后，按照上述授权顺序重新安装/刷新应用，就能在报告里面看到与 QQ/Telegram 一样的用户筛选、头像与 LLM 输出。
+
+
 
 ### 🛠️ 灵活配置
 - **多平台支持**: 自动识别并适配 OneBot, Discord, Telegram 等平台
@@ -90,6 +145,8 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 - **增量分析**: 全新的滑动窗口分析模式，全天候覆盖群聊消息
 - **自定义LLM服务**: 支持自定义指定的LLM服务
 
+
+
 ## 配置选项
 
 > [!NOTE]
@@ -97,10 +154,64 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 
 | 配置项 | 说明 | 备注 |
 |--------|------|--------|
-| 启用自动分析 | 启用定时触发自动分析功能。需要在群聊列表中添加群号或者使用 `/分析设置 enable` 启用。 | 默认关闭，建议开启 |
-| 启用增量分析 | 启用增量分析模式，定时分批分析消息，最终生成全天报告。 | 适合消息量大的群聊 |
-| PDF格式的报告 | 初次使用需要使用 `/安装PDF` 命令安装依赖。需重启 AstrBot 生效。 | 输出格式需设为 PDF |
-| 自定义LLM服务 | 用户可自行选取个人提供的服务商。 | 留空则回退到默认服务商 |
+| 定时分析名单模式 + 列表 | 控制哪些群参与定时任务（报告时间点触发）。 | `whitelist + 空列表` 表示不注册定时任务 |
+| 增量分析名单模式 + 列表 | 控制哪些群走增量模式，其他群走传统全量。 | `whitelist + 空列表` 表示不启用增量周期任务 |
+| PDF 格式的报告 | 初次使用需要使用 `/安装PDF` 命令安装依赖。需重启 AstrBot 生效。 | 输出格式需设为 PDF |
+| HTML 格式 (自建) | 配置 `html_base_url` 后，机器人会发送可直接点击的报告外链。 | 输出格式需设为 html |
+| 自定义 LLM 服务 | 用户可自行选取个人提供的服务商。 | 留空则回退到默认服务商 |
+
+### 分析黑白名单配置说明（小白能懂）
+
+下面只讲“在面板里怎么点”。
+
+#### 自动分析的判定顺序（很重要）
+
+系统会按下面顺序判断，前一关没过就直接停止：
+
+1. 基础群权限（`basic`）
+2. 定时分析名单（`auto_analysis`）
+3. 增量名单（`incremental`，只决定模式，不决定放行）
+
+一句话版：  
+`basic` 决定“能不能参与自动分析” -> `auto_analysis` 决定“会不会自动触发” -> `incremental` 决定“触发后用哪种分析方式”。
+
+#### 场景 A：只让一个群自动出报告（最常用）
+
+1. 在插件配置面板找到 `定时分析设置`。
+2. 把 `定时分析名单模式` 设为 `whitelist`。
+3. 在 `定时分析群列表` 里添加你的目标群（建议粘贴 `/sid` 拿到的完整会话ID）。
+4. 在 `自动分析时间列表` 里填时间（例如 `09:00`、`21:30`）。
+5. 去 `增量分析设置`：
+6. 把 `增量分析名单模式` 设为 `whitelist`，并保持 `增量分析群列表` 为空。  
+这样就是“这个群会自动跑，但走普通分析，不走增量”。
+
+#### 场景 B：除了某个群，其他群都自动跑
+
+1. 在 `定时分析设置` 里把 `定时分析名单模式` 设为 `blacklist`。
+2. 在 `定时分析群列表` 里填“不要自动跑”的那个群。
+3. 在 `自动分析时间列表` 里填每天自动运行时间。
+4. 如果你希望其他群默认走增量：
+5. 在 `增量分析设置` 把 `增量分析名单模式` 设为 `blacklist`，并把 `增量分析群列表` 留空。
+
+#### 场景 C：Telegram 用户怎么填最稳
+
+1. 在面板里需要填群的地方，尽量填完整会话ID（例如 `telegram2:GroupMessage:-1001234567890`）。
+2. 不建议新手只填纯群号，容易填错平台。
+3. 先在群里执行 `/sid`，复制结果粘贴到列表里就行。
+
+#### 最容易踩坑的 3 点
+
+- `定时分析名单模式` 选 `whitelist` 时，如果 `定时分析群列表` 为空，任务不会自动跑。
+- `增量分析名单模式` 选 `whitelist` 时，如果 `增量分析群列表` 为空，增量不会生效，会走普通分析。
+- `增量失败自动回退全量分析` 建议保持开启，这样增量异常时也能尽量产出报告。
+
+#### 你可能会问（关键边界）
+
+- 不在“定时白名单”里，但在“增量白名单”里，会触发吗？  
+不会。因为会先被“定时白名单”拦住，进不到增量判断。
+
+- 不在“基础群权限”里，但你开了定时分析，会触发吗？  
+不会。基础群权限是第一关，不通过就不会进入后续流程。
 
 > [!IMPORTANT]
 > **多平台配置注意**：
@@ -112,41 +223,6 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 >    2. 回退到主 LLM provider_id
 >    3. 回退到当前会话的 Provider (UMO)
 >    4. 回退到第一个可用的 Provider
-
-
-## 效果
-
-<table align="center" width="100%">
-  <tr>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Scrapbook (默认)</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="scrapbook" width="100%">
-    </td>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Retro Futurism</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="retro_futurism" width="100%">
-    </td>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Spring Festival</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/spring_festival-demo.jpg" alt="spring_festival" width="100%">
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Hack</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="hack" width="100%">
-    </td>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Format</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/format-demo.jpg" alt="format" width="100%">
-    </td>
-    <td align="center" width="33.3%" valign="top">
-      <p><b>Simple</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/simple-demo.jpg" alt="simple" width="100%">
-    </td>
-  </tr>
-</table>
-
 
 
 ## 使用方法
@@ -214,7 +290,34 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **QQ (OneBot)**�
 - **自动去重**：智能识别重复话题和金句，合并生成最终报告。
 
 **启用方法：**
-- 在插件配置中开启 `incremental_enabled`，并根据需要调整分析间隔 (`incremental_interval_minutes`) 和消息阈值。
+- 通过 `incremental_group_list_mode + incremental_group_list` 指定哪些群走增量模式，并根据需要调整分析间隔 (`incremental_interval_minutes`) 和消息阈值。
+
+## HTML 报告与自建外链
+
+如果你希望在群里发送的不是图片，而是一个可以点击跳转的精美网页链接，可以使用 HTML 格式输出。
+
+### 1. 配置流程
+1. **设置输出格式**：在 `basic` 设置中将 `output_format` 改为 `html`。
+2. **指定储存目录 (`html_output_dir`)**：设置 HTML 文件在服务器上的保存路径。留空则默认保存在插件数据目录。
+3. **配置外链基址 (`html_base_url`)**：这是关键。如果你使用 Nginx/Apache 等 Web 服务器将上述目录映射到了公网，请在这里填写访问的前缀（如 `https://report.example.com`）。
+
+### 2. 工作原理
+- 机器人生成 HTML 报告并保存到本地目录。
+- 机器人根据文件名和 `html_base_url` 拼接成完整链接发送到群里。
+- **注意**：本插件**不提供** Web 服务器功能，你需要自行使用 Nginx 或 AstrBot 所在的服务器环境来实现静态文件的公网访问。
+
+
+## 人格设定 (Persona)
+
+插件支持深度的“人格化”分析，让 AI 能够以特定的人设风格（口吻、偏好、语气）来产出摘要和锐评。
+
+### 人格识别优先级
+插件在构建分析任务时，会按以下顺序确定最终使用的“人设状态”：
+
+1.  **强制插件人格 (优先级最高)**：在配置中开启 `强制使用插件指定人格` 并选择 ID。此时 **全平台、所有群聊** 都会统一使用这一种人设，忽略群聊本身的设置。
+2.  **继承会话人设 (优先级次之)**：在配置中开启 `继承会话人设风格`。插件会尝试识别当前群聊在 AstrBot 中设置的人格（如通过 `/persona` 指令设置的人设）。如果该群已有人设，分析报告将尽量模拟其说话倾向。
+3.  **系统默认人设**：若上述开关均关闭，或未识别到有效人设，则回退到当前默认设定。
+
 
 ## 常见问题 (FAQ)
 
@@ -307,10 +410,14 @@ src/infrastructure/reporting/templates/your_theme_name/
 
 #### 5. 模板调试工具
 
-PDF 调试模板命令 Docker 下：
+PDF 调试模板命令：
 
 ```bash
-docker exec -it astrbot python data/plugins/astrbot_plugin_qq_group_daily_analysis/scripts/mock_pdf_gen.py
+# 生成所有主题的 PDF (推荐)
+uv run --with playwright --with diskcache scripts\debug_all_pdf_themes.py
+
+# 生成指定主题的 PDF (例如：HatsuneMiku ，可以修改内部代码占位解决)
+uv run --with playwright --with diskcache scripts\mock_pdf_gen.py
 ```
 
 Image 模板调试：
@@ -335,6 +442,17 @@ python scripts/debug_render.py -t retro_futurism -o my_output.html
 # 查看帮助信息
 python scripts/debug_render.py -h
 ```
+
+```
+uv run scripts\debug_render.py -t scrapbook -o debug_scrapbook.html
+uv run scripts\debug_render.py -t hack -o debug_hack.html
+uv run scripts\debug_render.py -t retro_futurism -o debug_retro.html
+uv run scripts\debug_render.py -t format -o debug_format.html
+uv run scripts\debug_render.py -t simple -o debug_simple.html
+uv run scripts\debug_render.py -t spring_festival -o debug_spring.html
+uv run scripts\debug_render.py -t HatsuneMiku -o debug_miku.html
+```
+
 
 **工具特性：**
 
