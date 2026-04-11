@@ -266,6 +266,15 @@ class ConfigManager:
         """获取HTML外链Base URL"""
         return self._get_group("html").get("html_base_url", "")
 
+    def get_html_only_url(self) -> bool:
+        """获取是否仅输出外链而不发送文件本体"""
+        return self._get_group("html").get("html_only_url", False)
+
+    def set_html_only_url(self, enabled: bool):
+        """设置是否仅输出外链而不发送文件本体"""
+        self._ensure_group("html")["html_only_url"] = enabled
+        self.config.save_config()
+
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
         return self._get_group("html").get(
