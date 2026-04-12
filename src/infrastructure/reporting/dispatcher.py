@@ -133,12 +133,13 @@ class ReportDispatcher:
                 if base_url and base_url.strip():
                     filename = os.path.basename(html_path)
                     report_url = f"{base_url.rstrip('/')}/{filename}"
-                    
+
                     sent = await self.message_sender.send_text(
-                        group_id, 
-                        f"📊 今日群聊分析报告已生成：\n{report_url}", 
-                        platform_id
+                        group_id,
+                        f"📊 今日群聊分析报告已生成：\n{report_url}",
+                        platform_id,
                     )
+
                     if sent:
                         return True
                 else:
