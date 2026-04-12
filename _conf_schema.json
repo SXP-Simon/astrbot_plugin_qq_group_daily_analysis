@@ -372,6 +372,12 @@
                 "default": "",
                 "hint": "HTML报告文件的保存目录，用于存储生成的 HTML 文件和原始 JSON 数据。留空则自动使用插件数据目录（astrbot_path/data/plugin_data/astrbot_plugin_qq_group_daily_analysis/）下的 self_hosted_html_reports 目录。"
             },
+            "html_only_url": {
+                "type": "bool",
+                "description": "仅发送外链",
+                "default": false,
+                "hint": "勾选后，若配置了外链 Base URL，则发送 HTML 报告时将只发送外链链接，不再发送HTML文件，若未勾选，将保持发送HTML文件。"
+            },
             "html_filename_format": {
                 "type": "string",
                 "description": "HTML文件名格式",
