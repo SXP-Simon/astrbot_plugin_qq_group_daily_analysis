@@ -635,10 +635,15 @@ class GroupDailyAnalysis(Star):
                     if base_url and base_url.strip():
                         filename = os.path.basename(html_path)
                         report_url = f"{base_url.rstrip('/')}/{filename}"
-                        yield event.plain_result(f"📊 今日群聊分析报告已生成：\n{report_url}")
+                        yield event.plain_result(
+                            f"📊 今日群聊分析报告已生成：\n{report_url}"
+                        )
                         return  # 拦截成功，直接退出，不再发文件
                     else:
-                        logger.warning(f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。")
+                        logger.warning(
+                            f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
+                        )
+
                 caption = self.report_generator.build_html_caption(html_path)
 
                 # 发送 HTML 文件
