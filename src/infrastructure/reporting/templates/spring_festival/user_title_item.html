@@ -1,7 +1,7 @@
 {% if titles %}
 <div class="sf-user-masonry">
     {% for title in titles %}
-    <div class="sf-user-card avoid-break">
+    <div class="sf-user-card avoid-break" style="position: relative; overflow: hidden;">
         <div class="sf-card-header">
             <div class="sf-avatar-wrap">
                 {% if title.avatar_data %}
@@ -14,12 +14,15 @@
             <div class="sf-user-info">
                 <h4 class="sf-user-name" style="margin: 0 0 5px; font-size: 1.3rem;">{{ title.name }}</h4>
                 <div class="sf-user-badges">
-                    <span class="sf-badge mbti">{{ title.mbti }}</span>
+                    <span class="sf-badge mbti">{{ title.profile_display or title.mbti }}</span>
                     <span class="sf-badge sf-title">{{ title.title }}</span>
                 </div>
             </div>
         </div>
         <div class="sf-user-reason">{{ title.reason }}</div>
+        {% if title.profile_image %}
+        <img src="{{ title.profile_image }}" alt="" style="position: absolute; right: 8px; bottom: 8px; width: 36%; max-height: 78%; object-fit: {{ title.profile_image_size_mode or 'contain' }}; opacity: {{ title.profile_image_opacity or 0.12 }}; pointer-events: none; z-index: 1;">
+        {% endif %}
     </div>
     {% endfor %}
 </div>
