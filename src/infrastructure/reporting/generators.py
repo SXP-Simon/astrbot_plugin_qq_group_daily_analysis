@@ -219,7 +219,13 @@ class ReportGenerator(IReportGenerator):
                 if not name_zh:
                     name_zh = str(asset_item.get("name", "")).strip()
 
-            # B. 对于 acgti 模式，如果没找到，尝试通过 MBTI 反查第一个匹配的资源
+            # B. 按照 asset_code 的资源规律推导图片地址 (尝试根据同目录下其他资源的规律猜测当前角色的 CDN 地址)
+            if not image:
+                image = self._build_profile_image_from_manifest_pattern(
+                    profile_mode, asset_code
+                )
+
+            # C. 对于 acgti 模式，如果没找到明确映射也没能推导出图片，尝试通过 MBTI 反查该类型下的第一个可用资源作为兜底
             if not image and profile_mode == "acgti":
                 fallback_item = self._get_manifest_profile_item_by_mbti(
                     profile_mode, normalized_mbti
@@ -230,12 +236,6 @@ class ReportGenerator(IReportGenerator):
                         name_zh = str(fallback_item.get("name", "")).strip()
                     if not code or code == normalized_mbti:
                         code = str(fallback_item.get("code", code)).strip()
-
-            # C. 最后底线：根据 manifest 路径模式推导
-            if not image:
-                image = self._build_profile_image_from_manifest_pattern(
-                    profile_mode, asset_code
-                )
 
         # 3. 构造显示文本 (Code + 中文名)
         display = str(base_info.get("display", "")).strip()
