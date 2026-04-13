@@ -1,12 +1,15 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.16] - 增加了html_only_url选项，使在选择输出格式为html时可以单独发送BaseURL (#166 @shiitin)
-
+## [v4.9.17] - ✨ 人格画像体验升级，SBTI 和 ACGTI 风格
+*   **🎉 特别致谢**: 本次更新的人格画像数据集与灵感来源于 [ACGTI](https://github.com/tianxingleo/ACGTI) 及 [SBTI-test](https://github.com/UnluckyNinja/SBTI-test) 项目，由衷感谢原作者的开源贡献。
+*   **⚙️ 配置透明化**: 将默认的人格映射表（MBTI/SBTI/ACGTI）及对应的 CDN 资源链接完整编码进 `_conf_schema.json`。现在用户可以直接在控制面板预览并快速自定义属于自己的角色映射关系。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.16] - 增加了html_only_url选项，使在选择输出格式为html时可以单独发送BaseURL (#166 @shiitin)
 
 ## [v4.9.15] - fix: 发送假超时不应该导致上传群相册群文件失败，删除 PDF 模块和相关的功能
 
