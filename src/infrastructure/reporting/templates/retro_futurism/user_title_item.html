@@ -1,6 +1,6 @@
 {% if titles %}
 {% for title in titles %}
-<div class="title-item">
+<div class="title-item" style="position: relative; overflow: hidden;">
     <div class="title-avatar-wrap">
         {% if title.avatar_data %}
         <img src="{{ title.avatar_data }}" alt="{{ title.name }}">
@@ -13,12 +13,15 @@
     <div class="title-info">
         <h4>{{ title.name }}</h4>
         <div class="title-badge">
-            <span>{{ title.mbti }}</span>
+            <span>{{ title.profile_display or title.mbti }}</span>
             <span style="color:var(--c-dec-3);">//</span>
             <span>{{ title.title }}</span>
         </div>
         <div class="title-reason">{{ title.reason }}</div>
     </div>
+    {% if title.profile_image %}
+    <img src="{{ title.profile_image }}" alt="" style="position: absolute; right: 8px; bottom: 8px; width: 35%; max-height: 80%; object-fit: {{ title.profile_image_size_mode or 'contain' }}; opacity: {{ title.profile_image_opacity or 0.12 }}; pointer-events: none; z-index: 1;">
+    {% endif %}
 </div>
 {% endfor %}
 {% endif %}

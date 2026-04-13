@@ -621,6 +621,34 @@ class ConfigManager:
         self._ensure_group("basic")["enable_analysis_reply"] = enabled
         self.config.save_config()
 
+    def get_profile_display_mode(self) -> str:
+        """获取人格标签展示模式。"""
+        mode = str(self._get_group("basic").get("profile_display_mode", "mbti")).lower()
+        if mode not in {"mbti", "sbti", "acgti"}:
+            return "mbti"
+        return mode
+
+    def get_profile_image_opacity(self) -> float:
+        """获取人格背景图透明度。"""
+        value = self._get_group("basic").get("profile_image_opacity", 0.12)
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.12
+
+    def get_profile_image_size_mode(self) -> str:
+        """获取人格背景图尺寸模式。"""
+        mode = str(
+            self._get_group("basic").get("profile_image_size_mode", "contain")
+        ).lower()
+        if mode not in {"contain", "cover"}:
+            return "contain"
+        return mode
+
+    def get_profile_mapping_config(self) -> str:
+        """获取人格映射配置(JSON 文本)。"""
+        return str(self._get_group("basic").get("profile_mapping_config", "")).strip()
+
     # ========== 群文件/群相册上传配置 ==========
 
     def get_enable_group_file_upload(self) -> bool:
