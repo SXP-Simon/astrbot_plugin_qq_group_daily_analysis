@@ -1,7 +1,7 @@
 {% if titles %}
 <div class="user-grid">
     {% for title in titles %}
-    <div class="user-card avoid-break">
+    <div class="user-card avoid-break" style="position: relative; overflow: hidden;">
         <div class="user-avatar">
             {% if title.avatar_data %}
             <img src="{{ title.avatar_data }}" alt="{{ title.name }}"
@@ -15,11 +15,14 @@
         <div class="user-info">
             <h4>{{ title.name }}</h4>
             <div style="margin-bottom: 10px;">
-                <span class="tag mbti">{{ title.mbti }}</span>
+                <span class="tag mbti">{{ title.profile_display or title.mbti }}</span>
                 <span class="tag title">{{ title.title }}</span>
             </div>
             <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">{{ title.reason }}</div>
         </div>
+        {% if title.profile_image %}
+        <img src="{{ title.profile_image }}" alt="" style="position: absolute; right: 8px; bottom: 8px; width: 36%; max-height: 78%; object-fit: {{ title.profile_image_size_mode or 'contain' }}; opacity: {{ title.profile_image_opacity or 0.12 }}; pointer-events: none; z-index: 1;">
+        {% endif %}
     </div>
     {% endfor %}
 </div>

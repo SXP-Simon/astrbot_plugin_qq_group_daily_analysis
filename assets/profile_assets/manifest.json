@@ -1,0 +1,246 @@
+﻿{
+    "sbti":  [
+                 {
+                     "code":  "ATM-er",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/ATM-er.png"
+                 },
+                 {
+                     "code":  "BOSS",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/BOSS.png"
+                 },
+                 {
+                     "code":  "CTRL",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/CTRL.png"
+                 },
+                 {
+                     "code":  "DEAD",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/DEAD.png"
+                 },
+                 {
+                     "code":  "Dior-s",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/Dior-s.jpg"
+                 },
+                 {
+                     "code":  "DRUNK",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/DRUNK.png"
+                 },
+                 {
+                     "code":  "FAKE",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/FAKE.png"
+                 },
+                 {
+                     "code":  "FUCK",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/FUCK.png"
+                 },
+                 {
+                     "code":  "GOGO",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/GOGO.png"
+                 },
+                 {
+                     "code":  "HHHH",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/HHHH.png"
+                 },
+                 {
+                     "code":  "IMFW",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/IMFW.png"
+                 },
+                 {
+                     "code":  "IMSB",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/IMSB.png"
+                 },
+                 {
+                     "code":  "JOKE-R",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/JOKE-R.jpg"
+                 },
+                 {
+                     "code":  "LOVE-R",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/LOVE-R.png"
+                 },
+                 {
+                     "code":  "MALO",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/MALO.png"
+                 },
+                 {
+                     "code":  "MONK",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/MONK.png"
+                 },
+                 {
+                     "code":  "MUM",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/MUM.png"
+                 },
+                 {
+                     "code":  "OH-NO",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/OH-NO.png"
+                 },
+                 {
+                     "code":  "OJBK",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/OJBK.png"
+                 },
+                 {
+                     "code":  "POOR",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/POOR.png"
+                 },
+                 {
+                     "code":  "SEXY",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SEXY.png"
+                 },
+                 {
+                     "code":  "SHIT",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SHIT.png"
+                 },
+                 {
+                     "code":  "SOLO",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SOLO.png"
+                 },
+                 {
+                     "code":  "THAN-K",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/THAN-K.png"
+                 },
+                 {
+                     "code":  "THIN-K",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/THIN-K.png"
+                 },
+                 {
+                     "code":  "WOC",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/WOC.png"
+                 },
+                 {
+                     "code":  "ZZZZ",
+                     "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/ZZZZ.png"
+                 }
+             ],
+    "acgti":  [
+                  {
+                      "code":  "CIRN",
+                      "name":  "琪露诺",
+                      "mbti":  "ESTP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/CIRN.png"
+                  },
+                  {
+                      "code":  "MIKT",
+                      "name":  "御坂美琴",
+                      "mbti":  "ESTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MIKT.png"
+                  },
+                  {
+                      "code":  "MADK",
+                      "name":  "鹿目圆",
+                      "mbti":  "INFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MADK.png"
+                  },
+                  {
+                      "code":  "FRNA",
+                      "name":  "芙宁娜",
+                      "mbti":  "ESFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/FRNA.png"
+                  },
+                  {
+                      "code":  "GGGG-A",
+                      "name":  "高松灯",
+                      "mbti":  "INFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/GGGG-A.png"
+                  },
+                  {
+                      "code":  "ANON",
+                      "name":  "千早爱音",
+                      "mbti":  "ESFJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/ANON.png"
+                  },
+                  {
+                      "code":  "BAFE",
+                      "name":  "要乐奈",
+                      "mbti":  "ISTP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/BAFE.png"
+                  },
+                  {
+                      "code":  "SOYO",
+                      "name":  "长崎爽世",
+                      "mbti":  "ISFJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/SOYO.png"
+                  },
+                  {
+                      "code":  "RIKI",
+                      "name":  "椎名立希",
+                      "mbti":  "ESTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/RIKI.png"
+                  },
+                  {
+                      "code":  "SAKI",
+                      "name":  "丰川祥子",
+                      "mbti":  "ENTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/SAKI.png"
+                  },
+                  {
+                      "code":  "MRTS",
+                      "name":  "若叶睦",
+                      "mbti":  "ISTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MRTS.png"
+                  },
+                  {
+                      "code":  "MRTS-X",
+                      "name":  "Mortis",
+                      "mbti":  "INTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MRTS-X.png"
+                  },
+                  {
+                      "code":  "DLRS",
+                      "name":  "三角初华 / Doloris",
+                      "mbti":  "INFJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/DLRS.png"
+                  },
+                  {
+                      "code":  "TMRS",
+                      "name":  "八幡海铃 / Timoris",
+                      "mbti":  "ISTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/TMRS.png"
+                  },
+                  {
+                      "code":  "AMRS",
+                      "name":  "祐天寺若麦 / Amoris",
+                      "mbti":  "ENTP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/AMRS.png"
+                  },
+                  {
+                      "code":  "DINA",
+                      "name":  "嘉然",
+                      "mbti":  "ENFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/DINA.png"
+                  },
+                  {
+                      "code":  "TAFI",
+                      "name":  "永雏塔菲",
+                      "mbti":  "ENTP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/TAFI.png"
+                  },
+                  {
+                      "code":  "NEUR",
+                      "name":  "Neuro-sama",
+                      "mbti":  "ENTP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/NEUR.png"
+                  },
+                  {
+                      "code":  "EVIL",
+                      "name":  "Evil Neuro",
+                      "mbti":  "INTJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/EVIL.png"
+                  },
+                  {
+                      "code":  "RINN",
+                      "name":  "镜音铃",
+                      "mbti":  "ESFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/RINN.png"
+                  },
+                  {
+                      "code":  "LTYI",
+                      "name":  "洛天依",
+                      "mbti":  "ISFP",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/LTYI.png"
+                  },
+                  {
+                      "code":  "YCYO",
+                      "name":  "月见八千代",
+                      "mbti":  "ENFJ",
+                      "file":  "https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/YCYO.png"
+                  }
+              ]
+}

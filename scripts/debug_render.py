@@ -64,8 +64,17 @@ from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E40
 
 
 class MockConfigManager:
-    def __init__(self, template_name: str = "scrapbook") -> None:
+    def __init__(
+        self,
+        template_name: str = "scrapbook",
+        profile_mode: str = "mbti",
+        profile_image_opacity: float = 0.20,
+        profile_mapping_config: str = "",
+    ) -> None:
         self.template_name = template_name
+        self.profile_mode = profile_mode
+        self.profile_image_opacity = profile_image_opacity
+        self.profile_mapping_config = profile_mapping_config
 
     def get_report_template(self) -> str:
         return self.template_name
@@ -74,16 +83,16 @@ class MockConfigManager:
         return 8
 
     def get_max_user_titles(self) -> int:
-        return 8
+        return 16
 
     def get_max_golden_quotes(self) -> int:
         return 8
 
-    def get_pdf_output_dir(self) -> str:
-        return "data/pdf"
+    def get_html_output_dir(self) -> str:
+        return "data/html"
 
-    def get_pdf_filename_format(self) -> str:
-        return "report_{group_id}_{date}.pdf"
+    def get_html_filename_format(self) -> str:
+        return "report_{group_id}_{date}.html"
 
     def get_enable_user_card(self) -> bool:
         return True
@@ -101,6 +110,21 @@ class MockConfigManager:
     def get_llm_max_concurrent(self) -> int:
         return 2
 
+    def get_profile_display_mode(self) -> str:
+        return self.profile_mode
+
+    def get_profile_image_opacity(self) -> float:
+        return self.profile_image_opacity
+
+    def get_profile_image_size_mode(self) -> str:
+        return "contain"
+
+    def get_profile_mapping_config(self) -> str:
+        return self.profile_mapping_config
+
+    def get_html_base_url(self) -> str:
+        return ""
+
 
 async def mock_get_user_avatar(user_id: str) -> str:
     # Return a known avatar URL for testing
@@ -108,10 +132,15 @@ async def mock_get_user_avatar(user_id: str) -> str:
 
 
 async def debug_render(
-    template_name: str, output_file: str = "debug_output.html"
+    template_name: str,
+    output_file: str = "debug_output.html",
+    profile_mode: str = "mbti",
 ) -> None:
     # 1. Setup Mock Data
-    config_manager = MockConfigManager(template_name)
+    config_manager = MockConfigManager(
+        template_name=template_name,
+        profile_mode=profile_mode,
+    )
 
     # 2. Mock Analysis Result using Data Models
     stats = GroupStatistics(
@@ -177,81 +206,48 @@ async def debug_render(
         SummaryTopic(
             topic="新出的3A大作测评",
             contributors=["周八", "吴九"],
-            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
-        ),
-        SummaryTopic(
-            topic="新出的3A大作测评",
-            contributors=["周八", "吴九"],
-            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
-        ),
-        SummaryTopic(
-            topic="新出的3A大作测评",
-            contributors=["周八", "吴九"],
-            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
-        ),
-        SummaryTopic(
-            topic="新出的3A大作测评",
-            contributors=["周八", "吴九"],
-            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
-        ),
-        SummaryTopic(
-            topic="新出的3A大作测评",
-            contributors=["周八", "吴九"],
-            detail="[123456789] 分享了最新游戏的通关体验，讨论了画面表现和剧情走向。",
+            detail="[200000000] 开始尝试新的游戏，发现 INTJ 类型的玩家在策略游戏中非常吃香。",
         ),
     ]
 
-    user_titles = [
-        UserTitle(
-            name="张三",
-            user_id="123456789",
-            title="代码收割机",
-            mbti="INTJ",
-            reason="在短短一小时内提交了10个PR，效率惊人。",
-        ),
-        UserTitle(
-            name="李四",
-            user_id="987654321",
-            title="群聊气氛组",
-            mbti="ENFP",
-            reason="总能精准接住每一个冷笑话，让群里充满快活的气息。",
-        ),
-        UserTitle(
-            name="潜水员",
-            user_id="112233445",
-            title="深夜潜水员",
-            mbti="INFP",
-            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
-        ),
-        UserTitle(
-            name="潜水员",
-            user_id="112233445",
-            title="深夜潜水员",
-            mbti="INFP",
-            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
-        ),
-        UserTitle(
-            name="潜水员",
-            user_id="112233445",
-            title="深夜潜水员",
-            mbti="INFP",
-            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
-        ),
-        UserTitle(
-            name="潜水员",
-            user_id="112233445",
-            title="深夜潜水员",
-            mbti="INFP",
-            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
-        ),
-        UserTitle(
-            name="潜水员",
-            user_id="112233445",
-            title="深夜潜水员",
-            mbti="INFP",
-            reason="总是在凌晨三点出没，留下几句深奥的话语后消失。",
-        ),
+    mbti_types = [
+        "INTJ",
+        "INTP",
+        "ENTJ",
+        "ENTP",
+        "INFJ",
+        "INFP",
+        "ENFJ",
+        "ENFP",
+        "ISTJ",
+        "ISFJ",
+        "ESTJ",
+        "ESTP",
+        "ISTP",
+        "ISFP",
+        "ESFJ",
+        "ESFP",
     ]
+    user_titles = []
+    user_analysis = {
+        "123456789": {"nickname": "张三"},
+        "987654321": {"nickname": "李四"},
+        "112233445": {"nickname": "潜水员"},
+    }
+
+    for i, mbti in enumerate(mbti_types):
+        uid = str(200000000 + i)
+        uname = f"用户_{mbti}"
+        user_titles.append(
+            UserTitle(
+                name=uname,
+                user_id=uid,
+                title=f"{mbti} 王者",
+                mbti=mbti,
+                reason=f"在日常交流中表现出极强的 {mbti} 特征，获得了大家的认可。",
+            )
+        )
+        user_analysis[uid] = {"nickname": uname}
 
     golden_quotes = [
         GoldenQuote(
@@ -269,31 +265,7 @@ async def debug_render(
         GoldenQuote(
             content="PHP是世界上最好的语言！",
             sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
-            user_id="112233445",
-        ),
-        GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
-            user_id="112233445",
-        ),
-        GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
-            user_id="112233445",
-        ),
-        GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
-            user_id="112233445",
-        ),
-        GoldenQuote(
-            content="PHP是世界上最好的语言！",
-            sender="王五",
-            reason="引发了长达3小时的群聊大讨论",
+            reason="[200000001] 表示强烈赞同，并引发了后续的长篇大论。",
             user_id="112233445",
         ),
     ]
@@ -305,21 +277,27 @@ async def debug_render(
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles,
-        "user_analysis": {
-            "123456789": {"nickname": "张三"},
-            "987654321": {"nickname": "李四"},
-            "112233445": {"nickname": "潜水员"},
-        },
+        "user_analysis": user_analysis,
         "chat_quality_review": stats.chat_quality_review,
         "analysis_date": "2026年02月11日",
         "group_id": "123456",
-        "group_name": "测试群组",
+        "group_name": "插件逻辑调试群",
     }
 
     # 3. Initialize Generator
     data_dir = Path("data/debug_data")
     data_dir.mkdir(parents=True, exist_ok=True)
     generator = ReportGenerator(config_manager, data_dir)
+
+    # Mock avatar cache to avoid KeyError in debug mode
+    class MockCache(dict):
+        def __getitem__(self, key):
+            return self.get(key, "")
+
+        def set(self, key, value, expire=None):
+            self[key] = value
+
+    generator._avatar_cache = MockCache()
 
     # 4. Prepare Render Data
     # Note: _prepare_render_data handles converting Entities to template-friendly dicts
@@ -340,7 +318,7 @@ async def debug_render(
     await generator.close()
 
     print(
-        f"Successfully rendered template '{template_name}' to {output_path.absolute()}"
+        f"Successfully rendered template '{template_name}' in mode '{profile_mode}' to {output_path.absolute()}"
     )
     print("You can now open this file with your browser to debug your HTML/CSS.")
 
@@ -363,9 +341,17 @@ def main() -> None:
         default="debug_output.html",
         help="Output HTML file path (default: debug_output.html)",
     )
+    parser.add_argument(
+        "-m",
+        "--mode",
+        type=str,
+        default="mbti",
+        choices=["mbti", "sbti", "acgti"],
+        help="Profile display mode to render (default: mbti)",
+    )
     args = parser.parse_args()
 
-    asyncio.run(debug_render(args.template, args.output))
+    asyncio.run(debug_render(args.template, args.output, args.mode))
 
 
 if __name__ == "__main__":

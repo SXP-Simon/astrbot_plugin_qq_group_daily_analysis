@@ -2,10 +2,13 @@
 <div class="section">
     <h2>群友称号</h2>
     {% for item in titles %}
-    <div style="margin-bottom: 10px; border: 1px solid #eee; padding: 5px;">
+    <div style="margin-bottom: 10px; border: 1px solid #eee; padding: 5px; position: relative; overflow: hidden;">
         <div style="font-weight: bold;">{{ item.name }} - {{ item.title }}</div>
-        <div style="font-size: 0.8em; background: #eee; display: inline-block; padding: 2px 5px; border-radius: 3px;">{{ item.mbti }}</div>
-        <div style="font-size: 0.9em; color: #555; margin-top: 5px;">{{ item.reason }}</div>
+        <div style="font-size: 0.8em; background: #eee; display: inline-block; padding: 2px 5px; border-radius: 3px; position: relative; z-index: 1;">{{ item.profile_display or item.mbti }}</div>
+        <div style="font-size: 0.9em; color: #555; margin-top: 5px; position: relative; z-index: 1;">{{ item.reason }}</div>
+        {% if item.profile_image %}
+        <img src="{{ item.profile_image }}" alt="" style="position: absolute; right: 4px; bottom: 4px; width: 36%; max-height: 90%; object-fit: {{ item.profile_image_size_mode or 'contain' }}; opacity: {{ item.profile_image_opacity or 0.12 }}; pointer-events: none; z-index: 2;">
+        {% endif %}
     </div>
     {% endfor %}
 </div>

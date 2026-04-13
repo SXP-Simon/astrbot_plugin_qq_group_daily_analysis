@@ -6,6 +6,7 @@
 import asyncio
 import base64
 import html
+import json
 import os
 import re
 from dataclasses import asdict, is_dataclass
@@ -27,6 +28,63 @@ from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
+
+DEFAULT_PROFILE_MAPPING = {
+    "mbti": {
+        "INTJ": {"code": "INTJ", "name_zh": "建筑师"},
+        "INTP": {"code": "INTP", "name_zh": "逻辑学家"},
+        "ENTJ": {"code": "ENTJ", "name_zh": "指挥官"},
+        "ENTP": {"code": "ENTP", "name_zh": "辩论家"},
+        "INFJ": {"code": "INFJ", "name_zh": "提倡者"},
+        "INFP": {"code": "INFP", "name_zh": "调停者"},
+        "ENFJ": {"code": "ENFJ", "name_zh": "主人公"},
+        "ENFP": {"code": "ENFP", "name_zh": "竞选者"},
+        "ISTJ": {"code": "ISTJ", "name_zh": "物流师"},
+        "ISFJ": {"code": "ISFJ", "name_zh": "守卫者"},
+        "ESTJ": {"code": "ESTJ", "name_zh": "总经理"},
+        "ESTP": {"code": "ESTP", "name_zh": "企业家"},
+        "ISTP": {"code": "ISTP", "name_zh": "鉴赏家"},
+        "ISFP": {"code": "ISFP", "name_zh": "探险家"},
+        "ESFJ": {"code": "ESFJ", "name_zh": "执政官"},
+        "ESFP": {"code": "ESFP", "name_zh": "表演者"},
+    },
+    "sbti": {
+        "INTJ": {"code": "CTRL", "name_zh": "拿捏者", "asset_code": "CTRL"},
+        "INTP": {"code": "THIN-K", "name_zh": "思考者", "asset_code": "THIN-K"},
+        "ENTJ": {"code": "BOSS", "name_zh": "领导者", "asset_code": "BOSS"},
+        "ENTP": {"code": "JOKE-R", "name_zh": "小丑", "asset_code": "JOKE-R"},
+        "INFJ": {"code": "LOVE-R", "name_zh": "多情者", "asset_code": "LOVE-R"},
+        "INFP": {"code": "SOLO", "name_zh": "孤儿", "asset_code": "SOLO"},
+        "ENFJ": {"code": "THAN-K", "name_zh": "感恩者", "asset_code": "THAN-K"},
+        "ENFP": {"code": "GOGO", "name_zh": "行者", "asset_code": "GOGO"},
+        "ISTJ": {"code": "OH-NO", "name_zh": "哦不人", "asset_code": "OH-NO"},
+        "ISTP": {"code": "POOR", "name_zh": "贫困者", "asset_code": "POOR"},
+        "ESTJ": {"code": "SHIT", "name_zh": "愤世者", "asset_code": "SHIT"},
+        "ESTP": {"code": "WOC!", "name_zh": "握草人", "asset_code": "WOC"},
+        "ISFJ": {"code": "MUM", "name_zh": "妈妈", "asset_code": "MUM"},
+        "ISFP": {"code": "MALO", "name_zh": "吗喽", "asset_code": "MALO"},
+        "ESFJ": {"code": "ATM-er", "name_zh": "送钱者", "asset_code": "ATM-er"},
+        "ESFP": {"code": "SEXY", "name_zh": "尤物", "asset_code": "SEXY"},
+    },
+    "acgti": {
+        "INTJ": {"code": "MRTS-X", "name_zh": "Mortis"},
+        "INTP": {"code": "KNAN", "name_zh": "江户川柯南"},
+        "ENTJ": {"code": "SAKI", "name_zh": "丰川祥子"},
+        "ENTP": {"code": "CHKA", "name_zh": "藤原千花"},
+        "INFJ": {"code": "DLRS", "name_zh": "三角初华"},
+        "INFP": {"code": "BCHI", "name_zh": "后藤一里"},
+        "ENFJ": {"code": "YCYO", "name_zh": "月见八千代"},
+        "ENFP": {"code": "HTMK", "name_zh": "初音未来"},
+        "ISTJ": {"code": "MRTS", "name_zh": "若叶睦"},
+        "ISTP": {"code": "AYRE", "name_zh": "绫波丽"},
+        "ESTJ": {"code": "MIKT", "name_zh": "御坂美琴"},
+        "ESTP": {"code": "ASKA", "name_zh": "明日香"},
+        "ISFJ": {"code": "SOYO", "name_zh": "长崎爽世"},
+        "ISFP": {"code": "LTYI", "name_zh": "洛天依"},
+        "ESFJ": {"code": "ANON", "name_zh": "千早爱音"},
+        "ESFP": {"code": "FRNA", "name_zh": "芙宁娜"},
+    },
+}
 
 
 class ReportGenerator(IReportGenerator):
@@ -51,6 +109,148 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+        self._profile_asset_manifest = self._load_profile_asset_manifest()
+
+    def _load_profile_asset_manifest(self) -> dict[str, dict]:
+        """加载人格资源清单。"""
+        manifest_path = (
+            Path(__file__).resolve().parents[3]
+            / "assets"
+            / "profile_assets"
+            / "manifest.json"
+        )
+        if not manifest_path.exists():
+            logger.warning(f"人格资源清单不存在: {manifest_path}")
+            return {"sbti": {}, "acgti": {}}
+
+        try:
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except Exception as e:
+            logger.warning(f"加载人格资源清单失败: {e}")
+            return {"sbti": {}, "acgti": {}}
+
+        manifest: dict[str, dict] = {"sbti": {}, "acgti": {}}
+        for item in raw.get("sbti", []):
+            code = str(item.get("code", "")).strip()
+            if code:
+                manifest["sbti"][code] = item
+        for item in raw.get("acgti", []):
+            code = str(item.get("code", "")).strip()
+            if code:
+                manifest["acgti"][code] = item
+        return manifest
+
+    def _get_profile_mapping_overrides(self) -> dict[str, dict]:
+        """解析用户配置的人格映射覆盖项。"""
+        raw = self.config_manager.get_profile_mapping_config()
+        if not raw:
+            return {}
+
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            logger.warning(f"人格映射配置 JSON 解析失败，已回退到默认映射: {e}")
+        return {}
+
+    def _build_profile_image_from_manifest_pattern(
+        self, profile_mode: str, asset_code: str
+    ) -> str:
+        """当 manifest 缺少具体 code 时，根据已有资源路径模式推导图片地址。"""
+        system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+        for item in system_manifest.values():
+            if not isinstance(item, dict):
+                continue
+            sample_code = str(item.get("code", "")).strip()
+            sample_file = str(item.get("file", "")).strip()
+            if not sample_code or not sample_file:
+                continue
+            code_token = f"/{sample_code}."
+            if code_token not in sample_file:
+                continue
+            return sample_file.replace(code_token, f"/{asset_code}.", 1)
+        return ""
+
+    def _get_manifest_profile_item_by_mbti(
+        self, profile_mode: str, mbti: str
+    ) -> dict | None:
+        """按 MBTI 从 manifest 中寻找可用资源。"""
+        normalized_mbti = str(mbti or "").strip().upper()
+        system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+        for item in system_manifest.values():
+            if not isinstance(item, dict):
+                continue
+            item_mbti = str(item.get("mbti", "")).strip().upper()
+            if item_mbti == normalized_mbti:
+                return item
+        return None
+
+    def _resolve_profile_info(
+        self,
+        mbti: str,
+        profile_mode: str,
+        overrides: dict[str, dict],
+    ) -> dict[str, str | float]:
+        """根据当前展示模式解析人格标签展示信息。"""
+        normalized_mbti = str(mbti or "").strip().upper()
+
+        # 1. 基础信息获取：从默认映射或用户覆盖中获取核心属性
+        profile_defaults = DEFAULT_PROFILE_MAPPING.get(profile_mode, {})
+        base_info = dict(profile_defaults.get(normalized_mbti, {}))
+
+        # 用户覆盖优先级最高
+        user_override = overrides.get(profile_mode, {}).get(normalized_mbti, {})
+        if isinstance(user_override, dict):
+            base_info.update(user_override)
+
+        code = str(base_info.get("code", normalized_mbti)).strip() or normalized_mbti
+        name_zh = str(base_info.get("name_zh", "")).strip()
+        asset_code = str(base_info.get("asset_code", code)).strip() or code
+        image = str(base_info.get("image", "")).strip()
+
+        # 2. 图片与属性补全 (基于 manifest.json 可信源)
+        if not image:
+            system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+            # A. 优先按 asset_code 索引
+            asset_item = system_manifest.get(asset_code)
+            if isinstance(asset_item, dict):
+                image = str(asset_item.get("file", "")).strip()
+                if not name_zh:
+                    name_zh = str(asset_item.get("name", "")).strip()
+
+            # B. 对于 acgti 模式，如果没找到，尝试通过 MBTI 反查第一个匹配的资源
+            if not image and profile_mode == "acgti":
+                fallback_item = self._get_manifest_profile_item_by_mbti(
+                    profile_mode, normalized_mbti
+                )
+                if isinstance(fallback_item, dict):
+                    image = str(fallback_item.get("file", "")).strip()
+                    if not name_zh:
+                        name_zh = str(fallback_item.get("name", "")).strip()
+                    if not code or code == normalized_mbti:
+                        code = str(fallback_item.get("code", code)).strip()
+
+            # C. 最后底线：根据 manifest 路径模式推导
+            if not image:
+                image = self._build_profile_image_from_manifest_pattern(
+                    profile_mode, asset_code
+                )
+
+        # 3. 构造显示文本 (Code + 中文名)
+        display = str(base_info.get("display", "")).strip()
+        if not display:
+            display = f"{code}（{name_zh}）" if name_zh else code
+
+        return {
+            "profile_mode": profile_mode,
+            "profile_code": code,
+            "profile_name_zh": name_zh,
+            "profile_display": display,
+            "profile_image": image,
+            "profile_image_opacity": self.config_manager.get_profile_image_opacity(),
+            "profile_image_size_mode": self.config_manager.get_profile_image_size_mode(),
+        }
 
     @staticmethod
     def _sanitize_path_component(name: str) -> str:
@@ -506,10 +706,15 @@ class ReportGenerator(IReportGenerator):
         # 使用Jinja2模板构建用户称号HTML（批量渲染，包含头像）
         max_user_titles = self.config_manager.get_max_user_titles()
         titles_list = []
+        profile_mode = self.config_manager.get_profile_display_mode()
+        profile_mapping_overrides = self._get_profile_mapping_overrides()
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
             avatar_data = await self._get_user_avatar(
                 str(title.user_id), avatar_url_getter
+            )
+            profile_info = self._resolve_profile_info(
+                title.mbti, profile_mode, profile_mapping_overrides
             )
             title_data = {
                 "name": title.name,
@@ -518,6 +723,7 @@ class ReportGenerator(IReportGenerator):
                 "reason": title.reason,
                 "avatar_data": avatar_data,
             }
+            title_data.update(profile_info)
             titles_list.append(title_data)
 
         titles_html = self.html_templates.render_template(
