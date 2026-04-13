@@ -131,22 +131,32 @@ class ReportDispatcher:
 
             if is_only_url:
                 if base_url and base_url.strip():
-
                     # 获取配置的目录
                     html_output_dir = self.config_manager.get_html_output_dir()
-                    
+
                     # 若用户配置为空，使用默认目录
                     if not html_output_dir:
                         try:
                             from astrbot.api.star import StarTools
-                            html_output_dir = os.path.join(StarTools.get_data_dir(), "self_hosted_html_reports")
+
+                            html_output_dir = os.path.join(
+                                StarTools.get_data_dir(), "self_hosted_html_reports"
+                            )
                         except Exception:
-                            from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-                            html_output_dir = os.path.join(get_astrbot_data_path(), "plugin_data", "astrbot_plugin_qq_group_daily_analysis", "self_hosted_html_reports")
-                    
+                            from astrbot.core.utils.astrbot_path import (
+                                get_astrbot_data_path,
+                            )
+
+                            html_output_dir = os.path.join(
+                                get_astrbot_data_path(),
+                                "plugin_data",
+                                "astrbot_plugin_qq_group_daily_analysis",
+                                "self_hosted_html_reports",
+                            )
+
                     # 计算相对路径并转换为URL
                     rel_path = os.path.relpath(html_path, html_output_dir)
-                    url_path = rel_path.replace(os.sep, '/')
+                    url_path = rel_path.replace(os.sep, "/")
                     report_url = f"{base_url.rstrip('/')}/{url_path.lstrip('/')}"
 
                     sent = await self.message_sender.send_text(
