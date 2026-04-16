@@ -32,6 +32,7 @@ class LLMAnalyzer(IAnalysisProvider):
     topic_analyzer: TopicAnalyzer
     user_title_analyzer: UserTitleAnalyzer
     golden_quote_analyzer: GoldenQuoteAnalyzer
+    DEFAULT_ANALYSIS_TASK_TIMEOUT_SECONDS = 240
 
     def __init__(self, context, config_manager):
         """
@@ -49,6 +50,36 @@ class LLMAnalyzer(IAnalysisProvider):
         self.user_title_analyzer = UserTitleAnalyzer(context, config_manager)
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
         self.chat_quality_analyzer = ChatQualityAnalyzer(context, config_manager)
+
+    def _get_analysis_task_timeout_seconds(self) -> int:
+        """获取单个分析子任务的超时时间，防止一条请求卡死整份报告。"""
+        llm_group_getter = getattr(self.config_manager, "_get_group", None)
+        if callable(llm_group_getter):
+            try:
+                raw_timeout = llm_group_getter("llm").get(
+                    "analysis_task_timeout_seconds",
+                    self.DEFAULT_ANALYSIS_TASK_TIMEOUT_SECONDS,
+                )
+                parsed_timeout = int(raw_timeout)
+                if parsed_timeout > 0:
+                    return parsed_timeout
+            except Exception:
+                pass
+        return self.DEFAULT_ANALYSIS_TASK_TIMEOUT_SECONDS
+
+    async def _run_analysis_task_with_timeout(
+        self, task_name: str, coro, timeout_seconds: int
+    ):
+        """为单个分析子任务添加超时兜底，避免 gather 被永久阻塞。"""
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout_seconds)
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                f"分析任务 {task_name} 超时，已在 {timeout_seconds}s 后终止并跳过"
+            )
+            raise TimeoutError(
+                f"{task_name} timeout after {timeout_seconds}s"
+            ) from exc
 
     async def analyze_topics(
         self,
@@ -230,33 +261,50 @@ class LLMAnalyzer(IAnalysisProvider):
             # 构建并发任务列表
             tasks = []
             task_names = []
+            task_timeout = self._get_analysis_task_timeout_seconds()
 
             if topic_enabled:
                 tasks.append(
-                    self.topic_analyzer.analyze_topics(messages, umo, session_id)
+                    self._run_analysis_task_with_timeout(
+                        "topic",
+                        self.topic_analyzer.analyze_topics(messages, umo, session_id),
+                        task_timeout,
+                    )
                 )
                 task_names.append("topic")
 
             if user_title_enabled:
                 tasks.append(
-                    self.user_title_analyzer.analyze_user_titles(
-                        messages, user_activity, umo, top_users, session_id
+                    self._run_analysis_task_with_timeout(
+                        "user_title",
+                        self.user_title_analyzer.analyze_user_titles(
+                            messages, user_activity, umo, top_users, session_id
+                        ),
+                        task_timeout,
                     )
                 )
                 task_names.append("user_title")
 
             if golden_quote_enabled:
                 tasks.append(
-                    self.golden_quote_analyzer.analyze_golden_quotes(
-                        messages, umo, session_id
+                    self._run_analysis_task_with_timeout(
+                        "golden_quote",
+                        self.golden_quote_analyzer.analyze_golden_quotes(
+                            messages, umo, session_id
+                        ),
+                        task_timeout,
                     )
                 )
                 task_names.append("golden_quote")
 
             if chat_quality_enabled:
                 tasks.append(
-                    self.chat_quality_analyzer.analyze_quality(
-                        messages, umo, session_id
+                    self._run_analysis_task_with_timeout(
+                        "chat_quality",
+                        self.chat_quality_analyzer.analyze_quality(
+                            messages, umo, session_id
+                        ),
+                        task_timeout,
                     )
                 )
                 task_names.append("chat_quality")
@@ -276,7 +324,10 @@ class LLMAnalyzer(IAnalysisProvider):
             for i, result in enumerate(results):
                 name = task_names[i]
                 if isinstance(result, Exception):
-                    logger.error(f"分析任务 {name} 失败: {result}")
+                    if isinstance(result, (asyncio.TimeoutError, TimeoutError)):
+                        logger.warning(f"分析任务 {name} 超时，已跳过该任务: {result}")
+                    else:
+                        logger.error(f"分析任务 {name} 失败: {result}")
                     continue
 
                 if name == "topic" and isinstance(result, tuple):
@@ -369,6 +420,7 @@ class LLMAnalyzer(IAnalysisProvider):
             # 设置增量模式的最大数量覆盖值
             self.topic_analyzer._incremental_max_count = topics_per_batch
             self.golden_quote_analyzer._incremental_max_count = quotes_per_batch
+            task_timeout = self._get_analysis_task_timeout_seconds()
 
             try:
                 # 构建并发任务列表（仅话题和金句，不包含用户称号）
@@ -377,22 +429,36 @@ class LLMAnalyzer(IAnalysisProvider):
 
                 if topic_enabled:
                     tasks.append(
-                        self.topic_analyzer.analyze_topics(messages, umo, session_id)
+                        self._run_analysis_task_with_timeout(
+                            "topic",
+                            self.topic_analyzer.analyze_topics(
+                                messages, umo, session_id
+                            ),
+                            task_timeout,
+                        )
                     )
                     task_names.append("topic")
 
                 if golden_quote_enabled:
                     tasks.append(
-                        self.golden_quote_analyzer.analyze_golden_quotes(
-                            messages, umo, session_id
+                        self._run_analysis_task_with_timeout(
+                            "golden_quote",
+                            self.golden_quote_analyzer.analyze_golden_quotes(
+                                messages, umo, session_id
+                            ),
+                            task_timeout,
                         )
                     )
                     task_names.append("golden_quote")
 
                 if chat_quality_enabled:
                     tasks.append(
-                        self.chat_quality_analyzer.analyze_quality(
-                            messages, umo, session_id
+                        self._run_analysis_task_with_timeout(
+                            "chat_quality",
+                            self.chat_quality_analyzer.analyze_quality(
+                                messages, umo, session_id
+                            ),
+                            task_timeout,
                         )
                     )
                     task_names.append("chat_quality")
@@ -411,7 +477,10 @@ class LLMAnalyzer(IAnalysisProvider):
                 for i, result in enumerate(results):
                     name = task_names[i]
                     if isinstance(result, Exception):
-                        logger.error(f"增量{name}分析失败: {result}")
+                        if isinstance(result, (asyncio.TimeoutError, TimeoutError)):
+                            logger.warning(f"增量{name}分析超时，已跳过该任务: {result}")
+                        else:
+                            logger.error(f"增量{name}分析失败: {result}")
                         continue
 
                     if name == "topic" and isinstance(result, tuple):
