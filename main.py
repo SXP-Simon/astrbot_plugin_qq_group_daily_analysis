@@ -49,6 +49,9 @@ from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
 
+IMAGE_REPORT_GENERATION_TIMEOUT_SECONDS = 240
+IMAGE_REPORT_SEND_TIMEOUT_SECONDS = 60
+
 
 class GroupDailyAnalysis(Star):
     """群分析插件主类"""
@@ -599,18 +602,46 @@ class GroupDailyAnalysis(Star):
             return None
 
         if output_format == "image":
-            image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result,
-                group_id,
-                self.html_render,
-                avatar_url_getter=avatar_url_getter,
-                nickname_getter=nickname_getter,
-            )
+            logger.info(f"开始生成图片报告，群: {group_id}")
+            try:
+                image_url, html_content = await asyncio.wait_for(
+                    self.report_generator.generate_image_report(
+                        analysis_result,
+                        group_id,
+                        self.html_render,
+                        avatar_url_getter=avatar_url_getter,
+                        nickname_getter=nickname_getter,
+                    ),
+                    timeout=IMAGE_REPORT_GENERATION_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"图片报告生成超时（{IMAGE_REPORT_GENERATION_TIMEOUT_SECONDS}s），群: {group_id}"
+                )
+                image_url, html_content = None, None
+            except Exception as e:
+                logger.error(f"图片报告生成失败，群: {group_id}: {e}", exc_info=True)
+                image_url, html_content = None, None
 
             if image_url:
                 caption = TraceContext.make_report_caption()
-                sent = await adapter.send_image(group_id, image_url, caption=caption)
+                logger.info(f"图片报告生成成功，准备发送图片，群: {group_id}")
+                try:
+                    sent = await asyncio.wait_for(
+                        adapter.send_image(group_id, image_url, caption=caption),
+                        timeout=IMAGE_REPORT_SEND_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"图片报告发送超时（{IMAGE_REPORT_SEND_TIMEOUT_SECONDS}s），群: {group_id}"
+                    )
+                    sent = False
+                except Exception as e:
+                    logger.error(f"图片报告发送异常，群: {group_id}: {e}", exc_info=True)
+                    sent = False
+
                 if sent:
+                    logger.info(f"图片报告发送成功，群: {group_id}")
                     await self._try_upload_image(group_id, image_url, platform_id)
                     return  # 成功发送
 

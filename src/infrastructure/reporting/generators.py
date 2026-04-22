@@ -28,6 +28,10 @@ from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
+DEFAULT_IMAGE_RENDER_STRATEGY_TIMEOUT_SECONDS = 75
+DEFAULT_T2I_PUBLIC_ENDPOINT = "https://t2i.soulter.top/text2img"
+DEFAULT_T2I_OFFICIAL_ENDPOINTS_API = "https://api.soulter.top/astrbot/t2i-endpoints"
+DEFAULT_T2I_ENDPOINTS_CACHE_TTL_SECONDS = 600
 
 DEFAULT_PROFILE_MAPPING = {
     "mbti": {
@@ -110,6 +114,148 @@ class ReportGenerator(IReportGenerator):
         )
         self._avatar_session = None
         self._profile_asset_manifest = self._load_profile_asset_manifest()
+        self._t2i_endpoints_cache: tuple[str, ...] = ()
+        self._t2i_endpoints_cache_expire_at = 0.0
+        self._t2i_endpoint_lock = asyncio.Lock()
+        self._t2i_renderer_cache: dict[str, object] = {}
+
+    @staticmethod
+    def _normalize_t2i_endpoint(endpoint: str | None) -> str:
+        """规范化 T2I 端点地址。"""
+        value = str(endpoint or "").strip().removesuffix("/")
+        if not value:
+            value = DEFAULT_T2I_PUBLIC_ENDPOINT
+        if not value.endswith("text2img"):
+            value = f"{value}/text2img"
+        return value
+
+    async def _get_t2i_render_endpoints(self) -> list[str]:
+        """获取可用的 T2I 渲染端点，并优先使用官方备用端点。"""
+        now = asyncio.get_running_loop().time()
+        if self._t2i_endpoints_cache and now < self._t2i_endpoints_cache_expire_at:
+            return list(self._t2i_endpoints_cache)
+
+        async with self._t2i_endpoint_lock:
+            now = asyncio.get_running_loop().time()
+            if self._t2i_endpoints_cache and now < self._t2i_endpoints_cache_expire_at:
+                return list(self._t2i_endpoints_cache)
+
+            try:
+                from astrbot.core import t2i_base_url
+
+                primary_endpoint = self._normalize_t2i_endpoint(t2i_base_url)
+            except Exception:
+                primary_endpoint = DEFAULT_T2I_PUBLIC_ENDPOINT
+
+            endpoints = [primary_endpoint]
+
+            connector = None
+            try:
+                from astrbot.core.utils.http_ssl import build_tls_connector
+
+                connector = build_tls_connector()
+            except Exception:
+                connector = None
+
+            try:
+                async with aiohttp.ClientSession(
+                    trust_env=True,
+                    connector=connector,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as session:
+                    async with session.get(DEFAULT_T2I_OFFICIAL_ENDPOINTS_API) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for item in data.get("data", []):
+                                if item.get("active") and item.get("url"):
+                                    endpoints.append(
+                                        self._normalize_t2i_endpoint(item.get("url"))
+                                    )
+                        else:
+                            logger.warning(
+                                f"获取官方 T2I 端点失败，HTTP {resp.status}"
+                            )
+            except Exception as e:
+                logger.warning(f"获取官方 T2I 端点失败: {e}")
+
+            deduped_endpoints: list[str] = []
+            seen: set[str] = set()
+            for endpoint in endpoints:
+                normalized = self._normalize_t2i_endpoint(endpoint)
+                if normalized not in seen:
+                    seen.add(normalized)
+                    deduped_endpoints.append(normalized)
+
+            if primary_endpoint == DEFAULT_T2I_PUBLIC_ENDPOINT and len(deduped_endpoints) > 1:
+                deduped_endpoints = [
+                    endpoint
+                    for endpoint in deduped_endpoints
+                    if endpoint != DEFAULT_T2I_PUBLIC_ENDPOINT
+                ] + [DEFAULT_T2I_PUBLIC_ENDPOINT]
+
+            self._t2i_endpoints_cache = tuple(deduped_endpoints)
+            self._t2i_endpoints_cache_expire_at = (
+                now + DEFAULT_T2I_ENDPOINTS_CACHE_TTL_SECONDS
+            )
+            return list(self._t2i_endpoints_cache)
+
+    def _get_t2i_renderer(self, endpoint: str):
+        """按端点缓存 HtmlRenderer 实例。"""
+        normalized_endpoint = self._normalize_t2i_endpoint(endpoint)
+        renderer = self._t2i_renderer_cache.get(normalized_endpoint)
+        if renderer is None:
+            from astrbot.core.utils.t2i.renderer import HtmlRenderer
+
+            renderer = HtmlRenderer(normalized_endpoint)
+            self._t2i_renderer_cache[normalized_endpoint] = renderer
+        return renderer
+
+    async def _render_html_via_t2i_endpoint(
+        self,
+        endpoint: str,
+        html_content: str,
+        image_options: dict,
+    ):
+        """通过指定 T2I 端点渲染 HTML。"""
+        renderer = self._get_t2i_renderer(endpoint)
+        return await renderer.render_custom_template(
+            html_content,
+            {},
+            return_url=False,
+            options=image_options,
+        )
+
+    @staticmethod
+    def _extract_non_image_response_summary(image_data) -> str | None:
+        """从错误的 HTML 响应里提取概要信息，便于定位上游故障。"""
+        preview_bytes = None
+        if isinstance(image_data, bytes):
+            preview_bytes = image_data[:4096]
+        elif isinstance(image_data, str) and os.path.exists(image_data):
+            try:
+                with open(image_data, "rb") as f:
+                    preview_bytes = f.read(4096)
+            except Exception:
+                preview_bytes = None
+
+        if not preview_bytes:
+            return None
+
+        stripped = preview_bytes.lstrip()
+        if not stripped.startswith(b"<"):
+            return None
+
+        try:
+            preview_text = stripped.decode("utf-8", errors="ignore")
+        except Exception:
+            return None
+
+        title_match = re.search(r"<title>(.*?)</title>", preview_text, re.I | re.S)
+        if title_match:
+            return re.sub(r"\s+", " ", title_match.group(1)).strip()
+
+        compact = re.sub(r"\s+", " ", preview_text)
+        return compact[:160].strip() or None
 
     def _load_profile_asset_manifest(self) -> dict[str, dict]:
         """加载人格资源清单。"""
@@ -369,6 +515,8 @@ class ReportGenerator(IReportGenerator):
             # 使用信号量控制并发进入渲染引擎
             async with self._render_semaphore:
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
+                render_endpoints = await self._get_t2i_render_endpoints()
+                logger.info(f"T2I 渲染候选端点: {render_endpoints}")
 
                 # 定义渲染策略
                 render_strategies = [
@@ -406,68 +554,102 @@ class ReportGenerator(IReportGenerator):
                 ]
 
                 last_exception = None
+                render_timeout_seconds = (
+                    DEFAULT_IMAGE_RENDER_STRATEGY_TIMEOUT_SECONDS
+                )
 
                 for image_options in render_strategies:
-                    try:
-                        # Cleanse options
-                        if image_options.get("type") == "png":
-                            image_options["quality"] = None
+                    if image_options.get("type") == "png":
+                        image_options["quality"] = None
 
-                        logger.info(f"正在尝试渲染策略: {image_options}")
-                        # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
-                        image_data = await html_render_func(
-                            html_content,  # 渲染后的HTML内容
-                            {},  # 空数据字典，因为数据已包含在HTML中
-                            False,  # return_url=False，直接获取图片数据
-                            image_options,
-                        )
+                    for endpoint in render_endpoints:
+                        try:
+                            logger.info(
+                                f"正在尝试渲染策略: {image_options} | endpoint={endpoint} | timeout={render_timeout_seconds}s"
+                            )
+                            image_data = await asyncio.wait_for(
+                                self._render_html_via_t2i_endpoint(
+                                    endpoint,
+                                    html_content,
+                                    image_options,
+                                ),
+                                timeout=render_timeout_seconds,
+                            )
 
-                        if image_data:
-                            # 校验是否为合法图片（防止 T2I 返回 500 错误 HTML 字符流）
-                            is_valid = False
-                            actual_data_head = None
+                            if image_data:
+                                is_valid = False
+                                actual_data_head = None
 
-                            if isinstance(image_data, bytes):
-                                actual_data_head = image_data[:10]
-                            elif isinstance(image_data, str) and os.path.exists(
-                                image_data
-                            ):
-                                try:
-                                    with open(image_data, "rb") as f:
-                                        actual_data_head = f.read(10)
-                                except Exception as e:
-                                    logger.warning(f"读取图片临时文件失败: {e}")
-
-                            if actual_data_head:
-                                # 检查 magic numbers (JPEG: FF D8, PNG: 89 50 4E 47)
-                                if actual_data_head.startswith(
-                                    b"\xff\xd8"
-                                ) or actual_data_head.startswith(b"\x89PNG"):
-                                    is_valid = True
-                                else:
-                                    logger.warning(
-                                        f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
-                                    )
-
-                            if is_valid:
                                 if isinstance(image_data, bytes):
-                                    b64 = base64.b64encode(image_data).decode("utf-8")
-                                    image_url = f"base64://{b64}"
-                                    logger.info(
-                                        f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                                    actual_data_head = image_data[:10]
+                                elif isinstance(image_data, str) and os.path.exists(
+                                    image_data
+                                ):
+                                    try:
+                                        with open(image_data, "rb") as f:
+                                            actual_data_head = f.read(10)
+                                    except Exception as e:
+                                        logger.warning(f"读取图片临时文件失败: {e}")
+
+                                if actual_data_head:
+                                    if actual_data_head.startswith(
+                                        b"\xff\xd8"
+                                    ) or actual_data_head.startswith(b"\x89PNG"):
+                                        is_valid = True
+                                    else:
+                                        logger.warning(
+                                            f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
+                                        )
+
+                                if is_valid:
+                                    if isinstance(image_data, bytes):
+                                        b64 = base64.b64encode(image_data).decode(
+                                            "utf-8"
+                                        )
+                                        image_url = f"base64://{b64}"
+                                        logger.info(
+                                            f"图片生成成功 (endpoint={endpoint}, {image_options}): [Base64 Data {len(image_data)} bytes]"
+                                        )
+                                        return image_url, html_content
+                                    elif isinstance(image_data, str):
+                                        logger.info(
+                                            f"图片生成成功 (endpoint={endpoint}, String): {image_data}"
+                                        )
+                                        return image_data, html_content
+
+                                error_summary = self._extract_non_image_response_summary(
+                                    image_data
+                                )
+                                if error_summary:
+                                    logger.warning(
+                                        f"T2I 端点 {endpoint} 返回了非图片 HTML 响应: {error_summary}"
                                     )
-                                    return image_url, html_content
-                                elif isinstance(image_data, str):
-                                    logger.info(f"图片生成成功 (String): {image_data}")
-                                    return image_data, html_content
+                                    last_exception = RuntimeError(
+                                        f"{endpoint} returned non-image HTML: {error_summary}"
+                                    )
+                                else:
+                                    last_exception = RuntimeError(
+                                        f"{endpoint} returned invalid image data"
+                                    )
 
-                        logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
+                            logger.warning(
+                                f"渲染策略 {image_options} 在端点 {endpoint} 返回了无效或空数据"
+                            )
 
-                    except Exception as e:
-                        logger.warning(f"渲染策略 {image_options} 失败: {e}")
-                        last_exception = e
-                        logger.warning("尝试下一个策略")
-                        continue
+                        except asyncio.TimeoutError as e:
+                            logger.warning(
+                                f"渲染策略 {image_options} 在端点 {endpoint} 超时（{render_timeout_seconds}s）"
+                            )
+                            last_exception = e
+                            logger.warning("尝试下一个策略")
+                            continue
+                        except Exception as e:
+                            logger.warning(
+                                f"渲染策略 {image_options} 在端点 {endpoint} 失败: {e}"
+                            )
+                            last_exception = e
+                            logger.warning("尝试下一个策略")
+                            continue
 
                 # 如果所有策略都失败
                 logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
