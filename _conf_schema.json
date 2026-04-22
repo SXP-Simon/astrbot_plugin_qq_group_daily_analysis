@@ -424,7 +424,7 @@
     "qq_group_upload": {
         "description": "群文件/群相册上传设置",
         "type": "object",
-        "hint": "图片报告生成后自动上传到群文件目录或群相册。群文件上传基于 OneBot upload_group_file API，群相册上传为 NapCat 扩展 API。仅对 QQ（OneBot）平台的图片格式报告生效",
+        "hint": "图片报告生成后自动上传到群文件目录或群相册。群文件上传基于 OneBot upload_group_file API。仅对 QQ（OneBot）平台的图片格式报告生效",
         "items": {
             "enable_group_file_upload": {
                 "type": "bool",
@@ -440,7 +440,7 @@
             },
             "enable_group_album_upload": {
                 "type": "bool",
-                "description": "启用群相册上传（NapCat 通过测试）",
+                "description": "启用群相册上传",
                 "default": false,
                 "hint": "图片报告生成后，自动上传到群相册（确保 Bot 有权限上传群相册）。此功能为 NapCat 扩展 API，其他 OneBot 实现可能不支持"
             },
