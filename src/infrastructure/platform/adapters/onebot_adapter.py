@@ -62,9 +62,29 @@ class OneBotAdapter(PlatformAdapter):
         if not self.bot_self_ids and config:
             self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
 
+        # LLBot 探测标志
+        self._is_llbot = False
+        self._llbot_checked = False
+
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
+
+    async def _detect_llbot(self):
+        """探测是否为 LLBot"""
+        if self._llbot_checked:
+            return
+        try:
+            # 避免在一些不支持 get_version_info 的老版本上卡死
+            result = await self.bot.call_action("get_version_info")
+            if isinstance(result, dict):
+                app_name = result.get("app_name", "")
+                self._is_llbot = app_name == "LLOneBot"
+                if self._is_llbot:
+                    logger.info("[OneBot] 探测到当前协议端为 LLBot")
+        except Exception:
+            self._is_llbot = False
+        self._llbot_checked = True
 
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
@@ -946,7 +966,7 @@ class OneBotAdapter(PlatformAdapter):
         if not album_id:
             albums = await self.get_group_album_list(group_id)
             album_id = self._find_item_in_list(
-                albums, album_name, ["album_id", "id"], ["name", "album_name"]
+                albums, album_name, ["album_id"], ["name", "album_name"]
             )
             # 如果仍没指定且没搜到特定相册，取第一个
             if not album_id and not album_name and albums:
@@ -959,6 +979,27 @@ class OneBotAdapter(PlatformAdapter):
             return False
 
         async def do_upload(content: str, label: str):
+            await self._detect_llbot()
+
+            if self._is_llbot:
+                # LLBot 模式：使用 files 参数 (列表)
+                # LLBot 的 upload_group_album 接收 files 作为数组
+                llbot_params = {
+                    "group_id": int(group_id),
+                    "album_id": str(album_id),
+                    "files": [content],
+                }
+                try:
+                    await self.bot.call_action("upload_group_album", **llbot_params)
+                    logger.debug(
+                        f"[群分析相册] 上传成功 (LLBot, {label}): 群 {group_id}"
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"[群分析相册] LLBot 上传接口调用失败: {e}，尝试 NapCat 模式..."
+                    )
+
             params = {
                 "group_id": int(group_id),
                 "file": content,
@@ -994,28 +1035,29 @@ class OneBotAdapter(PlatformAdapter):
         获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
 
-        def extract_list(data: Any) -> list[dict]:
-            if not data:
-                return []
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict):
-                # 探测常见键名
-                lst = (
-                    data.get("albums")
-                    or data.get("album_list")
-                    or data.get("albumList")
-                    or data.get("list")
-                    or []
+        def extract_list(payload: Any) -> list[dict]:
+            """从不同结构的响应中提取相册列表：直接列表、嵌套在 data 中、或直接在根字段中。"""
+            if isinstance(payload, list):
+                return [item for item in payload if isinstance(item, dict)]
+            if not isinstance(payload, dict):
+                logger.debug(
+                    f"[群分析相册] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
                 )
-                if isinstance(lst, list):
-                    return lst
-                # 如果 'data' 键本身存在且为列表
-                inner_data = data.get("data")
-                if isinstance(inner_data, list):
-                    return inner_data
-                if isinstance(inner_data, dict):
-                    return extract_list(inner_data)
+                return []
+
+            data = payload.get("data")
+            if isinstance(data, dict):
+                album_list = data.get("album_list") or data.get("list")
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
+                else:
+                    logger.debug(f"[群分析相册] 在 data 字段中未找到列表: data={data}")
+
+            album_list = payload.get("album_list") or payload.get("list")
+            if isinstance(album_list, list):
+                return [item for item in album_list if isinstance(item, dict)]
+
+            logger.debug(f"[群分析相册] 无法从响应中提取相册列表: payload={payload}")
             return []
 
         # 候选 API 名称
@@ -1033,13 +1075,14 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 result = await self.bot.call_action(
                     action,
-                    group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
+                    group_id=int(group_id),
                 )
+                logger.debug(f"[群分析相册] 接口 {action} 原始响应内容: {result}")
                 if result:
                     albums = extract_list(result)
                     if albums:
                         logger.debug(
-                            f"[群分析相册] {action} 成功获取到 {len(albums)} 个相册"
+                            f"[群分析相册] {action} 成功获取并提取到 {len(albums)} 个相册对象"
                         )
                         return albums
             except Exception as e:
@@ -1070,11 +1113,21 @@ class OneBotAdapter(PlatformAdapter):
         )
         albums = await self.get_group_album_list(group_id)
         for album in albums:
-            name = album.get("name") or album.get("album_name", "")
-            aid = album.get("album_id") or album.get("id", "")
-            if name == album_name and aid:
-                logger.info(f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}")
-                return str(aid)
+            name = album.get("name") or album.get("album_name")
+            logger.debug(
+                f"[群分析相册] 正在匹配相册: 目标='{album_name}', 当前相册名称='{name}', 原始数据={album}"
+            )
+            if name == album_name:
+                aid = album.get("album_id")
+                if aid:
+                    logger.info(
+                        f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}"
+                    )
+                    return str(aid)
+                else:
+                    logger.debug(
+                        f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
+                    )
 
         logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
         return None
