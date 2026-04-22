@@ -62,9 +62,29 @@ class OneBotAdapter(PlatformAdapter):
         if not self.bot_self_ids and config:
             self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
 
+        # LLBot 探测标志
+        self._is_llbot = False
+        self._llbot_checked = False
+
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
+
+    async def _detect_llbot(self):
+        """探测是否为 LLBot"""
+        if self._llbot_checked:
+            return
+        try:
+            # 避免在一些不支持 get_version_info 的老版本上卡死
+            result = await self.bot.call_action("get_version_info")
+            if isinstance(result, dict):
+                app_name = result.get("app_name", "")
+                self._is_llbot = app_name == "LLOneBot"
+                if self._is_llbot:
+                    logger.info("[OneBot] 探测到当前协议端为 LLBot")
+        except Exception:
+            self._is_llbot = False
+        self._llbot_checked = True
 
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
@@ -959,6 +979,27 @@ class OneBotAdapter(PlatformAdapter):
             return False
 
         async def do_upload(content: str, label: str):
+            await self._detect_llbot()
+
+            if self._is_llbot:
+                # LLBot 模式：使用 files 参数 (列表)
+                # 根据参考插件，LLBot 的 upload_group_album 接收 files 作为数组
+                llbot_params = {
+                    "group_id": int(group_id),
+                    "album_id": str(album_id),
+                    "files": [content],
+                }
+                try:
+                    await self.bot.call_action("upload_group_album", **llbot_params)
+                    logger.debug(
+                        f"[群分析相册] 上传成功 (LLBot, {label}): 群 {group_id}"
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"[群分析相册] LLBot 上传接口调用失败: {e}，尝试 NapCat 模式..."
+                    )
+
             params = {
                 "group_id": int(group_id),
                 "file": content,
