@@ -1,11 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.9.18] - ⚙️ base64 传输统一开关修复，正确处理 Onebot Adapter 的图片、文件资源传输情况
+## [v4.9.19] - ✨ 支持 LLBot 群相册接口并优化 OneBot 适配器
+*   **✨ LLBot 支持**: 支持 LLBot 的群相册上传接口。自动探测协议端版本，并针对 LLBot 采用其特定的参数格式进行上传。
+
+
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.9.18] - ⚙️ base64 传输统一开关修复，正确处理 Onebot Adapter 的图片、文件资源传输情况
 
 ## [v4.9.17] - ✨ 人格画像体验升级，SBTI 和 ACGTI 风格
 *   **🎉 特别致谢**: 本次更新的人格画像数据集与灵感来源于 [ACGTI](https://github.com/tianxingleo/ACGTI) 及 [SBTI-test](https://github.com/UnluckyNinja/SBTI-test) 项目，由衷感谢原作者的开源贡献。
