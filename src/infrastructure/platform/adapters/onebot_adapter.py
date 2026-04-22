@@ -1040,6 +1040,9 @@ class OneBotAdapter(PlatformAdapter):
             if isinstance(payload, list):
                 return [item for item in payload if isinstance(item, dict)]
             if not isinstance(payload, dict):
+                logger.debug(
+                    f"[群分析相册] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
+                )
                 return []
 
             data = payload.get("data")
@@ -1047,10 +1050,14 @@ class OneBotAdapter(PlatformAdapter):
                 album_list = data.get("album_list") or data.get("list")
                 if isinstance(album_list, list):
                     return [item for item in album_list if isinstance(item, dict)]
+                else:
+                    logger.debug(f"[群分析相册] 在 data 字段中未找到列表: data={data}")
 
             album_list = payload.get("album_list") or payload.get("list")
             if isinstance(album_list, list):
                 return [item for item in album_list if isinstance(item, dict)]
+
+            logger.debug(f"[群分析相册] 无法从响应中提取相册列表: payload={payload}")
             return []
 
         # 候选 API 名称
@@ -1070,11 +1077,12 @@ class OneBotAdapter(PlatformAdapter):
                     action,
                     group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
                 )
+                logger.debug(f"[群分析相册] 接口 {action} 原始响应内容: {result}")
                 if result:
                     albums = extract_list(result)
                     if albums:
                         logger.debug(
-                            f"[群分析相册] {action} 成功获取到 {len(albums)} 个相册"
+                            f"[群分析相册] {action} 成功获取并提取到 {len(albums)} 个相册对象"
                         )
                         return albums
             except Exception as e:
@@ -1107,6 +1115,9 @@ class OneBotAdapter(PlatformAdapter):
         for album in albums:
             # 严格对齐 qun_album 的逻辑
             name = album.get("name") or album.get("album_name")
+            logger.debug(
+                f"[群分析相册] 正在匹配相册: 目标='{album_name}', 当前相册名称='{name}', 原始数据={album}"
+            )
             if name == album_name:
                 aid = album.get("album_id")
                 if aid:
@@ -1114,6 +1125,10 @@ class OneBotAdapter(PlatformAdapter):
                         f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}"
                     )
                     return str(aid)
+                else:
+                    logger.debug(
+                        f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
+                    )
 
         logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
         return None
