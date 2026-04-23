@@ -366,54 +366,23 @@ class ReportGenerator(IReportGenerator):
 
             logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
 
+            # 从配置中获取两轮渲染策略
+            render_strategies = self.config_manager.get_t2i_rendering_strategies()
+
             # 使用信号量控制并发进入渲染引擎
             async with self._render_semaphore:
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
 
-                # 定义渲染策略
-                render_strategies = [
-                    # 1. 第一策略: PNG, Ultra quality, Device scale
-                    {
-                        "full_page": True,
-                        "type": "png",
-                        "scale": "device",
-                        "device_scale_factor_level": "ultra",
-                    },
-                    # 2. 第二策略: JPEG, ultra, quality 100%, Device scale
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 100,
-                        "scale": "device",
-                        "device_scale_factor_level": "ultra",
-                    },
-                    # 3. 第三策略: JPEG, high, quality 80%, Device scale
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 95,
-                        "scale": "device",
-                        "device_scale_factor_level": "high",  # 尝试高分辨率
-                    },
-                    # 4. 第四策略: JPEG, normal quality, Device scale (后备)
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 80,
-                        "scale": "device",
-                        # normal quality
-                    },
-                ]
-
                 last_exception = None
 
-                for image_options in render_strategies:
+                for attempt, image_options in enumerate(render_strategies, 1):
                     try:
                         # Cleanse options
                         if image_options.get("type") == "png":
-                            image_options["quality"] = None
+                            image_options.pop("quality", None)
 
-                        logger.info(f"正在尝试渲染策略: {image_options}")
+                        logger.info(f"正在尝试第 {attempt} 轮渲染策略: {image_options}")
+
                         # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
                         image_data = await html_render_func(
                             html_content,  # 渲染后的HTML内容
@@ -445,32 +414,62 @@ class ReportGenerator(IReportGenerator):
                                 ) or actual_data_head.startswith(b"\x89PNG"):
                                     is_valid = True
                                 else:
-                                    logger.warning(
-                                        f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
-                                    )
+                                    # 尝试解析 HTML 错误（如 502 Bad Gateway）
+                                    html_error = None
+                                    if isinstance(image_data, bytes):
+                                        html_error = self._extract_html_error_summary(
+                                            image_data
+                                        )
+                                    elif isinstance(image_data, str) and os.path.exists(
+                                        image_data
+                                    ):
+                                        try:
+                                            with open(image_data, "rb") as f:
+                                                # 读取前 4KB 即可识别 HTML 错误
+                                                html_error = (
+                                                    self._extract_html_error_summary(
+                                                        f.read(4096)
+                                                    )
+                                                )
+                                        except Exception:
+                                            pass
+
+                                    if html_error:
+                                        logger.warning(
+                                            f"[T2I] 渲染引擎返回了错误页面而非图片: {html_error}"
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
+                                        )
 
                             if is_valid:
                                 if isinstance(image_data, bytes):
                                     b64 = base64.b64encode(image_data).decode("utf-8")
                                     image_url = f"base64://{b64}"
                                     logger.info(
-                                        f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                                        f"图片生成成功 (轮次 {attempt}): [Base64 Data {len(image_data)} bytes]"
                                     )
                                     return image_url, html_content
                                 elif isinstance(image_data, str):
-                                    logger.info(f"图片生成成功 (String): {image_data}")
+                                    logger.info(
+                                        f"图片生成成功 (轮次 {attempt}): {image_data}"
+                                    )
                                     return image_data, html_content
 
-                        logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
+                        logger.warning(
+                            f"渲染轮次 {attempt} ({image_options['type']}) 返回了无效或空数据"
+                        )
 
                     except Exception as e:
-                        logger.warning(f"渲染策略 {image_options} 失败: {e}")
+                        logger.warning(f"渲染轮次 {attempt} 失败: {e}")
                         last_exception = e
-                        logger.warning("尝试下一个策略")
+                        if attempt < len(render_strategies):
+                            logger.info("准备尝试下一轮回退策略")
                         continue
 
                 # 如果所有策略都失败
-                logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
+                logger.error(f"所有渲染尝试都失败。最后一个错误: {last_exception}")
                 return None, html_content
 
         except Exception as e:
@@ -1071,3 +1070,28 @@ class ReportGenerator(IReportGenerator):
                 logger.debug("头像缓存已关闭")
         except Exception as e:
             logger.warning(f"关闭头像缓存失败: {e}")
+
+    def _extract_html_error_summary(self, data: bytes) -> str | None:
+        """从返回的字节流中尝试提取 HTML 错误信息（如 <title>）"""
+        try:
+            content = data.decode("utf-8", errors="ignore")
+            content_lower = content.lower()
+            if "<html" in content_lower or "<!doctype html" in content_lower:
+                # 尝试提取标题
+                title_match = re.search(
+                    r"<title>(.*?)</title>", content, re.IGNORECASE | re.DOTALL
+                )
+                if title_match:
+                    return f"HTML 错误页: {title_match.group(1).strip()}"
+
+                # 尝试提取 h1
+                h1_match = re.search(
+                    r"<h1>(.*?)</h1>", content, re.IGNORECASE | re.DOTALL
+                )
+                if h1_match:
+                    return f"HTML 错误页: {h1_match.group(1).strip()}"
+
+                return f"HTML 响应 (前100字): {content[:100].strip()}..."
+        except Exception:
+            pass
+        return None
