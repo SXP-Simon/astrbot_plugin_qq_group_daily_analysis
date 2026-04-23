@@ -202,6 +202,29 @@ class ConfigManager:
         """获取是否启用 Base64 图片传输"""
         return self._get_group("basic").get("enable_base64_image", False)
 
+    def get_t2i_rendering_strategies(self) -> list[dict]:
+        """获取用户配置的两轮 T2I 渲染策略"""
+        group = self._get_group("t2i_rendering")
+
+        return [
+            # 第一轮：质量优先
+            {
+                "full_page": True,
+                "type": group.get("t2i_r1_type", "png"),
+                "quality": group.get("t2i_r1_quality", 100),
+                "device_scale_factor_level": group.get("t2i_r1_device_scale", "ultra"),
+                "timeout": group.get("t2i_r1_timeout", 30000),
+            },
+            # 第二轮：稳定性/回退优先
+            {
+                "full_page": True,
+                "type": group.get("t2i_r2_type", "jpeg"),
+                "quality": group.get("t2i_r2_quality", 80),
+                "device_scale_factor_level": group.get("t2i_r2_device_scale", "normal"),
+                "timeout": group.get("t2i_r2_timeout", 60000),
+            },
+        ]
+
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
         return self._get_group("llm").get("llm_provider_id", "")
