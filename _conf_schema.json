@@ -139,6 +139,85 @@
             }
         }
     },
+    "t2i_rendering": {
+        "description": "图片渲染策略",
+        "type": "object",
+        "hint": "配置 HTML 转图片的渲染参数。支持两轮尝试：第一轮优先保证质量，第二轮作为回退方案，建议使用更低的分辨率和质量以提高成功率。",
+        "items": {
+            "t2i_r1_type": {
+                "type": "string",
+                "description": "第一轮：图片格式",
+                "options": ["jpeg", "png"],
+                "default": "png",
+                "hint": "建议：PNG 格式无损但体积较大；JPEG 格式体积较小。"
+            },
+            "t2i_r1_quality": {
+                "type": "int",
+                "description": "第一轮：图片质量 (若为 JPEG)",
+                "default": 100,
+                "slider": {
+                    "min": 1,
+                    "max": 100,
+                    "step": 1
+                },
+                "hint": "仅对 JPEG 格式生效。建议 80-100。"
+            },
+            "t2i_r1_device_scale": {
+                "type": "string",
+                "description": "第一轮：分辨率等级",
+                "options": ["normal", "high", "ultra"],
+                "default": "ultra",
+                "hint": "影响图片清晰度。normal=1.0x, high=1.3x, ultra=1.8x。高质量日报建议 ultra。"
+            },
+            "t2i_r1_timeout": {
+                "type": "int",
+                "description": "第一轮：渲染超时 (ms)",
+                "default": 50000,
+                "slider": {
+                    "min": 30000,
+                    "max": 180000,
+                    "step": 5000
+                },
+                "hint": "单次渲染的最长等待时间。复杂页面建议调大。"
+            },
+            "t2i_r2_type": {
+                "type": "string",
+                "description": "第二轮 (回退)：图片格式",
+                "options": ["jpeg", "png"],
+                "default": "jpeg",
+                "hint": "回退策略建议使用 jpeg 以减少渲染压力。"
+            },
+            "t2i_r2_quality": {
+                "type": "int",
+                "description": "第二轮 (回退)：图片质量 (若为 JPEG)",
+                "default": 80,
+                "slider": {
+                    "min": 1,
+                    "max": 100,
+                    "step": 1
+                },
+                "hint": "仅对 JPEG 格式生效。可以设置较低值以确保生成成功。"
+            },
+            "t2i_r2_device_scale": {
+                "type": "string",
+                "description": "第二轮 (回退)：分辨率等级",
+                "options": ["normal", "high", "ultra"],
+                "default": "high",
+                "hint": "回退建议使用 high/normal 以降低复杂页面的内存消耗和超时概率。"
+            },
+            "t2i_r2_timeout": {
+                "type": "int",
+                "description": "第二轮 (回退)：渲染超时 (ms)",
+                "default": 100000,
+                "slider": {
+                    "min": 30000,
+                    "max": 180000,
+                    "step": 5000
+                },
+                "hint": "回退尝试通常针对复杂页面，建议设置更长的超时时间（如 100000ms+）。"
+            }
+        }
+    },
     "auto_analysis": {
         "description": "定时分析设置",
         "type": "object",
