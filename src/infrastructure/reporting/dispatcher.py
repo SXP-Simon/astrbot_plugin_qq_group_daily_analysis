@@ -86,6 +86,7 @@ class ReportDispatcher:
                 group_id,
                 self._html_render_func,
                 avatar_url_getter=avatar_url_getter,
+                avatar_cache_namespace=platform_id,
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
@@ -119,8 +120,19 @@ class ReportDispatcher:
 
         html_path = None
         try:
+            async def avatar_url_getter(user_id: str):
+                if not platform_id:
+                    return None
+                adapter = self.message_sender.bot_manager.get_adapter(platform_id)
+                if adapter and hasattr(adapter, "get_user_avatar_url"):
+                    return await adapter.get_user_avatar_url(user_id, size=40)
+                return None
+
             html_path, json_path = await self.report_generator.generate_html_report(
-                analysis_result, group_id
+                analysis_result,
+                group_id,
+                avatar_url_getter=avatar_url_getter,
+                avatar_cache_namespace=platform_id,
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
