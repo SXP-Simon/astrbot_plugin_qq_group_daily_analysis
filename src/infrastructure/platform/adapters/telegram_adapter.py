@@ -8,6 +8,7 @@ Telegram 平台适配器
 import asyncio
 import base64
 import os
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -37,6 +38,9 @@ try:
 except ImportError:
     ExtBot = None
     TELEGRAM_AVAILABLE = False
+
+
+TELEGRAM_AVATAR_NEGATIVE_CACHE_TTL = 600
 
 
 class TelegramAdapter(PlatformAdapter):
@@ -71,6 +75,7 @@ class TelegramAdapter(PlatformAdapter):
         else:
             self._plugin_instance = None
         self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
+        self._avatar_negative_cache: dict[str, tuple[float, str]] = {}
 
     def set_context(self, context: "Context") -> None:
         """
@@ -804,10 +809,30 @@ class TelegramAdapter(PlatformAdapter):
         """
         client = self._telegram_client
         if not client:
+            logger.warning(
+                f"[Telegram] 获取用户头像失败 uid={user_id}: Telegram 客户端未初始化"
+            )
+            return None
+
+        user_id_str = str(user_id).strip()
+        cached_reason = self._get_avatar_negative_cache_reason(user_id_str)
+        if cached_reason:
+            logger.warning(
+                f"[Telegram] 跳过用户头像获取 uid={user_id_str}: negative cache 命中，"
+                f"上次失败原因: {cached_reason}"
+            )
             return None
 
         try:
-            photos = await client.get_user_profile_photos(user_id=int(user_id), limit=1)
+            tg_user_id = int(user_id_str)
+        except (TypeError, ValueError):
+            reason = f"用户 ID 不是有效整数: {user_id!r}"
+            self._remember_avatar_negative(user_id_str, reason)
+            logger.warning(f"[Telegram] 获取用户头像失败 uid={user_id}: {reason}")
+            return None
+
+        try:
+            photos = await client.get_user_profile_photos(user_id=tg_user_id, limit=1)
             if photos.photos:
                 # 获取最大尺寸的头像
                 photo_sizes = photos.photos[0]
@@ -830,10 +855,32 @@ class TelegramAdapter(PlatformAdapter):
                             return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
 
                         # 如果无法获取 token，返回 None
+                        reason = "get_file 返回相对 file_path，但 client 没有 token，无法拼接下载 URL"
+                        self._remember_avatar_negative(user_id_str, reason)
+                        logger.warning(
+                            f"[Telegram] 获取用户头像失败 uid={user_id_str}: {reason}"
+                        )
                         return None
+                    reason = "get_file 未返回 file_path"
+                    self._remember_avatar_negative(user_id_str, reason)
+                    logger.warning(
+                        f"[Telegram] 获取用户头像失败 uid={user_id_str}: {reason}"
+                    )
+                    return None
+                reason = "get_user_profile_photos 返回的首张头像没有可用尺寸"
+                self._remember_avatar_negative(user_id_str, reason)
+                logger.warning(
+                    f"[Telegram] 获取用户头像失败 uid={user_id_str}: {reason}"
+                )
+                return None
+            reason = "get_user_profile_photos 返回空列表，用户可能没有公开头像或隐私设置不可见"
+            self._remember_avatar_negative(user_id_str, reason)
+            logger.warning(f"[Telegram] 获取用户头像失败 uid={user_id_str}: {reason}")
             return None
         except Exception as e:
-            logger.debug(f"[Telegram] 获取用户头像失败: {e}")
+            reason = f"{type(e).__name__}: {e}"
+            self._remember_avatar_negative(user_id_str, reason)
+            logger.warning(f"[Telegram] 获取用户头像失败 uid={user_id_str}: {reason}")
             return None
 
     async def get_user_avatar_data(
@@ -843,6 +890,9 @@ class TelegramAdapter(PlatformAdapter):
     ) -> str | None:
         """获取头像的 Base64 数据"""
         # 暂不实现，返回 None
+        logger.warning(
+            f"[Telegram] 获取用户头像数据失败 uid={user_id}: get_user_avatar_data 暂未实现"
+        )
         return None
 
     async def get_group_avatar_url(
@@ -853,6 +903,9 @@ class TelegramAdapter(PlatformAdapter):
         """获取群组头像 URL"""
         client = self._telegram_client
         if not client:
+            logger.warning(
+                f"[Telegram] 获取群头像失败 group_id={group_id}: Telegram 客户端未初始化"
+            )
             return None
 
         try:
@@ -869,11 +922,41 @@ class TelegramAdapter(PlatformAdapter):
                     if hasattr(client, "token"):
                         return f"https://api.telegram.org/file/bot{client.token}/{file_path}"
 
+                    logger.warning(
+                        f"[Telegram] 获取群头像失败 group_id={group_id}: "
+                        "get_file 返回相对 file_path，但 client 没有 token，无法拼接下载 URL"
+                    )
                     return None
+                logger.warning(
+                    f"[Telegram] 获取群头像失败 group_id={group_id}: get_file 未返回 file_path"
+                )
+                return None
+            logger.warning(
+                f"[Telegram] 获取群头像失败 group_id={group_id}: 群组未设置头像或 bot 不可见"
+            )
             return None
         except Exception as e:
-            logger.debug(f"[Telegram] 获取群头像失败: {e}")
+            logger.warning(
+                f"[Telegram] 获取群头像失败 group_id={group_id}: {type(e).__name__}: {e}"
+            )
             return None
+
+    def _get_avatar_negative_cache_reason(self, user_id: str) -> str | None:
+        cached = self._avatar_negative_cache.get(user_id)
+        if not cached:
+            return None
+
+        expires_at, reason = cached
+        if time.monotonic() >= expires_at:
+            self._avatar_negative_cache.pop(user_id, None)
+            return None
+        return reason
+
+    def _remember_avatar_negative(self, user_id: str, reason: str) -> None:
+        self._avatar_negative_cache[user_id] = (
+            time.monotonic() + TELEGRAM_AVATAR_NEGATIVE_CACHE_TTL,
+            reason,
+        )
 
     async def batch_get_avatar_urls(
         self,
