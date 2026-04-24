@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-Hant">
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Night Mode Analysis Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap"
         rel="stylesheet">
     <style>
         :root {
@@ -27,11 +28,15 @@
             --grid-color: rgba(255, 255, 255, 0.03);
 
             --font-mono: 'JetBrains Mono', monospace;
-            --font-body: 'Inter', 'Noto Sans SC', sans-serif;
+            --font-body: 'Inter', 'Noto Sans TC', 'Noto Sans SC', 'Microsoft JhengHei', 'PingFang TC', sans-serif;
         }
 
         * {
             box-sizing: border-box;
+        }
+
+        html {
+            overflow-x: hidden;
         }
 
         body {
@@ -47,6 +52,7 @@
             min-height: 100vh;
             font-size: 18px;
             position: relative;
+            overflow-x: hidden;
         }
 
         body::before {
@@ -64,6 +70,7 @@
         }
 
         .layout {
+            width: 100%;
             max-width: 1200px;
             margin: 0 auto;
             padding: 60px 40px;
@@ -118,6 +125,10 @@
             font-size: 0.8rem;
             color: var(--text-secondary);
             flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Top Navigation Bar from Reference */
@@ -128,6 +139,7 @@
             font-family: var(--font-mono);
             font-size: 0.85rem;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .nav-item {
@@ -162,15 +174,16 @@
         }
 
         h1 {
-            font-size: 5rem;
+            font-size: clamp(3rem, 7vw, 5rem);
             font-weight: 900;
             margin: 0 0 25px;
-            letter-spacing: -3px;
+            letter-spacing: 0;
             line-height: 0.9;
             background: linear-gradient(135deg, #fff 60%, var(--accent-orange));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            overflow-wrap: anywhere;
         }
 
         .cursor {
@@ -244,22 +257,28 @@
         /* Main Layout Grid */
         .main-container {
             display: grid;
-            grid-template-columns: 58% 42%;
+            grid-template-columns: minmax(0, 1.38fr) minmax(0, 1fr);
             /* Golden ratio-ish split */
             gap: 40px;
             align-items: flex-start;
+        }
+
+        .report-section {
+            min-width: 0;
         }
 
         .left-col {
             display: flex;
             flex-direction: column;
             gap: 40px;
+            min-width: 0;
         }
 
         .right-col {
             display: flex;
             flex-direction: column;
             gap: 40px;
+            min-width: 0;
         }
 
         .section-header {
@@ -270,6 +289,8 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         /* Code Block Container */
@@ -281,6 +302,8 @@
             font-family: var(--font-mono);
             line-height: 1.6;
             box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.2);
+            max-width: 100%;
+            overflow-wrap: anywhere;
         }
 
         /* Chart Styling - Reference inspired */
@@ -292,7 +315,7 @@
             align-items: flex-end;
             justify-content: space-between;
             gap: 2px;
-            overflow: visible;
+            overflow: hidden;
         }
 
         .chart-svg {
@@ -368,6 +391,7 @@
             flex-direction: column;
             gap: 20px;
             width: 100%;
+            min-width: 0;
         }
 
         @media (max-width: 900px) {
@@ -386,6 +410,7 @@
             display: flex;
             gap: 20px;
             transition: border-color 0.2s;
+            min-width: 0;
         }
 
         .user-card:hover {
@@ -397,20 +422,34 @@
             height: 50px;
             border-radius: 8px;
             border: 1px solid #333;
+            flex: 0 0 50px;
+            overflow: hidden;
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+            position: relative;
+            z-index: 2;
         }
 
         .user-info h4 {
             margin: 0 0 5px;
             font-size: 1.1rem;
+            overflow-wrap: anywhere;
         }
 
         .tag {
+            display: inline-flex;
+            max-width: 100%;
             font-family: var(--font-mono);
             font-size: 0.75rem;
             padding: 2px 8px;
             border-radius: 4px;
             border: 1px solid;
             margin-right: 8px;
+            margin-bottom: 6px;
+            overflow-wrap: anywhere;
         }
 
         .tag.mbti {
@@ -435,6 +474,8 @@
             padding: 20px;
             border-left: 3px solid var(--accent-orange);
             background: rgba(255, 255, 255, 0.02);
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .topic-title {
@@ -442,6 +483,7 @@
             font-size: 1.5rem;
             margin-bottom: 12px;
             color: var(--accent-orange);
+            overflow-wrap: anywhere;
         }
 
         /* Quotes */
@@ -455,6 +497,7 @@
             background: rgba(30, 30, 30, 0.4);
             backdrop-filter: blur(5px);
             margin-bottom: 20px;
+            min-width: 0;
         }
 
         .quote-avatar {
@@ -474,6 +517,7 @@
 
         .quote-body {
             flex: 1;
+            min-width: 0;
         }
 
         .quote-text {
@@ -482,6 +526,7 @@
             color: var(--accent-orange);
             margin-bottom: 12px;
             line-height: 1.5;
+            overflow-wrap: anywhere;
         }
 
         .quote-author {
@@ -489,6 +534,7 @@
             font-size: 0.9rem;
             color: var(--accent-blue);
             margin-bottom: 8px;
+            overflow-wrap: anywhere;
         }
 
         /* Footer */
@@ -498,13 +544,250 @@
             border-top: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
+            gap: 18px;
             font-family: var(--font-mono);
             font-size: 0.9rem;
             color: var(--text-secondary);
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .footer-token {
             color: var(--accent-green);
+        }
+
+        .comment,
+        .hack-quality-item,
+        .hack-comment-box,
+        .hack-summary-section {
+            overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                padding: 34px 20px;
+            }
+
+            .main-container {
+                grid-template-columns: 1fr;
+                gap: 34px;
+            }
+
+            .chart-container {
+                height: 260px;
+            }
+        }
+
+        @media (max-width: 700px) {
+            body::before {
+                opacity: 0.12;
+            }
+
+            .layout {
+                padding: 28px 16px;
+            }
+
+            .top-nav {
+                margin-bottom: 28px;
+            }
+
+            .top-nav .nav-item:nth-of-type(n + 4),
+            .top-nav .user-avatar {
+                display: none;
+            }
+
+            .main-container {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+
+            .left-col,
+            .right-col {
+                display: contents;
+            }
+
+            .report-section,
+            .chart-section {
+                margin-bottom: 30px;
+            }
+
+            .hero-section {
+                order: 1;
+            }
+
+            .chart-section {
+                order: 2;
+            }
+
+            .quality-section {
+                order: 3;
+            }
+
+            .topics-section {
+                order: 4;
+            }
+
+            .titles-section {
+                order: 5;
+            }
+
+            .quotes-section {
+                order: 6;
+            }
+
+            .window {
+                border-radius: 10px;
+                margin-bottom: 30px;
+            }
+
+            .window-header {
+                padding: 10px 14px;
+            }
+
+            .code-block {
+                line-height: 1.55;
+            }
+
+            .section-header {
+                margin-bottom: 14px;
+                font-size: 0.92rem;
+            }
+
+            .topic-list,
+            .user-grid,
+            .quote-container {
+                gap: 14px;
+            }
+
+            .topic-title {
+                font-size: 1.18rem;
+            }
+
+            .stat-value {
+                font-size: 2.4rem;
+            }
+        }
+
+        @media (max-width: 560px) {
+            body {
+                font-size: 16px;
+            }
+
+            .layout {
+                padding: 22px 12px;
+            }
+
+            .top-nav {
+                gap: 8px;
+                margin-bottom: 26px;
+            }
+
+            .nav-item {
+                padding: 5px 8px;
+                font-size: 0.72rem;
+            }
+
+            h1 {
+                font-size: 2.15rem;
+                line-height: 1;
+                margin-bottom: 18px;
+            }
+
+            .code-block,
+            .user-card,
+            .quote-item,
+            .topic-item {
+                padding: 16px;
+            }
+
+            .chart-container {
+                height: 220px;
+                padding: 24px 4px 34px;
+                gap: 1px;
+            }
+
+            .activity-val-top {
+                display: none;
+            }
+
+            .activity-tick {
+                margin-top: 6px;
+                font-size: 0.48rem;
+                transform: none;
+                writing-mode: vertical-rl;
+            }
+
+            .activity-col:not(:nth-child(4n + 1)):not(:last-child) .activity-tick {
+                visibility: hidden;
+            }
+
+            .user-card,
+            .quote-item {
+                gap: 14px;
+            }
+
+            .user-card {
+                align-items: flex-start;
+            }
+
+            .user-avatar,
+            .quote-avatar {
+                width: 38px;
+                height: 38px;
+                flex-basis: 38px;
+            }
+
+            .quote-text {
+                font-size: 1rem;
+            }
+
+            .user-card img[alt=""] {
+                opacity: 0.07 !important;
+                width: 46% !important;
+            }
+
+            footer {
+                flex-direction: column;
+                margin-top: 44px;
+                padding-top: 24px;
+                font-size: 0.78rem;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .layout {
+                padding: 18px 10px;
+            }
+
+            .top-nav {
+                gap: 6px;
+            }
+
+            .nav-item {
+                font-size: 0.68rem;
+                padding: 4px 6px;
+            }
+
+            h1 {
+                font-size: 1.85rem;
+            }
+
+            .code-block,
+            .user-card,
+            .quote-item,
+            .topic-item {
+                padding: 12px;
+            }
+
+            .chart-container {
+                height: 190px;
+                padding-bottom: 28px;
+            }
+
+            .activity-tick {
+                font-size: 0.42rem;
+            }
         }
     </style>
 </head>
@@ -526,7 +809,7 @@
         <div class="main-container">
             <!-- Left Side: Analytical Data -->
             <div class="left-col">
-                <div>
+                <div class="report-section hero-section">
                     <div class="comment">// main.ts</div>
                     <h1><span class="prompt">&gt;</span> Group Activity<br>Insights<span class="cursor"></span></h1>
                     <div class="comment" style="margin-bottom: 30px;">// Report for {{current_date}}</div>
@@ -544,7 +827,7 @@
                 </div>
 
                 {% if chat_quality_html %}
-                <div>
+                <div class="report-section quality-section">
                     <div class="section-header">
                         <span class="prompt">$</span> analyze --quality
                     </div>
@@ -554,7 +837,7 @@
  
                 <!-- Topics moved into left column -->
                 {% if topics_html %}
-                <div>
+                <div class="report-section topics-section">
                     <div class="section-header">
                         <span class="prompt">$</span> ls ./topics
                     </div>
@@ -567,7 +850,7 @@
  
             <!-- Right Side: Visuals & Members -->
             <div class="right-col">
-                <div class="window">
+                <div class="window report-section chart-section">
                     <div class="window-header">
                         <div class="traffic-lights">
                             <div class="light red"></div>
@@ -583,7 +866,7 @@
  
                 <!-- User Titles grouped here -->
                 {% if titles_html %}
-                <div style="margin-top: 20px;">
+                <div class="report-section titles-section" style="margin-top: 20px;">
                     <div class="section-header">
                         <span class="prompt">$</span> cat ./user_titles
                     </div>
@@ -595,7 +878,7 @@
  
                 <!-- Golden Quotes grouped here -->
                 {% if quotes_html %}
-                <div style="margin-top: 20px;">
+                <div class="report-section quotes-section" style="margin-top: 20px;">
                     <div class="section-header">
                         <span class="prompt">$</span> grep -r "golden_quotes"
                     </div>
