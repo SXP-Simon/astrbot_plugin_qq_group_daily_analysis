@@ -330,6 +330,7 @@ class ReportGenerator(IReportGenerator):
         html_render_func,
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -352,6 +353,7 @@ class ReportGenerator(IReportGenerator):
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=avatar_cache_namespace,
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
@@ -487,6 +489,7 @@ class ReportGenerator(IReportGenerator):
         group_id: str,
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -530,6 +533,7 @@ class ReportGenerator(IReportGenerator):
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=avatar_cache_namespace,
             )
             logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -671,6 +675,7 @@ class ReportGenerator(IReportGenerator):
         chart_template: str = "activity_chart.html",
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -686,7 +691,11 @@ class ReportGenerator(IReportGenerator):
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
             processed_detail = await self._render_mentions(
-                topic.detail, avatar_url_getter, nickname_getter, user_analysis
+                topic.detail,
+                avatar_url_getter,
+                nickname_getter,
+                user_analysis,
+                avatar_cache_namespace,
             )
             topics_list.append(
                 {
@@ -710,7 +719,7 @@ class ReportGenerator(IReportGenerator):
         for title in user_titles[:max_user_titles]:
             # 获取用户头像
             avatar_data = await self._get_user_avatar(
-                str(title.user_id), avatar_url_getter
+                str(title.user_id), avatar_url_getter, avatar_cache_namespace
             )
             profile_info = self._resolve_profile_info(
                 title.mbti, profile_mode, profile_mapping_overrides
@@ -736,14 +745,20 @@ class ReportGenerator(IReportGenerator):
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             avatar_url = (
                 await self._get_user_avatar(
-                    str(golden_quote.user_id), avatar_url_getter
+                    str(golden_quote.user_id),
+                    avatar_url_getter,
+                    avatar_cache_namespace,
                 )
                 if golden_quote.user_id
                 else None
             )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                golden_quote.reason, avatar_url_getter, nickname_getter, user_analysis
+                golden_quote.reason,
+                avatar_url_getter,
+                nickname_getter,
+                user_analysis,
+                avatar_cache_namespace,
             )
             quotes_list.append(
                 {
@@ -833,6 +848,7 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
+        avatar_cache_namespace: str | None = None,
     ) -> Markup:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
@@ -848,7 +864,7 @@ class ReportGenerator(IReportGenerator):
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
             url = await self._get_user_avatar(
-                uid, avatar_url_getter
+                uid, avatar_url_getter, avatar_cache_namespace
             )  # 内部已有缓存，无需顶层并发获取
 
             name = None
@@ -926,14 +942,27 @@ class ReportGenerator(IReportGenerator):
         # Telegram file URL: .../file/bot<token>/<file_path>
         return re.sub(r"/bot[^/]+/", "/bot<redacted>/", url)
 
-    async def _get_user_avatar(self, avatar_id: str, avatar_url_getter=None) -> str:
+    def _get_avatar_cache_key(
+        self, avatar_id: str, avatar_cache_namespace: str | None = None
+    ) -> str:
+        """生成头像缓存键，避免不同平台的同一数字 ID 互相污染。"""
+        namespace = str(avatar_cache_namespace or "legacy").strip() or "legacy"
+        return f"{namespace}:{avatar_id}"
+
+    async def _get_user_avatar(
+        self,
+        avatar_id: str,
+        avatar_url_getter=None,
+        avatar_cache_namespace: str | None = None,
+    ) -> str:
         """
         获取用户头像的 Base64 Data URI。
         使用磁盘缓存，支持跨任务复用。获取失败时不缓存结果，以便后续请求重试。
         """
+        cache_key = self._get_avatar_cache_key(avatar_id, avatar_cache_namespace)
         # 1. 检查缓存 (仅包含成功的头像数据)
-        if avatar_id in self._avatar_cache:
-            data = self._avatar_cache[avatar_id]
+        if cache_key in self._avatar_cache:
+            data = self._avatar_cache[cache_key]
             if isinstance(data, str):
                 return data
             return str(data)
@@ -949,7 +978,7 @@ class ReportGenerator(IReportGenerator):
         # 3. 获取成功：转换并缓存
         avatar = self._b64_with_mime(avatar_bytes)
         if avatar:
-            self._avatar_cache.set(avatar_id, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            self._avatar_cache.set(cache_key, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
             return avatar
 
         # 最终兜底
@@ -1007,7 +1036,11 @@ class ReportGenerator(IReportGenerator):
                     logger.warning(f"使用 custom avatar_url_getter 获取头像失败: {e}")
 
             if not avatar_url:
-                if user_id.isdigit() and 5 <= len(user_id) <= 12:
+                if (
+                    avatar_url_getter is None
+                    and user_id.isdigit()
+                    and 5 <= len(user_id) <= 12
+                ):
                     # 强制使用 spec=40
                     avatar_url = (
                         f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
