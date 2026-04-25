@@ -1014,16 +1014,12 @@ class ReportGenerator(IReportGenerator):
 
     @staticmethod
     def _build_avatar_ref(avatar_key: str | None, avatar_url: str) -> str:
-        """根据平台+用户键生成稳定头像引用；缺少键时回退到内容 hash。"""
+        """根据稳定输入生成不暴露平台或用户 ID 的头像引用。"""
         if avatar_key:
-            safe_key = re.sub(r"[^0-9A-Za-z_-]+", "-", avatar_key.strip()).strip("-")
-            if safe_key:
-                if len(safe_key) > 96:
-                    digest = hashlib.sha256(avatar_key.encode("utf-8")).hexdigest()[:16]
-                    safe_key = f"{safe_key[:79]}-{digest}"
-                return f"avatar-{safe_key}"
+            digest = hashlib.sha256(avatar_key.encode("utf-8")).hexdigest()[:24]
+            return f"avatar-{digest}"
 
-        digest = hashlib.sha256(avatar_url.encode("utf-8")).hexdigest()[:16]
+        digest = hashlib.sha256(avatar_url.encode("utf-8")).hexdigest()[:24]
         return f"avatar-{digest}"
 
     @staticmethod
