@@ -605,6 +605,7 @@ class GroupDailyAnalysis(Star):
                 self.html_render,
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=platform_id,
             )
 
             if image_url:
@@ -626,6 +627,7 @@ class GroupDailyAnalysis(Star):
                 group_id,
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=platform_id,
             )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
