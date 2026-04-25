@@ -816,6 +816,10 @@ class ReportGenerator(IReportGenerator):
 
         # 准备最终渲染数据
         render_data = {
+            "t2i_font_source": self.config_manager.get_t2i_font_source(),
+            "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
+            "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
+            "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,

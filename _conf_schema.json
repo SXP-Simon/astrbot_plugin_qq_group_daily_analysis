@@ -215,6 +215,37 @@
                     "step": 5000
                 },
                 "hint": "回退尝试通常针对复杂页面，建议设置更长的超时时间（如 100000ms+）。"
+            },
+            "t2i_font_source": {
+                "type": "string",
+                "description": "t2i 渲染环境切换",
+                "options": ["Mainland", "Overseas"],
+                "default": "Overseas",
+                "hint": "切换环境会自动应用下方对应的镜像站地址、语言标识(zh-CN/zh-Hant)及字体优先级。"
+            },
+            "t2i_mainland_google_fonts": {
+                "type": "string",
+                "description": "[国内] Google Fonts 镜像",
+                "default": "https://fonts.loli.net",
+                "hint": "国内环境下推荐使用 loli.net 或其他可访问镜像。"
+            },
+            "t2i_mainland_gstatic": {
+                "type": "string",
+                "description": "[国内] Gstatic 镜像",
+                "default": "https://gstatic.loli.net",
+                "hint": "国内环境下推荐使用 loli.net 或其他可访问镜像。"
+            },
+            "t2i_overseas_google_fonts": {
+                "type": "string",
+                "description": "[国外] Google Fonts 官方",
+                "default": "https://fonts.googleapis.com",
+                "hint": "海外环境通常直接使用官方地址即可。"
+            },
+            "t2i_overseas_gstatic": {
+                "type": "string",
+                "description": "[国外] Gstatic 官方",
+                "default": "https://fonts.gstatic.com",
+                "hint": "海外环境通常直接使用官方地址即可。"
             }
         }
     },

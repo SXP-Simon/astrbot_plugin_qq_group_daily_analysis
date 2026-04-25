@@ -34,3 +34,6 @@ scripts/output/mock_report_test_group_mock_*.pdf
 astrbot-lark-group-daily-analysis-main/**
 .ace-tool/
 debug_atri.html
+data/test/avatar/cache.db
+test_mainland.html
+test_overseas.html

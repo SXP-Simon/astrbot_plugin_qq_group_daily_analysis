@@ -1,4 +1,4 @@
-    <style>
+﻿    <style>
         :root {
             --bg-deep: #0a0a0a;
             --bg-panel: #141414;
@@ -16,7 +16,7 @@
             --grid-color: rgba(255, 255, 255, 0.03);
 
             --font-mono: 'JetBrains Mono', monospace;
-            --font-body: 'Inter', 'Noto Sans TC', 'Noto Sans SC', 'Microsoft JhengHei', 'PingFang TC', sans-serif;
+            --font-body: 'Inter', {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', sans-serif;
         }
 
         * {
@@ -776,3 +776,7 @@
             }
         }
     </style>
+
+
+
+

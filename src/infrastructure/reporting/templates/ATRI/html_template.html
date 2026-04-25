@@ -1,5 +1,5 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
@@ -8,19 +8,19 @@
     <style>
         @font-face {
             font-family: 'LXGW WenKai';
-            src: url('https://tc.ciallo.ccwu.cc/file/1775130743963_1774880718993_LXGWWenKai-Regular.woff2') format('woff2');
+            src: url('{{ t2i_atri_font_mirror }}/file/1775130743963_1774880718993_LXGWWenKai-Regular.woff2') format('woff2');
             font-weight: 400;
         }
 
         @font-face {
             font-family: 'LXGW WenKai';
-            src: url('https://tc.ciallo.ccwu.cc/file/1775130739223_1774880715380_LXGWWenKai-Medium.woff2') format('woff2');
+            src: url('{{ t2i_atri_font_mirror }}/file/1775130739223_1774880715380_LXGWWenKai-Medium.woff2') format('woff2');
             font-weight: 600;
         }
 
         @font-face {
             font-family: 'LXGW WenKai Mono';
-            src: url('https://tc.ciallo.ccwu.cc/file/1775130738049_1774880717027_LXGWWenKaiMono-Regular.woff2') format('woff2');
+            src: url('{{ t2i_atri_font_mirror }}/file/1775130738049_1774880717027_LXGWWenKaiMono-Regular.woff2') format('woff2');
             font-weight: 400;
         }
 
@@ -55,7 +55,7 @@
         body {
             margin: 0;
                 padding: clamp(12px, 2.4vw, 28px);
-            font-family: 'LXGW WenKai', 'Microsoft YaHei', sans-serif;
+            font-family: 'LXGW WenKai', {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft YaHei', sans-serif;
             color: var(--text-main);
             background: transparent;
         }
@@ -74,7 +74,7 @@
                 radial-gradient(circle at 15% 12%, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0) 26%),
                 linear-gradient(rgba(117, 193, 240, 0.08) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(117, 193, 240, 0.08) 1px, transparent 1px),
-                url('https://tc.ciallo.ccwu.cc/file/1775130588385_1774881257527_bg1.webp');
+                url('{{ t2i_atri_font_mirror }}/file/1775130588385_1774881257527_bg1.webp');
             background-size: auto, auto, auto, 26px 26px, 26px 26px, cover;
             background-position: center, center, center, center, center, center;
             border: 1px solid var(--border);
@@ -2667,18 +2667,18 @@
         <div class="float-sticker sticker-moon-2"><svg class="icon-svg">
                 <use href="#icon-moon-star"></use>
             </svg></div>
-        <img class="deco-character" src="https://tc.ciallo.ccwu.cc/file/1775130613783_1774881310058_atri3.webp"
+        <img class="deco-character" src="{{ t2i_atri_font_mirror }}/file/1775130613783_1774881310058_atri3.webp"
             alt="ATRI decor">
 
         <div class="inner">
             <header class="header">
                 <div class="header-bg-layer">
                     <div class="header-bg-carousel" aria-hidden="true">
-                        <div class="header-bg-carousel__slide" style="background-image: url('https://tc.ciallo.ccwu.cc/file/1775138337740_ev002al.webp');"></div>
-                        <div class="header-bg-carousel__slide" style="background-image: url('https://tc.ciallo.ccwu.cc/file/1775138345152_ev004bl.webp');"></div>
-                        <div class="header-bg-carousel__slide" style="background-image: url('https://tc.ciallo.ccwu.cc/file/1775138343182_ev008cl.webp');"></div>
-                        <div class="header-bg-carousel__slide" style="background-image: url('https://tc.ciallo.ccwu.cc/file/1775138341839_ev007bl.webp');"></div>
-                        <div class="header-bg-carousel__slide" style="background-image: url('https://tc.ciallo.ccwu.cc/file/1775138344406_title_base2.webp');"></div>
+                        <div class="header-bg-carousel__slide" style="background-image: url('{{ t2i_atri_font_mirror }}/file/1775138337740_ev002al.webp');"></div>
+                        <div class="header-bg-carousel__slide" style="background-image: url('{{ t2i_atri_font_mirror }}/file/1775138345152_ev004bl.webp');"></div>
+                        <div class="header-bg-carousel__slide" style="background-image: url('{{ t2i_atri_font_mirror }}/file/1775138343182_ev008cl.webp');"></div>
+                        <div class="header-bg-carousel__slide" style="background-image: url('{{ t2i_atri_font_mirror }}/file/1775138341839_ev007bl.webp');"></div>
+                        <div class="header-bg-carousel__slide" style="background-image: url('{{ t2i_atri_font_mirror }}/file/1775138344406_title_base2.webp');"></div>
                         <div class="header-bg-carousel__overlay"></div>
                     </div>
                 </div>
@@ -2705,7 +2705,7 @@
                             </svg>
                         </div>
                         Overview
-                        <img class="hero-kawaii" src="https://tc.ciallo.ccwu.cc/file/1775132815504_1774881268554_可爱.gif"
+                        <img class="hero-kawaii" src="{{ t2i_atri_font_mirror }}/file/1775132815504_1774881268554_可爱.gif"
                             alt="cute icon">
                     </div>
                     <h2 class="hero-title">来看看今天都发生了什么吧！</h2>
@@ -2714,7 +2714,7 @@
                         位群友浮出水面参与了互动哦！我都仔细做好了备忘录哦，哼哼！
                     </div>
                     <img class="hero-character"
-                        src="https://tc.ciallo.ccwu.cc/file/1775130626446_1774881312214_atri1.webp" alt="ATRI main">
+                        src="{{ t2i_atri_font_mirror }}/file/1775130626446_1774881312214_atri1.webp" alt="ATRI main">
                 </div>
 
                 <div class="peak-card glass-card">
@@ -2728,7 +2728,7 @@
                             </div>
                         </div>
                     </div>
-                    <img class="peak-image" src="https://tc.ciallo.ccwu.cc/file/1775130623112_1774881319340_atri4.webp"
+                    <img class="peak-image" src="{{ t2i_atri_font_mirror }}/file/1775130623112_1774881319340_atri4.webp"
                         alt="ATRI peak">
                 </div>
             </section>
@@ -2780,13 +2780,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">心跳潮汐<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132804506_1774881263342_观察.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132804506_1774881263342_观察.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">一整天的心跳节拍，由亚托莉为您完美记录</div>
                         </div>
                     </div>
                     <div class="section-badge">TIDE CHART <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132817115_1774881269400_可爱-1.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132817115_1774881269400_可爱-1.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="html-slot">{{ hourly_chart_html | safe }}</div>
@@ -2800,13 +2800,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">高亮记忆碎片<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132805081_1774881262835_疑惑.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132805081_1774881262835_疑惑.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">亚托莉捕获的最亮眼的记忆碎片！</div>
                         </div>
                     </div>
                     <div class="section-badge">TOPIC BOARD <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132804506_1774881263342_观察.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132804506_1774881263342_观察.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="html-slot">{{ topics_html | safe }}</div>
@@ -2820,13 +2820,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">神人名片颁发<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132813334_1774881267181_得意.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132813334_1774881267181_得意.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">颁发给各位的高性能称号！</div>
                         </div>
                     </div>
                     <div class="section-badge">SPOTLIGHT <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132808652_1774881267385_得意-1.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132808652_1774881267385_得意-1.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="html-slot title-grid">{{ titles_html | safe }}</div>
@@ -2840,13 +2840,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">亚托莉的宝藏瓶<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132814629_1774881270686_爱心.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132814629_1774881270686_爱心.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">亚托莉偷偷记在小本子上的宝藏名言！</div>
                         </div>
                     </div>
                     <div class="section-badge">PRECIOUS WORDS <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132805485_1774881263748_可爱-3.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132805485_1774881263748_可爱-3.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="html-slot">{{ quotes_html | safe }}</div>
@@ -2861,13 +2861,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">亚托莉观测报告<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132817115_1774881269400_可爱-1.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132817115_1774881269400_可爱-1.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">来自高性能亚托莉的每日特别观测报告！</div>
                         </div>
                     </div>
                     <div class="section-badge">GROUP VIBE <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132804506_1774881263342_观察.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132804506_1774881263342_观察.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="html-slot">{{ chat_quality_html | safe }}</div>
@@ -2882,13 +2882,13 @@
                             </svg></div>
                         <div>
                             <h3 class="section-title">能量解析雷达<img class="section-kawaii"
-                                    src="https://tc.ciallo.ccwu.cc/file/1775132809943_1774881264350_睡觉.gif"
+                                    src="{{ t2i_atri_font_mirror }}/file/1775132809943_1774881264350_睡觉.gif"
                                     alt="kawaii icon"></h3>
                             <div class="section-sub">维持亚托莉运行与心跳的能量消耗~</div>
                         </div>
                     </div>
                     <div class="section-badge">ENERGY COST <img class="badge-kawaii"
-                            src="https://tc.ciallo.ccwu.cc/file/1775132811492_1774881264336_不要.gif" alt="badge icon">
+                            src="{{ t2i_atri_font_mirror }}/file/1775132811492_1774881264336_不要.gif" alt="badge icon">
                     </div>
                 </div>
                 <div class="token-grid">
@@ -3096,3 +3096,6 @@
 </body>
 
 </html>
+
+
+

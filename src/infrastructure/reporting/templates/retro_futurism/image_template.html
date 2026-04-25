@@ -1,13 +1,13 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <title>Retro Futurism Daily Export</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=Oswald:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap"
         rel="stylesheet">
     <style>
         @font-face {
@@ -50,7 +50,7 @@
             /* Fonts */
             --font-display: "Oswald", "Oswald-Fallback", Impact, sans-serif;
             --font-mono: "JetBrains Mono", monospace;
-            --font-body: "Noto Sans SC", sans-serif;
+            --font-body: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, sans-serif;
         }
 
         * {
@@ -841,3 +841,6 @@
 </body>
 
 </html>
+
+
+

@@ -1,4 +1,4 @@
-<div class="chart-section-horizontal">
+﻿<div class="chart-section-horizontal">
     {% for item in chart_data %}
     {% set bar_percentage = item.percentage | float %}
     {% if bar_percentage < 0 %}
@@ -38,3 +38,4 @@
     </div>
     {% endfor %}
 </div>
+

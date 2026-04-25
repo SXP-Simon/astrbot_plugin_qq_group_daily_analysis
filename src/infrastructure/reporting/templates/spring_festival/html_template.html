@@ -1,14 +1,14 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <title>春节特供 · 群聊日报</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <!-- 引入书法字体和节日字体 -->
     <link
-        href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;700&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=Ma+Shan+Zheng&family=ZCOOL+XiaoWei&family=Noto+Serif+TC:wght@400;700&family=Noto+Serif+SC:wght@400;700&display=swap"
         rel="stylesheet">
     <style>
         :root {
@@ -24,7 +24,7 @@
 
             --font-calligraphy: 'Ma Shan Zheng', cursive;
             --font-heading: 'ZCOOL XiaoWei', serif;
-            --font-body: 'Noto Serif SC', serif;
+            --font-body: {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
         }
 
         * {
@@ -688,3 +688,6 @@
 </body>
 
 </html>
+
+
+
