@@ -1,12 +1,14 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>群聊日常分析报告</title>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Serif+SC:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap"
         rel="stylesheet">
     <style>
         :root {
@@ -27,7 +29,7 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Inter', {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: var(--bg-body);
             color: var(--text-main);
             line-height: 1.6;
@@ -55,7 +57,7 @@
         }
 
         .header h1 {
-            font-family: 'Noto Serif SC', serif;
+            font-family: {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
             font-size: 2.4em;
             font-weight: 700;
             margin-bottom: 12px;
@@ -85,7 +87,7 @@
         }
 
         .section-title {
-            font-family: 'Noto Serif SC', serif;
+            font-family: {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
             font-size: 1.5em;
             font-weight: 600;
             margin-bottom: 25px;
@@ -157,7 +159,7 @@
         }
 
         .active-period .time {
-            font-family: 'Noto Serif SC', serif;
+            font-family: {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
             font-size: 2.2em;
             font-weight: 400;
             margin-bottom: 6px;
@@ -401,7 +403,7 @@
         }
 
         .quote-content {
-            font-family: 'Noto Serif SC', serif;
+            font-family: {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
             font-size: 1.1em;
             color: var(--text-main);
             font-weight: 500;
@@ -539,3 +541,6 @@
 </body>
 
 </html>
+
+
+

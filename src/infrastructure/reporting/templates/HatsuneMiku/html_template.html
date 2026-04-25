@@ -1,12 +1,14 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>群聊日常分析看板 · {{current_date}}</title>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap"
         rel="stylesheet">
     <link
         href="https://cdn.jsdelivr.net/npm/@proj-airi/font-cjkfonts-allseto@0.9.0/dist/index.css"
@@ -28,8 +30,8 @@
             --accent-dark: #2C3E50;
 
             --radius: 12px;
-            --font-main: 'Noto Sans TC', 'Noto Sans SC', 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
-            --font-title: 'cjkfonts AllSeto', 'Noto Sans TC', 'Noto Sans SC', 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-main: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-title: 'cjkfonts AllSeto', {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
             --font-num: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
 
@@ -855,3 +857,7 @@
 </body>
 
 </html>
+
+
+
+
