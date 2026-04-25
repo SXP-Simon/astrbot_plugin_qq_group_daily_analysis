@@ -1,15 +1,15 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>五彩斑斓的一天，来看看群里发生了什么吧！ · {{current_date}}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <!-- 引入手写字体和正文阅读字体 -->
     <link
-        href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=ZCOOL+KuaiLe&family=Long+Cang&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Patrick+Hand&display=swap"
         rel="stylesheet">
 
     <style>
@@ -42,7 +42,7 @@
             /* 标题字体 */
             --font-hand: 'Patrick Hand', "KaiTi", "STKaiti", serif;
             /* 手写体 */
-            --font-body: 'Noto Sans SC', sans-serif;
+            --font-body: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, sans-serif;
             /* 正文体 */
         }
 
@@ -1193,3 +1193,6 @@
 </body>
 
 </html>
+
+
+

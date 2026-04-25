@@ -125,6 +125,21 @@ class MockConfigManager:
     def get_html_base_url(self) -> str:
         return ""
 
+    def get_t2i_font_source(self) -> str:
+        return "Overseas"
+
+    def get_t2i_google_fonts_mirror(self) -> str:
+        return "https://fonts.googleapis.com"
+
+    def get_t2i_gstatic_mirror(self) -> str:
+        return "https://fonts.gstatic.com"
+
+    def get_t2i_atri_font_mirror(self) -> str:
+        return "https://tc.ciallo.ccwu.cc"
+
+    def get_t2i_rendering_strategies(self) -> list:
+        return []
+
 
 async def mock_get_user_avatar(user_id: str) -> str:
     # Return a known avatar URL for testing

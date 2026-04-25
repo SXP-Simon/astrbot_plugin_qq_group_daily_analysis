@@ -1,12 +1,15 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
     <meta charset="UTF-8">
     <title>Simple Report</title>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
+    <link href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: sans-serif;
+            font-family: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, sans-serif;
             padding: 20px;
         }
 
@@ -61,3 +64,6 @@
 </body>
 
 </html>
+
+
+

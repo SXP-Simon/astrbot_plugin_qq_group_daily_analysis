@@ -225,6 +225,32 @@ class ConfigManager:
             },
         ]
 
+    def get_t2i_font_source(self) -> str:
+        """获取 T2I 字体源 (Mainland/Overseas)"""
+        return self._get_group("t2i_rendering").get("t2i_font_source", "Overseas")
+
+    def get_t2i_google_fonts_mirror(self) -> str:
+        """根据环境选择获取 Google Fonts 镜像地址"""
+        source = self.get_t2i_font_source()
+        group = self._get_group("t2i_rendering")
+        if source == "Mainland":
+            return group.get("t2i_mainland_google_fonts", "https://fonts.loli.net")
+        return group.get("t2i_overseas_google_fonts", "https://fonts.googleapis.com")
+
+    def get_t2i_gstatic_mirror(self) -> str:
+        """根据环境选择获取 Gstatic 镜像地址"""
+        source = self.get_t2i_font_source()
+        group = self._get_group("t2i_rendering")
+        if source == "Mainland":
+            return group.get("t2i_mainland_gstatic", "https://gstatic.loli.net")
+        return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
+
+    def get_t2i_atri_font_mirror(self) -> str:
+        """获取 ATRI 主题字体镜像地址 (目前保持不变，如有需要可后续添加 Mainland/Overseas 配置)"""
+        return self._get_group("t2i_rendering").get(
+            "t2i_atri_font_mirror", "https://tc.ciallo.ccwu.cc"
+        )
+
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
         return self._get_group("llm").get("llm_provider_id", "")

@@ -1,4 +1,4 @@
-{% if quotes %}
+﻿{% if quotes %}
     {% for quote in quotes %}
     <div class="miku-quote-row" style="margin-bottom: 25px; display: flex; flex-direction: column; align-items: {% if loop.index0 is even %}flex-start{% else %}flex-end{% endif %};">
         <div class="miku-quote-wrap" style="display: flex; gap: 15px; max-width: 85%; {% if loop.index0 is odd %}flex-direction: row-reverse;{% endif %}">
@@ -27,3 +27,4 @@
     </div>
     {% endfor %}
 {% endif %}
+

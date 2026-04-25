@@ -1,4 +1,4 @@
-<div class="chart-container">
+﻿<div class="chart-container">
     <div style="display: flex; align-items: stretch; height: 220px; gap: 5px; padding: 20px 0 10px;">
         {% for hour_data in chart_data %}
         {% set ratio = loop.index0 / ((chart_data|length - 1) if (chart_data|length - 1) > 0 else 1) %}
