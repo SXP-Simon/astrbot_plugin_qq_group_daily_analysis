@@ -221,29 +221,29 @@
                 "description": "t2i 渲染环境切换",
                 "options": ["Mainland", "Overseas"],
                 "default": "Overseas",
-                "hint": "切换环境会自动应用下方对应的镜像站地址、语言标识(zh-CN/zh-Hant)及字体优先级。"
+                "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文）"
             },
             "t2i_mainland_google_fonts": {
                 "type": "string",
-                "description": "[国内] Google Fonts 镜像",
+                "description": "[内地] Google Fonts 镜像",
                 "default": "https://fonts.loli.net",
-                "hint": "国内环境下推荐使用 loli.net 或其他可访问镜像。"
+                "hint": "内地环境下推荐使用 loli.net 或其他可访问镜像。"
             },
             "t2i_mainland_gstatic": {
                 "type": "string",
-                "description": "[国内] Gstatic 镜像",
+                "description": "[内地] Gstatic 镜像",
                 "default": "https://gstatic.loli.net",
-                "hint": "国内环境下推荐使用 loli.net 或其他可访问镜像。"
+                "hint": "内地环境下推荐使用 loli.net 或其他可访问镜像。"
             },
             "t2i_overseas_google_fonts": {
                 "type": "string",
-                "description": "[国外] Google Fonts 官方",
+                "description": "[海外] Google Fonts 官方",
                 "default": "https://fonts.googleapis.com",
                 "hint": "海外环境通常直接使用官方地址即可。"
             },
             "t2i_overseas_gstatic": {
                 "type": "string",
-                "description": "[国外] Gstatic 官方",
+                "description": "[海外] Gstatic 官方",
                 "default": "https://fonts.gstatic.com",
                 "hint": "海外环境通常直接使用官方地址即可。"
             }
