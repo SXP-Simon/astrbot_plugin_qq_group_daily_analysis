@@ -5,6 +5,7 @@
 
 import asyncio
 import base64
+import hashlib
 import html
 import json
 import os
@@ -28,6 +29,10 @@ from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
+TRANSPARENT_IMAGE_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg=="
+)
 
 DEFAULT_PROFILE_MAPPING = {
     "mbti": {
@@ -360,6 +365,11 @@ class ReportGenerator(IReportGenerator):
             html_content = self.html_templates.render_template(
                 "image_template.html", **render_payload
             )
+            html_content = self._reuse_avatars_in_final_html(
+                html_content,
+                render_payload.get("avatar_reuse_registry", {}),
+                render_payload.get("avatar_reuse_aliases", {}),
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
@@ -543,6 +553,11 @@ class ReportGenerator(IReportGenerator):
                 html_content = self.html_templates.render_template(
                     "html_template.html", **render_data
                 )
+                html_content = self._reuse_avatars_in_final_html(
+                    html_content,
+                    render_data.get("avatar_reuse_registry", {}),
+                    render_data.get("avatar_reuse_aliases", {}),
+                )
                 logger.info("使用 html_template.html 渲染成功")
             except Exception as e:
                 logger.warning(
@@ -550,6 +565,11 @@ class ReportGenerator(IReportGenerator):
                 )
                 html_content = self.html_templates.render_template(
                     "image_template.html", **render_data
+                )
+                html_content = self._reuse_avatars_in_final_html(
+                    html_content,
+                    render_data.get("avatar_reuse_registry", {}),
+                    render_data.get("avatar_reuse_aliases", {}),
                 )
                 logger.info("使用 image_template.html 渲染成功")
 
@@ -687,6 +707,8 @@ class ReportGenerator(IReportGenerator):
         max_topics = self.config_manager.get_max_topics()
         topics_list = []
         user_analysis = analysis_result.get("user_analysis")
+        avatar_reuse_registry: dict[str, str] = {}
+        avatar_reuse_aliases: dict[str, str] = {}
 
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
@@ -696,6 +718,8 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter,
                 user_analysis,
                 avatar_cache_namespace,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
             )
             topics_list.append(
                 {
@@ -717,9 +741,16 @@ class ReportGenerator(IReportGenerator):
         profile_mode = self.config_manager.get_profile_display_mode()
         profile_mapping_overrides = self._get_profile_mapping_overrides()
         for title in user_titles[:max_user_titles]:
+            user_id = str(title.user_id)
             # 获取用户头像
             avatar_data = await self._get_user_avatar(
-                str(title.user_id), avatar_url_getter, avatar_cache_namespace
+                user_id, avatar_url_getter, avatar_cache_namespace
+            )
+            self._register_reusable_avatar(
+                avatar_data,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(user_id, avatar_cache_namespace),
             )
             profile_info = self._resolve_profile_info(
                 title.mbti, profile_mode, profile_mapping_overrides
@@ -743,15 +774,25 @@ class ReportGenerator(IReportGenerator):
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
+            quote_user_id = str(golden_quote.user_id) if golden_quote.user_id else None
             avatar_url = (
                 await self._get_user_avatar(
-                    str(golden_quote.user_id),
+                    quote_user_id,
                     avatar_url_getter,
                     avatar_cache_namespace,
                 )
-                if golden_quote.user_id
+                if quote_user_id
                 else None
             )
+            if quote_user_id:
+                self._register_reusable_avatar(
+                    avatar_url,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    avatar_key=self._get_avatar_cache_key(
+                        quote_user_id, avatar_cache_namespace
+                    ),
+                )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
                 golden_quote.reason,
@@ -759,6 +800,8 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter,
                 user_analysis,
                 avatar_cache_namespace,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
             )
             quotes_list.append(
                 {
@@ -841,6 +884,8 @@ class ReportGenerator(IReportGenerator):
             "completion_tokens": stats.token_usage.completion_tokens
             if stats.token_usage.completion_tokens
             else 0,
+            "avatar_reuse_registry": avatar_reuse_registry,
+            "avatar_reuse_aliases": avatar_reuse_aliases,
         }
 
         logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
@@ -853,6 +898,8 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         user_analysis: dict | None = None,
         avatar_cache_namespace: str | None = None,
+        avatar_reuse_registry: dict[str, str] | None = None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
     ) -> Markup:
         """
         处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
@@ -905,9 +952,28 @@ class ReportGenerator(IReportGenerator):
                 else str(uid)
             )
 
+            avatar_ref = self._register_reusable_avatar(
+                final_url,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(uid, avatar_cache_namespace),
+            )
+            if avatar_ref:
+                avatar_html = (
+                    f'<span class="user-capsule-avatar" '
+                    f'data-avatar-ref="{html.escape(avatar_ref, quote=True)}" '
+                    f'style="{img_style}background-size:cover;background-position:center;'
+                    'background-repeat:no-repeat;flex-shrink:0;"></span>'
+                )
+            else:
+                avatar_html = (
+                    f'<img src="{html.escape(final_url, quote=True)}" '
+                    f'style="{img_style}">'
+                )
+
             return Markup(
                 f'<span class="user-capsule" style="{capsule_style}">'
-                f'<img src="{html.escape(final_url, quote=True)}" style="{img_style}">'
+                f"{avatar_html}"
                 f'<span style="{name_style}">{html.escape(final_name)}</span>'
                 "</span>"
             )
@@ -945,6 +1011,127 @@ class ReportGenerator(IReportGenerator):
             return ""
         # Telegram file URL: .../file/bot<token>/<file_path>
         return re.sub(r"/bot[^/]+/", "/bot<redacted>/", url)
+
+    @staticmethod
+    def _build_avatar_ref(avatar_key: str | None, avatar_url: str) -> str:
+        """根据稳定输入生成不暴露平台或用户 ID 的头像引用。"""
+        if avatar_key:
+            digest = hashlib.sha256(avatar_key.encode("utf-8")).hexdigest()[:24]
+            return f"avatar-{digest}"
+
+        digest = hashlib.sha256(avatar_url.encode("utf-8")).hexdigest()[:24]
+        return f"avatar-{digest}"
+
+    @staticmethod
+    def _register_reusable_avatar(
+        avatar_url: str | None,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
+        avatar_key: str | None = None,
+    ) -> str | None:
+        """将 Data URI 头像登记为可复用资源，并返回短引用 ID。"""
+        if not avatar_url or avatar_reuse_registry is None:
+            return None
+        if not avatar_url.startswith("data:image/"):
+            return None
+
+        if avatar_reuse_aliases and avatar_url in avatar_reuse_aliases:
+            return avatar_reuse_aliases[avatar_url]
+
+        ref = ReportGenerator._build_avatar_ref(avatar_key, avatar_url)
+        avatar_reuse_registry.setdefault(ref, avatar_url)
+        if avatar_reuse_aliases is not None:
+            avatar_reuse_aliases[avatar_url] = ref
+        return ref
+
+    @staticmethod
+    def _build_avatar_reuse_styles(avatar_reuse_registry: dict[str, str]) -> str:
+        """为头像生成一次性复用样式。"""
+        if not avatar_reuse_registry:
+            return ""
+
+        rules = [
+            '<style id="avatar-reuse-styles">',
+            ".user-capsule-avatar,img[data-avatar-ref]{background-color:#ddd;background-size:cover;background-position:center;background-repeat:no-repeat;}",
+        ]
+        for ref, data_uri in avatar_reuse_registry.items():
+            escaped_ref = html.escape(ref, quote=True)
+            escaped_uri = data_uri.replace("\\", "\\\\").replace('"', '\\"')
+            rules.append(
+                f'[data-avatar-ref="{escaped_ref}"]'
+                f'{{background-image:url("{escaped_uri}");}}'
+            )
+        rules.append("</style>")
+        return "\n".join(rules)
+
+    @staticmethod
+    def _reuse_inline_avatar_img_sources(
+        html_content: str,
+        avatar_reuse_registry: dict[str, str],
+        avatar_reuse_aliases: dict[str, str] | None = None,
+    ) -> str:
+        """将最终 HTML 中的内联 Data URI 头像 img 改为短引用。"""
+        if not html_content:
+            return html_content
+
+        img_src_pattern = re.compile(
+            r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])(data:image/[^"\']+)(\2)([^>]*>)',
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        def replace(match: re.Match[str]) -> str:
+            prefix, quote_char, data_uri, _, suffix = match.groups()
+            if data_uri == TRANSPARENT_IMAGE_DATA_URI:
+                return match.group(0)
+
+            avatar_ref = (
+                avatar_reuse_aliases.get(data_uri) if avatar_reuse_aliases else None
+            )
+            if not avatar_ref:
+                return match.group(0)
+
+            escaped_ref = html.escape(avatar_ref, quote=True)
+            return (
+                f"{prefix}{quote_char}{TRANSPARENT_IMAGE_DATA_URI}{quote_char}"
+                f' data-avatar-ref="{escaped_ref}"{suffix}'
+            )
+
+        return img_src_pattern.sub(replace, html_content)
+
+    @staticmethod
+    def _reuse_avatars_in_final_html(
+        html_content: str,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
+    ) -> str:
+        """复用最终 HTML 中所有内联头像资源，并注入复用样式。"""
+        if not html_content:
+            return html_content
+
+        registry = avatar_reuse_registry if avatar_reuse_registry is not None else {}
+        aliases = avatar_reuse_aliases if avatar_reuse_aliases is not None else {}
+        html_content = ReportGenerator._reuse_inline_avatar_img_sources(
+            html_content, registry, aliases
+        )
+        return ReportGenerator._inject_avatar_reuse_styles(
+            html_content, ReportGenerator._build_avatar_reuse_styles(registry)
+        )
+
+    @staticmethod
+    def _inject_avatar_reuse_styles(html_content: str, avatar_reuse_styles: str) -> str:
+        """将头像复用样式注入最终 HTML。"""
+        if not html_content or not avatar_reuse_styles:
+            return html_content
+
+        head_close = re.search(r"</head\s*>", html_content, re.IGNORECASE)
+        if head_close:
+            return (
+                html_content[: head_close.start()]
+                + avatar_reuse_styles
+                + "\n"
+                + html_content[head_close.start() :]
+            )
+        return avatar_reuse_styles + "\n" + html_content
 
     def _get_avatar_cache_key(
         self, avatar_id: str, avatar_cache_namespace: str | None = None
