@@ -619,25 +619,25 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"JSON 数据已保存: {json_path}")
 
+            await self._save_latest_url_to_txt(group_id, str(html_path.absolute()))
+
             return str(html_path.absolute()), str(json_path.absolute())
 
         except Exception as e:
             logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)
             return None, None
 
-    def build_html_caption(self, html_path: str) -> str:
-        """根据 html_base_url 生成 HTML 报告链接 caption"""
-
-        caption = "📊 每日群聊分析报告已生成"
+    def get_report_url(self, html_path: str) -> str | None:
+        """提取并拼接纯净的报告 URL"""
         base_url = self.config_manager.get_html_base_url()
         if not base_url or not html_path:
-            return caption
+            return None
 
-        # 支持 html_filename_format 中的子目录，保持相对路径
         output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
             strict=False
         )
         try:
+            # 计算相对路径，统一斜杠
             relative_path = (
                 Path(html_path).resolve(strict=False).relative_to(output_dir)
             )
@@ -646,7 +646,38 @@ class ReportGenerator(IReportGenerator):
             relative_url = Path(html_path).name
 
         encoded_relative_url = quote(relative_url, safe="/")
-        return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
+        return f"{base_url.rstrip('/')}/{encoded_relative_url}"
+
+    def build_html_caption(self, html_path: str) -> str:
+        """构建发送至群聊的文案"""
+        caption = "📊 每日群聊分析报告已生成"
+        url = self.get_report_url(html_path)
+        return caption + f"\n{url}" if url else caption
+
+    async def _save_latest_url_to_txt(self, group_id: str, html_path: str):
+        """将最新 HTML 报告 URL 写入文本文件，供外部跨进程读取"""
+        url = self.get_report_url(html_path)
+        if not url:
+            return
+
+        try:
+            output_dir = Path(self.config_manager.get_html_output_dir()).resolve(
+                strict=False
+            )
+            newurl_dir = output_dir / "NewUrl"
+
+            # 验证目录是否存在，不存在则新建
+            if not newurl_dir.exists():
+                await asyncio.to_thread(newurl_dir.mkdir, parents=True, exist_ok=True)
+
+            txt_path = newurl_dir / f"newurl{group_id}.txt"
+
+            # 异步覆盖写入文本文件
+            await asyncio.to_thread(txt_path.write_text, url, encoding="utf-8")
+            logger.info(f"已更新最新报告 URL 至: {txt_path}")
+
+        except Exception as e:
+            logger.error(f"保存 URL 到 TXT 失败: {e}")
 
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
