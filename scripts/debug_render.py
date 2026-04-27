@@ -125,8 +125,8 @@ class MockConfigManager:
     def get_html_base_url(self) -> str:
         return ""
 
-    def get_t2i_font_source(self) -> str:
-        return "Overseas"
+    def get_t2i_atri_font_mirror(self) -> str:
+        return "https://tc.ciallo.ccwu.cc"
 
     def get_t2i_google_fonts_mirror(self) -> str:
         return "https://fonts.googleapis.com"
@@ -134,8 +134,8 @@ class MockConfigManager:
     def get_t2i_gstatic_mirror(self) -> str:
         return "https://fonts.gstatic.com"
 
-    def get_t2i_atri_font_mirror(self) -> str:
-        return "https://tc.ciallo.ccwu.cc"
+    def get_t2i_font_source(self) -> str:
+        return "Overseas"
 
     def get_t2i_rendering_strategies(self) -> list:
         return []
@@ -323,6 +323,13 @@ async def debug_render(
     # Use Jinja2 renderer
     final_html = generator.html_templates.render_template(
         "image_template.html", **render_payload
+    )
+
+    # 复用最终 HTML 中所有内联头像资源，并注入复用样式
+    final_html = generator._reuse_avatars_in_final_html(
+        final_html,
+        render_payload.get("avatar_reuse_registry", {}),
+        render_payload.get("avatar_reuse_aliases", {}),
     )
 
     # 6. Save to file
