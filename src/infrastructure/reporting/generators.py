@@ -730,8 +730,16 @@ class ReportGenerator(IReportGenerator):
                 }
             )
 
+        # 通用模板上下文，包含可能被子模板引用的全局配置
+        common_context = {
+            "t2i_font_source": self.config_manager.get_t2i_font_source(),
+            "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
+            "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
+            "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
+        }
+
         topics_html = self.html_templates.render_template(
-            "topic_item.html", topics=topics_list
+            "topic_item.html", topics=topics_list, **common_context
         )
         logger.info(f"话题HTML生成完成，长度: {len(topics_html)}")
 
@@ -766,7 +774,7 @@ class ReportGenerator(IReportGenerator):
             titles_list.append(title_data)
 
         titles_html = self.html_templates.render_template(
-            "user_title_item.html", titles=titles_list
+            "user_title_item.html", titles=titles_list, **common_context
         )
         logger.info(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
@@ -813,7 +821,7 @@ class ReportGenerator(IReportGenerator):
             )
 
         quotes_html = self.html_templates.render_template(
-            "quote_item.html", quotes=quotes_list
+            "quote_item.html", quotes=quotes_list, **common_context
         )
         logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
@@ -822,7 +830,7 @@ class ReportGenerator(IReportGenerator):
             activity_viz.hourly_activity
         )
         hourly_chart_html = self.html_templates.render_template(
-            chart_template, chart_data=chart_data
+            chart_template, chart_data=chart_data, **common_context
         )
         logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
@@ -853,7 +861,7 @@ class ReportGenerator(IReportGenerator):
                 review_data = chat_quality_review
 
             chat_quality_html = self.html_templates.render_template(
-                "chat_quality_item.html", **review_data
+                "chat_quality_item.html", **review_data, **common_context
             )
             logger.info(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
