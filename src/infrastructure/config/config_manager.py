@@ -194,6 +194,10 @@ class ConfigManager:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
         return self._get_group("llm").get("llm_backoff", 2)
 
+    def get_enable_streaming_llm_call(self) -> bool:
+        """获取是否启用流式 LLM 调用"""
+        return self._get_group("llm").get("enable_streaming_llm_call", False)
+
     def get_debug_mode(self) -> bool:
         """获取是否启用调试模式"""
         return self._get_group("basic").get("debug_mode", False)
