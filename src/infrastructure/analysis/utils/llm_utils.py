@@ -4,7 +4,8 @@ LLM API请求处理工具模块
 """
 
 import asyncio
-from types import SimpleNamespace
+
+from astrbot.api.provider import LLMResponse
 
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
@@ -63,7 +64,8 @@ async def _call_provider_stream(
     if final_text and not getattr(final_resp, "is_chunk", False):
         return final_resp
 
-    return SimpleNamespace(
+    return LLMResponse(
+        role="assistant",
         completion_text="".join(content_parts),
         usage=getattr(final_resp, "usage", None),
         raw_completion=getattr(final_resp, "raw_completion", None),
@@ -263,6 +265,9 @@ async def call_provider_with_retry(
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
 
+    # 检查流式调用配置
+    enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()
+
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
@@ -319,21 +324,16 @@ async def call_provider_with_retry(
                     if extra_generate_kwargs:
                         llm_kwargs.update(extra_generate_kwargs)
 
-                    enable_streaming_llm_call = (
-                        config_manager.get_enable_streaming_llm_call()
-                    )
                     if enable_streaming_llm_call:
                         logger.info("[LLM 调用] 使用流式 Provider 调用")
 
-                    try:
+                    async def _invoke_llm(pid: str):
                         if enable_streaming_llm_call:
-                            llm_resp = await _call_provider_stream(
-                                context, provider_id, llm_kwargs
-                            )
-                        else:
-                            llm_resp = await context.llm_generate(
-                                **llm_kwargs,
-                            )
+                            return await _call_provider_stream(context, pid, llm_kwargs)
+                        return await context.llm_generate(**llm_kwargs)
+
+                    try:
+                        llm_resp = await _invoke_llm(provider_id)
                     except Exception as e:
                         if (
                             response_format is not None
@@ -344,14 +344,7 @@ async def call_provider_with_retry(
                                 "已自动降级为无 schema 约束重试本次请求。"
                             )
                             llm_kwargs.pop("response_format", None)
-                            if enable_streaming_llm_call:
-                                llm_resp = await _call_provider_stream(
-                                    context, provider_id, llm_kwargs
-                                )
-                            else:
-                                llm_resp = await context.llm_generate(
-                                    **llm_kwargs,
-                                )
+                            llm_resp = await _invoke_llm(provider_id)
                         else:
                             raise
 
