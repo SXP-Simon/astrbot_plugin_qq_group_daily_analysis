@@ -5,6 +5,7 @@ JSON处理工具模块
 
 import json
 import re
+from typing import Any
 
 from ....utils.logger import logger
 
@@ -81,129 +82,91 @@ def fix_json(text: str) -> str:
         return text
 
 
-def parse_json_response(
-    result_text: str, data_type: str
-) -> tuple[bool, list[dict] | None, str | None]:
+def _parse_json_with_pattern(
+    result_text: str, pattern: str, data_type: str, expected_type_name: str = "数据"
+) -> tuple[bool, Any, str | None]:
     """
-    统一的JSON解析方法（用于JSON数组响应）
-
-    Args:
-        result_text: LLM返回的原始文本
-        data_type: 数据类型 ('topics' | 'user_titles' | 'golden_quotes')
-
-    Returns:
-        (成功标志, 解析后的数据列表, 错误消息)
+    通用内部 JSON 解析逻辑，包含提取、直接解析、修复后重试。
     """
     fixed_json_text = None
     try:
-        # 1. 提取JSON部分
-        json_match = re.search(r"\[.*\]", result_text, re.DOTALL)
+        # 1. 基础清理：去除 markdown 代码块标记
+        clean_text = result_text.strip()
+        clean_text = re.sub(r"```(?:json)?\s*", "", clean_text)
+        clean_text = re.sub(r"```\s*$", "", clean_text)
+
+        # 2. 提取 JSON 部分
+        json_match = re.search(pattern, clean_text, re.DOTALL)
         if not json_match:
-            error_msg = f"{data_type}响应中未找到JSON格式"
+            error_msg = f"{data_type}响应中未找到JSON{expected_type_name}"
             logger.warning(error_msg)
             return False, None, error_msg
 
         json_text = json_match.group()
         logger.debug(f"{data_type}分析JSON原文: {json_text[:500]}...")
 
-        # 2. 尝试直接解析
+        # 3. 尝试直接解析
         try:
             data = json.loads(json_text)
-            logger.info(f"{data_type}直接解析成功，解析到 {len(data)} 条数据")
+            count_info = f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
+            logger.info(f"{data_type}直接解析成功{count_info}")
             return True, data, None
         except json.JSONDecodeError:
             logger.debug(f"{data_type}直接解析失败，尝试修复JSON...")
 
-        # 3. 修复JSON
+        # 4. 修复后重试
         fixed_json_text = fix_json(json_text)
-        logger.debug(f"{data_type}修复后的JSON: {fixed_json_text[:300]}...")
-
-        # 4. 解析修复后的JSON
-        data = json.loads(fixed_json_text)
-        logger.info(f"{data_type}修复后解析成功，解析到 {len(data)} 条数据")
-        return True, data, None
-
-    except json.JSONDecodeError as e:
-        error_msg = f"{data_type}JSON解析失败: {e}"
-        logger.warning(error_msg)
-        logger.debug(f"修复后的JSON: {fixed_json_text or 'N/A'}")
-        return False, None, error_msg
-    except Exception as e:
-        error_msg = f"{data_type}解析异常: {e}"
-        logger.error(error_msg)
-        return False, None, error_msg
-
-
-def parse_json_object_response(
-    result_text: str, data_type: str
-) -> tuple[bool, dict | None, str | None]:
-    """
-    统一的JSON解析方法（用于JSON对象响应，如聊天质量分析）
-
-    与 parse_json_response 不同，此函数用于解析返回单个 JSON 对象 {...}
-    而非数组 [{...}, {...}] 的场景。
-
-    解析策略：
-    1. 先去除 markdown 代码块标记
-    2. 直接解析原始 JSON（避免 fix_json 破坏中文引号等合法内容）
-    3. 若直接解析失败，再使用 fix_json 修复后重试
-
-    Args:
-        result_text: LLM返回的原始文本
-        data_type: 数据类型标识（用于日志）
-
-    Returns:
-        (成功标志, 解析后的字典, 错误消息)
-    """
-    try:
-        # 1. 去除 markdown 代码块标记
-        raw_text = result_text.strip()
-        raw_text = re.sub(r"```(?:json)?\s*", "", raw_text)
-        raw_text = re.sub(r"```\s*$", "", raw_text)
-        raw_text = raw_text.strip()
-
-        # 2. 提取 JSON 对象
-        json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-        if not json_match:
-            error_msg = f"{data_type}响应中未找到JSON对象"
-            logger.warning(error_msg)
-            return False, None, error_msg
-
-        json_text = json_match.group()
-        logger.debug(f"{data_type}分析JSON原文: {json_text[:500]}...")
-
-        # 3. 尝试直接解析（保留原始文本，避免中文引号被破坏）
-        try:
-            data = json.loads(json_text)
-            logger.info(f"{data_type}直接解析成功")
-            return True, data, None
-        except json.JSONDecodeError:
-            logger.debug(f"{data_type}直接解析失败，尝试修复JSON...")
-
-        # 4. 使用 fix_json 修复后重试
-        fixed_json = fix_json(json_text)
-        fixed_match = re.search(r"\{.*\}", fixed_json, re.DOTALL)
+        # 修复后需要重新提取，因为 fix_json 可能会改变文本结构（例如补齐括号）
+        fixed_match = re.search(pattern, fixed_json_text, re.DOTALL)
         if fixed_match:
             try:
                 data = json.loads(fixed_match.group())
-                logger.info(f"{data_type}修复后解析成功")
+                count_info = (
+                    f"，包含 {len(data)} 条数据" if isinstance(data, list) else ""
+                )
+                logger.info(f"{data_type}修复后解析成功{count_info}")
                 return True, data, None
             except json.JSONDecodeError as e:
                 error_msg = f"{data_type}JSON修复后解析仍失败: {e}"
                 logger.warning(error_msg)
                 return False, None, error_msg
 
-        error_msg = f"{data_type}修复后未找到JSON对象"
+        error_msg = f"{data_type}修复后未找到JSON{expected_type_name}"
         return False, None, error_msg
 
-    except json.JSONDecodeError as e:
-        error_msg = f"{data_type}JSON解析失败: {e}"
-        logger.warning(error_msg)
-        return False, None, error_msg
     except Exception as e:
         error_msg = f"{data_type}解析异常: {e}"
         logger.error(error_msg)
         return False, None, error_msg
+
+
+def parse_json_response(
+    result_text: str, data_type: str
+) -> tuple[bool, list[dict] | None, str | None]:
+    """
+    统一的JSON解析方法（用于JSON数组响应）
+    """
+    return _parse_json_with_pattern(
+        result_text, r"\[.*\]", data_type, expected_type_name="数组"
+    )
+
+
+def parse_json_object_response(
+    result_text: str, data_type: str
+) -> tuple[bool, dict | None, str | None]:
+    """
+    统一的JSON解析方法（用于JSON对象响应）
+    """
+    return _parse_json_with_pattern(
+        result_text, r"\{.*\}", data_type, expected_type_name="对象"
+    )
+
+
+def _clean_json_string(text: str) -> str:
+    """
+    清理 JSON 字符串中的转义字符，用于正则提取后的数据清洗。
+    """
+    return text.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
 
 
 def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
@@ -232,10 +195,7 @@ def extract_topics_with_regex(result_text: str, max_topics: int) -> list[dict]:
         for match in matches[:max_topics]:
             topic_name = match[0].strip()
             contributors_str = match[1].strip()
-            detail = match[2].strip()
-
-            # 清理detail中的转义字符
-            detail = detail.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
+            detail = _clean_json_string(match[2].strip())
 
             # 解析参与者列表
             contributors = [
@@ -287,10 +247,7 @@ def extract_user_titles_with_regex(result_text: str, max_count: int) -> list[dic
             user_id = match[1].strip()
             title = match[2].strip()
             mbti = match[3].strip()
-            reason = match[4].strip()
-
-            # 清理转义字符
-            reason = reason.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
+            reason = _clean_json_string(match[4].strip())
 
             titles.append(
                 {
@@ -334,15 +291,9 @@ def extract_golden_quotes_with_regex(result_text: str, max_count: int) -> list[d
             matches = re.findall(pattern, result_text, re.DOTALL)
 
         for match in matches[:max_count]:
-            content = match[0].strip()
+            content = _clean_json_string(match[0].strip())
             sender = match[1].strip()
-            reason = match[2].strip()
-
-            # 清理转义字符
-            content = (
-                content.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
-            )
-            reason = reason.replace('\\"', '"').replace("\\n", " ").replace("\\t", " ")
+            reason = _clean_json_string(match[2].strip())
 
             quotes.append({"content": content, "sender": sender, "reason": reason})
 
