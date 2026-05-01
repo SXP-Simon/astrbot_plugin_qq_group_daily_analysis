@@ -337,6 +337,12 @@
                 "description": "LLM 请求重试退避基值（秒）",
                 "default": 2,
                 "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
+            },
+            "enable_streaming_llm_call": {
+                "type": "bool",
+                "description": "启用流式 LLM 调用",
+                "default": false,
+                "hint": "默认关闭，使用原有非流式调用方式。开启后，插件将使用 AstrBot Provider 的流式接口并聚合结果，适用于仅支持 stream=true 的服务。"
             }
         }
     },
