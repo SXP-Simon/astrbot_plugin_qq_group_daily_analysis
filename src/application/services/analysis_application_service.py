@@ -27,6 +27,8 @@ from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.persistence.incremental_store import IncrementalStore
+from ...infrastructure.analysis.utils.llm_utils import get_provider_id_with_fallback
+from ...infrastructure.utils.template_utils import render_template
 from ...utils.logger import logger
 
 
@@ -272,6 +274,22 @@ class AnalysisApplicationService:
             # 回填结果
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
+            image_summaries = []
+            if self.config_manager.get_image_summary_enabled():
+                bot_self_ids = {str(uid) for uid in self.config_manager.get_bot_self_ids() if uid}
+                runtime_bot_ids = getattr(self.bot_manager, "_bot_self_ids", None) or []
+                bot_self_ids.update(str(uid) for uid in runtime_bot_ids if uid)
+                max_image_summaries = self.config_manager.get_max_image_summaries()
+                image_summaries = self.statistics_service.extract_image_summaries(
+                    unified_messages,
+                    limit=max(max_image_summaries * 3, max_image_summaries),
+                    bot_self_ids=bot_self_ids,
+                )
+                image_summaries = await self._enrich_image_summaries(
+                    image_summaries,
+                    unified_msg_origin=unified_msg_origin,
+                    keep_limit=max_image_summaries,
+                )
 
             analysis_result = {
                 "statistics": statistics,
@@ -279,6 +297,7 @@ class AnalysisApplicationService:
                 "user_titles": user_titles,
                 "user_analysis": user_activity,
                 "chat_quality_review": chat_quality_review,
+                "image_summaries": image_summaries,
             }
 
             # 6. 持久化摘要 (Persistence)
@@ -294,6 +313,70 @@ class AnalysisApplicationService:
                 "group_id": group_id,
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
+
+    async def _enrich_image_summaries(
+        self,
+        image_summaries: list[Any],
+        unified_msg_origin: str | None = None,
+        keep_limit: int | None = None,
+    ) -> list[Any]:
+        """使用图片摘要专用 Provider 解析图片内容，并筛选适合锐评的抽象图片。"""
+        if not image_summaries:
+            return []
+
+        try:
+            provider_id = await get_provider_id_with_fallback(
+                self.llm_analyzer.context,
+                self.config_manager,
+                "image_summary_provider_id",
+                unified_msg_origin,
+            )
+        except Exception as e:
+            logger.warning(f"图片摘要 Provider 选择失败，使用原始图片描述: {e}")
+            return image_summaries[:keep_limit] if keep_limit else image_summaries
+
+        if not provider_id:
+            return image_summaries[:keep_limit] if keep_limit else image_summaries
+
+        system_prompt = (
+            "你是群聊图片筛选和锐评助手。只挑选群聊里抽象、离谱、有梗、值得锐评的图片。"
+            "宣传海报、广告图、通知截图、普通风景/壁纸/美图、表情包堆图、无明显槽点的图片一律返回 SKIP。"
+            "适合保留时，只返回适合直接展示在群日报里的简体中文短评，不要输出 Markdown。"
+        )
+        prompt_template = self.config_manager.get_image_summary_prompt()
+        kept_items: list[Any] = []
+
+        for item in image_summaries:
+            if keep_limit and len(kept_items) >= keep_limit:
+                break
+            url = getattr(item, "url", "")
+            if not url:
+                continue
+            try:
+                prompt = render_template(
+                    prompt_template,
+                    sender=getattr(item, "sender", ""),
+                    time="",
+                )
+                resp = await self.llm_analyzer.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                    image_urls=[url],
+                    system_prompt=system_prompt,
+                )
+                text = (getattr(resp, "completion_text", "") or "").strip()
+                normalized = text.strip().lower().strip("`*_ -。.!！")
+                if not text or normalized.startswith("skip") or normalized in {"跳过", "不保留", "忽略"}:
+                    logger.info(f"图片锐评筛选跳过普通图片: {url}")
+                    continue
+                item.model_summary = text[:160]
+                item.description = text[:160]
+                kept_items.append(item)
+            except Exception as e:
+                logger.warning(f"图片摘要解析失败，跳过该图片: {url} | {e}")
+
+        logger.info(f"图片锐评筛选完成，保留 {len(kept_items)}/{len(image_summaries)} 张")
+        return kept_items
 
     # ----------------------------------------------------------------
     # 增量分析用例

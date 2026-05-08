@@ -186,6 +186,28 @@ class ConfigManager:
         """获取最大金句数量"""
         return self._get_group("analysis_features").get("max_golden_quotes", 5)
 
+    def get_image_summary_enabled(self) -> bool:
+        """获取是否启用图片锐评"""
+        return self._get_group("analysis_features").get("image_summary_enabled", False)
+
+    def get_max_image_summaries(self) -> int:
+        """获取最大图片锐评数量"""
+        return self._get_group("analysis_features").get("max_image_summaries", 5)
+
+    def get_image_summary_prompt(self, style: str = "image_summary_prompt") -> str:
+        """获取图片锐评提示词模板"""
+        prompts_config = self._get_group("prompts").get("image_summary_prompts", {})
+        prompt = prompts_config.get(style, "")
+        if prompt:
+            return prompt
+        return (
+            "这是一张群聊图片，发送者：${sender}。请先判断它是否适合放进群日报的【图片锐评】。"
+            "只保留抽象、离谱、有梗、反差强、能体现群聊名场面的图片。"
+            "如果是宣传海报、广告图、通知截图、普通美图、风景壁纸、自拍摆拍、商品图、无明显槽点的普通图片，请只回复 SKIP。"
+            "如果适合保留，请用 60 字以内锐评：先概括图里有什么，再轻微吐槽或点评。语气接地气、有梗，但不要造谣，不要提发送时间，不要输出 Markdown。"
+        )
+
+
     def get_llm_retries(self) -> int:
         """获取LLM请求重试次数"""
         return self._get_group("llm").get("llm_retries", 2)

@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from ...infrastructure.visualization.activity_charts import ActivityVisualizer
-from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
+from ..models.data_models import EmojiStatistics, GroupStatistics, ImageSummaryItem, TokenUsage
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 
 
@@ -104,6 +104,103 @@ class StatisticsService:
 
         text = str(raw_data)
         return "动画表情" in text or "表情" in text
+
+    @staticmethod
+    def _is_bot_daily_report_image(
+        msg: UnifiedMessage, bot_self_ids: set[str] | None = None
+    ) -> bool:
+        """判断是否为 bot/日报报告图片，避免进入图片名场面。"""
+        sender_name = (msg.sender_name or msg.sender_card or "").lower()
+        sender_id = str(msg.sender_id or "").lower()
+        normalized_bot_ids = {str(uid).lower() for uid in (bot_self_ids or set()) if uid}
+        if normalized_bot_ids and sender_id in normalized_bot_ids:
+            return True
+
+        bot_markers = ("bot", "astrbot", "openclaw", "机器人")
+        report_sender_markers = ("日报", "群分析", "群聊分析")
+        if any(marker in sender_name for marker in bot_markers + report_sender_markers):
+            return True
+        if any(marker in sender_id for marker in bot_markers):
+            return True
+
+        strong_report_markers = (
+            "群聊分析报告", "聊天质量锐评", "bible quotes", "image moments",
+            "24h 活跃", "24h活跃", "ai 锐评", "ai锐评", "图片锐评",
+            "图片名场面", "群贤毕至", "活跃轨迹", "群聊质量",
+        )
+        weak_report_markers = ("日报", "群聊分析", "群分析")
+
+        text = (msg.text_content or "").strip().lower()
+        if any(marker in text for marker in strong_report_markers):
+            return True
+        if any(marker in text for marker in weak_report_markers) and any(
+            marker in sender_name for marker in bot_markers + report_sender_markers
+        ):
+            return True
+
+        for content in msg.contents:
+            if content.type != MessageContentType.IMAGE:
+                continue
+
+            raw_parts: list[str] = []
+            raw_data = content.raw_data
+            if isinstance(raw_data, dict):
+                # 只看值，不看 key；key 里的 summary/report 会误伤普通图片。
+                raw_parts.extend(str(value) for value in raw_data.values() if value)
+            elif raw_data:
+                raw_parts.append(str(raw_data))
+
+            raw_lower = " ".join(raw_parts).lower()
+            if any(marker in raw_lower for marker in strong_report_markers):
+                return True
+            if any(marker in raw_lower for marker in weak_report_markers) and any(
+                marker in sender_name for marker in bot_markers + report_sender_markers
+            ):
+                return True
+
+        return False
+
+    def extract_image_summaries(
+        self,
+        messages: list[UnifiedMessage],
+        limit: int = 12,
+        bot_self_ids: set[str] | None = None,
+    ) -> list[ImageSummaryItem]:
+        """从消息中提取图片锐评候选。"""
+        items: list[ImageSummaryItem] = []
+        for msg in reversed(messages):
+            if len(items) >= limit:
+                break
+            if self._is_bot_daily_report_image(msg, bot_self_ids):
+                continue
+            for content in msg.contents:
+                if content.type != MessageContentType.IMAGE:
+                    continue
+                if self._is_emoji_like_image(content.raw_data):
+                    continue
+                url = content.url or ""
+                if not url and isinstance(content.raw_data, dict):
+                    url = str(
+                        content.raw_data.get("url")
+                        or content.raw_data.get("file")
+                        or content.raw_data.get("path")
+                        or ""
+                    )
+                if not url:
+                    continue
+                description = "已收录进今日群聊图片名场面。"
+                items.append(
+                    ImageSummaryItem(
+                        url=url,
+                        sender=msg.sender_name or msg.sender_card or str(msg.sender_id),
+                        sender_id=str(msg.sender_id or ""),
+                        description=description,
+                    )
+                )
+                if len(items) >= limit:
+                    break
+        items.reverse()
+        return items
 
     def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
         """内部辅助：将 UnifiedMessage 转换为 Legacy Dict 格式，用于兼容可视化组件"""
