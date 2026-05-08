@@ -314,8 +314,6 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            padding: 10px 0;
-            /* 上下预留一点点白边好看些 */
             position: relative;
             z-index: 1;
             /* 在水印上方，但在文字下方 */
@@ -327,9 +325,7 @@
             width: 150px;
             max-width: 100%;
             /* 核心：保持原比例，不拉伸，完整显示在框内 */
-            background: var(--miku-peak-activity-image) center / contain no-repeat;
-            border-radius: 6px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            background: var(--miku-peak-activity-image) center / auto 100% no-repeat;
         }
 
         /* 模块标头公共样式 */
@@ -525,7 +521,944 @@
                 white-space: normal;
             }
         }
-    </style>
+
+        /* MOBILE_HTML_OPTIMIZATION_V1_START */
+        /* Mobile-only layout optimization. Content and template variables are unchanged. */
+        @media (max-width: 900px) {
+            *,
+            *::before,
+            *::after {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                width: 100%;
+                max-width: 100%;
+                overflow-x: hidden;
+            }
+
+            body {
+                padding: clamp(10px, 3vw, 18px) clamp(8px, 2.8vw, 14px) !important;
+                background-attachment: scroll !important;
+            }
+
+            img,
+            svg,
+            canvas {
+                max-width: 100%;
+            }
+
+            .container {
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: clamp(16px, 4.2vw, 28px) !important;
+                border-radius: clamp(14px, 4vw, 22px) !important;
+                overflow: hidden !important;
+            }
+
+            .header {
+                gap: clamp(10px, 3vw, 18px) !important;
+                margin-bottom: clamp(24px, 6vw, 36px) !important;
+            }
+
+            .header h1 {
+                font-size: clamp(2rem, 9vw, 3.5rem) !important;
+                line-height: 1.08 !important;
+                letter-spacing: 0.02em !important;
+                overflow-wrap: anywhere;
+            }
+
+            .date-line {
+                font-size: clamp(0.9rem, 3.4vw, 1.05rem) !important;
+            }
+
+            .stats-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: clamp(8px, 2.8vw, 14px) !important;
+                margin-bottom: clamp(18px, 5vw, 28px) !important;
+            }
+
+            .stat-box {
+                min-width: 0 !important;
+                padding: clamp(12px, 3.5vw, 16px) clamp(8px, 2.8vw, 14px) !important;
+            }
+
+            .stat-num {
+                font-size: clamp(1.45rem, 7vw, 2rem) !important;
+                line-height: 1.12 !important;
+                overflow-wrap: anywhere;
+            }
+
+            .stat-txt {
+                font-size: clamp(0.75rem, 3vw, 0.92rem) !important;
+                line-height: 1.25 !important;
+            }
+
+            .section-header {
+                margin-bottom: clamp(16px, 4vw, 24px) !important;
+                padding-bottom: clamp(8px, 2.6vw, 12px) !important;
+                min-width: 0 !important;
+            }
+
+            .section-title-text {
+                min-width: 0 !important;
+                font-size: clamp(1.15rem, 5vw, 1.45rem) !important;
+                line-height: 1.25 !important;
+                gap: clamp(6px, 2vw, 10px) !important;
+                overflow-wrap: anywhere;
+            }
+
+            .card-common {
+                padding: clamp(16px, 4.4vw, 24px) !important;
+                margin-bottom: clamp(18px, 5vw, 28px) !important;
+                border-radius: clamp(14px, 4vw, 22px) !important;
+                transform: none !important;
+            }
+
+            .card-common,
+            .miku-topic-card,
+            .miku-user-title-card,
+            .miku-chat-quality,
+            .miku-quote-wrap,
+            .miku-quality-summary,
+            .footer,
+            .footer-repo,
+            .token-data {
+                min-width: 0 !important;
+                max-width: 100% !important;
+            }
+
+            .card-common *,
+            .miku-topic-card *,
+            .miku-user-title-card *,
+            .miku-chat-quality *,
+            .miku-quote-wrap *,
+            .footer * {
+                min-width: 0;
+            }
+
+            .card-common,
+            .miku-topic-card,
+            .miku-user-title-card,
+            .miku-chat-quality,
+            .miku-quote-wrap,
+            .section-title-text,
+            .footer-repo a,
+            .token-data {
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
+            .miku-user-title-grid,
+            .miku-quality-grid {
+                grid-template-columns: 1fr !important;
+                gap: clamp(12px, 3.5vw, 18px) !important;
+            }
+
+            .miku-topic-card {
+                gap: clamp(10px, 3vw, 14px) !important;
+                padding: clamp(16px, 4vw, 22px) !important;
+            }
+
+            .miku-topic-card div[style*="inline-flex"] {
+                max-width: 100% !important;
+                flex-wrap: wrap !important;
+            }
+
+            .miku-quote-row {
+                align-items: stretch !important;
+            }
+
+            .miku-quote-wrap {
+                max-width: 100% !important;
+            }
+
+            .miku-chat-quality-head,
+            .miku-quality-summary {
+                align-items: flex-start !important;
+                gap: clamp(10px, 3vw, 14px) !important;
+            }
+
+            .miku-activity-chart {
+                width: 100% !important;
+                max-width: 100% !important;
+                gap: clamp(6px, 2vw, 10px) !important;
+                overflow: hidden !important;
+            }
+
+            .miku-activity-chart > div {
+                min-width: 0 !important;
+                gap: 1px !important;
+            }
+
+            .miku-activity-chart > div:first-child {
+                height: clamp(118px, 34vw, 160px) !important;
+            }
+
+            .miku-activity-chart span {
+                font-size: clamp(0.48rem, 1.9vw, 0.68rem) !important;
+                line-height: 1.05 !important;
+            }
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 8px !important;
+            }
+
+            .container {
+                padding: clamp(14px, 4vw, 20px) !important;
+                border-radius: 16px !important;
+            }
+
+            .header {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+            }
+
+            .stats-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .active-peak-block {
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                height: clamp(92px, 27vw, 118px) !important;
+                min-height: 0 !important;
+                padding: 0 clamp(12px, 4vw, 24px) !important;
+                gap: clamp(8px, 3vw, 14px) !important;
+                overflow: hidden !important;
+            }
+
+            .active-peak-block > div:first-child {
+                min-width: 0 !important;
+                flex: 1 1 auto !important;
+                position: relative;
+                z-index: 2;
+            }
+
+            .active-peak-block::after {
+                right: clamp(48px, 18vw, 96px) !important;
+                font-size: clamp(70px, 24vw, 112px) !important;
+                opacity: 0.14 !important;
+            }
+
+            .peak-label {
+                font-size: clamp(0.78rem, 3.2vw, 0.95rem) !important;
+                line-height: 1.2 !important;
+                white-space: normal !important;
+            }
+
+            .peak-time-text {
+                font-size: clamp(1.25rem, 6.4vw, 1.75rem) !important;
+                line-height: 1.12 !important;
+                white-space: normal !important;
+                overflow-wrap: anywhere;
+            }
+
+            .peak-image-container {
+                align-self: stretch !important;
+                height: 100% !important;
+                flex: 0 0 clamp(74px, 27vw, 132px) !important;
+                width: clamp(74px, 27vw, 132px) !important;
+                max-width: 42% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                display: flex !important;
+                align-items: stretch !important;
+                justify-content: flex-end !important;
+            }
+
+            .miku-peak-activity-image {
+                height: 100% !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                background: var(--miku-peak-activity-image) center / auto 100% no-repeat !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+            }
+
+            .miku-topic-card {
+                flex-direction: column !important;
+            }
+
+            .miku-user-title-head,
+            .miku-quote-wrap {
+                gap: clamp(8px, 2.8vw, 12px) !important;
+            }
+
+            .miku-user-title-tags {
+                flex-wrap: wrap !important;
+            }
+
+            .miku-user-title-tags span {
+                white-space: normal !important;
+            }
+
+            .footer-top,
+            .footer-bottom {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 10px !important;
+            }
+
+            .token-data {
+                text-align: left !important;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .stats-row {
+                grid-template-columns: 1fr !important;
+            }
+
+            .active-peak-block {
+                height: clamp(88px, 30vw, 108px) !important;
+                padding-left: 10px !important;
+                padding-right: 10px !important;
+            }
+
+            .peak-image-container {
+                flex-basis: clamp(66px, 25vw, 96px) !important;
+                width: clamp(66px, 25vw, 96px) !important;
+            }
+        }
+        /* MOBILE_HTML_OPTIMIZATION_V1_END */
+
+
+        /* MOBILE_COMPACT_COMPONENTS_V2_START */
+        /* Compact mobile component sizing. This only changes presentation density. */
+        @media (max-width: 900px) {
+            .container > div[style*="margin-bottom: 50px"],
+            .container > div[style*="margin-bottom:50px"] {
+                margin-bottom: clamp(22px, 6vw, 34px) !important;
+            }
+
+            .section-header {
+                margin-bottom: clamp(12px, 3.5vw, 18px) !important;
+            }
+
+            .card-common {
+                padding: clamp(12px, 3.4vw, 16px) !important;
+                margin-bottom: clamp(12px, 3.6vw, 18px) !important;
+                border-radius: clamp(12px, 3.4vw, 16px) !important;
+            }
+
+            .miku-topic-card {
+                padding: clamp(12px, 3.4vw, 16px) !important;
+                gap: clamp(8px, 2.8vw, 12px) !important;
+                margin-bottom: clamp(12px, 3.6vw, 16px) !important;
+                border-left-width: 4px !important;
+            }
+
+            .miku-topic-card > div:first-child {
+                font-size: clamp(1.1rem, 4.4vw, 1.35rem) !important;
+                line-height: 1.15 !important;
+                padding-top: 0 !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:first-child {
+                font-size: clamp(1rem, 3.8vw, 1.12rem) !important;
+                line-height: 1.32 !important;
+                margin-bottom: 8px !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(2) {
+                padding: clamp(8px, 2.6vw, 10px) !important;
+                border-radius: 8px !important;
+                font-size: clamp(0.86rem, 3.2vw, 0.95rem) !important;
+                line-height: 1.55 !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(3) {
+                margin-top: clamp(10px, 3vw, 14px) !important;
+                gap: clamp(8px, 2.5vw, 10px) !important;
+            }
+
+            .miku-topic-card div[style*="inline-flex"] {
+                padding: 5px 10px !important;
+                gap: 5px !important;
+                font-size: clamp(0.74rem, 2.8vw, 0.82rem) !important;
+                border-radius: 14px !important;
+            }
+
+            .miku-topic-card div[style*="inline-flex"] svg {
+                width: 13px !important;
+                height: 13px !important;
+            }
+
+            .miku-topic-card div[style*="height: 65px"] {
+                height: clamp(38px, 12vw, 52px) !important;
+            }
+
+            .miku-topic-card img[alt="装饰图"] {
+                max-width: clamp(76px, 24vw, 112px) !important;
+                height: 100% !important;
+                object-fit: contain !important;
+            }
+
+            .miku-user-title-grid {
+                gap: clamp(10px, 3vw, 14px) !important;
+            }
+
+            .miku-user-title-card {
+                padding: clamp(12px, 3.4vw, 16px) !important;
+                gap: clamp(8px, 2.8vw, 12px) !important;
+                border-top-width: 3px !important;
+            }
+
+            .miku-user-title-head {
+                gap: clamp(8px, 2.8vw, 12px) !important;
+            }
+
+            .miku-user-title-head > div:first-child {
+                width: clamp(42px, 13vw, 52px) !important;
+                height: clamp(42px, 13vw, 52px) !important;
+                border-width: 2px !important;
+            }
+
+            .miku-user-title-head > div:nth-child(2) > div:first-child {
+                font-size: clamp(0.95rem, 3.6vw, 1.05rem) !important;
+                line-height: 1.22 !important;
+            }
+
+            .miku-user-title-tags {
+                gap: 4px !important;
+                margin-top: 4px !important;
+            }
+
+            .miku-user-title-tags span {
+                font-size: clamp(0.62rem, 2.5vw, 0.7rem) !important;
+                padding: 2px 6px !important;
+                border-radius: 5px !important;
+            }
+
+            .miku-user-title-card > div:nth-child(2) {
+                padding: clamp(9px, 2.8vw, 12px) !important;
+                border-radius: 9px !important;
+                font-size: clamp(0.82rem, 3.1vw, 0.9rem) !important;
+                line-height: 1.48 !important;
+            }
+
+            .miku-quote-row {
+                margin-bottom: clamp(12px, 3.6vw, 18px) !important;
+            }
+
+            .miku-quote-wrap {
+                gap: clamp(8px, 2.8vw, 12px) !important;
+                max-width: 100% !important;
+            }
+
+            .miku-quote-wrap > div:first-child {
+                width: clamp(36px, 11vw, 44px) !important;
+                height: clamp(36px, 11vw, 44px) !important;
+                border-width: 2px !important;
+            }
+
+            .miku-quote-body > div:first-child {
+                font-size: clamp(0.76rem, 2.8vw, 0.84rem) !important;
+                margin-bottom: 4px !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) {
+                padding: clamp(10px, 3vw, 14px) clamp(12px, 3.5vw, 16px) !important;
+                margin-bottom: 8px !important;
+                border-radius: 12px !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) > div {
+                font-size: clamp(0.9rem, 3.3vw, 1rem) !important;
+                line-height: 1.45 !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) {
+                padding: clamp(8px, 2.8vw, 12px) clamp(10px, 3.2vw, 14px) !important;
+                border-radius: 10px !important;
+                border-left-width: 3px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) > div:first-child {
+                gap: 6px !important;
+                margin-bottom: 4px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) svg {
+                width: 15px !important;
+                height: 15px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) span {
+                font-size: clamp(0.82rem, 3vw, 0.9rem) !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) > div:last-child {
+                font-size: clamp(0.8rem, 3vw, 0.88rem) !important;
+                line-height: 1.45 !important;
+            }
+
+            .miku-chat-quality {
+                padding: clamp(12px, 3.5vw, 16px) !important;
+            }
+
+            .miku-chat-quality-head {
+                margin-bottom: clamp(12px, 3.4vw, 16px) !important;
+                padding-bottom: clamp(8px, 2.8vw, 10px) !important;
+            }
+
+            .miku-chat-quality-head > div:first-child {
+                font-size: clamp(1.15rem, 4.8vw, 1.35rem) !important;
+                line-height: 1.2 !important;
+            }
+
+            .miku-chat-quality-head > div:nth-child(2) {
+                font-size: clamp(0.72rem, 2.8vw, 0.82rem) !important;
+                padding: 3px 9px !important;
+            }
+
+            .miku-chat-quality > div:nth-child(2) {
+                height: 9px !important;
+                margin-bottom: clamp(14px, 3.8vw, 18px) !important;
+            }
+
+            .miku-quality-grid {
+                gap: clamp(8px, 2.8vw, 12px) !important;
+                margin-bottom: clamp(14px, 4vw, 18px) !important;
+            }
+
+            .miku-quality-grid > div {
+                padding: clamp(8px, 2.8vw, 11px) clamp(9px, 3vw, 12px) !important;
+                border-radius: 9px !important;
+                gap: 8px !important;
+            }
+
+            .miku-quality-grid > div > div:first-child {
+                width: 8px !important;
+                height: 8px !important;
+                margin-top: 4px !important;
+            }
+
+            .miku-quality-grid > div > div:nth-child(2) > div:first-child {
+                font-size: clamp(0.78rem, 3vw, 0.88rem) !important;
+                margin-bottom: 3px !important;
+            }
+
+            .miku-quality-grid > div > div:nth-child(2) > div:nth-child(2) {
+                font-size: clamp(0.75rem, 2.8vw, 0.84rem) !important;
+                line-height: 1.42 !important;
+            }
+
+            .miku-quality-summary {
+                padding: clamp(12px, 3.6vw, 16px) !important;
+                border-radius: 10px !important;
+                gap: clamp(8px, 3vw, 12px) !important;
+            }
+
+            .miku-quality-summary > div:first-child > div:first-child {
+                margin-bottom: 8px !important;
+            }
+
+            .miku-quality-summary svg {
+                width: 16px !important;
+                height: 16px !important;
+            }
+
+            .miku-quality-summary span {
+                font-size: clamp(0.9rem, 3.4vw, 1rem) !important;
+            }
+
+            .miku-quality-summary > div:first-child > div:nth-child(2) {
+                font-size: clamp(0.84rem, 3.1vw, 0.92rem) !important;
+                line-height: 1.48 !important;
+            }
+
+            .miku-quality-deco {
+                height: clamp(50px, 16vw, 72px) !important;
+                margin-left: clamp(8px, 3vw, 14px) !important;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .card-common {
+                padding: 12px !important;
+                margin-bottom: 12px !important;
+            }
+
+            .miku-topic-card {
+                padding: 12px !important;
+                gap: 8px !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(3) {
+                align-items: flex-end !important;
+            }
+
+            .miku-topic-card div[style*="height: 65px"] {
+                height: clamp(34px, 11vw, 46px) !important;
+            }
+
+            .miku-topic-card img[alt="装饰图"] {
+                max-width: clamp(68px, 22vw, 96px) !important;
+            }
+
+            .miku-user-title-card,
+            .miku-chat-quality {
+                padding: 12px !important;
+            }
+
+            .miku-quality-summary {
+                flex-direction: row !important;
+                align-items: flex-end !important;
+            }
+
+            .miku-quality-deco {
+                flex: 0 0 auto !important;
+                align-self: flex-end !important;
+                height: clamp(42px, 14vw, 60px) !important;
+            }
+        }
+        /* MOBILE_COMPACT_COMPONENTS_V2_END */
+
+
+        /* MOBILE_HOUR_UNIT_HIDE_V1_START */
+        @media (max-width: 600px) {
+            .miku-hour-unit {
+                display: none !important;
+            }
+        }
+        /* MOBILE_HOUR_UNIT_HIDE_V1_END */
+
+
+        /* MOBILE_TOPIC_PROFILE_DENSE_V3_START */
+        /* Extra dense mobile tuning for topics and user profiles. ACGTI role artwork remains visible. */
+        @media (max-width: 900px) {
+            .miku-topic-card {
+                padding: clamp(10px, 3vw, 14px) !important;
+                gap: clamp(7px, 2.4vw, 10px) !important;
+                margin-bottom: clamp(9px, 2.8vw, 13px) !important;
+            }
+
+            .miku-topic-card > div:first-child {
+                font-size: clamp(1rem, 4vw, 1.22rem) !important;
+                line-height: 1.1 !important;
+                opacity: 0.72 !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:first-child {
+                font-size: clamp(0.94rem, 3.5vw, 1.04rem) !important;
+                line-height: 1.25 !important;
+                margin-bottom: 6px !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(2) {
+                padding: 7px 9px !important;
+                font-size: clamp(0.8rem, 2.95vw, 0.88rem) !important;
+                line-height: 1.42 !important;
+                border-radius: 7px !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(3) {
+                margin-top: 8px !important;
+                gap: 7px !important;
+            }
+
+            .miku-topic-card div[style*="inline-flex"] {
+                padding: 4px 8px !important;
+                gap: 4px !important;
+                font-size: clamp(0.68rem, 2.5vw, 0.76rem) !important;
+                border-radius: 12px !important;
+            }
+
+            .miku-topic-card div[style*="inline-flex"] svg {
+                width: 12px !important;
+                height: 12px !important;
+            }
+
+            .miku-topic-card div[style*="height: 65px"] {
+                height: clamp(30px, 9.5vw, 42px) !important;
+                opacity: 0.92 !important;
+            }
+
+            .miku-topic-card img[alt="装饰图"] {
+                max-width: clamp(58px, 19vw, 86px) !important;
+                height: 100% !important;
+                object-fit: contain !important;
+            }
+
+            .miku-user-title-grid {
+                gap: clamp(8px, 2.6vw, 12px) !important;
+            }
+
+            .miku-user-title-card {
+                padding: clamp(10px, 3vw, 14px) !important;
+                gap: clamp(7px, 2.4vw, 10px) !important;
+                border-top-width: 3px !important;
+                overflow: hidden !important;
+            }
+
+            .miku-user-title-head {
+                gap: clamp(7px, 2.4vw, 10px) !important;
+            }
+
+            .miku-user-title-head > div:first-child {
+                width: clamp(36px, 11.5vw, 46px) !important;
+                height: clamp(36px, 11.5vw, 46px) !important;
+                border-width: 2px !important;
+                box-shadow: 0 2px 7px rgba(57,197,187,0.16) !important;
+            }
+
+            .miku-user-title-head > div:nth-child(2) > div:first-child {
+                font-size: clamp(0.88rem, 3.25vw, 0.98rem) !important;
+                line-height: 1.16 !important;
+            }
+
+            .miku-user-title-tags {
+                gap: 3px !important;
+                margin-top: 3px !important;
+            }
+
+            .miku-user-title-tags span {
+                font-size: clamp(0.58rem, 2.25vw, 0.66rem) !important;
+                padding: 1px 5px !important;
+                border-radius: 5px !important;
+                line-height: 1.35 !important;
+            }
+
+            .miku-user-title-card > div:nth-child(2) {
+                padding: 7px 9px !important;
+                border-radius: 8px !important;
+                font-size: clamp(0.76rem, 2.85vw, 0.84rem) !important;
+                line-height: 1.38 !important;
+                min-height: 0 !important;
+            }
+
+            .miku-user-title-card > div:nth-child(2) svg {
+                width: 12px !important;
+                height: 12px !important;
+                right: 6px !important;
+                bottom: 6px !important;
+            }
+
+            .miku-user-title-card > img[alt=""] {
+                width: clamp(30%, 34vw, 38%) !important;
+                max-height: 74% !important;
+                right: 6px !important;
+                bottom: 6px !important;
+                object-fit: contain !important;
+                pointer-events: none !important;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .miku-topic-card {
+                padding: 9px 10px !important;
+                gap: 6px !important;
+                border-left-width: 3px !important;
+            }
+
+            .miku-topic-card > div:first-child {
+                font-size: clamp(0.95rem, 3.8vw, 1.08rem) !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:first-child {
+                font-size: clamp(0.9rem, 3.35vw, 0.98rem) !important;
+                margin-bottom: 5px !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(2) {
+                padding: 6px 8px !important;
+                font-size: clamp(0.76rem, 2.8vw, 0.84rem) !important;
+                line-height: 1.36 !important;
+            }
+
+            .miku-topic-card > div:nth-child(2) > div:nth-child(3) {
+                margin-top: 7px !important;
+                gap: 6px !important;
+            }
+
+            .miku-topic-card div[style*="height: 65px"] {
+                height: clamp(26px, 8.5vw, 36px) !important;
+            }
+
+            .miku-topic-card img[alt="装饰图"] {
+                max-width: clamp(50px, 17vw, 74px) !important;
+            }
+
+            .miku-user-title-grid {
+                gap: 8px !important;
+            }
+
+            .miku-user-title-card {
+                padding: 9px 10px !important;
+                gap: 6px !important;
+            }
+
+            .miku-user-title-head > div:first-child {
+                width: clamp(34px, 10.5vw, 42px) !important;
+                height: clamp(34px, 10.5vw, 42px) !important;
+            }
+
+            .miku-user-title-card > div:nth-child(2) {
+                padding: 6px 8px !important;
+                font-size: clamp(0.74rem, 2.75vw, 0.82rem) !important;
+                line-height: 1.34 !important;
+            }
+
+            .miku-user-title-card > img[alt=""] {
+                width: clamp(30%, 33vw, 36%) !important;
+                max-height: 70% !important;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .miku-topic-card {
+                padding: 8px !important;
+            }
+
+            .miku-topic-card div[style*="height: 65px"] {
+                height: 24px !important;
+            }
+
+            .miku-topic-card img[alt="装饰图"] {
+                max-width: 56px !important;
+            }
+
+            .miku-user-title-card {
+                padding: 8px !important;
+            }
+
+            .miku-user-title-head > div:first-child {
+                width: 32px !important;
+                height: 32px !important;
+            }
+
+            .miku-user-title-card > img[alt=""] {
+                width: 32% !important;
+                max-height: 66% !important;
+            }
+        }
+        /* MOBILE_TOPIC_PROFILE_DENSE_V3_END */
+
+
+        /* MOBILE_QUOTE_DENSE_V4_START */
+        /* Extra dense mobile tuning for the daily quote section. */
+        @media (max-width: 900px) {
+            .miku-quote-row {
+                margin-bottom: clamp(9px, 2.8vw, 13px) !important;
+            }
+
+            .miku-quote-wrap {
+                gap: clamp(6px, 2.2vw, 9px) !important;
+                max-width: 100% !important;
+            }
+
+            .miku-quote-wrap > div:first-child {
+                width: clamp(30px, 9.5vw, 38px) !important;
+                height: clamp(30px, 9.5vw, 38px) !important;
+                border-width: 2px !important;
+                box-shadow: 0 0 0 1px var(--miku-light) !important;
+            }
+
+            .miku-quote-body > div:first-child {
+                font-size: clamp(0.68rem, 2.5vw, 0.78rem) !important;
+                line-height: 1.15 !important;
+                margin-bottom: 3px !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) {
+                padding: 8px 10px !important;
+                margin-bottom: 6px !important;
+                border-radius: 10px !important;
+                box-shadow: 0 2px 6px rgba(57,197,187,0.04) !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) > div {
+                font-size: clamp(0.82rem, 3vw, 0.92rem) !important;
+                line-height: 1.34 !important;
+                font-weight: 600 !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) {
+                padding: 7px 9px !important;
+                border-radius: 8px !important;
+                border-left-width: 3px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) > div:first-child {
+                gap: 5px !important;
+                margin-bottom: 3px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) svg {
+                width: 13px !important;
+                height: 13px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) span {
+                font-size: clamp(0.74rem, 2.7vw, 0.82rem) !important;
+                line-height: 1.15 !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) > div:last-child {
+                font-size: clamp(0.72rem, 2.65vw, 0.8rem) !important;
+                line-height: 1.34 !important;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .miku-quote-row {
+                margin-bottom: 9px !important;
+            }
+
+            .miku-quote-wrap {
+                gap: 6px !important;
+            }
+
+            .miku-quote-wrap > div:first-child {
+                width: clamp(28px, 8.8vw, 34px) !important;
+                height: clamp(28px, 8.8vw, 34px) !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) {
+                padding: 7px 9px !important;
+                margin-bottom: 5px !important;
+            }
+
+            .miku-quote-body > div:nth-child(2) > div {
+                font-size: clamp(0.78rem, 2.85vw, 0.88rem) !important;
+                line-height: 1.3 !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) {
+                padding: 6px 8px !important;
+            }
+
+            .miku-quote-body > div:nth-child(3) > div:last-child {
+                font-size: clamp(0.7rem, 2.55vw, 0.78rem) !important;
+                line-height: 1.3 !important;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .miku-quote-row {
+                margin-bottom: 8px !important;
+            }
+
+            .miku-quote-wrap > div:first-child {
+                width: 26px !important;
+                height: 26px !important;
+            }
+
+            .miku-quote-body > div:nth-child(2),
+            .miku-quote-body > div:nth-child(3) {
+                padding: 6px 7px !important;
+            }
+        }
+        /* MOBILE_QUOTE_DENSE_V4_END */
+
+</style>
 {{ inline_assets.peak_activity_image_css() | safe }}
 </head>
 
@@ -681,7 +1614,7 @@
                 <div class="footer-author">
                     <i data-lucide="heart"
                         style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: #ff85a2;"></i>
-                    Template by shiitin
+                    <a href="https://github.com/shiitin" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">Template by shiitin</a>
                 </div>
             </div>
         </div>
