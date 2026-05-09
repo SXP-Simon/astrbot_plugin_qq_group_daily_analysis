@@ -1,0 +1,51 @@
+{% set image_moments_emojis = [
+    t2i_atri_font_mirror ~ '/file/1775132814629_1774881270686_爱心.gif',
+    t2i_atri_font_mirror ~ '/file/1775132815504_1774881268554_可爱.gif'
+] %}
+{% if image_summaries %}
+<div class="image-moments-section-new" style="margin-top: 60px; width: 100%;">
+    <div class="section-title" style="color: #448aff; margin-bottom: 45px; font-weight: 900; font-size: 1.6rem; text-align: center; display: flex; align-items: center; justify-content: center; gap: 15px;">
+        <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; vertical-align: middle;">
+            <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+        高性能图片分析 Image Moments
+    </div>
+
+    {% for item in image_summaries %}
+    <div class="img-moment-card avoid-break" style="display: flex; gap: 25px; margin-bottom: 60px; width: 100%; align-items: flex-start;">
+        <!-- Avatar & Name Column (Fixed Left) -->
+        <div class="img-moment-user" style="flex: 0 0 85px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            {% if item.avatar_url %}
+            <div style="width: 68px; height: 68px; border-radius: 50%; border: 3px solid #448aff; box-shadow: 0 4px 15px rgba(68, 138, 255, 0.2); overflow: hidden; background: #fff;">
+                <img src="{{ item.avatar_url }}" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            {% endif %}
+            <div style="font-weight: 800; color: #448aff; font-size: 0.95rem; text-align: center; word-break: break-all;">{{ item.sender }}</div>
+        </div>
+
+        <!-- Content Column (Bubble) -->
+        <div class="img-moment-content" style="flex: 1; min-width: 0;">
+            <div style="background: #fff; border: 2px solid #448aff; border-radius: 4px 24px 24px 24px; padding: 15px; box-shadow: 0 15px 40px rgba(68, 138, 255, 0.08); position: relative;">
+                <!-- Image Container -->
+                <div style="background: #f0f7ff; border-radius: 16px; overflow: hidden; border: 1.5px solid rgba(68, 138, 255, 0.15); margin-bottom: 20px;">
+                    <img src="{{ item.url }}" style="width: 100%; max-height: 1200px; height: auto; object-fit: contain; display: block;">
+                </div>
+                
+                <!-- Floating Emoji -->
+                <img src="{{ image_moments_emojis | random }}" style="position: absolute; right: -25px; top: -25px; width: 50px; height: 50px; z-index: 5;">
+
+                <!-- Commentary -->
+                <div style="padding: 15px 20px; background: rgba(68, 138, 255, 0.04); border-radius: 12px; border-left: 5px solid #448aff;">
+                    <div style="font-weight: 900; color: #448aff; margin-bottom: 8px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                        <span>🤖 亚托莉锐评</span>
+                    </div>
+                    <div style="color: #333; line-height: 1.7; font-size: 1.05rem; letter-spacing: 0.02em;">
+                        {{ item.description }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

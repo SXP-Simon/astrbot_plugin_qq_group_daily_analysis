@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -2851,6 +2851,12 @@
                 </div>
                 <div class="html-slot">{{ quotes_html | safe }}</div>
             </section>
+
+            {% if image_summary_html %}
+            <section class="glass-card section image-moments-section" style="padding-top: 0; background: transparent; border: none; box-shadow: none; backdrop-filter: none;">
+                {{ image_summary_html | safe }}
+            </section>
+            {% endif %}
 
             {% if chat_quality_html %}
             <section class="glass-card section review-section">

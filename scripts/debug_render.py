@@ -14,9 +14,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 plugin_root = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.insert(0, plugin_root)
 
-# Mock astrbot.api before importing our modules
-astrbot_api = types.ModuleType("astrbot.api")
-
 
 class MockLogger:
     def info(self, msg, *args, **kwargs):
@@ -38,9 +35,22 @@ class MockLogger:
         return True
 
 
+# Mock astrbot.api before importing our modules
+astrbot_api = types.ModuleType("astrbot.api")
+astrbot_api.__path__ = []  # Mark as package
 astrbot_api.logger = MockLogger()
 astrbot_api.AstrBotConfig = dict
 sys.modules["astrbot.api"] = astrbot_api
+
+# Mock submodules
+astrbot_api_provider = types.ModuleType("astrbot.api.provider")
+astrbot_api_provider.LLMResponse = type(
+    "LLMResponse", (), {"__init__": lambda self, **kwargs: None}
+)
+sys.modules["astrbot.api.provider"] = astrbot_api_provider
+
+astrbot_api_star = types.ModuleType("astrbot.api.star")
+sys.modules["astrbot.api.star"] = astrbot_api_star
 
 # Mock astrbot.core.utils.astrbot_path
 astrbot_core_utils = types.ModuleType("astrbot.core.utils")
@@ -49,16 +59,26 @@ astrbot_path.get_astrbot_data_path = lambda: Path(".")
 sys.modules["astrbot.core.utils"] = astrbot_core_utils
 sys.modules["astrbot.core.utils.astrbot_path"] = astrbot_path
 
+from src.application.services.analysis_application_service import (  # noqa: E402
+    AnalysisApplicationService,
+)
 from src.domain.models.data_models import (  # noqa: E402
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
     GroupStatistics,
+    ImageSummaryItem,
     QualityDimension,
     QualityReview,
     SummaryTopic,
     TokenUsage,
     UserTitle,
+)
+from src.domain.services.statistics_service import StatisticsService  # noqa: E402
+from src.domain.value_objects.unified_message import (  # noqa: E402
+    MessageContent,
+    MessageContentType,
+    UnifiedMessage,
 )
 from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
 
@@ -139,6 +159,33 @@ class MockConfigManager:
 
     def get_t2i_rendering_strategies(self) -> list:
         return []
+
+    def get_image_summary_enabled(self) -> bool:
+        return True
+
+    def get_max_image_summaries(self) -> int:
+        return 5
+
+    def get_max_image_candidates(self) -> int:
+        return 10
+
+    def get_image_llm_max_concurrent(self) -> int:
+        return 2
+
+    def get_llm_retries(self) -> int:
+        return 1
+
+    def get_llm_backoff(self) -> int:
+        return 0
+
+    def get_image_summary_prompt(self) -> str:
+        return "Test prompt for ${sender}"
+
+    def get_bot_self_ids(self) -> list:
+        return []
+
+    def get_enable_streaming_llm_call(self) -> bool:
+        return False
 
 
 async def mock_get_user_avatar(user_id: str) -> str:
@@ -288,12 +335,34 @@ async def debug_render(
     stats.golden_quotes = golden_quotes
     # token_usage already set in constructor
 
+    image_summaries = [
+        ImageSummaryItem(
+            url="https://q4.qlogo.cn/headimg_dl?dst_uin=123456789&spec=640",
+            sender="张三",
+            sender_id="123456789",
+            description="这张图里的代码写得很有深度，建议细品。",
+        ),
+        ImageSummaryItem(
+            url="https://q4.qlogo.cn/headimg_dl?dst_uin=987654321&spec=640",
+            sender="李四",
+            sender_id="987654321",
+            description="离谱的 Bug 现场，建议查查这位群友的心理状态。",
+        ),
+        ImageSummaryItem(
+            url="https://q4.qlogo.cn/headimg_dl?dst_uin=112233445&spec=640",
+            sender="王五",
+            sender_id="112233445",
+            description="群友发的神秘二次元图，大家都在问出处。",
+        ),
+    ]
+
     analysis_result = {
         "statistics": stats,
         "topics": topics,
         "user_titles": user_titles,
         "user_analysis": user_analysis,
         "chat_quality_review": stats.chat_quality_review,
+        "image_summaries": image_summaries,
         "analysis_date": "2026年02月11日",
         "group_id": "123456",
         "group_name": "插件逻辑调试群",
@@ -345,6 +414,151 @@ async def debug_render(
     print("You can now open this file with your browser to debug your HTML/CSS.")
 
 
+async def test_image_logic():
+    print("\n" + "=" * 50)
+    print("RUNNING IMAGE LOGIC TESTS")
+    print("=" * 50)
+
+    # 1. Test StatisticsService Sampling
+    stats_service = StatisticsService()
+    messages = []
+    # Create 30 mock messages with images
+    for i in range(30):
+        messages.append(
+            UnifiedMessage(
+                message_id=f"msg_{i}",
+                sender_id=f"user_{i}",
+                sender_name=f"User {i}",
+                group_id="test_group",
+                timestamp=1000 + i * 100,
+                text_content="",
+                contents=(
+                    MessageContent(
+                        type=MessageContentType.IMAGE,
+                        url=f"http://example.com/img_{i}.jpg",
+                        raw_data={"url": f"http://example.com/img_{i}.jpg"},
+                    ),
+                ),
+            )
+        )
+
+    print(f"Total messages created: {len(messages)}")
+    limit = 10
+    sampled = stats_service.extract_image_summaries(messages, limit=limit)
+
+    print(f"Sampled {len(sampled)} images (Limit: {limit})")
+    for i, item in enumerate(sampled):
+        print(f"  [{i}] {item.url}")
+
+    # Verify distribution (simple check)
+    if len(sampled) == limit:
+        print("[PASS] Sampling count correct.")
+        # Check if it's spread out (index should be roughly 0, 3, 6, 9, 12, 15, 18, 21, 24, 27)
+        indices = [int(item.url.split("_")[1].split(".")[0]) for item in sampled]
+        print(f"  Indices: {indices}")
+        if indices[0] == 0 and indices[-1] > 20:
+            print("[PASS] Sampling distribution seems uniform.")
+    else:
+        print("[FAIL] Sampling count incorrect.")
+
+    # 2. Test Concurrent Analysis in AnalysisApplicationService
+    print("\nTesting Concurrent Analysis...")
+
+    class MockLLMAnalyzer:
+        def __init__(self):
+            self.context = types.ModuleType("MockContext")
+
+            async def mock_llm_generate(**kwargs):
+                await asyncio.sleep(0.5)  # Simulate network latency
+                print(f"    [AI] Analyzing {kwargs.get('image_urls')}")
+                return types.SimpleNamespace(
+                    completion_text="这张图很抽象。",
+                    usage={
+                        "prompt_tokens": 100,
+                        "completion_tokens": 50,
+                        "total_tokens": 150,
+                    },
+                )
+
+            self.context.llm_generate = mock_llm_generate
+            self.context.get_provider_by_id = lambda **k: types.SimpleNamespace(
+                text_chat_stream=None, meta=lambda: types.SimpleNamespace(id="test")
+            )
+
+    config = MockConfigManager()
+
+    # Manually mock the service object to avoid heavy __init__
+    class MockService:
+        def __init__(self, config_manager, llm_analyzer):
+            self.config_manager = config_manager
+            self.llm_analyzer = llm_analyzer
+
+    app_service = MockService(config, MockLLMAnalyzer())
+    # Bind the method from the class to our mock instance
+    app_service._enrich_image_summaries = (
+        AnalysisApplicationService._enrich_image_summaries.__get__(
+            app_service, MockService
+        )
+    )
+
+    start_time = asyncio.get_event_loop().time()
+    # Mocking 5 candidates, concurrency limit is 2
+    candidates = sampled[:5]
+    print(f"Starting parallel analysis of {len(candidates)} images (Concurrency: 2)...")
+
+    # We need to mock get_provider_id_with_fallback for AnalysisApplicationService
+    # It's imported as a function, so we might need to patch it or mock the context better.
+    # Since we are in a debug script, we can just hack it.
+    import src.application.services.analysis_application_service as aas
+
+    original_fallback = aas.get_provider_id_with_fallback
+    aas.get_provider_id_with_fallback = lambda *a, **k: asyncio.sleep(
+        0, result="mock_provider"
+    )
+
+    # Also mock call_provider_with_retry
+    original_call = aas.call_provider_with_retry
+
+    async def mock_call(*a, **k):
+        await asyncio.sleep(0.5)
+        print(
+            f"    [AI] Analyzing image: {k.get('extra_generate_kwargs', {}).get('image_urls')}"
+        )
+        return types.SimpleNamespace(
+            completion_text="这张图太离谱了，建议查查。",
+            usage={"prompt_tokens": 200, "completion_tokens": 100, "total_tokens": 300},
+        )
+
+    aas.call_provider_with_retry = mock_call
+
+    try:
+        enriched, tokens = await app_service._enrich_image_summaries(candidates)
+        end_time = asyncio.get_event_loop().time()
+
+        print(f"Analysis took {end_time - start_time:.2f}s")
+        print(f"Enriched {len(enriched)} images")
+        print(
+            f"Total Tokens: {tokens.total_tokens} (P:{tokens.prompt_tokens}, C:{tokens.completion_tokens})"
+        )
+
+        # Verify time: 5 images, concurrency 2, each 0.5s -> should take ~1.5s
+        if 1.4 <= (end_time - start_time) <= 1.8:
+            print("[PASS] Concurrency seems to be working correctly (around 1.5s).")
+        else:
+            print(
+                f"Note: Concurrency check timed {end_time - start_time:.2f}s (Expected ~1.5s)"
+            )
+
+        if tokens.total_tokens == 300 * len(enriched):
+            print("[PASS] Token tracking correct.")
+    finally:
+        # Restore originals
+        aas.get_provider_id_with_fallback = original_fallback
+        aas.call_provider_with_retry = original_call
+
+    print("=" * 50 + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Debug render tool for astrbot_plugin_qq_group_daily_analysis report templates."
@@ -371,9 +585,17 @@ def main() -> None:
         choices=["mbti", "sbti", "acgti"],
         help="Profile display mode to render (default: mbti)",
     )
+    parser.add_argument(
+        "--test-logic",
+        action="store_true",
+        help="Run image sampling and concurrency logic tests",
+    )
     args = parser.parse_args()
 
-    asyncio.run(debug_render(args.template, args.output, args.mode))
+    if args.test_logic:
+        asyncio.run(test_image_logic())
+    else:
+        asyncio.run(debug_render(args.template, args.output, args.mode))
 
 
 if __name__ == "__main__":

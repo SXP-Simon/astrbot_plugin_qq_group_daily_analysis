@@ -26,8 +26,12 @@ from ...domain.services.analysis_domain_service import (
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
+from ...infrastructure.analysis.utils.llm_utils import (
+    call_provider_with_retry,
+    extract_token_usage,
+    get_provider_id_with_fallback,
+)
 from ...infrastructure.persistence.incremental_store import IncrementalStore
-from ...infrastructure.analysis.utils.llm_utils import get_provider_id_with_fallback
 from ...infrastructure.utils.template_utils import render_template
 from ...utils.logger import logger
 
@@ -273,23 +277,44 @@ class AnalysisApplicationService:
 
             # 回填结果
             statistics.golden_quotes = golden_quotes
-            statistics.token_usage = total_token_usage
+
             image_summaries = []
+            image_tokens = TokenUsage()
             if self.config_manager.get_image_summary_enabled():
-                bot_self_ids = {str(uid) for uid in self.config_manager.get_bot_self_ids() if uid}
+                bot_self_ids = {
+                    str(uid) for uid in self.config_manager.get_bot_self_ids() if uid
+                }
                 runtime_bot_ids = getattr(self.bot_manager, "_bot_self_ids", None) or []
                 bot_self_ids.update(str(uid) for uid in runtime_bot_ids if uid)
+
+                # 获取候选上限配置（默认15，可由用户自定义）
+                max_image_candidates = getattr(
+                    self.config_manager, "get_max_image_candidates", lambda: 15
+                )()
                 max_image_summaries = self.config_manager.get_max_image_summaries()
-                image_summaries = self.statistics_service.extract_image_summaries(
+
+                # 提取候选图（现在使用打散分布采样）
+                candidates = self.statistics_service.extract_image_summaries(
                     unified_messages,
-                    limit=max(max_image_summaries * 3, max_image_summaries),
+                    limit=max_image_candidates,
                     bot_self_ids=bot_self_ids,
                 )
-                image_summaries = await self._enrich_image_summaries(
-                    image_summaries,
+
+                # 并发分析图片
+                image_summaries, image_tokens = await self._enrich_image_summaries(
+                    candidates,
                     unified_msg_origin=unified_msg_origin,
                     keep_limit=max_image_summaries,
                 )
+
+            # 汇总 Token 消耗
+            statistics.token_usage = TokenUsage(
+                prompt_tokens=total_token_usage.prompt_tokens
+                + image_tokens.prompt_tokens,
+                completion_tokens=total_token_usage.completion_tokens
+                + image_tokens.completion_tokens,
+                total_tokens=total_token_usage.total_tokens + image_tokens.total_tokens,
+            )
 
             analysis_result = {
                 "statistics": statistics,
@@ -319,10 +344,10 @@ class AnalysisApplicationService:
         image_summaries: list[Any],
         unified_msg_origin: str | None = None,
         keep_limit: int | None = None,
-    ) -> list[Any]:
-        """使用图片摘要专用 Provider 解析图片内容，并筛选适合锐评的抽象图片。"""
+    ) -> tuple[list[Any], TokenUsage]:
+        """使用图片摘要专用 Provider 解析图片内容，并筛选适合锐评的抽象图片。支持并发处理、重试与 Token 统计。"""
         if not image_summaries:
-            return []
+            return [], TokenUsage()
 
         try:
             provider_id = await get_provider_id_with_fallback(
@@ -333,10 +358,14 @@ class AnalysisApplicationService:
             )
         except Exception as e:
             logger.warning(f"图片摘要 Provider 选择失败，使用原始图片描述: {e}")
-            return image_summaries[:keep_limit] if keep_limit else image_summaries
+            return (
+                image_summaries[:keep_limit] if keep_limit else image_summaries
+            ), TokenUsage()
 
         if not provider_id:
-            return image_summaries[:keep_limit] if keep_limit else image_summaries
+            return (
+                image_summaries[:keep_limit] if keep_limit else image_summaries
+            ), TokenUsage()
 
         system_prompt = (
             "你是群聊图片筛选和锐评助手。只挑选群聊里抽象、离谱、有梗、值得锐评的图片。"
@@ -344,39 +373,82 @@ class AnalysisApplicationService:
             "适合保留时，只返回适合直接展示在群日报里的简体中文短评，不要输出 Markdown。"
         )
         prompt_template = self.config_manager.get_image_summary_prompt()
-        kept_items: list[Any] = []
 
-        for item in image_summaries:
-            if keep_limit and len(kept_items) >= keep_limit:
-                break
+        # 使用专用信号量控制图片请求并发，避免触发风控/限流
+        image_concurrency = getattr(
+            self.config_manager, "get_image_llm_max_concurrent", lambda: 2
+        )()
+        sem = asyncio.Semaphore(image_concurrency)
+        total_image_tokens = TokenUsage()
+
+        async def analyze_single_image(item):
+            nonlocal total_image_tokens
             url = getattr(item, "url", "")
             if not url:
-                continue
-            try:
-                prompt = render_template(
-                    prompt_template,
-                    sender=getattr(item, "sender", ""),
-                    time="",
-                )
-                resp = await self.llm_analyzer.context.llm_generate(
-                    chat_provider_id=provider_id,
-                    prompt=prompt,
-                    image_urls=[url],
-                    system_prompt=system_prompt,
-                )
-                text = (getattr(resp, "completion_text", "") or "").strip()
-                normalized = text.strip().lower().strip("`*_ -。.!！")
-                if not text or normalized.startswith("skip") or normalized in {"跳过", "不保留", "忽略"}:
-                    logger.info(f"图片锐评筛选跳过普通图片: {url}")
-                    continue
-                item.model_summary = text[:160]
-                item.description = text[:160]
-                kept_items.append(item)
-            except Exception as e:
-                logger.warning(f"图片摘要解析失败，跳过该图片: {url} | {e}")
+                return None
 
-        logger.info(f"图片锐评筛选完成，保留 {len(kept_items)}/{len(image_summaries)} 张")
-        return kept_items
+            async with sem:
+                try:
+                    prompt = render_template(
+                        prompt_template,
+                        sender=getattr(item, "sender", ""),
+                        time="",
+                    )
+                    # 使用带重试机制的通用调用函数
+                    resp = await call_provider_with_retry(
+                        self.llm_analyzer.context,
+                        self.config_manager,
+                        prompt=prompt,
+                        provider_id_key="image_summary_provider_id",
+                        system_prompt=system_prompt,
+                        umo=unified_msg_origin,
+                        extra_generate_kwargs={"image_urls": [url]},
+                    )
+
+                    if not resp:
+                        return None
+
+                    # 统计 Token
+                    usage = extract_token_usage(resp)
+                    total_image_tokens.prompt_tokens += usage.get("prompt_tokens", 0)
+                    total_image_tokens.completion_tokens += usage.get(
+                        "completion_tokens", 0
+                    )
+                    total_image_tokens.total_tokens += usage.get("total_tokens", 0)
+
+                    text = (getattr(resp, "completion_text", "") or "").strip()
+                    normalized = text.strip().lower().strip("`*_ -。.!！")
+                    if (
+                        not text
+                        or normalized.startswith("skip")
+                        or normalized in {"跳过", "不保留", "忽略"}
+                    ):
+                        logger.debug("图片锐评筛选跳过普通图片 (AI 判定为不值得锐评)")
+                        return None
+
+                    item.model_summary = text[:160]
+                    item.description = text[:160]
+                    return item
+                except Exception as e:
+                    logger.warning(f"单张图片摘要解析异常，跳过: {e}")
+                    return None
+
+        # 并发执行所有候选图的分析
+        tasks = [analyze_single_image(item) for item in image_summaries]
+        results = await asyncio.gather(*tasks)
+
+        # 过滤掉 None 结果并按照原时间顺序排列（gather 保持顺序）
+        kept_items = [res for res in results if res is not None]
+
+        # 截断到用户要求的显示上限
+        if keep_limit:
+            kept_items = kept_items[:keep_limit]
+
+        logger.info(
+            f"图片锐评筛选完成，保留 {len(kept_items)}/{len(image_summaries)} 张，"
+            f"图片分析 Token: P={total_image_tokens.prompt_tokens}, C={total_image_tokens.completion_tokens}"
+        )
+        return kept_items, total_image_tokens
 
     # ----------------------------------------------------------------
     # 增量分析用例

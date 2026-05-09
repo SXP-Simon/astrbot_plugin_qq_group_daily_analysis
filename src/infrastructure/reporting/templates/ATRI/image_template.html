@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -1835,7 +1835,7 @@
                             <h3 class="section-title">亚托莉的宝藏瓶<img class="section-kawaii"
                                     src="{{ t2i_atri_font_mirror }}/file/1775130605165_1774881270686_爱心.webp"
                                     alt="kawaii icon"></h3>
-                            <div class="section-sub">亚托莉偷偷记在小本子上的宝藏名言！</div>
+                            <div class="section-sub">亚托莉偷偷记 en 小本子上的宝藏名言！</div>
                         </div>
                     </div>
                     <div class="section-badge">PRECIOUS WORDS <img class="badge-kawaii"
@@ -1844,6 +1844,12 @@
                 </div>
                 <div class="html-slot">{{ quotes_html | safe }}</div>
             </section>
+
+            {% if image_summary_html %}
+            <section class="glass-card section image-moments-section" style="padding-top: 0; background: transparent; border: none; box-shadow: none; backdrop-filter: none;">
+                {{ image_summary_html | safe }}
+            </section>
+            {% endif %}
 
             {% if chat_quality_html %}
             <section class="glass-card section review-section">
