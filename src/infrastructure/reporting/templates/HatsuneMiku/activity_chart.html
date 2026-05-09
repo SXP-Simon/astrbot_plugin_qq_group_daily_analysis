@@ -37,7 +37,7 @@
         {% for item in chart_data %}
         <div style="flex: 1; text-align: center;">
             <span style="font-family: var(--font-num); font-size: 0.7rem; color: var(--text-sub); font-weight: bold; white-space: nowrap; display: inline-block;">
-                {{ "%02d"|format(item.hour) }}{% if loop.index0 % 4 == 0 or loop.last %}时{% endif %}
+                {{ "%02d"|format(item.hour) }}{% if loop.index0 % 4 == 0 or loop.last %}<span class="miku-hour-unit">时</span>{% endif %}
             </span>
         </div>
         {% endfor %}
