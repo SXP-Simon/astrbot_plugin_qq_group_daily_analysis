@@ -1760,6 +1760,12 @@
         </div>
         {% endif %}
 
+        {% if image_summary_html %}
+        <div style="margin-bottom: 50px;">
+            {{image_summary_html | safe}}
+        </div>
+        {% endif %}
+
         <!-- Chat Quality Review -->
         {% if chat_quality_html %}
         <div style="margin-bottom: 50px;">

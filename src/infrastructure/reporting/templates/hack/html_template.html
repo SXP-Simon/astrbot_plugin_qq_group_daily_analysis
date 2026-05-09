@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -106,6 +106,15 @@
                     <div class="quote-container">
                         {{quotes_html | safe}}
                     </div>
+                </div>
+                {% endif %}
+
+                {% if image_summary_html %}
+                <div class="report-section image-summary-section">
+                    <div class="section-header">
+                        <span class="prompt">$</span> analyze --images
+                    </div>
+                    {{image_summary_html | safe}}
                 </div>
                 {% endif %}
             </div>

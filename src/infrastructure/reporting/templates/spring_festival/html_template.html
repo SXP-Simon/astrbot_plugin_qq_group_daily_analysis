@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -675,6 +675,13 @@
                 <div class="sf-quote-timeline">
                     {{quotes_html | safe}}
                 </div>
+            </div>
+            {% endif %}
+
+            {% if image_summary_html %}
+            <div class="sf-section-box">
+                <div class="sf-section-title"><span>🖼️</span> 精彩图片瞬间</div>
+                {{image_summary_html | safe}}
             </div>
             {% endif %}
         </div>

@@ -1,0 +1,44 @@
+{% if image_summaries %}
+<div class="image-moments-section-new" style="margin-top: 60px; width: 100%; grid-column: span 12;">
+    <div class="section-title" style="justify-content: center; margin-bottom: 40px; font-family: var(--font-title); font-size: 1.8rem; display: flex; align-items: center; gap: 15px; color: var(--accent-orange);">
+        <svg class="doodle" viewBox="0 0 24 24" style="width: 32px; height: 32px;">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
+        </svg>
+        图片名场面 Image Moments
+    </div>
+
+    {% for item in image_summaries %}
+    <div class="img-moment-card avoid-break" style="display: flex; gap: 20px; margin-bottom: 50px; width: 100%; align-items: flex-start;">
+        <!-- Avatar & Name Column (Fixed Left) -->
+        <div class="img-moment-user" style="flex: 0 0 80px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            {% if item.avatar_url %}
+            <div style="width: 64px; height: 64px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; background: #fff;">
+                <img src="{{ item.avatar_url }}" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            {% endif %}
+            <div style="font-family: var(--font-hand); font-size: 1.1rem; color: var(--ink-primary); text-align: center; font-weight: bold; width: 100%; overflow: hidden; text-overflow: ellipsis;">{{ item.sender }}</div>
+        </div>
+
+        <!-- Content Column (Bubble) -->
+        <div class="img-moment-content" style="flex: 1; min-width: 0;">
+            <div style="background: #fff; border: 2.5px solid var(--ink-primary); border-radius: 4px 24px 24px 24px; padding: 18px; box-shadow: 8px 8px 0 rgba(179, 229, 252, 0.5); position: relative;">
+                <!-- Image Container -->
+                <div style="background: #fdfbf7; border-radius: 12px; overflow: hidden; border: 1.5px solid #eee; margin-bottom: 20px;">
+                    <img src="{{ item.url }}" style="width: 100%; max-height: 1200px; height: auto; object-fit: contain; display: block;">
+                </div>
+                
+                <!-- Commentary -->
+                <div style="padding: 15px; background: rgba(255, 249, 196, 0.3); border-radius: 12px; border-left: 6px solid var(--accent-orange);">
+                    <div style="font-family: var(--font-title); font-size: 1.1rem; color: var(--accent-orange); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                        <span>🎨 AI 锐评</span>
+                    </div>
+                    <div style="font-family: var(--font-hand); font-size: 1.35rem; color: var(--ink-primary); line-height: 1.5; font-style: italic;">
+                        "{{ item.description }}"
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

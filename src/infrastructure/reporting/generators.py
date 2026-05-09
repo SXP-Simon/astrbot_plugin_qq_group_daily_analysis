@@ -825,6 +825,54 @@ class ReportGenerator(IReportGenerator):
         )
         logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
+        # 生成图片锐评HTML
+        max_image_summaries = getattr(
+            self.config_manager, "get_max_image_summaries", lambda: 5
+        )()
+        image_summaries = analysis_result.get("image_summaries") or []
+        display_image_summaries = image_summaries[:max_image_summaries]
+
+        image_summaries_list = []
+        for item in display_image_summaries:
+            user_id = getattr(item, "sender_id", None)
+            avatar_url = (
+                await self._get_user_avatar(
+                    user_id,
+                    avatar_url_getter,
+                    avatar_cache_namespace,
+                )
+                if user_id
+                else None
+            )
+            if user_id:
+                self._register_reusable_avatar(
+                    avatar_url,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    avatar_key=self._get_avatar_cache_key(
+                        user_id, avatar_cache_namespace
+                    ),
+                )
+            image_summaries_list.append(
+                {
+                    "url": item.url,
+                    "sender": item.sender,
+                    "sender_id": user_id,
+                    "avatar_url": avatar_url,
+                    "description": item.model_summary or item.description,
+                }
+            )
+
+        image_summary_html = self.html_templates.render_template(
+            "image_summary_item.html",
+            image_summaries=image_summaries_list,
+            **common_context,
+        )
+        if image_summary_html:
+            logger.info(
+                f"图片锐评HTML生成完成，图片数: {len(display_image_summaries)}/{len(image_summaries)}"
+            )
+
         # 生成活跃度可视化HTML
         chart_data = self.activity_visualizer.get_hourly_chart_data(
             activity_viz.hourly_activity
@@ -881,6 +929,7 @@ class ReportGenerator(IReportGenerator):
             "topics_html": topics_html,
             "titles_html": titles_html,
             "quotes_html": quotes_html,
+            "image_summary_html": image_summary_html,
             "hourly_chart_html": hourly_chart_html,
             "chat_quality_html": chat_quality_html,
             "total_tokens": stats.token_usage.total_tokens

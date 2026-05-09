@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -820,6 +820,17 @@
         </div>
         <div class="quote-list">
             {{quotes_html|safe}}
+        </div>
+        {% endif %}
+
+        {% if image_summary_html %}
+        <div class="section-label">
+            Image Moments <span>GALLERY_MODULE</span>
+        </div>
+        <div class="grid-container">
+            <div style="grid-column: span 12;">
+                {{image_summary_html|safe}}
+            </div>
         </div>
         {% endif %}
 
