@@ -7,8 +7,32 @@ from collections import defaultdict
 from datetime import datetime
 
 from ...infrastructure.visualization.activity_charts import ActivityVisualizer
-from ..models.data_models import EmojiStatistics, GroupStatistics, ImageSummaryItem, TokenUsage
+from ..models.data_models import (
+    EmojiStatistics,
+    GroupStatistics,
+    ImageSummaryItem,
+    TokenUsage,
+)
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
+
+BOT_MARKERS = ("bot", "astrbot", "openclaw", "机器人")
+REPORT_SENDER_MARKERS = ("日报", "群分析", "群聊分析")
+STRONG_REPORT_MARKERS = (
+    "群聊分析报告",
+    "聊天质量锐评",
+    "bible quotes",
+    "image moments",
+    "24h 活跃",
+    "24h活跃",
+    "ai 锐评",
+    "ai锐评",
+    "图片锐评",
+    "图片名场面",
+    "群贤毕至",
+    "活跃轨迹",
+    "群聊质量",
+)
+WEAK_REPORT_MARKERS = ("日报", "群聊分析", "群分析")
 
 
 class StatisticsService:
@@ -112,29 +136,22 @@ class StatisticsService:
         """判断是否为 bot/日报报告图片，避免进入图片名场面。"""
         sender_name = (msg.sender_name or msg.sender_card or "").lower()
         sender_id = str(msg.sender_id or "").lower()
-        normalized_bot_ids = {str(uid).lower() for uid in (bot_self_ids or set()) if uid}
+        normalized_bot_ids = {
+            str(uid).lower() for uid in (bot_self_ids or set()) if uid
+        }
         if normalized_bot_ids and sender_id in normalized_bot_ids:
             return True
 
-        bot_markers = ("bot", "astrbot", "openclaw", "机器人")
-        report_sender_markers = ("日报", "群分析", "群聊分析")
-        if any(marker in sender_name for marker in bot_markers + report_sender_markers):
+        if any(marker in sender_name for marker in BOT_MARKERS + REPORT_SENDER_MARKERS):
             return True
-        if any(marker in sender_id for marker in bot_markers):
+        if any(marker in sender_id for marker in BOT_MARKERS):
             return True
-
-        strong_report_markers = (
-            "群聊分析报告", "聊天质量锐评", "bible quotes", "image moments",
-            "24h 活跃", "24h活跃", "ai 锐评", "ai锐评", "图片锐评",
-            "图片名场面", "群贤毕至", "活跃轨迹", "群聊质量",
-        )
-        weak_report_markers = ("日报", "群聊分析", "群分析")
 
         text = (msg.text_content or "").strip().lower()
-        if any(marker in text for marker in strong_report_markers):
+        if any(marker in text for marker in STRONG_REPORT_MARKERS):
             return True
-        if any(marker in text for marker in weak_report_markers) and any(
-            marker in sender_name for marker in bot_markers + report_sender_markers
+        if any(marker in text for marker in WEAK_REPORT_MARKERS) and any(
+            marker in sender_name for marker in BOT_MARKERS + REPORT_SENDER_MARKERS
         ):
             return True
 
@@ -151,10 +168,10 @@ class StatisticsService:
                 raw_parts.append(str(raw_data))
 
             raw_lower = " ".join(raw_parts).lower()
-            if any(marker in raw_lower for marker in strong_report_markers):
+            if any(marker in raw_lower for marker in STRONG_REPORT_MARKERS):
                 return True
-            if any(marker in raw_lower for marker in weak_report_markers) and any(
-                marker in sender_name for marker in bot_markers + report_sender_markers
+            if any(marker in raw_lower for marker in WEAK_REPORT_MARKERS) and any(
+                marker in sender_name for marker in BOT_MARKERS + REPORT_SENDER_MARKERS
             ):
                 return True
 
@@ -166,11 +183,11 @@ class StatisticsService:
         limit: int = 12,
         bot_self_ids: set[str] | None = None,
     ) -> list[ImageSummaryItem]:
-        """从消息中提取图片锐评候选。"""
-        items: list[ImageSummaryItem] = []
-        for msg in reversed(messages):
-            if len(items) >= limit:
-                break
+        """从消息中提取图片锐评候选。采用全局等距采样，确保时间分布均匀。"""
+        all_candidates: list[ImageSummaryItem] = []
+
+        # 1. 收集所有符合条件的图片
+        for msg in messages:
             if self._is_bot_daily_report_image(msg, bot_self_ids):
                 continue
             for content in msg.contents:
@@ -188,19 +205,34 @@ class StatisticsService:
                     )
                 if not url:
                     continue
-                description = "已收录进今日群聊图片名场面。"
-                items.append(
+
+                all_candidates.append(
                     ImageSummaryItem(
                         url=url,
                         sender=msg.sender_name or msg.sender_card or str(msg.sender_id),
                         sender_id=str(msg.sender_id or ""),
-                        description=description,
+                        description="已收录进今日群聊图片名场面。",
                     )
                 )
-                if len(items) >= limit:
-                    break
-        items.reverse()
-        return items
+
+        if not all_candidates:
+            return []
+
+        # 2. 如果图片总数超过限制，进行等距采样
+        total_count = len(all_candidates)
+        if total_count <= limit:
+            return all_candidates
+
+        # 采样逻辑：计算步长，确保覆盖全天
+        # 使用浮点步长可以更均匀地分布
+        step = total_count / limit
+        sampled_items = []
+        for i in range(limit):
+            index = int(i * step)
+            if index < total_count:
+                sampled_items.append(all_candidates[index])
+
+        return sampled_items
 
     def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
         """内部辅助：将 UnifiedMessage 转换为 Legacy Dict 格式，用于兼容可视化组件"""

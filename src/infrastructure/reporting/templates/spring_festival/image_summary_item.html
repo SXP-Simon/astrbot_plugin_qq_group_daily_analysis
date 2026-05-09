@@ -1,0 +1,16 @@
+{% if image_summaries %}
+<div class="quotes-section image-moments-section" style="margin-top: 40px; padding-top: 20px; border-top: 2px dashed #d32f2f;">
+    <h2 class="section-title" style="color: #d32f2f;">🧧 图片名场面</h2>
+    {% for item in image_summaries %}
+    <div class="quote-wrapper" style="margin-bottom: 30px; background: #fff; border: 2px solid #d32f2f; border-radius: 8px; overflow: hidden; box-shadow: 4px 4px 0 #ffcdd2;">
+        <img src="{{ item.url }}" style="width: 100%; max-height: 400px; object-fit: contain; display: block; border-bottom: 1px solid #ffcdd2;">
+        <div style="padding: 15px; background: #fffde7;">
+            <div style="font-weight: bold; color: #d32f2f; margin-bottom: 8px;">🖼️ 来自 {{ item.sender }} 的春节瞬间</div>
+            <div style="color: #5d4037; font-size: 0.95rem; line-height: 1.5;">
+                <span style="font-weight: bold;">AI 锐评：</span>{{ item.model_summary or item.description or "新年好，图真靓！" }}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

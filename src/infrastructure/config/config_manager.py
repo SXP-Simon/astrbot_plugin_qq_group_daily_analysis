@@ -194,6 +194,10 @@ class ConfigManager:
         """获取最大图片锐评数量"""
         return self._get_group("analysis_features").get("max_image_summaries", 5)
 
+    def get_max_image_candidates(self) -> int:
+        """获取用于 LLM 分析的候选图片数量上限"""
+        return self._get_group("analysis_features").get("max_image_candidates", 15)
+
     def get_image_summary_prompt(self, style: str = "image_summary_prompt") -> str:
         """获取图片锐评提示词模板"""
         prompts_config = self._get_group("prompts").get("image_summary_prompts", {})
@@ -206,7 +210,6 @@ class ConfigManager:
             "如果是宣传海报、广告图、通知截图、普通美图、风景壁纸、自拍摆拍、商品图、无明显槽点的普通图片，请只回复 SKIP。"
             "如果适合保留，请用 60 字以内锐评：先概括图里有什么，再轻微吐槽或点评。语气接地气、有梗，但不要造谣，不要提发送时间，不要输出 Markdown。"
         )
-
 
     def get_llm_retries(self) -> int:
         """获取LLM请求重试次数"""
@@ -539,6 +542,10 @@ class ConfigManager:
     def get_llm_max_concurrent(self) -> int:
         """获取全局 LLM 最大并发请求数"""
         return self._get_group("performance").get("max_concurrent_llm", 3)
+
+    def get_image_llm_max_concurrent(self) -> int:
+        """获取图片分析专用 LLM 最大并发请求数"""
+        return self._get_group("performance").get("max_concurrent_image_llm", 2)
 
     def get_t2i_max_concurrent(self) -> int:
         """获取全局图片渲染（T2I）最大并发数"""

@@ -40,8 +40,6 @@ class GoldenQuote:
     user_id: str = ""  # 原 qq 字段
 
 
-
-
 @dataclass
 class ImageSummaryItem:
     """图片锐评数据结构"""

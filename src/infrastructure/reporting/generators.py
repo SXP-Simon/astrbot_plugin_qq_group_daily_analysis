@@ -825,41 +825,53 @@ class ReportGenerator(IReportGenerator):
         )
         logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
-        # 生成图片锐评HTML：独立于金句区块，避免和最后一条文字锐评粘连
-        image_summary_html = ""
+        # 生成图片锐评HTML
+        max_image_summaries = getattr(
+            self.config_manager, "get_max_image_summaries", lambda: 5
+        )()
         image_summaries = analysis_result.get("image_summaries") or []
-        max_image_summaries = min(
-            self.config_manager.get_max_golden_quotes(),
-            getattr(self.config_manager, "get_max_image_summaries", lambda: 5)(),
-        )
         display_image_summaries = image_summaries[:max_image_summaries]
-        if display_image_summaries:
-            image_cards = []
-            for item in display_image_summaries:
-                if isinstance(item, dict):
-                    url = item.get("url", "")
-                    sender = item.get("sender", "")
-                    raw_roast = item.get("model_summary") or item.get("description") or "这张图已收录进今日群聊名场面。"
-                else:
-                    url = getattr(item, "url", "")
-                    sender = getattr(item, "sender", "")
-                    raw_roast = getattr(item, "model_summary", "") or getattr(item, "description", "") or "这张图已收录进今日群聊名场面。"
-                image_cards.append(
-                    '<div class="quote-wrapper" style="margin-bottom: 28px; break-inside: avoid; clear: both;">'
-                    '<div class="q-bubble" style="padding: 0; overflow: hidden;">'
-                    f'<img src="{self._escape_html(url)}" alt="图片锐评" style="width: 100%; max-height: 360px; object-fit: contain; display: block; background: #f7f1e3; border-bottom: 2px solid var(--ink-primary);">'
-                    '<div style="padding: 18px 20px;">'
-                    f'<div class="q-author" style="margin-bottom: 10px;">🖼️ 图片锐评：{self._escape_html(sender)}</div>'
-                    f'<div class="q-analysis-note">{self._escape_html(str(raw_roast))}</div>'
-                    '</div></div></div>'
+
+        image_summaries_list = []
+        for item in display_image_summaries:
+            user_id = getattr(item, "sender_id", None)
+            avatar_url = (
+                await self._get_user_avatar(
+                    user_id,
+                    avatar_url_getter,
+                    avatar_cache_namespace,
                 )
-            image_summary_html = (
-                '<div class="quotes-section image-moments-section" style="grid-column: span 12; clear: both; display: block; margin-top: 56px; padding-top: 26px; border-top: 2px dashed rgba(0,0,0,0.18);">'
-                '<h2 class="section-title">🖼️ 图片名场面</h2>'
-                + ''.join(image_cards)
-                + '</div>'
+                if user_id
+                else None
             )
-            logger.info(f"图片锐评HTML生成完成，图片数: {len(display_image_summaries)}/{len(image_summaries)}")
+            if user_id:
+                self._register_reusable_avatar(
+                    avatar_url,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    avatar_key=self._get_avatar_cache_key(
+                        user_id, avatar_cache_namespace
+                    ),
+                )
+            image_summaries_list.append(
+                {
+                    "url": item.url,
+                    "sender": item.sender,
+                    "sender_id": user_id,
+                    "avatar_url": avatar_url,
+                    "description": item.model_summary or item.description,
+                }
+            )
+
+        image_summary_html = self.html_templates.render_template(
+            "image_summary_item.html",
+            image_summaries=image_summaries_list,
+            **common_context,
+        )
+        if image_summary_html:
+            logger.info(
+                f"图片锐评HTML生成完成，图片数: {len(display_image_summaries)}/{len(image_summaries)}"
+            )
 
         # 生成活跃度可视化HTML
         chart_data = self.activity_visualizer.get_hourly_chart_data(

@@ -1,0 +1,12 @@
+{% if image_summaries %}
+<div class="section">
+    <h2>图片名场面</h2>
+    {% for item in image_summaries %}
+    <div style="margin-bottom: 25px; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+        <img src="{{ item.url }}" style="width: 100%; max-height: 350px; object-fit: contain; display: block; margin-bottom: 10px;">
+        <div style="font-weight: bold; margin-bottom: 5px;">{{ item.sender }}</div>
+        <div style="font-size: 0.9em; color: #666;">{{ item.model_summary or item.description }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

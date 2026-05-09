@@ -423,6 +423,12 @@
                 "description": "最大图片锐评数量",
                 "default": 5,
                 "hint": "日报中最多展示的图片锐评数量。插件会先多取候选图，再由视觉模型筛掉普通图片，最终保留不超过此数量。"
+            },
+            "max_image_candidates": {
+                "type": "int",
+                "description": "最大图片分析候选数",
+                "default": 15,
+                "hint": "从全天群聊中等距采样出的、发送给 AI 进行分析的图片数量。增加此值会提高分析深度，但会显著增加分析耗时和 Token 消耗。"
             }
         }
     },
@@ -686,6 +692,12 @@
                 "description": "最大 LLM 请求并发数（API 闸口）",
                 "default": 3,
                 "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。"
+            },
+            "max_concurrent_image_llm": {
+                "type": "int",
+                "description": "图片分析最大并发数",
+                "default": 2,
+                "hint": "专门限制图片锐评时的并发请求数。因为图片分析耗时较长且 Token 较贵，建议设置较小（如 1-3），以防止被服务商风控。"
             },
             "max_concurrent_t2i": {
                 "type": "int",
