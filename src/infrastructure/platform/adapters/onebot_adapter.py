@@ -102,7 +102,11 @@ class OneBotAdapter(PlatformAdapter):
                 if self._is_snowluma:
                     logger.info("[OneBot] 探测到当前协议端为 SnowLuma")
         except Exception as exc:
-            logger.debug("[OneBot] 探测 SnowLuma 失败，将按非 SnowLuma 处理: %s", exc, exc_info=True)
+            logger.debug(
+                "[OneBot] 探测 SnowLuma 失败，将按非 SnowLuma 处理: %s",
+                exc,
+                exc_info=True,
+            )
             self._is_snowluma = False
         self._snowluma_checked = True
 
