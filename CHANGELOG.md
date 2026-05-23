@@ -1,11 +1,16 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.10.5] - ✨ 支持可选流式 LLM 调用 (#181 @anchorAnc)
+## [v4.10.6] - ✨ 支持 [SnowLuma](https://github.com/SnowLuma/SnowLuma) ，优化 HatsuneMiku 移动端适配情况
+*   **✨ 支持 SnowLuma**: 自动探测是否为 SnowLuma；支持 SnowLuma 的 get_group_msg_history 参数传递情况 (#189  @tryptophawa)。
+*   **🛠️ HatsuneMiku 优化**: 优化了移动端直接使用浏览器打开 HTML 时的 UI 排版情况 (#184 @Shiitin)
+
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.10.5] - ✨ 支持可选流式 LLM 调用 (#181 @anchorAnc)
 
 ## [v4.10.4] - 🛠️ 将镜像地址配置注入到子模板渲染上下文中，解决 ATRI 子模板中变量未定义导致的生成问题
 
