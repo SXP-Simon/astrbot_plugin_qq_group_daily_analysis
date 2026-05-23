@@ -66,6 +66,10 @@ class OneBotAdapter(PlatformAdapter):
         self._is_llbot = False
         self._llbot_checked = False
 
+        # SnowLuma 探测标志
+        self._is_snowluma = False
+        self._snowluma_checked = False
+
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
@@ -85,6 +89,21 @@ class OneBotAdapter(PlatformAdapter):
         except Exception:
             self._is_llbot = False
         self._llbot_checked = True
+
+    async def _detect_snowluma(self):
+        """探测是否为 SnowLuma"""
+        if self._snowluma_checked:
+            return
+        try:
+            result = await self.bot.call_action("get_version_info")
+            if isinstance(result, dict):
+                app_name = result.get("app_name", "")
+                self._is_snowluma = app_name.lower() == "snowluma"
+                if self._is_snowluma:
+                    logger.info("[OneBot] 探测到当前协议端为 SnowLuma")
+        except Exception:
+            self._is_snowluma = False
+        self._snowluma_checked = True
 
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
@@ -117,6 +136,8 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return []
 
+        await self._detect_snowluma()
+
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
             all_raw_messages = []
@@ -144,11 +165,14 @@ class OneBotAdapter(PlatformAdapter):
                 params = {
                     "group_id": int(group_id),
                     "count": fetch_count,
-                    "reverseOrder": True,  # 关键：协助分页向上回退拉取历史
                 }
-
-                if current_anchor_id:
-                    params["message_seq"] = current_anchor_id
+                if self._is_snowluma:
+                    if current_anchor_id:
+                        params["message_id"] = current_anchor_id
+                else:
+                    params["reverseOrder"] = True
+                    if current_anchor_id:
+                        params["message_seq"] = current_anchor_id
 
                 result = await self.bot.call_action("get_group_msg_history", **params)
 
@@ -199,22 +223,21 @@ class OneBotAdapter(PlatformAdapter):
                         all_raw_messages.append(raw_msg)
 
                 # 提取锚点。
-                # 优先级: message_seq > real_id > seq > message_id
+                # SnowLuma 仅支持 message_id 作为分页锚点。
+                # 其他 OneBot 实现优先级: message_seq > real_id > seq > message_id
                 # 注意：为了兼容 NapCat (NTQQ) 这种 Message ID 非连续的情况，
                 # 以及 LLBot 这种 Sequence 模式，我们统一不进行 -1 偏移。
                 # 分页产生的重叠消息将由上方的去重逻辑 (all_raw_messages 循环对比) 自动处理。
-                seq_val = (
-                    chunk_earliest_msg.get("message_seq")
-                    or chunk_earliest_msg.get("real_id")
-                    or chunk_earliest_msg.get("seq")
-                )
-                mid_val = chunk_earliest_msg.get("message_id")
-
-                # 重要修复：取消对 ID 的 -1 位移手动操作。
-                # 在 NapCat/NTQQ 中，ID 虽为数字但并不连续。-1 位移会导致“消息不存在”错误。
-                # 即使 API 返回的消息包含锚点本身，上方的 deduplication 逻辑也会将其排除，
-                # 保证翻页能正常向前推进。
-                new_anchor_id = seq_val if seq_val is not None else mid_val
+                if self._is_snowluma:
+                    new_anchor_id = chunk_earliest_msg.get("message_id")
+                else:
+                    seq_val = (
+                        chunk_earliest_msg.get("message_seq")
+                        or chunk_earliest_msg.get("real_id")
+                        or chunk_earliest_msg.get("seq")
+                    )
+                    mid_val = chunk_earliest_msg.get("message_id")
+                    new_anchor_id = seq_val if seq_val is not None else mid_val
 
                 # 如果消息时间已到达起始点，或者锚点无法继续往前位移，则停止
                 if chunk_earliest_time <= start_timestamp:
