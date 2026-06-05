@@ -149,23 +149,11 @@ class ReportDispatcher:
 
                     # 若用户配置为空，使用默认目录
                     if not html_output_dir:
-                        try:
-                            from astrbot.api.star import StarTools
+                        from astrbot.api.star import StarTools
 
-                            html_output_dir = os.path.join(
-                                StarTools.get_data_dir(), "self_hosted_html_reports"
-                            )
-                        except Exception:
-                            from astrbot.core.utils.astrbot_path import (
-                                get_astrbot_data_path,
-                            )
-
-                            html_output_dir = os.path.join(
-                                get_astrbot_data_path(),
-                                "plugin_data",
-                                "astrbot_plugin_qq_group_daily_analysis",
-                                "self_hosted_html_reports",
-                            )
+                        html_output_dir = os.path.join(
+                            StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis"), "self_hosted_html_reports"
+                        )
 
                     # 计算相对路径并转换为URL
                     rel_path = os.path.relpath(html_path, html_output_dir)

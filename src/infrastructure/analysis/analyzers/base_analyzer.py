@@ -285,15 +285,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             from astrbot.api.star import StarTools
             from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-            try:
-                data_path = StarTools.get_data_dir() / "debug_data"
-            except Exception:
-                data_path = (
-                    Path(get_astrbot_data_path())
-                    / "plugin_data"
-                    / "astrbot_plugin_qq_group_daily_analysis"
-                    / "debug_data"
-                )
+            data_path = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "debug_data"
 
             data_path.mkdir(parents=True, exist_ok=True)
 

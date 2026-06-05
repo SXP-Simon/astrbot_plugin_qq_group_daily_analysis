@@ -464,7 +464,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
             from astrbot.api.star import StarTools
 
-            debug_dir = StarTools.get_data_dir() / "debug_data"
+            debug_dir = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "debug_data"
             debug_dir.mkdir(parents=True, exist_ok=True)
 
             msg_file_path = debug_dir / f"{session_id}_messages.json"

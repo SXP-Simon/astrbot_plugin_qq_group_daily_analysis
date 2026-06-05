@@ -88,15 +88,7 @@ class GroupDailyAnalysis(Star):
         self.bot_manager.set_plugin_instance(self)
         self.history_manager = HistoryManager(self)
 
-        try:
-            plugin_data_dir = StarTools.get_data_dir()
-        except Exception:
-            # 回退逻辑：手动构造满足规范的路径
-            plugin_data_dir = (
-                Path(get_astrbot_data_path())
-                / "plugin_data"
-                / "astrbot_plugin_qq_group_daily_analysis"
-            )
+        plugin_data_dir = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis")
 
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
@@ -640,23 +632,11 @@ class GroupDailyAnalysis(Star):
 
                         # 若用户配置为空，使用默认目录
                         if not html_output_dir:
-                            try:
-                                from astrbot.api.star import StarTools
+                            from astrbot.api.star import StarTools
 
-                                html_output_dir = os.path.join(
-                                    StarTools.get_data_dir(), "self_hosted_html_reports"
-                                )
-                            except Exception:
-                                from astrbot.core.utils.astrbot_path import (
-                                    get_astrbot_data_path,
-                                )
-
-                                html_output_dir = os.path.join(
-                                    get_astrbot_data_path(),
-                                    "plugin_data",
-                                    "astrbot_plugin_qq_group_daily_analysis",
-                                    "self_hosted_html_reports",
-                                )
+                            html_output_dir = os.path.join(
+                                StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis"), "self_hosted_html_reports"
+                            )
 
                         # 计算相对路径并转换为URL
                         rel_path = os.path.relpath(html_path, html_output_dir)

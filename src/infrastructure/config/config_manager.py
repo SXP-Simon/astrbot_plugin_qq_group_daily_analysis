@@ -301,19 +301,9 @@ class ConfigManager:
 
         from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-        try:
-            default_path = StarTools.get_data_dir() / "self_hosted_html_reports"
-            val = self._get_group("html").get("html_output_dir")
-            return val if val else str(default_path)
-        except Exception:
-            val = self._get_group("html").get("html_output_dir")
-            fallback_path = (
-                Path(get_astrbot_data_path())
-                / "plugin_data"
-                / "astrbot_plugin_qq_group_daily_analysis"
-                / "self_hosted_html_reports"
-            )
-            return val if val else str(fallback_path)
+        default_path = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "self_hosted_html_reports"
+        val = self._get_group("html").get("html_output_dir")
+        return val if val else str(default_path)
 
     def get_html_base_url(self) -> str:
         """获取HTML外链Base URL"""
