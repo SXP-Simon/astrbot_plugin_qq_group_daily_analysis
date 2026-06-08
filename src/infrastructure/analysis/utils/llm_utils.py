@@ -4,6 +4,8 @@ LLM API请求处理工具模块
 """
 
 import asyncio
+import random
+from typing import Any
 
 from astrbot.api.provider import LLMResponse
 
@@ -39,7 +41,7 @@ def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
 
 
 async def _call_provider_stream(
-    context, provider_id: str, llm_kwargs: dict[str, object]
+    context, provider_id: str, llm_kwargs: dict[str, Any]
 ):
     provider = context.get_provider_by_id(provider_id=provider_id)
     if provider is None:
@@ -242,7 +244,7 @@ async def call_provider_with_retry(
     provider_id_key: str | None = None,
     system_prompt: str | None = None,
     response_format: JSONObject | None = None,
-    extra_generate_kwargs: dict[str, object] | None = None,
+    extra_generate_kwargs: dict[str, Any] | None = None,
 ) -> object | None:
     """
     调用LLM提供者，带超时、重试与退避。支持指定模型失效后自动降级到默认模型重试。
@@ -282,7 +284,7 @@ async def call_provider_with_retry(
 
         try:
             async with GlobalRateLimiter.get_instance().semaphore:
-                llm_kwargs: dict[str, object] = {
+                llm_kwargs: dict[str, Any] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
                 }
@@ -305,12 +307,19 @@ async def call_provider_with_retry(
 
     # 3. 开始执行队列
     last_exc = None
-    current_response_format = response_format
+    
+    # 记录上一次尝试的 Provider ID，用于判断是否发生切换
+    previous_pid = None
 
     for i, (current_pid, is_fallback) in enumerate(attempt_queue):
         attempt_num = i + 1
         is_last_attempt = (i == len(attempt_queue) - 1)
         
+        # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
+        if current_pid != previous_pid:
+            current_response_format = response_format
+        previous_pid = current_pid
+
         prefix = "[降级补偿] " if is_fallback else "[LLM 调用] "
         logger.info(
             f"{prefix}尝试 #{attempt_num} | Provider ID: {current_pid} | "
@@ -340,7 +349,10 @@ async def call_provider_with_retry(
             logger.warning(f"{prefix}请求失败: {last_exc}")
             
             if not is_last_attempt:
-                await asyncio.sleep(backoff * attempt_num)
+                # Exponential backoff with jitter: backoff * (2 ^ (attempt_num - 1)) + random jitter
+                sleep_time = backoff * (2 ** (attempt_num - 1)) + random.uniform(0, 1)
+                logger.debug(f"等待 {sleep_time:.2f} 秒后重试...")
+                await asyncio.sleep(sleep_time)
 
     logger.error(f"LLM请求队列全部耗尽，最终失败: {last_exc}")
     return None
