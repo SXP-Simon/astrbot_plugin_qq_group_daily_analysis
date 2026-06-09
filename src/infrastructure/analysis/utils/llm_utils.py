@@ -255,7 +255,7 @@ async def call_provider_with_retry(
 
     # 1. 确定我们要尝试的 Provider 队列
     attempt_queue = []
-    
+
     # 尝试获取指定的 Provider
     specific_provider_id = await get_provider_id_with_fallback(
         context, config_manager, provider_id_key, umo
@@ -270,7 +270,7 @@ async def call_provider_with_retry(
         )
         if fallback_provider_id and fallback_provider_id != specific_provider_id:
             attempt_queue.extend([(fallback_provider_id, True)] * retries)
-            
+
     if not attempt_queue:
         logger.error("无可用 Provider，无法调用 llm_generate")
         return None
@@ -302,19 +302,21 @@ async def call_provider_with_retry(
             cb.record_success()
             return resp
         except Exception as err:
+            if r_format is not None and _is_response_format_unsupported_error(err):
+                raise err
             cb.record_failure()
             raise err
 
     # 3. 开始执行队列
     last_exc = None
-    
+
     # 记录上一次尝试的 Provider ID，用于判断是否发生切换
     previous_pid = None
 
     for i, (current_pid, is_fallback) in enumerate(attempt_queue):
         attempt_num = i + 1
         is_last_attempt = (i == len(attempt_queue) - 1)
-        
+
         # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
         if current_pid != previous_pid:
             current_response_format = response_format
@@ -325,17 +327,17 @@ async def call_provider_with_retry(
             f"{prefix}尝试 #{attempt_num} | Provider ID: {current_pid} | "
             f"prompt长度={len(prompt) if prompt else 0}字符"
         )
-        
+
         if not prompt or not prompt.strip():
             logger.error("LLM provider: prompt 为空，无法调用")
             return None
 
         try:
             return await _execute_llm_request(current_pid, current_response_format)
-            
+
         except Exception as e:
             last_exc = e
-            
+
             # 处理不支持 response_format 的情况
             if current_response_format is not None and _is_response_format_unsupported_error(e):
                 logger.warning(f"{prefix}当前 Provider 可能不支持 response_format，已自动降级为无 schema 约束。")
@@ -345,9 +347,9 @@ async def call_provider_with_retry(
                     return await _execute_llm_request(current_pid, current_response_format)
                 except Exception as inner_e:
                     last_exc = inner_e
-            
+
             logger.warning(f"{prefix}请求失败: {last_exc}")
-            
+
             if not is_last_attempt:
                 # Exponential backoff with jitter: backoff * (2 ^ (attempt_num - 1)) + random jitter
                 sleep_time = backoff * (2 ** (attempt_num - 1)) + random.uniform(0, 1)
