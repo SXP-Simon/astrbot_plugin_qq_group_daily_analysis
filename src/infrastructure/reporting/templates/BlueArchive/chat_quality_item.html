@@ -1,0 +1,62 @@
+<div class="quality-item">
+    <div class="quality-header">
+        <div class="theme-title-badge">{{ title }}</div>
+        <div class="time-range">{{ subtitle }}</div>
+    </div>
+
+    <div class="dimension-bar-container">
+        <div class="dimension-bar">
+            {% set colors = ['#3593f3', '#58c3e5', '#7c6ff7', '#f06292', '#ff9800', '#66bb6a', '#ffc107', '#26c6da'] %}
+            {% for dim in dimensions %}
+            {% set safe_percentage = dim.percentage|float %}
+            {% if safe_percentage < 0 %}
+            {% set safe_percentage = 0 %}
+            {% elif safe_percentage > 100 %}
+            {% set safe_percentage = 100 %}
+            {% endif %}
+            {% if safe_percentage > 0 %}
+            <div class="dimension-segment"
+                style="width: {{ safe_percentage }}%; background-color: {{ colors[loop.index0 % colors|length] }};"
+                title="{{ dim.comment }}">
+                <span class="segment-label"
+                    style="display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
+                    {{ dim.name }}
+                </span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="dimension-comments-grid">
+        {% set colors = ['#3593f3', '#58c3e5', '#7c6ff7', '#f06292', '#ff9800', '#66bb6a', '#ffc107', '#26c6da'] %}
+        {% for dim in dimensions %}
+        {% set safe_percentage = dim.percentage|float %}
+        {% if safe_percentage < 0 %}
+        {% set safe_percentage = 0 %}
+        {% elif safe_percentage > 100 %}
+        {% set safe_percentage = 100 %}
+        {% endif %}
+        {% if safe_percentage > 0 %}
+        <div class="dim-sticker" style="border-color: {{ colors[loop.index0 % colors|length] }};">
+            <div style="margin-bottom: 4px;">
+                <strong class="dim-sticker-title" style="color: {{ colors[loop.index0 % colors|length] }}; border-color: {{ colors[loop.index0 % colors|length] }}; margin-bottom: 2px; display: block;">{{ dim.name }}</strong>
+                <span style="font-size: 0.82rem; font-weight: 700; color: {{ colors[loop.index0 % colors|length] }}; display: block; margin-bottom: 4px;">{{ '%.1f'|format(safe_percentage) }}%</span>
+            </div>
+            <span>{{ dim.comment }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="character-summary-section">
+        <div class="character-container">
+            <img class="character-img"
+                src="https://img.dkdun.cn/v1/2026/17/314653a2aa301144.png"
+                alt="Assistant">
+        </div>
+        <div class="speech-bubble">
+            <div class="summary-text">{{ summary }}</div>
+        </div>
+    </div>
+</div>
