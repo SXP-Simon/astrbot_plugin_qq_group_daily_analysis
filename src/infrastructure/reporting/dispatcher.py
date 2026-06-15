@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -152,7 +153,8 @@ class ReportDispatcher:
                         from astrbot.api.star import StarTools
 
                         html_output_dir = os.path.join(
-                            StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis"), "self_hosted_html_reports"
+                            StarTools.get_data_dir(PLUGIN_NAME),
+                            "self_hosted_html_reports",
                         )
 
                     # 计算相对路径并转换为URL

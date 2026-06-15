@@ -8,6 +8,7 @@ from collections.abc import Sized
 from typing import Generic, TypeVar
 
 from ....domain.models.data_models import TokenUsage
+from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
@@ -280,12 +281,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             session_id: 会话ID
         """
         try:
-            from pathlib import Path
-
             from astrbot.api.star import StarTools
-            from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-            data_path = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "debug_data"
+            data_path = StarTools.get_data_dir(PLUGIN_NAME) / "debug_data"
 
             data_path.mkdir(parents=True, exist_ok=True)
 

@@ -13,6 +13,7 @@ from ...domain.models.data_models import (
     UserTitle,
 )
 from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from .analyzers.chat_quality_analyzer import ChatQualityAnalyzer
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer
@@ -464,7 +465,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
             from astrbot.api.star import StarTools
 
-            debug_dir = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "debug_data"
+            debug_dir = StarTools.get_data_dir(PLUGIN_NAME) / "debug_data"
             debug_dir.mkdir(parents=True, exist_ok=True)
 
             msg_file_path = debug_dir / f"{session_id}_messages.json"

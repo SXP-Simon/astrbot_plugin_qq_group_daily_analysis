@@ -6,6 +6,7 @@
 from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
+from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ..utils.template_utils import upgrade_str_format_template
 
@@ -297,11 +298,8 @@ class ConfigManager:
 
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
-        from pathlib import Path
 
-        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
-        default_path = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis") / "self_hosted_html_reports"
+        default_path = StarTools.get_data_dir(PLUGIN_NAME) / "self_hosted_html_reports"
         val = self._get_group("html").get("html_output_dir")
         return val if val else str(default_path)
 

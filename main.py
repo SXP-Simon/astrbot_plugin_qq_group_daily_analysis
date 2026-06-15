@@ -45,6 +45,7 @@ from .src.infrastructure.platform.template_preview import (
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
+from .src.shared.constants import PLUGIN_NAME
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
@@ -77,10 +78,6 @@ class GroupDailyAnalysis(Star):
         super().__init__(context)
         self.config = config
 
-        from pathlib import Path
-
-        from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-
         # 1. 基础设施层
         self.config_manager = ConfigManager(config)
         self.bot_manager = BotManager(self.config_manager)
@@ -88,7 +85,7 @@ class GroupDailyAnalysis(Star):
         self.bot_manager.set_plugin_instance(self)
         self.history_manager = HistoryManager(self)
 
-        plugin_data_dir = StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis")
+        plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
 
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
@@ -635,7 +632,8 @@ class GroupDailyAnalysis(Star):
                             from astrbot.api.star import StarTools
 
                             html_output_dir = os.path.join(
-                                StarTools.get_data_dir("astrbot_plugin_qq_group_daily_analysis"), "self_hosted_html_reports"
+                                StarTools.get_data_dir(PLUGIN_NAME),
+                                "self_hosted_html_reports",
                             )
 
                         # 计算相对路径并转换为URL
