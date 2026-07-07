@@ -910,13 +910,12 @@ class OneBotAdapter(PlatformAdapter):
         role = "member"  # 默认为 member 以防万一
         if bot_user_id:
             try:
-                # 设定 5.0 秒超时
+                # 设定 5.0 秒超时，且不传递 no_cache=True 以免强制向腾讯服务器同步导致高延时超时
                 member_info = await asyncio.wait_for(
                     self.bot.call_action(
                         "get_group_member_info",
                         group_id=int(group_id),
                         user_id=int(bot_user_id),
-                        no_cache=True,
                     ),
                     timeout=5.0,
                 )
@@ -931,6 +930,10 @@ class OneBotAdapter(PlatformAdapter):
                         else:
                             # 否则认为是相对禁言剩余时间（秒）
                             is_individually_muted = True
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"[OneBot] 获取群成员信息超时 (group_id={group_id}, user_id={bot_user_id})"
+                )
             except Exception as e:
                 if self._is_mute_exception(e):
                     self._record_mute_status(group_id, True)
@@ -951,12 +954,11 @@ class OneBotAdapter(PlatformAdapter):
         # 管理员 (admin) 和群主 (owner) 在全群禁言下依然可以发言
         if role not in ("admin", "owner"):
             try:
-                # 设定 5.0 秒超时
+                # 设定 5.0 秒超时，不传 no_cache=True
                 group_info = await asyncio.wait_for(
                     self.bot.call_action(
                         "get_group_info",
                         group_id=int(group_id),
-                        no_cache=True,
                     ),
                     timeout=5.0,
                 )
@@ -976,6 +978,8 @@ class OneBotAdapter(PlatformAdapter):
                             f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
                         )
                         return True
+            except asyncio.TimeoutError:
+                logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
             except Exception as e:
                 if self._is_mute_exception(e):
                     self._record_mute_status(group_id, True)
@@ -992,13 +996,15 @@ class OneBotAdapter(PlatformAdapter):
         if not e:
             return False
         err_str = str(e)
-        if "1200" in err_str and "禁言" in err_str:
+        if "1200" in err_str and ("禁言" in err_str or "操作失败" in err_str):
             return True
         err_msg = getattr(e, "message", "") or ""
         err_word = getattr(e, "wording", "") or ""
         if (
             "禁言" in err_msg
             or "禁言" in err_word
+            or "操作失败" in err_msg
+            or "操作失败" in err_word
             or "shut up" in err_msg.lower()
             or "shut up" in err_word.lower()
         ):
