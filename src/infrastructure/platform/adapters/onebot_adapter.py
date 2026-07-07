@@ -7,6 +7,7 @@ OneBot v11 平台适配器
 import asyncio
 import base64
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -69,6 +70,9 @@ class OneBotAdapter(PlatformAdapter):
         # SnowLuma 探测标志
         self._is_snowluma = False
         self._snowluma_checked = False
+
+        # 禁言状态缓存 (group_id -> timestamp)
+        self._muted_groups_cache = {}
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -517,8 +521,11 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
                 message=message,
             )
+            self._record_mute_status(group_id, False)  # 成功发送，清除禁言缓存
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.error(f"OneBot 文本发送失败: {e}")
             return False
 
@@ -600,9 +607,15 @@ class OneBotAdapter(PlatformAdapter):
             if caption:
                 msg.append({"type": "text", "data": {"text": caption}})
             msg.append({"type": "image", "data": {"file": file_val}})
-            await self.bot.call_action(
-                "send_group_msg", group_id=int(group_id), message=msg
-            )
+            try:
+                await self.bot.call_action(
+                    "send_group_msg", group_id=int(group_id), message=msg
+                )
+                self._record_mute_status(group_id, False)
+            except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                raise
             logger.debug(f"[OneBot] 图片发送成功 ({label}): 群 {group_id}")
 
         return await self._execute_transmission_strategy(
@@ -618,12 +631,18 @@ class OneBotAdapter(PlatformAdapter):
         """通过群文件功能上传并发送文件。"""
 
         async def do_upload(content: str, label: str):
-            await self.bot.call_action(
-                "upload_group_file",
-                group_id=int(group_id),
-                file=content,
-                name=filename or os.path.basename(file_path),
-            )
+            try:
+                await self.bot.call_action(
+                    "upload_group_file",
+                    group_id=int(group_id),
+                    file=content,
+                    name=filename or os.path.basename(file_path),
+                )
+                self._record_mute_status(group_id, False)
+            except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                raise
             logger.debug(f"[OneBot] 文件发送成功 ({label}): {filename or file_path}")
 
         return await self._execute_transmission_strategy(
@@ -653,8 +672,11 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
                 messages=nodes,
             )
+            self._record_mute_status(group_id, False)
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.warning(f"[OneBot] 发送合并转发消息失败: {e}")
             return False
 
@@ -837,10 +859,20 @@ class OneBotAdapter(PlatformAdapter):
         """
         检查 OneBot 平台下的群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
         """
+        import time
+
+        # 1. 检查最近缓存的禁言状态（5分钟内有效）
+        last_mute_time = self._muted_groups_cache.get(group_id)
+        if last_mute_time and (time.time() - last_mute_time) < 300:
+            logger.info(
+                f"[OneBot] 从缓存中检测到群 {group_id} 最近处于禁言状态，跳过分析"
+            )
+            return True
+
         if not hasattr(self.bot, "call_action"):
             return False
 
-        # 1. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
+        # 2. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
         bot_user_id = None
         if self.bot_self_ids:
             valid_ids = [
@@ -857,30 +889,41 @@ class OneBotAdapter(PlatformAdapter):
 
         if not bot_user_id:
             try:
-                login_info = await self.bot.call_action("get_login_info")
+                # 设定 5.0 秒超时，防止接口请求无限挂起
+                login_info = await asyncio.wait_for(
+                    self.bot.call_action("get_login_info"), timeout=5.0
+                )
                 if login_info and "user_id" in login_info:
                     bot_user_id = str(login_info["user_id"])
                     self.bot_self_ids = [bot_user_id]
             except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_login_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
                 logger.warning(f"[OneBot] 获取 Bot 自身登录信息失败: {e}")
 
-        # 2. 检查 Bot 是否被个人禁言，并获取 Bot 在群内的角色
+        # 3. 检查 Bot 是否被个人禁言，并获取 Bot 在群内的角色
         is_individually_muted = False
         role = "member"  # 默认为 member 以防万一
         if bot_user_id:
             try:
-                member_info = await self.bot.call_action(
-                    "get_group_member_info",
-                    group_id=int(group_id),
-                    user_id=int(bot_user_id),
-                    no_cache=True,
+                # 设定 5.0 秒超时
+                member_info = await asyncio.wait_for(
+                    self.bot.call_action(
+                        "get_group_member_info",
+                        group_id=int(group_id),
+                        user_id=int(bot_user_id),
+                        no_cache=True,
+                    ),
+                    timeout=5.0,
                 )
                 if member_info:
                     role = member_info.get("role", "member")
                     shut_up_time = member_info.get("shut_up_time", 0)
                     if shut_up_time > 0:
-                        import time
-
                         # 如果 shut_up_time 是 Unix 时间戳
                         if shut_up_time > 1000000000:
                             if shut_up_time > time.time():
@@ -889,22 +932,33 @@ class OneBotAdapter(PlatformAdapter):
                             # 否则认为是相对禁言剩余时间（秒）
                             is_individually_muted = True
             except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_group_member_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
                 logger.warning(
                     f"[OneBot] 获取群成员信息失败 (group_id={group_id}, user_id={bot_user_id}): {e}"
                 )
 
         if is_individually_muted:
+            self._record_mute_status(group_id, True)
             logger.info(f"[OneBot] 检测到 Bot 在群 {group_id} 中已被单独禁言")
             return True
 
-        # 3. 如果 Bot 不是管理员或群主，则需要检查群聊是否开启了全群禁言
+        # 4. 如果 Bot 不是管理员或群主，则需要检查群聊是否开启了全群禁言
         # 管理员 (admin) 和群主 (owner) 在全群禁言下依然可以发言
         if role not in ("admin", "owner"):
             try:
-                group_info = await self.bot.call_action(
-                    "get_group_info",
-                    group_id=int(group_id),
-                    no_cache=True,
+                # 设定 5.0 秒超时
+                group_info = await asyncio.wait_for(
+                    self.bot.call_action(
+                        "get_group_info",
+                        group_id=int(group_id),
+                        no_cache=True,
+                    ),
+                    timeout=5.0,
                 )
                 if group_info:
                     # 兼容 LLOneBot, Lagrange, NapCat/SnowLuma 以及标准 OneBot 各种全群禁言状态字段
@@ -917,14 +971,45 @@ class OneBotAdapter(PlatformAdapter):
                         or group_info.get("shut_up")
                     )
                     if is_whole_ban:
+                        self._record_mute_status(group_id, True)
                         logger.info(
                             f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
                         )
                         return True
             except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_group_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
                 logger.warning(f"[OneBot] 获取群信息失败 (group_id={group_id}): {e}")
 
+        # 如果所有检测均未发现禁言，则暂时视为未禁言
         return False
+
+    def _is_mute_exception(self, e: Exception) -> bool:
+        if not e:
+            return False
+        err_str = str(e)
+        if "1200" in err_str and "禁言" in err_str:
+            return True
+        err_msg = getattr(e, "message", "") or ""
+        err_word = getattr(e, "wording", "") or ""
+        if (
+            "禁言" in err_msg
+            or "禁言" in err_word
+            or "shut up" in err_msg.lower()
+            or "shut up" in err_word.lower()
+        ):
+            return True
+        return False
+
+    def _record_mute_status(self, group_id: str, is_muted: bool):
+        if is_muted:
+            self._muted_groups_cache[group_id] = time.time()
+        else:
+            self._muted_groups_cache.pop(group_id, None)
 
     # ================================================================
     # 群文件 / 群相册上传
