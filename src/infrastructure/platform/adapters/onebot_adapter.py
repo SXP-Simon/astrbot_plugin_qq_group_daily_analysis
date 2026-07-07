@@ -840,11 +840,22 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return False
 
-        # 1. 获取 Bot 自身的 QQ 号
+        # 1. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
         bot_user_id = None
         if self.bot_self_ids:
-            bot_user_id = self.bot_self_ids[0]
-        else:
+            valid_ids = [
+                str(uid)
+                for uid in self.bot_self_ids
+                if uid
+                and isinstance(uid, (str, int))
+                and not callable(uid)
+                and "partial" not in str(uid)
+                and str(uid).isdigit()
+            ]
+            if valid_ids:
+                bot_user_id = valid_ids[0]
+
+        if not bot_user_id:
             try:
                 login_info = await self.bot.call_action("get_login_info")
                 if login_info and "user_id" in login_info:
