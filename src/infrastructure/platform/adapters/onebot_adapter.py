@@ -833,6 +833,88 @@ class OneBotAdapter(PlatformAdapter):
             for user_id in user_ids
         }
 
+    async def is_group_muted(self, group_id: str) -> bool:
+        """
+        检查 OneBot 平台下的群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
+        """
+        if not hasattr(self.bot, "call_action"):
+            return False
+
+        # 1. 获取 Bot 自身的 QQ 号
+        bot_user_id = None
+        if self.bot_self_ids:
+            bot_user_id = self.bot_self_ids[0]
+        else:
+            try:
+                login_info = await self.bot.call_action("get_login_info")
+                if login_info and "user_id" in login_info:
+                    bot_user_id = str(login_info["user_id"])
+                    self.bot_self_ids = [bot_user_id]
+            except Exception as e:
+                logger.warning(f"[OneBot] 获取 Bot 自身登录信息失败: {e}")
+
+        # 2. 检查 Bot 是否被个人禁言，并获取 Bot 在群内的角色
+        is_individually_muted = False
+        role = "member"  # 默认为 member 以防万一
+        if bot_user_id:
+            try:
+                member_info = await self.bot.call_action(
+                    "get_group_member_info",
+                    group_id=int(group_id),
+                    user_id=int(bot_user_id),
+                    no_cache=True,
+                )
+                if member_info:
+                    role = member_info.get("role", "member")
+                    shut_up_time = member_info.get("shut_up_time", 0)
+                    if shut_up_time > 0:
+                        import time
+
+                        # 如果 shut_up_time 是 Unix 时间戳
+                        if shut_up_time > 1000000000:
+                            if shut_up_time > time.time():
+                                is_individually_muted = True
+                        else:
+                            # 否则认为是相对禁言剩余时间（秒）
+                            is_individually_muted = True
+            except Exception as e:
+                logger.warning(
+                    f"[OneBot] 获取群成员信息失败 (group_id={group_id}, user_id={bot_user_id}): {e}"
+                )
+
+        if is_individually_muted:
+            logger.info(f"[OneBot] 检测到 Bot 在群 {group_id} 中已被单独禁言")
+            return True
+
+        # 3. 如果 Bot 不是管理员或群主，则需要检查群聊是否开启了全群禁言
+        # 管理员 (admin) 和群主 (owner) 在全群禁言下依然可以发言
+        if role not in ("admin", "owner"):
+            try:
+                group_info = await self.bot.call_action(
+                    "get_group_info",
+                    group_id=int(group_id),
+                    no_cache=True,
+                )
+                if group_info:
+                    # 兼容 LLOneBot, Lagrange, NapCat/SnowLuma 以及标准 OneBot 各种全群禁言状态字段
+                    is_whole_ban = (
+                        group_info.get("group_all_shut")
+                        or group_info.get("shutup_all")
+                        or group_info.get("is_whole_ban")
+                        or group_info.get("whole_ban")
+                        or group_info.get("shutup")
+                        or group_info.get("shut_up")
+                    )
+                    if is_whole_ban:
+                        logger.info(
+                            f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
+                        )
+                        return True
+            except Exception as e:
+                logger.warning(f"[OneBot] 获取群信息失败 (group_id={group_id}): {e}")
+
+        return False
+
     # ================================================================
     # 群文件 / 群相册上传
     # ================================================================
