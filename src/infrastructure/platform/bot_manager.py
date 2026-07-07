@@ -55,6 +55,14 @@ class BotManager:
             platform_id = self._get_platform_id_from_instance(bot_instance)
 
         if bot_instance and platform_id:
+            # 如果 bot_instance 没变，且已经有适配器，跳过重新创建，防止丢失内部状态（如缓存等）
+            old_instance = self._bot_instances.get(platform_id)
+            if bot_instance is old_instance and platform_id in self._adapters:
+                bot_self_id = self._extract_bot_self_id(bot_instance)
+                if bot_self_id and bot_self_id not in self._bot_self_ids:
+                    self._bot_self_ids.append(str(bot_self_id))
+                return
+
             self._bot_instances[platform_id] = bot_instance
 
             # 为 DDD 集成创建 PlatformAdapter
