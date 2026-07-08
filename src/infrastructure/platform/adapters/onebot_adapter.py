@@ -859,13 +859,13 @@ class OneBotAdapter(PlatformAdapter):
         """
         检查 OneBot 平台下的群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
         """
-        import time
+        group_id_str = str(group_id)
 
         # 1. 检查最近缓存的禁言状态（5分钟内有效）
-        last_mute_time = self._muted_groups_cache.get(group_id)
+        last_mute_time = self._muted_groups_cache.get(group_id_str)
         if last_mute_time and (time.time() - last_mute_time) < 300:
             logger.info(
-                f"[OneBot] 从缓存中检测到群 {group_id} 最近处于禁言状态，跳过分析"
+                f"[OneBot] 从缓存中检测到群 {group_id_str} 最近处于禁言状态，跳过分析"
             )
             return True
 
@@ -1011,11 +1011,28 @@ class OneBotAdapter(PlatformAdapter):
             return True
         return False
 
-    def _record_mute_status(self, group_id: str, is_muted: bool):
+    def _record_mute_status(self, group_id: Any, is_muted: bool):
+        group_id_str = str(group_id)
         if is_muted:
-            self._muted_groups_cache[group_id] = time.time()
+            # Prune expired cache entries if cache size grows too large (threshold of 1000)
+            if len(self._muted_groups_cache) >= 1000:
+                now = time.time()
+                expired_keys = [
+                    k for k, t in self._muted_groups_cache.items() if now - t >= 300
+                ]
+                for k in expired_keys:
+                    self._muted_groups_cache.pop(k, None)
+
+                # If still over threshold, evict the oldest entry to prevent unbounded growth
+                if len(self._muted_groups_cache) >= 1000:
+                    oldest_key = min(
+                        self._muted_groups_cache, key=self._muted_groups_cache.get
+                    )
+                    self._muted_groups_cache.pop(oldest_key, None)
+
+            self._muted_groups_cache[group_id_str] = time.time()
         else:
-            self._muted_groups_cache.pop(group_id, None)
+            self._muted_groups_cache.pop(group_id_str, None)
 
     # ================================================================
     # 群文件 / 群相册上传
