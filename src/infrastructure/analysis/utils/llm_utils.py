@@ -40,9 +40,7 @@ def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
     return _circuit_breakers[provider_id]
 
 
-async def _call_provider_stream(
-    context, provider_id: str, llm_kwargs: dict[str, Any]
-):
+async def _call_provider_stream(context, provider_id: str, llm_kwargs: dict[str, Any]):
     provider = context.get_provider_by_id(provider_id=provider_id)
     if provider is None:
         raise RuntimeError(f"Provider 不存在: {provider_id}")
@@ -315,7 +313,7 @@ async def call_provider_with_retry(
 
     for i, (current_pid, is_fallback) in enumerate(attempt_queue):
         attempt_num = i + 1
-        is_last_attempt = (i == len(attempt_queue) - 1)
+        is_last_attempt = i == len(attempt_queue) - 1
 
         # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
         if current_pid != previous_pid:
@@ -339,12 +337,19 @@ async def call_provider_with_retry(
             last_exc = e
 
             # 处理不支持 response_format 的情况
-            if current_response_format is not None and _is_response_format_unsupported_error(e):
-                logger.warning(f"{prefix}当前 Provider 可能不支持 response_format，已自动降级为无 schema 约束。")
+            if (
+                current_response_format is not None
+                and _is_response_format_unsupported_error(e)
+            ):
+                logger.warning(
+                    f"{prefix}当前 Provider 可能不支持 response_format，已自动降级为无 schema 约束。"
+                )
                 current_response_format = None
                 # 在当前尝试额度内立即再试一次剥离了 schema 的请求
                 try:
-                    return await _execute_llm_request(current_pid, current_response_format)
+                    return await _execute_llm_request(
+                        current_pid, current_response_format
+                    )
                 except Exception as inner_e:
                     last_exc = inner_e
 
