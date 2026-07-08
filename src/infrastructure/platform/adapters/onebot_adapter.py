@@ -1026,7 +1026,8 @@ class OneBotAdapter(PlatformAdapter):
                 # If still over threshold, evict the oldest entry to prevent unbounded growth
                 if len(self._muted_groups_cache) >= 1000:
                     oldest_key = min(
-                        self._muted_groups_cache, key=self._muted_groups_cache.get
+                        self._muted_groups_cache,
+                        key=lambda k: self._muted_groups_cache[k],
                     )
                     self._muted_groups_cache.pop(oldest_key, None)
 
