@@ -307,6 +307,7 @@ async def call_provider_with_retry(
 
     # 3. 开始执行队列
     last_exc = None
+    current_response_format = response_format
 
     # 记录上一次尝试的 Provider ID，用于判断是否发生切换
     previous_pid = None
