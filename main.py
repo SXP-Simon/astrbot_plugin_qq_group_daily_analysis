@@ -535,6 +535,10 @@ class GroupDailyAnalysis(Star):
                 reason = result.get("reason")
                 if reason == "no_messages":
                     yield event.plain_result("❌ 未找到足够的群聊记录")
+                elif reason == "muted":
+                    logger.warning(
+                        f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过回复以防抛出发送异常"
+                    )
                 else:
                     yield event.plain_result("❌ 分析失败，原因未知")
                 return

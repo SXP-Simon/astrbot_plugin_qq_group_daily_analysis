@@ -131,6 +131,17 @@ class AnalysisApplicationService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
+            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
+            if hasattr(adapter, "is_group_muted"):
+                try:
+                    if await adapter.is_group_muted(group_id):
+                        logger.info(
+                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次群分析"
+                        )
+                        return {"success": False, "reason": "muted"}
+                except Exception as e:
+                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
+
             # 飞书平台在分析前进行一次性权限与成员头像预热，避免报告阶段出现大面积默认头像。
             if hasattr(adapter, "prepare_group_member_cache"):
                 try:
@@ -340,6 +351,17 @@ class AnalysisApplicationService:
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
+
+            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
+            if hasattr(adapter, "is_group_muted"):
+                try:
+                    if await adapter.is_group_muted(group_id):
+                        logger.info(
+                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量群分析"
+                        )
+                        return {"success": False, "reason": "muted"}
+                except Exception as e:
+                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             # 2. 拉取消息，获取进度并确定拉取量
             last_analyzed_ts = await self.incremental_store.get_last_analyzed_timestamp(
@@ -624,6 +646,17 @@ class AnalysisApplicationService:
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
+
+            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
+            if hasattr(adapter, "is_group_muted"):
+                try:
+                    if await adapter.is_group_muted(group_id):
+                        logger.info(
+                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量最终报告生成"
+                        )
+                        return {"success": False, "reason": "muted"}
+                except Exception as e:
+                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             # 6. 执行分析相关的变量准备
             user_titles = []
