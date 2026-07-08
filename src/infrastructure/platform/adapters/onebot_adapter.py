@@ -1367,8 +1367,11 @@ class OneBotAdapter(PlatformAdapter):
                 emoji_type="1",  # 还原为最稳定的系统表情类型
                 set=is_add,
             )
+            self._record_mute_status(group_id, False)
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.debug(f"OneBot set_reaction 失败 (API 可能不支持): {e}")
             return False
 
