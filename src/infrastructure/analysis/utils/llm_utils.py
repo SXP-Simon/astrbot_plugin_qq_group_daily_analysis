@@ -5,13 +5,14 @@ LLM API请求处理工具模块
 
 import asyncio
 import random
-from typing import Any
 
 from astrbot.api.provider import LLMResponse
+from astrbot.api.star import Context
 
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
-from .structured_output_schema import JSONObject
+from ...config.config_manager import ConfigManager
+from .structured_output_schema import JSONObject, JSONValue
 
 _circuit_breakers = {}
 
@@ -40,7 +41,9 @@ def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
     return _circuit_breakers[provider_id]
 
 
-async def _call_provider_stream(context, provider_id: str, llm_kwargs: dict[str, Any]):
+async def _call_provider_stream(
+    context: Context, provider_id: str, llm_kwargs: dict[str, JSONValue]
+) -> LLMResponse:
     provider = context.get_provider_by_id(provider_id=provider_id)
     if provider is None:
         raise RuntimeError(f"Provider 不存在: {provider_id}")
@@ -151,8 +154,8 @@ async def _try_get_first_available_provider_id(context) -> str | None:
 
 
 async def get_provider_id_with_fallback(
-    context,
-    config_manager,
+    context: Context,
+    config_manager: ConfigManager,
     provider_id_key: str | None,
     umo: str | None = None,
 ) -> str | None:
@@ -235,15 +238,15 @@ async def get_provider_id_with_fallback(
 
 
 async def call_provider_with_retry(
-    context,
-    config_manager,
+    context: Context,
+    config_manager: ConfigManager,
     prompt: str,
     umo: str | None = None,
     provider_id_key: str | None = None,
     system_prompt: str | None = None,
     response_format: JSONObject | None = None,
-    extra_generate_kwargs: dict[str, Any] | None = None,
-) -> object | None:
+    extra_generate_kwargs: dict[str, JSONValue] | None = None,
+) -> LLMResponse | None:
     """
     调用LLM提供者，带超时、重试与退避。支持指定模型失效后自动降级到默认模型重试。
     """
@@ -274,7 +277,9 @@ async def call_provider_with_retry(
         return None
 
     # 2. 核心请求执行闭包
-    async def _execute_llm_request(pid: str, r_format: JSONObject | None):
+    async def _execute_llm_request(
+        pid: str, r_format: JSONObject | None
+    ) -> LLMResponse:
         cb = _get_circuit_breaker(pid)
         if not cb.allow_request():
             logger.warning(f"Provider {pid} 熔断器已打开，跳过本次请求")
@@ -282,7 +287,7 @@ async def call_provider_with_retry(
 
         try:
             async with GlobalRateLimiter.get_instance().semaphore:
-                llm_kwargs: dict[str, Any] = {
+                llm_kwargs: dict[str, JSONValue] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
                 }
