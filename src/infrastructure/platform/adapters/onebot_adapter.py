@@ -171,7 +171,7 @@ class OneBotAdapter(PlatformAdapter):
             while len(all_raw_messages) < max_count:
                 fetch_count = min(chunk_size, max_count - len(all_raw_messages))
 
-                params = {
+                params: dict[str, int | str | bool | None] = {
                     "group_id": int(group_id),
                     "count": fetch_count,
                 }
