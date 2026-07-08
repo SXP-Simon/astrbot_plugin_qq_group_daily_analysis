@@ -55,6 +55,14 @@ class BotManager:
             platform_id = self._get_platform_id_from_instance(bot_instance)
 
         if bot_instance and platform_id:
+            # 如果 bot_instance 没变，且已经有适配器，跳过重新创建，防止丢失内部状态（如缓存等）
+            old_instance = self._bot_instances.get(platform_id)
+            if bot_instance is old_instance and platform_id in self._adapters:
+                bot_self_id = self._extract_bot_self_id(bot_instance)
+                if bot_self_id and bot_self_id not in self._bot_self_ids:
+                    self._bot_self_ids.append(str(bot_self_id))
+                return
+
             self._bot_instances[platform_id] = bot_instance
 
             # 为 DDD 集成创建 PlatformAdapter
@@ -486,8 +494,22 @@ class BotManager:
                 platform_id = event.platform
 
             self.set_bot_instance(bot_instance, platform_id)
-            # 每次都尝试从bot实例提取ID
-            bot_self_id = self._extract_bot_self_id(bot_instance)
+
+            # 优先从事件中提取机器人自身 ID，避免获取到 functools.partial 等异常对象
+            bot_self_id = None
+            if hasattr(event, "get_self_id"):
+                val = event.get_self_id()
+                if (
+                    val
+                    and isinstance(val, (str, int))
+                    and not callable(val)
+                    and "partial" not in str(val)
+                ):
+                    bot_self_id = str(val)
+
+            if not bot_self_id:
+                bot_self_id = self._extract_bot_self_id(bot_instance)
+
             if bot_self_id:
                 # 将单个ID转换为列表，保持统一处理
                 self.set_bot_self_ids([bot_self_id])
@@ -505,17 +527,25 @@ class BotManager:
 
     def _extract_bot_self_id_impl(self, bot_instance):
         """从bot实例中提取ID（通用实现）"""
-        # 尝试多种方式获取bot ID
+        # 尝试多种方式获取bot ID，并严格限制类型为 str/int 且不可调用，防止 OneBot (aiocqhttp) 动态代理返回 functools.partial
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
-            return str(bot_instance.self_id)
-        elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
-            return str(bot_instance.user_id)
+            val = bot_instance.self_id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
+        if hasattr(bot_instance, "user_id") and bot_instance.user_id:
+            val = bot_instance.user_id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         # Discord.py style: client.user.id
-        elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
-            return str(bot_instance.user.id)
+        if hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
+            val = bot_instance.user.id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         # python-telegram-bot style: bot.id
-        elif hasattr(bot_instance, "id") and bot_instance.id:
-            return str(bot_instance.id)
+        if hasattr(bot_instance, "id") and bot_instance.id:
+            val = bot_instance.id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         return None
 
     def validate_for_message_fetching(self, group_id: str) -> bool:

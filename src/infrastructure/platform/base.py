@@ -209,3 +209,10 @@ class PlatformAdapter(
         except Exception:
             # 兜底：直接发送
             return await self.send_text(group_id, str(content))
+
+    async def is_group_muted(self, group_id: str) -> bool:
+        """
+        检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
+        默认返回 False。各平台适配器可以根据需要重写此方法。
+        """
+        return False
