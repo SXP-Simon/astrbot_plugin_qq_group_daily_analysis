@@ -248,8 +248,23 @@ async def call_provider_with_retry(
     extra_generate_kwargs: dict[str, JSONValue] | None = None,
 ) -> LLMResponse | None:
     """
-    调用LLM提供者，带超时、重试与退避。支持指定模型失效后自动降级到默认模型重试。
+    调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
+
+    Args:
+        context: AstrBot上下文对象
+        config_manager: 配置管理器
+        prompt: 输入的提示语
+        umo: 指定使用的模型唯一标识符
+        provider_id_key: 配置中的 provider_id 键名（如 'topic_provider_id'），用于选择特定的 Provider
+        system_prompt: 系统提示词
+        response_format: 结构化输出约束（OpenAI 风格）
+        extra_generate_kwargs: 传递给 context.llm_generate 的附加参数（用于内部高级重试策略）
+
+    Returns:
+        LLM生成的结果，失败时返回None
     """
+    # 注意: 超时由 AstrBot Provider 内部配置控制，不再使用插件层 asyncio.wait_for
+    # 用户可在 AstrBot WebUI 中为每个 Provider 配置 timeout 参数
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
     enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()
