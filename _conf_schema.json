@@ -336,7 +336,7 @@
                 "type": "int",
                 "description": "LLM 请求重试退避基值（秒）",
                 "default": 2,
-                "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
+                "hint": "重试之间的基准等待时间（秒）。实际等待时间会随尝试次数指数增长，并加入少量随机抖动；当专用 Provider 失败后，会继续按队列尝试默认 Provider。"
             },
             "enable_streaming_llm_call": {
                 "type": "bool",
