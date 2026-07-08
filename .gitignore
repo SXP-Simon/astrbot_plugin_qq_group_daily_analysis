@@ -37,3 +37,5 @@ debug_atri.html
 data/test/avatar/cache.db
 test_mainland.html
 test_overseas.html
+.tmp_refs/
+
