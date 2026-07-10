@@ -73,6 +73,8 @@ class OneBotAdapter(PlatformAdapter):
 
         # 禁言状态缓存 (group_id -> timestamp)
         self._muted_groups_cache = {}
+        # 群角色缓存 (group_id -> (role, timestamp))，用于 get_group_member_info 超时降级
+        self._group_role_cache: dict[str, tuple[str, float]] = {}
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -921,6 +923,8 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 if member_info:
                     role = member_info.get("role", "member")
+                    # Cache the role for timeout fallback
+                    self._group_role_cache[group_id_str] = (role, time.time())
                     shut_up_time = member_info.get("shut_up_time", 0)
                     if shut_up_time > 0:
                         # 如果 shut_up_time 是 Unix 时间戳
@@ -931,9 +935,17 @@ class OneBotAdapter(PlatformAdapter):
                             # 否则认为是相对禁言剩余时间（秒）
                             is_individually_muted = True
             except asyncio.TimeoutError:
-                logger.warning(
-                    f"[OneBot] 获取群成员信息超时 (group_id={group_id}, user_id={bot_user_id})"
-                )
+                # Fall back to cached role if available (roles rarely change)
+                cached_role = self._group_role_cache.get(group_id_str)
+                if cached_role:
+                    role = cached_role[0]
+                    logger.warning(
+                        f"[OneBot] 获取群成员信息超时，使用缓存角色: {role} (group_id={group_id}, user_id={bot_user_id})"
+                    )
+                else:
+                    logger.warning(
+                        f"[OneBot] 获取群成员信息超时且无角色缓存，将按 member 处理 (group_id={group_id}, user_id={bot_user_id})"
+                    )
             except Exception as e:
                 if self._is_mute_exception(e):
                     self._record_mute_status(group_id, True)
