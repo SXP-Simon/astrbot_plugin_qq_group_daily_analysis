@@ -381,7 +381,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             # 2. 调用LLM（使用配置的 provider）
             provider_id_key = self.get_provider_id_key()
 
-            # Resolve provider ID once; pass downstream to avoid duplicate resolve logs
+            # 只 resolve 一次 provider ID，同时传递给温度解析和 LLM 调用，避免重复日志
             resolved_provider_id = None
             if provider_id_key:
                 resolved_provider_id = await get_provider_id_with_fallback(

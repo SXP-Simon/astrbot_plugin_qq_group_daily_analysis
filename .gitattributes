@@ -1,15 +1,15 @@
-### Demo preview images — not needed at runtime, kept in repo for reference/docs
+### 模板预览图 — 仅用于文档/仓库展示，插件运行时不需要
 assets/*.jpg     export-ignore
 assets/*.png     export-ignore
 
-### CI/CD workflow files — not needed in production plugin zip
+### CI/CD 工作流 — 插件打包时不需要
 .github/         export-ignore
 
-### Documentation — design docs, not needed at runtime
+### 设计文档 — 运行时不需要
 docs/            export-ignore
 
-### Scripts — release utilities, not needed by end users
+### 发布/调试脚本 — 终端用户不需要
 scripts/         export-ignore
 
-### Test directory — not needed in production
+### 测试文件 — 生产包不需要
 tests/           export-ignore

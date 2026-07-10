@@ -923,7 +923,7 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 if member_info:
                     role = member_info.get("role", "member")
-                    # Cache the role for timeout fallback
+                    # 缓存角色信息，用于 get_group_member_info 超时时降级使用
                     self._group_role_cache[group_id_str] = (role, time.time())
                     shut_up_time = member_info.get("shut_up_time", 0)
                     if shut_up_time > 0:
@@ -935,7 +935,7 @@ class OneBotAdapter(PlatformAdapter):
                             # 否则认为是相对禁言剩余时间（秒）
                             is_individually_muted = True
             except asyncio.TimeoutError:
-                # Fall back to cached role if available (roles rarely change)
+                # 超时降级：优先使用缓存的角色（角色几乎不会变）
                 cached_role = self._group_role_cache.get(group_id_str)
                 if cached_role:
                     role = cached_role[0]
@@ -1008,21 +1008,40 @@ class OneBotAdapter(PlatformAdapter):
         if not e:
             return False
         err_str = str(e)
-        if "1200" in err_str and (
-            "禁言" in err_str or "操作失败" in err_str or "下游群鉴权" in err_str
+
+        mute_keywords = ("禁言", "操作失败", "下游群鉴权")
+
+        # --- 方法一：根据 retcode 检测 ---
+        # NapCat/LLOneBot 被禁言时返回 retcode=1200（INTERNAL_ERROR）
+        # SnowLuma/OIDB 操作被拒时返回 retcode=100（ACTION_FAILED）+ wording 含错误描述
+        # SnowLuma 发送消息被拒时返回 result=120
+        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
+            if any(kw in err_str for kw in mute_keywords):
+                return True
+
+        # --- 方法二：检查 exception 的 message/wording 属性 ---
+        # 适配不同协议端对错误信息的字段命名差异
+        for attr in ("message", "wording"):
+            val = getattr(e, attr, "") or ""
+            if any(kw in val for kw in mute_keywords):
+                return True
+            if "shut up" in val.lower():
+                return True
+
+        # --- 方法三：检测 SnowLuma 发消息被拒的特定模式 ---
+        # SnowLuma 在群内发消息失败时返回：
+        #   retcode=100, wording="send group message rejected: result=120 err="
+        err_lower = err_str.lower()
+        if "rejected" in err_lower and (
+            "result=120" in err_lower or "muted" in err_lower
         ):
             return True
-        err_msg = getattr(e, "message", "") or ""
-        err_word = getattr(e, "wording", "") or ""
-        if (
-            "禁言" in err_msg
-            or "禁言" in err_word
-            or "操作失败" in err_msg
-            or "操作失败" in err_word
-            or "shut up" in err_msg.lower()
-            or "shut up" in err_word.lower()
-        ):
+
+        # --- 方法四：兜底 --- 直接从 err_str 匹配禁言关键词 ---
+        # 即使 getattr 获取不到 wording 属性，str(e) 本身仍包含关键词文本
+        if any(kw in err_str for kw in mute_keywords):
             return True
+
         return False
 
     def _record_mute_status(self, group_id: Any, is_muted: bool):
