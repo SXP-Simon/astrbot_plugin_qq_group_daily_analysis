@@ -376,10 +376,12 @@ async def call_provider_with_retry(
                 fallback_provider_id = await get_provider_id_with_fallback(
                     context, config_manager, None, umo
                 )
-                if fallback_provider_id and fallback_provider_id != specific_provider_id:
+                if (
+                    fallback_provider_id
+                    and fallback_provider_id != specific_provider_id
+                ):
                     for _ in range(retries):
                         attempt_queue.append((fallback_provider_id, True))
-
 
             is_last_attempt = i == len(attempt_queue) - 1
             if not is_last_attempt:
