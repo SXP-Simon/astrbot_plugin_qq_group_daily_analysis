@@ -1008,7 +1008,7 @@ class OneBotAdapter(PlatformAdapter):
         if not e:
             return False
         err_str = str(e)
-        if "1200" in err_str and ("禁言" in err_str or "操作失败" in err_str):
+        if "1200" in err_str and ("禁言" in err_str or "操作失败" in err_str or "下游群鉴权" in err_str):
             return True
         err_msg = getattr(e, "message", "") or ""
         err_word = getattr(e, "wording", "") or ""
