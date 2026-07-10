@@ -243,6 +243,7 @@ async def call_provider_with_retry(
     prompt: str,
     umo: str | None = None,
     provider_id_key: str | None = None,
+    provider_id: str | None = None,
     system_prompt: str | None = None,
     response_format: JSONObject | None = None,
     extra_generate_kwargs: dict[str, JSONValue] | None = None,
@@ -273,19 +274,13 @@ async def call_provider_with_retry(
     attempt_queue = []
 
     # 尝试获取指定的 Provider
-    specific_provider_id = await get_provider_id_with_fallback(
-        context, config_manager, provider_id_key, umo
-    )
+    specific_provider_id = provider_id
+    if not specific_provider_id:
+        specific_provider_id = await get_provider_id_with_fallback(
+            context, config_manager, provider_id_key, umo
+        )
     if specific_provider_id:
         attempt_queue.extend([(specific_provider_id, False)] * retries)
-
-    # 尝试获取降级/默认的 Provider (传入 None 走主模型/会话模型路径)
-    if provider_id_key is not None:
-        fallback_provider_id = await get_provider_id_with_fallback(
-            context, config_manager, None, umo
-        )
-        if fallback_provider_id and fallback_provider_id != specific_provider_id:
-            attempt_queue.extend([(fallback_provider_id, True)] * retries)
 
     if not attempt_queue:
         logger.error("无可用 Provider，无法调用 llm_generate")
@@ -331,10 +326,11 @@ async def call_provider_with_retry(
 
     # 记录上一次尝试的 Provider ID，用于判断是否发生切换
     previous_pid = None
+    # 惰性降级标记：仅在 primary provider 重试用尽后才 resolve fallback
+    needs_fallback = provider_id_key is not None
 
     for i, (current_pid, is_fallback) in enumerate(attempt_queue):
         attempt_num = i + 1
-        is_last_attempt = i == len(attempt_queue) - 1
 
         # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
         if current_pid != previous_pid:
@@ -375,7 +371,17 @@ async def call_provider_with_retry(
                     last_exc = inner_e
 
             logger.warning(f"{prefix}请求失败: {last_exc}")
+            # 惰性降级：仅当所有 primary provider 的重试都耗尽后才 resolve 并注入 fallback
+            if not is_fallback and i == retries - 1 and needs_fallback:
+                fallback_provider_id = await get_provider_id_with_fallback(
+                    context, config_manager, None, umo
+                )
+                if fallback_provider_id and fallback_provider_id != specific_provider_id:
+                    for _ in range(retries):
+                        attempt_queue.append((fallback_provider_id, True))
 
+
+            is_last_attempt = i == len(attempt_queue) - 1
             if not is_last_attempt:
                 # Exponential backoff with jitter: backoff * (2 ^ (attempt_num - 1)) + random jitter
                 sleep_time = backoff * (2 ** (attempt_num - 1)) + random.uniform(0, 1)

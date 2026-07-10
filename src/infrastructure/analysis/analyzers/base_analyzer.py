@@ -158,20 +158,23 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         self,
         provider_id_key: str | None,
         umo: str | None,
+        provider_id: str | None = None,
     ) -> float | None:
         """
         尝试从当前将要调用的 Provider 配置中解析基础 temperature。
         """
-        provider_id = await get_provider_id_with_fallback(
-            self.context,
-            self.config_manager,
-            provider_id_key,
-            umo,
-        )
-        if not provider_id:
+        pid = provider_id
+        if not pid:
+            pid = await get_provider_id_with_fallback(
+                self.context,
+                self.config_manager,
+                provider_id_key,
+                umo,
+            )
+        if not pid:
             return None
 
-        provider = self.context.get_provider_by_id(provider_id=provider_id)
+        provider = self.context.get_provider_by_id(provider_id=pid)
         if provider is None:
             return None
 
@@ -377,8 +380,16 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
             # 2. 调用LLM（使用配置的 provider）
             provider_id_key = self.get_provider_id_key()
+
+            # Resolve provider ID once; pass downstream to avoid duplicate resolve logs
+            resolved_provider_id = None
+            if provider_id_key:
+                resolved_provider_id = await get_provider_id_with_fallback(
+                    self.context, self.config_manager, provider_id_key, umo
+                )
+
             base_temperature = await self._resolve_provider_temperature(
-                provider_id_key, umo
+                provider_id_key, umo, provider_id=resolved_provider_id
             )
 
             # 获取人格设定
@@ -401,6 +412,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 prompt=prompt,
                 umo=umo,
                 provider_id_key=provider_id_key,
+                provider_id=resolved_provider_id,
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
             )
