@@ -1,14 +1,18 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.10.6] - ✨ 支持 [SnowLuma](https://github.com/SnowLuma/SnowLuma) ，优化 HatsuneMiku 移动端适配情况
-*   **✨ 支持 SnowLuma**: 自动探测是否为 SnowLuma；支持 SnowLuma 的 get_group_msg_history 参数传递情况 (#189  @tryptophawa)。
-*   **🛠️ HatsuneMiku 优化**: 优化了移动端直接使用浏览器打开 HTML 时的 UI 排版情况 (#184 @Shiitin)
-
+## [v4.10.7] - ✨ 被禁言避免触发分析功能浪费 token，重构并优化模型请求的重试与降级补偿机制
+*   **✨ 支持禁言跳过**: 被禁言避免触发分析功能浪费 token (#191)
+*   **✨ 模型请求优化**: 重构并优化模型请求的重试与降级补偿机制 (@Rat0323)
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.10.6] - ✨ 支持 [SnowLuma](https://github.com/SnowLuma/SnowLuma) ，优化 HatsuneMiku 移动端适配情况
+*   **✨ 支持 SnowLuma**: 自动探测是否为 SnowLuma；支持 SnowLuma 的 get_group_msg_history 参数传递情况 (#189  @tryptophawa)。
+*   **🛠️ HatsuneMiku 优化**: 优化了移动端直接使用浏览器打开 HTML 时的 UI 排版情况 (#184 @Shiitin)
+
 
 ## [v4.10.5] - ✨ 支持可选流式 LLM 调用 (#181 @anchorAnc)
 

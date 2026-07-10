@@ -1,0 +1,15 @@
+### Demo preview images — not needed at runtime, kept in repo for reference/docs
+assets/*.jpg     export-ignore
+assets/*.png     export-ignore
+
+### CI/CD workflow files — not needed in production plugin zip
+.github/         export-ignore
+
+### Documentation — design docs, not needed at runtime
+docs/            export-ignore
+
+### Scripts — release utilities, not needed by end users
+scripts/         export-ignore
+
+### Test directory — not needed in production
+tests/           export-ignore
