@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -531,6 +531,7 @@
             {{topics_html | safe}}
             {{titles_html | safe}}
             {{quotes_html | safe}}
+            {{image_summary_html | safe}}
         </div>
         <div class="footer">
             由 AstrBot 群日常分析插件 生成 | {{current_datetime}}<br>

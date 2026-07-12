@@ -41,6 +41,17 @@ class GoldenQuote:
 
 
 @dataclass
+class ImageSummaryItem:
+    """图片锐评数据结构"""
+
+    url: str
+    sender: str = ""
+    sender_id: str = ""
+    description: str = ""
+    model_summary: str = ""
+
+
+@dataclass
 class QualityDimension:
     """聊天质量维度数据结构"""
 
