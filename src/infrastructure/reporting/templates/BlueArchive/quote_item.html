@@ -1,0 +1,34 @@
+{% if quotes %}
+<div class="quotes-section">
+    <div class="section-title" style="justify-content: center;">
+        <div class="section-icon">
+            <svg viewBox="0 0 24 24"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>
+        </div>
+        群贤毕至 Bible Quotes
+    </div>
+    {% for quote in quotes %}
+    <div class="quote-wrapper avoid-break">
+        <div class="q-flex-container">
+            <div class="q-user-col">
+                {% if quote.avatar_url %}
+                <div class="q-avatar-box">
+                    <img src="{{ quote.avatar_url }}" class="q-avatar">
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="q-content-col">
+                <div class="q-sender-name">{{ quote.sender }}</div>
+                <div class="q-bubble">
+                    <div class="q-content">{{ quote.content }}</div>
+                </div>
+                <div class="q-analysis-note">
+                    <span class="note-label">🤣👉 AI 锐评：</span>
+                    {{ quote.reason | safe }}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

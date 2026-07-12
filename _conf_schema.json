@@ -73,6 +73,7 @@
                 "description": "报告模板",
                 "options": [
                     "ATRI",
+                    "BlueArchive",
                     "scrapbook",
                     "retro_futurism",
                     "HatsuneMiku",
