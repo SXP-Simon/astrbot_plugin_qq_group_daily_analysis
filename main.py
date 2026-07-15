@@ -549,7 +549,15 @@ class GroupDailyAnalysis(Star):
             # 表情回应 或 文本提示（二选一，由配置开关控制）
             adapter = self.bot_manager.get_adapter(platform_id)
             orig_msg_id = getattr(event.message_obj, "message_id", None)
-            use_text_reply = self.config_manager.get_enable_analysis_reply()
+            adapter_platform_name = (
+                (adapter.get_platform_name() if adapter else "").strip().lower()
+            )
+            # QQ 官方机器人 API v2 不支持本插件使用的表情回应接口，
+            # 因此始终沿用原有的文字进度提示，避免触发无效的 reaction 请求。
+            use_text_reply = (
+                adapter_platform_name in {"qq_official", "qq_official_webhook"}
+                or self.config_manager.get_enable_analysis_reply()
+            )
 
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
