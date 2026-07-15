@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from src.infrastructure.platform.adapters.qq_official_adapter import QQOfficialAdapter
 from src.infrastructure.platform.factory import PlatformAdapterFactory
@@ -82,3 +83,30 @@ def test_local_history_is_deduplicated_filtered_and_sorted():
 def test_factory_registers_both_official_platform_types():
     assert PlatformAdapterFactory.is_supported("qq_official")
     assert PlatformAdapterFactory.is_supported("qq_official_webhook")
+
+
+def test_proactive_send_restores_group_scene_after_restart():
+    remember_session_scene = Mock()
+    platform = SimpleNamespace(
+        config={"appid": "1029384756"},
+        remember_session_scene=remember_session_scene,
+    )
+    adapter = QQOfficialAdapter(
+        SimpleNamespace(platform=platform),
+        {"platform_id": "official-main"},
+    )
+    sent = []
+
+    async def send_message(umo, chain):
+        sent.append((umo, chain))
+        return True
+
+    adapter.set_context(SimpleNamespace(send_message=send_message))
+
+    assert asyncio.run(adapter._send_chain("GROUP_OPENID", object())) is True
+    remember_session_scene.assert_called_once_with("GROUP_OPENID", "group")
+    assert sent[0][0] == "official-main:GroupMessage:GROUP_OPENID"
+
+
+def test_official_adapter_does_not_advertise_reply_support():
+    assert make_adapter().get_capabilities().supports_reply_message is False

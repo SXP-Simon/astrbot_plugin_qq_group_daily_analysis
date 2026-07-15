@@ -266,6 +266,13 @@ class QQOfficialAdapter(PlatformAdapter):
             logger.error("[QQOfficial] 未设置 context，无法发送消息")
             return False
         try:
+            # AstrBot's QQ Official adapter keeps the group/channel scene only
+            # in memory. Restore it before proactive sends so scheduled reports
+            # continue to work after a process restart, before the next event.
+            platform = getattr(self.bot, "platform", None)
+            remember_scene = getattr(platform, "remember_session_scene", None)
+            if callable(remember_scene):
+                remember_scene(str(group_id), "group")
             umo = f"{self.platform_id}:GroupMessage:{group_id}"
             return bool(await self._context.send_message(umo, chain))
         except Exception as exc:

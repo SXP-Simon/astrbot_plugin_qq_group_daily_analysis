@@ -14,6 +14,7 @@ class PlatformGroupRegistry:
     def __init__(self, plugin_instance: Any):
         self.plugin = plugin_instance
         self._lock = asyncio.Lock()
+        self._known_groups: set[tuple[str, str]] = set()
 
     async def upsert(
         self,
@@ -29,6 +30,10 @@ class PlatformGroupRegistry:
             return
 
         async with self._lock:
+            identity = (platform_key, group_key)
+            if identity in self._known_groups:
+                return
+
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             if not isinstance(registry, dict):
                 registry = {}
@@ -41,31 +46,43 @@ class PlatformGroupRegistry:
                 platform_map = {}
                 platforms[platform_key] = platform_map
 
+            # Existing groups only need to be remembered in memory. The
+            # registry is used for group discovery, so rewriting last_seen and
+            # the full KV document for every message creates unnecessary I/O.
+            if group_key in platform_map:
+                self._known_groups.add(identity)
+                return
+
             now_iso = datetime.now(timezone.utc).isoformat()
-            entry = platform_map.get(group_key)
-            if not isinstance(entry, dict):
-                entry = {}
-            entry.setdefault("first_seen", now_iso)
-            entry.update(
-                {
-                    "last_seen": now_iso,
-                    "last_sender_id": str(sender_id or ""),
-                    "last_sender_name": str(sender_name or ""),
-                    "last_event_message_id": str(event_message_id or ""),
-                }
-            )
-            platform_map[group_key] = entry
+            platform_map[group_key] = {
+                "first_seen": now_iso,
+                "last_seen": now_iso,
+                "last_sender_id": str(sender_id or ""),
+                "last_sender_name": str(sender_name or ""),
+                "last_event_message_id": str(event_message_id or ""),
+            }
             registry["updated_at"] = now_iso
             await self.plugin.put_kv_data(self._KV_KEY, registry)
+            self._known_groups.add(identity)
 
     async def get_all_group_ids(self, platform_id: str | None = None) -> list[str]:
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             groups = self._extract_groups(registry, platform_id)
+            if platform_id:
+                platform_key = str(platform_id).strip()
+                self._known_groups.update(
+                    (platform_key, group_id) for group_id in groups
+                )
 
             # Preserve groups recorded by older plugin versions.
             legacy = await self.plugin.get_kv_data(self._LEGACY_TELEGRAM_KEY, {})
-            groups.update(self._extract_groups(legacy, platform_id))
+            legacy_groups = self._extract_groups(legacy, platform_id)
+            groups.update(legacy_groups)
+            if platform_id:
+                self._known_groups.update(
+                    (platform_key, group_id) for group_id in legacy_groups
+                )
             return sorted(groups)
 
     @staticmethod
