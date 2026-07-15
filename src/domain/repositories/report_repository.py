@@ -21,6 +21,7 @@ class IReportGenerator(ABC):
         avatar_url_getter: Any = None,
         nickname_getter: Any = None,
         avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
     ) -> tuple[str | None, str | None]:
         """生成图片报告"""
         pass
@@ -33,12 +34,15 @@ class IReportGenerator(ABC):
         avatar_url_getter: Any = None,
         nickname_getter: Any = None,
         avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
     ) -> tuple[str | None, str | None]:
         """生成 HTML 报告"""
         pass
 
     @abstractmethod
-    def generate_text_report(self, analysis_result: dict) -> str:
+    def generate_text_report(
+        self, analysis_result: dict, hide_user_names: bool = False
+    ) -> str:
         """生成文本报告"""
         pass
 

@@ -1,10 +1,10 @@
 import re
-from collections import Counter
+from collections import Counter, OrderedDict
 
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.star import Context
 
-from ...infrastructure.persistence.telegram_group_registry import TelegramGroupRegistry
+from ...infrastructure.persistence.platform_group_registry import PlatformGroupRegistry
 from ...utils.logger import logger
 
 
@@ -19,9 +19,12 @@ class MessageProcessingService:
     4. 维护 Telegram 群组注册表（回退机制）
     """
 
-    def __init__(self, context: Context, telegram_registry: TelegramGroupRegistry):
+    def __init__(self, context: Context, group_registry: PlatformGroupRegistry):
         self.context = context
-        self.telegram_registry = telegram_registry
+        self.group_registry = group_registry
+        self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
+        self._inflight_event_ids: set[str] = set()
+        self._seen_event_ids_limit = 4096
 
     async def process_message(self, event: AstrMessageEvent) -> None:
         """
@@ -62,37 +65,62 @@ class MessageProcessingService:
                 f"群 {group_id}: 消息内容为空 (sender={sender_name})，拒绝存储"
             )
 
-        # 6. 提取事件消息 ID（用于 Telegram 已见群/话题记录）
+        # 6. 提取事件消息 ID 和事件时间
         msg_obj = getattr(event, "message_obj", None)
         event_message_id = str(getattr(msg_obj, "message_id", "") or "")
+        event_timestamp = self._extract_event_timestamp(msg_obj)
+
+        platform_name = str(event.get_platform_name() or "").strip().lower()
+        reserved_event_id = False
+        if platform_name in {"qq_official", "qq_official_webhook"} and event_message_id:
+            reserved_event_id = self._reserve_event_id(event_message_id)
+            if not reserved_event_id:
+                logger.debug("[QQOfficial] 跳过重复消息事件: %s", event_message_id)
+                return
+        history_content = {
+            "type": "user",
+            "message": message_parts,
+        }
+        if platform_name in {"qq_official", "qq_official_webhook"}:
+            history_content["_qq_official"] = {
+                "message_id": event_message_id,
+                "timestamp": event_timestamp,
+            }
 
         # 7. 存储到数据库
-        await self.context.message_history_manager.insert(
-            platform_id=platform_id,
-            user_id=group_id,
-            content={"type": "user", "message": message_parts},
-            sender_id=sender_id,
-            sender_name=sender_name,
-        )
+        try:
+            await self.context.message_history_manager.insert(
+                platform_id=platform_id,
+                user_id=group_id,
+                content=history_content,
+                sender_id=sender_id,
+                sender_name=sender_name,
+            )
+        except BaseException:
+            if reserved_event_id:
+                self._release_event_id(event_message_id)
+            raise
+        else:
+            if reserved_event_id:
+                self._commit_event_id(event_message_id)
 
-        # Telegram: 记录已见群/话题
-        if self._is_telegram_event(event, platform_id):
-            try:
-                await self.telegram_registry.upsert(
-                    platform_id=platform_id,
-                    group_id=group_id,
-                    sender_id=sender_id,
-                    sender_name=sender_name,
-                    event_message_id=event_message_id,
-                )
-            except Exception as e:
-                logger.warning(
-                    "[TGRegistry] Upsert failed: "
-                    f"platform_id={platform_id} group_id={group_id} error={e}"
-                )
+        # 事件驱动平台无法枚举群组，记录已见群供调度器回退使用。
+        try:
+            await self.group_registry.upsert(
+                platform_id=platform_id,
+                group_id=group_id,
+                sender_id=sender_id,
+                sender_name=sender_name,
+                event_message_id=event_message_id,
+            )
+        except Exception as e:
+            logger.warning(
+                "[GroupRegistry] Upsert failed: "
+                f"platform_id={platform_id} group_id={group_id} error={e}"
+            )
 
         logger.info(
-            f"[Telegram] [{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
+            f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
@@ -208,6 +236,24 @@ class MessageProcessingService:
                             }
                         )
 
+                elif seg_type in ("File", "file"):
+                    url = getattr(seg, "url", None) or getattr(seg, "file_", None)
+                    message_parts.append(
+                        {
+                            "type": "file",
+                            "url": str(url or ""),
+                            "name": str(getattr(seg, "name", "") or ""),
+                        }
+                    )
+
+                elif seg_type in ("Record", "record", "voice"):
+                    url = getattr(seg, "url", None) or getattr(seg, "file", None)
+                    message_parts.append({"type": "voice", "url": str(url or "")})
+
+                elif seg_type in ("Video", "video"):
+                    url = getattr(seg, "url", None) or getattr(seg, "file", None)
+                    message_parts.append({"type": "video", "url": str(url or "")})
+
         if not message_parts and event.message_str:
             message_parts.append({"type": "plain", "text": event.message_str})
 
@@ -261,9 +307,57 @@ class MessageProcessingService:
         return normalized == str(sender_id).strip()
 
     @staticmethod
-    def _is_telegram_event(event: AstrMessageEvent, platform_id: str) -> bool:
-        """判断当前事件是否为 Telegram 平台"""
-        platform_name = str(event.get_platform_name() or "").strip().lower()
-        if platform_name == "telegram":
-            return True
-        return str(platform_id or "").strip().lower().startswith("telegram")
+    def _extract_event_timestamp(message_obj: object) -> int:
+        """Extract an upstream event timestamp when a platform exposes one."""
+        raw_message = getattr(message_obj, "raw_message", None)
+        if isinstance(raw_message, dict):
+            candidate = raw_message.get("timestamp")
+            if not candidate:
+                raw_data = raw_message.get("raw_data")
+                if isinstance(raw_data, dict):
+                    candidate = raw_data.get("timestamp")
+        else:
+            raw_data = getattr(raw_message, "raw_data", None)
+            candidate = getattr(raw_message, "timestamp", None)
+            if not candidate and isinstance(raw_data, dict):
+                candidate = raw_data.get("timestamp")
+        if isinstance(candidate, (int, float)):
+            return int(candidate)
+        if candidate:
+            try:
+                from datetime import datetime
+
+                return int(
+                    datetime.fromisoformat(
+                        str(candidate).replace("Z", "+00:00")
+                    ).timestamp()
+                )
+            except (TypeError, ValueError, OverflowError):
+                pass
+        return 0
+
+    def _reserve_event_id(self, event_message_id: str) -> bool:
+        """Reserve an event ID while its history record is being persisted."""
+        if (
+            event_message_id in self._inflight_event_ids
+            or event_message_id in self._seen_event_ids
+        ):
+            if event_message_id in self._seen_event_ids:
+                self._seen_event_ids.move_to_end(event_message_id)
+            return False
+        self._inflight_event_ids.add(event_message_id)
+        return True
+
+    def _commit_event_id(self, event_message_id: str) -> None:
+        """Mark a reserved event ID as persisted and eligible for deduplication."""
+        self._inflight_event_ids.discard(event_message_id)
+        if event_message_id in self._seen_event_ids:
+            self._seen_event_ids.move_to_end(event_message_id)
+        else:
+            self._seen_event_ids[event_message_id] = None
+        if len(self._seen_event_ids) > self._seen_event_ids_limit:
+            self._seen_event_ids.popitem(last=False)
+
+    def _release_event_id(self, event_message_id: str) -> None:
+        """Release an event reservation after persistence fails or is cancelled."""
+        self._inflight_event_ids.discard(event_message_id)

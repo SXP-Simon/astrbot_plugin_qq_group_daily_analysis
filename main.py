@@ -35,8 +35,8 @@ from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
-from .src.infrastructure.persistence.telegram_group_registry import (
-    TelegramGroupRegistry,
+from .src.infrastructure.persistence.platform_group_registry import (
+    PlatformGroupRegistry,
 )
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.platform.template_preview import (
@@ -60,7 +60,7 @@ class GroupDailyAnalysis(Star):
     bot_manager: BotManager
     history_manager: HistoryManager
     report_generator: ReportGenerator
-    telegram_group_registry: TelegramGroupRegistry
+    platform_group_registry: PlatformGroupRegistry
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
     llm_analyzer: LLMAnalyzer
@@ -90,7 +90,7 @@ class GroupDailyAnalysis(Star):
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
         # Telegram 注册表 (持久层)
-        self.telegram_group_registry = TelegramGroupRegistry(self)
+        self.platform_group_registry = PlatformGroupRegistry(self)
 
         # 2. 领域层
         self.statistics_service = StatisticsService()
@@ -118,7 +118,7 @@ class GroupDailyAnalysis(Star):
 
         # 消息处理服务
         self.message_processing_service = MessageProcessingService(
-            context, self.telegram_group_registry
+            context, self.platform_group_registry
         )
         self.template_command_service = TemplateCommandService(
             plugin_root=os.path.dirname(__file__)
@@ -287,11 +287,43 @@ class GroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"[Telegram] 消息存储异常: {e}", exc_info=True)
 
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(
+        filter.PlatformAdapterType.QQOFFICIAL
+        | filter.PlatformAdapterType.QQOFFICIAL_WEBHOOK
+    )
+    async def intercept_qq_official_messages(self, event: AstrMessageEvent):
+        """缓存 QQ 官方机器人群消息；频道消息不在本插件适配范围内。"""
+        raw_message = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        if isinstance(raw_message, dict):
+            author = raw_message.get("author") or {}
+            group_openid = str(raw_message.get("group_openid", "") or "").strip()
+            member_openid = str(
+                author.get("member_openid", "") if isinstance(author, dict) else ""
+            ).strip()
+        else:
+            author = getattr(raw_message, "author", None)
+            group_openid = str(getattr(raw_message, "group_openid", "") or "").strip()
+            member_openid = str(getattr(author, "member_openid", "") or "").strip()
+        if not group_openid or not member_openid:
+            return
+
+        try:
+            await self.message_processing_service.process_message(event)
+        except (ValueError, RuntimeError) as e:
+            logger.warning(f"[QQOfficial] 消息存储失败: {e}")
+        except Exception as e:
+            logger.error(f"[QQOfficial] 消息存储异常: {e}", exc_info=True)
+
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
     ) -> list[str]:
         """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
-        return await self.telegram_group_registry.get_all_group_ids(platform_id)
+        return await self.platform_group_registry.get_all_group_ids(platform_id)
+
+    async def get_seen_group_ids(self, platform_id: str | None = None) -> list[str]:
+        """读取任意事件驱动平台已经见过的群组。"""
+        return await self.platform_group_registry.get_all_group_ids(platform_id)
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从消息事件中安全获取群组 ID"""
@@ -577,6 +609,7 @@ class GroupDailyAnalysis(Star):
         analysis_result = result["analysis_result"]
         adapter = result["adapter"]
         output_format = self.config_manager.get_output_format()
+        hide_user_names = adapter.get_platform_name() == "qq_official"
 
         # 定义获取回调
         async def avatar_url_getter(user_id: str) -> str | None:
@@ -599,6 +632,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
+                hide_user_names=hide_user_names,
             )
 
             if image_url:
@@ -610,7 +644,9 @@ class GroupDailyAnalysis(Star):
 
             # 如果图片生成或发送失败，直接回退到文本
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            text_report = self.report_generator.generate_text_report(analysis_result)
+            text_report = self.report_generator.generate_text_report(
+                analysis_result, hide_user_names=hide_user_names
+            )
             await adapter.send_text_report(group_id, text_report)
             return
 
@@ -621,6 +657,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
+                hide_user_names=hide_user_names,
             )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
@@ -681,7 +718,9 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            text_report = self.report_generator.generate_text_report(analysis_result)
+            text_report = self.report_generator.generate_text_report(
+                analysis_result, hide_user_names=hide_user_names
+            )
             await adapter.send_text_report(group_id, text_report)
 
     @filter.command("设置格式", alias={"set_format"})

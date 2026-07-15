@@ -99,5 +99,13 @@ def _register_adapters():
     except ImportError:
         pass
 
+    try:
+        from .adapters.qq_official_adapter import QQOfficialAdapter
+
+        PlatformAdapterFactory.register("qq_official", QQOfficialAdapter)
+        PlatformAdapterFactory.register("qq_official_webhook", QQOfficialAdapter)
+    except ImportError:
+        pass
+
 
 _register_adapters()

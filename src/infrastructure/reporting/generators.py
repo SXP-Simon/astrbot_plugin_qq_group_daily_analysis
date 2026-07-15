@@ -5,6 +5,7 @@
 
 import asyncio
 import base64
+import copy
 import hashlib
 import html
 import json
@@ -336,6 +337,7 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter=None,
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -359,6 +361,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
+                hide_user_names=hide_user_names,
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
@@ -500,6 +503,7 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter=None,
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -544,6 +548,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
+                hide_user_names=hide_user_names,
             )
             logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -603,7 +608,11 @@ class ReportGenerator(IReportGenerator):
 
             # 保存原始 JSON 数据
             json_data = {
-                "analysis_result": analysis_result,
+                "analysis_result": (
+                    self._sanitize_analysis_result_for_export(analysis_result)
+                    if hide_user_names
+                    else analysis_result
+                ),
                 "group_id": group_id,
                 "generated_at": datetime.now().isoformat(),
             }
@@ -648,7 +657,9 @@ class ReportGenerator(IReportGenerator):
         encoded_relative_url = quote(relative_url, safe="/")
         return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
 
-    def generate_text_report(self, analysis_result: dict) -> str:
+    def generate_text_report(
+        self, analysis_result: dict, hide_user_names: bool = False
+    ) -> str:
         """生成文本格式的分析报告"""
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -671,23 +682,97 @@ class ReportGenerator(IReportGenerator):
         max_topics = self.config_manager.get_max_topics()
         for i, topic in enumerate(topics[:max_topics], 1):
             contributors_str = "、".join(topic.contributors)
-            report += f"{i}. {topic.topic}\n"
-            report += f"   参与者: {contributors_str}\n"
-            report += f"   {topic.detail}\n\n"
+            topic_name = self._sanitize_identity_text(
+                topic.topic, analysis_result, hide_user_names
+            )
+            report += f"{i}. {topic_name}\n"
+            if not hide_user_names:
+                report += f"   参与者: {contributors_str}\n"
+            report += f"   {self._sanitize_identity_text(topic.detail, analysis_result, hide_user_names)}\n\n"
 
         report += "🏆 群友称号\n"
         max_user_titles = self.config_manager.get_max_user_titles()
         for title in user_titles[:max_user_titles]:
-            report += f"• {title.name} - {title.title} ({title.mbti})\n"
-            report += f"  {title.reason}\n\n"
+            if hide_user_names:
+                report += f"• {title.title} ({title.mbti})\n"
+            else:
+                report += f"• {title.name} - {title.title} ({title.mbti})\n"
+            report += f"  {self._sanitize_identity_text(title.reason, analysis_result, hide_user_names)}\n\n"
 
         report += "💬 群圣经\n"
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         for i, golden_quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            report += f'{i}. "{golden_quote.content}" —— {golden_quote.sender}\n'
-            report += f"   {golden_quote.reason}\n\n"
+            suffix = "" if hide_user_names else f" —— {golden_quote.sender}"
+            quote_content = self._sanitize_identity_text(
+                golden_quote.content, analysis_result, hide_user_names
+            )
+            report += f'{i}. "{quote_content}"{suffix}\n'
+            report += f"   {self._sanitize_identity_text(golden_quote.reason, analysis_result, hide_user_names)}\n\n"
 
         return report
+
+    def _sanitize_analysis_result_for_export(self, analysis_result: dict) -> dict:
+        """Remove platform identities from the HTML sidecar JSON export."""
+        sanitized = self._to_plain_export_data(copy.deepcopy(analysis_result))
+        sanitized["user_analysis"] = {}
+        for topic in sanitized.get("topics", []):
+            if not isinstance(topic, dict):
+                continue
+            topic["contributors"] = []
+            topic["contributor_ids"] = []
+        for title in sanitized.get("user_titles", []):
+            if not isinstance(title, dict):
+                continue
+            title["name"] = ""
+            title["user_id"] = ""
+        stats = sanitized.get("statistics")
+        if isinstance(stats, dict):
+            for golden_quote in stats.get("golden_quotes", []) or []:
+                if not isinstance(golden_quote, dict):
+                    continue
+                golden_quote["sender"] = ""
+                golden_quote["user_id"] = ""
+
+            activity_visualization = stats.get("activity_visualization")
+            if isinstance(activity_visualization, dict):
+                activity_visualization["user_activity_ranking"] = []
+
+        for golden_quote in sanitized.get("golden_quotes", []) or []:
+            if not isinstance(golden_quote, dict):
+                continue
+            golden_quote["sender"] = ""
+            golden_quote["user_id"] = ""
+
+        return self._sanitize_export_identity_text(sanitized, analysis_result)
+
+    @classmethod
+    def _to_plain_export_data(cls, value):
+        """Convert report models into plain containers before privacy filtering."""
+        if hasattr(value, "to_dict") and callable(value.to_dict):
+            return cls._to_plain_export_data(value.to_dict())
+        if is_dataclass(value) and not isinstance(value, type):
+            return cls._to_plain_export_data(asdict(value))
+        if isinstance(value, dict):
+            return {key: cls._to_plain_export_data(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [cls._to_plain_export_data(item) for item in value]
+        return value
+
+    def _sanitize_export_identity_text(self, value, analysis_result: dict):
+        """Remove known IDs and display names from every exported text field."""
+        if isinstance(value, str):
+            return self._sanitize_identity_text(value, analysis_result, True)
+        if isinstance(value, dict):
+            return {
+                key: self._sanitize_export_identity_text(item, analysis_result)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._sanitize_export_identity_text(item, analysis_result)
+                for item in value
+            ]
+        return value
 
     async def _prepare_render_data(
         self,
@@ -696,6 +781,7 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter=None,
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -720,18 +806,34 @@ class ReportGenerator(IReportGenerator):
                 avatar_cache_namespace,
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
+                hide_user_names=hide_user_names,
             )
+            if hide_user_names:
+                contributors = await self._render_avatar_only_ids(
+                    getattr(topic, "contributor_ids", []) or [],
+                    avatar_url_getter,
+                    avatar_cache_namespace,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                )
+            else:
+                contributors = "、".join(topic.contributors)
             topics_list.append(
                 {
                     "index": i,
-                    "topic": topic,
-                    "contributors": "、".join(topic.contributors),
+                    "topic": {
+                        "topic": self._sanitize_identity_text(
+                            topic.topic, analysis_result, hide_user_names
+                        )
+                    },
+                    "contributors": contributors,
                     "detail": processed_detail,
                 }
             )
 
         # 通用模板上下文，包含可能被子模板引用的全局配置
         common_context = {
+            "hide_user_names": hide_user_names,
             "t2i_font_source": self.config_manager.get_t2i_font_source(),
             "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
             "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
@@ -763,11 +865,23 @@ class ReportGenerator(IReportGenerator):
             profile_info = self._resolve_profile_info(
                 title.mbti, profile_mode, profile_mapping_overrides
             )
+            title_reason = title.reason
+            if hide_user_names:
+                title_reason = await self._render_mentions(
+                    title.reason,
+                    avatar_url_getter,
+                    nickname_getter,
+                    user_analysis,
+                    avatar_cache_namespace,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    hide_user_names=True,
+                )
             title_data = {
-                "name": title.name,
+                "name": "" if hide_user_names else title.name,
                 "title": title.title,
                 "mbti": title.mbti,
-                "reason": title.reason,
+                "reason": title_reason,
                 "avatar_data": avatar_data,
             }
             title_data.update(profile_info)
@@ -810,11 +924,14 @@ class ReportGenerator(IReportGenerator):
                 avatar_cache_namespace,
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
+                hide_user_names=hide_user_names,
             )
             quotes_list.append(
                 {
-                    "content": golden_quote.content,
-                    "sender": golden_quote.sender,
+                    "content": self._sanitize_identity_text(
+                        golden_quote.content, analysis_result, hide_user_names
+                    ),
+                    "sender": "" if hide_user_names else golden_quote.sender,
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
@@ -860,6 +977,33 @@ class ReportGenerator(IReportGenerator):
             else:
                 review_data = chat_quality_review
 
+            if hide_user_names and isinstance(review_data, dict):
+                review_data = {
+                    **review_data,
+                    "title": self._sanitize_identity_text(
+                        review_data.get("title", ""), analysis_result, True
+                    ),
+                    "subtitle": self._sanitize_identity_text(
+                        review_data.get("subtitle", ""), analysis_result, True
+                    ),
+                    "summary": self._sanitize_identity_text(
+                        review_data.get("summary", ""), analysis_result, True
+                    ),
+                    "dimensions": [
+                        {
+                            **dimension,
+                            "name": self._sanitize_identity_text(
+                                dimension.get("name", ""), analysis_result, True
+                            ),
+                            "comment": self._sanitize_identity_text(
+                                dimension.get("comment", ""), analysis_result, True
+                            ),
+                        }
+                        for dimension in review_data.get("dimensions", [])
+                        if isinstance(dimension, dict)
+                    ],
+                }
+
             chat_quality_html = self.html_templates.render_template(
                 "chat_quality_item.html", **review_data, **common_context
             )
@@ -899,6 +1043,50 @@ class ReportGenerator(IReportGenerator):
         logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
         return render_data
 
+    async def _render_avatar_only_ids(
+        self,
+        user_ids: list[str],
+        avatar_url_getter,
+        avatar_cache_namespace: str | None,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None,
+    ) -> Markup:
+        avatars: list[Markup] = []
+        for raw_user_id in user_ids:
+            user_id = str(raw_user_id or "").strip()
+            if not user_id:
+                continue
+            avatar_url = await self._get_user_avatar(
+                user_id, avatar_url_getter, avatar_cache_namespace
+            )
+            avatar_ref = self._register_reusable_avatar(
+                avatar_url,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(user_id, avatar_cache_namespace),
+            )
+            style = (
+                "width:24px;height:24px;border-radius:50%;display:inline-block;"
+                "vertical-align:middle;margin:0 2px;background-size:cover;"
+                "background-position:center;background-repeat:no-repeat;"
+            )
+            if avatar_ref:
+                avatars.append(
+                    Markup(
+                        f'<span class="user-capsule-avatar" '
+                        f'data-avatar-ref="{html.escape(avatar_ref, quote=True)}" '
+                        f'style="{style}"></span>'
+                    )
+                )
+            else:
+                avatars.append(
+                    Markup(
+                        f'<img src="{html.escape(avatar_url, quote=True)}" '
+                        f'style="{style}">'
+                    )
+                )
+        return Markup("").join(avatars)
+
     async def _render_mentions(
         self,
         text: str,
@@ -908,20 +1096,41 @@ class ReportGenerator(IReportGenerator):
         avatar_cache_namespace: str | None = None,
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
+        hide_user_names: bool = False,
     ) -> Markup:
         """
-        处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
+        处理文本，将 [用户ID] 格式的引用替换为头像胶囊。
         """
-        pattern = r"\[(\d+)\]"
         if not text:
             return Markup("")
 
-        matches = list(re.finditer(pattern, text))
+        known_ids = {
+            str(user_id).strip()
+            for user_id in (user_analysis or {})
+            if str(user_id).strip()
+        }
+        source_text = str(text)
+        if hide_user_names:
+            # LLM 偶尔会直接输出 ID；在头像-only 模式下先标准化为引用，
+            # 避免 member_openid 以明文形式泄露。
+            for user_id in sorted(known_ids, key=len, reverse=True):
+                source_text = re.sub(
+                    rf"(?<!\[)(?<![A-Za-z0-9_-]){re.escape(user_id)}"
+                    rf"(?![A-Za-z0-9_-])(?!\])",
+                    f"[{user_id}]",
+                    source_text,
+                )
+
+        pattern = r"\[([A-Za-z0-9_-]{1,128})\]"
+
+        matches = list(re.finditer(pattern, source_text))
         if not matches:
-            return self._escape_text_segment(text)
+            return self._escape_text_segment(source_text)
 
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
+            if hide_user_names and uid not in known_ids:
+                return Markup("")
             url = await self._get_user_avatar(
                 uid, avatar_url_getter, avatar_cache_namespace
             )  # 内部已有缓存，无需顶层并发获取
@@ -949,7 +1158,10 @@ class ReportGenerator(IReportGenerator):
                 "padding:2px 6px 2px 2px;border-radius:12px;margin:0 2px;"
                 "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
             )
-            img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
+            img_style = (
+                "width:18px;height:18px;border-radius:50%;"
+                f"margin-right:{'0' if hide_user_names else '4px'};display:block;"
+            )
             name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
             # 3. 最终后备: 确保有头像和名称
@@ -979,22 +1191,50 @@ class ReportGenerator(IReportGenerator):
                     f'style="{img_style}">'
                 )
 
+            name_html = (
+                ""
+                if hide_user_names
+                else f'<span style="{name_style}">{html.escape(final_name)}</span>'
+            )
             return Markup(
                 f'<span class="user-capsule" style="{capsule_style}">'
-                f"{avatar_html}"
-                f'<span style="{name_style}">{html.escape(final_name)}</span>'
-                "</span>"
+                f"{avatar_html}{name_html}</span>"
             )
 
         result: list[Markup | str] = []
         last_end = 0
         for match in matches:
-            result.append(self._escape_text_segment(text[last_end : match.start()]))
+            result.append(
+                self._escape_text_segment(source_text[last_end : match.start()])
+            )
             result.append(await render_capsule(match))
             last_end = match.end()
 
-        result.append(self._escape_text_segment(text[last_end:]))
+        result.append(self._escape_text_segment(source_text[last_end:]))
         return Markup("").join(result)
+
+    @staticmethod
+    def _sanitize_identity_text(
+        text: str, analysis_result: dict, hide_user_names: bool
+    ) -> str:
+        if not hide_user_names:
+            return str(text)
+        sanitized = str(text)
+        user_analysis = analysis_result.get("user_analysis") or {}
+        known_ids = {
+            str(user_id).strip() for user_id in user_analysis if str(user_id).strip()
+        }
+        known_names = set()
+        for stats in user_analysis.values():
+            if not isinstance(stats, dict):
+                continue
+            for key in ("nickname", "name"):
+                value = str(stats.get(key, "") or "").strip()
+                if value:
+                    known_names.add(value)
+        for identity in sorted(known_ids | known_names, key=len, reverse=True):
+            sanitized = sanitized.replace(identity, "")
+        return re.sub(r"\[\s*\]", "", sanitized)
 
     @staticmethod
     def _escape_text_segment(text: str) -> Markup:

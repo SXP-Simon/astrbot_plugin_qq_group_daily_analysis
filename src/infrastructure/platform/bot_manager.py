@@ -75,6 +75,10 @@ class BotManager:
                     "platform_id": str(platform_id),
                     "plugin_instance": self._plugin_instance,
                 }
+                platform_instance = self._platforms.get(str(platform_id))
+                platform_config = getattr(platform_instance, "config", None)
+                if isinstance(platform_config, Mapping):
+                    adapter_config["appid"] = platform_config.get("appid", "")
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config
                 )

@@ -19,7 +19,7 @@
                 "type": "list",
                 "description": "群组白/黑名单列表",
                 "default": [],
-                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号（如 123456）。新手建议优先填完整会话ID，更不容易填错。可用 /sid 获取当前会话ID。",
+                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号。QQ 官方机器人使用 group_openid，不是群号，务必优先通过 /sid 获取并填写完整 UMO。",
                 "items": {
                     "type": "string"
                 }
@@ -28,7 +28,7 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 无历史拉取接口，只能分析插件启用后实时缓存到 AstrBot 本地库的消息。"
             },
             "max_messages": {
                 "type": "int",
@@ -66,7 +66,7 @@
                     "html"
                 ],
                 "default": "image",
-                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)"
+                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方群事件没有昵称，图片/HTML 报告仅显示头像，文本报告会省略用户身份。"
             },
             "report_template": {
                 "type": "string",
