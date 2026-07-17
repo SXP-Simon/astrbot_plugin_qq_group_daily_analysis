@@ -632,6 +632,26 @@ class GroupDailyAnalysis(Star):
                 pass
             return None
 
+        async def generate_text_reports() -> tuple[str, str | None]:
+            if hide_user_names:
+                markdown_report, fallback_report = (
+                    await self.report_generator.generate_qq_official_markdown_report(
+                        analysis_result, self.html_render
+                    )
+                )
+                return markdown_report, fallback_report
+            return self.report_generator.generate_text_report(analysis_result), None
+
+        async def send_text_reports() -> bool:
+            text_report, fallback_report = await generate_text_reports()
+            if hide_user_names:
+                return await adapter.send_text_report(
+                    group_id,
+                    text_report,
+                    fallback_content=fallback_report,
+                )
+            return await adapter.send_text_report(group_id, text_report)
+
         if output_format == "image":
             image_url, html_content = await self.report_generator.generate_image_report(
                 analysis_result,
@@ -652,10 +672,7 @@ class GroupDailyAnalysis(Star):
 
             # 如果图片生成或发送失败，直接回退到文本
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            text_report = self.report_generator.generate_text_report(
-                analysis_result, hide_user_names=hide_user_names
-            )
-            await adapter.send_text_report(group_id, text_report)
+            await send_text_reports()
             return
 
         elif output_format == "html":
@@ -726,10 +743,7 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            text_report = self.report_generator.generate_text_report(
-                analysis_result, hide_user_names=hide_user_names
-            )
-            await adapter.send_text_report(group_id, text_report)
+            await send_text_reports()
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)

@@ -16,6 +16,7 @@ class ConfigManager:
 
     配置结构采用分组嵌套方式，顶层分为以下分组：
     - basic: 基础设置
+    - qq_official: QQ 官方机器人展示设置
     - auto_analysis: 自动分析设置
     - llm: LLM 设置
     - analysis_features: 分析功能开关
@@ -148,6 +149,12 @@ class ConfigManager:
     def get_output_format(self) -> str:
         """获取输出格式"""
         return self._get_group("basic").get("output_format", "image")
+
+    def get_qq_official_t2i_activity_histogram_enabled(self) -> bool:
+        """是否在 QQ 官方 Markdown 报告中启用 T2I 直方图。"""
+        return self._get_group("qq_official").get(
+            "enable_t2i_activity_histogram", True
+        )
 
     def get_min_messages_threshold(self) -> int:
         """获取最小消息阈值"""

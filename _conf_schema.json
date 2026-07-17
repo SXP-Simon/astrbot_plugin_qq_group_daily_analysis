@@ -140,6 +140,19 @@
             }
         }
     },
+    "qq_official": {
+        "description": "QQ 官方机器人",
+        "type": "object",
+        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。",
+        "items": {
+            "enable_t2i_activity_histogram": {
+                "type": "bool",
+                "description": "启用 T2I 活跃时间直方图",
+                "default": true,
+                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的 24 小时竖向直方图。渲染失败时自动回退为文字条形图。"
+            }
+        }
+    },
     "t2i_rendering": {
         "description": "图片渲染策略",
         "type": "object",

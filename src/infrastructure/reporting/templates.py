@@ -20,6 +20,9 @@ class HTMLTemplates:
         self.config_manager = config_manager
         # 设置模板根目录
         self.base_dir = os.path.join(os.path.dirname(__file__), "templates")
+        self.platform_base_dir = os.path.join(
+            os.path.dirname(__file__), "platform_templates"
+        )
         # 缓存不同模板的Jinja2环境（多线程安全）
         self._envs = {}
         self._env_lock = threading.Lock()
@@ -107,4 +110,23 @@ class HTMLTemplates:
             return template.render(**kwargs)
         except Exception as e:
             logger.error(f"渲染模板 {template_name} 失败: {e}")
+            return ""
+
+    def render_platform_template(
+        self, platform_name: str, template_name: str, **kwargs
+    ) -> str:
+        """渲染与报告主题解耦的平台专用模板。"""
+        try:
+            template_dir = os.path.join(self.platform_base_dir, platform_name)
+            env = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=select_autoescape(["html", "xml"]),
+                trim_blocks=True,
+                lstrip_blocks=True,
+            )
+            return env.get_template(template_name).render(**kwargs)
+        except Exception as e:
+            logger.error(
+                f"渲染平台模板 {platform_name}/{template_name} 失败: {e}"
+            )
             return ""

@@ -10,6 +10,7 @@ from src.domain.models.data_models import (
     QualityReview,
 )
 from src.infrastructure.reporting.generators import ReportGenerator
+from src.infrastructure.reporting.templates import HTMLTemplates
 
 
 class FakeConfig:
@@ -21,6 +22,9 @@ class FakeConfig:
 
     def get_max_golden_quotes(self):
         return 10
+
+    def get_qq_official_t2i_activity_histogram_enabled(self):
+        return True
 
 
 def build_generator_without_io():
@@ -72,6 +76,320 @@ def test_text_report_removes_official_identity_values():
     assert "测试内容" in report
     assert "龙王" in report
     assert "参与者:" not in report
+
+
+def test_non_qq_text_report_does_not_use_qq_histogram_path():
+    generator = build_generator_without_io()
+    statistics = SimpleNamespace(
+        message_count=3,
+        participant_count=1,
+        total_characters=12,
+        emoji_count=0,
+        most_active_period="03:00-04:00",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(hourly_activity={3: 3}),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+
+    report = generator.generate_text_report(analysis_result)
+
+    assert "🎯 群聊日常分析报告" in report
+    assert "## ⏰ 活跃时间分布" not in report
+    assert "████" not in report
+    assert "![24小时活跃分布" not in report
+
+
+def test_qq_official_markdown_uses_mentions_for_all_identity_sections():
+    generator = build_generator_without_io()
+    openid = "A1B2C3D4_OPENID"
+    nickname = "测试群友"
+    statistics = SimpleNamespace(
+        message_count=2,
+        participant_count=1,
+        total_characters=10,
+        emoji_count=0,
+        most_active_period="12:00-13:00",
+        golden_quotes=[
+            SimpleNamespace(
+                content=f"[{openid}] 说了一句话",
+                sender=nickname,
+                reason=f"{nickname} 的发言很精彩",
+                user_id=openid,
+            )
+        ],
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [
+            SimpleNamespace(
+                topic="测试话题",
+                contributors=[nickname],
+                contributor_ids=[openid],
+                detail=f"{nickname} 和 {openid} 参与讨论",
+            )
+        ],
+        "user_titles": [
+            SimpleNamespace(
+                name=nickname,
+                user_id=openid,
+                title="龙王",
+                mbti="ENTP",
+                reason=f"[{openid}] 发言最多",
+            )
+        ],
+        "user_analysis": {openid: {"nickname": nickname}},
+    }
+
+    report = generator.generate_text_report(
+        analysis_result,
+        hide_user_names=True,
+        qq_official_mentions=True,
+    )
+
+    assert report.count(f"<@{openid}>") >= 6
+    without_mentions = report.replace(f"<@{openid}>", "")
+    assert openid not in without_mentions
+    assert nickname not in without_mentions
+    assert "## 💬 热门话题" in report
+    assert "**参与者**" in report
+    assert "**龙王**" in report
+    assert f"- **1. <@{openid}> 说了一句话** — <@{openid}>" in report
+    assert f"  > <@{openid}> 的发言很精彩" in report
+    assert f"> 1. <@{openid}> 说了一句话" not in report
+
+
+def test_qq_official_markdown_keeps_content_when_identity_id_is_missing():
+    generator = build_generator_without_io()
+    statistics = SimpleNamespace(
+        message_count=1,
+        participant_count=1,
+        total_characters=4,
+        emoji_count=0,
+        most_active_period="12:00-13:00",
+        golden_quotes=[
+            SimpleNamespace(
+                content="测试内容",
+                sender="无法映射的用户",
+                reason="理由保留",
+                user_id="",
+            )
+        ],
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [
+            SimpleNamespace(
+                name="无法映射的用户",
+                user_id="",
+                title="龙王",
+                mbti="",
+                reason="称号理由",
+            )
+        ],
+        "user_analysis": {},
+    }
+
+    report = generator.generate_text_report(
+        analysis_result, qq_official_mentions=True
+    )
+
+    assert "<@" not in report
+    assert "龙王" in report
+    assert "称号理由" in report
+    assert "测试内容" in report
+    assert "理由保留" in report
+    assert "无法映射的用户" not in report
+    assert "- **1. 测试内容**" in report
+    assert "  > 理由保留" in report
+    assert "> 1. 测试内容" not in report
+
+
+def test_qq_official_scripture_spacing_and_optional_reason():
+    generator = build_generator_without_io()
+    statistics = SimpleNamespace(
+        message_count=2,
+        participant_count=2,
+        total_characters=8,
+        emoji_count=0,
+        most_active_period="12:00-13:00",
+        golden_quotes=[
+            SimpleNamespace(
+                content="第一条",
+                sender="甲",
+                reason="第一条理由",
+                user_id="A_OPENID",
+            ),
+            SimpleNamespace(
+                content="第二条",
+                sender="乙",
+                reason="",
+                user_id="",
+            ),
+        ],
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {
+            "A_OPENID": {"nickname": "甲"},
+        },
+    }
+
+    report = generator.generate_text_report(
+        analysis_result, qq_official_mentions=True
+    )
+
+    assert "- **1. 第一条** — <@A_OPENID>\n  > 第一条理由\n\n- **2. 第二条**" in report
+    assert "- **2. 第二条** —" not in report
+
+
+def test_qq_official_markdown_renders_simple_hourly_bar_chart():
+    generator = build_generator_without_io()
+    statistics = SimpleNamespace(
+        message_count=17,
+        participant_count=3,
+        total_characters=80,
+        emoji_count=1,
+        most_active_period="03:00-04:00",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(
+            hourly_activity={0: 0, "1": 2, 2: 5, "3": 10}
+        ),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+
+    report = generator.generate_text_report(
+        analysis_result, qq_official_mentions=True
+    )
+
+    assert "## ⏰ 活跃时间分布" in report
+    assert "- 00:00　—　0" in report
+    assert "- 01:00　███　2" in report
+    assert "- 02:00　██████　5" in report
+    assert "- 03:00　████████████　10" in report
+    chart_section = report.split("## ⏰ 活跃时间分布", 1)[1].split(
+        "## 💬 热门话题", 1
+    )[0]
+    assert sum(1 for line in chart_section.splitlines() if line.startswith("- ")) == 24
+
+
+def test_qq_official_markdown_omits_empty_hourly_bar_chart():
+    generator = build_generator_without_io()
+    statistics = SimpleNamespace(
+        message_count=0,
+        participant_count=0,
+        total_characters=0,
+        emoji_count=0,
+        most_active_period="",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(hourly_activity={}),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+
+    report = generator.generate_text_report(
+        analysis_result, qq_official_mentions=True
+    )
+
+    assert "## ⏰ 活跃时间分布" not in report
+
+
+def test_qq_official_t2i_histogram_url_replaces_text_chart():
+    generator = build_generator_without_io()
+    generator.html_templates = HTMLTemplates(generator.config_manager)
+    generator._render_semaphore = asyncio.Semaphore(1)
+    statistics = SimpleNamespace(
+        message_count=10,
+        participant_count=2,
+        total_characters=50,
+        emoji_count=0,
+        most_active_period="03:00-04:00",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(hourly_activity={1: 2, 3: 10}),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+    render_calls = []
+
+    async def fake_html_render(template, data, return_url, options):
+        render_calls.append((template, data, return_url, options))
+        return "https://t2i.example/chart.png"
+
+    markdown_report, fallback_report = asyncio.run(
+        generator.generate_qq_official_markdown_report(
+            analysis_result, fake_html_render
+        )
+    )
+
+    assert len(render_calls) == 1
+    template, data, return_url, options = render_calls[0]
+    assert 'class="histogram"' in template
+    assert template.count('class="hour"') == 24
+    assert data == {}
+    assert return_url is True
+    assert options["type"] == "png"
+    assert options["omit_background"] is True
+    assert options["clip"] == {"x": 0, "y": 0, "width": 800, "height": 240}
+    assert "https://t2i.example/chart.png" in markdown_report
+    assert "████" not in markdown_report
+    assert "https://t2i.example/chart.png" not in fallback_report
+    assert "████" in fallback_report
+
+
+def test_qq_official_t2i_histogram_switch_disables_rendering():
+    class DisabledConfig(FakeConfig):
+        def get_qq_official_t2i_activity_histogram_enabled(self):
+            return False
+
+    generator = object.__new__(ReportGenerator)
+    generator.config_manager = DisabledConfig()
+    statistics = SimpleNamespace(
+        message_count=10,
+        participant_count=2,
+        total_characters=50,
+        emoji_count=0,
+        most_active_period="03:00-04:00",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(hourly_activity={3: 10}),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+
+    async def unexpected_render(*args, **kwargs):
+        raise AssertionError("T2I should not run when disabled")
+
+    markdown_report, fallback_report = asyncio.run(
+        generator.generate_qq_official_markdown_report(
+            analysis_result, unexpected_render
+        )
+    )
+
+    assert markdown_report == fallback_report
+    assert "████████████" in markdown_report
 
 
 def test_mentions_support_alphanumeric_openid_and_hide_text():

@@ -110,3 +110,80 @@ def test_proactive_send_restores_group_scene_after_restart():
 
 def test_official_adapter_does_not_advertise_reply_support():
     assert make_adapter().get_capabilities().supports_reply_message is False
+
+
+def test_markdown_report_posts_custom_markdown_with_unique_sequences():
+    calls = []
+
+    class FakeAPI:
+        async def post_group_message(self, **kwargs):
+            calls.append(kwargs)
+            return {"id": f"MSG-{len(calls)}"}
+
+    remember_session_scene = Mock()
+    platform = SimpleNamespace(
+        config={"appid": "1029384756"},
+        remember_session_scene=remember_session_scene,
+    )
+    bot = SimpleNamespace(platform=platform, api=FakeAPI())
+    adapter = QQOfficialAdapter(bot, {"platform_id": "official-main"})
+    adapter.MARKDOWN_CHUNK_SIZE = 35
+
+    assert asyncio.run(
+        adapter.send_text_report(
+            "GROUP_OPENID",
+            "# 报告\n\n第一段 <@A_OPENID>\n\n第二段 " + "x" * 40,
+        )
+    )
+
+    assert len(calls) >= 2
+    assert all(call["group_openid"] == "GROUP_OPENID" for call in calls)
+    assert all(call["msg_type"] == 2 for call in calls)
+    assert all("markdown" in call for call in calls)
+    assert len({call["msg_seq"] for call in calls}) == len(calls)
+    assert all(len(str(call["markdown"])) > 0 for call in calls)
+    remember_session_scene.assert_called_with("GROUP_OPENID", "group")
+
+
+def test_markdown_report_falls_back_to_plain_text_after_api_failure():
+    class FailingAPI:
+        async def post_group_message(self, **kwargs):
+            raise RuntimeError("markdown disabled")
+
+    platform = SimpleNamespace(
+        config={"appid": "1029384756"},
+        remember_session_scene=Mock(),
+    )
+    adapter = QQOfficialAdapter(
+        SimpleNamespace(platform=platform, api=FailingAPI()),
+        {"platform_id": "official-main"},
+    )
+    sent = []
+
+    async def send_text(group_id, text, reply_to=None):
+        sent.append((group_id, text))
+        return True
+
+    adapter.send_text = send_text
+
+    assert asyncio.run(
+        adapter.send_text_report(
+            "GROUP_OPENID",
+            "# 报告\n\n![图表](https://t2i.example/chart.png)",
+            fallback_content="# 报告\n\n<@A_OPENID> 获得称号",
+        )
+    )
+    assert len(sent) == 1
+    assert sent[0][0] == "GROUP_OPENID"
+    assert "<@A_OPENID>" in sent[0][1]
+    assert "t2i.example" not in sent[0][1]
+
+
+def test_markdown_split_does_not_break_mentions():
+    adapter = make_adapter()
+    adapter.MARKDOWN_CHUNK_SIZE = 20
+    chunks = adapter._split_markdown_report("x" * 17 + "<@A_OPENID>" + "tail")
+
+    assert all(len(chunk) <= 20 for chunk in chunks)
+    assert "".join(chunks) == "x" * 17 + "<@A_OPENID>" + "tail"
+    assert any("<@A_OPENID>" in chunk for chunk in chunks)

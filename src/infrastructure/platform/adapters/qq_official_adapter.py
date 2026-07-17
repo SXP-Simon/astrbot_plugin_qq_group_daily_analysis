@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import random
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -34,6 +36,7 @@ class QQOfficialAdapter(PlatformAdapter):
     platform_name = "qq_official"
     AVATAR_TEMPLATE = "https://thirdqq.qlogo.cn/qqapp/{appid}/{member_openid}/640"
     HISTORY_PAGE_SIZE = 500
+    MARKDOWN_CHUNK_SIZE = 3900
 
     def __init__(self, bot_instance: Any, config: dict | None = None):
         super().__init__(bot_instance, config)
@@ -43,6 +46,7 @@ class QQOfficialAdapter(PlatformAdapter):
         ids = config.get("bot_self_ids", []) if config else []
         self.bot_self_ids = [str(item) for item in ids if item]
         self.appid = self._resolve_appid(config or {})
+        self._markdown_msg_seq = random.randint(1, 10000)
 
     @property
     def platform_id(self) -> str:
@@ -285,6 +289,132 @@ class QQOfficialAdapter(PlatformAdapter):
         from astrbot.api.event import MessageChain
 
         return await self._send_chain(group_id, MessageChain().message(str(text)))
+
+    async def send_text_report(
+        self,
+        group_id: str,
+        content: str,
+        fallback_content: str | None = None,
+    ) -> bool:
+        """Send long reports as QQ custom Markdown with plain-text fallback."""
+        chunks = self._split_markdown_report(str(content))
+        if not chunks:
+            return True
+
+        markdown_enabled = True
+        sent_markdown_chunks = 0
+        for chunk in chunks:
+            if markdown_enabled:
+                try:
+                    if await self._send_markdown_chunk(group_id, chunk):
+                        sent_markdown_chunks += 1
+                        continue
+                    logger.warning(
+                        "[QQOfficial] Markdown 接口未返回成功结果，后续改用普通文本"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[QQOfficial] Markdown 报告发送失败，后续改用普通文本: %s",
+                        exc,
+                    )
+                markdown_enabled = False
+
+                if fallback_content and sent_markdown_chunks == 0:
+                    for fallback_chunk in self._split_markdown_report(
+                        str(fallback_content)
+                    ):
+                        if not await self.send_text(group_id, fallback_chunk):
+                            return False
+                    return True
+
+            if not await self.send_text(group_id, chunk):
+                return False
+        return True
+
+    async def _send_markdown_chunk(self, group_id: str, content: str) -> bool:
+        api = getattr(self.bot, "api", None)
+        post_group_message = getattr(api, "post_group_message", None)
+        if not callable(post_group_message):
+            return False
+
+        platform = getattr(self.bot, "platform", None)
+        remember_scene = getattr(platform, "remember_session_scene", None)
+        if callable(remember_scene):
+            remember_scene(str(group_id), "group")
+
+        try:
+            from botpy.types.message import MarkdownPayload
+
+            markdown: Any = MarkdownPayload(content=content)
+        except ImportError:
+            # Allows lightweight test environments while botpy is provided by
+            # AstrBot in production.
+            markdown = {"content": content}
+
+        result = await post_group_message(
+            group_openid=str(group_id),
+            msg_type=2,
+            markdown=markdown,
+            msg_seq=self._next_markdown_msg_seq(),
+        )
+        return result is not None
+
+    def _next_markdown_msg_seq(self) -> int:
+        self._markdown_msg_seq = (self._markdown_msg_seq % 10000) + 1
+        return self._markdown_msg_seq
+
+    def _split_markdown_report(self, content: str) -> list[str]:
+        """Split Markdown on block boundaries without breaking mention tokens."""
+        normalized = str(content or "").strip()
+        if not normalized:
+            return []
+
+        blocks = re.split(r"\n{2,}", normalized)
+        chunks: list[str] = []
+        current = ""
+
+        def append_piece(piece: str) -> None:
+            nonlocal current
+            candidate = f"{current}\n\n{piece}" if current else piece
+            if len(candidate) <= self.MARKDOWN_CHUNK_SIZE:
+                current = candidate
+                return
+            if current:
+                chunks.append(current)
+            current = piece
+
+        for block in blocks:
+            block = block.strip()
+            if not block:
+                continue
+            if len(block) <= self.MARKDOWN_CHUNK_SIZE:
+                append_piece(block)
+                continue
+
+            lines = block.splitlines() or [block]
+            piece = ""
+            for line in lines:
+                candidate = f"{piece}\n{line}" if piece else line
+                if len(candidate) <= self.MARKDOWN_CHUNK_SIZE:
+                    piece = candidate
+                    continue
+                if piece:
+                    append_piece(piece)
+                while len(line) > self.MARKDOWN_CHUNK_SIZE:
+                    split_at = self.MARKDOWN_CHUNK_SIZE
+                    mention_start = line.rfind("<@", 0, split_at)
+                    mention_end = line.find(">", mention_start) if mention_start >= 0 else -1
+                    if mention_start >= 0 and mention_end >= split_at:
+                        split_at = mention_start or self.MARKDOWN_CHUNK_SIZE
+                    append_piece(line[:split_at])
+                    line = line[split_at:]
+                piece = line
+            if piece:
+                append_piece(piece)
+
+        if current:
+            chunks.append(current)
+        return chunks
 
     async def send_image(
         self, group_id: str, image_path: str, caption: str = ""
