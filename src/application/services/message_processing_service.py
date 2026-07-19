@@ -126,7 +126,7 @@ class MessageProcessingService:
                 f"platform_id={platform_id} group_id={group_id} error={e}"
             )
 
-        logger.info(
+        logger.debug(
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
 
