@@ -722,7 +722,9 @@ class ReportGenerator(IReportGenerator):
             html_render_func,
         )
 
-    def _sanitize_analysis_result_for_export(self, analysis_result: dict) -> dict[str, Any]:
+    def _sanitize_analysis_result_for_export(
+        self, analysis_result: dict
+    ) -> dict[str, Any]:
         """Remove platform identities from the HTML sidecar JSON export."""
         sanitized = self._to_plain_export_data(copy.deepcopy(analysis_result))
         sanitized["user_analysis"] = {}

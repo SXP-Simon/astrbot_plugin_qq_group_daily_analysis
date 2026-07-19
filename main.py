@@ -657,7 +657,9 @@ class GroupDailyAnalysis(Star):
 
             # 如果图片生成或发送失败，直接回退到文本
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            await self._send_text_reports(group_id, analysis_result, hide_user_names, adapter)
+            await self._send_text_reports(
+                group_id, analysis_result, hide_user_names, adapter
+            )
             return
 
         elif output_format == "html":
@@ -728,15 +730,23 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            await self._send_text_reports(group_id, analysis_result, hide_user_names, adapter)
+            await self._send_text_reports(
+                group_id, analysis_result, hide_user_names, adapter
+            )
 
-    async def _generate_text_reports(self, analysis_result: dict, hide_user_names: bool) -> tuple[str, str | None]:
+    async def _generate_text_reports(
+        self, analysis_result: dict, hide_user_names: bool
+    ) -> tuple[str, str | None]:
         """Generate text or QQ-official-markdown reports."""
         if hide_user_names:
-            return await self.report_generator.generate_qq_official_markdown_report(analysis_result, self.html_render)
+            return await self.report_generator.generate_qq_official_markdown_report(
+                analysis_result, self.html_render
+            )
         return self.report_generator.generate_text_report(analysis_result), None
 
-    async def _send_text_reports(self, group_id: str, analysis_result: dict, hide_user_names: bool, adapter) -> bool:
+    async def _send_text_reports(
+        self, group_id: str, analysis_result: dict, hide_user_names: bool, adapter
+    ) -> bool:
         """Send text reports via platform adapter."""
         tr, fr = await self._generate_text_reports(analysis_result, hide_user_names)
         if hide_user_names:

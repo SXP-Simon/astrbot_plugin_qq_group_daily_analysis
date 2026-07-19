@@ -33,15 +33,15 @@ class MessageProcessingService:
 
     async def process_message(self, event: AstrMessageEvent) -> None:
         """
-       处理并在历史记录中存储消息。
-        被 main.py 的 Telegram 和 QQ 官方消息拦截器共同调用。
+        处理并在历史记录中存储消息。
+         被 main.py 的 Telegram 和 QQ 官方消息拦截器共同调用。
 
-        Args:
-            event: AstrBot 消息事件
+         Args:
+             event: AstrBot 消息事件
 
-        Raises:
-            ValueError: 当必要数据无法获取时
-            RuntimeError: 当消息内容为空时
+         Raises:
+             ValueError: 当必要数据无法获取时
+             RuntimeError: 当消息内容为空时
         """
         # 1. 获取群组 ID（必需）
         group_id = self._get_group_id_from_event(event)
