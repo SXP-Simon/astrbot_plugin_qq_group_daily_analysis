@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 from types import SimpleNamespace
 
@@ -10,6 +11,9 @@ from src.domain.models.data_models import (
     QualityReview,
 )
 from src.infrastructure.reporting.generators import ReportGenerator
+from src.infrastructure.reporting.qq_official_markdown import (
+    QQOfficialMarkdownReportGenerator,
+)
 from src.infrastructure.reporting.templates import HTMLTemplates
 
 
@@ -23,7 +27,7 @@ class FakeConfig:
     def get_max_golden_quotes(self):
         return 10
 
-    def get_qq_official_t2i_activity_histogram_enabled(self):
+    def get_qq_official_t2i_summary_dashboard_enabled(self):
         return True
 
 
@@ -33,7 +37,14 @@ def build_generator_without_io():
     return generator
 
 
-def test_text_report_removes_official_identity_values():
+def generate_qq_markdown(generator, analysis_result):
+    markdown_report, _ = asyncio.run(
+        generator.generate_qq_official_markdown_report(analysis_result)
+    )
+    return markdown_report
+
+
+def test_standard_text_report_keeps_existing_identity_format():
     generator = build_generator_without_io()
     openid = "A1B2C3D4_OPENID"
     statistics = SimpleNamespace(
@@ -70,12 +81,20 @@ def test_text_report_removes_official_identity_values():
         "user_analysis": {openid: {"nickname": openid}},
     }
 
-    report = generator.generate_text_report(analysis_result, hide_user_names=True)
+    report = generator.generate_text_report(analysis_result)
 
-    assert openid not in report
+    assert openid in report
     assert "测试内容" in report
     assert "龙王" in report
-    assert "参与者:" not in report
+    assert f"参与者: {openid}" in report
+    assert f"• {openid} - 龙王 (ENTP)" in report
+    assert f'1. "测试内容" —— {openid}' in report
+
+
+def test_standard_text_report_api_has_no_qq_platform_switches():
+    parameters = inspect.signature(ReportGenerator.generate_text_report).parameters
+
+    assert list(parameters) == ["self", "analysis_result"]
 
 
 def test_non_qq_text_report_does_not_use_qq_histogram_path():
@@ -145,11 +164,7 @@ def test_qq_official_markdown_uses_mentions_for_all_identity_sections():
         "user_analysis": {openid: {"nickname": nickname}},
     }
 
-    report = generator.generate_text_report(
-        analysis_result,
-        hide_user_names=True,
-        qq_official_mentions=True,
-    )
+    report = generate_qq_markdown(generator, analysis_result)
 
     assert report.count(f"<@{openid}>") >= 6
     without_mentions = report.replace(f"<@{openid}>", "")
@@ -195,9 +210,7 @@ def test_qq_official_markdown_keeps_content_when_identity_id_is_missing():
         "user_analysis": {},
     }
 
-    report = generator.generate_text_report(
-        analysis_result, qq_official_mentions=True
-    )
+    report = generate_qq_markdown(generator, analysis_result)
 
     assert "<@" not in report
     assert "龙王" in report
@@ -242,9 +255,7 @@ def test_qq_official_scripture_spacing_and_optional_reason():
         },
     }
 
-    report = generator.generate_text_report(
-        analysis_result, qq_official_mentions=True
-    )
+    report = generate_qq_markdown(generator, analysis_result)
 
     assert "- **1. 第一条** — <@A_OPENID>\n  > 第一条理由\n\n- **2. 第二条**" in report
     assert "- **2. 第二条** —" not in report
@@ -270,9 +281,7 @@ def test_qq_official_markdown_renders_simple_hourly_bar_chart():
         "user_analysis": {},
     }
 
-    report = generator.generate_text_report(
-        analysis_result, qq_official_mentions=True
-    )
+    report = generate_qq_markdown(generator, analysis_result)
 
     assert "## ⏰ 活跃时间分布" in report
     assert "- 00:00　—　0" in report
@@ -303,14 +312,12 @@ def test_qq_official_markdown_omits_empty_hourly_bar_chart():
         "user_analysis": {},
     }
 
-    report = generator.generate_text_report(
-        analysis_result, qq_official_mentions=True
-    )
+    report = generate_qq_markdown(generator, analysis_result)
 
     assert "## ⏰ 活跃时间分布" not in report
 
 
-def test_qq_official_t2i_histogram_url_replaces_text_chart():
+def test_qq_official_t2i_summary_dashboard_replaces_text_summary():
     generator = build_generator_without_io()
     generator.html_templates = HTMLTemplates(generator.config_manager)
     generator._render_semaphore = asyncio.Semaphore(1)
@@ -318,7 +325,7 @@ def test_qq_official_t2i_histogram_url_replaces_text_chart():
         message_count=10,
         participant_count=2,
         total_characters=50,
-        emoji_count=0,
+        emoji_count=4,
         most_active_period="03:00-04:00",
         golden_quotes=[],
         activity_visualization=SimpleNamespace(hourly_activity={1: 2, 3: 10}),
@@ -343,22 +350,58 @@ def test_qq_official_t2i_histogram_url_replaces_text_chart():
 
     assert len(render_calls) == 1
     template, data, return_url, options = render_calls[0]
+    assert "群聊日常分析" in template
+    assert "消息" in template
+    assert "参与" in template
+    assert "字符" in template
+    assert "表情" in template
+    assert "高峰" in template
+    assert ">10<" in template
+    assert ">2<" in template
+    assert ">50<" in template
+    assert ">4<" in template
+    assert ">03–04<" in template
     assert 'class="histogram"' in template
     assert template.count('class="hour"') == 24
+    assert template.count('class="metric"') == 5
+    assert ">00<" in template
+    assert ">23<" in template
+    assert "background: transparent !important" in template
+    assert "background: #000000" in template
+    assert "font-size: 25px" in template
+    assert "font-size: 28px" in template
+    assert "font-size: 14px" in template
+    assert "#1d1d1f" not in template
+    assert "#6e6e73" not in template
+    assert "#86868b" not in template
+    assert "rgba(0, 0, 0" not in template
+    assert "text-shadow" not in template
+    assert "linear-gradient" not in template
+    assert "#5b8ff9" not in template
     assert data == {}
     assert return_url is True
     assert options["type"] == "png"
     assert options["omit_background"] is True
-    assert options["clip"] == {"x": 0, "y": 0, "width": 800, "height": 240}
+    assert options["clip"] == {"x": 0, "y": 0, "width": 800, "height": 360}
     assert "https://t2i.example/chart.png" in markdown_report
+    assert "# 🎯 群聊日常分析报告" not in markdown_report
+    assert "📅" not in markdown_report
+    assert "## 📊 基础统计" not in markdown_report
+    assert "消息总数" not in markdown_report
+    assert "## ⏰ 活跃时间分布" not in markdown_report
     assert "████" not in markdown_report
     assert "https://t2i.example/chart.png" not in fallback_report
+    assert "# 🎯 群聊日常分析报告" in fallback_report
+    assert "📅" in fallback_report
+    assert "## 📊 基础统计" in fallback_report
+    assert "消息总数" in fallback_report
+    assert "## ⏰ 活跃时间分布" in fallback_report
     assert "████" in fallback_report
 
 
-def test_qq_official_t2i_histogram_switch_disables_rendering():
+def test_qq_official_t2i_summary_dashboard_switch_disables_rendering():
     class DisabledConfig(FakeConfig):
-        def get_qq_official_t2i_activity_histogram_enabled(self):
+        def get_qq_official_t2i_summary_dashboard_enabled(self):
             return False
 
     generator = object.__new__(ReportGenerator)
@@ -390,6 +433,81 @@ def test_qq_official_t2i_histogram_switch_disables_rendering():
 
     assert markdown_report == fallback_report
     assert "████████████" in markdown_report
+
+
+def test_qq_official_t2i_summary_dashboard_supports_legacy_config_key():
+    class LegacyDisabledConfig:
+        def get_max_topics(self):
+            return 10
+
+        def get_max_user_titles(self):
+            return 10
+
+        def get_max_golden_quotes(self):
+            return 10
+
+        def get_qq_official_t2i_activity_histogram_enabled(self):
+            return False
+
+    generator = object.__new__(ReportGenerator)
+    generator.config_manager = LegacyDisabledConfig()
+    statistics = SimpleNamespace(
+        message_count=10,
+        participant_count=2,
+        total_characters=50,
+        emoji_count=0,
+        most_active_period="03:00-04:00",
+        golden_quotes=[],
+        activity_visualization=SimpleNamespace(hourly_activity={3: 10}),
+    )
+    analysis_result = {
+        "statistics": statistics,
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {},
+    }
+
+    async def unexpected_render(*args, **kwargs):
+        raise AssertionError("legacy disabled switch must prevent T2I rendering")
+
+    markdown_report, fallback_report = asyncio.run(
+        generator.generate_qq_official_markdown_report(
+            analysis_result, unexpected_render
+        )
+    )
+
+    assert markdown_report == fallback_report
+    assert "████████████" in markdown_report
+
+
+def test_qq_official_summary_dashboard_compacts_large_metrics():
+    assert QQOfficialMarkdownReportGenerator.format_metric(10_000) == "10K"
+    assert QQOfficialMarkdownReportGenerator.format_metric(12_500) == "12.5K"
+    assert QQOfficialMarkdownReportGenerator.format_metric(1_000_000) == "1M"
+    assert QQOfficialMarkdownReportGenerator.format_metric(1_250_000) == "1.2M"
+
+
+def test_non_qq_avatar_mentions_ignore_alphanumeric_bracket_text():
+    generator = build_generator_without_io()
+
+    async def unexpected_avatar(*args, **kwargs):
+        raise AssertionError("non-QQ bracket text must not trigger avatar lookup")
+
+    generator._get_user_avatar = unexpected_avatar
+    rendered = asyncio.run(
+        generator._render_mentions(
+            "保留 [TODO]、[GPT-4] 和 [A_OPENID]",
+            avatar_url_getter=None,
+            user_analysis={"A_OPENID": {"nickname": "测试用户"}},
+            hide_user_names=False,
+        )
+    )
+
+    rendered_text = str(rendered)
+    assert "[TODO]" in rendered_text
+    assert "[GPT-4]" in rendered_text
+    assert "[A_OPENID]" in rendered_text
+    assert "user-capsule" not in rendered_text
 
 
 def test_mentions_support_alphanumeric_openid_and_hide_text():

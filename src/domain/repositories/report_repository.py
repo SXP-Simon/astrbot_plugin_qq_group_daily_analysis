@@ -40,12 +40,7 @@ class IReportGenerator(ABC):
         pass
 
     @abstractmethod
-    def generate_text_report(
-        self,
-        analysis_result: dict,
-        hide_user_names: bool = False,
-        qq_official_mentions: bool = False,
-    ) -> str:
+    def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本报告"""
         pass
 

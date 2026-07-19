@@ -26,6 +26,7 @@ from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
+from .qq_official_markdown import QQOfficialMarkdownReportGenerator
 from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
@@ -106,6 +107,11 @@ class ReportGenerator(IReportGenerator):
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
+        self._qq_official_markdown_generator = QQOfficialMarkdownReportGenerator(
+            config_manager,
+            self.html_templates,
+            self._render_semaphore,
+        )
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
         self._avatar_cache = Cache(
@@ -657,16 +663,8 @@ class ReportGenerator(IReportGenerator):
         encoded_relative_url = quote(relative_url, safe="/")
         return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
 
-    def generate_text_report(
-        self,
-        analysis_result: dict,
-        hide_user_names: bool = False,
-        qq_official_mentions: bool = False,
-    ) -> str:
+    def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本格式的分析报告"""
-        if qq_official_mentions:
-            return self._generate_qq_official_markdown_report(analysis_result)
-
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
@@ -688,347 +686,40 @@ class ReportGenerator(IReportGenerator):
         max_topics = self.config_manager.get_max_topics()
         for i, topic in enumerate(topics[:max_topics], 1):
             contributors_str = "、".join(topic.contributors)
-            topic_name = self._sanitize_identity_text(
-                topic.topic, analysis_result, hide_user_names
-            )
-            report += f"{i}. {topic_name}\n"
-            if not hide_user_names:
-                report += f"   参与者: {contributors_str}\n"
-            report += f"   {self._sanitize_identity_text(topic.detail, analysis_result, hide_user_names)}\n\n"
+            report += f"{i}. {topic.topic}\n"
+            report += f"   参与者: {contributors_str}\n"
+            report += f"   {topic.detail}\n\n"
 
         report += "🏆 群友称号\n"
         max_user_titles = self.config_manager.get_max_user_titles()
         for title in user_titles[:max_user_titles]:
-            if hide_user_names:
-                report += f"• {title.title} ({title.mbti})\n"
-            else:
-                report += f"• {title.name} - {title.title} ({title.mbti})\n"
-            report += f"  {self._sanitize_identity_text(title.reason, analysis_result, hide_user_names)}\n\n"
+            report += f"• {title.name} - {title.title} ({title.mbti})\n"
+            report += f"  {title.reason}\n\n"
 
         report += "💬 群圣经\n"
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         for i, golden_quote in enumerate(stats.golden_quotes[:max_golden_quotes], 1):
-            suffix = "" if hide_user_names else f" —— {golden_quote.sender}"
-            quote_content = self._sanitize_identity_text(
-                golden_quote.content, analysis_result, hide_user_names
-            )
-            report += f'{i}. "{quote_content}"{suffix}\n'
-            report += f"   {self._sanitize_identity_text(golden_quote.reason, analysis_result, hide_user_names)}\n\n"
+            report += f'{i}. "{golden_quote.content}" —— {golden_quote.sender}\n'
+            report += f"   {golden_quote.reason}\n\n"
 
         return report
 
     async def generate_qq_official_markdown_report(
         self, analysis_result: dict, html_render_func=None
     ) -> tuple[str, str]:
-        """Generate QQ Markdown and a URL-free plain fallback report."""
-        fallback_report = self._generate_qq_official_markdown_report(analysis_result)
-        enabled_getter = getattr(
-            self.config_manager,
-            "get_qq_official_t2i_activity_histogram_enabled",
-            None,
+        """Delegate QQ-only text generation to the platform-specific module."""
+        generator = getattr(self, "_qq_official_markdown_generator", None)
+        if generator is None:
+            generator = QQOfficialMarkdownReportGenerator(
+                self.config_manager,
+                getattr(self, "html_templates", None),
+                getattr(self, "_render_semaphore", None),
+            )
+            self._qq_official_markdown_generator = generator
+        return await generator.generate(
+            analysis_result,
+            html_render_func,
         )
-        enabled = bool(enabled_getter()) if callable(enabled_getter) else True
-        if not enabled or not callable(html_render_func):
-            return fallback_report, fallback_report
-
-        chart_url = await self._generate_qq_official_activity_histogram_url(
-            analysis_result["statistics"], html_render_func
-        )
-        if not chart_url:
-            return fallback_report, fallback_report
-        return (
-            self._generate_qq_official_markdown_report(
-                analysis_result, activity_chart_url=chart_url
-            ),
-            fallback_report,
-        )
-
-    async def _generate_qq_official_activity_histogram_url(
-        self, stats: object, html_render_func
-    ) -> str | None:
-        hourly_counts = self._get_qq_official_hourly_counts(stats)
-        max_count = max(hourly_counts, default=0)
-        if max_count <= 0:
-            return None
-
-        chart_data = [
-            {
-                "hour": f"{hour:02d}",
-                "count": count,
-                "height": (
-                    max(2, round(count / max_count * 100)) if count > 0 else 0
-                ),
-            }
-            for hour, count in enumerate(hourly_counts)
-        ]
-        html_content = self.html_templates.render_platform_template(
-            "qq_official",
-            "activity_histogram.html",
-            chart_data=chart_data,
-        )
-        if not html_content:
-            return None
-
-        options = {
-            "type": "png",
-            "omit_background": True,
-            "full_page": False,
-            "clip": {"x": 0, "y": 0, "width": 800, "height": 240},
-            "animations": "disabled",
-            "caret": "hide",
-            "scale": "device",
-            "device_scale_factor_level": "high",
-            "timeout": 30000,
-        }
-
-        async def render() -> str | None:
-            result = await html_render_func(html_content, {}, True, options)
-            url = str(result or "").strip()
-            if url.startswith(("http://", "https://")):
-                return url
-            logger.warning("[QQOfficial] T2I 直方图未返回可公开访问的 URL")
-            return None
-
-        try:
-            semaphore = getattr(self, "_render_semaphore", None)
-            if semaphore is None:
-                return await render()
-            async with semaphore:
-                return await render()
-        except Exception as exc:
-            logger.warning("[QQOfficial] T2I 活跃时间直方图生成失败: %s", exc)
-            return None
-
-    def _generate_qq_official_markdown_report(
-        self, analysis_result: dict, activity_chart_url: str | None = None
-    ) -> str:
-        """Generate QQ Official Markdown using member_openid mentions."""
-        stats = analysis_result["statistics"]
-        topics = analysis_result["topics"]
-        user_titles = analysis_result["user_titles"]
-
-        lines = [
-            "# 🎯 群聊日常分析报告",
-            f"📅 {datetime.now().strftime('%Y年%m月%d日')}",
-            "",
-            "## 📊 基础统计",
-            f"- **消息总数**：{stats.message_count}",
-            f"- **参与人数**：{stats.participant_count}",
-            f"- **总字符数**：{stats.total_characters}",
-            f"- **表情数量**：{stats.emoji_count}",
-            f"- **最活跃时段**：{stats.most_active_period}",
-            "",
-        ]
-
-        if activity_chart_url:
-            lines.extend(
-                [
-                    "## ⏰ 活跃时间分布",
-                    f"![24小时活跃分布 #800px #240px]({activity_chart_url})",
-                ]
-            )
-            lines.append("")
-        else:
-            activity_chart = self._build_qq_official_activity_chart(stats)
-            if activity_chart:
-                lines.extend(activity_chart)
-                lines.append("")
-
-        lines.append("## 💬 热门话题")
-
-        max_topics = self.config_manager.get_max_topics()
-        for index, topic in enumerate(topics[:max_topics], 1):
-            topic_name = self._render_qq_official_identity_text(
-                topic.topic, analysis_result
-            )
-            lines.append(f"### {index}. {topic_name}")
-            contributor_ids = list(getattr(topic, "contributor_ids", []) or [])
-            mentions = self._qq_official_mentions(contributor_ids)
-            if mentions:
-                lines.append(f"**参与者**：{mentions}")
-            detail = self._render_qq_official_identity_text(
-                topic.detail, analysis_result
-            )
-            if detail:
-                lines.append(detail)
-            lines.append("")
-
-        lines.append("## 🏆 群友称号")
-        max_user_titles = self.config_manager.get_max_user_titles()
-        for title in user_titles[:max_user_titles]:
-            mention = self._qq_official_mention(getattr(title, "user_id", ""))
-            title_text = self._render_qq_official_identity_text(
-                title.title, analysis_result
-            )
-            mbti = f" · {title.mbti}" if getattr(title, "mbti", "") else ""
-            prefix = f"{mention} — " if mention else ""
-            lines.append(f"- {prefix}**{title_text}**{mbti}")
-            reason = self._render_qq_official_identity_text(
-                title.reason, analysis_result
-            )
-            if reason:
-                lines.append(f"  > {reason}")
-        lines.append("")
-
-        lines.append("## 💬 群圣经")
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
-        for index, golden_quote in enumerate(
-            stats.golden_quotes[:max_golden_quotes], 1
-        ):
-            quote_content = self._render_qq_official_identity_text(
-                golden_quote.content, analysis_result
-            )
-            mention = self._qq_official_mention(
-                getattr(golden_quote, "user_id", "")
-            )
-            attribution = f" — {mention}" if mention else ""
-            lines.append(f"- **{index}. {quote_content}**{attribution}")
-            reason = self._render_qq_official_identity_text(
-                golden_quote.reason, analysis_result
-            )
-            if reason:
-                lines.append(f"  > {reason}")
-            lines.append("")
-
-        return "\n".join(lines).strip()
-
-    @staticmethod
-    def _build_qq_official_activity_chart(
-        stats: object, bar_width: int = 12
-    ) -> list[str]:
-        """Build a compact 24-hour Markdown bar chart for QQ Official."""
-        hourly_counts = ReportGenerator._get_qq_official_hourly_counts(stats)
-        max_count = max(hourly_counts, default=0)
-        if max_count <= 0:
-            return []
-
-        effective_width = max(1, int(bar_width))
-        lines = ["## ⏰ 活跃时间分布"]
-        for hour, count in enumerate(hourly_counts):
-            if count > 0:
-                blocks = max(
-                    1,
-                    (count * effective_width + max_count - 1) // max_count,
-                )
-                bar = "█" * blocks
-            else:
-                bar = "—"
-            lines.append(f"- {hour:02d}:00　{bar}　{count}")
-        return lines
-
-    @staticmethod
-    def _get_qq_official_hourly_counts(stats: object) -> list[int]:
-        """Normalize hourly activity keys and values into a 24-item list."""
-        activity_viz = getattr(stats, "activity_visualization", None)
-        raw_activity = getattr(activity_viz, "hourly_activity", None) or {}
-        if not isinstance(raw_activity, dict):
-            return [0] * 24
-
-        hourly_counts: list[int] = []
-        for hour in range(24):
-            raw_count = raw_activity.get(hour, raw_activity.get(str(hour), 0))
-            try:
-                count = max(0, int(raw_count or 0))
-            except (TypeError, ValueError):
-                count = 0
-            hourly_counts.append(count)
-        return hourly_counts
-
-    @staticmethod
-    def _qq_official_mention(user_id: object) -> str:
-        normalized = str(user_id or "").strip().strip("[]")
-        return f"<@{normalized}>" if normalized else ""
-
-    @classmethod
-    def _qq_official_mentions(cls, user_ids: list[object]) -> str:
-        unique_ids = list(
-            dict.fromkeys(
-                str(user_id or "").strip().strip("[]")
-                for user_id in user_ids
-                if str(user_id or "").strip().strip("[]")
-            )
-        )
-        return " ".join(cls._qq_official_mention(user_id) for user_id in unique_ids)
-
-    @classmethod
-    def _render_qq_official_identity_text(
-        cls, text: object, analysis_result: dict
-    ) -> str:
-        """Replace known IDs and display names with QQ mention syntax."""
-        source = str(text or "")
-        user_analysis = analysis_result.get("user_analysis") or {}
-        id_to_names: dict[str, set[str]] = {}
-
-        for user_id, user_data in user_analysis.items():
-            normalized_id = str(user_id or "").strip()
-            if not normalized_id:
-                continue
-            names: set[str] = set()
-            if isinstance(user_data, dict):
-                for key in ("nickname", "name", "card"):
-                    name = str(user_data.get(key, "") or "").strip()
-                    if name and name != normalized_id:
-                        names.add(name)
-            id_to_names[normalized_id] = names
-
-        for title in analysis_result.get("user_titles", []) or []:
-            user_id = str(getattr(title, "user_id", "") or "").strip()
-            name = str(getattr(title, "name", "") or "").strip()
-            if user_id:
-                id_to_names.setdefault(user_id, set())
-                if name and name != user_id:
-                    id_to_names[user_id].add(name)
-
-        stats = analysis_result.get("statistics")
-        for golden_quote in getattr(stats, "golden_quotes", []) or []:
-            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
-            name = str(getattr(golden_quote, "sender", "") or "").strip()
-            if user_id:
-                id_to_names.setdefault(user_id, set())
-                if name and name != user_id:
-                    id_to_names[user_id].add(name)
-
-        placeholders: dict[str, str] = {}
-
-        def protect_mention(match: re.Match[str]) -> str:
-            key = f"\x00QQMENTION{len(placeholders)}\x00"
-            placeholders[key] = match.group(0)
-            return key
-
-        source = re.sub(r"<@[A-Za-z0-9_-]+>", protect_mention, source)
-        for user_id in sorted(id_to_names, key=len, reverse=True):
-            mention = cls._qq_official_mention(user_id)
-            source = re.sub(rf"\[{re.escape(user_id)}\]", mention, source)
-            source = re.sub(r"<@[A-Za-z0-9_-]+>", protect_mention, source)
-            source = re.sub(
-                rf"(?<![A-Za-z0-9_-]){re.escape(user_id)}(?![A-Za-z0-9_-])",
-                mention,
-                source,
-            )
-            source = re.sub(r"<@[A-Za-z0-9_-]+>", protect_mention, source)
-
-        # Protect mentions created above before replacing display names. A
-        # short nickname may otherwise match a substring inside member_openid.
-        source = re.sub(r"<@[A-Za-z0-9_-]+>", protect_mention, source)
-
-        name_to_ids: dict[str, set[str]] = {}
-        for user_id, names in id_to_names.items():
-            for name in names:
-                if name:
-                    name_to_ids.setdefault(name, set()).add(user_id)
-        for name in sorted(name_to_ids, key=len, reverse=True):
-            matched_ids = name_to_ids[name]
-            replacement = (
-                cls._qq_official_mention(next(iter(matched_ids)))
-                if len(matched_ids) == 1
-                else ""
-            )
-            source = source.replace(name, replacement)
-            source = re.sub(r"<@[A-Za-z0-9_-]+>", protect_mention, source)
-
-        for placeholder, mention in placeholders.items():
-            source = source.replace(placeholder, mention)
-        return source.strip()
 
     def _sanitize_analysis_result_for_export(self, analysis_result: dict) -> dict:
         """Remove platform identities from the HTML sidecar JSON export."""
@@ -1440,7 +1131,9 @@ class ReportGenerator(IReportGenerator):
                     source_text,
                 )
 
-        pattern = r"\[([A-Za-z0-9_-]{1,128})\]"
+        pattern = (
+            r"\[([A-Za-z0-9_-]{1,128})\]" if hide_user_names else r"\[(\d+)\]"
+        )
 
         matches = list(re.finditer(pattern, source_text))
         if not matches:

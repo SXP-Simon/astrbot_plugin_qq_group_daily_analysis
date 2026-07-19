@@ -66,7 +66,7 @@
                     "html"
                 ],
                 "default": "image",
-                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方群事件没有昵称，图片/HTML 报告仅显示头像，文本报告会省略用户身份。"
+                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方群事件没有昵称，图片/HTML 报告仅显示头像，文本报告由独立 Markdown 模块使用艾特展示身份；其他平台保持原有昵称文本格式。"
             },
             "report_template": {
                 "type": "string",
@@ -147,9 +147,9 @@
         "items": {
             "enable_t2i_activity_histogram": {
                 "type": "bool",
-                "description": "启用 T2I 活跃时间直方图",
+                "description": "启用 T2I 群聊概览图",
                 "default": true,
-                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的 24 小时竖向直方图。渲染失败时自动回退为文字条形图。"
+                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的日期、基础统计与 24 小时直方图。渲染失败时自动回退为完整文字报告。"
             }
         }
     },

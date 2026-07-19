@@ -150,11 +150,16 @@ class ConfigManager:
         """获取输出格式"""
         return self._get_group("basic").get("output_format", "image")
 
+    def get_qq_official_t2i_summary_dashboard_enabled(self) -> bool:
+        """是否启用 QQ 官方 T2I 概览图。"""
+        group = self._get_group("qq_official")
+        if "enable_t2i_summary_dashboard" in group:
+            return bool(group["enable_t2i_summary_dashboard"])
+        return bool(group.get("enable_t2i_activity_histogram", True))
+
     def get_qq_official_t2i_activity_histogram_enabled(self) -> bool:
-        """是否在 QQ 官方 Markdown 报告中启用 T2I 直方图。"""
-        return self._get_group("qq_official").get(
-            "enable_t2i_activity_histogram", True
-        )
+        """兼容旧调用名称。"""
+        return self.get_qq_official_t2i_summary_dashboard_enabled()
 
     def get_min_messages_threshold(self) -> int:
         """获取最小消息阈值"""
