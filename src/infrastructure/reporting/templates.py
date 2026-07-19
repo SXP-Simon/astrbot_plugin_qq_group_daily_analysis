@@ -76,6 +76,9 @@ class HTMLTemplates:
         try:
             env = await self._get_env_async()
             template = env.get_template("image_template.html")
+            if template.filename is None:
+                logger.error("图片模板路径为空")
+                return ""
             return await asyncio.to_thread(
                 self._read_template_file_sync, template.filename
             )
@@ -88,6 +91,9 @@ class HTMLTemplates:
         try:
             env = self._get_env()
             template = env.get_template("image_template.html")
+            if template.filename is None:
+                logger.error("图片模板路径为空")
+                return ""
             with open(template.filename, encoding="utf-8") as f:
                 return f.read()
         except Exception as e:

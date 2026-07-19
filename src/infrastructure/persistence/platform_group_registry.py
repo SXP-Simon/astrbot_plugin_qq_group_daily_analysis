@@ -69,8 +69,8 @@ class PlatformGroupRegistry:
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             groups = self._extract_groups(registry, platform_id)
+            platform_key = str(platform_id).strip() if platform_id else None
             if platform_id:
-                platform_key = str(platform_id).strip()
                 self._known_groups.update(
                     (platform_key, group_id) for group_id in groups
                 )
@@ -80,7 +80,7 @@ class PlatformGroupRegistry:
             legacy_groups = self._extract_groups(legacy, platform_id)
             groups.update(legacy_groups)
             if platform_id:
-                self._known_groups.update(
+                self._known_groups.update(  # type: ignore[arg-type]
                     (platform_key, group_id) for group_id in legacy_groups
                 )
             return sorted(groups)
