@@ -1,11 +1,23 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.10.9] - ✨ 新增模板 ”BlueArchive“ 蔚蓝档案 (@VanillaNahida)
+## [v4.11.0] - ✨ 新增 QQ 官方机器人群聊分析与专用 Markdown 报告 (@clown145)
+
+插件同时支持 AstrBot 的 `qq_official` 与 `qq_official_webhook` 平台。
+
+*   **🛠️配置注意事项 **: 在群聊中需要由群主允许机器人接收群内全部消息，使 AstrBot 能收到 `GROUP_MESSAGE_CREATE` 事件；只开放 @ 消息时，报告只能覆盖 @ 机器人的聊天。
+*   **🛠️ 适配范围**: 本次适配只覆盖普通 QQ 群，不包含频道或子频道。
+*   **⚙️ 成员昵称**: 官方群事件不提供成员昵称，所以推荐使用 QQ 官方机器人的用户配置输出格式为 text （默认为 image）格式，获得更好的体验，图片格式下无法显示成员昵称。
+*   **⚙️ QQ 官方 API 支持有限**: QQ 官方 API 不提供“按群拉取历史消息”的接口。插件会从启用后开始实时保存消息，并从 AstrBot 本地消息历史库分页读取；启用前的群聊无法自动回填。
+*   **✨ 分析名单配置**: 官方群和成员使用 `group_openid` / `member_openid`，不是群号或 QQ 号。配置黑白名单、定时任务时建议先在群内执行 `/sid`，填写完整 UMO。
+*   **✨ Markdown 报告**: QQ 官方文本报告使用自定义 Markdown，并默认通过 AstrBot T2I 生成透明背景的群聊概览图，将日期、基础统计和 24 小时竖向直方图合并为紧凑布局。可在 `QQ 官方机器人` 配置组关闭；渲染失败时自动回退为包含文字条形图的完整文本报告。
+*   **✨ Markdown 概览图**: Markdown 概览图直接使用 AstrBot T2I 返回的公网 URL。请确保当前 T2I 端点域名已加入 QQ 开放平台的消息 URL 配置。
 
 ---
 
 <details>
 <summary>📋 点击查看历史更新日志</summary>
+
+## [v4.10.9] - ✨ 新增模板 ”BlueArchive“ 蔚蓝档案 (@VanillaNahida)
 
 ## [v4.10.8] - 🛠️ snowluma 被禁言避免触发分析修复 (#191)
 

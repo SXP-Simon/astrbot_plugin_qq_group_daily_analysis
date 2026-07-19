@@ -12,16 +12,14 @@ from ..value_objects.unified_message import (
     UnifiedMessage,
 )
 
+# Discord 自定义表情正则 <:name:id> 或 <a:name:id>
+_DISCORD_CUSTOM_EMOJI_PATTERN = re.compile(r"<a?:.+?:\d+>")
+# 指令匹配正则：匹配以 / 开头，或者以 @某人 / 开头的消息
+_COMMAND_PATTERN = re.compile(r"^\s*(?:<@\d+>\s+)?/")
+
 
 class MessageCleanerService:
     """消息清理服务"""
-
-    # Discord 自定义表情正则 <:name:id> 或 <a:name:id>
-    DISCORD_CUSTOM_EMOJI_PATTERN = re.compile(r"<a?:.+?:\d+>")
-
-    # 指令匹配正则：匹配以 / 开头，或者以 @某人 / 开头的消息
-    # 比如: "/group_analysis", "@bot /help", " /test"
-    COMMAND_PATTERN = re.compile(r"^\s*(?:<@\d+>\s+)?/")
 
     def clean_messages(
         self,
@@ -51,11 +49,7 @@ class MessageCleanerService:
             # 2. 预检指令消息（首个内容块通常是文本）
             is_command = False
             first_text = msg.text_content
-            if (
-                filter_commands
-                and first_text
-                and self.COMMAND_PATTERN.match(first_text)
-            ):
+            if filter_commands and first_text and _COMMAND_PATTERN.match(first_text):
                 is_command = True
 
             if is_command:
@@ -70,7 +64,7 @@ class MessageCleanerService:
                     text = content.text or ""
 
                     # 移除 Discord 原始表情代码
-                    text = self.DISCORD_CUSTOM_EMOJI_PATTERN.sub("", text)
+                    text = _DISCORD_CUSTOM_EMOJI_PATTERN.sub("", text)
 
                     # 移除 @mentions 文本 (e.g. <@123456>)
                     text = re.sub(r"<@\d+>", "", text)

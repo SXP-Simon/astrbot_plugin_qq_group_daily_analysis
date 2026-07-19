@@ -7,7 +7,7 @@
 
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 
 from astrbot.api import AstrBotConfig
@@ -15,6 +15,8 @@ from astrbot.api import logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
+
+# File is only available via astrbot.core (internal API — may change).
 from astrbot.core.message.components import File
 
 from .src.application.commands.template_command_service import (
@@ -35,8 +37,8 @@ from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
-from .src.infrastructure.persistence.telegram_group_registry import (
-    TelegramGroupRegistry,
+from .src.infrastructure.persistence.platform_group_registry import (
+    PlatformGroupRegistry,
 )
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.platform.template_preview import (
@@ -45,6 +47,7 @@ from .src.infrastructure.platform.template_preview import (
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
+from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.shared.constants import PLUGIN_NAME
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
@@ -60,7 +63,8 @@ class GroupDailyAnalysis(Star):
     bot_manager: BotManager
     history_manager: HistoryManager
     report_generator: ReportGenerator
-    telegram_group_registry: TelegramGroupRegistry
+    html_render: Callable
+    platform_group_registry: PlatformGroupRegistry
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
     llm_analyzer: LLMAnalyzer
@@ -90,10 +94,11 @@ class GroupDailyAnalysis(Star):
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
         # Telegram 注册表 (持久层)
-        self.telegram_group_registry = TelegramGroupRegistry(self)
+        self.platform_group_registry = PlatformGroupRegistry(self)
 
         # 2. 领域层
-        self.statistics_service = StatisticsService()
+        activity_visualizer = ActivityVisualizer()
+        self.statistics_service = StatisticsService(activity_visualizer)
         self.analysis_domain_service = AnalysisDomainService()
 
         # 3. 分析核心 (LLM Bridge)
@@ -118,7 +123,7 @@ class GroupDailyAnalysis(Star):
 
         # 消息处理服务
         self.message_processing_service = MessageProcessingService(
-            context, self.telegram_group_registry
+            context, self.platform_group_registry
         )
         self.template_command_service = TemplateCommandService(
             plugin_root=os.path.dirname(__file__)
@@ -287,11 +292,43 @@ class GroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"[Telegram] 消息存储异常: {e}", exc_info=True)
 
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(
+        filter.PlatformAdapterType.QQOFFICIAL
+        | filter.PlatformAdapterType.QQOFFICIAL_WEBHOOK
+    )
+    async def intercept_qq_official_messages(self, event: AstrMessageEvent):
+        """缓存 QQ 官方机器人群消息；频道消息不在本插件适配范围内。"""
+        raw_message = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        if isinstance(raw_message, dict):
+            author = raw_message.get("author") or {}
+            group_openid = str(raw_message.get("group_openid", "") or "").strip()
+            member_openid = str(
+                author.get("member_openid", "") if isinstance(author, dict) else ""
+            ).strip()
+        else:
+            author = getattr(raw_message, "author", None)
+            group_openid = str(getattr(raw_message, "group_openid", "") or "").strip()
+            member_openid = str(getattr(author, "member_openid", "") or "").strip()
+        if not group_openid or not member_openid:
+            return
+
+        try:
+            await self.message_processing_service.process_message(event)
+        except (ValueError, RuntimeError) as e:
+            logger.warning(f"[QQOfficial] 消息存储失败: {e}")
+        except Exception as e:
+            logger.error(f"[QQOfficial] 消息存储异常: {e}", exc_info=True)
+
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
     ) -> list[str]:
         """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
-        return await self.telegram_group_registry.get_all_group_ids(platform_id)
+        return await self.platform_group_registry.get_all_group_ids(platform_id)
+
+    async def get_seen_group_ids(self, platform_id: str | None = None) -> list[str]:
+        """读取任意事件驱动平台已经见过的群组。"""
+        return await self.platform_group_registry.get_all_group_ids(platform_id)
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从消息事件中安全获取群组 ID"""
@@ -517,7 +554,15 @@ class GroupDailyAnalysis(Star):
             # 表情回应 或 文本提示（二选一，由配置开关控制）
             adapter = self.bot_manager.get_adapter(platform_id)
             orig_msg_id = getattr(event.message_obj, "message_id", None)
-            use_text_reply = self.config_manager.get_enable_analysis_reply()
+            adapter_platform_name = (
+                (adapter.get_platform_name() if adapter else "").strip().lower()
+            )
+            # QQ 官方机器人 API v2 不支持本插件使用的表情回应接口，
+            # 因此始终沿用原有的文字进度提示，避免触发无效的 reaction 请求。
+            use_text_reply = (
+                adapter_platform_name in {"qq_official", "qq_official_webhook"}
+                or self.config_manager.get_enable_analysis_reply()
+            )
 
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
@@ -577,6 +622,7 @@ class GroupDailyAnalysis(Star):
         analysis_result = result["analysis_result"]
         adapter = result["adapter"]
         output_format = self.config_manager.get_output_format()
+        hide_user_names = adapter.get_platform_name() == "qq_official"
 
         # 定义获取回调
         async def avatar_url_getter(user_id: str) -> str | None:
@@ -599,6 +645,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
+                hide_user_names=hide_user_names,
             )
 
             if image_url:
@@ -610,8 +657,9 @@ class GroupDailyAnalysis(Star):
 
             # 如果图片生成或发送失败，直接回退到文本
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            text_report = self.report_generator.generate_text_report(analysis_result)
-            await adapter.send_text_report(group_id, text_report)
+            await self._send_text_reports(
+                group_id, analysis_result, hide_user_names, adapter
+            )
             return
 
         elif output_format == "html":
@@ -621,6 +669,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
+                hide_user_names=hide_user_names,
             )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
@@ -681,8 +730,28 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            text_report = self.report_generator.generate_text_report(analysis_result)
-            await adapter.send_text_report(group_id, text_report)
+            await self._send_text_reports(
+                group_id, analysis_result, hide_user_names, adapter
+            )
+
+    async def _generate_text_reports(
+        self, analysis_result: dict, hide_user_names: bool
+    ) -> tuple[str, str | None]:
+        """Generate text or QQ-official-markdown reports."""
+        if hide_user_names:
+            return await self.report_generator.generate_qq_official_markdown_report(
+                analysis_result, self.html_render
+            )
+        return self.report_generator.generate_text_report(analysis_result), None
+
+    async def _send_text_reports(
+        self, group_id: str, analysis_result: dict, hide_user_names: bool, adapter
+    ) -> bool:
+        """Send text reports via platform adapter."""
+        tr, fr = await self._generate_text_reports(analysis_result, hide_user_names)
+        if hide_user_names:
+            return await adapter.send_text_report(group_id, tr, fallback_content=fr)
+        return await adapter.send_text_report(group_id, tr)
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)

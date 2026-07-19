@@ -51,6 +51,21 @@ class LLMAnalyzer(IAnalysisProvider):
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
         self.chat_quality_analyzer = ChatQualityAnalyzer(context, config_manager)
 
+    @staticmethod
+    def _make_session_id(
+        session_id: str | None, umo: str | None = None, prefix: str = ""
+    ) -> str:
+        """Generate a session ID if not already provided."""
+        if session_id:
+            return session_id
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if umo:
+            safe_umo = umo.replace(":", "_")
+            return f"{prefix}{timestamp}_{safe_umo}"
+        return f"{prefix}{timestamp}"
+
     async def analyze_topics(
         self,
         messages: list[dict],
@@ -70,16 +85,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, Token使用统计)
         """
         try:
-            if not session_id:
-                from datetime import datetime
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                if umo:
-                    # Sanitize umo for filename (replace : with _)
-                    safe_umo = umo.replace(":", "_")
-                    session_id = f"{timestamp}_{safe_umo}"
-                else:
-                    session_id = timestamp
+            session_id = self._make_session_id(session_id, umo)
 
             logger.info(f"开始话题分析, session_id: {session_id}")
             return await self.topic_analyzer.analyze_topics(messages, umo, session_id)
@@ -110,15 +116,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (用户称号列表, Token使用统计)
         """
         try:
-            if not session_id:
-                from datetime import datetime
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                if umo:
-                    safe_umo = umo.replace(":", "_")
-                    session_id = f"{timestamp}_{safe_umo}"
-                else:
-                    session_id = timestamp
+            session_id = self._make_session_id(session_id, umo)
 
             logger.info(f"开始用户称号分析, session_id: {session_id}")
             return await self.user_title_analyzer.analyze_user_titles(
@@ -147,15 +145,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (金句列表, Token使用统计)
         """
         try:
-            if not session_id:
-                from datetime import datetime
-
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                if umo:
-                    safe_umo = umo.replace(":", "_")
-                    session_id = f"{timestamp}_{safe_umo}"
-                else:
-                    session_id = timestamp
+            session_id = self._make_session_id(session_id, umo)
 
             logger.info(f"开始金句分析, session_id: {session_id}")
             return await self.golden_quote_analyzer.analyze_golden_quotes(
@@ -211,14 +201,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
         """
         try:
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if umo:
-                safe_umo = umo.replace(":", "_")
-                session_id = f"{timestamp}_{safe_umo}"
-            else:
-                session_id = timestamp
+            session_id = self._make_session_id(None, umo)
 
             logger.info(
                 f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled})，会话ID: {session_id}"
@@ -349,14 +332,7 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 金句列表, 总Token使用统计)
         """
         try:
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            if umo:
-                safe_umo = umo.replace(":", "_")
-                session_id = f"incr_{timestamp}_{safe_umo}"
-            else:
-                session_id = f"incr_{timestamp}"
+            session_id = self._make_session_id(None, umo, "incr_")
 
             logger.info(
                 f"开始增量并发分析 (话题:{topic_enabled}/{topics_per_batch}, 金句:{golden_quote_enabled}/{quotes_per_batch}, 质量锐评:{chat_quality_enabled})，"

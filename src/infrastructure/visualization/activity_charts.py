@@ -7,9 +7,10 @@ from collections import defaultdict
 from datetime import datetime
 
 from ...domain.models.data_models import ActivityVisualization
+from ...domain.repositories.visualization_repository import IActivityVisualizer
 
 
-class ActivityVisualizer:
+class ActivityVisualizer(IActivityVisualizer):
     """活跃度可视化器"""
 
     def __init__(self):

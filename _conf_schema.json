@@ -19,7 +19,7 @@
                 "type": "list",
                 "description": "群组白/黑名单列表",
                 "default": [],
-                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号（如 123456）。新手建议优先填完整会话ID，更不容易填错。可用 /sid 获取当前会话ID。",
+                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号。QQ 官方机器人使用 group_openid，不是群号，务必优先通过 /sid 获取并填写完整 UMO。",
                 "items": {
                     "type": "string"
                 }
@@ -28,7 +28,7 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 无历史拉取接口，只能分析插件启用后实时缓存到 AstrBot 本地库的消息。"
             },
             "max_messages": {
                 "type": "int",
@@ -66,7 +66,7 @@
                     "html"
                 ],
                 "default": "image",
-                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)"
+                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方群事件没有昵称，图片/HTML 报告仅显示头像，文本报告由独立 Markdown 模块使用艾特展示身份；其他平台保持原有昵称文本格式。"
             },
             "report_template": {
                 "type": "string",
@@ -137,6 +137,19 @@
                 "description": "发送文本/表情回复",
                 "default": false,
                 "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。"
+            }
+        }
+    },
+    "qq_official": {
+        "description": "QQ 官方机器人",
+        "type": "object",
+        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。",
+        "items": {
+            "enable_t2i_activity_histogram": {
+                "type": "bool",
+                "description": "启用 T2I 群聊概览图",
+                "default": true,
+                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的日期、基础统计与 24 小时直方图。渲染失败时自动回退为完整文字报告。"
             }
         }
     },

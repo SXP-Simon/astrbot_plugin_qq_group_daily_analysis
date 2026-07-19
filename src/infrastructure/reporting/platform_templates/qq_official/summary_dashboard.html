@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=800, initial-scale=1">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 800px;
+            height: 360px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: transparent !important;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+            color: #000000;
+            font-variant-numeric: tabular-nums;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: geometricPrecision;
+        }
+
+        .dashboard {
+            width: 800px;
+            height: 360px;
+            padding: 18px 22px 12px;
+            display: grid;
+            grid-template-rows: 36px 78px 204px;
+            row-gap: 6px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 4px;
+        }
+
+        .title {
+            color: #000000;
+            font-size: 25px;
+            font-weight: 650;
+            letter-spacing: 0.6px;
+        }
+
+        .date {
+            color: #000000;
+            font-size: 17px;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            align-items: center;
+            border-top: 1px solid #000000;
+            border-bottom: 1px solid #000000;
+        }
+
+        .metric {
+            min-width: 0;
+            height: 58px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+        }
+
+        .metric + .metric {
+            border-left: 1px solid #000000;
+        }
+
+        .metric-value {
+            max-width: 100%;
+            color: #000000;
+            font-size: 28px;
+            font-weight: 650;
+            line-height: 31px;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .metric-label {
+            color: #000000;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 18px;
+            letter-spacing: 0.8px;
+        }
+
+        .histogram {
+            display: grid;
+            grid-template-columns: repeat(24, minmax(0, 1fr));
+            column-gap: 5px;
+            align-items: stretch;
+        }
+
+        .hour {
+            min-width: 0;
+            display: grid;
+            grid-template-rows: 180px 20px;
+        }
+
+        .bar-area {
+            min-width: 0;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            border-bottom: 1px solid #000000;
+        }
+
+        .bar {
+            width: min(16px, 72%);
+            height: var(--height);
+            min-height: var(--min-height);
+            border-radius: 3px 3px 1px 1px;
+            background: #000000;
+        }
+
+        .hour-label {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            color: #000000;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 17px;
+            letter-spacing: -0.2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="title">{{ report_title }}</div>
+            <div class="date">{{ report_date }}</div>
+        </div>
+
+        <div class="metrics">
+            {% for metric in metrics %}
+            <div class="metric">
+                <div class="metric-value">{{ metric.value }}</div>
+                <div class="metric-label">{{ metric.label }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="histogram">
+            {% for item in chart_data %}
+            <div class="hour">
+                <div class="bar-area">
+                    <div
+                        class="bar"
+                        style="--height: {{ item.height }}%; --min-height: {{ '3px' if item.count > 0 else '0' }};"
+                    ></div>
+                </div>
+                <div class="hour-label">{{ item.hour }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
