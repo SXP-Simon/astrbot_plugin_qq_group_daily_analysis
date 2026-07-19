@@ -7,7 +7,7 @@
 
 import asyncio
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
 
 from astrbot.api import AstrBotConfig
@@ -61,6 +61,7 @@ class GroupDailyAnalysis(Star):
     bot_manager: BotManager
     history_manager: HistoryManager
     report_generator: ReportGenerator
+    html_render: Callable
     platform_group_registry: PlatformGroupRegistry
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
