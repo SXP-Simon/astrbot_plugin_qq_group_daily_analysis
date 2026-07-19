@@ -754,7 +754,7 @@ class ReportGenerator(IReportGenerator):
             golden_quote["sender"] = ""
             golden_quote["user_id"] = ""
 
-        return self._sanitize_export_identity_text(sanitized, analysis_result)
+        return self._sanitize_export_identity_text(sanitized, analysis_result)  # type: ignore[return-type]
 
     @classmethod
     def _to_plain_export_data(cls, value):
