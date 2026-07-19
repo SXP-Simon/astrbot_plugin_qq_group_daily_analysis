@@ -12,11 +12,15 @@ class MessageProcessingService:
     """
     消息处理服务
 
-    负责处理接收到的消息事件：
+    解析收到的群消息事件，提取内容与发送者信息，持久化历史记录，
+    并对 QQ 官方等事件驱动平台做消息去重。
+
+    职责：
     1. 解析消息内容（文本、图片、@提及等）
-    2. 解析发送者信息（跨平台兼容）
+    2. 解析发送者展示名（跨平台兼容）
     3. 存储消息历史
-    4. 维护 Telegram 群组注册表（回退机制）
+    4. QQ 官方事件消息去重
+    5. 维护群组注册表，供调度器做群组发现
     """
 
     def __init__(self, context: Context, group_registry: PlatformGroupRegistry):
@@ -104,7 +108,8 @@ class MessageProcessingService:
             if reserved_event_id:
                 self._commit_event_id(event_message_id)
 
-        # 事件驱动平台无法枚举群组，记录已见群供调度器回退使用。
+        # Register the group so the scheduler can discover platforms that
+        # do not provide a group-list API (Telegram, QQ Official, etc.).
         try:
             await self.group_registry.upsert(
                 platform_id=platform_id,
@@ -308,7 +313,7 @@ class MessageProcessingService:
 
     @staticmethod
     def _extract_event_timestamp(message_obj: object) -> int:
-        """Extract an upstream event timestamp when a platform exposes one."""
+        """从消息对象中提取平台事件时间戳。"""
         raw_message = getattr(message_obj, "raw_message", None)
         if isinstance(raw_message, dict):
             candidate = raw_message.get("timestamp")
@@ -337,7 +342,7 @@ class MessageProcessingService:
         return 0
 
     def _reserve_event_id(self, event_message_id: str) -> bool:
-        """Reserve an event ID while its history record is being persisted."""
+        """预占事件消息 ID：在历史记录持久化期间防止重复入库。"""
         if (
             event_message_id in self._inflight_event_ids
             or event_message_id in self._seen_event_ids
@@ -349,7 +354,7 @@ class MessageProcessingService:
         return True
 
     def _commit_event_id(self, event_message_id: str) -> None:
-        """Mark a reserved event ID as persisted and eligible for deduplication."""
+        """确认事件消息 ID：标记为已持久化，纳入后续去重。"""
         self._inflight_event_ids.discard(event_message_id)
         if event_message_id in self._seen_event_ids:
             self._seen_event_ids.move_to_end(event_message_id)
@@ -359,5 +364,5 @@ class MessageProcessingService:
             self._seen_event_ids.popitem(last=False)
 
     def _release_event_id(self, event_message_id: str) -> None:
-        """Release an event reservation after persistence fails or is cancelled."""
+        """释放事件消息 ID：持久化失败或取消时清理预占状态。"""
         self._inflight_event_ids.discard(event_message_id)
