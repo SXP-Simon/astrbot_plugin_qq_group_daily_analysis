@@ -13,14 +13,15 @@ class MessageProcessingService:
     消息处理服务
 
     解析收到的群消息事件，提取内容与发送者信息，持久化历史记录，
-    并对 QQ 官方等事件驱动平台做消息去重。
+    并维护事件驱动平台（Telegram、QQ 官方等）的群组注册表。
+    QQ 官方平台特有的重复消息去重逻辑也在本服务中处理。
 
     职责：
     1. 解析消息内容（文本、图片、@提及等）
     2. 解析发送者展示名（跨平台兼容）
     3. 存储消息历史
-    4. QQ 官方事件消息去重
-    5. 维护群组注册表，供调度器做群组发现
+    4. 维护群组注册表，供调度器做群组发现（Telegram、QQ 官方等事件驱动平台）
+    5. QQ 官方事件消息去重（按 message_id 预占 + 确认机制）
     """
 
     def __init__(self, context: Context, group_registry: PlatformGroupRegistry):
@@ -32,7 +33,8 @@ class MessageProcessingService:
 
     async def process_message(self, event: AstrMessageEvent) -> None:
         """
-        处理并在历史记录中存储消息。
+       处理并在历史记录中存储消息。
+        被 main.py 的 Telegram 和 QQ 官方消息拦截器共同调用。
 
         Args:
             event: AstrBot 消息事件
