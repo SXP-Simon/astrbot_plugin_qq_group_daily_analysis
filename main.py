@@ -634,10 +634,11 @@ class GroupDailyAnalysis(Star):
 
         async def generate_text_reports() -> tuple[str, str | None]:
             if hide_user_names:
-                markdown_report, fallback_report = (
-                    await self.report_generator.generate_qq_official_markdown_report(
-                        analysis_result, self.html_render
-                    )
+                (
+                    markdown_report,
+                    fallback_report,
+                ) = await self.report_generator.generate_qq_official_markdown_report(
+                    analysis_result, self.html_render
                 )
                 return markdown_report, fallback_report
             return self.report_generator.generate_text_report(analysis_result), None

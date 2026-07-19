@@ -205,10 +205,11 @@ class ReportDispatcher:
         is_qq_official = self._hide_user_names(platform_id)
         fallback_report = None
         if is_qq_official:
-            text_report, fallback_report = (
-                await self.report_generator.generate_qq_official_markdown_report(
-                    analysis_result, self._html_render_func
-                )
+            (
+                text_report,
+                fallback_report,
+            ) = await self.report_generator.generate_qq_official_markdown_report(
+                analysis_result, self._html_render_func
             )
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)

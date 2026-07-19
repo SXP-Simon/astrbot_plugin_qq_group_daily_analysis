@@ -39,11 +39,7 @@ class QQOfficialMarkdownReportGenerator:
                 None,
             )
         enabled = bool(enabled_getter()) if callable(enabled_getter) else True
-        if (
-            not enabled
-            or not callable(html_render_func)
-            or self.html_templates is None
-        ):
+        if not enabled or not callable(html_render_func) or self.html_templates is None:
             return fallback_report, fallback_report
 
         dashboard_url = await self._generate_summary_dashboard_url(

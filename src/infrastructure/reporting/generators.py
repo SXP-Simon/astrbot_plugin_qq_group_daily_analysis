@@ -1131,9 +1131,7 @@ class ReportGenerator(IReportGenerator):
                     source_text,
                 )
 
-        pattern = (
-            r"\[([A-Za-z0-9_-]{1,128})\]" if hide_user_names else r"\[(\d+)\]"
-        )
+        pattern = r"\[([A-Za-z0-9_-]{1,128})\]" if hide_user_names else r"\[(\d+)\]"
 
         matches = list(re.finditer(pattern, source_text))
         if not matches:

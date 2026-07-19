@@ -62,7 +62,7 @@ class QQOfficialAdapter(PlatformAdapter):
             return str(platform_config.get("appid", "") or "").strip()
         return ""
 
-    def set_context(self, context: "Context") -> None:
+    def set_context(self, context: Context) -> None:
         self._context = context
 
     def _init_capabilities(self) -> PlatformCapabilities:
@@ -403,7 +403,9 @@ class QQOfficialAdapter(PlatformAdapter):
                 while len(line) > self.MARKDOWN_CHUNK_SIZE:
                     split_at = self.MARKDOWN_CHUNK_SIZE
                     mention_start = line.rfind("<@", 0, split_at)
-                    mention_end = line.find(">", mention_start) if mention_start >= 0 else -1
+                    mention_end = (
+                        line.find(">", mention_start) if mention_start >= 0 else -1
+                    )
                     if mention_start >= 0 and mention_end >= split_at:
                         split_at = mention_start or self.MARKDOWN_CHUNK_SIZE
                     append_piece(line[:split_at])

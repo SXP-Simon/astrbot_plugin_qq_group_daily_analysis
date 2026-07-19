@@ -126,7 +126,5 @@ class HTMLTemplates:
             )
             return env.get_template(template_name).render(**kwargs)
         except Exception as e:
-            logger.error(
-                f"渲染平台模板 {platform_name}/{template_name} 失败: {e}"
-            )
+            logger.error(f"渲染平台模板 {platform_name}/{template_name} 失败: {e}")
             return ""

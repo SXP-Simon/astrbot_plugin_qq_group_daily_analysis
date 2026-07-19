@@ -288,9 +288,9 @@ def test_qq_official_markdown_renders_simple_hourly_bar_chart():
     assert "- 01:00　███　2" in report
     assert "- 02:00　██████　5" in report
     assert "- 03:00　████████████　10" in report
-    chart_section = report.split("## ⏰ 活跃时间分布", 1)[1].split(
-        "## 💬 热门话题", 1
-    )[0]
+    chart_section = report.split("## ⏰ 活跃时间分布", 1)[1].split("## 💬 热门话题", 1)[
+        0
+    ]
     assert sum(1 for line in chart_section.splitlines() if line.startswith("- ")) == 24
 
 
