@@ -435,51 +435,6 @@ def test_qq_official_t2i_summary_dashboard_switch_disables_rendering():
     assert "████████████" in markdown_report
 
 
-def test_qq_official_t2i_summary_dashboard_supports_legacy_config_key():
-    class LegacyDisabledConfig:
-        def get_max_topics(self):
-            return 10
-
-        def get_max_user_titles(self):
-            return 10
-
-        def get_max_golden_quotes(self):
-            return 10
-
-        def get_qq_official_t2i_activity_histogram_enabled(self):
-            return False
-
-    generator = object.__new__(ReportGenerator)
-    generator.config_manager = LegacyDisabledConfig()
-    statistics = SimpleNamespace(
-        message_count=10,
-        participant_count=2,
-        total_characters=50,
-        emoji_count=0,
-        most_active_period="03:00-04:00",
-        golden_quotes=[],
-        activity_visualization=SimpleNamespace(hourly_activity={3: 10}),
-    )
-    analysis_result = {
-        "statistics": statistics,
-        "topics": [],
-        "user_titles": [],
-        "user_analysis": {},
-    }
-
-    async def unexpected_render(*args, **kwargs):
-        raise AssertionError("legacy disabled switch must prevent T2I rendering")
-
-    markdown_report, fallback_report = asyncio.run(
-        generator.generate_qq_official_markdown_report(
-            analysis_result, unexpected_render
-        )
-    )
-
-    assert markdown_report == fallback_report
-    assert "████████████" in markdown_report
-
-
 def test_qq_official_summary_dashboard_compacts_large_metrics():
     assert QQOfficialMarkdownReportGenerator.format_metric(10_000) == "10K"
     assert QQOfficialMarkdownReportGenerator.format_metric(12_500) == "12.5K"

@@ -27,18 +27,7 @@ class QQOfficialMarkdownReportGenerator:
     ) -> tuple[str, str]:
         """Generate QQ Markdown and a URL-free Markdown fallback report."""
         fallback_report = self._generate_markdown_report(analysis_result)
-        enabled_getter = getattr(
-            self.config_manager,
-            "get_qq_official_t2i_summary_dashboard_enabled",
-            None,
-        )
-        if not callable(enabled_getter):
-            enabled_getter = getattr(
-                self.config_manager,
-                "get_qq_official_t2i_activity_histogram_enabled",
-                None,
-            )
-        enabled = bool(enabled_getter()) if callable(enabled_getter) else True
+        enabled = self.config_manager.get_qq_official_t2i_summary_dashboard_enabled()
         if not enabled or not callable(html_render_func) or self.html_templates is None:
             return fallback_report, fallback_report
 
