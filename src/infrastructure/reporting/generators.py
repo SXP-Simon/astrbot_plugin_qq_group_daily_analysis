@@ -15,6 +15,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 import aiohttp
@@ -721,7 +722,7 @@ class ReportGenerator(IReportGenerator):
             html_render_func,
         )
 
-    def _sanitize_analysis_result_for_export(self, analysis_result: dict) -> dict:
+    def _sanitize_analysis_result_for_export(self, analysis_result: dict) -> dict[str, Any]:
         """Remove platform identities from the HTML sidecar JSON export."""
         sanitized = self._to_plain_export_data(copy.deepcopy(analysis_result))
         sanitized["user_analysis"] = {}
