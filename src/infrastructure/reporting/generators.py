@@ -1141,7 +1141,7 @@ class ReportGenerator(IReportGenerator):
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
             if hide_user_names and uid not in known_ids:
-                return Markup("")
+                return Markup(html.escape(f"[{uid}]", quote=True))
             url = await self._get_user_avatar(
                 uid, avatar_url_getter, avatar_cache_namespace
             )  # 内部已有缓存，无需顶层并发获取
