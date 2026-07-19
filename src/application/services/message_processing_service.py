@@ -74,7 +74,6 @@ class MessageProcessingService:
         # 6. 提取事件消息 ID 和事件时间
         msg_obj = getattr(event, "message_obj", None)
         event_message_id = str(getattr(msg_obj, "message_id", "") or "")
-        event_timestamp = self._extract_event_timestamp(msg_obj)
 
         platform_name = str(event.get_platform_name() or "").strip().lower()
         reserved_event_id = False
@@ -88,6 +87,7 @@ class MessageProcessingService:
             "message": message_parts,
         }
         if platform_name in {"qq_official", "qq_official_webhook"}:
+            event_timestamp = self._extract_event_timestamp(msg_obj)
             history_content["_qq_official"] = {
                 "message_id": event_message_id,
                 "timestamp": event_timestamp,
