@@ -362,11 +362,15 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
             for topic in topics:
                 raw_ids = topic.contributors  # LLM 返回的是 ID 列表
 
-                # 填充 contributor_ids
-                # 过滤掉非数字的脏数据 (LLM 偶尔会发疯)
-                valid_ids = [
-                    str(uid).strip() for uid in raw_ids if str(uid).strip().isdigit()
-                ]
+                # 填充 contributor_ids。QQ 官方 member_openid 并非纯数字，
+                # 因此仅接受本批次已知用户或已配置机器人 ID，而不是用 isdigit 过滤。
+                bot_ids = {str(uid) for uid in self.config_manager.get_bot_self_ids()}
+                known_ids = set(id_to_nickname) | bot_ids
+                valid_ids = []
+                for raw_uid in raw_ids:
+                    uid = str(raw_uid).strip().strip("[]")
+                    if uid and uid in known_ids and uid not in valid_ids:
+                        valid_ids.append(uid)
                 topic.contributor_ids = valid_ids
 
                 # 映射回昵称用于显示
@@ -376,7 +380,6 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                     name = id_to_nickname.get(uid)
                     if not name:
                         # 尝试去全局配置里找 (e.g. 机器人自己)
-                        bot_ids = self.config_manager.get_bot_self_ids()
                         if uid in bot_ids:
                             name = "Bot"
                         else:

@@ -216,7 +216,6 @@ class AnalysisApplicationService:
             )
 
             # 4. 用户分析 (Domain Service)
-            bot_self_ids = self.config_manager.get_bot_self_ids()
             user_activity = await asyncio.to_thread(
                 self.analysis_domain_service.analyze_user_activity,
                 unified_messages,
