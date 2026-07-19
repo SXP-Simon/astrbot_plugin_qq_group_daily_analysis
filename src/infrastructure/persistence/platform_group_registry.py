@@ -72,7 +72,7 @@ class PlatformGroupRegistry:
             platform_key = str(platform_id).strip() if platform_id else None
             if platform_id:
                 self._known_groups.update(
-                    (platform_key, group_id) for group_id in groups
+                    (str(platform_key), group_id) for group_id in groups
                 )
 
             # Preserve groups recorded by older plugin versions.
@@ -80,8 +80,8 @@ class PlatformGroupRegistry:
             legacy_groups = self._extract_groups(legacy, platform_id)
             groups.update(legacy_groups)
             if platform_id:
-                self._known_groups.update(  # type: ignore[arg-type]
-                    (platform_key, group_id) for group_id in legacy_groups
+                self._known_groups.update(
+                    (str(platform_key), group_id) for group_id in legacy_groups
                 )
             return sorted(groups)
 

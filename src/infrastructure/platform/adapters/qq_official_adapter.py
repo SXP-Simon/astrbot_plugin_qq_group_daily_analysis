@@ -336,7 +336,6 @@ class QQOfficialAdapter(PlatformAdapter):
         post_group_message = getattr(api, "post_group_message", None)
         if not callable(post_group_message):
             return False
-        post_group_message_awaitable = post_group_message  # type: ignore[assignment]
 
         platform = getattr(self.bot, "platform", None)
         remember_scene = getattr(platform, "remember_session_scene", None)
@@ -352,7 +351,7 @@ class QQOfficialAdapter(PlatformAdapter):
             # AstrBot in production.
             markdown = {"content": content}
 
-        result = await post_group_message_awaitable(
+        result = await post_group_message(  # type: ignore[arg-type]
             group_openid=str(group_id),
             msg_type=2,
             markdown=markdown,

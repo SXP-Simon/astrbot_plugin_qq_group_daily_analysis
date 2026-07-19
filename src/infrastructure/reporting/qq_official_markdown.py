@@ -189,7 +189,7 @@ class QQOfficialMarkdownReportGenerator:
     @staticmethod
     def format_metric(value: object) -> str:
         try:
-            number = max(0, int(value) if value is not None else 0)
+            number = max(0, int(value) if value is not None else 0)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             return "0"
         if number >= 1_000_000:
