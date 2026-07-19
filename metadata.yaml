@@ -8,7 +8,6 @@ support_platforms:
   - aiocqhttp
   - discord
   - telegram
-  - lark
   - qq_official
   - qq_official_webhook
 repo: https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis # 插件的仓库地址
