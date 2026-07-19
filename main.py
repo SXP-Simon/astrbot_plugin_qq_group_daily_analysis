@@ -94,7 +94,8 @@ class GroupDailyAnalysis(Star):
         self.platform_group_registry = PlatformGroupRegistry(self)
 
         # 2. 领域层
-        self.statistics_service = StatisticsService()
+        activity_visualizer = ActivityVisualizer()
+        self.statistics_service = StatisticsService(activity_visualizer)
         self.analysis_domain_service = AnalysisDomainService()
 
         # 3. 分析核心 (LLM Bridge)
