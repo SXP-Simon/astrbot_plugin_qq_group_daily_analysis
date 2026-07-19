@@ -15,7 +15,11 @@ from astrbot.api import logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
-from astrbot.core.message.components import File
+
+try:
+    from astrbot.api.message_components import File
+except ImportError:
+    from astrbot.core.message.components import File
 
 from .src.application.commands.template_command_service import (
     TemplateCommandService,

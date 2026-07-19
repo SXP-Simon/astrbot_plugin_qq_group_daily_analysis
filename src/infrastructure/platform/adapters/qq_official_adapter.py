@@ -439,8 +439,13 @@ class QQOfficialAdapter(PlatformAdapter):
     async def send_file(
         self, group_id: str, file_path: str, filename: str | None = None
     ) -> bool:
+        # Prefer the public API; fall back to internal for backward compat.
+        # astrbot.core is not part of the stable contract and may change.
+        try:
+            from astrbot.api.message_components import File
+        except ImportError:
+            from astrbot.core.message.components import File
         from astrbot.api.event import MessageChain
-        from astrbot.core.message.components import File
 
         name = filename or os.path.basename(file_path) or "report"
         if file_path.startswith(("http://", "https://")):
