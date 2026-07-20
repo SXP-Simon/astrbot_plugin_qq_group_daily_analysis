@@ -66,7 +66,7 @@
                     "html"
                 ],
                 "default": "image",
-                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方群事件没有昵称，图片/HTML 报告仅显示头像，文本报告由独立 Markdown 模块使用艾特展示身份；其他平台保持原有昵称文本格式。"
+                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)。QQ 官方图片/HTML 报告优先显示事件昵称，昵称缺失时使用群内稳定匿名名；文本报告由独立 Markdown 模块使用成员艾特展示身份。其他平台保持原有昵称文本格式。"
             },
             "report_template": {
                 "type": "string",
@@ -143,7 +143,7 @@
     "qq_official": {
         "description": "QQ 官方机器人",
         "type": "object",
-        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。",
+        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。成员昵称会自动从事件历史恢复，缺失时使用群内稳定匿名名，无需额外配置。",
         "items": {
             "enable_t2i_activity_histogram": {
                 "type": "bool",

@@ -270,7 +270,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
 | 平台 | 适配器类型 | 特殊要求/说明 |
 |------|-----------|--------------|
 | **QQ** | OneBot v11 | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。 |
-| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 仅显示头像，Markdown 文本使用成员艾特。 |
+| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。 |
 | **Discord** | Discord | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。 |
 | **Telegram** | Telegram Bot API | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
