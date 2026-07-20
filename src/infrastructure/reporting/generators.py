@@ -621,7 +621,7 @@ class ReportGenerator(IReportGenerator):
             json_data = {
                 "analysis_result": (
                     self._sanitize_analysis_result_for_export(analysis_result)
-                    if hide_user_names
+                    if hide_user_names or allow_alphanumeric_user_ids
                     else analysis_result
                 ),
                 "group_id": group_id,
@@ -1132,9 +1132,9 @@ class ReportGenerator(IReportGenerator):
             if str(user_id).strip()
         }
         source_text = str(text)
-        if hide_user_names:
-            # LLM 偶尔会直接输出 ID；在头像-only 模式下先标准化为引用，
-            # 避免 member_openid 以明文形式泄露。
+        supports_extended_ids = hide_user_names or allow_alphanumeric_user_ids
+        if supports_extended_ids:
+            # LLM 偶尔会直接输出 ID；先标准化为引用，避免 OpenID 以明文形式显示。
             for user_id in sorted(known_ids, key=len, reverse=True):
                 source_text = re.sub(
                     rf"(?<!\[)(?<![A-Za-z0-9_-]){re.escape(user_id)}"
@@ -1143,11 +1143,8 @@ class ReportGenerator(IReportGenerator):
                     source_text,
                 )
 
-        supports_extended_ids = hide_user_names or allow_alphanumeric_user_ids
         pattern = (
-            r"\[([A-Za-z0-9_-]{1,128})\]"
-            if supports_extended_ids
-            else r"\[(\d+)\]"
+            r"\[([A-Za-z0-9_-]{1,128})\]" if supports_extended_ids else r"\[(\d+)\]"
         )
 
         matches = list(re.finditer(pattern, source_text))
@@ -1196,7 +1193,7 @@ class ReportGenerator(IReportGenerator):
             final_name = (
                 name
                 if (name and not self._is_placeholder_display_name(name, uid))
-                else str(uid)
+                else ("群友" if allow_alphanumeric_user_ids else str(uid))
             )
 
             avatar_ref = self._register_reusable_avatar(

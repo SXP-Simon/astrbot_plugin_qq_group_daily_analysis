@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from src.domain.models.data_models import (
@@ -486,6 +487,27 @@ def test_qq_official_avatar_mentions_render_alphanumeric_id_with_nickname():
     assert "[A_OPENID]" not in rendered_text
 
 
+def test_qq_official_avatar_mentions_hide_placeholder_openid():
+    generator = build_generator_without_io()
+
+    async def fake_avatar(*args, **kwargs):
+        return "data:image/png;base64,AAAA"
+
+    generator._get_user_avatar = fake_avatar
+    rendered = asyncio.run(
+        generator._render_mentions(
+            "成员 A_OPENID 发言",
+            avatar_url_getter=None,
+            user_analysis={"A_OPENID": {"nickname": "A_OPENID"}},
+            allow_alphanumeric_user_ids=True,
+        )
+    )
+
+    rendered_text = str(rendered)
+    assert "A_OPENID" not in rendered_text
+    assert "群友" in rendered_text
+
+
 def test_mentions_support_alphanumeric_openid_and_hide_text():
     generator = build_generator_without_io()
     openid = "A1B2C3D4_OPENID"
@@ -567,3 +589,47 @@ def test_html_sidecar_export_removes_nested_identity_values():
     assert (
         sanitized["statistics"]["activity_visualization"]["user_activity_ranking"] == []
     )
+
+
+def test_qq_official_html_sidecar_uses_identity_sanitizer(tmp_path):
+    class HtmlConfig(FakeConfig):
+        def get_html_output_dir(self):
+            return str(tmp_path)
+
+        def get_html_filename_format(self):
+            return "report.html"
+
+    generator = build_generator_without_io()
+    generator.config_manager = HtmlConfig()
+    generator.html_templates = SimpleNamespace(
+        render_template=lambda *args, **kwargs: "<html>safe</html>"
+    )
+    generator._reuse_avatars_in_final_html = lambda html_content, *args: html_content
+
+    async def fake_prepare_render_data(*args, **kwargs):
+        return {}
+
+    generator._prepare_render_data = fake_prepare_render_data
+    openid = "A1B2C3D4_OPENID"
+    analysis_result = {
+        "statistics": {
+            "golden_quotes": [],
+            "activity_visualization": {"user_activity_ranking": [{"user_id": openid}]},
+        },
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {openid: {"nickname": "测试群友"}},
+        "summary": f"{openid} 最活跃",
+    }
+
+    _, json_path = asyncio.run(
+        generator.generate_html_report(
+            analysis_result,
+            "GROUP_OPENID",
+            allow_alphanumeric_user_ids=True,
+        )
+    )
+
+    assert json_path is not None
+    exported = Path(json_path).read_text(encoding="utf-8")
+    assert openid not in exported

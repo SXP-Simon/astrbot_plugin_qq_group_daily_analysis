@@ -344,9 +344,7 @@ class MessageProcessingService:
         return replacements
 
     @staticmethod
-    def _sanitize_qq_official_mentions(
-        text: str, replacements: dict[str, str]
-    ) -> str:
+    def _sanitize_qq_official_mentions(text: str, replacements: dict[str, str]) -> str:
         def replace_mention(match: re.Match[str]) -> str:
             mention_id = match.group(1)
             if mention_id.lower() in {"all", "everyone"}:
@@ -354,7 +352,7 @@ class MessageProcessingService:
             return replacements.get(mention_id, "@群友")
 
         cleaned = _QQ_OFFICIAL_MENTION_PATTERN.sub(replace_mention, str(text))
-        return re.sub(r"\s{2,}", " ", cleaned).strip()
+        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip()
 
     @staticmethod
     def _read_field(source: object, *names: str) -> object | None:
@@ -394,7 +392,7 @@ class MessageProcessingService:
                 if pending_mentions[mention] <= 0:
                     pending_mentions.pop(mention, None)
 
-        return re.sub(r"\s{2,}", " ", cleaned).strip()
+        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip()
 
     @staticmethod
     def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:

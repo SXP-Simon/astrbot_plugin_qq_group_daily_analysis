@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import os
 import random
 import re
@@ -61,6 +62,27 @@ class QQOfficialAdapter(PlatformAdapter):
         if isinstance(platform_config, dict):
             return str(platform_config.get("appid", "") or "").strip()
         return ""
+
+    @staticmethod
+    def _is_placeholder_sender_name(name: str | None, sender_id: str) -> bool:
+        normalized = str(name or "").strip()
+        if not normalized:
+            return True
+        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
+            return True
+        return normalized == str(sender_id).strip()
+
+    @classmethod
+    def _resolve_history_sender_name(
+        cls, sender_name: str | None, sender_id: str, group_id: str
+    ) -> str:
+        normalized = str(sender_name or "").strip()
+        if not cls._is_placeholder_sender_name(normalized, sender_id):
+            return normalized
+        digest = hashlib.sha256(f"{group_id}\0{sender_id}".encode("utf-8")).hexdigest()[
+            :8
+        ]
+        return f"群友-{digest.upper()}"
 
     def set_context(self, context: Context) -> None:
         self._context = context
@@ -222,8 +244,8 @@ class QQOfficialAdapter(PlatformAdapter):
             sender_id = str(getattr(record, "sender_id", "") or "")
             if not sender_id:
                 return None
-            sender_name = (
-                str(getattr(record, "sender_name", "") or "").strip() or sender_id
+            sender_name = self._resolve_history_sender_name(
+                getattr(record, "sender_name", None), sender_id, group_id
             )
 
             return UnifiedMessage(

@@ -35,8 +35,18 @@ class FakeGroupRegistry:
 
 
 class FakeOfficialEvent:
-    def __init__(self, text="hello", mentions=None, platform_name="qq_official"):
+    def __init__(
+        self,
+        text="hello",
+        mentions=None,
+        platform_name="qq_official",
+        at_target=None,
+    ):
         self.platform_name = platform_name
+        message = []
+        if at_target:
+            message.append(SimpleNamespace(type="At", qq=at_target, name=""))
+        message.append(SimpleNamespace(type="Plain", text=text))
         self.message_obj = SimpleNamespace(
             message_id="OFFICIAL-MSG-1",
             raw_message=SimpleNamespace(
@@ -44,7 +54,7 @@ class FakeOfficialEvent:
                 mentions=list(mentions or []),
             ),
             sender=SimpleNamespace(nickname=""),
-            message=[SimpleNamespace(type="Plain", text=text)],
+            message=message,
         )
         self.message_str = text
 
@@ -132,6 +142,39 @@ def test_qq_official_bot_mention_is_removed_before_storage():
     assert stored_parts == [{"type": "plain", "text": "帮我问问 @群友甲"}]
 
 
+def test_qq_official_message_preserves_internal_line_breaks():
+    history_manager = RecordingHistoryManager()
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager), FakeGroupRegistry()
+    )
+    event = FakeOfficialEvent(text="第一行\n\n第二行\t\t结尾")
+
+    asyncio.run(service.process_message(event))
+
+    stored_parts = history_manager.calls[0]["content"]["message"]
+    assert stored_parts == [{"type": "plain", "text": "第一行\n\n第二行 结尾"}]
+
+
+def test_qq_official_at_component_preserves_internal_line_breaks():
+    history_manager = RecordingHistoryManager()
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager), FakeGroupRegistry()
+    )
+    event = FakeOfficialEvent(
+        text="第一行\n\n第二行",
+        mentions=[SimpleNamespace(id="BOT_OPENID", username="机器人", is_you=True)],
+        at_target="BOT_OPENID",
+    )
+
+    asyncio.run(service.process_message(event))
+
+    stored_parts = history_manager.calls[0]["content"]["message"]
+    assert stored_parts == [
+        {"type": "at", "target_id": "BOT_OPENID", "name": ""},
+        {"type": "plain", "text": "第一行\n\n第二行"},
+    ]
+
+
 def test_non_qq_message_keeps_platform_mention_syntax_unchanged():
     history_manager = RecordingHistoryManager()
     service = MessageProcessingService(
@@ -152,6 +195,4 @@ def test_non_qq_message_keeps_platform_mention_syntax_unchanged():
     asyncio.run(service.process_message(event))
 
     stored_parts = history_manager.calls[0]["content"]["message"]
-    assert stored_parts == [
-        {"type": "plain", "text": "请问 <@DISCORD_USER_ID> 怎么看"}
-    ]
+    assert stored_parts == [{"type": "plain", "text": "请问 <@DISCORD_USER_ID> 怎么看"}]
