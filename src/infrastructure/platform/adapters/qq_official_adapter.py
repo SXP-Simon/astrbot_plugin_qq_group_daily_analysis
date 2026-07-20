@@ -79,9 +79,7 @@ class QQOfficialAdapter(PlatformAdapter):
         normalized = str(sender_name or "").strip()
         if not cls._is_placeholder_sender_name(normalized, sender_id):
             return normalized
-        digest = hashlib.sha256(f"{group_id}\0{sender_id}".encode("utf-8")).hexdigest()[
-            :8
-        ]
+        digest = hashlib.sha256(f"{group_id}\0{sender_id}".encode()).hexdigest()[:8]
         return f"群友-{digest.upper()}"
 
     def set_context(self, context: Context) -> None:
