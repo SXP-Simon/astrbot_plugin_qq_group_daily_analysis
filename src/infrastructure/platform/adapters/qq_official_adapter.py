@@ -222,11 +222,14 @@ class QQOfficialAdapter(PlatformAdapter):
             sender_id = str(getattr(record, "sender_id", "") or "")
             if not sender_id:
                 return None
+            sender_name = (
+                str(getattr(record, "sender_name", "") or "").strip() or sender_id
+            )
 
             return UnifiedMessage(
                 message_id=message_id,
                 sender_id=sender_id,
-                sender_name=sender_id,
+                sender_name=sender_name,
                 sender_card=None,
                 group_id=group_id,
                 text_content="".join(text_parts),
@@ -256,7 +259,7 @@ class QQOfficialAdapter(PlatformAdapter):
                     "group_id": message.group_id,
                     "sender": {
                         "user_id": message.sender_id,
-                        "nickname": message.sender_id,
+                        "nickname": message.sender_name or message.sender_id,
                         "card": "",
                     },
                     "message": chain,

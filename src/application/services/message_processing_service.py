@@ -7,6 +7,9 @@ from astrbot.api.star import Context
 from ...infrastructure.persistence.platform_group_registry import PlatformGroupRegistry
 from ...utils.logger import logger
 
+_QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
+_QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")
+
 
 class MessageProcessingService:
     """
@@ -187,6 +190,12 @@ class MessageProcessingService:
         """从事件中提取消息内容"""
         message_parts = []
         message = event.message_obj
+        platform_name = str(event.get_platform_name() or "").strip().lower()
+        qq_mention_replacements = (
+            self._extract_qq_official_mention_replacements(event)
+            if platform_name in _QQ_OFFICIAL_PLATFORM_NAMES
+            else None
+        )
 
         # 收集 @ 标记
         pending_mentions: Counter[str] = Counter()
@@ -221,6 +230,10 @@ class MessageProcessingService:
                         text = seg.data.get("text")
                     if text:
                         text = self._strip_known_mentions(text, pending_mentions)
+                        if qq_mention_replacements is not None:
+                            text = self._sanitize_qq_official_mentions(
+                                text, qq_mention_replacements
+                            )
                         message_parts.append({"type": "plain", "text": text})
 
                 elif seg_type in ("Image", "image"):
@@ -262,7 +275,12 @@ class MessageProcessingService:
                     message_parts.append({"type": "video", "url": str(url or "")})
 
         if not message_parts and event.message_str:
-            message_parts.append({"type": "plain", "text": event.message_str})
+            fallback_text = str(event.message_str)
+            if qq_mention_replacements is not None:
+                fallback_text = self._sanitize_qq_official_mentions(
+                    fallback_text, qq_mention_replacements
+                )
+            message_parts.append({"type": "plain", "text": fallback_text})
 
         # 清理空文本段
         message_parts = [
@@ -274,6 +292,83 @@ class MessageProcessingService:
         ]
 
         return message_parts
+
+    @classmethod
+    def _extract_qq_official_mention_replacements(
+        cls, event: AstrMessageEvent
+    ) -> dict[str, str]:
+        message_obj = getattr(event, "message_obj", None)
+        raw_message = getattr(message_obj, "raw_message", None)
+        raw_candidates = [raw_message]
+        nested_message = cls._read_field(raw_message, "message")
+        if nested_message is not None and nested_message is not raw_message:
+            raw_candidates.insert(0, nested_message)
+
+        mentions = None
+        for candidate in raw_candidates:
+            mentions = cls._read_field(candidate, "mentions")
+            if mentions is not None:
+                break
+
+        replacements: dict[str, str] = {}
+        if not isinstance(mentions, (list, tuple)):
+            return replacements
+
+        for mention in mentions:
+            mention_id = str(
+                cls._read_field(
+                    mention,
+                    "id",
+                    "member_openid",
+                    "memberopenid",
+                    "user_openid",
+                    "useropenid",
+                )
+                or ""
+            ).strip()
+            if not mention_id:
+                continue
+
+            if cls._read_field(mention, "is_you") is True:
+                replacements[mention_id] = ""
+                continue
+
+            display_name = str(
+                cls._read_field(mention, "username", "name", "nickname") or ""
+            ).strip()
+            display_name = display_name.lstrip("@").strip()
+            if cls._is_placeholder_sender_name(display_name, mention_id):
+                display_name = "群友"
+            replacements[mention_id] = f"@{display_name}"
+
+        return replacements
+
+    @staticmethod
+    def _sanitize_qq_official_mentions(
+        text: str, replacements: dict[str, str]
+    ) -> str:
+        def replace_mention(match: re.Match[str]) -> str:
+            mention_id = match.group(1)
+            if mention_id.lower() in {"all", "everyone"}:
+                return "@全体成员"
+            return replacements.get(mention_id, "@群友")
+
+        cleaned = _QQ_OFFICIAL_MENTION_PATTERN.sub(replace_mention, str(text))
+        return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+    @staticmethod
+    def _read_field(source: object, *names: str) -> object | None:
+        if isinstance(source, dict):
+            for name in names:
+                if name in source:
+                    return source[name]
+            return None
+
+        for name in names:
+            value = getattr(source, name, None)
+            if value is not None:
+                return value
+        return None
 
     @staticmethod
     def _strip_known_mentions(text: str, pending_mentions: Counter[str]) -> str:

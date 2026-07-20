@@ -18,11 +18,13 @@ class FakeHistoryManager:
         return self.pages.get(page, [])
 
 
-def make_record(record_id, message_id, sender_id, timestamp, text):
+def make_record(
+    record_id, message_id, sender_id, timestamp, text, sender_name=None
+):
     return SimpleNamespace(
         id=record_id,
         sender_id=sender_id,
-        sender_name=sender_id,
+        sender_name=sender_id if sender_name is None else sender_name,
         created_at=datetime.fromtimestamp(timestamp, timezone.utc),
         content={
             "type": "user",
@@ -61,8 +63,12 @@ def test_local_history_is_deduplicated_filtered_and_sorted():
             message_history_manager=FakeHistoryManager(
                 {
                     1: [
-                        make_record(1, "MSG-2", "B_OPENID", 200, "second"),
-                        make_record(2, "MSG-1", "A_OPENID", 100, "first"),
+                        make_record(
+                            1, "MSG-2", "B_OPENID", 200, "second", "用户乙"
+                        ),
+                        make_record(
+                            2, "MSG-1", "A_OPENID", 100, "first", "用户甲"
+                        ),
                         make_record(3, "MSG-2", "B_OPENID", 200, "duplicate"),
                         make_record(4, "MSG-BOT", "BOT_OPENID", 300, "bot"),
                     ]
@@ -77,7 +83,31 @@ def test_local_history_is_deduplicated_filtered_and_sorted():
 
     assert [message.message_id for message in messages] == ["MSG-1", "MSG-2"]
     assert [message.sender_id for message in messages] == ["A_OPENID", "B_OPENID"]
+    assert [message.sender_name for message in messages] == ["用户甲", "用户乙"]
     assert [message.text_content for message in messages] == ["first", "second"]
+
+    raw_messages = adapter.convert_to_raw_format(messages)
+    assert [message["sender"]["nickname"] for message in raw_messages] == [
+        "用户甲",
+        "用户乙",
+    ]
+
+
+def test_local_history_sender_name_falls_back_to_openid():
+    adapter = make_adapter()
+    record = make_record(
+        1,
+        "MSG-1",
+        "A_OPENID",
+        100,
+        "first",
+        sender_name="",
+    )
+
+    message = adapter._convert_history_record(record, "GROUP_OPENID")
+
+    assert message is not None
+    assert message.sender_name == "A_OPENID"
 
 
 def test_factory_registers_both_official_platform_types():

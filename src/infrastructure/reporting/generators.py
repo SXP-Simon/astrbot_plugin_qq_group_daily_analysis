@@ -345,6 +345,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -369,6 +370,7 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
@@ -511,6 +513,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -556,6 +559,7 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -795,6 +799,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -820,6 +825,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             if hide_user_names:
                 contributors = await self._render_avatar_only_ids(
@@ -889,6 +895,7 @@ class ReportGenerator(IReportGenerator):
                     avatar_reuse_registry,
                     avatar_reuse_aliases,
                     hide_user_names=True,
+                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 )
             title_data = {
                 "name": "" if hide_user_names else title.name,
@@ -938,6 +945,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             quotes_list.append(
                 {
@@ -1110,6 +1118,7 @@ class ReportGenerator(IReportGenerator):
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> Markup:
         """
         处理文本，将 [用户ID] 格式的引用替换为头像胶囊。
@@ -1134,7 +1143,12 @@ class ReportGenerator(IReportGenerator):
                     source_text,
                 )
 
-        pattern = r"\[([A-Za-z0-9_-]{1,128})\]" if hide_user_names else r"\[(\d+)\]"
+        supports_extended_ids = hide_user_names or allow_alphanumeric_user_ids
+        pattern = (
+            r"\[([A-Za-z0-9_-]{1,128})\]"
+            if supports_extended_ids
+            else r"\[(\d+)\]"
+        )
 
         matches = list(re.finditer(pattern, source_text))
         if not matches:
@@ -1142,7 +1156,7 @@ class ReportGenerator(IReportGenerator):
 
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
-            if hide_user_names and uid not in known_ids:
+            if supports_extended_ids and uid not in known_ids:
                 return Markup(html.escape(f"[{uid}]", quote=True))
             url = await self._get_user_avatar(
                 uid, avatar_url_getter, avatar_cache_namespace

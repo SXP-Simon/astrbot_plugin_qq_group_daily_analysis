@@ -465,6 +465,27 @@ def test_non_qq_avatar_mentions_ignore_alphanumeric_bracket_text():
     assert "user-capsule" not in rendered_text
 
 
+def test_qq_official_avatar_mentions_render_alphanumeric_id_with_nickname():
+    generator = build_generator_without_io()
+
+    async def fake_avatar(*args, **kwargs):
+        return "data:image/png;base64,AAAA"
+
+    generator._get_user_avatar = fake_avatar
+    rendered = asyncio.run(
+        generator._render_mentions(
+            "成员 [A_OPENID] 发言",
+            avatar_url_getter=None,
+            user_analysis={"A_OPENID": {"nickname": "测试用户"}},
+            allow_alphanumeric_user_ids=True,
+        )
+    )
+
+    rendered_text = str(rendered)
+    assert "测试用户" in rendered_text
+    assert "[A_OPENID]" not in rendered_text
+
+
 def test_mentions_support_alphanumeric_openid_and_hide_text():
     generator = build_generator_without_io()
     openid = "A1B2C3D4_OPENID"
