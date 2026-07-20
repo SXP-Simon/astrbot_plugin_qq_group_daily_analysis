@@ -158,7 +158,6 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
 |--------|------|--------|
 | 定时分析名单模式 + 列表 | 控制哪些群参与定时任务（报告时间点触发）。 | `whitelist + 空列表` 表示不注册定时任务 |
 | 增量分析名单模式 + 列表 | 控制哪些群走增量模式，其他群走传统全量。 | `whitelist + 空列表` 表示不启用增量周期任务 |
-| PDF 格式的报告 | 初次使用需要使用 `/安装PDF` 命令安装依赖。需重启 AstrBot 生效。 | 输出格式需设为 PDF |
 | HTML 格式 (自建) | 配置 `html_base_url` 后，机器人会发送可直接点击的报告外链。 | 输出格式需设为 html |
 | 自定义 LLM 服务 | 用户可自行选取个人提供的服务商。 | 留空则回退到默认服务商 |
 
@@ -377,7 +376,6 @@ pre-commit run --all-files
 ```text
 src/infrastructure/reporting/templates/your_theme_name/
 ├── image_template.html      # 图片报告主模板
-├── pdf_template.html        # PDF报告主模板
 ├── activity_chart.html      # 活跃度图表组件
 ├── topic_item.html          # 话题列表项组件
 ├── user_title_item.html     # 用户称号项组件
@@ -386,7 +384,7 @@ src/infrastructure/reporting/templates/your_theme_name/
 
 #### 3. 模板变量说明
 
-**主模板 (`image_template.html` / `pdf_template.html`) 可用变量:**
+**主模板 (`image_template.html`) 可用变量:**
 - `current_date`: 当前日期 (YYYY年MM月DD日)
 - `current_datetime`: 当前时间 (YYYY-MM-DD HH:MM:SS)
 - `message_count`: 消息总数
@@ -412,16 +410,6 @@ src/infrastructure/reporting/templates/your_theme_name/
 您可以参考 `src/infrastructure/reporting/templates/simple/` 目录下的文件，这是一个最简化的模板实现，包含了所有必需的基本结构。
 
 #### 5. 模板调试工具
-
-PDF 调试模板命令：
-
-```bash
-# 生成所有主题的 PDF (推荐)
-uv run --with playwright --with diskcache scripts\debug_all_pdf_themes.py
-
-# 生成指定主题的 PDF (例如：HatsuneMiku ，可以修改内部代码占位解决)
-uv run --with playwright --with diskcache scripts\mock_pdf_gen.py
-```
 
 Image 模板调试：
 
@@ -479,16 +467,6 @@ uv run scripts\debug_render.py -t HatsuneMiku -o debug_miku.html
 
 <a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&max=200&columns=14" />
-</a>
-
-## Star History
-
-<a href="https://www.star-history.com/#SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=top-left" />
- </picture>
 </a>
 
 ## 许可证
