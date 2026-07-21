@@ -621,7 +621,7 @@ class GroupDailyAnalysis(Star):
         platform_id = result["platform_id"]
         analysis_result = result["analysis_result"]
         adapter = result["adapter"]
-        output_format = self.config_manager.get_output_format()
+        output_format = self.config_manager.get_output_format()[0]
         is_qq_official = adapter.get_platform_name() == "qq_official"
 
         # 定义获取回调
@@ -764,7 +764,7 @@ class GroupDailyAnalysis(Star):
     async def set_output_format(self, event: AstrMessageEvent, format_input: str = ""):
         """
         设置分析报告输出格式（跨平台支持）
-        用法: /设置格式 [格式名称或序号]
+        用法: /设置格式 [格式名称或序号] 或 image,html 等逗号分隔的组合
         """
         # 命令由插件处理，禁用默认 LLM 回退。
         event.should_call_llm(True)
@@ -777,19 +777,19 @@ class GroupDailyAnalysis(Star):
         }
 
         if not format_input:
-            current_format = self.config_manager.get_output_format()
+            current = ", ".join(self.config_manager.get_output_format())
             format_list_str = "\n".join(
                 [
                     f"【{i}】{f} - {format_display_names[f]}"
                     for i, f in enumerate(available_formats, start=1)
                 ]
             )
-            yield event.plain_result(f"""📊 当前输出格式: {current_format}
+            yield event.plain_result(f"""📊 当前输出格式: {current}
 
 可用格式:
 {format_list_str}
 
-用法: /设置格式 [名称或序号]""")
+用法: /设置格式 [名称或序号] 如 /设置格式 image,html""")
             return
 
         target_format = None
@@ -805,6 +805,17 @@ class GroupDailyAnalysis(Star):
             if input_lower in available_formats:
                 target_format = input_lower
 
+        # 支持逗号分隔的多个格式
+        if not target_format:
+            parts = [f.strip() for f in format_input.replace("，", ",").split(",")]
+            if all(p in available_formats for p in parts) and len(parts) > 1:
+                try:
+                    self.config_manager.set_output_format(parts)
+                    yield event.plain_result(f"✅ 输出格式已设置为: {', '.join(parts)}")
+                except Exception as e:
+                    yield event.plain_result(f"❌ 设置失败: {e}")
+                return
+
         if not target_format:
             yield event.plain_result(
                 f"❌ 无效的格式类型 '{format_input}'。可用: {', '.join(available_formats)} 或序号 1-{len(available_formats)}"
@@ -812,7 +823,7 @@ class GroupDailyAnalysis(Star):
             return
 
         try:
-            self.config_manager.set_output_format(target_format)
+            self.config_manager.set_output_format(target_format)  # type: ignore[arg-type]
             yield event.plain_result(f"✅ 输出格式已设置为: {target_format}")
         except Exception as e:
             yield event.plain_result(f"❌ 设置失败: {e}")
@@ -992,7 +1003,7 @@ class GroupDailyAnalysis(Star):
             )
             auto_time = self.config_manager.get_auto_analysis_time()
 
-            output_format = self.config_manager.get_output_format()
+            output_format = self.config_manager.get_output_format()[0]
             min_threshold = self.config_manager.get_min_messages_threshold()
 
             # 增量分析状态

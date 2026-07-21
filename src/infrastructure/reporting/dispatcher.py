@@ -45,24 +45,23 @@ class ReportDispatcher:
         分发分析报告
         """
         trace_id = TraceContext.get()
-        output_format = self.config_manager.get_output_format()
+        output_formats = self.config_manager.get_output_format()
 
         logger.info(
-            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {output_format})"
+            f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {', '.join(output_formats)})"
         )
 
-        success = False
-        if output_format == "image":
-            success = await self._dispatch_image(group_id, analysis_result, platform_id)
-        elif output_format == "html":
-            success = await self._dispatch_html(group_id, analysis_result, platform_id)
-        else:
-            success = await self._dispatch_text(group_id, analysis_result, platform_id)
+        dispatch_map = {
+            "image": self._dispatch_image,
+            "html": self._dispatch_html,
+            "text": self._dispatch_text,
+        }
+        for fmt in output_formats:
+            handler = dispatch_map.get(fmt)
+            if handler:
+                await handler(group_id, analysis_result, platform_id)
 
-        if success:
-            logger.info(f"[{trace_id}] 群 {group_id} 的报告分发成功")
-        else:
-            logger.warning(f"[{trace_id}] 群 {group_id} 的报告分发失败")
+        logger.info(f"[{trace_id}] 群 {group_id} 的报告分发完成")
 
     async def _dispatch_image(
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None

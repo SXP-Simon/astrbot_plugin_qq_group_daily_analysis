@@ -146,9 +146,10 @@ class ConfigManager:
         """
         return self.is_auto_analysis_enabled()
 
-    def get_output_format(self) -> str:
+    def get_output_format(self) -> list[str]:
         """获取输出格式"""
-        return self._get_group("basic").get("output_format", "image")
+        val = self._get_group("basic").get("output_format", ["image"])
+        return val if isinstance(val, list) else [val]
 
     def get_qq_official_t2i_summary_dashboard_enabled(self) -> bool:
         """是否启用 QQ 官方 T2I 概览图。"""
@@ -494,15 +495,15 @@ class ConfigManager:
         prompts["golden_quote_analysis_prompts"]["golden_quote_v2_prompt"] = prompt
         self.config.save_config()
 
-    def set_output_format(self, format_type: str):
+    def set_output_format(self, format_types: str | list[str]):
         """设置输出格式"""
-        valid_formats = ["image", "text", "html"]
-        if format_type.lower() not in valid_formats:
-            raise ValueError(
-                f"无效的输出格式: {format_type}。有效选项: {valid_formats}"
-            )
+        if isinstance(format_types, str):
+            format_types = [f.strip() for f in format_types.replace("，", ",").split(",")]
+        for f in format_types:
+            if f not in ("image", "text", "html"):
+                raise ValueError(f"无效格式: {f}。有效: image, text, html")
 
-        self._ensure_group("basic")["output_format"] = format_type.lower()
+        self._ensure_group("basic")["output_format"] = format_types
         self.config.save_config()
 
     def set_group_list_mode(self, mode: str):
