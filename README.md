@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.10.9-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.11.1-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -105,7 +105,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
 >     3. **稳定性**：上方地址为维护者提供 T2I 服务（国外网络环境），在一段时间内大概率稳定，但不保证长期有效，如果自己不想部署可以使用。
 >     4. **休眠保活**：由于免费空间若长时间（约 48 小时）无人访问会进入休眠。可选择使用保活服务（如 [UptimeRobot](https://uptimerobot.com/)）定期访问 API 地址以保持其处于唤醒状态。
 >
-> - **国内加速 (CF 代理)**: `https://t2i.vercel.ciallo.de5.net`
+> - **国内加速**: `https://t2i.vercel.ciallo.de5.net`
 >   - **说明**: 在国内直接访问原始域名下载图片可能较慢，可选择使用此代理域名。在一段时间内大概率稳定。
 > </details>
 >
@@ -121,7 +121,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
 > - 在群聊中需要由群主允许机器人接收群内全部消息，使 AstrBot 能收到 `GROUP_MESSAGE_CREATE` 事件；只开放 @ 消息时，报告只能覆盖 @ 机器人的聊天。
 > - QQ 官方 API 不提供“按群拉取历史消息”的接口。插件会从启用后开始实时保存消息，并从 AstrBot 本地消息历史库分页读取；启用前的群聊无法自动回填。
 > - 官方群和成员使用 `group_openid` / `member_openid`，不是群号或 QQ 号。配置白名单、定时任务时建议先在群内执行 `/sid`，填写完整 UMO。
-> - 官方群事件不提供成员昵称。
+> - 官方群事件提供有效昵称时会用于报告；昵称缺失时使用群内稳定匿名名，避免直接展示 `member_openid`。
 > - QQ 官方文本报告使用自定义 Markdown，并默认通过 AstrBot T2I 生成透明背景的群聊概览图，将日期、基础统计和 24 小时竖向直方图合并为紧凑布局。可在 `QQ 官方机器人` 配置组关闭；渲染失败时自动回退为包含文字条形图的完整文本报告。
 > - Markdown 概览图直接使用 AstrBot T2I 返回的公网 URL。请确保当前 T2I 端点域名已加入 QQ 开放平台的消息 URL 配置。
 > - 本次适配只覆盖普通 QQ 群，不包含频道或子频道。
@@ -270,7 +270,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
 | 平台 | 适配器类型 | 特殊要求/说明 |
 |------|-----------|--------------|
 | **QQ** | OneBot v11 | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。 |
-| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 仅显示头像，Markdown 文本使用成员艾特。 |
+| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。 |
 | **Discord** | Discord | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。 |
 | **Telegram** | Telegram Bot API | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
