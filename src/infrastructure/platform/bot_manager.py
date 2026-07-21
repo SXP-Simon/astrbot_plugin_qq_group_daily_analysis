@@ -73,6 +73,7 @@ class BotManager:
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
                     "platform_id": str(platform_id),
+                    "filter_bot_messages": self.config_manager.get_filter_bot_messages(),
                     "plugin_instance": self._plugin_instance,
                 }
                 platform_instance = self._platforms.get(str(platform_id))

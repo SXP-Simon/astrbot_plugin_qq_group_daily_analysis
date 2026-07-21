@@ -62,6 +62,9 @@ class OneBotAdapter(PlatformAdapter):
         )
         if not self.bot_self_ids and config:
             self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
+        self.filter_bot_messages = (
+            config.get("filter_bot_messages", True) if config else True
+        )
 
         # LLBot 探测标志
         self._is_llbot = False
@@ -226,7 +229,7 @@ class OneBotAdapter(PlatformAdapter):
 
                     # 身份过滤（排除机器人自己）
                     sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
-                    if sender_id in self.bot_self_ids:
+                    if self.filter_bot_messages and sender_id in self.bot_self_ids:
                         continue
 
                     # 时间范围判定
