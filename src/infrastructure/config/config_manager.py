@@ -498,7 +498,9 @@ class ConfigManager:
     def set_output_format(self, format_types: str | list[str]):
         """设置输出格式"""
         if isinstance(format_types, str):
-            format_types = [f.strip() for f in format_types.replace("，", ",").split(",")]
+            format_types = [
+                f.strip() for f in format_types.replace("，", ",").split(",")
+            ]
         for f in format_types:
             if f not in ("image", "text", "html"):
                 raise ValueError(f"无效格式: {f}。有效: image, text, html")
