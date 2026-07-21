@@ -143,7 +143,7 @@
     "qq_official": {
         "description": "QQ 官方机器人",
         "type": "object",
-        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。成员昵称会自动从事件历史恢复，缺失时使用群内稳定匿名名，无需额外配置。",
+        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。",
         "items": {
             "enable_t2i_activity_histogram": {
                 "type": "bool",
