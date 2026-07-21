@@ -352,7 +352,7 @@ class MessageProcessingService:
             return replacements.get(mention_id, "@群友")
 
         cleaned = _QQ_OFFICIAL_MENTION_PATTERN.sub(replace_mention, str(text))
-        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip()
+        return re.sub(r"[^\S\r\n]{2,}", " ", cleaned).strip(" \t")
 
     @staticmethod
     def _read_field(source: object, *names: str) -> object | None:

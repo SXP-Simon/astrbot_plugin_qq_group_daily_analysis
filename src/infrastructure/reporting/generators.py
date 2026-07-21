@@ -345,6 +345,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        # Also controls ID normalization and fallback display name ("群友").
         allow_alphanumeric_user_ids: bool = False,
     ) -> tuple[str | None, str | None]:
         """
