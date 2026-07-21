@@ -649,7 +649,11 @@ class GroupDailyAnalysis(Star):
             )
 
             if image_url:
-                caption = TraceContext.make_report_caption() if self.config_manager.get_show_report_caption() else ""
+                caption = (
+                    TraceContext.make_report_caption()
+                    if self.config_manager.get_show_report_caption()
+                    else ""
+                )
                 sent = await adapter.send_image(group_id, image_url, caption=caption)
                 if sent:
                     await self._try_upload_image(group_id, image_url, platform_id)
