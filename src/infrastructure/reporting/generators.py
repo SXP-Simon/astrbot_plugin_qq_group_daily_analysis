@@ -647,7 +647,7 @@ class ReportGenerator(IReportGenerator):
             return None, None
 
     def build_html_caption(self, html_path: str) -> str:
-        """根据 html_base_url 生成 HTML 报告链接 caption"""
+        """根据 html_base_url 生成 HTML 报告链接 caption。由调用方决定是否发送。"""
 
         caption = "📊 每日群聊分析报告已生成"
         base_url = self.config_manager.get_html_base_url()

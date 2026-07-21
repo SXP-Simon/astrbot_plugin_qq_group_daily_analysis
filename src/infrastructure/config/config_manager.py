@@ -680,6 +680,15 @@ class ConfigManager:
         self._ensure_group("basic")["enable_analysis_reply"] = enabled
         self.config.save_config()
 
+    def get_show_report_caption(self) -> bool:
+        """获取是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
+        return self._get_group("basic").get("show_report_caption", True)
+
+    def set_show_report_caption(self, enabled: bool):
+        """设置是否发送 \"📊 每日群聊分析报告已生成\" 前缀文字。"""
+        self._ensure_group("basic")["show_report_caption"] = enabled
+        self.config.save_config()
+
     def get_profile_display_mode(self) -> str:
         """获取人格标签展示模式。"""
         mode = str(self._get_group("basic").get("profile_display_mode", "mbti")).lower()
