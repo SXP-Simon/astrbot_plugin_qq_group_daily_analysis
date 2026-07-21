@@ -345,6 +345,8 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        # Also controls ID normalization and fallback display name ("群友").
+        allow_alphanumeric_user_ids: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -369,6 +371,7 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
@@ -511,6 +514,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -556,6 +560,7 @@ class ReportGenerator(IReportGenerator):
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=avatar_cache_namespace,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
@@ -617,7 +622,7 @@ class ReportGenerator(IReportGenerator):
             json_data = {
                 "analysis_result": (
                     self._sanitize_analysis_result_for_export(analysis_result)
-                    if hide_user_names
+                    if hide_user_names or allow_alphanumeric_user_ids
                     else analysis_result
                 ),
                 "group_id": group_id,
@@ -795,6 +800,7 @@ class ReportGenerator(IReportGenerator):
         nickname_getter=None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -820,6 +826,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             if hide_user_names:
                 contributors = await self._render_avatar_only_ids(
@@ -889,6 +896,7 @@ class ReportGenerator(IReportGenerator):
                     avatar_reuse_registry,
                     avatar_reuse_aliases,
                     hide_user_names=True,
+                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
                 )
             title_data = {
                 "name": "" if hide_user_names else title.name,
@@ -938,6 +946,7 @@ class ReportGenerator(IReportGenerator):
                 avatar_reuse_registry,
                 avatar_reuse_aliases,
                 hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             quotes_list.append(
                 {
@@ -1110,6 +1119,7 @@ class ReportGenerator(IReportGenerator):
         avatar_reuse_registry: dict[str, str] | None = None,
         avatar_reuse_aliases: dict[str, str] | None = None,
         hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> Markup:
         """
         处理文本，将 [用户ID] 格式的引用替换为头像胶囊。
@@ -1123,9 +1133,9 @@ class ReportGenerator(IReportGenerator):
             if str(user_id).strip()
         }
         source_text = str(text)
-        if hide_user_names:
-            # LLM 偶尔会直接输出 ID；在头像-only 模式下先标准化为引用，
-            # 避免 member_openid 以明文形式泄露。
+        supports_extended_ids = hide_user_names or allow_alphanumeric_user_ids
+        if supports_extended_ids:
+            # LLM 偶尔会直接输出 ID；先标准化为引用，避免 OpenID 以明文形式显示。
             for user_id in sorted(known_ids, key=len, reverse=True):
                 source_text = re.sub(
                     rf"(?<!\[)(?<![A-Za-z0-9_-]){re.escape(user_id)}"
@@ -1134,7 +1144,9 @@ class ReportGenerator(IReportGenerator):
                     source_text,
                 )
 
-        pattern = r"\[([A-Za-z0-9_-]{1,128})\]" if hide_user_names else r"\[(\d+)\]"
+        pattern = (
+            r"\[([A-Za-z0-9_-]{1,128})\]" if supports_extended_ids else r"\[(\d+)\]"
+        )
 
         matches = list(re.finditer(pattern, source_text))
         if not matches:
@@ -1142,7 +1154,7 @@ class ReportGenerator(IReportGenerator):
 
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
-            if hide_user_names and uid not in known_ids:
+            if supports_extended_ids and uid not in known_ids:
                 return Markup(html.escape(f"[{uid}]", quote=True))
             url = await self._get_user_avatar(
                 uid, avatar_url_getter, avatar_cache_namespace
@@ -1182,7 +1194,7 @@ class ReportGenerator(IReportGenerator):
             final_name = (
                 name
                 if (name and not self._is_placeholder_display_name(name, uid))
-                else str(uid)
+                else ("群友" if allow_alphanumeric_user_ids else str(uid))
             )
 
             avatar_ref = self._register_reusable_avatar(

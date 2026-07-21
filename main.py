@@ -622,7 +622,7 @@ class GroupDailyAnalysis(Star):
         analysis_result = result["analysis_result"]
         adapter = result["adapter"]
         output_format = self.config_manager.get_output_format()
-        hide_user_names = adapter.get_platform_name() == "qq_official"
+        is_qq_official = adapter.get_platform_name() == "qq_official"
 
         # 定义获取回调
         async def avatar_url_getter(user_id: str) -> str | None:
@@ -645,7 +645,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
-                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=is_qq_official,
             )
 
             if image_url:
@@ -658,7 +658,7 @@ class GroupDailyAnalysis(Star):
             # 如果图片生成或发送失败，直接回退到文本
             logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
             await self._send_text_reports(
-                group_id, analysis_result, hide_user_names, adapter
+                group_id, analysis_result, is_qq_official, adapter
             )
             return
 
@@ -669,7 +669,7 @@ class GroupDailyAnalysis(Star):
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
                 avatar_cache_namespace=platform_id,
-                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=is_qq_official,
             )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
@@ -731,25 +731,31 @@ class GroupDailyAnalysis(Star):
 
         else:
             await self._send_text_reports(
-                group_id, analysis_result, hide_user_names, adapter
+                group_id, analysis_result, is_qq_official, adapter
             )
 
     async def _generate_text_reports(
-        self, analysis_result: dict, hide_user_names: bool
+        self, analysis_result: dict, use_qq_official_markdown: bool
     ) -> tuple[str, str | None]:
         """Generate text or QQ-official-markdown reports."""
-        if hide_user_names:
+        if use_qq_official_markdown:
             return await self.report_generator.generate_qq_official_markdown_report(
                 analysis_result, self.html_render
             )
         return self.report_generator.generate_text_report(analysis_result), None
 
     async def _send_text_reports(
-        self, group_id: str, analysis_result: dict, hide_user_names: bool, adapter
+        self,
+        group_id: str,
+        analysis_result: dict,
+        use_qq_official_markdown: bool,
+        adapter,
     ) -> bool:
         """Send text reports via platform adapter."""
-        tr, fr = await self._generate_text_reports(analysis_result, hide_user_names)
-        if hide_user_names:
+        tr, fr = await self._generate_text_reports(
+            analysis_result, use_qq_official_markdown
+        )
+        if use_qq_official_markdown:
             return await adapter.send_text_report(group_id, tr, fallback_content=fr)
         return await adapter.send_text_report(group_id, tr)
 

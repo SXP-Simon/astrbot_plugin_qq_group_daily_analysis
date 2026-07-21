@@ -31,7 +31,7 @@ class ReportDispatcher:
         """设置 HTML 渲染函数 (运行时注入)"""
         self._html_render_func = render_func
 
-    def _hide_user_names(self, platform_id: str | None) -> bool:
+    def _is_qq_official(self, platform_id: str | None) -> bool:
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         return bool(adapter and adapter.get_platform_name() == "qq_official")
 
@@ -92,7 +92,7 @@ class ReportDispatcher:
                 self._html_render_func,
                 avatar_url_getter=avatar_url_getter,
                 avatar_cache_namespace=platform_id,
-                hide_user_names=self._hide_user_names(platform_id),
+                allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
@@ -140,7 +140,7 @@ class ReportDispatcher:
                 group_id,
                 avatar_url_getter=avatar_url_getter,
                 avatar_cache_namespace=platform_id,
-                hide_user_names=self._hide_user_names(platform_id),
+                allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
             )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
@@ -202,7 +202,7 @@ class ReportDispatcher:
     ) -> bool:
         """分发文本报告"""
         logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
-        is_qq_official = self._hide_user_names(platform_id)
+        is_qq_official = self._is_qq_official(platform_id)
         fallback_report = None
         if is_qq_official:
             (
