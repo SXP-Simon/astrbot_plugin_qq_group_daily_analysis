@@ -304,6 +304,15 @@ class ConfigManager:
             ids = basic.get("bot_qq_ids", [])
         return ids
 
+    def get_filter_bot_messages(self) -> bool:
+        """获取是否过滤机器人自己的消息。"""
+        return self._get_group("basic").get("filter_bot_messages", True)
+
+    def set_filter_bot_messages(self, enabled: bool):
+        """设置是否过滤机器人自己的消息。"""
+        self._ensure_group("basic")["filter_bot_messages"] = enabled
+        self.config.save_config()
+
     def get_html_output_dir(self) -> str:
         """获取HTML输出目录"""
 
