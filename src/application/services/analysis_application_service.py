@@ -189,6 +189,13 @@ class AnalysisApplicationService:
 
             cleaner = MessageCleanerService()
             bot_self_ids = self.config_manager.get_bot_self_ids()
+            if not self.config_manager.get_filter_bot_messages():
+                bot_self_ids = []
+            logger.debug(
+                "filter_bot_messages=%s, bot_self_ids=%s",
+                self.config_manager.get_filter_bot_messages(),
+                bot_self_ids,
+            )
 
             # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
             unified_messages = cleaner.clean_messages(
@@ -387,6 +394,13 @@ class AnalysisApplicationService:
 
             cleaner = MessageCleanerService()
             bot_self_ids = self.config_manager.get_bot_self_ids()
+            if not self.config_manager.get_filter_bot_messages():
+                bot_self_ids = []
+            logger.debug(
+                "filter_bot_messages=%s, bot_self_ids=%s (incremental)",
+                self.config_manager.get_filter_bot_messages(),
+                bot_self_ids,
+            )
             unified_messages = cleaner.clean_messages(
                 raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
             )

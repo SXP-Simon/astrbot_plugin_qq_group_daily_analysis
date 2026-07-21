@@ -918,6 +918,7 @@ class GroupDailyAnalysis(Star):
         - status: 查看当前状态
         - reload: 重新加载配置并重启定时任务
         - test: 测试自动分析功能
+        - filter_bot: 切换是否在分析中包含机器人自己的消息
         - incremental_debug: 切换增量分析立即报告模式（调试用）
         """
         group_id = self._get_group_id_from_event(event)
@@ -968,6 +969,13 @@ class GroupDailyAnalysis(Star):
             status_text = "已启用" if new_state else "已禁用"
             yield event.plain_result(f"✅ 增量分析立即报告模式: {status_text}")
 
+        elif action == "filter_bot":
+            current = self.config_manager.get_filter_bot_messages()
+            new_state = not current
+            self.config_manager.set_filter_bot_messages(new_state)
+            status_text = "已启用" if new_state else "已禁用"
+            yield event.plain_result(f"✅ 过滤机器人消息: {status_text}")
+
         else:  # status
             check_target = getattr(event, "unified_msg_origin", None)
             if not check_target:
@@ -1000,18 +1008,21 @@ class GroupDailyAnalysis(Star):
                     f"活跃时段{active_start}:00-{active_end}:00)"
                 )
 
-            debug_report = self.config_manager.get_incremental_report_immediately()
-            debug_status = "✅ 开启" if debug_report else "❌ 关闭"
+        debug_report = self.config_manager.get_incremental_report_immediately()
+        debug_status = "✅ 开启" if debug_report else "❌ 关闭"
+        filter_bot = self.config_manager.get_filter_bot_messages()
+        filter_bot_status = "✅ 开启" if filter_bot else "❌ 关闭"
 
-            yield event.plain_result(f"""📊 当前群分析功能状态:
+        yield event.plain_result(f"""📊 当前群分析功能状态:
 • 群分析功能: {status} (模式: {mode})
 • 自动分析: {auto_status} ({auto_time})
-• 增量分析: {incremental_status_text}
-• 调试模式: {debug_status} (增量立即报告)
-• 输出格式: {output_format}
+        • 增量分析: {incremental_status_text}
+        • 调试模式: {debug_status} (增量立即报告)
+        • 过滤机器人: {filter_bot_status}
+        • 输出格式: {output_format}
 • 最小消息数: {min_threshold}
 
-💡 可用命令: enable, disable, status, reload, test, incremental_debug
+💡 可用命令: enable, disable, status, reload, test, filter_bot, incremental_debug
 💡 支持的输出格式: image, text (图片包含活跃度可视化)
 💡 其他命令: /设置格式, /增量状态""")
 

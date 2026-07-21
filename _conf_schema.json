@@ -51,6 +51,12 @@
                     "type": "string"
                 }
             },
+            "filter_bot_messages": {
+                "type": "bool",
+                "description": "分析时是否过滤机器人自己的消息",
+                "default": true,
+                "hint": "默认开启，bot 自身的发言不会出现在分析报告中。关闭后 bot 的发言也会被纳入话题分析、金句提取等。"
+            },
             "enable_user_card": {
                 "type": "bool",
                 "description": "使用用户群名片",
