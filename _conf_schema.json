@@ -143,6 +143,12 @@
                 "description": "发送文本/表情回复",
                 "default": false,
                 "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。"
+            },
+            "show_report_caption": {
+                "type": "bool",
+                "description": "发送报告时附带 \"📊 每日群聊分析报告已生成\" 前缀",
+                "default": true,
+                "hint": "关闭后，发送图片/HTML 报告时将只发送文件本身，不附带 \"📊 每日群聊分析报告已生成\" 等文字前缀。"
             }
         }
     },

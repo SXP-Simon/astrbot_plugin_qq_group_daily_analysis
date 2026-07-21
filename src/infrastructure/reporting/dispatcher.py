@@ -100,7 +100,7 @@ class ReportDispatcher:
         # 4. 发送图片
         sent = False
         if image_url:
-            caption = TraceContext.make_report_caption()
+            caption = TraceContext.make_report_caption() if self.config_manager.get_show_report_caption() else ""
             sent = await self.message_sender.send_image_smart(
                 group_id, image_url, caption, platform_id
             )
@@ -180,7 +180,7 @@ class ReportDispatcher:
                         f"[{trace_id}] 群 {group_id} 开启了仅发送外链，但未配置 html_base_url，已进行降级，回退至发送 HTML 文件。"
                     )
 
-            caption = self.report_generator.build_html_caption(html_path)
+            caption = self.report_generator.build_html_caption(html_path) if self.config_manager.get_show_report_caption() else ""
 
             sent = await self.message_sender.send_file(
                 group_id,
