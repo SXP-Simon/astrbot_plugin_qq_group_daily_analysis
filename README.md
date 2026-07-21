@@ -58,7 +58,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCa
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>BlueArchive</b></p>
-      <img src="https://fastly.jsdelivr.net/gh/VanillaNahida/astrbot_plugin_qq_group_daily_analysis@main/assets/BlueArchive-demo.jpg" alt="BlueArchive" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/BlueArchive-demo.jpg" alt="BlueArchive" width="100%">
     </td>
   </tr>
 </table>
