@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.11.2-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v4.11.3-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -23,7 +23,7 @@
 </table>
 
 
-_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** (NapCat, LLOneBot, Snowluma)、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
+_✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [NapNeko/NapCatQQ<img src="https://avatars.githubusercontent.com/u/165024194?s=200&v=4" width="14px" >](https://napneko.github.io/), [LLOneBot/LuckyLilliaBot<img src="https://avatars.githubusercontent.com/u/161472069?s=200&v=4" width="14px" >](https://www.llonebot.com/), [SnowLuma/SnowLuma<img src="https://avatars.githubusercontent.com/u/216149176?s=200&v=4" width="14px" >](https://snowluma.github.io/))、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
