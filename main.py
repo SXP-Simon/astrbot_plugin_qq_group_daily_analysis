@@ -211,6 +211,11 @@ class GroupDailyAnalysis(Star):
                 except Exception as e:
                     logger.warning(f"自动升级 prompt 模板失败: {e}")
 
+                try:
+                    self.config_manager.migrate_legacy_configs()
+                except Exception as e:
+                    logger.warning(f"迁移旧版配置失败: {e}")
+
                 # 1. 尝试发现 bot 实例
                 await self.bot_manager.initialize_from_config()
 

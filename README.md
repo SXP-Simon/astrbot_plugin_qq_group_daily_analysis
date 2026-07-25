@@ -337,8 +337,6 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 ## 贡献
 
 
-
-
 ### 开发环境设置
 
 为了保持代码质量，本项目使用 [pre-commit](https://pre-commit.com/) 钩子进行代码规范检查和自动修复。所有的贡献代码都必须通过 pre-commit 检查。

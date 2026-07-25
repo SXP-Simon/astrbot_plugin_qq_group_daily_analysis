@@ -455,6 +455,20 @@ class ConfigManager:
             )
         return modified
 
+    def migrate_legacy_configs(self):
+        """升级旧版配置项的类型/结构，确保兼容新 schema"""
+        modified = False
+
+        val = self._get_group("basic").get("output_format")
+        if isinstance(val, str):
+            self._ensure_group("basic")["output_format"] = [val]
+            logger.info("output_format 已从旧版 string 自动迁移为 list")
+            modified = True
+
+        if modified:
+            self.config.save_config()
+            logger.info("旧版配置迁移完成，已自动回写")
+
     def get_quality_summary_prompt(self, style: str = "quality_summary_prompt") -> str:
         """获取聊天质量汇总分析提示词模板"""
         prompts_config = self._get_group("prompts").get("quality_analysis_prompts", {})
