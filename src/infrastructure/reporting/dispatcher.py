@@ -4,6 +4,7 @@ import tempfile
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
@@ -169,7 +170,8 @@ class ReportDispatcher:
                     # 计算相对路径并转换为URL
                     rel_path = os.path.relpath(html_path, html_output_dir)
                     url_path = rel_path.replace(os.sep, "/")
-                    report_url = f"{base_url.rstrip('/')}/{url_path.lstrip('/')}"
+                    encoded_url_path = quote(url_path.lstrip("/"), safe="/")
+                    report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
 
                     sent = await self.message_sender.send_text(
                         group_id,
