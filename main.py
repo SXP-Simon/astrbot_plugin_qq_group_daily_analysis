@@ -9,6 +9,7 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
+from urllib.parse import quote
 
 from astrbot.api import AstrBotConfig
 from astrbot.api import logger as astrbot_logger
@@ -701,7 +702,8 @@ class GroupDailyAnalysis(Star):
                         # 计算相对路径并转换为URL
                         rel_path = os.path.relpath(html_path, html_output_dir)
                         url_path = rel_path.replace(os.sep, "/")
-                        report_url = f"{base_url.rstrip('/')}/{url_path.lstrip('/')}"
+                        encoded_url_path = quote(url_path.lstrip("/"), safe="/")
+                        report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
 
                         yield event.plain_result(
                             f"📊 今日群聊分析报告已生成：\n{report_url}"
