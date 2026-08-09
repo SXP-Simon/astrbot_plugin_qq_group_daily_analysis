@@ -189,7 +189,6 @@ class IncrementalTriggerCoordinator:
     async def _run_analysis(self, state_key: str) -> None:
         """执行分析并根据实际消费数量修正估算计数。"""
         allow_continuation = False
-        count_after_result: int | None = None
         try:
             await self._ensure_loaded()
             async with self._state_lock:
@@ -222,11 +221,8 @@ class IncrementalTriggerCoordinator:
                     state["count"] = consumed + new_arrivals
                 elif reason == "no_messages":
                     state["count"] = new_arrivals
-                count_after_result = int(state["count"])
-                # 成功消费后可连续排空积压；失败仅在执行期间有新消息时重试。
-                allow_continuation = bool(result.get("success") and consumed > 0) or (
-                    not result.get("success") and new_arrivals > 0
-                )
+                # 成功消费后可连续排空积压；失败必须等待任务结束后的新消息。
+                allow_continuation = bool(result.get("success") and consumed > 0)
 
             self._schedule_flush()
         except asyncio.CancelledError:
@@ -241,13 +237,10 @@ class IncrementalTriggerCoordinator:
         async with self._state_lock:
             state = self._states.get(state_key)
             current_count = int(state.get("count", 0)) if state else 0
-            arrived_after_result = (
-                count_after_result is not None and current_count > count_after_result
-            )
             should_continue = bool(
                 state
                 and current_count >= self.config_manager.get_incremental_min_messages()
-                and (allow_continuation or arrived_after_result)
+                and allow_continuation
             )
         if should_continue:
             self._schedule_analysis(state_key)

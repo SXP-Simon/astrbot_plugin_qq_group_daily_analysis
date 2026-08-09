@@ -999,8 +999,18 @@ class GroupDailyAnalysis(Star):
             self.bot_manager.update_from_event(event)
 
             try:
-                await self.auto_scheduler._perform_auto_analysis_for_group(group_id)
-                yield event.plain_result("✅ 自动分析测试完成，请查看群消息")
+                result = await self.auto_scheduler._perform_auto_analysis_for_group(
+                    group_id
+                )
+                if isinstance(result, dict) and result.get("success"):
+                    yield event.plain_result("✅ 自动分析及报告发送成功，请查看群消息")
+                else:
+                    reason = (
+                        result.get("reason", "unknown")
+                        if isinstance(result, dict)
+                        else "invalid_result"
+                    )
+                    yield event.plain_result(f"❌ 自动分析或报告发送失败: {reason}")
             except DuplicateGroupTaskError:
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
             except Exception as e:

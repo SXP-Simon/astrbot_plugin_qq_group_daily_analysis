@@ -816,7 +816,7 @@ class AnalysisApplicationService:
             await self.history_manager.save_analysis(group_id, analysis_result)
 
             logger.info(
-                f"群 {group_id} 增量最终报告完成: "
+                f"群 {group_id} 增量最终报告内容生成并保存完成，等待发送: "
                 f"窗口={state.get_window_date_str()}, "
                 f"累计消息={state.total_message_count}, "
                 f"话题={len(state.topics)}, 金句={len(state.golden_quotes)}, "

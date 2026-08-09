@@ -387,10 +387,24 @@ class AutoScheduler:
                 elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 定时报告任务异常: {result}")
                     error_count += 1
-                elif isinstance(result, dict) and not result.get("success", True):
-                    skip_count += 1
-                else:
+                elif isinstance(result, dict) and result.get("success"):
                     success_count += 1
+                elif isinstance(result, dict):
+                    reason = result.get("reason", "unknown")
+                    if reason in {
+                        "below_threshold",
+                        "no_incremental_data",
+                        "already_running",
+                        "muted",
+                        "bot_not_ready",
+                    }:
+                        skip_count += 1
+                    else:
+                        logger.error(f"群 {gid} 定时报告失败: {reason}")
+                        error_count += 1
+                else:
+                    logger.error(f"群 {gid} 定时报告返回了无效状态: {result!r}")
+                    error_count += 1
 
             logger.info(
                 f"定时报告完成 — 成功: {success_count}, 跳过: {skip_count}, "
@@ -403,17 +417,36 @@ class AutoScheduler:
     async def _perform_auto_analysis_for_group_with_timeout(
         self, group_id: str, target_platform_id: str | None = None
     ):
-        """为指定群执行自动分析（带超时控制）"""
+        """为指定群执行自动分析并返回真实的分析与发送状态。"""
         try:
-            # 为每个群聊设置独立的超时时间，适当放宽到 30 分钟以支持大型批次
-            await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 self._perform_auto_analysis_for_group(group_id, target_platform_id),
                 timeout=1800,
             )
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "invalid_result",
+                }
+            return result
         except asyncio.TimeoutError:
             logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "timeout",
+            }
         except Exception as e:
             logger.error(f"群 {group_id} 分析任务执行失败: {e}")
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
 
     async def _perform_auto_analysis_for_group(
         self, group_id: str, target_platform_id: str | None = None
@@ -426,7 +459,12 @@ class AutoScheduler:
             TraceContext.set(trace_id)
 
             if self._terminating:
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "terminating",
+                }
 
             logger.info(
                 f"开始为群 {group_id} 执行自动分析 (Platform: {target_platform_id or 'Auto'})"
@@ -435,7 +473,12 @@ class AutoScheduler:
             # 检查平台状态 (BotManager 为基础设施层，用于获取平台就绪状态)
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "bot_not_ready",
+                }
 
             # 委派给应用层服务执行核心用例
             # AnalysisApplicationService 内部已处理群锁 (group_lock)
@@ -446,14 +489,16 @@ class AutoScheduler:
             if not result.get("success"):
                 reason = result.get("reason")
                 logger.info(f"群 {group_id} 自动分析跳过: {reason}")
-                return
+                result["analysis_success"] = False
+                result["report_sent"] = False
+                return result
 
             # 获取分析结果及适配器
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
 
             # 调度导出并发送报告
-            await self.report_dispatcher.dispatch(
+            report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
                 adapter.platform_id
@@ -461,7 +506,16 @@ class AutoScheduler:
                 else target_platform_id,
             )
 
-            logger.info(f"群 {group_id} 自动分析任务执行成功")
+            result["analysis_success"] = True
+            result["report_sent"] = bool(report_sent)
+            if not report_sent:
+                result["success"] = False
+                result["reason"] = "report_delivery_failed"
+                logger.error(f"群 {group_id} 自动分析完成，但报告发送失败")
+                return result
+
+            logger.info(f"群 {group_id} 自动分析及报告发送成功")
+            return result
 
         except DuplicateGroupTaskError:
             # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
@@ -469,6 +523,12 @@ class AutoScheduler:
             raise  # 重新抛出，让上层知道任务并没真正执行而是跳过了
         except Exception as e:
             logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
         finally:
             logger.debug(f"群 {group_id} 自动分析流程结束")
 
@@ -620,8 +680,16 @@ class AutoScheduler:
                 timeout=1800,
             )
 
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "invalid_result",
+                }
+
             # 判定是否需要触发回退 (例如：无增量数据等)
-            if isinstance(result, dict) and not result.get("success"):
+            if not result.get("success"):
                 reason = result.get("reason", "")
                 if reason in ("below_threshold", "already_running"):
                     return result  # 正常跳过，无需回退
@@ -641,14 +709,24 @@ class AutoScheduler:
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
-            return {"success": False, "reason": "timeout"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "timeout",
+            }
 
         except Exception as e:
             logger.error(f"群 {group_id} 最终报告任务执行失败: {e}")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告异常，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
-            return {"success": False, "reason": str(e)}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
 
     async def _fallback_to_traditional(
         self, group_id: str, target_platform_id: str | None = None
@@ -659,16 +737,31 @@ class AutoScheduler:
                 f"⬆️ 群 {group_id} 回退到传统全量分析 "
                 f"(Platform: {target_platform_id or 'Auto'})"
             )
-            await self._perform_auto_analysis_for_group_with_timeout(
+            result = await self._perform_auto_analysis_for_group_with_timeout(
                 group_id, target_platform_id
             )
-            return {"success": True, "fallback": True}
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "fallback": True,
+                    "reason": "fallback_invalid_result",
+                }
+            result["fallback"] = True
+            return result
         except Exception as fallback_err:
             logger.error(
                 f"群 {group_id} 回退传统分析也失败: {fallback_err}",
                 exc_info=True,
             )
-            return {"success": False, "reason": f"fallback_failed: {fallback_err}"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "fallback": True,
+                "reason": f"fallback_failed: {fallback_err}",
+            }
 
     async def _perform_incremental_final_report_for_group(
         self, group_id: str, target_platform_id: str | None = None
@@ -681,7 +774,12 @@ class AutoScheduler:
             TraceContext.set(trace_id)
 
             if self._terminating:
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "terminating",
+                }
 
             logger.info(
                 f"开始为群 {group_id} 生成增量最终报告 "
@@ -691,7 +789,12 @@ class AutoScheduler:
             # 检查平台状态
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
-                return {"success": False, "reason": "bot_not_ready"}
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "bot_not_ready",
+                }
 
             # 委派给应用层服务执行最终报告用例
             # AnalysisApplicationService 内部已处理群锁 (group_lock)
@@ -702,19 +805,29 @@ class AutoScheduler:
             if not result.get("success"):
                 reason = result.get("reason", "unknown")
                 logger.info(f"群 {group_id} 最终报告跳过: {reason}")
+                result["analysis_success"] = False
+                result["report_sent"] = False
                 return result
 
             # 获取分析结果及适配器，分发报告
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
 
-            await self.report_dispatcher.dispatch(
+            report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
                 adapter.platform_id
                 if hasattr(adapter, "platform_id")
                 else target_platform_id,
             )
+
+            result["analysis_success"] = True
+            result["report_sent"] = bool(report_sent)
+            if not report_sent:
+                result["success"] = False
+                result["reason"] = "report_delivery_failed"
+                logger.error(f"群 {group_id} 最终报告生成完成，但报告发送失败")
+                return result
 
             # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）
             try:
@@ -740,10 +853,20 @@ class AutoScheduler:
         except DuplicateGroupTaskError:
             # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
             logger.debug(f"群 {group_id} 最终报告因并发锁冲突而跳过（已在运行）")
-            return {"success": False, "reason": "already_running"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "already_running",
+            }
         except Exception as e:
             logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
-            return {"success": False, "reason": str(e)}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
         finally:
             logger.debug(f"群 {group_id} 最终报告流程结束")
 
