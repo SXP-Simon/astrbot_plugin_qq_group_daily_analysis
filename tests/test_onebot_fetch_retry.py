@@ -109,3 +109,38 @@ def test_fetch_messages_returns_partial_results_after_retries(monkeypatch):
     assert bot.history_call_count == 4
     assert [message.message_id for message in messages] == ["201"]
     assert [message.text_content for message in messages] == ["已获取消息"]
+
+
+def test_fetch_messages_deduplicates_overlapping_pages(monkeypatch):
+    now = int(datetime.now().timestamp())
+    bot = FakeOneBot(
+        [
+            {
+                "messages": [
+                    make_message("303", now, "第三条"),
+                    make_message("302", now - 1, "第二条"),
+                ]
+            },
+            {
+                "messages": [
+                    make_message("302", now - 1, "重复的第二条"),
+                    make_message("301", now - 2, "第一条"),
+                ]
+            },
+        ]
+    )
+    adapter = make_adapter(bot)
+
+    async def skip_sleep(delay: float):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", skip_sleep)
+    messages = asyncio.run(adapter.fetch_messages("123456", max_count=3))
+
+    assert bot.history_call_count == 2
+    assert [message.message_id for message in messages] == ["301", "302", "303"]
+    assert [message.text_content for message in messages] == [
+        "第一条",
+        "第二条",
+        "第三条",
+    ]
