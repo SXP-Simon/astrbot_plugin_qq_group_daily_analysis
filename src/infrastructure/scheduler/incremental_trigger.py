@@ -86,6 +86,11 @@ class IncrementalTriggerCoordinator:
                         "count": count,
                     }
             self._loaded = True
+            logger.debug(
+                "增量计数状态恢复完成: 群数=%s, 待处理消息=%s",
+                len(self._states),
+                sum(int(state.get("count", 0)) for state in self._states.values()),
+            )
 
     def _schedule_flush(self) -> None:
         """合并短时间内的计数更新，避免每条消息都写 KV。"""
@@ -118,6 +123,11 @@ class IncrementalTriggerCoordinator:
             self._KV_KEY,
             {"version": 1, "updated_at": time.time(), "states": states},
         )
+        logger.debug(
+            "增量计数状态已持久化: 群数=%s, 待处理消息=%s",
+            len(states),
+            sum(int(state.get("count", 0)) for state in states.values()),
+        )
 
     async def record_message(
         self,
@@ -149,6 +159,12 @@ class IncrementalTriggerCoordinator:
         if event_key:
             if event_key in self._seen_event_ids:
                 self._seen_event_ids.move_to_end(event_key)
+                logger.debug(
+                    "忽略重复增量消息事件: platform=%s, group=%s, message_id=%s",
+                    platform_id,
+                    group_id,
+                    message_id,
+                )
                 return True
             self._seen_event_ids[event_key] = None
             if len(self._seen_event_ids) > self._SEEN_EVENT_LIMIT:
@@ -180,6 +196,14 @@ class IncrementalTriggerCoordinator:
         """确保同一个群同一时间只有一个消息量触发任务。"""
         if self._closed or state_key in self._analysis_tasks:
             return
+        state = self._states.get(state_key, {})
+        logger.info(
+            "增量消息计数达到阈值，安排分析任务: platform=%s, group=%s, pending=%s, threshold=%s",
+            state.get("platform_id", ""),
+            state.get("group_id", ""),
+            int(state.get("count", 0)),
+            self.config_manager.get_incremental_min_messages(),
+        )
         task = asyncio.create_task(
             self._run_analysis(state_key),
             name=f"incremental_volume_{state_key}",
@@ -198,6 +222,14 @@ class IncrementalTriggerCoordinator:
                 count_at_start = int(state.get("count", 0))
                 platform_id = str(state["platform_id"])
                 group_id = str(state["group_id"])
+
+            logger.debug(
+                "增量分析任务开始: platform=%s, group=%s, pending_at_start=%s",
+                platform_id,
+                group_id,
+                count_at_start,
+            )
+            started_at = time.monotonic()
 
             if self._semaphore is None:
                 self._semaphore = asyncio.Semaphore(
@@ -223,6 +255,23 @@ class IncrementalTriggerCoordinator:
                     state["count"] = new_arrivals
                 # 成功消费后可连续排空积压；失败必须等待任务结束后的新消息。
                 allow_continuation = bool(result.get("success") and consumed > 0)
+                remaining_count = int(state.get("count", 0))
+
+            logger.info(
+                "增量分析计数结算: platform=%s, group=%s, success=%s, reason=%s, "
+                "pending_at_start=%s, new_arrivals=%s, consumed=%s, remaining=%s, "
+                "allow_continuation=%s, duration=%.2fs",
+                platform_id,
+                group_id,
+                bool(result.get("success")),
+                reason or "none",
+                count_at_start,
+                new_arrivals,
+                consumed,
+                remaining_count,
+                allow_continuation,
+                time.monotonic() - started_at,
+            )
 
             self._schedule_flush()
         except asyncio.CancelledError:
@@ -243,6 +292,12 @@ class IncrementalTriggerCoordinator:
                 and allow_continuation
             )
         if should_continue:
+            logger.info(
+                "增量分析继续处理待办批次: state=%s, pending=%s, threshold=%s",
+                state_key,
+                current_count,
+                self.config_manager.get_incremental_min_messages(),
+            )
             self._schedule_analysis(state_key)
 
     async def start(self) -> int:
