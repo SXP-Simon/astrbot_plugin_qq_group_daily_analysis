@@ -188,7 +188,39 @@ class OneBotAdapter(PlatformAdapter):
                     if current_anchor_id:
                         params["message_seq"] = current_anchor_id
 
-                result = await self.bot.call_action("get_group_msg_history", **params)
+                result = None
+                fetch_error = None
+                # 单页请求最多尝试三次，避免 NapCat 偶发 WebSocket 超时导致整次分析失败。
+                for attempt in range(1, 4):
+                    try:
+                        result = await self.bot.call_action(
+                            "get_group_msg_history", **params
+                        )
+                        fetch_error = None
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        fetch_error = exc
+                        if attempt < 3:
+                            logger.warning(
+                                f"OneBot 分页拉取失败，将进行第 {attempt + 1} 次尝试："
+                                f"群 {group_id}，错误：{exc}"
+                            )
+                            await asyncio.sleep(attempt)
+
+                if fetch_error is not None:
+                    if all_raw_messages:
+                        logger.warning(
+                            f"OneBot 分页拉取重试耗尽，停止继续回溯并处理已获取的 "
+                            f"{len(all_raw_messages)} 条消息：群 {group_id}，错误：{fetch_error}"
+                        )
+                    else:
+                        logger.warning(
+                            f"OneBot 分页拉取重试耗尽，且尚未获取到消息："
+                            f"群 {group_id}，错误：{fetch_error}"
+                        )
+                    break
 
                 if not result or "messages" not in result:
                     logger.debug(
