@@ -155,6 +155,7 @@ class OneBotAdapter(PlatformAdapter):
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
             all_raw_messages = []
+            seen_raw_ids: set[str] = set()
 
             # 确定回溯的起始时间点
             if since_ts and since_ts > 0:
@@ -253,10 +254,8 @@ class OneBotAdapter(PlatformAdapter):
                     msg_time = raw_msg.get("time", 0)
                     msg_id = str(raw_msg.get("message_id", ""))
 
-                    # 基础过滤：去重
-                    if any(
-                        str(m.get("message_id", "")) == msg_id for m in all_raw_messages
-                    ):
+                    # 使用集合去重分页重叠消息，避免消息量较大时反复线性扫描。
+                    if not msg_id or msg_id in seen_raw_ids:
                         continue
 
                     # 身份过滤（排除机器人自己）
@@ -267,6 +266,7 @@ class OneBotAdapter(PlatformAdapter):
                     # 时间范围判定
                     if start_timestamp <= msg_time <= int(datetime.now().timestamp()):
                         all_raw_messages.append(raw_msg)
+                        seen_raw_ids.add(msg_id)
 
                 # 提取锚点。
                 # SnowLuma 仅支持 message_id 作为分页锚点。
