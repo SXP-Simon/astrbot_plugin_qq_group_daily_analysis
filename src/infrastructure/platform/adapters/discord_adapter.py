@@ -150,6 +150,13 @@ class DiscordAdapter(PlatformAdapter):
                 end_time = datetime.now()
                 start_time = end_time - timedelta(days=days)
 
+            logger.debug(
+                "Discord 消息拉取开始: group=%s, max_count=%s, since_ts=%s, before_id=%s",
+                group_id,
+                max_count,
+                since_ts,
+                before_id,
+            )
             messages = []
 
             # 构建 Discord SDK 的 history 查询参数
@@ -173,6 +180,11 @@ class DiscordAdapter(PlatformAdapter):
 
             # 排序回升序（SDK 通常返回降序）
             messages.sort(key=lambda m: m.timestamp)
+            logger.debug(
+                "Discord 消息拉取完成: group=%s, messages=%s",
+                group_id,
+                len(messages),
+            )
             return messages
 
         except Exception as e:

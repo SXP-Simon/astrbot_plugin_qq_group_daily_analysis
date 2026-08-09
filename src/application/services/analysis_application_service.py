@@ -349,10 +349,11 @@ class AnalysisApplicationService:
             dict: 包含 success、batch_summary 等信息
         """
         async with self.group_lock(group_id, "incremental"):
+            analysis_started_at = time_mod.monotonic()
             if not self.incremental_store:
                 raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
 
-            logger.info(
+            logger.debug(
                 f"开始增量分析用例: 群 {group_id}, 平台 {platform_id or '默认'}"
             )
 
@@ -365,7 +366,7 @@ class AnalysisApplicationService:
             if hasattr(adapter, "is_group_muted"):
                 try:
                     if await adapter.is_group_muted(group_id):
-                        logger.info(
+                        logger.debug(
                             f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量群分析"
                         )
                         return {"success": False, "reason": "muted"}
@@ -383,12 +384,15 @@ class AnalysisApplicationService:
             max_count = max(self.config_manager.get_max_messages(), min_messages)
 
             # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
+            fetch_started_at = time_mod.monotonic()
             raw_messages = await adapter.fetch_messages(
                 group_id=group_id,
                 days=days,
                 max_count=max_count,
                 since_ts=last_analyzed_ts,
             )
+            raw_count = len(raw_messages)
+            fetch_duration = time_mod.monotonic() - fetch_started_at
 
             if not raw_messages:
                 logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
@@ -402,13 +406,15 @@ class AnalysisApplicationService:
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
             logger.debug(
-                "filter_bot_messages=%s, bot_self_ids=%s (incremental)",
+                "增量消息清洗配置: group=%s, filter_bot_messages=%s, bot_self_id_count=%s",
+                group_id,
                 self.config_manager.get_filter_bot_messages(),
-                bot_self_ids,
+                len(bot_self_ids),
             )
             unified_messages = cleaner.clean_messages(
                 raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
             )
+            cleaned_count = len(unified_messages)
 
             # 5. 复合游标去重，避免同一秒内分批时遗漏消息。
             if last_analyzed_ts > 0:
@@ -422,9 +428,27 @@ class AnalysisApplicationService:
                     )
                 ]
 
-            # 固定每批消息规模，爆发消息会拆成多个连续批次，避免 LLM 负载波动。
+            eligible_count = len(unified_messages)
+            logger.debug(
+                "增量消息筛选完成: platform=%s, group=%s, raw=%s, cleaned=%s, "
+                "eligible=%s, threshold=%s, fetch_limit=%s, fetch_limit_reached=%s, "
+                "fetch_duration=%.2fs, cursor_ts=%s, cursor_ids=%s",
+                platform_id or "default",
+                group_id,
+                raw_count,
+                cleaned_count,
+                eligible_count,
+                min_messages,
+                max_count,
+                raw_count >= max_count,
+                fetch_duration,
+                last_analyzed_ts,
+                len(last_analyzed_message_ids),
+            )
+
+            # 固定每批消息规模，待处理消息达到多个批次时连续处理，避免 LLM 负载波动。
             if len(unified_messages) < min_messages:
-                logger.info(
+                logger.debug(
                     f"群 {group_id} 增量分析：新消息数 ({len(unified_messages)}) "
                     f"未达到阈值 ({min_messages})，跳过本次分析"
                 )
@@ -436,6 +460,13 @@ class AnalysisApplicationService:
             unified_messages.sort(key=lambda msg: (msg.timestamp, msg.message_id))
             if len(unified_messages) > min_messages:
                 unified_messages = unified_messages[:min_messages]
+            logger.debug(
+                "增量批次已选定: platform=%s, group=%s, eligible=%s, selected=%s",
+                platform_id or "default",
+                group_id,
+                eligible_count,
+                len(unified_messages),
+            )
 
             # 6. 计算基础统计
             statistics = await asyncio.to_thread(
@@ -623,9 +654,14 @@ class AnalysisApplicationService:
             )
 
             logger.info(
-                f"群 {group_id} 增量分析完成: "
-                f"本批次消息={len(unified_messages)}, "
-                f"新话题={len(new_topics)}, 新金句={len(new_quotes)}"
+                f"群 {group_id} 增量批次完成: "
+                f"platform={getattr(adapter, 'platform_id', platform_id) or 'default'}, "
+                f"batch={batch.batch_id[:8]}, 消息={len(unified_messages)}, "
+                f"raw={raw_count}, cleaned={cleaned_count}, eligible={eligible_count}, "
+                f"cursor={last_analyzed_ts}->{safe_ts}, "
+                f"新话题={len(new_topics)}, 新金句={len(new_quotes)}, "
+                f"tokens={token_usage.total_tokens}, "
+                f"duration={time_mod.monotonic() - analysis_started_at:.2f}s"
             )
 
             return {

@@ -637,13 +637,13 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = result.get("reason", "unknown")
-                logger.info(f"群 {group_id} 增量分析跳过: {reason}")
+                logger.info(f"群 {group_id} 增量分析未完成: reason={reason}")
                 return result
 
             # 增量分析只累积数据，不发送报告
             batch_summary = result.get("batch_summary", {})
             logger.info(
-                f"群 {group_id} 增量分析完成: "
+                f"群 {group_id} 增量分析调度回调完成: "
                 f"消息数={result.get('messages_count', 0)}, "
                 f"话题={batch_summary.get('topics_count', 0)}, "
                 f"金句={batch_summary.get('quotes_count', 0)}"
