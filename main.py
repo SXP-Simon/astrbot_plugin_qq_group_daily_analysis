@@ -169,73 +169,78 @@ class GroupDailyAnalysis(Star):
 
     # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
     # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
-
     @filter.on_platform_loaded()
     async def on_platform_loaded(self):
-        """平台加载完成后初始化"""
+        """平台加载完成后初始化与平台相关的状态。
+
+        Returns:
+            None: 完成插件状态刷新后返回。
+        """
         await self._run_initialization("Platform Loaded")
 
     async def _run_initialization(self, source: str):
-        """统一初始化逻辑"""
+        """执行插件初始化，避免阻塞平台启动流程。
+
+        Args:
+            source: 触发本次初始化的来源标识。
+
+        Returns:
+            None: 就地完成插件状态初始化或刷新。
+        """
         async with self._init_lock:
-            # 如果已经成功发现过平台，且不是来自 Platform Loaded 的强制触发，则跳过
-            if (
-                self._initialized
-                and self.bot_manager
-                and self.bot_manager.get_platform_count() > 0
-                and source != "Platform Loaded"
-            ):
-                return
-
-            # 稍微延迟，确保 context 和环境稳定
-            # 针对极少数环境，2秒可能不足以让平台管理器就绪，增加到 5秒
-            await asyncio.sleep(5)
-
-            # [加固] 如果在等待期间插件已被卸载（terminate），则直接退出
-            if not self.bot_manager:
+            if self._terminating or not self.bot_manager:
                 return
 
             try:
-                # 注册 TraceID 过滤器
-                trace_filter = TraceLogFilter()
-                if not any(
-                    isinstance(f, TraceLogFilter) for f in astrbot_logger.filters
-                ):
-                    astrbot_logger.addFilter(trace_filter)
-                    astrbot_logger.info("[Trace] TraceID 日志追踪已启用")
+                # 核心配置迁移和定时任务只执行一次。
+                if not self._initialized:
+                    # 注册 TraceID 过滤器。
+                    trace_filter = TraceLogFilter()
+                    if not any(
+                        isinstance(f, TraceLogFilter) for f in astrbot_logger.filters
+                    ):
+                        astrbot_logger.addFilter(trace_filter)
+                        astrbot_logger.info("[Trace] 已启用 TraceID 日志追踪")
 
-                logger.info(f"正在执行插件初始化 (来源: {source})...")
+                    logger.info(f"开始初始化插件（来源：{source}）...")
 
-                # 0. 自动升级旧版 prompt 模板（str.format -> string.Template）并回写配置
-                try:
-                    self.config_manager.upgrade_prompt_templates()
-                except Exception as e:
-                    logger.warning(f"自动升级 prompt 模板失败: {e}")
+                    # 升级旧版 prompt 模板并回写迁移后的配置。
+                    try:
+                        self.config_manager.upgrade_prompt_templates()
+                    except Exception as e:
+                        logger.warning(f"升级 prompt 模板失败：{e}")
 
-                try:
-                    self.config_manager.migrate_legacy_configs()
-                except Exception as e:
-                    logger.warning(f"迁移旧版配置失败: {e}")
+                    try:
+                        self.config_manager.migrate_legacy_configs()
+                    except Exception as e:
+                        logger.warning(f"迁移旧版配置失败：{e}")
 
-                # 1. 尝试发现 bot 实例
+                # AstrBot 会为每个平台调用一次此回调。平台发现只检查已创建的
+                # 平台对象，可以安全重复执行；这样后加载的平台也不会被遗漏。
                 await self.bot_manager.initialize_from_config()
 
-                # 2. 注册预览路由器
+                # 模板预览处理器依赖平台实例，因此每个平台加载时都要刷新。
                 if self.template_preview_router:
                     await self.template_preview_router.ensure_handlers_registered(
                         self.context
                     )
 
-                # 3. 强制注册定时分析任务
+                if self._initialized:
+                    logger.debug(
+                        f"插件已完成初始化，已刷新平台状态（来源：{source}）。"
+                    )
+                    return
+
+                # 插件基础设施准备完成后注册定时任务。
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
 
                 self._initialized = True
                 self._discovery_run = True
-                logger.info(f"插件任务注册完成 (来源: {source})")
+                logger.info(f"插件初始化完成（来源：{source}）")
 
             except Exception as e:
-                logger.error(f"插件初始化失败: {e}", exc_info=True)
+                logger.error(f"插件初始化失败：{e}", exc_info=True)
 
     async def terminate(self):
         """插件被卸载/停用时调用，清理资源"""
