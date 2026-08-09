@@ -41,12 +41,12 @@ class ReportDispatcher:
         group_id: str,
         analysis_result: dict[str, Any],
         platform_id: str | None = None,
-    ):
-        """
-        分发分析报告
-        """
+    ) -> bool:
+        """分发分析报告，并返回至少一种格式是否实际发送成功。"""
         trace_id = TraceContext.get()
         output_formats = self.config_manager.get_output_format()
+        if isinstance(output_formats, str):
+            output_formats = [output_formats]
 
         logger.info(
             f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {', '.join(output_formats)})"
@@ -57,12 +57,30 @@ class ReportDispatcher:
             "html": self._dispatch_html,
             "text": self._dispatch_text,
         }
+        sent_any = False
         for fmt in output_formats:
             handler = dispatch_map.get(fmt)
-            if handler:
-                await handler(group_id, analysis_result, platform_id)
+            if not handler:
+                logger.warning(f"[{trace_id}] 不支持的报告格式: {fmt}")
+                continue
+            try:
+                sent_any = (
+                    bool(await handler(group_id, analysis_result, platform_id))
+                    or sent_any
+                )
+            except Exception as e:
+                logger.error(
+                    f"[{trace_id}] 群 {group_id} 的 {fmt} 报告发送异常: {e}",
+                    exc_info=True,
+                )
 
-        logger.info(f"[{trace_id}] 群 {group_id} 的报告分发完成")
+        if sent_any:
+            logger.info(
+                f"[{trace_id}] 群 {group_id} 的报告分发完成，至少一种格式发送成功"
+            )
+        else:
+            logger.error(f"[{trace_id}] 群 {group_id} 的报告分发失败，未发送任何报告")
+        return sent_any
 
     async def _dispatch_image(
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
@@ -106,13 +124,19 @@ class ReportDispatcher:
                 if self.config_manager.get_show_report_caption()
                 else ""
             )
-            sent = await self.message_sender.send_image_smart(
-                group_id, image_url, caption, platform_id
-            )
+            try:
+                sent = await self.message_sender.send_image_smart(
+                    group_id, image_url, caption, platform_id
+                )
+            except Exception as e:
+                logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
 
             # 5. 尝试上传到群文件/群相册（静默处理）
             # 无论消息发送是否成功（如超时回退），只要图片生成了，就尝试备份到群文件
-            await self._try_upload_image(group_id, image_url, platform_id)
+            try:
+                await self._try_upload_image(group_id, image_url, platform_id)
+            except Exception as e:
+                logger.warning(f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}")
 
         if sent:
             return True

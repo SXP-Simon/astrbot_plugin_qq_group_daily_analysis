@@ -217,6 +217,47 @@ def test_failed_analysis_keeps_count_and_waits_for_new_message():
     asyncio.run(scenario())
 
 
+def test_message_during_failed_analysis_does_not_immediately_retry():
+    calls = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def analyze(group_id, platform_id):
+        calls.append((group_id, platform_id))
+        started.set()
+        await release.wait()
+        return {"success": False, "reason": "timeout", "messages_count": 0}
+
+    async def scenario():
+        coordinator = IncrementalTriggerCoordinator(
+            FakeConfigManager(), FakePlugin(), analyze
+        )
+        umo = "onebot-main:GroupMessage:123456"
+        for message_id in ("1", "2", "3"):
+            await coordinator.record_message(
+                "onebot-main", "123456", umo, message_id
+            )
+        await started.wait()
+
+        await coordinator.record_message("onebot-main", "123456", umo, "4")
+        release.set()
+        await wait_for_task_completion(coordinator, umo)
+        await asyncio.sleep(0)
+
+        assert calls == [("123456", "onebot-main")]
+        assert coordinator._states[umo]["count"] == 4
+
+        await coordinator.record_message("onebot-main", "123456", umo, "5")
+        await wait_for_task_completion(coordinator, umo)
+        assert calls == [
+            ("123456", "onebot-main"),
+            ("123456", "onebot-main"),
+        ]
+        await coordinator.close()
+
+    asyncio.run(scenario())
+
+
 def test_burst_messages_are_processed_in_fixed_batches():
     calls = []
 
