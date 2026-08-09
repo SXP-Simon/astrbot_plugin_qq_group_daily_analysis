@@ -43,7 +43,7 @@ AstrBot 没有内置的“某群达到 N 条消息”回调，因此插件监听
 
 ## 批次处理与幂等
 
-每次拉取由 `incremental_safe_limit` 限制，清洗后只处理断点之后最早的 `incremental_min_messages` 条消息。这样每个 LLM 批次规模稳定，消息爆发只增加批次数，不放大单批负载。
+每次拉取复用基础设置 `max_messages`，并保证拉取量不低于 `incremental_min_messages`。清洗后只处理断点之后最早的 `incremental_min_messages` 条消息。这样每个 LLM 批次规模稳定，消息爆发只增加批次数，不放大单批负载。
 
 批次 ID 根据平台、群组和批次消息标识生成确定性哈希。同一批消息重试时会覆盖同一个批次索引项；只有批次保存成功后才推进 `incr_last_ts_{group_id}` 断点，避免持久化失败造成消息永久跳过。
 
@@ -60,7 +60,6 @@ AstrBot 没有内置的“某群达到 N 条消息”回调，因此插件监听
 | `incremental_group_list_mode` | `whitelist` | 增量群名单模式 |
 | `incremental_group_list` | `[]` | 启用增量分析的群列表 |
 | `incremental_min_messages` | `300` | 单群累计到多少条消息时触发一个批次 |
-| `incremental_safe_limit` | `2000` | 单次拉取和清洗的安全上限 |
 | `incremental_topics_per_batch` | `2` | 每批最多提取的话题数 |
 | `incremental_quotes_per_batch` | `2` | 每批最多提取的金句数 |
 | `incremental_report_immediately` | `false` | 调试时在每批完成后立即生成最终报告 |

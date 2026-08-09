@@ -798,10 +798,6 @@ class ConfigManager:
         self._ensure_group("incremental")["incremental_report_immediately"] = enabled
         self.config.save_config()
 
-    def get_incremental_safe_limit(self) -> int:
-        """获取单次增量分析的安全分析/同步上限 (Safe Count)"""
-        return self._get_group("incremental").get("incremental_safe_limit", 2000)
-
     def get_incremental_min_messages(self) -> int:
         """获取触发增量分析的最小消息数阈值"""
         value = self._get_group("incremental").get("incremental_min_messages", 300)

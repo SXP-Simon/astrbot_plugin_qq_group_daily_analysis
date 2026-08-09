@@ -378,11 +378,9 @@ class AnalysisApplicationService:
                 last_analyzed_message_ids,
             ) = await self.incremental_store.get_last_analyzed_cursor(group_id)
             days = self.config_manager.get_analysis_days()
-            # 拉取量至少覆盖一个批次，并受安全上限配置约束。
+            # 复用基础拉取上限，同时保证至少能拉取一个完整增量批次。
             min_messages = self.config_manager.get_incremental_min_messages()
-            max_count = max(
-                self.config_manager.get_incremental_safe_limit(), min_messages
-            )
+            max_count = max(self.config_manager.get_max_messages(), min_messages)
 
             # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
             raw_messages = await adapter.fetch_messages(

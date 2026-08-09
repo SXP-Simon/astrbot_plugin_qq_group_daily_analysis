@@ -334,7 +334,7 @@ def test_incremental_cursor_reads_legacy_timestamp():
     asyncio.run(scenario())
 
 
-def test_incremental_schema_has_no_time_based_trigger_settings():
+def test_incremental_schema_has_no_obsolete_batch_settings():
     schema_path = Path(__file__).parents[1] / "_conf_schema.json"
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     incremental_items = schema["incremental"]["items"]
@@ -347,6 +347,7 @@ def test_incremental_schema_has_no_time_based_trigger_settings():
         "incremental_watchdog_minutes",
         "incremental_counter_flush_seconds",
         "incremental_cooldown_seconds",
+        "incremental_safe_limit",
     }
 
     assert removed_settings.isdisjoint(incremental_items)
