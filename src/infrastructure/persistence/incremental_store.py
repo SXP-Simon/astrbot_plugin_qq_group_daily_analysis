@@ -9,8 +9,8 @@ KV 键设计：
   值: [{"batch_id": "xxx", "timestamp": 1234567890.0}, ...]
 - 批次数据: incr_batch_{group_id}_{batch_id}
   值: IncrementalBatch.to_dict()
-- 最后分析消息时间戳: incr_last_ts_{group_id}
-  值: int (epoch timestamp)
+- 最后分析消息游标: incr_last_ts_{group_id}
+  值: {"timestamp": 1234567890, "message_ids": ["..."]}
 """
 
 from typing import Any
@@ -26,7 +26,7 @@ class IncrementalStore:
     核心职责：
     - save_batch: 保存单个批次数据并更新索引
     - query_batches: 按时间窗口查询批次列表
-    - get_last_analyzed_timestamp / update_last_analyzed_timestamp: 跨批次去重
+    - get_last_analyzed_cursor / update_last_analyzed_cursor: 跨批次去重
     - cleanup_old_batches: 清理过期批次
     - get_batch_count: 获取当前批次总数（状态查询用）
     """
@@ -130,12 +130,19 @@ class IncrementalStore:
 
             # 2. 更新索引
             index = await self._get_index(group_id)
-            index.append(
-                {
-                    "batch_id": batch.batch_id,
-                    "timestamp": batch.timestamp,
-                }
+            existing_entry = next(
+                (entry for entry in index if entry.get("batch_id") == batch.batch_id),
+                None,
             )
+            if existing_entry is None:
+                index.append(
+                    {
+                        "batch_id": batch.batch_id,
+                        "timestamp": batch.timestamp,
+                    }
+                )
+            else:
+                existing_entry["timestamp"] = batch.timestamp
             await self._save_index(group_id, index)
 
             logger.debug(
@@ -213,45 +220,61 @@ class IncrementalStore:
         return batches
 
     # ================================================================
-    # 最后分析消息时间戳（跨批次去重用）
+    # 最后分析消息游标（跨批次去重用）
     # ================================================================
 
-    async def get_last_analyzed_timestamp(self, group_id: str) -> int:
-        """
-        获取指定群的最后分析消息时间戳。
+    async def get_last_analyzed_cursor(self, group_id: str) -> tuple[int, set[str]]:
+        """获取指定群的最后分析消息游标。
 
-        用于增量分析时过滤已分析过的消息。
+        旧版本仅保存整数时间戳，此处会将其兼容为不含消息 ID 的游标。
 
         Args:
-            group_id: 群组 ID
+            group_id: 群组 ID。
 
         Returns:
-            int: 最后分析消息的 epoch 时间戳，不存在则返回 0
+            最后分析时间戳，以及该时间戳下已经处理的消息 ID 集合。
         """
         key = self._last_ts_key(group_id)
         try:
             data = await self.plugin.get_kv_data(key, 0)
-            return int(data) if data else 0
+            if isinstance(data, dict):
+                timestamp = max(0, int(data.get("timestamp", 0)))
+                message_ids = data.get("message_ids", [])
+                if not isinstance(message_ids, list):
+                    message_ids = []
+                return timestamp, {str(item) for item in message_ids if str(item)}
+            return (int(data) if data else 0), set()
         except Exception as e:
-            logger.error(f"读取最后分析时间戳失败 (Key: {key}): {e}", exc_info=True)
-            return 0
+            logger.error(f"读取最后分析游标失败 (Key: {key}): {e}", exc_info=True)
+            return 0, set()
 
-    async def update_last_analyzed_timestamp(
-        self, group_id: str, timestamp: int
+    async def update_last_analyzed_cursor(
+        self,
+        group_id: str,
+        timestamp: int,
+        message_ids: set[str],
     ) -> None:
-        """
-        更新指定群的最后分析消息时间戳。
+        """更新指定群的最后分析消息游标。
 
         Args:
-            group_id: 群组 ID
-            timestamp: 最后分析消息的 epoch 时间戳
+            group_id: 群组 ID。
+            timestamp: 最后分析消息的 epoch 时间戳。
+            message_ids: 该时间戳下已经处理的消息 ID。
         """
         key = self._last_ts_key(group_id)
         try:
-            await self.plugin.put_kv_data(key, timestamp)
-            logger.debug(f"更新最后分析时间戳: 群 {group_id}, ts={timestamp}")
+            await self.plugin.put_kv_data(
+                key,
+                {
+                    "timestamp": max(0, int(timestamp)),
+                    "message_ids": sorted(
+                        str(item) for item in message_ids if str(item)
+                    ),
+                },
+            )
+            logger.debug(f"更新最后分析游标: 群 {group_id}, ts={timestamp}")
         except Exception as e:
-            logger.error(f"更新最后分析时间戳失败 (Key: {key}): {e}", exc_info=True)
+            logger.error(f"更新最后分析游标失败 (Key: {key}): {e}", exc_info=True)
             raise
 
     # ================================================================

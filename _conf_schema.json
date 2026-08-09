@@ -443,7 +443,7 @@
     "incremental": {
         "description": "增量分析设置",
         "type": "object",
-        "hint": "增量分析通过在活跃时段分步提取摘要，能显著提高分析深度和覆盖率。这里仅决定“已通过前两关的群”是走增量还是普通模式。",
+        "hint": "增量分析按目标群新增消息数量分批提取摘要，不受时间段或执行间隔限制。这里仅决定“已通过前两关的群”是走增量还是普通模式。",
         "items": {
             "incremental_group_list_mode": {
                 "type": "string",
@@ -470,18 +470,6 @@
                 "default": false,
                 "hint": "【调试功能】启用后，每次增量分析完成后都会立即生成并发送一份最终报告。仅建议在调试时开启，生产环境请保持关闭，否则会频繁打扰群友。"
             },
-            "incremental_interval_minutes": {
-                "type": "int",
-                "description": "增量分析间隔（分钟）",
-                "default": 120,
-                "hint": "每隔多少分钟执行一次增量分析。建议根据群聊实际情况处理，间隔越短分析越精细但消耗更多 Token。"
-            },
-            "incremental_max_daily_analyses": {
-                "type": "int",
-                "description": "每日最大增量分析次数",
-                "default": 8,
-                "hint": "一天内最多执行多少次增量分析。达到上限后当天不再触发新的增量分析，但仍会在报告时间生成最终报告。建议4-12次。"
-            },
             "incremental_safe_limit": {
                 "type": "int",
                 "description": "增量分析单次安全上限 (Safe Count)",
@@ -490,9 +478,9 @@
             },
             "incremental_min_messages": {
                 "type": "int",
-                "description": "增量分析最小消息数阈值",
+                "description": "增量分析每批消息数",
                 "default": 300,
-                "hint": "当自上次分析以来的新消息数低于此阈值时，跳过本次增量分析以节省 Token。建议设置较大值，因为当获取到的消息不够时，最晚消息的游标不会更新，等消息累计足够后的增量分析会进行分析。"
+                "hint": "目标群每累计到此消息数就触发一个固定规模的增量分析批次；不足时持续等待，消息爆发时自动拆分为多个批次。建议根据模型上下文和群活跃度设置。"
             },
             "incremental_topics_per_batch": {
                 "type": "int",
@@ -505,24 +493,6 @@
                 "description": "单次增量提取金句数",
                 "default": 2,
                 "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议1-2。"
-            },
-            "incremental_active_start_hour": {
-                "type": "int",
-                "description": "增量分析活跃起始时段",
-                "default": 8,
-                "hint": "增量分析的活跃时段起始小时（24小时制）。如果目标群聊凌晨也活跃，建议设定的很早；在活跃时段之外不会触发增量分析，避免凌晨等低活跃时段浪费分析配额."
-            },
-            "incremental_active_end_hour": {
-                "type": "int",
-                "description": "增量分析活跃结束时段",
-                "default": 23,
-                "hint": "增量分析的活跃时段结束小时（24小时制）。超过此时段后不再触发增量分析。"
-            },
-            "incremental_stagger_seconds": {
-                "type": "int",
-                "description": "多群增量分析交错间隔（秒）",
-                "default": 2,
-                "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。"
             },
             "incremental_fallback_enabled": {
                 "type": "bool",

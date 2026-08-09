@@ -60,7 +60,10 @@ def test_initialization_has_no_fixed_delay_and_preserves_platform_refresh():
             migrate_legacy_configs=Mock(),
         ),
         template_preview_router=SimpleNamespace(ensure_handlers_registered=AsyncMock()),
-        auto_scheduler=SimpleNamespace(schedule_jobs=Mock()),
+        auto_scheduler=SimpleNamespace(
+            schedule_jobs=Mock(),
+            start_incremental_trigger=AsyncMock(),
+        ),
         context=object(),
     )
 
@@ -77,5 +80,6 @@ def test_initialization_has_no_fixed_delay_and_preserves_platform_refresh():
     plugin.config_manager.upgrade_prompt_templates.assert_called_once_with()
     plugin.config_manager.migrate_legacy_configs.assert_called_once_with()
     plugin.auto_scheduler.schedule_jobs.assert_called_once_with(plugin.context)
+    plugin.auto_scheduler.start_incremental_trigger.assert_awaited_once_with()
     assert plugin._initialized is True
     assert plugin._discovery_run is True
