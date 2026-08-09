@@ -234,6 +234,7 @@ class GroupDailyAnalysis(Star):
                 # 插件基础设施准备完成后注册定时任务。
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
+                    await self.auto_scheduler.start_incremental_trigger()
 
                 self._initialized = True
                 self._discovery_run = True
@@ -268,7 +269,7 @@ class GroupDailyAnalysis(Star):
             # 2. 停止各个组件 (顺序：先调度器，后底层服务)
             if self.auto_scheduler:
                 logger.debug("正在停止自动调度器...")
-                self.auto_scheduler.unschedule_jobs(self.context)
+                await self.auto_scheduler.shutdown(self.context)
 
             if self.template_preview_router:
                 await self.template_preview_router.unregister_handlers()
@@ -286,7 +287,23 @@ class GroupDailyAnalysis(Star):
         except Exception as e:
             logger.error(f"插件资源清理失败: {e}")
 
-    # ==================== Telegram 消息拦截器 ====================
+    # ==================== 群消息增量计数与事件缓存 ====================
+
+    @filter.event_message_type(
+        filter.EventMessageType.GROUP_MESSAGE,
+        priority=100,
+    )
+    async def count_incremental_group_message(self, event: AstrMessageEvent):
+        """记录目标群消息，达到配置阈值后触发增量分析。
+
+        Args:
+            event: AstrBot 群消息事件。
+
+        Returns:
+            None: 计数完成后继续消息流水线。
+        """
+        if self.auto_scheduler:
+            await self.auto_scheduler.record_incremental_message(event)
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
@@ -1026,14 +1043,8 @@ class GroupDailyAnalysis(Star):
             incremental_enabled = self.config_manager.get_incremental_enabled()
             incremental_status_text = "未启用"
             if incremental_enabled:
-                interval = self.config_manager.get_incremental_interval_minutes()
-                max_daily = self.config_manager.get_incremental_max_daily_analyses()
-                active_start = self.config_manager.get_incremental_active_start_hour()
-                active_end = self.config_manager.get_incremental_active_end_hour()
-                incremental_status_text = (
-                    f"已启用 (间隔{interval}分钟, 最多{max_daily}次/天, "
-                    f"活跃时段{active_start}:00-{active_end}:00)"
-                )
+                batch_messages = self.config_manager.get_incremental_min_messages()
+                incremental_status_text = f"已启用 (每 {batch_messages} 条消息触发)"
 
         debug_report = self.config_manager.get_incremental_report_immediately()
         debug_status = "✅ 开启" if debug_report else "❌ 关闭"

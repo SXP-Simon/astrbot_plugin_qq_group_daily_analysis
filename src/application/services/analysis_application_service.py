@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
 import time as time_mod
 import weakref
 from collections import defaultdict
@@ -317,12 +318,14 @@ class AnalysisApplicationService:
     # ----------------------------------------------------------------
 
     async def execute_incremental_analysis(
-        self, group_id: str, platform_id: str | None = None
+        self,
+        group_id: str,
+        platform_id: str | None = None,
     ) -> dict[str, Any]:
         """
         执行一次增量分析用例（滑动窗口批次架构）。
 
-        与每日分析不同，增量分析每次仅处理最近一段时间的消息，
+        与每日分析不同，增量分析每次仅处理消息阈值规定的固定批次，
         提取少量话题和金句，将结果作为独立批次存储到 KV。
         不生成用户称号（留到最终报告时再做），不生成报告。
 
@@ -330,7 +333,7 @@ class AnalysisApplicationService:
         1. 获取适配器
         2. 拉取消息（使用增量配置的 max_messages）
         3. 清理消息
-        4. 按时间戳去重：过滤已分析过的消息
+        4. 按时间戳和消息 ID 去重：过滤已分析过的消息
         5. 检查最小消息阈值
         6. 计算基础统计（小时分布、用户活跃、表情）
         7. LLM 增量分析（仅话题 + 金句）
@@ -370,12 +373,16 @@ class AnalysisApplicationService:
                     logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             # 2. 拉取消息，获取进度并确定拉取量
-            last_analyzed_ts = await self.incremental_store.get_last_analyzed_timestamp(
-                group_id
-            )
+            (
+                last_analyzed_ts,
+                last_analyzed_message_ids,
+            ) = await self.incremental_store.get_last_analyzed_cursor(group_id)
             days = self.config_manager.get_analysis_days()
-            # 在增量模式下，拉取上限由安全限制 (Safe Count) 统一控制，确保能追平进度且不溢出
-            max_count = self.config_manager.get_incremental_safe_limit()
+            # 拉取量至少覆盖一个批次，并受安全上限配置约束。
+            min_messages = self.config_manager.get_incremental_min_messages()
+            max_count = max(
+                self.config_manager.get_incremental_safe_limit(), min_messages
+            )
 
             # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
             raw_messages = await adapter.fetch_messages(
@@ -387,7 +394,7 @@ class AnalysisApplicationService:
 
             if not raw_messages:
                 logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
-                return {"success": False, "reason": "no_messages"}
+                return {"success": False, "reason": "no_messages", "messages_count": 0}
 
             # 3. 清理消息
             from ...domain.services.message_cleaner_service import MessageCleanerService
@@ -405,20 +412,32 @@ class AnalysisApplicationService:
                 raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
             )
 
-            # 5. 二次去重，确保只保留断点之后的真正新消息
+            # 5. 复合游标去重，避免同一秒内分批时遗漏消息。
             if last_analyzed_ts > 0:
                 unified_messages = [
-                    msg for msg in unified_messages if msg.timestamp > last_analyzed_ts
+                    msg
+                    for msg in unified_messages
+                    if msg.timestamp > last_analyzed_ts
+                    or (
+                        msg.timestamp == last_analyzed_ts
+                        and msg.message_id not in last_analyzed_message_ids
+                    )
                 ]
 
-            # 5. 检查最小消息阈值
-            min_messages = self.config_manager.get_incremental_min_messages()
+            # 固定每批消息规模，爆发消息会拆成多个连续批次，避免 LLM 负载波动。
             if len(unified_messages) < min_messages:
                 logger.info(
                     f"群 {group_id} 增量分析：新消息数 ({len(unified_messages)}) "
                     f"未达到阈值 ({min_messages})，跳过本次分析"
                 )
-                return {"success": False, "reason": "below_threshold"}
+                return {
+                    "success": False,
+                    "reason": "below_threshold",
+                    "messages_count": len(unified_messages),
+                }
+            unified_messages.sort(key=lambda msg: (msg.timestamp, msg.message_id))
+            if len(unified_messages) > min_messages:
+                unified_messages = unified_messages[:min_messages]
 
             # 6. 计算基础统计
             statistics = await asyncio.to_thread(
@@ -552,8 +571,14 @@ class AnalysisApplicationService:
             characters_count = sum(msg.get_text_length() for msg in unified_messages)
 
             # 构建批次对象
+            batch_identity = "\n".join(
+                f"{msg.timestamp}:{msg.message_id}" for msg in unified_messages
+            )
             batch = IncrementalBatch(
                 group_id=group_id,
+                batch_id=hashlib.sha256(
+                    f"{platform_id or 'default'}:{group_id}:{batch_identity}".encode()
+                ).hexdigest(),
                 timestamp=time_mod.time(),
                 messages_count=len(unified_messages),
                 characters_count=characters_count,
@@ -570,7 +595,12 @@ class AnalysisApplicationService:
             )
 
             # 9. 保存批次并更新最后分析时间戳
-            await self.incremental_store.save_batch(batch)
+            if not await self.incremental_store.save_batch(batch):
+                return {
+                    "success": False,
+                    "reason": "batch_persistence_failed",
+                    "messages_count": 0,
+                }
 
             # 安全更新水位线：取消息最大时间戳，但不能超过当前时间+1分钟，防止未来时间戳毒化导致后续分析死锁
             import time
@@ -578,8 +608,20 @@ class AnalysisApplicationService:
             safe_now = int(time.time()) + 60
             safe_ts = min(last_message_timestamp, safe_now)
 
-            await self.incremental_store.update_last_analyzed_timestamp(
-                group_id, safe_ts
+            analyzed_ids_at_boundary = {
+                msg.message_id
+                for msg in unified_messages
+                if msg.timestamp == last_message_timestamp and msg.message_id
+            }
+            if last_message_timestamp == last_analyzed_ts:
+                analyzed_ids_at_boundary.update(last_analyzed_message_ids)
+            if safe_ts != last_message_timestamp:
+                analyzed_ids_at_boundary.clear()
+
+            await self.incremental_store.update_last_analyzed_cursor(
+                group_id,
+                safe_ts,
+                analyzed_ids_at_boundary,
             )
 
             logger.info(

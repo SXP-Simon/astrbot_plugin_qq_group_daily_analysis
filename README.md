@@ -288,11 +288,11 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 **核心特性：**
 - **滑动窗口**：不再受限于自然日，分析窗口随时间滑动（如过去 24 小时），确保任何时候生成的报告都覆盖完整的时间段。
-- **分批处理**：定时（如每 2 小时）执行一次小批量分析，减轻 LLM 瞬时压力。
+- **按量分批**：目标群每累计到配置的消息数就执行一个固定规模批次，平滑 LLM 负载。
 - **自动去重**：智能识别重复话题和金句，合并生成最终报告。
 
 **启用方法：**
-- 通过 `incremental_group_list_mode + incremental_group_list` 指定哪些群走增量模式，并根据需要调整分析间隔 (`incremental_interval_minutes`) 和消息阈值。
+- 通过 `incremental_group_list_mode + incremental_group_list` 指定哪些群走增量模式，并使用 `incremental_min_messages` 设置每批触发消息数。
 
 ## HTML 报告与自建外链
 
