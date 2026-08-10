@@ -96,6 +96,8 @@ class IncrementalTriggerCoordinator:
             return
 
         tasks_to_cancel: list[asyncio.Task] = []
+        removed_state_keys: list[str] = []
+        cancelled_state_keys: list[str] = []
         removed_count = 0
         is_initial_snapshot = self._target_config_signature is None
         async with self._state_lock:
@@ -107,12 +109,14 @@ class IncrementalTriggerCoordinator:
                     self._state_versions.get(state_key, 0) + 1
                 )
                 removed_count += 1
+                removed_state_keys.append(state_key)
                 task = self._analysis_tasks.get(state_key)
                 if task and state_key not in self._running_state_keys:
                     # 尚未进入分析服务的任务可以安全取消。先移出任务表，避免
                     # 任务在首次执行前被取消而没有机会运行 finally，留下幽灵任务。
                     self._analysis_tasks.pop(state_key, None)
                     tasks_to_cancel.append(task)
+                    cancelled_state_keys.append(state_key)
             self._target_config_signature = config_signature
             active_task_count = len(self._analysis_tasks)
 
@@ -132,6 +136,12 @@ class IncrementalTriggerCoordinator:
                 removed_count,
                 len(tasks_to_cancel),
                 active_task_count,
+            )
+        if removed_state_keys:
+            logger.debug(
+                "增量名单变更明细：移出群=%s，取消未开始任务=%s",
+                ", ".join(sorted(removed_state_keys)),
+                ", ".join(sorted(cancelled_state_keys)) or "无",
             )
 
     async def _ensure_loaded(self) -> None:
@@ -162,10 +172,15 @@ class IncrementalTriggerCoordinator:
                     }
                     self._state_versions[str(key)] = 1
             self._loaded = True
+            state_details = ", ".join(
+                f"{state_key}={int(state['count'])}"
+                for state_key, state in sorted(self._states.items())
+            )
             logger.debug(
-                "增量计数状态恢复完成: 群数=%s, 待处理消息=%s",
+                "增量计数状态恢复完成: 群数=%s, 待处理消息=%s, 群计数=[%s]",
                 len(self._states),
                 sum(int(state.get("count", 0)) for state in self._states.values()),
+                state_details or "无",
             )
 
     def _schedule_flush(self) -> None:
@@ -269,14 +284,23 @@ class IncrementalTriggerCoordinator:
                 }
                 self._states[state_key] = state
             state["count"] = int(state["count"]) + 1
-            should_trigger = (
-                int(state["count"])
-                >= self.config_manager.get_incremental_min_messages()
-            )
+            pending_count = int(state["count"])
+            threshold = self.config_manager.get_incremental_min_messages()
+            should_trigger = pending_count >= threshold
 
         self._schedule_flush()
         if should_trigger:
             self._schedule_analysis(state_key)
+        logger.debug(
+            "增量消息 Hook 已记录: platform=%s, group=%s, pending=%s, "
+            "threshold=%s, 已安排任务=%s, 当前活跃群任务=%s",
+            platform_id,
+            group_id,
+            pending_count,
+            threshold,
+            state_key in self._analysis_tasks,
+            len(self._analysis_tasks),
+        )
         return True
 
     def _schedule_analysis(self, state_key: str) -> None:
@@ -451,6 +475,8 @@ class IncrementalTriggerCoordinator:
             len(ready_keys),
             len(self._analysis_tasks),
         )
+        if ready_keys:
+            logger.debug("增量状态恢复任务明细：群=%s", ", ".join(sorted(ready_keys)))
         return len(ready_keys)
 
     async def close(self) -> None:
