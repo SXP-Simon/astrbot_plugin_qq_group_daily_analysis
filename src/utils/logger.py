@@ -22,21 +22,27 @@ class PluginLogger:
         return f"{self.prefix} {msg}"
 
     def info(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.info(self._format_msg(msg), *args, **kwargs)
 
     def error(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.error(self._format_msg(msg), *args, **kwargs)
 
     def warning(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.warning(self._format_msg(msg), *args, **kwargs)
 
     def debug(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.debug(self._format_msg(msg), *args, **kwargs)
 
     def critical(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.critical(self._format_msg(msg), *args, **kwargs)
 
     def exception(self, msg: str, *args, **kwargs):
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         astrbot_logger.exception(self._format_msg(msg), *args, **kwargs)
 
 
