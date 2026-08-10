@@ -9,6 +9,7 @@ from ...utils.logger import logger
 
 _QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
 _QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")
+_LOCAL_HISTORY_MAX_MESSAGES = 10000
 
 
 class MessageProcessingService:
@@ -34,7 +35,7 @@ class MessageProcessingService:
         self._inflight_event_ids: set[str] = set()
         self._seen_event_ids_limit = 4096
 
-    async def process_message(self, event: AstrMessageEvent) -> None:
+    async def process_message(self, event: AstrMessageEvent) -> bool:
         """
         处理并在历史记录中存储消息。
          被 main.py 的 Telegram 和 QQ 官方消息拦截器共同调用。
@@ -84,7 +85,7 @@ class MessageProcessingService:
             reserved_event_id = self._reserve_event_id(event_message_id)
             if not reserved_event_id:
                 logger.debug("[QQOfficial] 跳过重复消息事件: %s", event_message_id)
-                return
+                return False
         history_content = {
             "type": "user",
             "message": message_parts,
@@ -104,6 +105,7 @@ class MessageProcessingService:
                 content=history_content,
                 sender_id=sender_id,
                 sender_name=sender_name,
+                max_messages=_LOCAL_HISTORY_MAX_MESSAGES,
             )
         except BaseException:
             if reserved_event_id:
@@ -132,6 +134,7 @@ class MessageProcessingService:
         logger.debug(
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
+        return True
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从消息事件中安全获取群组 ID"""

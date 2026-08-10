@@ -618,7 +618,7 @@ class AutoScheduler:
             if self._terminating:
                 return
 
-            logger.info(
+            logger.debug(
                 f"开始为群 {group_id} 执行增量分析 "
                 f"(Platform: {target_platform_id or 'Auto'})"
             )
@@ -637,12 +637,12 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = result.get("reason", "unknown")
-                logger.info(f"群 {group_id} 增量分析未完成: reason={reason}")
+                logger.debug(f"群 {group_id} 增量分析未完成: reason={reason}")
                 return result
 
             # 增量分析只累积数据，不发送报告
             batch_summary = result.get("batch_summary", {})
-            logger.info(
+            logger.debug(
                 f"群 {group_id} 增量分析调度回调完成: "
                 f"消息数={result.get('messages_count', 0)}, "
                 f"话题={batch_summary.get('topics_count', 0)}, "
@@ -839,7 +839,7 @@ class AutoScheduler:
                         group_id, before_ts
                     )
                     if cleaned > 0:
-                        logger.info(
+                        logger.debug(
                             f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"
                         )
             except Exception as cleanup_err:

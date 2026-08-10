@@ -197,7 +197,7 @@ class IncrementalTriggerCoordinator:
         if self._closed or state_key in self._analysis_tasks:
             return
         state = self._states.get(state_key, {})
-        logger.info(
+        logger.debug(
             "增量消息计数达到阈值，安排分析任务: platform=%s, group=%s, pending=%s, threshold=%s",
             state.get("platform_id", ""),
             state.get("group_id", ""),
@@ -257,7 +257,7 @@ class IncrementalTriggerCoordinator:
                 allow_continuation = bool(result.get("success") and consumed > 0)
                 remaining_count = int(state.get("count", 0))
 
-            logger.info(
+            logger.debug(
                 "增量分析计数结算: platform=%s, group=%s, success=%s, reason=%s, "
                 "pending_at_start=%s, new_arrivals=%s, consumed=%s, remaining=%s, "
                 "allow_continuation=%s, duration=%.2fs",
@@ -292,7 +292,7 @@ class IncrementalTriggerCoordinator:
                 and allow_continuation
             )
         if should_continue:
-            logger.info(
+            logger.debug(
                 "增量分析继续处理待办批次: state=%s, pending=%s, threshold=%s",
                 state_key,
                 current_count,

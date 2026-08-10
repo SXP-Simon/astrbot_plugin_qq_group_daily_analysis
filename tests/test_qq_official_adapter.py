@@ -54,6 +54,26 @@ def test_avatar_url_uses_appid_and_member_openid():
     )
 
 
+def test_event_profile_is_preferred_over_avatar_url_fallback():
+    adapter = make_adapter()
+    adapter.remember_user_profile(
+        "A1B2C3_OPENID",
+        nickname="Alice",
+        avatar_url="https://cdn.example/avatar.png",
+    )
+    adapter.remember_user_profile(
+        "A1B2C3_OPENID",
+        nickname="unknown",
+        avatar_url="not-a-url",
+    )
+
+    member = asyncio.run(adapter.get_member_info("GROUP_OPENID", "A1B2C3_OPENID"))
+
+    assert member is not None
+    assert member.nickname == "Alice"
+    assert member.avatar_url == "https://cdn.example/avatar.png"
+
+
 def test_local_history_is_deduplicated_filtered_and_sorted():
     adapter = make_adapter()
     adapter.set_context(

@@ -653,7 +653,7 @@ class AnalysisApplicationService:
                 analyzed_ids_at_boundary,
             )
 
-            logger.info(
+            logger.debug(
                 f"群 {group_id} 增量批次完成: "
                 f"platform={getattr(adapter, 'platform_id', platform_id) or 'default'}, "
                 f"batch={batch.batch_id[:8]}, 消息={len(unified_messages)}, "

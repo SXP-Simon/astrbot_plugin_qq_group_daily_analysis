@@ -48,6 +48,7 @@ class QQOfficialAdapter(PlatformAdapter):
         self.bot_self_ids = [str(item) for item in ids if item]
         self.appid = self._resolve_appid(config or {})
         self._markdown_msg_seq = random.randint(1, 10000)
+        self._member_profiles: dict[str, dict[str, str]] = {}
 
     @property
     def platform_id(self) -> str:
@@ -84,6 +85,31 @@ class QQOfficialAdapter(PlatformAdapter):
 
     def set_context(self, context: Context) -> None:
         self._context = context
+
+    def remember_user_profile(
+        self, user_id: str, nickname: str = "", avatar_url: str = ""
+    ) -> None:
+        """缓存 QQ 官方消息事件提供的用户资料。
+
+        Args:
+            user_id: QQ 成员 OpenID。
+            nickname: 事件提供的显示名称。
+            avatar_url: 事件提供的头像地址。
+        """
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return
+
+        profile = self._member_profiles.setdefault(normalized_user_id, {})
+        normalized_nickname = str(nickname or "").strip()
+        if not self._is_placeholder_sender_name(
+            normalized_nickname, normalized_user_id
+        ):
+            profile["nickname"] = normalized_nickname
+
+        normalized_avatar_url = str(avatar_url or "").strip()
+        if normalized_avatar_url.startswith(("https://", "http://")):
+            profile["avatar_url"] = normalized_avatar_url
 
     def _init_capabilities(self) -> PlatformCapabilities:
         return QQ_OFFICIAL_CAPABILITIES
@@ -497,18 +523,26 @@ class QQOfficialAdapter(PlatformAdapter):
     async def get_member_info(
         self, group_id: str, user_id: str
     ) -> UnifiedMember | None:
+        profile = self._member_profiles.get(str(user_id), {})
         return UnifiedMember(
             user_id=str(user_id),
-            nickname="",
+            nickname=profile.get("nickname", ""),
             avatar_url=await self.get_user_avatar_url(str(user_id)),
         )
 
     async def get_user_avatar_url(self, user_id: str, size: int = 100) -> str | None:
-        if not self.appid or not user_id:
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id:
+            return None
+        profile = self._member_profiles.get(normalized_user_id, {})
+        remembered_avatar_url = profile.get("avatar_url", "")
+        if remembered_avatar_url:
+            return remembered_avatar_url
+        if not self.appid:
             return None
         return self.AVATAR_TEMPLATE.format(
             appid=quote(self.appid, safe=""),
-            member_openid=quote(str(user_id), safe=""),
+            member_openid=quote(normalized_user_id, safe=""),
         )
 
     async def get_user_avatar_data(self, user_id: str, size: int = 100) -> str | None:

@@ -11,9 +11,11 @@ import html
 import json
 import os
 import re
+import time
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -22,6 +24,7 @@ import aiohttp
 import ulid
 from diskcache import Cache
 from markupsafe import Markup
+from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
 from ...utils.logger import logger
@@ -32,6 +35,8 @@ from .templates import HTMLTemplates
 
 MAX_CONCURRENT_DOWNLOADS = 10
 AVATAR_CACHE_EXPIRE_TIME = 259200
+AVATAR_FAILURE_CACHE_EXPIRE_TIME = 60
+AVATAR_MAX_EDGE_LENGTH = 96
 TRANSPARENT_IMAGE_DATA_URI = (
     "data:image/svg+xml;base64,"
     "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg=="
@@ -122,6 +127,8 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+        self._avatar_session_lock = asyncio.Lock()
+        self._avatar_failure_cache: dict[str, float] = {}
         self._profile_asset_manifest = self._load_profile_asset_manifest()
 
     def _load_profile_asset_manifest(self) -> dict[str, dict]:
@@ -389,7 +396,7 @@ class ReportGenerator(IReportGenerator):
                 logger.error("图片报告HTML渲染失败：返回空内容")
                 return None, None
 
-            logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+            logger.debug(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
 
             # 从配置中获取两轮渲染策略
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
@@ -500,11 +507,6 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
             return None, html_content
-        finally:
-            # 清理本次运行的 session 和缓存
-            if self._avatar_session:
-                await self._avatar_session.close()
-                self._avatar_session = None
 
     async def generate_html_report(
         self,
@@ -562,7 +564,7 @@ class ReportGenerator(IReportGenerator):
                 hide_user_names=hide_user_names,
                 allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
-            logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
+            logger.debug(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
             # 生成 HTML 内容（使用 Jinja2 渲染器，尝试 html_template.html，失败则回退到 image_template.html）
             html_content = None
@@ -595,7 +597,7 @@ class ReportGenerator(IReportGenerator):
                 logger.error("HTML报告渲染失败：返回空内容")
                 return None, None
 
-            logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
+            logger.debug(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
             # 保存 HTML 文件
             await asyncio.to_thread(
@@ -815,6 +817,57 @@ class ReportGenerator(IReportGenerator):
         avatar_reuse_registry: dict[str, str] = {}
         avatar_reuse_aliases: dict[str, str] = {}
 
+        # 仅预取本次报告可见区域实际引用的头像。
+        avatar_user_ids: set[str] = set()
+        known_user_ids = {
+            str(user_id).strip()
+            for user_id in (user_analysis or {})
+            if str(user_id).strip()
+        }
+        max_user_titles = self.config_manager.get_max_user_titles()
+        max_golden_quotes = self.config_manager.get_max_golden_quotes()
+        for title in user_titles[:max_user_titles]:
+            user_id = str(getattr(title, "user_id", "") or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
+            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        mention_sources = []
+        for topic in topics[:max_topics]:
+            if hide_user_names:
+                avatar_user_ids.update(
+                    str(user_id).strip()
+                    for user_id in (getattr(topic, "contributor_ids", []) or [])
+                    if str(user_id).strip()
+                )
+            mention_sources.append(str(getattr(topic, "detail", "") or ""))
+        mention_sources.extend(
+            str(getattr(golden_quote, "reason", "") or "")
+            for golden_quote in stats.golden_quotes[:max_golden_quotes]
+        )
+        if hide_user_names:
+            mention_sources.extend(
+                str(getattr(title, "reason", "") or "")
+                for title in user_titles[:max_user_titles]
+            )
+        for source in mention_sources:
+            avatar_user_ids.update(
+                matched_user_id
+                for matched_user_id in re.findall(r"\[([A-Za-z0-9_-]{1,128})\]", source)
+                if matched_user_id in known_user_ids
+            )
+        if avatar_user_ids:
+            await asyncio.gather(
+                *(
+                    self._get_user_avatar(
+                        user_id, avatar_url_getter, avatar_cache_namespace
+                    )
+                    for user_id in avatar_user_ids
+                )
+            )
+
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
             processed_detail = await self._render_mentions(
@@ -863,10 +916,9 @@ class ReportGenerator(IReportGenerator):
         topics_html = self.html_templates.render_template(
             "topic_item.html", topics=topics_list, **common_context
         )
-        logger.info(f"话题HTML生成完成，长度: {len(topics_html)}")
+        logger.debug(f"话题HTML生成完成，长度: {len(topics_html)}")
 
         # 使用Jinja2模板构建用户称号HTML（批量渲染，包含头像）
-        max_user_titles = self.config_manager.get_max_user_titles()
         titles_list = []
         profile_mode = self.config_manager.get_profile_display_mode()
         profile_mapping_overrides = self._get_profile_mapping_overrides()
@@ -911,10 +963,9 @@ class ReportGenerator(IReportGenerator):
         titles_html = self.html_templates.render_template(
             "user_title_item.html", titles=titles_list, **common_context
         )
-        logger.info(f"用户称号HTML生成完成，长度: {len(titles_html)}")
+        logger.debug(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
         # 使用Jinja2模板构建金句HTML（批量渲染）
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
             quote_user_id = str(golden_quote.user_id) if golden_quote.user_id else None
@@ -962,7 +1013,7 @@ class ReportGenerator(IReportGenerator):
         quotes_html = self.html_templates.render_template(
             "quote_item.html", quotes=quotes_list, **common_context
         )
-        logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
+        logger.debug(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
         # 生成活跃度可视化HTML
         chart_data = self.activity_visualizer.get_hourly_chart_data(
@@ -971,7 +1022,7 @@ class ReportGenerator(IReportGenerator):
         hourly_chart_html = self.html_templates.render_template(
             chart_template, chart_data=chart_data, **common_context
         )
-        logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
+        logger.debug(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
         # 生成聊天质量锐评HTML
         chat_quality_html = ""
@@ -1029,7 +1080,7 @@ class ReportGenerator(IReportGenerator):
             chat_quality_html = self.html_templates.render_template(
                 "chat_quality_item.html", **review_data, **common_context
             )
-            logger.info(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
+            logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
         # 准备最终渲染数据
         render_data = {
@@ -1062,7 +1113,7 @@ class ReportGenerator(IReportGenerator):
             "avatar_reuse_aliases": avatar_reuse_aliases,
         }
 
-        logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
+        logger.debug(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
         return render_data
 
     async def _render_avatar_only_ids(
@@ -1421,7 +1472,7 @@ class ReportGenerator(IReportGenerator):
     ) -> str:
         """
         获取用户头像的 Base64 Data URI。
-        使用磁盘缓存，支持跨任务复用。获取失败时不缓存结果，以便后续请求重试。
+        使用磁盘缓存，支持跨任务复用。失败结果短时缓存，避免同一报告重复请求。
         """
         cache_key = self._get_avatar_cache_key(avatar_id, avatar_cache_namespace)
         # 1. 检查缓存 (仅包含成功的头像数据)
@@ -1431,22 +1482,65 @@ class ReportGenerator(IReportGenerator):
                 return data
             return str(data)
 
+        failure_cache = getattr(self, "_avatar_failure_cache", {})
+        failed_until = failure_cache.get(cache_key, 0)
+        if failed_until > time.monotonic():
+            return self._get_default_avatar_base64()
+        failure_cache.pop(cache_key, None)
+
         # 2. 尝试获取头像字节流
         avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
 
         if not avatar_bytes:
-            # 获取失败时返回默认头像，但不存入缓存，以便下次重试
-            logger.warning(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
+            failure_cache[cache_key] = (
+                time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
+            )
+            self._avatar_failure_cache = failure_cache
+            logger.debug(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
             return self._get_default_avatar_base64()
 
         # 3. 获取成功：转换并缓存
-        avatar = self._b64_with_mime(avatar_bytes)
+        avatar = self._b64_with_mime(self._resize_avatar_bytes(avatar_bytes))
         if avatar:
             self._avatar_cache.set(cache_key, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            failure_cache.pop(cache_key, None)
             return avatar
 
-        # 最终兜底
+        failure_cache[cache_key] = time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
+        self._avatar_failure_cache = failure_cache
         return self._get_default_avatar_base64()
+
+    @staticmethod
+    def _resize_avatar_bytes(payload: bytes) -> bytes:
+        """缩放头像后再嵌入 HTML，降低渲染请求体积。
+
+        Args:
+            payload: 下载得到的头像二进制数据。
+
+        Returns:
+            压缩后的头像；解码失败时返回原始数据。
+        """
+        try:
+            with Image.open(BytesIO(payload)) as image:
+                image.load()
+                resampling = getattr(Image, "Resampling", Image)
+                image.thumbnail(
+                    (AVATAR_MAX_EDGE_LENGTH, AVATAR_MAX_EDGE_LENGTH),
+                    resampling.LANCZOS,
+                )
+                output = BytesIO()
+                if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+                    image.convert("RGBA").save(output, format="PNG", optimize=True)
+                else:
+                    image.convert("RGB").save(
+                        output,
+                        format="JPEG",
+                        quality=85,
+                        optimize=True,
+                    )
+                return output.getvalue()
+        except (OSError, UnidentifiedImageError):
+            return payload
 
     def _b64_with_mime(self, _bytes: bytes) -> str | None:
         """将字节数据转换为 Base64 Data URI，并自动识别 MIME 类型。"""
@@ -1473,10 +1567,15 @@ class ReportGenerator(IReportGenerator):
     ) -> bytes | None:
         """核心头像获取逻辑"""
         file_content = None
-        if not self._avatar_session:
-            self._avatar_session = aiohttp.ClientSession(
-                trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
-            )
+        avatar_session_lock = getattr(self, "_avatar_session_lock", None)
+        if avatar_session_lock is None:
+            avatar_session_lock = asyncio.Lock()
+            self._avatar_session_lock = avatar_session_lock
+        async with avatar_session_lock:
+            if not self._avatar_session or self._avatar_session.closed:
+                self._avatar_session = aiohttp.ClientSession(
+                    trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
+                )
         async with self._avatar_session_concurrent_semaphore:
             avatar_url = None
             if avatar_url_getter:
@@ -1494,10 +1593,11 @@ class ReportGenerator(IReportGenerator):
                                 return base64.b64decode(parts[1])
                         else:
                             logger.warning(
-                                f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
+                                "自定义头像地址获取器返回了非 HTTP 地址: "
+                                f"{result[:50]}..."
                             )
                 except Exception as e:
-                    logger.warning(f"使用 custom avatar_url_getter 获取头像失败: {e}")
+                    logger.warning(f"使用自定义头像地址获取器失败: {e}")
 
             if not avatar_url:
                 if (

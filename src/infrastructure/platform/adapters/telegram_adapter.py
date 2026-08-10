@@ -211,6 +211,7 @@ class TelegramAdapter(PlatformAdapter):
             current_page = 1
 
             messages: list[UnifiedMessage] = []
+            seen_message_ids: set[str] = set()
             sender_name_cache: dict[str, str] = {}
             total_records_loaded = 0
 
@@ -273,6 +274,9 @@ class TelegramAdapter(PlatformAdapter):
                     msg = await self._fix_sender_name_if_needed(
                         group_id, msg, sender_name_cache
                     )
+                    if msg.message_id in seen_message_ids:
+                        continue
+                    seen_message_ids.add(msg.message_id)
                     messages.append(msg)
 
                 # 当前页完整处理后已足够，停止继续翻更旧页面。
