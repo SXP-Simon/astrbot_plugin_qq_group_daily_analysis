@@ -1037,6 +1037,7 @@ class GroupDailyAnalysis(Star):
 
         elif action == "reload":
             self.auto_scheduler.schedule_jobs(self.context)
+            await self._refresh_incremental_target_states()
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
 
         elif action == "test":
@@ -1192,8 +1193,9 @@ class GroupDailyAnalysis(Star):
             if not self.config_manager.is_group_allowed(target_id):
                 glist.append(target_id)
                 self.config_manager.set_group_list(glist)
-                yield event.plain_result(f"✅ 已将当前群加入白名单\nID: {target_id}")
                 self.auto_scheduler.schedule_jobs(self.context)
+                await self._refresh_incremental_target_states()
+                yield event.plain_result(f"✅ 已将当前群加入白名单\nID: {target_id}")
             else:
                 yield event.plain_result("ℹ️ 当前群已在白名单中")
         elif mode == "blacklist":
@@ -1208,8 +1210,9 @@ class GroupDailyAnalysis(Star):
 
             if removed:
                 self.config_manager.set_group_list(glist)
-                yield event.plain_result("✅ 已将当前群从黑名单移除")
                 self.auto_scheduler.schedule_jobs(self.context)
+                await self._refresh_incremental_target_states()
+                yield event.plain_result("✅ 已将当前群从黑名单移除")
             else:
                 yield event.plain_result("ℹ️ 当前群不在黑名单中")
         else:
@@ -1232,8 +1235,9 @@ class GroupDailyAnalysis(Star):
 
             if removed:
                 self.config_manager.set_group_list(glist)
-                yield event.plain_result("✅ 已将当前群从白名单移除")
                 self.auto_scheduler.schedule_jobs(self.context)
+                await self._refresh_incremental_target_states()
+                yield event.plain_result("✅ 已将当前群从白名单移除")
             else:
                 yield event.plain_result("ℹ️ 当前群不在白名单中")
         elif mode == "blacklist":
@@ -1241,9 +1245,16 @@ class GroupDailyAnalysis(Star):
             if self.config_manager.is_group_allowed(target_id):
                 glist.append(target_id)
                 self.config_manager.set_group_list(glist)
-                yield event.plain_result(f"✅ 已将当前群加入黑名单\nID: {target_id}")
                 self.auto_scheduler.schedule_jobs(self.context)
+                await self._refresh_incremental_target_states()
+                yield event.plain_result(f"✅ 已将当前群加入黑名单\nID: {target_id}")
             else:
                 yield event.plain_result("ℹ️ 当前群已在黑名单中")
         else:
             yield event.plain_result("ℹ️ 当前为无限制模式，如需禁用请切换到黑名单模式")
+
+    async def _refresh_incremental_target_states(self) -> None:
+        """在插件内修改名单后立即同步增量状态。"""
+        incremental_trigger = self.auto_scheduler.incremental_trigger
+        if incremental_trigger:
+            await incremental_trigger.refresh_target_states()

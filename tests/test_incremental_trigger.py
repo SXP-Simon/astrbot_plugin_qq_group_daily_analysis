@@ -24,6 +24,12 @@ class FakeConfigManager:
     def is_group_allowed(self, unified_msg_origin):
         return self.allowed
 
+    def get_group_list_mode(self):
+        return "blacklist"
+
+    def get_group_list(self):
+        return [] if self.allowed else ["__all_groups_disabled__"]
+
     def is_group_in_filtered_list(self, unified_msg_origin, mode, group_list):
         return True
 
@@ -179,6 +185,62 @@ def test_start_does_not_resume_group_removed_from_target_list():
 
         assert await coordinator.start() == 0
         assert calls == []
+        assert umo not in coordinator._states
+        await coordinator.close()
+
+    asyncio.run(scenario())
+
+
+def test_removing_and_readding_target_clears_old_message_count():
+    async def analyze(group_id, platform_id):
+        return {"success": True, "messages_count": 3}
+
+    async def scenario():
+        config = FakeConfigManager()
+        coordinator = IncrementalTriggerCoordinator(config, FakePlugin(), analyze)
+        umo = "onebot-main:GroupMessage:123456"
+        await coordinator.record_message("onebot-main", "123456", umo, "1")
+        await coordinator.record_message("onebot-main", "123456", umo, "2")
+        assert coordinator._states[umo]["count"] == 2
+
+        config.allowed = False
+        assert not await coordinator.record_message("onebot-main", "123456", umo, "3")
+        assert umo not in coordinator._states
+
+        config.allowed = True
+        assert await coordinator.record_message("onebot-main", "123456", umo, "4")
+        assert coordinator._states[umo]["count"] == 1
+        await coordinator.close()
+
+    asyncio.run(scenario())
+
+
+def test_removed_target_discards_running_analysis_result():
+    calls = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def analyze(group_id, platform_id):
+        calls.append((group_id, platform_id))
+        started.set()
+        await release.wait()
+        return {"success": True, "messages_count": 3}
+
+    async def scenario():
+        config = FakeConfigManager()
+        coordinator = IncrementalTriggerCoordinator(config, FakePlugin(), analyze)
+        umo = "onebot-main:GroupMessage:123456"
+        for message_id in ("1", "2", "3"):
+            await coordinator.record_message("onebot-main", "123456", umo, message_id)
+        await started.wait()
+
+        config.allowed = False
+        assert not await coordinator.record_message("onebot-main", "123456", umo, "4")
+        release.set()
+        await wait_for_task_completion(coordinator, umo)
+
+        assert calls == [("123456", "onebot-main")]
+        assert umo not in coordinator._states
         await coordinator.close()
 
     asyncio.run(scenario())
@@ -234,9 +296,7 @@ def test_message_during_failed_analysis_does_not_immediately_retry():
         )
         umo = "onebot-main:GroupMessage:123456"
         for message_id in ("1", "2", "3"):
-            await coordinator.record_message(
-                "onebot-main", "123456", umo, message_id
-            )
+            await coordinator.record_message("onebot-main", "123456", umo, message_id)
         await started.wait()
 
         await coordinator.record_message("onebot-main", "123456", umo, "4")
