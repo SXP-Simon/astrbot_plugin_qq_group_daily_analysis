@@ -332,6 +332,9 @@ class AutoScheduler:
         try:
             logger.info("定时报告触发 — 开始解析调度目标")
 
+            if self.incremental_trigger:
+                await self.incremental_trigger.refresh_target_states()
+
             all_targets = await self._get_scheduled_targets()
 
             if not all_targets:
@@ -397,6 +400,7 @@ class AutoScheduler:
                         "already_running",
                         "muted",
                         "bot_not_ready",
+                        "target_removed",
                     }:
                         skip_count += 1
                     else:
@@ -691,7 +695,7 @@ class AutoScheduler:
             # 判定是否需要触发回退 (例如：无增量数据等)
             if not result.get("success"):
                 reason = result.get("reason", "")
-                if reason in ("below_threshold", "already_running"):
+                if reason in ("below_threshold", "already_running", "target_removed"):
                     return result  # 正常跳过，无需回退
                 if self.config_manager.get_incremental_fallback_enabled():
                     logger.warning(
@@ -781,6 +785,22 @@ class AutoScheduler:
                     "reason": "terminating",
                 }
 
+            incremental_trigger = getattr(self, "incremental_trigger", None)
+            if (
+                incremental_trigger
+                and target_platform_id
+                and not incremental_trigger.is_target_group(
+                    f"{target_platform_id}:GroupMessage:{group_id}"
+                )
+            ):
+                logger.info(f"群 {group_id} 已移出增量名单，跳过最终报告")
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "target_removed",
+                }
+
             logger.info(
                 f"开始为群 {group_id} 生成增量最终报告 "
                 f"(Platform: {target_platform_id or 'Auto'})"
@@ -812,13 +832,30 @@ class AutoScheduler:
             # 获取分析结果及适配器，分发报告
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
+            dispatch_platform_id = (
+                adapter.platform_id
+                if hasattr(adapter, "platform_id")
+                else target_platform_id
+            )
+
+            if (
+                incremental_trigger
+                and dispatch_platform_id
+                and not incremental_trigger.is_target_group(
+                    f"{dispatch_platform_id}:GroupMessage:{group_id}"
+                )
+            ):
+                result["success"] = False
+                result["analysis_success"] = True
+                result["report_sent"] = False
+                result["reason"] = "target_removed"
+                logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
+                return result
 
             report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
-                adapter.platform_id
-                if hasattr(adapter, "platform_id")
-                else target_platform_id,
+                dispatch_platform_id,
             )
 
             result["analysis_success"] = True

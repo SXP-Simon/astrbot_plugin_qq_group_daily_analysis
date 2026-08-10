@@ -88,7 +88,9 @@ def test_incremental_final_report_requires_successful_delivery():
         scheduler.report_dispatcher = SimpleNamespace(
             dispatch=AsyncMock(return_value=False)
         )
-        scheduler.config_manager = SimpleNamespace(get_analysis_days=Mock(return_value=1))
+        scheduler.config_manager = SimpleNamespace(
+            get_analysis_days=Mock(return_value=1)
+        )
 
         result = await scheduler._perform_incremental_final_report_for_group(
             "123456", "onebot-main"
@@ -112,6 +114,46 @@ def test_incremental_final_report_requires_successful_delivery():
         assert result["analysis_success"] is True
         assert result["report_sent"] is True
         assert result["success"] is True
+
+    asyncio.run(scenario())
+
+
+def test_incremental_final_report_does_not_send_after_target_is_removed():
+    async def scenario():
+        scheduler = object.__new__(AutoScheduler)
+        scheduler._terminating = False
+        scheduler._get_group_name_safe = AsyncMock(return_value="测试群")
+        scheduler.bot_manager = SimpleNamespace(
+            is_ready_for_auto_analysis=Mock(return_value=True)
+        )
+        scheduler.analysis_service = SimpleNamespace(
+            execute_incremental_final_report=AsyncMock(
+                return_value={
+                    "success": True,
+                    "analysis_result": {},
+                    "adapter": SimpleNamespace(platform_id="onebot-main"),
+                }
+            ),
+            incremental_store=None,
+        )
+        scheduler.report_dispatcher = SimpleNamespace(dispatch=AsyncMock())
+        scheduler.config_manager = SimpleNamespace(
+            get_analysis_days=Mock(return_value=1)
+        )
+        scheduler.incremental_trigger = SimpleNamespace(
+            is_target_group=Mock(side_effect=[True, False])
+        )
+
+        result = await scheduler._perform_incremental_final_report_for_group(
+            "123456", "onebot-main"
+        )
+
+        scheduler.analysis_service.execute_incremental_final_report.assert_awaited_once()
+        scheduler.report_dispatcher.dispatch.assert_not_awaited()
+        assert result["success"] is False
+        assert result["analysis_success"] is True
+        assert result["report_sent"] is False
+        assert result["reason"] == "target_removed"
 
     asyncio.run(scenario())
 

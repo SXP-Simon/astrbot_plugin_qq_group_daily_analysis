@@ -38,11 +38,14 @@ class IncrementalTriggerCoordinator:
         self._state_lock = asyncio.Lock()
         self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
         self._analysis_tasks: dict[str, asyncio.Task] = {}
+        self._running_state_keys: set[str] = set()
+        self._state_versions: dict[str, int] = {}
+        self._target_config_signature: tuple[Any, ...] | None = None
         self._flush_task: asyncio.Task | None = None
         self._closed = False
         self._semaphore: asyncio.Semaphore | None = None
 
-    def _is_target_group(self, unified_msg_origin: str) -> bool:
+    def is_target_group(self, unified_msg_origin: str) -> bool:
         """判断消息所属群是否启用了增量分析。"""
         if not self.config_manager.get_incremental_enabled():
             return False
@@ -59,6 +62,77 @@ class IncrementalTriggerCoordinator:
             self.config_manager.get_incremental_group_list_mode(),
             self.config_manager.get_incremental_group_list(),
         )
+
+    def _get_target_config_signature(self) -> tuple[Any, ...]:
+        """生成影响增量目标群判定的配置快照。"""
+
+        def get_group_list(getter_name: str) -> tuple[str, ...]:
+            getter = getattr(self.config_manager, getter_name, None)
+            values = getter() if callable(getter) else []
+            if not isinstance(values, (list, tuple, set)):
+                values = [values]
+            return tuple(sorted({str(value).strip() for value in values}))
+
+        def get_group_mode(getter_name: str, default: str) -> str:
+            getter = getattr(self.config_manager, getter_name, None)
+            value = getter() if callable(getter) else default
+            return str(value).strip().lower()
+
+        return (
+            bool(self.config_manager.get_incremental_enabled()),
+            get_group_mode("get_group_list_mode", "none"),
+            get_group_list("get_group_list"),
+            get_group_mode("get_scheduled_group_list_mode", "whitelist"),
+            get_group_list("get_scheduled_group_list"),
+            get_group_mode("get_incremental_group_list_mode", "whitelist"),
+            get_group_list("get_incremental_group_list"),
+        )
+
+    async def refresh_target_states(self) -> None:
+        """在名单配置变化后清理不再允许的待处理状态。"""
+        await self._ensure_loaded()
+        config_signature = self._get_target_config_signature()
+        if config_signature == self._target_config_signature:
+            return
+
+        tasks_to_cancel: list[asyncio.Task] = []
+        removed_count = 0
+        is_initial_snapshot = self._target_config_signature is None
+        async with self._state_lock:
+            for state_key in list(self._states):
+                if self.is_target_group(state_key):
+                    continue
+                self._states.pop(state_key, None)
+                self._state_versions[state_key] = (
+                    self._state_versions.get(state_key, 0) + 1
+                )
+                removed_count += 1
+                task = self._analysis_tasks.get(state_key)
+                if task and state_key not in self._running_state_keys:
+                    # 尚未进入分析服务的任务可以安全取消。先移出任务表，避免
+                    # 任务在首次执行前被取消而没有机会运行 finally，留下幽灵任务。
+                    self._analysis_tasks.pop(state_key, None)
+                    tasks_to_cancel.append(task)
+            self._target_config_signature = config_signature
+            active_task_count = len(self._analysis_tasks)
+
+        for task in tasks_to_cancel:
+            task.cancel()
+        if removed_count:
+            self._schedule_flush()
+        if is_initial_snapshot:
+            logger.debug(
+                "增量名单初始快照已建立：清理待处理群=%s，当前活跃群任务=%s",
+                removed_count,
+                active_task_count,
+            )
+        else:
+            logger.info(
+                "增量名单配置已更新：清理待处理群=%s，取消未开始任务=%s，当前活跃群任务=%s",
+                removed_count,
+                len(tasks_to_cancel),
+                active_task_count,
+            )
 
     async def _ensure_loaded(self) -> None:
         """首次使用时从 KV 恢复尚未消费的群消息计数。"""
@@ -84,7 +158,9 @@ class IncrementalTriggerCoordinator:
                         "platform_id": platform_id,
                         "group_id": group_id,
                         "count": count,
+                        "version": 1,
                     }
+                    self._state_versions[str(key)] = 1
             self._loaded = True
             logger.debug(
                 "增量计数状态恢复完成: 群数=%s, 待处理消息=%s",
@@ -115,7 +191,11 @@ class IncrementalTriggerCoordinator:
         await self._ensure_loaded()
         async with self._state_lock:
             states = {
-                key: dict(state)
+                key: {
+                    "platform_id": state["platform_id"],
+                    "group_id": state["group_id"],
+                    "count": int(state["count"]),
+                }
                 for key, state in self._states.items()
                 if int(state.get("count", 0)) > 0
             }
@@ -147,7 +227,11 @@ class IncrementalTriggerCoordinator:
         Returns:
             消息是否属于启用增量分析的目标群。
         """
-        if self._closed or not self._is_target_group(unified_msg_origin):
+        if self._closed:
+            return False
+
+        await self.refresh_target_states()
+        if not self.is_target_group(unified_msg_origin):
             return False
 
         platform_id = str(platform_id or "").strip()
@@ -173,14 +257,17 @@ class IncrementalTriggerCoordinator:
         await self._ensure_loaded()
         state_key = f"{platform_id}:GroupMessage:{group_id}"
         async with self._state_lock:
-            state = self._states.setdefault(
-                state_key,
-                {
+            state = self._states.get(state_key)
+            if state is None:
+                version = self._state_versions.get(state_key, 0) + 1
+                self._state_versions[state_key] = version
+                state = {
                     "platform_id": platform_id,
                     "group_id": group_id,
                     "count": 0,
-                },
-            )
+                    "version": version,
+                }
+                self._states[state_key] = state
             state["count"] = int(state["count"]) + 1
             should_trigger = (
                 int(state["count"])
@@ -194,27 +281,36 @@ class IncrementalTriggerCoordinator:
 
     def _schedule_analysis(self, state_key: str) -> None:
         """确保同一个群同一时间只有一个消息量触发任务。"""
-        if self._closed or state_key in self._analysis_tasks:
+        if (
+            self._closed
+            or state_key in self._analysis_tasks
+            or not self.is_target_group(state_key)
+        ):
             return
         state = self._states.get(state_key, {})
-        logger.debug(
-            "增量消息计数达到阈值，安排分析任务: platform=%s, group=%s, pending=%s, threshold=%s",
-            state.get("platform_id", ""),
-            state.get("group_id", ""),
-            int(state.get("count", 0)),
-            self.config_manager.get_incremental_min_messages(),
-        )
         task = asyncio.create_task(
             self._run_analysis(state_key),
             name=f"incremental_volume_{state_key}",
         )
         self._analysis_tasks[state_key] = task
+        logger.debug(
+            "增量消息计数达到阈值，安排分析任务: platform=%s, group=%s, pending=%s, "
+            "threshold=%s, 当前活跃群任务=%s",
+            state.get("platform_id", ""),
+            state.get("group_id", ""),
+            int(state.get("count", 0)),
+            self.config_manager.get_incremental_min_messages(),
+            len(self._analysis_tasks),
+        )
 
     async def _run_analysis(self, state_key: str) -> None:
         """执行分析并根据实际消费数量修正估算计数。"""
         allow_continuation = False
+        discarded = False
+        task_version = -1
+        current_task = asyncio.current_task()
         try:
-            await self._ensure_loaded()
+            await self.refresh_target_states()
             async with self._state_lock:
                 state = self._states.get(state_key)
                 if not state:
@@ -222,6 +318,7 @@ class IncrementalTriggerCoordinator:
                 count_at_start = int(state.get("count", 0))
                 platform_id = str(state["platform_id"])
                 group_id = str(state["group_id"])
+                task_version = int(state.get("version", 0))
 
             logger.debug(
                 "增量分析任务开始: platform=%s, group=%s, pending_at_start=%s",
@@ -236,31 +333,51 @@ class IncrementalTriggerCoordinator:
                     max(1, self.config_manager.get_max_concurrent_tasks())
                 )
             async with self._semaphore:
-                result = await self.analyze_callback(group_id, platform_id)
+                async with self._state_lock:
+                    state = self._states.get(state_key)
+                    if (
+                        not state
+                        or int(state.get("version", -1)) != task_version
+                        or not self.is_target_group(state_key)
+                    ):
+                        return
+                    self._running_state_keys.add(state_key)
+                try:
+                    result = await self.analyze_callback(group_id, platform_id)
+                finally:
+                    self._running_state_keys.discard(state_key)
 
             result = result if isinstance(result, dict) else {}
             consumed = max(0, int(result.get("messages_count", 0)))
             reason = str(result.get("reason", ""))
+            await self.refresh_target_states()
             async with self._state_lock:
                 state = self._states.get(state_key)
-                if not state:
-                    return
-                current_count = int(state.get("count", 0))
-                new_arrivals = max(0, current_count - count_at_start)
-                if result.get("success"):
-                    state["count"] = max(0, current_count - consumed)
-                elif reason == "below_threshold":
-                    state["count"] = consumed + new_arrivals
-                elif reason == "no_messages":
-                    state["count"] = new_arrivals
-                # 成功消费后可连续排空积压；失败必须等待任务结束后的新消息。
-                allow_continuation = bool(result.get("success") and consumed > 0)
-                remaining_count = int(state.get("count", 0))
+                if (
+                    not state
+                    or int(state.get("version", -1)) != task_version
+                    or not self.is_target_group(state_key)
+                ):
+                    discarded = True
+                    remaining_count = 0
+                    new_arrivals = 0
+                else:
+                    current_count = int(state.get("count", 0))
+                    new_arrivals = max(0, current_count - count_at_start)
+                    if result.get("success"):
+                        state["count"] = max(0, current_count - consumed)
+                    elif reason == "below_threshold":
+                        state["count"] = consumed + new_arrivals
+                    elif reason == "no_messages":
+                        state["count"] = new_arrivals
+                    # 成功消费后可连续排空积压；失败必须等待任务结束后的新消息。
+                    allow_continuation = bool(result.get("success") and consumed > 0)
+                    remaining_count = int(state.get("count", 0))
 
             logger.debug(
                 "增量分析计数结算: platform=%s, group=%s, success=%s, reason=%s, "
                 "pending_at_start=%s, new_arrivals=%s, consumed=%s, remaining=%s, "
-                "allow_continuation=%s, duration=%.2fs",
+                "allow_continuation=%s, discarded=%s, 当前活跃群任务=%s, duration=%.2fs",
                 platform_id,
                 group_id,
                 bool(result.get("success")),
@@ -270,6 +387,8 @@ class IncrementalTriggerCoordinator:
                 consumed,
                 remaining_count,
                 allow_continuation,
+                discarded,
+                len(self._analysis_tasks),
                 time.monotonic() - started_at,
             )
 
@@ -279,7 +398,13 @@ class IncrementalTriggerCoordinator:
         except Exception as exc:
             logger.error(f"消息量触发增量分析失败：{exc}", exc_info=True)
         finally:
-            self._analysis_tasks.pop(state_key, None)
+            if self._analysis_tasks.get(state_key) is current_task:
+                self._analysis_tasks.pop(state_key, None)
+            logger.debug(
+                "增量分析任务已结束：state=%s，当前活跃群任务=%s",
+                state_key,
+                len(self._analysis_tasks),
+            )
 
         if self._closed:
             return
@@ -288,8 +413,12 @@ class IncrementalTriggerCoordinator:
             current_count = int(state.get("count", 0)) if state else 0
             should_continue = bool(
                 state
+                and self.is_target_group(state_key)
                 and current_count >= self.config_manager.get_incremental_min_messages()
-                and allow_continuation
+                and (
+                    allow_continuation
+                    or (discarded and int(state.get("version", -1)) != task_version)
+                )
             )
         if should_continue:
             logger.debug(
@@ -306,17 +435,22 @@ class IncrementalTriggerCoordinator:
         Returns:
             启动时恢复的分析任务数量。
         """
-        await self._ensure_loaded()
+        await self.refresh_target_states()
         async with self._state_lock:
             ready_keys = [
                 state_key
                 for state_key, state in self._states.items()
-                if self._is_target_group(state_key)
+                if self.is_target_group(state_key)
                 and int(state.get("count", 0))
                 >= self.config_manager.get_incremental_min_messages()
             ]
         for state_key in ready_keys:
             self._schedule_analysis(state_key)
+        logger.info(
+            "增量状态恢复完成：恢复任务=%s，当前活跃群任务=%s",
+            len(ready_keys),
+            len(self._analysis_tasks),
+        )
         return len(ready_keys)
 
     async def close(self) -> None:
