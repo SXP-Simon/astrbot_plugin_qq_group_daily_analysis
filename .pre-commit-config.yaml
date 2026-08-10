@@ -7,14 +7,14 @@ ci:
   autoupdate_commit_msg: ":sparkles: pre-commit autoupdate"
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit 
-  # Ruff version.
-  rev: v0.14.1
+  # 与 AstrBot 开发环境中 uv 解析的 Ruff 版本保持一致。
+  rev: v0.15.22
   hooks:
-    # Run the linter.
+    # 运行静态检查。
     - id: ruff-check
       types_or: [ python, pyi ]
       args: [ --fix ]
-    # Run the formatter.
+    # 运行格式化。
     - id: ruff-format
       types_or: [ python, pyi ]
       
