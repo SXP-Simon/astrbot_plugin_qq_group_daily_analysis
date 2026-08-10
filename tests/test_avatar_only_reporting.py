@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
+import aiohttp
 from PIL import Image
 
 from src.domain.models.data_models import (
@@ -656,6 +657,54 @@ def test_avatar_failure_is_cached_briefly_to_avoid_repeated_downloads():
 
     assert first == second
     assert requests == 1
+
+
+def test_avatar_download_retries_after_transient_network_error(monkeypatch):
+    class FailedRequest:
+        async def __aenter__(self):
+            raise aiohttp.ClientConnectionError()
+
+        async def __aexit__(self, *args):
+            return False
+
+    class SuccessfulRequest:
+        async def __aenter__(self):
+            return SimpleNamespace(status=200, read=self.read)
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def read(self):
+            return b"\x89PNG\r\n\x1a\nvalid-image"
+
+    class FakeSession:
+        closed = False
+
+        def __init__(self):
+            self.requests = 0
+
+        def get(self, _url):
+            self.requests += 1
+            if self.requests == 1:
+                return FailedRequest()
+            return SuccessfulRequest()
+
+    async def no_wait(_seconds):
+        return None
+
+    generator = object.__new__(ReportGenerator)
+    generator._avatar_session = FakeSession()
+    generator._avatar_session_lock = asyncio.Lock()
+    generator._avatar_session_concurrent_semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(asyncio, "sleep", no_wait)
+
+    async def avatar_url_getter(_user_id):
+        return "https://q1.qlogo.cn/g?b=qq&nk=123456&s=100"
+
+    avatar = asyncio.run(generator._get_user_avatar_bytes("123456", avatar_url_getter))
+
+    assert avatar == b"\x89PNG\r\n\x1a\nvalid-image"
+    assert generator._avatar_session.requests == 2
 
 
 def test_avatar_resize_preserves_transparency():
