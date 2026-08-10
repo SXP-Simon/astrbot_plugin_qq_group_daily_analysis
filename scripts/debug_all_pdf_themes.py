@@ -56,6 +56,7 @@ from src.domain.entities.analysis_result import (  # noqa: E402
     TokenUsage,
     UserTitle,
 )
+
 from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
 
 
