@@ -158,6 +158,47 @@ def test_incremental_final_report_does_not_send_after_target_is_removed():
     asyncio.run(scenario())
 
 
+def test_immediate_incremental_reports_are_coalesced_per_group():
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = []
+
+    async def report(group_id, platform_id):
+        calls.append((group_id, platform_id))
+        started.set()
+        await release.wait()
+        return {"success": True}
+
+    async def scenario():
+        scheduler = object.__new__(AutoScheduler)
+        scheduler._terminating = False
+        scheduler.config_manager = SimpleNamespace(
+            get_incremental_report_immediately=Mock(return_value=True)
+        )
+        scheduler._immediate_report_tasks = {}
+        scheduler._immediate_report_versions = {}
+        scheduler._perform_incremental_final_report_for_group_with_timeout = report
+
+        scheduler._request_immediate_incremental_report("123456", "onebot-main")
+        await started.wait()
+        scheduler._request_immediate_incremental_report("123456", "onebot-main")
+        scheduler._request_immediate_incremental_report("123456", "onebot-main")
+
+        release.set()
+        for _ in range(100):
+            if not scheduler._immediate_report_tasks:
+                break
+            await asyncio.sleep(0)
+
+        assert calls == [
+            ("123456", "onebot-main"),
+            ("123456", "onebot-main"),
+        ]
+        assert scheduler._immediate_report_versions == {}
+
+    asyncio.run(scenario())
+
+
 def test_fallback_does_not_mask_failed_report_delivery():
     async def scenario():
         scheduler = object.__new__(AutoScheduler)

@@ -51,11 +51,14 @@ class AutoScheduler:
         # Cache: group_id -> group_name (populated lazily)
         self._group_name_cache: dict[str, str] = {}
         self._terminating = False  # 终止标志位
+        self._immediate_report_tasks: dict[str, asyncio.Task] = {}
+        self._immediate_report_versions: dict[str, int] = {}
         self.incremental_trigger = (
             IncrementalTriggerCoordinator(
                 config_manager,
                 plugin_instance,
                 self._trigger_incremental_analysis,
+                self._request_immediate_incremental_report,
             )
             if plugin_instance is not None
             else None
@@ -237,6 +240,15 @@ class AutoScheduler:
         Args:
             context: AstrBot 插件上下文。
         """
+        self._terminating = True
+        immediate_report_tasks = list(self._immediate_report_tasks.values())
+        for task in immediate_report_tasks:
+            task.cancel()
+        if immediate_report_tasks:
+            await asyncio.gather(*immediate_report_tasks, return_exceptions=True)
+        self._immediate_report_tasks.clear()
+        self._immediate_report_versions.clear()
+
         if self.incremental_trigger:
             await self.incremental_trigger.close()
         self.unschedule_jobs(context)
@@ -576,15 +588,102 @@ class AutoScheduler:
         result = await self._perform_incremental_analysis_for_group_with_timeout(
             group_id, platform_id
         )
-        if (
-            self.config_manager.get_incremental_report_immediately()
-            and isinstance(result, dict)
-            and result.get("success")
-        ):
-            await self._perform_incremental_final_report_for_group_with_timeout(
-                group_id, platform_id
-            )
         return result
+
+    def _request_immediate_incremental_report(
+        self, group_id: str, platform_id: str
+    ) -> None:
+        """合并同群即时报告请求，并在后台发送报告。"""
+        if (
+            self._terminating
+            or not self.config_manager.get_incremental_report_immediately()
+        ):
+            return
+
+        state_key = f"{platform_id}:GroupMessage:{group_id}"
+        version = self._immediate_report_versions.get(state_key, 0) + 1
+        self._immediate_report_versions[state_key] = version
+        task = self._immediate_report_tasks.get(state_key)
+        if task and not task.done():
+            logger.debug(
+                "即时增量报告已合并到运行中任务：platform=%s，group=%s，版本=%s",
+                platform_id,
+                group_id,
+                version,
+            )
+            return
+
+        task = asyncio.create_task(
+            self._run_immediate_incremental_report(state_key, group_id, platform_id),
+            name=f"incremental_immediate_report_{state_key}",
+        )
+        self._immediate_report_tasks[state_key] = task
+        logger.debug(
+            "即时增量报告已安排：platform=%s，group=%s，版本=%s，当前即时报告任务=%s",
+            platform_id,
+            group_id,
+            version,
+            len(self._immediate_report_tasks),
+        )
+
+    async def _run_immediate_incremental_report(
+        self, state_key: str, group_id: str, platform_id: str
+    ) -> None:
+        """串行发送同群即时报告，并合并执行期间新增的批次。"""
+        current_task = asyncio.current_task()
+        try:
+            while not self._terminating:
+                requested_version = self._immediate_report_versions.get(state_key, 0)
+                logger.debug(
+                    "即时增量报告开始：platform=%s，group=%s，版本=%s",
+                    platform_id,
+                    group_id,
+                    requested_version,
+                )
+                result = (
+                    await self._perform_incremental_final_report_for_group_with_timeout(
+                        group_id, platform_id
+                    )
+                )
+                result = result if isinstance(result, dict) else {}
+                has_new_batch = (
+                    self._immediate_report_versions.get(state_key, 0)
+                    != requested_version
+                )
+                logger.debug(
+                    "即时增量报告结束：platform=%s，group=%s，版本=%s，success=%s，"
+                    "reason=%s，执行期间有新批次=%s",
+                    platform_id,
+                    group_id,
+                    requested_version,
+                    bool(result.get("success")),
+                    result.get("reason", "none"),
+                    has_new_batch,
+                )
+                if not has_new_batch:
+                    break
+                logger.debug(
+                    "即时增量报告检测到新批次，合并后继续发送：platform=%s，group=%s",
+                    platform_id,
+                    group_id,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error(
+                f"即时增量报告后台任务异常：群 {group_id}，平台 {platform_id}，错误：{exc}",
+                exc_info=True,
+            )
+        finally:
+            if self._immediate_report_tasks.get(state_key) is current_task:
+                self._immediate_report_tasks.pop(state_key, None)
+                self._immediate_report_versions.pop(state_key, None)
+            logger.debug(
+                "即时增量报告任务已结束：platform=%s，group=%s，当前即时报告任务=%s",
+                platform_id,
+                group_id,
+                len(self._immediate_report_tasks),
+            )
 
     async def _perform_incremental_analysis_for_group_with_timeout(
         self,
