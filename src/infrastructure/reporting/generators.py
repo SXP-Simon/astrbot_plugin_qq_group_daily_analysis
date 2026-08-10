@@ -33,7 +33,9 @@ from ..visualization.activity_charts import ActivityVisualizer
 from .qq_official_markdown import QQOfficialMarkdownReportGenerator
 from .templates import HTMLTemplates
 
-MAX_CONCURRENT_DOWNLOADS = 10
+# qlogo 在短时间内承受大量并发请求时可能主动断开连接，保留并发预取但限制并发度。
+MAX_CONCURRENT_DOWNLOADS = 4
+AVATAR_DOWNLOAD_RETRY_TIMES = 2
 AVATAR_CACHE_EXPIRE_TIME = 259200
 AVATAR_FAILURE_CACHE_EXPIRE_TIME = 60
 AVATAR_MAX_EDGE_LENGTH = 96
@@ -1566,7 +1568,6 @@ class ReportGenerator(IReportGenerator):
         self, user_id: str, avatar_url_getter=None
     ) -> bytes | None:
         """核心头像获取逻辑"""
-        file_content = None
         avatar_session_lock = getattr(self, "_avatar_session_lock", None)
         if avatar_session_lock is None:
             avatar_session_lock = asyncio.Lock()
@@ -1615,38 +1616,58 @@ class ReportGenerator(IReportGenerator):
 
             # 5. 下载并保存
             safe_avatar_url = self._safe_url_for_log(avatar_url)
-            try:
-                async with self._avatar_session.get(avatar_url) as response:
-                    if response.status == 200:
-                        content = await response.read()
-                        if content:
-                            # 校验文件头
-                            is_valid_image = False
-                            if content.startswith(b"\xff\xd8"):  # JPEG
-                                is_valid_image = True
-                            elif content.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
-                                is_valid_image = True
-                            elif content.startswith(b"GIF8"):  # GIF
-                                is_valid_image = True
-                            elif (
+            failure_reason = ""
+            for attempt in range(1, AVATAR_DOWNLOAD_RETRY_TIMES + 1):
+                try:
+                    async with self._avatar_session.get(avatar_url) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            if not content:
+                                failure_reason = "响应内容为空"
+                            elif content.startswith(
+                                (b"\xff\xd8", b"\x89PNG\r\n\x1a\n", b"GIF8")
+                            ) or (
                                 content.startswith(b"RIFF") and b"WEBP" in content[:16]
-                            ):  # WebP
-                                is_valid_image = True
-
-                            if is_valid_image:
-                                file_content = content
+                            ):
+                                return content
                             else:
                                 logger.warning(
                                     f"下载的头像数据格式无效 ({safe_avatar_url})"
                                 )
-                    else:
-                        logger.warning(
-                            f"下载头像失败 {safe_avatar_url}: {response.status}"
-                        )
-            except Exception as e:
-                logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
+                                return None
+                        else:
+                            failure_reason = f"HTTP {response.status}"
+                            if (
+                                response.status not in {408, 429}
+                                and response.status < 500
+                            ):
+                                logger.warning(
+                                    f"下载头像失败 {safe_avatar_url}: {failure_reason}"
+                                )
+                                return None
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    # 部分 aiohttp 断连异常的字符串为空，保留异常类型便于定位。
+                    failure_reason = f"{type(e).__name__}: {e!r}"
+                except Exception as e:
+                    logger.warning(
+                        f"下载头像发生未知错误 {safe_avatar_url}: "
+                        f"{type(e).__name__}: {e!r}"
+                    )
+                    return None
 
-            return file_content
+                if attempt < AVATAR_DOWNLOAD_RETRY_TIMES:
+                    logger.debug(
+                        f"下载头像失败，将在短暂等待后重试 "
+                        f"({attempt}/{AVATAR_DOWNLOAD_RETRY_TIMES}): "
+                        f"{safe_avatar_url}，原因: {failure_reason}"
+                    )
+                    await asyncio.sleep(0.5 * attempt)
+
+            logger.warning(
+                f"下载头像网络错误，已重试 {AVATAR_DOWNLOAD_RETRY_TIMES} 次 "
+                f"{safe_avatar_url}: {failure_reason}"
+            )
+            return None
 
     def _get_default_avatar_base64(self) -> str:
         """返回默认头像 (灰色圆形占位符)"""
