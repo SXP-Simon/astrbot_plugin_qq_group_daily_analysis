@@ -109,7 +109,7 @@ def test_new_qq_official_message_replaces_mentions_before_storage():
         ],
     )
 
-    asyncio.run(service.process_message(event))
+    assert asyncio.run(service.process_message(event)) is True
 
     stored_parts = history_manager.calls[0]["content"]["message"]
     assert stored_parts == [
@@ -117,6 +117,7 @@ def test_new_qq_official_message_replaces_mentions_before_storage():
     ]
     assert "KNOWN_OPENID" not in stored_parts[0]["text"]
     assert "UNKNOWN_OPENID" not in stored_parts[0]["text"]
+    assert history_manager.calls[0]["max_messages"] == 10000
 
 
 def test_qq_official_bot_mention_is_removed_before_storage():

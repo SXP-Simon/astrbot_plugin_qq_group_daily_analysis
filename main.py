@@ -302,6 +302,13 @@ class GroupDailyAnalysis(Star):
         Returns:
             None: 计数完成后继续消息流水线。
         """
+        # QQ 官方和 Telegram 会在各自的持久化钩子成功后计数，避免任务先于入库启动。
+        if str(event.get_platform_name() or "").strip().lower() in {
+            "qq_official",
+            "qq_official_webhook",
+            "telegram",
+        }:
+            return
         if self.auto_scheduler:
             await self.auto_scheduler.record_incremental_message(event)
 
@@ -314,7 +321,9 @@ class GroupDailyAnalysis(Star):
         委托给 MessageProcessingService 处理
         """
         try:
-            await self.message_processing_service.process_message(event)
+            stored = await self.message_processing_service.process_message(event)
+            if stored and self.auto_scheduler:
+                await self.auto_scheduler.record_incremental_message(event)
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[Telegram] 消息存储失败: {e}")
         except Exception as e:
@@ -342,7 +351,27 @@ class GroupDailyAnalysis(Star):
             return
 
         try:
-            await self.message_processing_service.process_message(event)
+            adapter = self.bot_manager.get_adapter(event.get_platform_id())
+            if adapter and hasattr(adapter, "remember_user_profile"):
+                raw_avatar = (
+                    author.get("avatar")
+                    if isinstance(author, dict)
+                    else getattr(author, "avatar", None)
+                )
+                raw_nickname = (
+                    author.get("username")
+                    if isinstance(author, dict)
+                    else getattr(author, "username", None)
+                )
+                adapter.remember_user_profile(
+                    member_openid,
+                    nickname=str(raw_nickname or event.get_sender_name() or ""),
+                    avatar_url=str(raw_avatar or ""),
+                )
+
+            stored = await self.message_processing_service.process_message(event)
+            if stored and self.auto_scheduler:
+                await self.auto_scheduler.record_incremental_message(event)
         except (ValueError, RuntimeError) as e:
             logger.warning(f"[QQOfficial] 消息存储失败: {e}")
         except Exception as e:
@@ -650,7 +679,10 @@ class GroupDailyAnalysis(Star):
         analysis_result = result["analysis_result"]
         adapter = result["adapter"]
         output_format = self.config_manager.get_output_format()[0]
-        is_qq_official = adapter.get_platform_name() == "qq_official"
+        is_qq_official = adapter.get_platform_name() in {
+            "qq_official",
+            "qq_official_webhook",
+        }
 
         # 定义获取回调
         async def avatar_url_getter(user_id: str) -> str | None:

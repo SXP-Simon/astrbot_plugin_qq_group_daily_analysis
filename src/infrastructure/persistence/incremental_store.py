@@ -332,7 +332,7 @@ class IncrementalStore:
         # 更新索引（仅保留未过期条目）
         await self._save_index(group_id, retained)
 
-        logger.info(
+        logger.debug(
             f"清理过期批次: 群 {group_id}, "
             f"删除 {deleted_count} 个, 保留 {len(retained)} 个"
         )

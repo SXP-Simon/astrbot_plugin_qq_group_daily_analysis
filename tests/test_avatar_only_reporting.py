@@ -1,8 +1,11 @@
 import asyncio
 import inspect
 import json
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+
+from PIL import Image
 
 from src.domain.models.data_models import (
     ActivityVisualization,
@@ -633,3 +636,35 @@ def test_qq_official_html_sidecar_uses_identity_sanitizer(tmp_path):
     assert json_path is not None
     exported = Path(json_path).read_text(encoding="utf-8")
     assert openid not in exported
+
+
+def test_avatar_failure_is_cached_briefly_to_avoid_repeated_downloads():
+    generator = object.__new__(ReportGenerator)
+    generator._avatar_cache = {}
+    generator._avatar_failure_cache = {}
+    requests = 0
+
+    async def fail_to_get_avatar(*args, **kwargs):
+        nonlocal requests
+        requests += 1
+        return None
+
+    generator._get_user_avatar_bytes = fail_to_get_avatar
+
+    first = asyncio.run(generator._get_user_avatar("USER-1"))
+    second = asyncio.run(generator._get_user_avatar("USER-1"))
+
+    assert first == second
+    assert requests == 1
+
+
+def test_avatar_resize_preserves_transparency():
+    source = BytesIO()
+    Image.new("RGBA", (192, 128), (0, 0, 0, 0)).save(source, format="PNG")
+
+    resized = ReportGenerator._resize_avatar_bytes(source.getvalue())
+
+    assert resized.startswith(b"\x89PNG")
+    with Image.open(BytesIO(resized)) as image:
+        assert image.mode == "RGBA"
+        assert max(image.size) <= 96
