@@ -178,6 +178,31 @@ class GroupDailyAnalysis(Star):
         """
         await self._run_initialization("Platform Loaded")
 
+    async def initialize(self):
+        """在 AstrBot 插件生命周期中确认初始化已经完成。
+
+        Returns:
+            None: 初始化任务完成或恢复初始化完成后返回。
+        """
+        init_task = getattr(self, "_init_task", None)
+        if init_task is None:
+            await self._run_initialization("Plugin Lifecycle")
+            return
+
+        try:
+            # 构造函数中的任务负责避免阻塞 AstrBot 启动；生命周期入口负责等待
+            # 它完成，确保插件重载不会在平台刷新之前被判定为加载成功。
+            await asyncio.shield(init_task)
+        except asyncio.CancelledError:
+            if self._terminating:
+                raise
+            logger.warning("插件生命周期初始化任务被取消，正在执行恢复初始化。")
+            await self._run_initialization("Plugin Lifecycle Recovery")
+
+        if not self._initialized and not self._terminating:
+            logger.warning("插件初始化未完成，正在执行一次生命周期恢复初始化。")
+            await self._run_initialization("Plugin Lifecycle Recovery")
+
     async def _run_initialization(self, source: str):
         """执行插件初始化，避免阻塞平台启动流程。
 
