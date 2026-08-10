@@ -105,6 +105,36 @@ def test_message_count_threshold_triggers_once_and_consumes_count():
     asyncio.run(scenario())
 
 
+def test_successful_batch_notifies_after_message_count_settlement():
+    notifications = []
+
+    async def analyze(group_id, platform_id):
+        return {"success": True, "messages_count": 3}
+
+    async def scenario():
+        coordinator = IncrementalTriggerCoordinator(
+            FakeConfigManager(),
+            FakePlugin(),
+            analyze,
+        )
+        umo = "onebot-main:GroupMessage:123456"
+
+        def notify(group_id, platform_id):
+            notifications.append(
+                (group_id, platform_id, coordinator._states[umo]["count"])
+            )
+
+        coordinator.on_analysis_succeeded = notify
+        for message_id in ("1", "2", "3"):
+            await coordinator.record_message("onebot-main", "123456", umo, message_id)
+        await wait_for_task_completion(coordinator, umo)
+
+        assert notifications == [("123456", "onebot-main", 0)]
+        await coordinator.close()
+
+    asyncio.run(scenario())
+
+
 def test_duplicate_event_id_does_not_increase_message_count():
     calls = []
 

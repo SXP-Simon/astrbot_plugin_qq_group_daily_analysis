@@ -21,6 +21,7 @@ class IncrementalTriggerCoordinator:
         config_manager: Any,
         plugin_instance: Any,
         analyze_callback: Callable[[str, str], Awaitable[dict | None]],
+        on_analysis_succeeded: Callable[[str, str], None] | None = None,
     ) -> None:
         """初始化触发协调器。
 
@@ -28,10 +29,12 @@ class IncrementalTriggerCoordinator:
             config_manager: 插件配置管理器。
             plugin_instance: 提供 KV 存储接口的插件实例。
             analyze_callback: 执行单群增量分析的异步回调。
+            on_analysis_succeeded: 批次成功结算后执行的同步通知回调。
         """
         self.config_manager = config_manager
         self.plugin = plugin_instance
         self.analyze_callback = analyze_callback
+        self.on_analysis_succeeded = on_analysis_succeeded
         self._states: dict[str, dict[str, Any]] = {}
         self._loaded = False
         self._load_lock = asyncio.Lock()
@@ -417,6 +420,16 @@ class IncrementalTriggerCoordinator:
             )
 
             self._schedule_flush()
+            if (
+                result.get("success")
+                and consumed > 0
+                and not discarded
+                and self.on_analysis_succeeded
+            ):
+                try:
+                    self.on_analysis_succeeded(group_id, platform_id)
+                except Exception as exc:
+                    logger.error(f"通知增量批次成功事件失败：{exc}", exc_info=True)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
