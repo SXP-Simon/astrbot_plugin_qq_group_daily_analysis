@@ -845,6 +845,11 @@ class ConfigManager:
         """获取是否开启每日群漫画功能"""
         return self._get_group("daily_comic").get("enable_daily_comic", False)
 
+    def get_drawing_backend(self) -> str:
+        """获取漫画绘图后端 (builtin/general_plugin)。"""
+        group = self._get_group("daily_comic")
+        return str(group.get("drawing_backend", "builtin")).strip() or "builtin"
+
     def get_drawing_api_url(self) -> str:
         """获取绘图 API 地址，空值由所选协议补全默认地址。"""
         return self._get_group("daily_comic").get("drawing_api_url", "")

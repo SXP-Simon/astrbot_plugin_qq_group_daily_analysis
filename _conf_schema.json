@@ -465,6 +465,13 @@
                 "file_types": ["jpg", "jpeg", "png", "webp"],
                 "hint": "上传后点击 + 将图片设为参考图。已添加多张时，最后添加的一张会用于图生图。"
             },
+            "drawing_backend": {
+                "description": "绘图后端",
+                "type": "string",
+                "options": ["builtin", "general_plugin"],
+                "default": "builtin",
+                "hint": "builtin=使用本插件内置绘图客户端（非流式请求，慢模型可能撞上游网关超时）；general_plugin=调用已安装的「通用生图」插件的公共 API（流式+异步任务，可规避网关超时）。使用通用生图后端时，需先在通用生图插件中配置其自身的 API；未安装/未激活/调用失败时自动回退内置后端。"
+            },
             "drawing_api_url": {
                 "description": "绘图 API URL",
                 "type": "string",
