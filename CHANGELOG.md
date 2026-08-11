@@ -1,11 +1,11 @@
 # 更新日志 (CHANGELOG)
 
-## [v4.11.10] - ✨ 每日群漫画支持定时与增量触发
+## [v5.0.0] - ✨ 每日群漫画
 
 <table align="center" width="100%">
   <tr>
     <td align="center" width="100%" valign="top">
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="100%">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
       <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
     </td>
   </tr>
@@ -16,6 +16,11 @@
 *   **⚙️ 原生参考图配置**：`drawing_reference_image` 为 AstrBot 原生文件配置，支持从 WebUI 上传 `jpg/jpeg/png/webp` 并选择最后加入配置的一张作为图生图参考图；不再支持 URL、任意本地路径或目录随机选图。
 *   **⚙️ 配置要求**：启用 `enable_daily_comic` 后，需配置 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和匹配的 `drawing_api_protocol`；`drawing_prompt_provider_id` 与参考图均为可选项。
 *   **⚠️ 状态边界**：漫画是独立后台任务。报告发送失败不会取消已启动的漫画，漫画生成或发送失败也不会改写报告的成功状态。
+
+---
+
+<details>
+<summary>📋 点击查看历史更新日志</summary>
 
 ## [v4.11.9] - 🛠️ 解耦即时报告与批次结算，渲染、发送失败或超时不会阻塞计数扣减和后续增量批次
 *   **🛠️ 增量批次逻辑优化**：增量批次成功保存并完成待处理计数结算后，才通知调度器安排即时报告。报告不再处于分析回调的等待链中，因此渲染、发送失败或超时不会阻塞计数扣减和后续增量批次。
@@ -44,11 +49,6 @@
 *   **✨ QQ 官方机器人信息完善**：优先使用事件中的成员昵称和头像，并在缺失时回退 QQ 官方头像地址；WebSocket 与 Webhook 模式均使用 QQ 官方报告发送逻辑。
 *   **🛠️ 本地历史保护**：QQ 官方机器人和 Telegram 的本地消息历史按群最多保留 10000 条，防止长期运行后历史数据无限增长；分页读取继续进行跨页去重。
 *   **⚡ T2I 头像渲染优化**：仅预取报告实际展示的成员头像，去重后并发下载；头像缩放至最大边 96px，以减少 Base64、HTML 与 T2I 请求体积。成功头像仍写入原有磁盘缓存；下载失败头像仅在内存中短暂缓存，避免同一报告反复请求，同时在网络恢复后自动重新尝试。
-
----
-
-<details>
-<summary>📋 点击查看历史更新日志</summary>
 
 ## [v4.11.5] - 🛠️ 修复发送链接出现中文导致链接被 QQ 渲染错误问题
 *   **🛠️ 链接发送**: 链接非 ASCII 部分做百分号编码，避免发送链接出现中文导致链接被 QQ 渲染错误。
