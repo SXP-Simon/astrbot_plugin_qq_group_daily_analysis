@@ -16,6 +16,7 @@ from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from .analyzers.chat_quality_analyzer import ChatQualityAnalyzer
+from .analyzers.comic_analyzer import ComicStoryboardAnalyzer
 from .analyzers.golden_quote_analyzer import GoldenQuoteAnalyzer
 from .analyzers.topic_analyzer import TopicAnalyzer
 from .analyzers.user_title_analyzer import UserTitleAnalyzer
@@ -33,6 +34,7 @@ class LLMAnalyzer(IAnalysisProvider):
     topic_analyzer: TopicAnalyzer
     user_title_analyzer: UserTitleAnalyzer
     golden_quote_analyzer: GoldenQuoteAnalyzer
+    comic_storyboard_analyzer: ComicStoryboardAnalyzer
 
     def __init__(self, context, config_manager):
         """
@@ -50,6 +52,9 @@ class LLMAnalyzer(IAnalysisProvider):
         self.user_title_analyzer = UserTitleAnalyzer(context, config_manager)
         self.golden_quote_analyzer = GoldenQuoteAnalyzer(context, config_manager)
         self.chat_quality_analyzer = ChatQualityAnalyzer(context, config_manager)
+        self.comic_storyboard_analyzer = ComicStoryboardAnalyzer(
+            context, config_manager
+        )
 
     @staticmethod
     def _make_session_id(
@@ -153,6 +158,26 @@ class LLMAnalyzer(IAnalysisProvider):
             )
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
+            return [], TokenUsage()
+
+    async def analyze_comic_storyboards(
+        self,
+        topics: list[dict],
+        umo: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[list[dict], TokenUsage]:
+        """
+        使用LLM分析并生成漫画分镜和绘画提示词
+        """
+        try:
+            session_id = self._make_session_id(session_id, umo)
+
+            logger.info(f"开始漫画分镜分析, session_id: {session_id}")
+            return await self.comic_storyboard_analyzer.analyze_storyboards(
+                topics, umo, session_id
+            )
+        except Exception as e:
+            logger.error(f"漫画分镜分析失败: {e}", exc_info=True)
             return [], TokenUsage()
 
     async def summarize_quality_reviews(
@@ -491,3 +516,76 @@ class LLMAnalyzer(IAnalysisProvider):
             修复后的JSON文本
         """
         return fix_json(text)
+
+    async def analyze_retry_prompt(
+        self, original_prompt: str, last_error: str, umo: str | None
+    ) -> str | None:
+        """
+        当画图 API 遇到多次失败后，将错误信息交给 LLM 进行分析和改写。
+        如果 LLM 认为原 Prompt 严重违规且无法修改，将返回 None；
+        否则返回脱敏/重写后的新 Prompt，进行最后一次尝试。
+        """
+        prompt = f"""
+你是一个专业且注重安全合规的内容改写员。
+有一段画图提示词在提交给画图模型时被拒绝或遇到了异常，原因可能包含敏感内容审查、尺寸格式报错或连接异常。
+
+【原画图提示词】:
+{original_prompt}
+
+【画图模型返回的最后一次异常信息】:
+{last_error}
+
+请你根据异常信息，对原画图提示词进行诊断和修改：
+1. 如果报错是因为“色情、暴力、血腥、政治”等严重违规审查，且你认为原内容**绝对无法**被修改为健康场景（例如要求本身就是极端不合法的），请直接返回 {{"can_fix": false, "new_prompt": ""}}
+2. 如果是因为审查问题，但你可以通过**去掉敏感词**、**把场景转换为正能量/健康搞笑/委婉抽象**的画面描述来避开审查，请进行脱敏重写。
+3. 如果只是普通的超时或未知错误，你可以尝试简化画面中的复杂要素，让场景更简洁。
+
+请严格以 JSON 格式输出，不要包含任何 markdown 代码块（如 ```json 等），只输出 JSON 字符串：
+{{
+  "can_fix": true,
+  "new_prompt": "修改后且保证健康合规的全新英文或中文画图提示词"
+}}
+"""
+        try:
+            llm_response = await call_provider_with_retry(
+                context=self.context,
+                config_manager=self.config_manager,
+                prompt=prompt,
+                umo=umo,
+                provider_id_key="drawing_prompt_provider_id",
+            )
+            if not llm_response or not llm_response.completion_text:
+                return None
+
+            response_text = llm_response.completion_text.strip()
+            if response_text.startswith("```"):
+                import re
+
+                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
+                response_text = re.sub(r"\s*```$", "", response_text)
+
+            import json
+
+            try:
+                data = json.loads(response_text)
+            except json.JSONDecodeError:
+                # 尝试通过正则寻找大括号内的内容
+                import re
+
+                match = re.search(r"(\{.*\})", response_text, re.DOTALL)
+                if match:
+                    data = json.loads(match.group(1))
+                else:
+                    raise
+
+            if data.get("can_fix") and data.get("new_prompt"):
+                new_prompt = data["new_prompt"].strip()
+                if new_prompt:
+                    logger.info("[Comic] LLM 成功分析异常并给出了重写的安全提示词。")
+                    return new_prompt
+
+            logger.info("[Comic] LLM 判断该异常无法通过重写修复，或未提供新提示词。")
+            return None
+        except Exception as e:
+            logger.error(f"[Comic] 请求 LLM 重写提示词时发生错误: {e}")
+            return None

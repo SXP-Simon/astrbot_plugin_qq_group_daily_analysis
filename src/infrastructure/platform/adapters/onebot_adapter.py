@@ -1266,9 +1266,15 @@ class OneBotAdapter(PlatformAdapter):
             album_id = self._find_item_in_list(
                 albums, album_name, ["album_id"], ["name", "album_name"]
             )
-            # 如果仍没指定且没搜到特定相册，取第一个
-            if not album_id and not album_name and albums:
+            # 如果仍没确定相册：
+            # - 没有指定相册名（纯兜底）→ 取第一个
+            # - 指定了名字但找不到且非严格模式 → 也取第一个（回退到默认相册）
+            if not album_id and albums and (not album_name or not strict_mode):
                 album_id = albums[0].get("album_id") or albums[0].get("id")
+                if album_name:
+                    logger.info(
+                        f"[群分析相册] 未找到相册 '{album_name}'，回退到默认相册 (群 {group_id})"
+                    )
 
         if not album_id:
             logger.info(

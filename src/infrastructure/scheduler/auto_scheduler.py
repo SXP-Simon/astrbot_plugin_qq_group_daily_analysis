@@ -512,14 +512,30 @@ class AutoScheduler:
             # 获取分析结果及适配器
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
+            dispatch_platform_id = (
+                adapter.platform_id
+                if hasattr(adapter, "platform_id")
+                else target_platform_id
+            )
 
             # 调度导出并发送报告
+            comic_trigger = getattr(
+                getattr(self, "plugin_instance", None),
+                "_try_trigger_comic_generation",
+                None,
+            )
+            if callable(comic_trigger):
+                try:
+                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                except Exception as exc:
+                    logger.error(
+                        f"群 {group_id} 触发定时报告漫画失败: {exc}", exc_info=True
+                    )
+
             report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
-                adapter.platform_id
-                if hasattr(adapter, "platform_id")
-                else target_platform_id,
+                dispatch_platform_id,
             )
 
             result["analysis_success"] = True
@@ -950,6 +966,19 @@ class AutoScheduler:
                 result["reason"] = "target_removed"
                 logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
                 return result
+
+            comic_trigger = getattr(
+                getattr(self, "plugin_instance", None),
+                "_try_trigger_comic_generation",
+                None,
+            )
+            if callable(comic_trigger):
+                try:
+                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                except Exception as exc:
+                    logger.error(
+                        f"群 {group_id} 触发增量报告漫画失败: {exc}", exc_info=True
+                    )
 
             report_sent = await self.report_dispatcher.dispatch(
                 group_id,

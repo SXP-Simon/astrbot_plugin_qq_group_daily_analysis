@@ -1,5 +1,22 @@
 # 更新日志 (CHANGELOG)
 
+## [v4.11.10] - ✨ 每日群漫画支持定时与增量触发
+
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="100%" valign="top">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="100%">
+      <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
+    </td>
+  </tr>
+</table>
+
+*   **✨ 并行触发**：群分析结果构建完成后即后台启动漫画任务，报告渲染和发送不再等待出图。手动分析、定时传统分析、定时增量最终报告与即时增量报告均可触发。
+*   **⚙️ 话题前置条件**：漫画只使用有效的话题总结作为分镜素材。话题功能关闭、未产出结果或标题为空时，插件会静默跳过本次漫画，避免生成与真实讨论无关的内容。
+*   **⚙️ 原生参考图配置**：`drawing_reference_image` 为 AstrBot 原生文件配置，支持从 WebUI 上传 `jpg/jpeg/png/webp` 并选择最后加入配置的一张作为图生图参考图；不再支持 URL、任意本地路径或目录随机选图。
+*   **⚙️ 配置要求**：启用 `enable_daily_comic` 后，需配置 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和匹配的 `drawing_api_protocol`；`drawing_prompt_provider_id` 与参考图均为可选项。
+*   **⚠️ 状态边界**：漫画是独立后台任务。报告发送失败不会取消已启动的漫画，漫画生成或发送失败也不会改写报告的成功状态。
+
 ## [v4.11.9] - 🛠️ 解耦即时报告与批次结算，渲染、发送失败或超时不会阻塞计数扣减和后续增量批次
 *   **🛠️ 增量批次逻辑优化**：增量批次成功保存并完成待处理计数结算后，才通知调度器安排即时报告。报告不再处于分析回调的等待链中，因此渲染、发送失败或超时不会阻塞计数扣减和后续增量批次。
 

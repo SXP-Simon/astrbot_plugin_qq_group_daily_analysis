@@ -352,6 +352,13 @@
                 "default": "",
                 "hint": "专门用于聊天质量锐评的 Provider。留空则使用主 LLM Provider"
             },
+            "drawing_prompt_provider_id": {
+                "type": "string",
+                "description": "用于每日群漫画区域的功能，画图提示词专用 Provider ID",
+                "_special": "select_provider",
+                "default": "",
+                "hint": "专门用于生成漫画分镜、画图提示词及失败后的提示词重写。推荐最低使用 DeepSeek V4 Flash，避免使用角色扮演能力较弱的模型。留空则使用主 LLM Provider"
+            },
             "llm_retries": {
                 "type": "int",
                 "description": "LLM 请求重试次数",
@@ -436,7 +443,139 @@
                 "type": "string",
                 "_special": "select_persona",
                 "default": "",
-                "hint": "当“强制使用插件指定人格”开启时，在此处选择系统中已定义的人设。若此处未选择，则仍会尝试识别全局默认人格。"
+                "hint": "当“强制使用插件指定人格”开启时，在此处选择系统中已定义的人设。该人格会同时作用于画图提示词生成模型。若此处未选择，则仍会尝试识别全局默认人格。"
+            }
+        }
+    },
+    "daily_comic": {
+        "description": "每日群漫画",
+        "type": "object",
+        "hint": "群聊分析结果完成后，后台并行生成并发送趣味漫画，不等待报告渲染或发送结束。可选上传至群相册，支持配置独立绘图接口和图生图参考图。",
+        "items": {
+            "enable_daily_comic": {
+                "description": "启用每日群漫画",
+                "type": "bool",
+                "default": false,
+                "hint": "开启后，每次群分析话题结果完成就会在后台并行生成漫画。需要启用话题分析并获得有效话题；没有有效话题时静默跳过。报告发送失败不会取消已开始的漫画任务。"
+            },
+            "drawing_reference_image": {
+                "description": "漫画参考图",
+                "type": "file",
+                "default": [],
+                "file_types": ["jpg", "jpeg", "png", "webp"],
+                "hint": "上传后点击 + 将图片设为参考图。已添加多张时，最后添加的一张会用于图生图。"
+            },
+            "drawing_api_url": {
+                "description": "绘图 API URL",
+                "type": "string",
+                "default": "",
+                "hint": "支持 OpenAI Images、Chat、xAI Grok Imagine 和 Google Gemini Interactions。可填写服务根地址、版本根地址或所选协议的完整接口地址。"
+            },
+            "drawing_api_key": {
+                "description": "绘图 API Key",
+                "type": "string",
+                "default": "",
+                "hint": "API 的验证密钥"
+            },
+            "drawing_model": {
+                "description": "绘图大模型名称",
+                "type": "string",
+                "default": "gpt-image-2",
+                "hint": "填写上游实际提供的模型名称或别名，推荐使用 gpt-image-2，例如 gpt-image-2、gpt-image-2-test。接口路由由下方协议类型决定，不限制模型名称。"
+            },
+            "drawing_api_protocol": {
+                "description": "API 协议类型",
+                "type": "string",
+                "options": ["images", "chat", "grok", "gemini"],
+                "default": "images",
+                "hint": "images=OpenAI /v1/images/generations 或 edits；chat=OpenAI 兼容 /v1/chat/completions；grok=xAI Grok Imagine 官方 JSON 协议；gemini=Google Gemini Interactions 官方协议。协议仅由此项决定，不根据模型名判断。"
+            },
+            "drawing_image_size": {
+                "description": "默认图片尺寸",
+                "type": "string",
+                "default": "1024x1024",
+                "options": [
+                    "1024x1024",
+                    "1K",
+                    "2K",
+                    "4K"
+                ],
+                "hint": "支持填写实际分辨率（如 3840x2160）或 1K、2K、4K 别名。Images 将其作为 size；Chat 写入 Prompt；Gemini 映射为 1K、2K、4K。Grok 当前使用官方默认分辨率。"
+            },
+            "drawing_aspect_ratio": {
+                "description": "默认宽高比",
+                "type": "string",
+                "default": "16:9",
+                "options": [
+                    "1:1",
+                    "2:3",
+                    "3:2",
+                    "3:4",
+                    "4:3",
+                    "4:5",
+                    "5:4",
+                    "9:16",
+                    "16:9",
+                    "21:9"
+                ],
+                "hint": "当默认图片尺寸使用 1K、2K、4K、auto 或比例值时，会结合该宽高比换算为实际分辨率。"
+            },
+            "drawing_image_quality": {
+                "description": "默认图片质量",
+                "type": "string",
+                "options": ["auto", "high", "medium", "low"],
+                "default": "high",
+                "hint": "仅 Images 协议生效。可选 low、medium、high；auto 表示不发送质量参数。具体取值是否受支持由上游接口决定。"
+            },
+            "drawing_background": {
+                "description": "默认背景",
+                "type": "string",
+                "default": "auto",
+                "hint": "仅 Images 协议生效，transparent 仅 PNG/WebP 输出格式可用。"
+            },
+            "drawing_output_format": {
+                "description": "默认输出格式",
+                "type": "string",
+                "options": ["png", "jpeg", "webp"],
+                "default": "png",
+                "hint": "Images 协议作为 output_format 发送；Gemini 协议映射为响应 MIME 类型（WebP 由所选模型决定，无法确认时使用服务默认格式）；Chat 和 Grok 当前不发送此项。"
+            },
+            "drawing_timeout": {
+                "description": "请求超时时间 (秒)",
+                "type": "int",
+                "default": 600,
+                "hint": "出图模型耗时较长，建议 120-600。"
+            },
+            "drawing_output_exception_retries": {
+                "description": "输出异常重试次数",
+                "type": "int",
+                "default": 3,
+                "hint": "当触发屏蔽词/审核等异常时的自动重试次数。次数耗尽后会交给LLM进行改写救场。"
+            },
+            "drawing_output_exception_retry_keywords": {
+                "description": "输出异常触发关键词",
+                "type": "list",
+                "items": { "type": "string" },
+                "default": [],
+                "hint": "当绘图错误信息包含任一关键词时，将其视为内容生成或安全审核异常，并使用同一接口配置重试；重试耗尽后可由 LLM 改写 Prompt。留空则不执行此类内容重试和 Prompt 改写。"
+            },
+            "drawing_retry_delay": {
+                "description": "画图重试等待时间 (秒)",
+                "type": "int",
+                "default": 2,
+                "hint": "遇到异常或网络报错时，等待多长时间后重试。针对容易超载的接口建议调高，如 5 或 10。"
+            },
+            "drawing_network_retries": {
+                "description": "网络错误重试次数",
+                "type": "int",
+                "default": 2,
+                "hint": "请求超时、限流或服务端错误时的重试次数；内容审核重试次数请单独配置。"
+            },
+            "drawing_download_proxy": {
+                "description": "图片下载代理",
+                "type": "string",
+                "default": "",
+                "hint": "下载绘图 API 返回的图片 URL 时使用的代理，格式为 http://host:port 或 socks5://host:port。留空则不使用代理。"
             }
         }
     },
@@ -561,6 +700,18 @@
                 "description": "群相册上传严格模式",
                 "default": true,
                 "hint": "当启用该开关且设置了目标群相册名称时：如果插件在目标群组中找不到同名的相册，将放弃上传。关闭该开关时，找不到目标相册将回退到群组默认的第一个相册。"
+            },
+            "enable_comic_album_upload": {
+                "type": "bool",
+                "description": "启用漫画相册上传",
+                "default": false,
+                "hint": "生成的每日群漫画除了发送到群聊外，是否还需要额外静默上传到群相册"
+            },
+            "comic_album_name": {
+                "description": "漫画相册名称",
+                "type": "string",
+                "default": "",
+                "hint": "指定每日群漫画上传到的群相册名称。群相册严格模式开启时，名称为空或找不到同名相册将放弃上传；关闭严格模式时可回退到默认相册。"
             }
         }
     },
@@ -579,7 +730,7 @@
                         "type": "text",
                         "editor_mode": true,
                         "editor_language": "markdown",
-                        "default": "请分析接下来提供的群聊记录，提取出最多 **${max_topics}** 个主要话题。根据实际聊天内容提取所有最有意义的话题。\n\n## 对于每个话题，请提供：\n\n1. **话题名称**（突出主题内容，尽量简明扼要，控制在 10 字以内）\n2. **主要参与者的用户ID**（最多 5 人，按参与度排序）\n3. **话题详细描述**（包含关键信息和结论）\n\n## 注意事项：\n\n- 在生成描述内容时，请务必从你当前人格设定的视角和口吻出发。\n- 对于比较有价值的点，稍微用一两句话详细讲讲，让读者能了解讨论的深度\n- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，即明确指出\"谁做了什么\"\n- **用户引用**：在话题详情描述中，如果提到了具体用户，请使用 `[用户ID]` 的格式来指代（例如 `[123456]`）。不要只写昵称。我们会自动渲染头像。\n- 对于每一条总结，尽量讲清楚前因后果，不要只列出结论\n- 如果某个话题有明确的结论或共识，请在描述中体现\n- 忽略无意义的闲聊、灌水、单纯的表情回复等\n- 优先选择讨论深度较深、参与人数较多的话题\n- 如果消息太少或没有明确话题，可以返回空数组 []\n\n群聊记录格式: [HH:MM] [用户ID]: 消息内容\n\n群聊记录：\n${messages_text}\n\n---\n\n## 重要：必须返回标准 JSON 格式\n\n严格遵守以下规则：\n\n1. 只使用英文双引号 `\"` ，不要使用中文引号 `“` `”`\n2. 字符串内容中的引号必须转义为 `\\\"`\n3. 多个对象之间用逗号分隔\n4. 数组元素之间用逗号分隔\n5. 不要在 JSON 外添加任何文字说明\n6. 描述内容避免使用特殊符号，用普通文字表达\n\n### 返回格式示例：\n\n```json\n[\n  {{\n    \"topic\": \"话题名称\",\n    \"contributors\": [\"123456789\", \"987654321\"],\n    \"detail\": \"话题的详细描述，包含讨论内容、关键信息和结论。注意：在描述中提及用户时，使用 [用户ID] 格式，例如 [123456789]。\"\n  }},\n  {{\n    \"topic\": \"另一个话题\",\n    \"contributors\": [\"111222333\", \"444555666\"],\n    \"detail\": \"另一个话题的详细描述...\"\n  }}\n]\n```\n\n**注意**：返回的内容必须是纯 JSON，不要包含 markdown 代码块标记或其他格式。"
+                        "default": "请分析接下来提供的群聊记录，提取出 1 到 **${max_topics}** 个主要话题。**如果聊天记录较多，请务必仔细分析，尽可能多地提取出不同层面的话题，争取达到 ${max_topics} 个上限**。\n\n## 对于每个话题，请提供：\n\n1. **话题名称**（突出主题内容，尽量简明扼要，控制在 10 字以内）\n2. **主要参与者的用户ID**（最多 5 人，按参与度排序）\n3. **话题详细描述**（包含关键信息和结论）\n\n## 注意事项：\n\n- 在生成描述内容时，请务必从你当前人格设定的视角和口吻出发。\n- 对于比较有价值的点，稍微用一两句话详细讲讲，让读者能了解讨论的深度\n- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，即明确指出\"谁做了什么\"\n- **用户引用**：在话题详情描述中，如果提到了具体用户，请使用 `[用户ID]` 的格式来指代（例如 `[123456]`）。不要只写昵称。我们会自动渲染头像。\n- 对于每一条总结，尽量讲清楚前因后果，不要只列出结论\n- 如果某个话题有明确的结论或共识，请在描述中体现\n- 忽略无意义的闲聊、灌水、单纯的表情回复等\n- 优先选择讨论深度较深、参与人数较多的话题\n- 如果消息太少或没有明确话题，可以返回空数组 []\n\n群聊记录格式: [HH:MM] [用户ID]: 消息内容\n\n群聊记录：\n${messages_text}\n\n---\n\n## 重要：必须返回标准 JSON 格式\n\n严格遵守以下规则：\n\n1. 只使用英文双引号 `\"` ，不要使用中文引号 `“` `”`\n2. 字符串内容中的引号必须转义为 `\\\"`\n3. 多个对象之间用逗号分隔\n4. 数组元素之间用逗号分隔\n5. 不要在 JSON 外添加任何文字说明\n6. 描述内容避免使用特殊符号，用普通文字表达\n\n### 返回格式示例：\n\n```json\n[\n  {{\n    \"topic\": \"话题名称\",\n    \"contributors\": [\"123456789\", \"987654321\"],\n    \"detail\": \"话题的详细描述，包含讨论内容、关键信息和结论。注意：在描述中提及用户时，使用 [用户ID] 格式，例如 [123456789]。\"\n  }},\n  {{\n    \"topic\": \"另一个话题\",\n    \"contributors\": [\"111222333\", \"444555666\"],\n    \"detail\": \"另一个话题的详细描述...\"\n  }}\n]\n```\n\n**注意**：返回的内容必须是纯 JSON，不要包含 markdown 代码块标记或其他格式。"
                     }
                 }
             },
@@ -629,6 +780,21 @@
                         "editor_mode": true,
                         "editor_language": "markdown",
                         "default": "你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。\n你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。\n\n## 任务目标：\n1. **全局抽象维度**：根据各批次的维度表现，平衡权重，提取出 3-6 个覆盖全天的【核心、上层抽象】课题维度（如：职场/行业风向、技术架构演进、社畜心理博弈等）。\n2. **严禁在维度名称（name）中出现具体的批次细节。标题必须代表全天的某种趋势。**\n3. **百分比融合**：根据全天笔记的频率和强度，给出一个代表全天整体分布的比例（总和不超过100%）。\n4. **终极点评**：为每个汇总维度写出一句符合你当前人设且升华后的全天总结性点评。可以融合具体批次中的有趣槽点。\n5. **终极总结**：拟定全天的大型主题标题、副标题，并给出一句霸气的全天表现总结。\n\n## 风格要求：\n- 只有维度名称（name）需要高度概括抽象。\n- 点评（comment）和总结（summary）请尽量生动、具体，要把一整天的梗串联起来。\n\n## 返回格式要求：\n必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。\n\n```json\n{{\n  \"title\": \"今日群聊主题\",\n  \"subtitle\": \"副标题\",\n  \"dimensions\": [\n    {{\n      \"name\": \"抽象大类标题\",\n      \"percentage\": 比例,\n      \"comment\": \"全天的锐评总结，请务必保持你的人设口吻\"\n    }}\n  ],\n  \"summary\": \"全天总结金句\"\n}}\n```\n\n增量汇总数据：\n${reviews_text}"
+                    }
+                }
+            },
+            "comic_analysis_prompts": {
+                "description": "漫画场景分析提示词模板",
+                "type": "object",
+                "hint": "漫画场景分析提示词模板，可自定义修改",
+                "items": {
+                    "comic_storyboard_prompt": {
+                        "description": "漫画场景分析提示词",
+                        "type": "text",
+                        "editor_mode": true,
+                        "editor_language": "markdown",
+                        "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n请输出包含 \"scene\" 字段的 JSON 对象。\n",
+                        "hint": "让大模型根据核心话题生成丰富生动的多格连环漫画画图提示词"
                     }
                 }
             }
