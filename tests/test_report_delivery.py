@@ -22,6 +22,10 @@ def test_dispatch_returns_false_when_no_report_format_is_sent():
 
 def test_traditional_analysis_is_failed_when_report_delivery_fails():
     async def scenario():
+        async def failing_dispatch(*_args):
+            assert scheduler.plugin_instance._try_trigger_comic_generation.called
+            return False
+
         scheduler = object.__new__(AutoScheduler)
         scheduler._terminating = False
         scheduler._get_group_name_safe = AsyncMock(return_value="测试群")
@@ -38,7 +42,10 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
             )
         )
         scheduler.report_dispatcher = SimpleNamespace(
-            dispatch=AsyncMock(return_value=False)
+            dispatch=AsyncMock(side_effect=failing_dispatch)
+        )
+        scheduler.plugin_instance = SimpleNamespace(
+            _try_trigger_comic_generation=Mock()
         )
 
         result = await scheduler._perform_auto_analysis_for_group(
@@ -49,12 +56,16 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
         assert result["report_sent"] is False
         assert result["success"] is False
         assert result["reason"] == "report_delivery_failed"
+        scheduler.plugin_instance._try_trigger_comic_generation.assert_called_once_with(
+            "123456", "onebot-main", {}
+        )
 
         scheduler.analysis_service.execute_daily_analysis.return_value = {
             "success": True,
             "analysis_result": {},
             "adapter": SimpleNamespace(platform_id="onebot-main"),
         }
+        scheduler.report_dispatcher.dispatch.side_effect = None
         scheduler.report_dispatcher.dispatch.return_value = True
         result = await scheduler._perform_auto_analysis_for_group(
             "123456", "onebot-main"
@@ -63,12 +74,20 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
         assert result["analysis_success"] is True
         assert result["report_sent"] is True
         assert result["success"] is True
+        assert scheduler.plugin_instance._try_trigger_comic_generation.call_count == 2
+        scheduler.plugin_instance._try_trigger_comic_generation.assert_called_with(
+            "123456", "onebot-main", {}
+        )
 
     asyncio.run(scenario())
 
 
 def test_incremental_final_report_requires_successful_delivery():
     async def scenario():
+        async def failing_dispatch(*_args):
+            assert scheduler.plugin_instance._try_trigger_comic_generation.called
+            return False
+
         scheduler = object.__new__(AutoScheduler)
         scheduler._terminating = False
         scheduler._get_group_name_safe = AsyncMock(return_value="测试群")
@@ -86,10 +105,13 @@ def test_incremental_final_report_requires_successful_delivery():
             incremental_store=None,
         )
         scheduler.report_dispatcher = SimpleNamespace(
-            dispatch=AsyncMock(return_value=False)
+            dispatch=AsyncMock(side_effect=failing_dispatch)
         )
         scheduler.config_manager = SimpleNamespace(
             get_analysis_days=Mock(return_value=1)
+        )
+        scheduler.plugin_instance = SimpleNamespace(
+            _try_trigger_comic_generation=Mock()
         )
 
         result = await scheduler._perform_incremental_final_report_for_group(
@@ -100,12 +122,16 @@ def test_incremental_final_report_requires_successful_delivery():
         assert result["report_sent"] is False
         assert result["success"] is False
         assert result["reason"] == "report_delivery_failed"
+        scheduler.plugin_instance._try_trigger_comic_generation.assert_called_once_with(
+            "123456", "onebot-main", {}
+        )
 
         scheduler.analysis_service.execute_incremental_final_report.return_value = {
             "success": True,
             "analysis_result": {},
             "adapter": SimpleNamespace(platform_id="onebot-main"),
         }
+        scheduler.report_dispatcher.dispatch.side_effect = None
         scheduler.report_dispatcher.dispatch.return_value = True
         result = await scheduler._perform_incremental_final_report_for_group(
             "123456", "onebot-main"
@@ -114,6 +140,7 @@ def test_incremental_final_report_requires_successful_delivery():
         assert result["analysis_success"] is True
         assert result["report_sent"] is True
         assert result["success"] is True
+        assert scheduler.plugin_instance._try_trigger_comic_generation.call_count == 2
 
     asyncio.run(scenario())
 

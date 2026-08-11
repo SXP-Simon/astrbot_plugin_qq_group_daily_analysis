@@ -32,6 +32,8 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 ## 效果
 
+### 1. **群分析报告**：生成群聊活跃度、参与度、话题、金句等统计的可视化报告
+
 <table align="center" width="100%">
   <tr>
     <td align="center" width="33.3%" valign="top">
@@ -63,7 +65,16 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   </tr>
 </table>
 
+### 2. **每日群漫画**：将群分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="100%" valign="top">
+      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="100%">
+      <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
+    </td>
+  </tr>
+</table>
 
 
 ## 功能特色
@@ -73,6 +84,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **话题分析**: 使用LLM智能提取群聊中的热门话题和讨论要点
 - **用户画像**: 基于聊天行为分析用户特征，分配个性化称号
 - **圣经识别**: 自动筛选出群聊中的精彩发言
+- **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
@@ -158,8 +170,21 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 |--------|------|--------|
 | 定时分析名单模式 + 列表 | 控制哪些群参与定时任务（报告时间点触发）。 | `whitelist + 空列表` 表示不注册定时任务 |
 | 增量分析名单模式 + 列表 | 控制哪些群走增量模式，其他群走传统全量。 | `whitelist + 空列表` 表示不启用增量周期任务 |
+| 每日群漫画 | 分析结果完成后并行生成漫画。 | 需开启 `enable_daily_comic` 并填写绘图 API 配置 |
 | HTML 格式 (自建) | 配置 `html_base_url` 后，机器人会发送可直接点击的报告外链。 | 输出格式需设为 html |
 | 自定义 LLM 服务 | 用户可自行选取个人提供的服务商。 | 留空则回退到默认服务商 |
+
+### 每日群漫画配置
+
+每日群漫画不按自然日限流：每次成功得到群分析结果时都会尝试生成一张。手动群分析、定时传统分析、定时增量最终报告，以及开启“增量分析立即报告”后的即时增量最终报告都适用。同一群已有漫画在排队或生成时，新请求会直接跳过，避免重复出图；不同群仍受漫画并发配置限制。
+
+1. 在 `每日群漫画` 配置组开启 `enable_daily_comic`，并在 `分析功能` 配置组保持 `topic_analysis_enabled` 开启。
+2. 填写 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和 `drawing_api_protocol`。协议必须与上游接口一致：OpenAI Images 用 `images`，OpenAI 兼容聊天接口用 `chat`，xAI Grok Imagine 用 `grok`，Google Gemini Interactions 用 `gemini`。
+3. 可选填写 `drawing_prompt_provider_id`。它用于把分析结果整理成绘图分镜提示词；留空时使用插件的常规 Provider 回退策略。
+4. 可选在 `漫画参考图` 中上传 `jpg`、`jpeg`、`png` 或 `webp`，再点击目标文件的 `+` 加入配置。列表中最后加入的一张作为当前图生图参考图。
+5. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
+
+分析结果完成后，漫画任务会立即在后台运行，报告渲染与发送不会等待出图完成。反过来，报告发送失败也不会取消已经开始的漫画任务。漫画只使用有效的话题总结作为分镜素材，因此需要开启话题分析；话题功能关闭、话题 LLM 无结果或标题为空时，插件仅记录调试日志并跳过本次漫画。
 
 ### 分析黑白名单配置说明（小白能懂）
 
