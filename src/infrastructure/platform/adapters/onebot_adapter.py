@@ -9,6 +9,7 @@ import base64
 import os
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -25,6 +26,7 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from ..napcat_stream import upload_file_stream
 
 
 class OneBotAdapter(PlatformAdapter):
@@ -655,9 +657,34 @@ class OneBotAdapter(PlatformAdapter):
                 raise
             logger.debug(f"[OneBot] 图片发送成功 ({label}): 群 {group_id}")
 
-        return await self._execute_transmission_strategy(
+        sent = await self._execute_transmission_strategy(
             image_path, do_send, "OneBot 图片", format_path_as_url=True
         )
+        if sent:
+            return True
+
+        stream_threshold = self._get_napcat_stream_threshold_bytes()
+        path = Path(image_path)
+        if (
+            stream_threshold <= 0
+            or not path.is_file()
+            or path.stat().st_size < stream_threshold
+        ):
+            return False
+
+        logger.warning(
+            "[OneBot] 常规图片发送失败: %s，准备通过 NapCat Stream API 重试",
+            path.name,
+        )
+        uploaded_path = await upload_file_stream(self.bot, path)
+        if not uploaded_path:
+            return False
+        try:
+            await do_send(uploaded_path, "NapCat 流式上传重试")
+            return True
+        except Exception as exc:
+            logger.warning(f"[OneBot] NapCat 流式上传图片重试失败: {exc}")
+            return False
 
     async def send_file(
         self,
@@ -1473,6 +1500,17 @@ class OneBotAdapter(PlatformAdapter):
         if plugin and hasattr(plugin, "config_manager"):
             return plugin.config_manager.get_enable_base64_image()
         return False
+
+    def _get_napcat_stream_threshold_bytes(self) -> int:
+        """获取配置的 NapCat 流式上传兜底阈值（字节）。"""
+        plugin: Any = self.config.get("plugin_instance") if self.config else None
+        if not plugin or not hasattr(plugin, "config_manager"):
+            return 0
+        try:
+            threshold_mb = plugin.config_manager.get_napcat_stream_threshold_mb()
+            return max(0, int(float(threshold_mb) * 1024 * 1024))
+        except (TypeError, ValueError):
+            return 0
 
     def _prepare_path(self, path: str) -> tuple[str, bool, bool]:
         """统一路径预处理。返回: (标准化后的绝对路径, 是否为远程/编码路径, 本地文件是否存在)"""

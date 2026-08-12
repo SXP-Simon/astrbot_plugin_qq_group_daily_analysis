@@ -138,6 +138,12 @@
                 "default": true,
                 "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
             },
+            "napcat_stream_threshold_mb": {
+                "type": "float",
+                "description": "NapCat 流式上传阈值（MB）",
+                "default": 2.0,
+                "hint": "先按现有图片发送策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 OneBot/NapCat 连接调用 upload_file_stream 并重试一次。填 0 禁用。Docker / docker compose 环境建议保持默认或按图片大小调大。"
+            },
             "enable_analysis_reply": {
                 "type": "bool",
                 "description": "发送文本/表情回复",
@@ -519,7 +525,7 @@
                                 "type": "file",
                                 "default": [],
                                 "file_types": ["jpg", "jpeg", "png", "webp"],
-                                "hint": "上传后点击 + 加入此角色方案。已选择多张时，最后添加的一张会用于图生图。"
+                                "hint": "上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
                             },
                             "storyboard_prompt": {
                                 "description": "漫画场景分析提示词",
@@ -540,6 +546,93 @@
                 "file_types": ["jpg", "jpeg", "png", "webp"],
                 "invisible": true,
                 "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
+            },
+            "drawing_provider_overrides": {
+                "description": "绘图供应商配置表",
+                "type": "template_list",
+                "default": [],
+                "hint": "可添加多个绘图供应商。按 priority 从高到低尝试，同优先级按表中顺序尝试；所有候选失败后才判定漫画生成失败。留空时继续使用下方旧版单接口配置。",
+                "templates": {
+                    "provider": {
+                        "name": "绘图供应商",
+                        "display_item": "name",
+                        "items": {
+                            "name": {
+                                "description": "供应商名称",
+                                "type": "string",
+                                "default": "",
+                                "hint": "仅用于在配置面板和运行日志中识别该供应商。"
+                            },
+                            "enable": {
+                                "description": "启用此供应商",
+                                "type": "bool",
+                                "default": true
+                            },
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0,
+                                "hint": "数值越大越先尝试；相同数值按配置表从上到下尝试。"
+                            },
+                            "api_protocol": {
+                                "description": "API 协议类型",
+                                "type": "string",
+                                "options": ["images", "chat", "grok", "gemini"],
+                                "default": "images",
+                                "hint": "images=OpenAI Images；chat=OpenAI 兼容 Chat；grok=xAI Grok Imagine；gemini=Google Gemini Interactions。"
+                            },
+                            "api_url": {
+                                "description": "绘图 API URL",
+                                "type": "string",
+                                "default": "",
+                                "hint": "可填写服务根地址、版本根地址或完整接口地址；留空时使用该协议的官方默认地址。"
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "model": {
+                                "description": "绘图模型",
+                                "type": "string",
+                                "default": "gpt-image-2"
+                            },
+                            "image_size": {
+                                "description": "图片尺寸",
+                                "type": "string",
+                                "default": "1024x1024",
+                                "hint": "支持实际分辨率或 1K、2K、4K 别名。"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "输出格式",
+                                "type": "string",
+                                "options": ["png", "jpeg", "webp"],
+                                "default": "png"
+                            },
+                            "image_quality": {
+                                "description": "图片质量",
+                                "type": "string",
+                                "options": ["auto", "high", "medium", "low"],
+                                "default": "high"
+                            },
+                            "background": {
+                                "description": "背景",
+                                "type": "string",
+                                "default": "auto"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    }
+                }
             },
             "drawing_api_url": {
                 "description": "绘图 API URL",
