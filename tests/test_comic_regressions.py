@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import json
 import mimetypes
+import os
 import re
 import shutil
 from pathlib import Path
@@ -54,6 +55,9 @@ def load_main_method(name: str):
         "DuplicateGroupTaskError": RuntimeError,
         "asyncio": asyncio,
         "logger": Mock(),
+        "os": os,
+        "PLUGIN_NAME": "test_plugin",
+        "StarTools": SimpleNamespace(get_data_dir=Mock()),
     }
     exec(compile(isolated_module, str(main_path), "exec"), namespace)
     return getattr(namespace["MainMethodHarness"], name)
@@ -1057,3 +1061,70 @@ def test_detect_image_ext_sniffs_bytes():
     assert detect(b"GIF89a....") == ".gif"
     assert detect(b"\x00\x00\x00\x18ftypavif....") == ".avif"
     assert detect(b"unknown-bytes") == ".png"
+
+
+def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
+    """漫画生成成功后应按真实图片字节缓存，不能读取已删除的全局输出格式。
+
+    外部绘图后端可以返回与内置供应商配置不同的编码格式。此处覆盖从生成结果到
+    发送、相册上传的完整路径，确保 JPEG 不会因旧的 ``get_drawing_output_format``
+    回退逻辑触发 AttributeError 或被错误保存为 PNG。
+    """
+    trigger_comic = load_main_method("_trigger_comic_generation")
+    detect_image_ext = load_main_method("_detect_image_ext")
+    trigger_comic.__globals__["StarTools"] = SimpleNamespace(
+        get_data_dir=Mock(return_value=tmp_path)
+    )
+    adapter = SimpleNamespace(send_image=AsyncMock())
+    comic_bytes = b"\xff\xd8\xffjpeg-payload"
+    plugin = SimpleNamespace(
+        _comic_semaphore=asyncio.Semaphore(1),
+        _terminating=False,
+        _detect_image_ext=detect_image_ext,
+        comic_service=SimpleNamespace(
+            generate_comic=AsyncMock(return_value=(comic_bytes, None))
+        ),
+        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
+        _try_upload_image=AsyncMock(),
+    )
+
+    asyncio.run(trigger_comic(plugin, [{"topic": "测试"}], "123456", "onebot", "umo"))
+
+    sent_path = adapter.send_image.await_args.args[1]
+    assert sent_path.endswith(".jpg")
+    assert not Path(sent_path).exists()
+    plugin._try_upload_image.assert_awaited_once_with(
+        "123456", sent_path, "onebot", is_comic=True
+    )
+
+
+def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
+    """漫画相册上传应从本地缓存内容识别格式，而不是默认标记为 PNG。"""
+    upload_image = load_main_method("_try_upload_image")
+    detect_image_ext = load_main_method("_detect_image_ext")
+    image_path = tmp_path / "comic_cache" / "comic.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"\xff\xd8\xffjpeg-payload")
+    adapter = SimpleNamespace(
+        get_group_info=AsyncMock(return_value=None),
+        upload_group_album=AsyncMock(),
+    )
+    plugin = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_enable_comic_album_upload=Mock(return_value=True),
+            get_comic_album_name=Mock(return_value="comic"),
+            get_group_album_strict_mode=Mock(return_value=False),
+        ),
+        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
+        _detect_image_ext=detect_image_ext,
+    )
+
+    asyncio.run(upload_image(plugin, "123456", str(image_path), "onebot", True))
+
+    adapter.upload_group_album.assert_awaited_once_with(
+        "123456",
+        str(image_path.resolve()),
+        album_id=None,
+        album_name="comic",
+        strict_mode=False,
+    )
