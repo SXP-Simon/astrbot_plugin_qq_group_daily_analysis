@@ -3,6 +3,13 @@
 负责处理插件配置
 """
 
+import json
+import random
+import shutil
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
 from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
@@ -26,12 +33,133 @@ class ConfigManager:
 
     def __init__(self, config: AstrBotConfig):
         self.config = config
+        self._migrate_daily_comic_characters()
+
+    def _migrate_daily_comic_characters(self) -> None:
+        """迁移旧版漫画参考图配置，并保存迁移前备份。
+
+        旧版仅支持一个全局参考图列表；新版将参考图归属到具体角色方案。
+        迁移只在尚未创建角色方案时执行，避免覆盖用户已编辑的新配置。
+        """
         daily_comic = self._get_group("daily_comic")
-        if isinstance(daily_comic.get("drawing_reference_image"), str):
-            # 旧版使用 URL 或本地路径字符串；新版仅接受 WebUI 上传的文件列表。
+        old_references = daily_comic.get("drawing_reference_image", [])
+        characters = daily_comic.get("comic_characters", [])
+        if isinstance(characters, list) and characters:
+            return
+
+        if isinstance(old_references, str):
+            # 早期版本允许 URL 或任意本地路径，原生文件控件不能安全地继续使用它们。
+            backup_data = {"drawing_reference_image": old_references}
             daily_comic["drawing_reference_image"] = []
+            self._write_comic_config_backup(backup_data)
             self.config.save_config()
-            logger.info("已清除旧版漫画参考图配置，请在 WebUI 重新选择图片。")
+            logger.info(
+                "已备份并清除不受支持的旧版漫画参考图配置，请在 WebUI 重新选择图片。"
+            )
+            return
+
+        references = (
+            [
+                reference.strip()
+                for reference in old_references
+                if isinstance(reference, str) and reference.strip()
+            ]
+            if isinstance(old_references, list)
+            else []
+        )
+        if not references:
+            return
+
+        specific_persona_id = ""
+        if self.get_use_plugin_specific_persona():
+            specific_persona_id = self.get_plugin_specific_persona_id().strip()
+        migrated_references = self._copy_legacy_comic_reference_images(references)
+        if len(migrated_references) != len(references):
+            logger.warning(
+                "旧版漫画参考图尚未完整迁移，将保留原配置并在下次重载时重试。"
+            )
+            return
+        backup_data = {
+            "drawing_reference_image": references,
+            "use_plugin_specific_persona": self.get_use_plugin_specific_persona(),
+            "plugin_specific_persona_id": specific_persona_id,
+        }
+        self._write_comic_config_backup(backup_data)
+        daily_comic["comic_characters"] = [
+            {
+                "__template_key": "character",
+                "name": "默认角色方案",
+                "enable": True,
+                "persona_id": specific_persona_id,
+                "reference_images": migrated_references,
+            }
+        ]
+        # 已迁移的数据不再保留在兼容字段，避免用户主动清空角色方案后被重复迁移。
+        daily_comic["drawing_reference_image"] = []
+        self.config.save_config()
+        logger.info(
+            "已将旧版漫画参考图迁移到“默认角色方案”，原始配置已备份到插件数据目录。"
+        )
+
+    def _write_comic_config_backup(self, data: dict) -> None:
+        """写入漫画配置迁移备份。
+
+        Args:
+            data: 需要保留的旧版漫画相关配置。
+        """
+        try:
+            backup_dir = StarTools.get_data_dir(PLUGIN_NAME) / "config_backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"comic_character_migration_{timestamp}.json"
+            backup_path.write_text(
+                json.dumps(
+                    {
+                        "migrated_at": datetime.now().isoformat(),
+                        "config": data,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning(f"保存漫画配置迁移备份失败: {exc}")
+
+    def _copy_legacy_comic_reference_images(self, references: list[str]) -> list[str]:
+        """复制旧参考图到角色模板对应的原生上传目录。
+
+        AstrBot 会校验 file 类型配置的路径前缀。旧字段与模板字段的目录不同，
+        因此不能只复用旧路径字符串，否则用户在 WebUI 保存时会校验失败。
+
+        Args:
+            references: 旧版全局参考图相对路径列表。
+
+        Returns:
+            可写入新角色方案的参考图相对路径列表。
+        """
+        plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
+        relative_dir = Path(
+            "files/daily_comic/comic_characters/templates/character/reference_images"
+        )
+        target_dir = plugin_data_dir / relative_dir
+        migrated_references = []
+        for index, reference in enumerate(references, start=1):
+            try:
+                source_path = (plugin_data_dir / reference).resolve()
+                source_path.relative_to(plugin_data_dir.resolve())
+                if not source_path.is_file():
+                    logger.warning(f"旧版漫画参考图不存在，跳过迁移: {reference}")
+                    continue
+
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target_name = f"migrated_{index}_{source_path.name}"
+                target_path = target_dir / target_name
+                shutil.copy2(source_path, target_path)
+                migrated_references.append((relative_dir / target_name).as_posix())
+            except (OSError, ValueError) as exc:
+                logger.warning(f"迁移旧版漫画参考图失败 {reference}: {exc}")
+        return migrated_references
 
     def _get_group(self, group: str) -> dict:
         """获取指定分组的配置字典，不存在时返回空字典"""
@@ -914,9 +1042,16 @@ class ConfigManager:
         ).strip()
 
     def get_drawing_reference_image(self) -> str:
-        """获取当前选中的漫画参考图相对路径。"""
-        reference_images = self._get_group("daily_comic").get(
-            "drawing_reference_image", []
+        """获取当前选中的漫画参考图相对路径。
+
+        Returns:
+            当前角色方案最后添加的参考图；未配置角色方案时兼容旧版字段。
+        """
+        character = self.get_selected_comic_character()
+        reference_images = (
+            character.get("reference_images", [])
+            if character
+            else self._get_group("daily_comic").get("drawing_reference_image", [])
         )
         if not isinstance(reference_images, list):
             return ""
@@ -925,6 +1060,101 @@ class ConfigManager:
             if isinstance(reference_image, str) and reference_image.strip():
                 return reference_image.strip()
         return ""
+
+    def get_selected_comic_character(self) -> dict | None:
+        """获取本次漫画应使用的角色方案。
+
+        开启随机后，同一上海自然日内固定选择同一个已启用方案；关闭时始终使用
+        第一个已启用方案。角色列表为空时返回 None，调用方将回退到既有文生图行为。
+
+        Returns:
+            角色方案配置；没有可用方案时返回 None。
+        """
+        characters = self._get_group("daily_comic").get("comic_characters", [])
+        enabled_characters = (
+            [
+                character
+                for character in characters
+                if isinstance(character, dict) and character.get("enable", True)
+            ]
+            if isinstance(characters, list)
+            else []
+        )
+        if not enabled_characters:
+            return None
+
+        if not self._get_group("daily_comic").get(
+            "random_daily_comic_character", False
+        ):
+            return enabled_characters[0]
+
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        state_path = self._get_comic_character_state_path()
+        state = self._read_comic_character_state(state_path)
+        selected_character = state.get("selected_character")
+        if state.get("date") == today and selected_character in enabled_characters:
+            return selected_character
+
+        selected_character = random.choice(enabled_characters)
+        self._save_comic_character_state(
+            state_path,
+            {"date": today, "selected_character": selected_character},
+        )
+        character_name = str(selected_character.get("name", "")).strip() or "未命名方案"
+        logger.info(f"今日漫画角色已随机选择: {character_name}")
+        return selected_character
+
+    def get_comic_character_persona_id(self, character: dict | None) -> str:
+        """获取角色方案绑定的漫画专用人格 ID。
+
+        Args:
+            character: 当前选中的角色方案。
+
+        Returns:
+            人格 ID；未配置时为空字符串。
+        """
+        if not isinstance(character, dict):
+            return ""
+        return str(character.get("persona_id", "")).strip()
+
+    @staticmethod
+    def _get_comic_character_state_path() -> Path:
+        """获取每日随机角色状态文件路径。"""
+        return StarTools.get_data_dir(PLUGIN_NAME) / "comic_character_daily_state.json"
+
+    @staticmethod
+    def _read_comic_character_state(state_path: Path) -> dict:
+        """读取每日随机角色状态。
+
+        Args:
+            state_path: 状态文件路径。
+
+        Returns:
+            可用状态字典；文件不存在或无效时返回空字典。
+        """
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            return state if isinstance(state, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    @staticmethod
+    def _save_comic_character_state(state_path: Path, state: dict) -> None:
+        """原子写入每日随机角色状态。
+
+        Args:
+            state_path: 状态文件路径。
+            state: 待保存状态。
+        """
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = state_path.with_suffix(".tmp")
+            temporary_path.write_text(
+                json.dumps(state, ensure_ascii=False), encoding="utf-8"
+            )
+            temporary_path.replace(state_path)
+        except OSError as exc:
+            logger.warning(f"保存每日漫画角色选择失败: {exc}")
 
     def get_comic_storyboard_prompt(
         self, style: str = "comic_storyboard_prompt"

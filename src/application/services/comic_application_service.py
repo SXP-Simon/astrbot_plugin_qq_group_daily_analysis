@@ -47,10 +47,19 @@ class ComicApplicationService:
         if not self.config_manager.get_enable_daily_comic():
             return None, None
 
-        logger.info(f"[Comic] 开始为群 {group_id} 生成每日漫画...")
+        character = self.config_manager.get_selected_comic_character()
+        character_name = (
+            str(character.get("name", "")).strip() if character else ""
+        ) or "默认配置"
+        persona_id = self.config_manager.get_comic_character_persona_id(character)
+        logger.info(
+            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
+        )
 
         # 1. 提取分镜和金句
-        storyboards, _ = await self.llm_analyzer.analyze_comic_storyboards(topics, umo)
+        storyboards, _ = await self.llm_analyzer.analyze_comic_storyboards(
+            topics, umo, persona_id=persona_id or None
+        )
 
         if not storyboards:
             logger.warning(

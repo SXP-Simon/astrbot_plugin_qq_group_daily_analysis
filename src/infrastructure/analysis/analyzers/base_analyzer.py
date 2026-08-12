@@ -334,7 +334,11 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         )
 
     async def analyze(
-        self, data: TInputData, umo: str | None = None, session_id: str | None = None
+        self,
+        data: TInputData,
+        umo: str | None = None,
+        session_id: str | None = None,
+        persona_id: str | None = None,
     ) -> tuple[list[TDataObject], TokenUsage]:
         """
         统一的分析流程
@@ -343,6 +347,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             data: 输入数据
             umo: 模型唯一标识符
             session_id: 会话ID (用于调试模式)
+            persona_id: 显式指定的人格 ID，传入时优先于常规人格选择逻辑
 
         Returns:
             (分析结果列表, Token使用统计)
@@ -393,7 +398,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             )
 
             # 获取人格设定
-            system_prompt = await self._build_system_prompt(umo)
+            system_prompt = await self._build_system_prompt(umo, persona_id)
 
             # 应用人格强化注入
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
@@ -498,15 +503,19 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             logger.error(f"{self.get_data_type()}分析失败: {e}", exc_info=True)
             return [], TokenUsage()
 
-    async def _build_system_prompt(self, umo: str | None) -> str | None:
+    async def _build_system_prompt(
+        self, umo: str | None, persona_id: str | None = None
+    ) -> str | None:
         """
         构建带有会话人格的系统提示词，优先级如下：
-        1. 插件指定的全局人格 (若核心开关开启)
-        2. 会话/对话选定的人格 (若开启了继承开关)
-        3. 当前 UMO 的默认人格 (若开启了继承开关)
+        1. 调用方显式指定的人格
+        2. 插件指定的全局人格 (若核心开关开启)
+        3. 会话/对话选定的人格 (若开启了继承开关)
+        4. 当前 UMO 的默认人格 (若开启了继承开关)
 
         Args:
             umo: 用户模型对象标识，用于定位会话上下文
+            persona_id: 调用方显式指定的人格 ID
 
         Returns:
             最终生成的 System Prompt 字符串，若无则返回 None
@@ -523,9 +532,23 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
         persona_prompt = None
 
+        # 漫画角色等局部调用可显式指定人格，不修改插件全局人格配置。
+        if persona_id:
+            try:
+                persona_obj = await persona_mgr.get_persona(persona_id)
+                persona_prompt = (
+                    persona_obj.system_prompt
+                    if hasattr(persona_obj, "system_prompt")
+                    else None
+                )
+                if persona_prompt:
+                    logger.debug(f"已应用调用方指定人格: {persona_id}")
+            except Exception as e:
+                logger.warning(f"获取调用方指定人格失败 (ID: {persona_id}): {e}")
+
         # --- 优先级 1: 插件指定的全局固定人格 ---
         # 适用于希望所有分析报告都呈现同一种风格的情况
-        if use_specific and specific_id:
+        if not persona_prompt and use_specific and specific_id:
             try:
                 persona_obj = await persona_mgr.get_persona(specific_id)
                 persona_prompt = (

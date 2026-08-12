@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import json
 import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,8 +95,15 @@ def load_comic_service_method(name: str):
     return getattr(namespace["ComicServiceHarness"], name)
 
 
-def load_config_manager_class():
-    """加载漫画参考图相关配置方法，避免测试依赖 AstrBot 运行时。"""
+def load_config_manager_class(plugin_data_dir: Path):
+    """加载漫画配置相关方法，避免测试依赖 AstrBot 运行时。
+
+    Args:
+        plugin_data_dir: 用于模拟插件数据目录的临时路径。
+
+    Returns:
+        仅包含漫画配置逻辑的 ConfigManager 测试替身类。
+    """
     config_path = (
         Path(__file__).parents[1]
         / "src"
@@ -111,7 +119,21 @@ def load_config_manager_class():
         for node in module.body
         if isinstance(node, ast.ClassDef) and node.name == "ConfigManager"
     )
-    required_names = {"__init__", "_get_group", "get_drawing_reference_image"}
+    required_names = {
+        "__init__",
+        "_get_group",
+        "_migrate_daily_comic_characters",
+        "_write_comic_config_backup",
+        "_copy_legacy_comic_reference_images",
+        "get_use_plugin_specific_persona",
+        "get_plugin_specific_persona_id",
+        "get_drawing_reference_image",
+        "get_selected_comic_character",
+        "get_comic_character_persona_id",
+        "_get_comic_character_state_path",
+        "_read_comic_character_state",
+        "_save_comic_character_state",
+    }
     methods = [
         node
         for node in config_class.body
@@ -127,7 +149,18 @@ def load_config_manager_class():
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
-    namespace = {"AstrBotConfig": object, "logger": Mock()}
+    namespace = {
+        "AstrBotConfig": object,
+        "StarTools": SimpleNamespace(get_data_dir=Mock(return_value=plugin_data_dir)),
+        "PLUGIN_NAME": "test_plugin",
+        "Path": Path,
+        "datetime": __import__("datetime").datetime,
+        "ZoneInfo": __import__("zoneinfo").ZoneInfo,
+        "json": json,
+        "random": __import__("random"),
+        "shutil": __import__("shutil"),
+        "logger": Mock(),
+    }
     exec(compile(isolated_module, str(config_path), "exec"), namespace)
     return namespace["ConfigManagerHarness"]
 
@@ -214,9 +247,11 @@ def test_uploaded_reference_image_is_loaded_from_plugin_data_dir(tmp_path: Path)
     assert result == (b"\x89PNG\r\n\x1a\nimage", "image/png")
 
 
-def test_reference_image_migrates_old_config_and_uses_last_selected_file():
-    """旧字符串配置应迁移为空，原生文件列表取最后一次选择。"""
-    config_manager_class = load_config_manager_class()
+def test_reference_image_migrates_old_config_and_uses_last_selected_file(
+    tmp_path: Path,
+):
+    """旧参考图应迁移到默认角色方案，并使用最后一次选择的文件。"""
+    config_manager_class = load_config_manager_class(tmp_path)
 
     class Config(dict):
         save_config = Mock()
@@ -228,15 +263,68 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file():
 
     assert config["daily_comic"]["drawing_reference_image"] == []
     config.save_config.assert_called_once()
+    assert list((tmp_path / "config_backups").glob("*.json"))
 
+    legacy_directory = tmp_path / "files" / "daily_comic" / "drawing_reference_image"
+    legacy_directory.mkdir(parents=True)
+    (legacy_directory / "first.png").write_bytes(b"first")
+    (legacy_directory / "selected.webp").write_bytes(b"selected")
     config["daily_comic"]["drawing_reference_image"] = [
         "files/daily_comic/drawing_reference_image/first.png",
         "files/daily_comic/drawing_reference_image/selected.webp",
     ]
-    assert (
-        config_manager.get_drawing_reference_image()
-        == "files/daily_comic/drawing_reference_image/selected.webp"
+    config["daily_comic"]["comic_characters"] = []
+    config_manager._migrate_daily_comic_characters()
+
+    character = config["daily_comic"]["comic_characters"][0]
+    assert character["name"] == "默认角色方案"
+    assert character["reference_images"][-1].endswith("selected.webp")
+    assert config["daily_comic"]["drawing_reference_image"] == []
+    assert (tmp_path / character["reference_images"][-1]).read_bytes() == b"selected"
+    assert config_manager.get_drawing_reference_image().endswith("selected.webp")
+
+
+def test_daily_random_character_is_stable_and_recovers_from_disabled_choice(
+    tmp_path: Path,
+):
+    """每日随机角色应在当天保持不变，禁用后自动选择可用方案。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    first = {
+        "__template_key": "character",
+        "name": "角色甲",
+        "enable": True,
+        "persona_id": "persona-a",
+        "reference_images": [],
+    }
+    second = {
+        "__template_key": "character",
+        "name": "角色乙",
+        "enable": True,
+        "persona_id": "persona-b",
+        "reference_images": [],
+    }
+    config = Config(
+        daily_comic={
+            "random_daily_comic_character": True,
+            "comic_characters": [first, second],
+        }
     )
+    config_manager = config_manager_class(config)
+
+    selected = config_manager.get_selected_comic_character()
+    assert selected in (first, second)
+    assert config_manager.get_selected_comic_character() == selected
+    assert config_manager.get_comic_character_persona_id(selected) in {
+        "persona-a",
+        "persona-b",
+    }
+
+    selected["enable"] = False
+    assert config_manager.get_selected_comic_character() != selected
 
 
 def test_comic_is_skipped_without_valid_topics():

@@ -165,16 +165,25 @@ class LLMAnalyzer(IAnalysisProvider):
         topics: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
     ) -> tuple[list[dict], TokenUsage]:
-        """
-        使用LLM分析并生成漫画分镜和绘画提示词
+        """使用 LLM 分析并生成漫画分镜和绘画提示词。
+
+        Args:
+            topics: 已提取的有效群聊话题。
+            umo: 群聊统一消息来源标识。
+            session_id: 调试会话标识。
+            persona_id: 漫画分镜专用人格 ID。
+
+        Returns:
+            分镜列表和 Token 使用统计。
         """
         try:
             session_id = self._make_session_id(session_id, umo)
 
             logger.info(f"开始漫画分镜分析, session_id: {session_id}")
             return await self.comic_storyboard_analyzer.analyze_storyboards(
-                topics, umo, session_id
+                topics, umo, session_id, persona_id
             )
         except Exception as e:
             logger.error(f"漫画分镜分析失败: {e}", exc_info=True)
