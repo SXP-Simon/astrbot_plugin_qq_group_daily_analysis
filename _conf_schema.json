@@ -553,55 +553,374 @@
                 "default": [],
                 "hint": "可添加多个绘图供应商。按 priority 从高到低尝试，同优先级按表中顺序尝试；所有候选失败后才判定漫画生成失败。留空时继续使用下方旧版单接口配置。",
                 "templates": {
-                    "provider": {
-                        "name": "绘图供应商",
-                        "display_item": "name",
+                    "google": {
+                        "name": "google",
+                        "description": "配置 Google Gemini 官方 API 的密钥和端点",
                         "items": {
-                            "name": {
-                                "description": "供应商名称",
-                                "type": "string",
-                                "default": "",
-                                "hint": "仅用于在配置面板和运行日志中识别该供应商。"
-                            },
-                            "enable": {
-                                "description": "启用此供应商",
-                                "type": "bool",
-                                "default": true
-                            },
                             "priority": {
                                 "description": "优先级",
                                 "type": "int",
-                                "default": 0,
-                                "hint": "数值越大越先尝试；相同数值按配置表从上到下尝试。"
-                            },
-                            "api_protocol": {
-                                "description": "API 协议类型",
-                                "type": "string",
-                                "options": ["images", "chat", "grok", "gemini"],
-                                "default": "images",
-                                "hint": "images=OpenAI Images；chat=OpenAI 兼容 Chat；grok=xAI Grok Imagine；gemini=Google Gemini Interactions。"
-                            },
-                            "api_url": {
-                                "description": "绘图 API URL",
-                                "type": "string",
-                                "default": "",
-                                "hint": "可填写服务根地址、版本根地址或完整接口地址；留空时使用该协议的官方默认地址。"
+                                "default": 0
                             },
                             "api_key": {
                                 "description": "API Key",
                                 "type": "string",
                                 "default": ""
                             },
-                            "model": {
-                                "description": "绘图模型",
+                            "api_url": {
+                                "description": "API 端点",
                                 "type": "string",
-                                "default": "gpt-image-2"
+                                "default": "https://generativelanguage.googleapis.com/v1beta"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gemini-3-pro-image-preview"
                             },
                             "image_size": {
-                                "description": "图片尺寸",
+                                "description": "图像分辨率",
                                 "type": "string",
-                                "default": "1024x1024",
-                                "hint": "支持实际分辨率或 1K、2K、4K 别名。"
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "openai": {
+                        "name": "openai",
+                        "description": "配置 OpenAI 兼容格式的 Chat API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-4o"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "zai": {
+                        "name": "zai",
+                        "description": "配置 Z.ai 的 API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.z.ai/api/paas/v4"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "glm-4.6v"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "grok2api": {
+                        "name": "grok2api",
+                        "description": "配置 grok2api 的 API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "grok-2-image"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "agnes_ai": {
+                        "name": "agnes_ai",
+                        "description": "配置 Agnes AI /v1/images/generations 端点，支持文生图和参考图",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://apihub.agnes-ai.com"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "agnes-image-2.1-flash"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "xai": {
+                        "name": "xai",
+                        "description": "配置 xAI /v1/images/generations 和 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.x.ai"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "grok-imagine-image"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "minimax": {
+                        "name": "minimax",
+                        "description": "配置 MiniMax /v1/image_generation 端点，支持 subject_reference 参考图",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.minimaxi.com"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "image-01"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "stepfun": {
+                        "name": "stepfun",
+                        "description": "配置阶跃星辰 /v1/images/generations 或 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.stepfun.com"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "step-image-edit-2"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "openai_images": {
+                        "name": "openai_images",
+                        "description": "配置 OpenAI /v1/images/generations 和 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.openai.com/v1"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-image-1"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "auto"
                             },
                             "aspect_ratio": {
                                 "description": "宽高比",
@@ -614,16 +933,188 @@
                                 "options": ["png", "jpeg", "webp"],
                                 "default": "png"
                             },
-                            "image_quality": {
-                                "description": "图片质量",
-                                "type": "string",
-                                "options": ["auto", "high", "medium", "low"],
-                                "default": "high"
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "doubao": {
+                        "name": "doubao",
+                        "description": "配置豆包专用图像生成端点、模型和图片参数",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
                             },
-                            "background": {
-                                "description": "背景",
+                            "api_key": {
+                                "description": "API Key",
                                 "type": "string",
-                                "default": "auto"
+                                "default": ""
+                            },
+                            "endpoint_mode": {
+                                "description": "端点模式",
+                                "type": "string",
+                                "options": ["official", "agent_plan"],
+                                "default": "official"
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://ark.cn-beijing.volces.com"
+                            },
+                            "model": {
+                                "description": "模型或 Endpoint ID",
+                                "type": "string",
+                                "default": "doubao-seedream-5-0-260128"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "output_format": {
+                                "description": "输出格式",
+                                "type": "string",
+                                "options": ["png", "jpeg", "webp"],
+                                "default": "png"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "sensenova": {
+                        "name": "sensenova",
+                        "description": "配置 SenseNova U1 Fast 文生图 API 的密钥与端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "Bearer Token",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://token.sensenova.cn"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "sensenova-u1-fast"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "dashscope": {
+                        "name": "dashscope",
+                        "description": "配置通义万相 wan2.7 / 千问图像 qwen-image-2.0 等 DashScope 原生图像模型",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "endpoint_mode": {
+                                "description": "端点模式",
+                                "type": "string",
+                                "options": ["dashscope", "token_plan"],
+                                "default": "dashscope"
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://dashscope.aliyuncs.com"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "wan2.7-image-pro"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "custom": {
+                        "name": "自定义协议",
+                        "description": "为未列出的兼容服务手动选择协议和参数",
+                        "items": {
+                            "name": {
+                                "description": "供应商名称",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_protocol": {
+                                "description": "API 协议类型",
+                                "type": "string",
+                                "options": ["images", "chat", "grok", "gemini"],
+                                "default": "images"
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-image-2"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
                             },
                             "timeout": {
                                 "description": "请求超时（秒）",
