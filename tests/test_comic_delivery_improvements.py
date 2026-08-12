@@ -90,7 +90,10 @@ def test_drawing_provider_schema_keeps_all_reference_presets():
     assert list(templates) == [*preset_keys, "custom"]
     for preset_key in preset_keys:
         items = templates[preset_key]["items"]
-        assert {"priority", "api_key", "api_url", "model", "timeout"} <= set(items)
+        assert {"priority", "api_key", "api_url", "model", "proxy", "timeout"} <= set(
+            items
+        )
+    assert "drawing_proxy" in schema["daily_comic"]["items"]
 
 
 def test_drawing_provider_presets_map_to_runtime_protocols(tmp_path):
@@ -284,6 +287,87 @@ def test_stepfun_reference_image_uses_multipart_edits_request(monkeypatch):
         b"reference",
         "image/png",
     )
+
+
+def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeypatch):
+    """供应商代理应覆盖全局代理，并用于下载同次请求返回的图片。"""
+    requests = []
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json():
+            return {"data": [{"url": "https://image.example.com/comic.png"}]}
+
+    class AsyncClient:
+        def __init__(self, **kwargs):
+            requests.append(kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            del args
+
+        async def post(self, *_args, **_kwargs):
+            return Response()
+
+    drawing_client_class = _load_drawing_client_class()
+    drawing_client_module = sys.modules[drawing_client_class.__module__]
+    monkeypatch.setattr(drawing_client_module.httpx, "AsyncClient", AsyncClient)
+    config_manager = SimpleNamespace(
+        get_drawing_proxy=lambda: "http://global-proxy:7890",
+        get_drawing_aspect_ratio=lambda: "1:1",
+    )
+    drawing_client = drawing_client_class(config_manager)
+    drawing_client._extract_image_from_response = AsyncMock(return_value=PNG_BYTES)
+    provider = {
+        "api_url": "https://api.openai.com/v1",
+        "api_key": "api-key",
+        "model": "gpt-image-1",
+        "image_size": "1024x1024",
+        "aspect_ratio": "1:1",
+        "output_format": "png",
+        "image_quality": "auto",
+        "background": "auto",
+        "timeout": 60,
+        "proxy": "socks5://provider-proxy:1080",
+    }
+
+    assert asyncio.run(drawing_client._call_images_api("漫画提示词", provider=provider))
+
+    assert requests[0]["proxy"] == "socks5://provider-proxy:1080"
+    drawing_client._extract_image_from_response.assert_awaited_once_with(
+        {"data": [{"url": "https://image.example.com/comic.png"}]},
+        "socks5://provider-proxy:1080",
+    )
+    assert drawing_client._get_request_proxy({}) == "http://global-proxy:7890"
+
+
+def test_image_url_download_uses_request_proxy_before_download_proxy():
+    """生图响应的图片 URL 应优先使用生图请求的代理。"""
+
+    async def scenario():
+        drawing_client_class = _load_drawing_client_class()
+        drawing_client = drawing_client_class(
+            SimpleNamespace(get_drawing_download_proxy=lambda: "http://download:7890")
+        )
+        drawing_client.download_public_image = AsyncMock(return_value=PNG_BYTES)
+
+        assert (
+            await drawing_client._extract_image_from_response(
+                {"data": [{"url": "https://image.example.com/comic.png"}]},
+                "http://request-proxy:7890",
+            )
+            == PNG_BYTES
+        )
+        drawing_client.download_public_image.assert_awaited_once_with(
+            "https://image.example.com/comic.png", "http://request-proxy:7890"
+        )
+
+    asyncio.run(scenario())
 
 
 def test_multiple_character_references_are_preserved(tmp_path):

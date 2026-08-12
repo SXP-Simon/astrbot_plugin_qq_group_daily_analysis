@@ -211,6 +211,15 @@ class DrawingClient:
         getter = getattr(self.config_manager, f"get_drawing_{name}")
         return getter()
 
+    def _get_request_proxy(self, provider: dict | None = None) -> str | None:
+        """获取当前绘图请求的代理，供应商配置优先于全局配置。"""
+        provider_proxy = str((provider or {}).get("proxy", "")).strip()
+        if provider_proxy:
+            return provider_proxy
+        getter = getattr(self.config_manager, "get_drawing_proxy", None)
+        global_proxy = getter() if callable(getter) else ""
+        return str(global_proxy).strip() or None
+
     async def _call_google_api(
         self,
         prompt: str,
@@ -258,6 +267,7 @@ class DrawingClient:
             payload,
             self._get_provider_value("timeout", provider),
             "Google Gemini",
+            provider,
         )
 
     async def _call_preset_api(
@@ -414,7 +424,7 @@ class DrawingClient:
             raise ValueError(f"不支持的绘图供应商预设: {provider_type}")
 
         return await self._post_json_for_image(
-            target_url, headers, payload, timeout, provider_name
+            target_url, headers, payload, timeout, provider_name, provider
         )
 
     async def _call_stepfun_api(
@@ -448,7 +458,9 @@ class DrawingClient:
             logger.info(
                 f"[Comic] 发起阶跃星辰图生图请求 -> {self._sanitize_url(target_url)}"
             )
-            async with httpx.AsyncClient(timeout=api_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=api_timeout, proxy=self._get_request_proxy(provider)
+            ) as client:
                 response = await client.post(
                     target_url, headers=headers, data=form_data, files=files
                 )
@@ -464,7 +476,9 @@ class DrawingClient:
             logger.info(
                 f"[Comic] 发起阶跃星辰文生图请求 -> {self._sanitize_url(target_url)}"
             )
-            async with httpx.AsyncClient(timeout=api_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=api_timeout, proxy=self._get_request_proxy(provider)
+            ) as client:
                 response = await client.post(target_url, headers=headers, json=payload)
 
         if not 200 <= response.status_code < 300:
@@ -476,7 +490,9 @@ class DrawingClient:
             data = response.json()
         except ValueError as exc:
             raise Exception("阶跃星辰 API 未返回合法 JSON") from exc
-        image = await self._extract_image_from_response(data)
+        image = await self._extract_image_from_response(
+            data, self._get_request_proxy(provider)
+        )
         if image:
             return image
         raise Exception(f"阶跃星辰 API 返回格式异常: {self._summarize_response(data)}")
@@ -488,6 +504,7 @@ class DrawingClient:
         payload: dict[str, Any],
         timeout: int | float,
         provider_name: str,
+        provider: dict,
     ) -> bytes | None:
         """发送 JSON 图片生成请求，并从响应中提取图片。"""
         headers["Content-Type"] = "application/json"
@@ -495,7 +512,9 @@ class DrawingClient:
         logger.info(
             f"[Comic] 发起 {provider_name} 图片请求 -> {self._sanitize_url(target_url)}"
         )
-        async with httpx.AsyncClient(timeout=api_timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=api_timeout, proxy=self._get_request_proxy(provider)
+        ) as client:
             response = await client.post(target_url, headers=headers, json=payload)
         if not 200 <= response.status_code < 300:
             message = response.text[:500] if response.text else "(空响应)"
@@ -506,7 +525,9 @@ class DrawingClient:
             data = response.json()
         except ValueError as exc:
             raise Exception(f"{provider_name} API 未返回合法 JSON") from exc
-        image = await self._extract_image_from_response(data)
+        image = await self._extract_image_from_response(
+            data, self._get_request_proxy(provider)
+        )
         if image:
             return image
         raise Exception(
@@ -606,7 +627,9 @@ class DrawingClient:
             api_timeout = httpx.Timeout(
                 connect=20.0, read=timeout, write=20.0, pool=20.0
             )
-            async with httpx.AsyncClient(timeout=api_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=api_timeout, proxy=self._get_request_proxy(provider)
+            ) as client:
                 resp = await client.post(
                     target_url, headers=headers, data=multipart_data, files=files
                 )
@@ -617,7 +640,9 @@ class DrawingClient:
             api_timeout = httpx.Timeout(
                 connect=20.0, read=timeout, write=20.0, pool=20.0
             )
-            async with httpx.AsyncClient(timeout=api_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=api_timeout, proxy=self._get_request_proxy(provider)
+            ) as client:
                 resp = await client.post(target_url, headers=headers, json=payload)
 
         if resp.status_code != 200:
@@ -632,7 +657,9 @@ class DrawingClient:
                 f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
             )
 
-        image = await self._extract_image_from_response(data)
+        image = await self._extract_image_from_response(
+            data, self._get_request_proxy(provider)
+        )
         if image:
             return image
 
@@ -691,7 +718,9 @@ class DrawingClient:
             f"reference_bytes={reference_bytes})..."
         )
         api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(timeout=api_timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=api_timeout, proxy=self._get_request_proxy(provider)
+        ) as client:
             resp = await client.post(target_url, headers=headers, json=payload)
 
         if not 200 <= resp.status_code < 300:
@@ -708,7 +737,9 @@ class DrawingClient:
                 f"<body len={len(resp.content)}>"
             )
 
-        image = await self._extract_image_from_response(data)
+        image = await self._extract_image_from_response(
+            data, self._get_request_proxy(provider)
+        )
         if image:
             return image
 
@@ -800,7 +831,9 @@ class DrawingClient:
             f"aspect_ratio={aspect_ratio}, reference_bytes={reference_bytes})..."
         )
         api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(timeout=api_timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=api_timeout, proxy=self._get_request_proxy(provider)
+        ) as client:
             resp = await client.post(target_url, headers=headers, json=payload)
 
         if not 200 <= resp.status_code < 300:
@@ -845,7 +878,9 @@ class DrawingClient:
         # When steps are present, limit compatibility parsing to model outputs so
         # temporary thought images cannot be selected as final output.
         fallback_data: Any = model_outputs if isinstance(steps, list) else data
-        image = await self._extract_image_from_response(fallback_data)
+        image = await self._extract_image_from_response(
+            fallback_data, self._get_request_proxy(provider)
+        )
         if image:
             return image
 
@@ -910,7 +945,9 @@ class DrawingClient:
         )
 
         api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(timeout=api_timeout) as client:
+        async with httpx.AsyncClient(
+            timeout=api_timeout, proxy=self._get_request_proxy(provider)
+        ) as client:
             resp = await client.post(target_url, headers=headers, json=payload)
 
             if resp.status_code != 200:
@@ -925,7 +962,9 @@ class DrawingClient:
                     f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
                 )
 
-            image = await self._extract_image_from_response(data)
+            image = await self._extract_image_from_response(
+                data, self._get_request_proxy(provider)
+            )
             if image:
                 return image
 
@@ -933,7 +972,9 @@ class DrawingClient:
                 f"无法从 Chat API 的回复中提取到图片: {self._summarize_response(data)}"
             )
 
-    async def _extract_image_from_response(self, data: Any) -> bytes | None:
+    async def _extract_image_from_response(
+        self, data: Any, proxy: str | None = None
+    ) -> bytes | None:
         """递归提取中转站响应中的图片数据。"""
         encoded: list[tuple[str, str]] = []
         image_fields: list[tuple[str, str]] = []
@@ -1003,7 +1044,7 @@ class DrawingClient:
                     ("http://", "https://")
                 ):
                     last_download_url = candidate
-                    image = await self.download_public_image(candidate)
+                    image = await self.download_public_image(candidate, proxy)
                 elif candidate.startswith("data:image/"):
                     image = self._decode_data_uri(candidate)
                 elif candidate.startswith("base64://"):
@@ -1097,11 +1138,13 @@ class DrawingClient:
     # 图片下载整体超时（秒），防止代理服务器慢速发送导致无限等待
     IMAGE_DOWNLOAD_TOTAL_TIMEOUT = 90
 
-    async def download_public_image(self, url: str) -> bytes | None:
+    async def download_public_image(
+        self, url: str, proxy: str | None = None
+    ) -> bytes | None:
         """从公网 URL 下载已校验且大小受限的图片。"""
         try:
             return await asyncio.wait_for(
-                self._download_image_inner(url),
+                self._download_image_inner(url, proxy),
                 timeout=self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT,
             )
         except asyncio.TimeoutError:
@@ -1109,18 +1152,24 @@ class DrawingClient:
                 f"图片下载超过 {self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT}s 总超时限制: {self._sanitize_url(url)}"
             )
 
-    async def _download_image_inner(self, url: str) -> bytes | None:
+    async def _download_image_inner(
+        self, url: str, proxy: str | None = None
+    ) -> bytes | None:
         """实际下载逻辑（由 _download_image 包裹超时）。"""
         current_url = url
         # connect/write 超时 20s，read 超时 60s（单次 socket read）
         download_timeout = httpx.Timeout(connect=20.0, read=60.0, write=20.0, pool=20.0)
-        proxy = self.config_manager.get_drawing_download_proxy() or None
-        if proxy:
-            logger.debug(f"[Comic] 图片下载使用代理: {self._sanitize_url(proxy)}")
+        request_proxy = (
+            proxy or self.config_manager.get_drawing_download_proxy() or None
+        )
+        if request_proxy:
+            logger.debug(
+                f"[Comic] 图片下载使用代理: {self._sanitize_url(request_proxy)}"
+            )
         async with httpx.AsyncClient(
             timeout=download_timeout,
             follow_redirects=False,
-            proxy=proxy,
+            proxy=request_proxy,
         ) as client:
             for redirect_count in range(self.MAX_IMAGE_REDIRECTS + 1):
                 await self._validate_public_image_url(current_url)
