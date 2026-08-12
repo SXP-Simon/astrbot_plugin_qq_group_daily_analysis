@@ -96,6 +96,52 @@ def test_drawing_provider_schema_keeps_all_reference_presets():
     assert "drawing_proxy" in schema["daily_comic"]["items"]
 
 
+def test_drawing_provider_schema_exposes_advanced_preset_controls():
+    """四个重点预设必须公开其实际支持的专属控制项。
+
+    此断言防止仅在后端增加参数却遗漏配置面板，导致用户无法开启参考图截断、
+    组图、尺寸和 GPT Image 的输出控制能力。
+    """
+    schema = json.loads((PLUGIN_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    templates = schema["daily_comic"]["items"]["drawing_provider_overrides"][
+        "templates"
+    ]
+
+    assert {
+        "quality",
+        "background",
+        "response_format",
+        "output_compression",
+        "moderation",
+        "max_reference_images",
+        "generations_only",
+    } <= set(templates["openai_images"]["items"])
+    assert {
+        "endpoint_id",
+        "model_capability",
+        "size_mode",
+        "size",
+        "custom_size",
+        "watermark",
+        "optimize_prompt_mode",
+        "sequential_image_generation",
+        "sequential_max_images",
+        "max_reference_images",
+    } <= set(templates["doubao"]["items"])
+    assert {"default_size", "n"} <= set(templates["sensenova"]["items"])
+    assert {
+        "max_reference_images",
+        "size_mode",
+        "custom_size",
+        "n",
+        "watermark",
+        "negative_prompt",
+        "prompt_extend",
+        "thinking_mode",
+        "enable_sequential",
+    } <= set(templates["dashscope"]["items"])
+
+
 def test_drawing_provider_presets_map_to_runtime_protocols(tmp_path):
     """预设模板保存后必须映射到对应的实际请求协议。"""
     config_manager_class = load_config_manager_class(tmp_path)
@@ -344,6 +390,256 @@ def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeyp
         "socks5://provider-proxy:1080",
     )
     assert drawing_client._get_request_proxy({}) == "http://global-proxy:7890"
+
+
+def test_openai_images_request_applies_advanced_controls_and_reference_limit(
+    monkeypatch,
+):
+    """OpenAI Images 的 JSON 和 multipart 请求应使用相同的关键控制参数。"""
+    requests = []
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json():
+            return {"data": [{"b64_json": base64.b64encode(PNG_BYTES).decode()}]}
+
+    class AsyncClient:
+        def __init__(self, **kwargs):
+            del kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            del args
+
+        async def post(self, url, **kwargs):
+            requests.append((url, kwargs))
+            return Response()
+
+    async def scenario():
+        drawing_client_class = _load_drawing_client_class()
+        images_module = sys.modules[
+            "src.infrastructure.drawing.api_requests.images"
+        ]
+        monkeypatch.setattr(images_module.httpx, "AsyncClient", AsyncClient)
+        drawing_client = drawing_client_class(
+            SimpleNamespace(get_drawing_aspect_ratio=lambda: "1:1")
+        )
+        provider = {
+            "api_url": "https://api.openai.com/v1",
+            "api_key": "api-key",
+            "model": "gpt-image-1",
+            "image_size": "1024x1024",
+            "aspect_ratio": "1:1",
+            "output_format": "webp",
+            "quality": "auto",
+            "background": "transparent",
+            "response_format": "b64_json",
+            "output_compression": 75,
+            "moderation": "low",
+            "max_reference_images": 2,
+            "timeout": 60,
+        }
+        references = [(f"reference-{index}".encode(), "image/png") for index in range(3)]
+
+        assert await drawing_client._call_images_api("漫画提示词", provider=provider)
+        generation_url, generation_request = requests[-1]
+        assert generation_url.endswith("/images/generations")
+        assert generation_request["json"] == {
+            "prompt": "漫画提示词",
+            "model": "gpt-image-1",
+            "n": 1,
+            "size": "1024x1024",
+            "output_format": "webp",
+            "quality": "auto",
+            "background": "transparent",
+            "response_format": "b64_json",
+            "output_compression": 75,
+            "moderation": "low",
+        }
+
+        assert await drawing_client._call_images_api(
+            "漫画提示词", references, provider
+        )
+        edits_url, edits_request = requests[-1]
+        assert edits_url.endswith("/images/edits")
+        assert len(edits_request["files"]) == 2
+        assert edits_request["data"] == {
+            "prompt": "漫画提示词",
+            "model": "gpt-image-1",
+            "n": "1",
+            "size": "1024x1024",
+            "output_format": "webp",
+            "quality": "auto",
+            "background": "transparent",
+            "response_format": "b64_json",
+            "output_compression": "75",
+            "moderation": "low",
+        }
+
+        provider["generations_only"] = True
+        assert await drawing_client._call_images_api(
+            "漫画提示词", references, provider
+        )
+        assert requests[-1][0].endswith("/images/generations")
+
+    asyncio.run(scenario())
+
+
+def test_preset_requests_apply_provider_specific_advanced_controls():
+    """各原生供应商只发送其模型支持的专属字段，并正确限制数量。"""
+
+    async def scenario():
+        drawing_client_class = _load_drawing_client_class()
+        drawing_client = drawing_client_class(
+            SimpleNamespace(
+                get_drawing_aspect_ratio=lambda: "16:9",
+                get_drawing_output_format=lambda: "png",
+                get_drawing_image_size=lambda: "2K",
+            )
+        )
+        drawing_client._post_json_for_image = AsyncMock(return_value=PNG_BYTES)
+        references = [(f"reference-{index}".encode(), "image/png") for index in range(15)]
+
+        doubao_provider = {
+            "api_url": "https://ark.cn-beijing.volces.com",
+            "api_key": "doubao-key",
+            "model": "ignored-model",
+            "endpoint_id": "ep-20260812",
+            "image_size": "1K",
+            "aspect_ratio": "4:3",
+            "size_mode": "custom",
+            "custom_size": "2304x1728",
+            "output_format": "webp",
+            "watermark": True,
+            "optimize_prompt_mode": "fast",
+            "sequential_image_generation": "auto",
+            "sequential_max_images": 8,
+            "max_reference_images": 12,
+            "timeout": 60,
+        }
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", references, doubao_provider, "doubao"
+        )
+        doubao_payload = drawing_client._post_json_for_image.await_args.args[2]
+        assert doubao_payload["model"] == "ep-20260812"
+        assert doubao_payload["size"] == "2304x1728"
+        assert doubao_payload["watermark"] is True
+        assert len(doubao_payload["image"]) == 12
+        assert doubao_payload["optimize_prompt_options"] == {"mode": "fast"}
+        assert doubao_payload["sequential_image_generation"] == "auto"
+        assert doubao_payload["sequential_image_generation_options"] == {
+            "max_images": 8
+        }
+
+        drawing_client._post_json_for_image.reset_mock()
+        doubao_provider.update(
+            {
+                "model_capability": "seedream_5_pro",
+                "max_reference_images": 14,
+            }
+        )
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", references, doubao_provider, "doubao"
+        )
+        seedream_payload = drawing_client._post_json_for_image.await_args.args[2]
+        assert len(seedream_payload["image"]) == 10
+        assert "sequential_image_generation" not in seedream_payload
+
+        drawing_client._post_json_for_image.reset_mock()
+        dashscope_provider = {
+            "api_url": "https://dashscope.aliyuncs.com",
+            "api_key": "dashscope-key",
+            "model": "wan2.7-image-pro",
+            "image_size": "2K",
+            "aspect_ratio": "16:9",
+            "output_format": "png",
+            "size_mode": "custom",
+            "custom_size": "1536x1024",
+            "max_reference_images": 2,
+            "n": 99,
+            "watermark": True,
+            "negative_prompt": "模糊",
+            "thinking_mode": True,
+            "enable_sequential": False,
+            "timeout": 60,
+        }
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", references, dashscope_provider, "dashscope"
+        )
+        dashscope_payload = drawing_client._post_json_for_image.await_args.args[2]
+        dashscope_parameters = dashscope_payload["parameters"]
+        assert dashscope_parameters["size"] == "1536*1024"
+        assert dashscope_parameters["n"] == 4
+        assert dashscope_parameters["watermark"] is True
+        assert dashscope_parameters["thinking_mode"] is True
+        assert "negative_prompt" not in dashscope_parameters
+        assert len(dashscope_payload["input"]["messages"][0]["content"]) == 3
+
+        drawing_client._post_json_for_image.reset_mock()
+        dashscope_provider["enable_sequential"] = True
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", references, dashscope_provider, "dashscope"
+        )
+        sequential_parameters = drawing_client._post_json_for_image.await_args.args[2][
+            "parameters"
+        ]
+        assert sequential_parameters["n"] == 12
+        assert sequential_parameters["enable_sequential"] is True
+        assert "thinking_mode" not in sequential_parameters
+
+        drawing_client._post_json_for_image.reset_mock()
+        qwen_provider = {
+            **dashscope_provider,
+            "model": "qwen-image-2.0-pro",
+            "n": 10,
+            "enable_sequential": False,
+            "prompt_extend": True,
+        }
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", [], qwen_provider, "dashscope"
+        )
+        qwen_parameters = drawing_client._post_json_for_image.await_args.args[2][
+            "parameters"
+        ]
+        assert qwen_parameters["n"] == 6
+        assert qwen_parameters["negative_prompt"] == "模糊"
+        assert qwen_parameters["prompt_extend"] is True
+
+        drawing_client._post_json_for_image.reset_mock()
+        sensenova_provider = {
+            "api_url": "https://token.sensenova.cn",
+            "api_key": "sensenova-key",
+            "model": "sensenova-u1-fast",
+            "image_size": "2K",
+            "aspect_ratio": "9:21",
+            "output_format": "png",
+            "default_size": "2048x2048",
+            "n": 9,
+            "timeout": 60,
+        }
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", references, sensenova_provider, "sensenova"
+        )
+        sensenova_payload = drawing_client._post_json_for_image.await_args.args[2]
+        assert sensenova_payload["size"] == "1344x3136"
+        assert sensenova_payload["n"] == 4
+
+        drawing_client._post_json_for_image.reset_mock()
+        sensenova_provider["aspect_ratio"] = "invalid"
+        assert await drawing_client._call_preset_api(
+            "漫画提示词", None, sensenova_provider, "sensenova"
+        )
+        assert (
+            drawing_client._post_json_for_image.await_args.args[2]["size"]
+            == "2048x2048"
+        )
+
+    asyncio.run(scenario())
 
 
 def test_image_url_download_uses_request_proxy_before_download_proxy():

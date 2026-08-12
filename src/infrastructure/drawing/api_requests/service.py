@@ -1,3 +1,10 @@
+"""绘图供应商请求服务的统一分发层。
+
+每个服务商协议位于独立模块中，本服务仅提供稳定的调用入口并传递共享上下文。
+``DrawingClient`` 因此不需要了解某个服务商的请求体格式，也无需使用 Mixin
+将大量实现混入客户端类。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,7 +22,11 @@ from .presets import call_preset_api, call_stepfun_api
 
 @dataclass(slots=True)
 class DrawingApiRequestService:
-    """协调各服务商请求实现并对外暴露统一调用入口。"""
+    """协调各服务商请求实现并对外暴露统一调用入口。
+
+    每个方法保持一层直接转发，目的是固定高层调用契约；服务商特有的参数和
+    能力限制仍留在各自模块，避免该类成为新的请求逻辑聚集点。
+    """
 
     context: DrawingRequestContext
 

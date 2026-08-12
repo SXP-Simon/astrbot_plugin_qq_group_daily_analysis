@@ -1,3 +1,10 @@
+"""漫画绘图客户端的高层调度入口。
+
+``DrawingClient`` 保留插件既有的私有兼容入口，供调用方和扩展继续使用；实际
+供应商请求与图片响应分别委托给两个组合服务。客户端只保留供应商回退、重试和
+全局配置读取，避免 HTTP 协议细节再次集中到一个过大的类中。
+"""
+
 import asyncio
 import re
 from typing import Any
@@ -18,7 +25,12 @@ __all__ = ["DrawingClient", "ImageDownloadFailedError"]
 
 
 class DrawingClient:
-    """协调绘图供应商选择、重试、请求服务和图片响应处理。"""
+    """协调绘图供应商选择、重试、请求服务和图片响应处理。
+
+    服务对象通过 ``DrawingRequestContext`` 显式获取所需能力，而不是继承
+    客户端内部状态。私有兼容入口仍保留为薄转发层，确保既有扩展和测试替换
+    ``_post_json_for_image`` 等方法时能够继续生效。
+    """
 
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager

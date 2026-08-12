@@ -981,11 +981,57 @@
                                 "type": "string",
                                 "default": "16:9"
                             },
+                            "quality": {
+                                "description": "图像质量",
+                                "type": "string",
+                                "hint": "OpenAI Images 的 quality 参数。GPT Image 模型通常支持 auto、low、medium、high；不兼容的中转服务可改为 auto。",
+                                "options": ["auto", "low", "medium", "high"],
+                                "default": "high"
+                            },
+                            "background": {
+                                "description": "背景模式",
+                                "type": "string",
+                                "hint": "仅 GPT Image 模型支持。auto 不发送该参数；transparent 适合透明背景素材，opaque 使用不透明背景。",
+                                "options": ["auto", "transparent", "opaque"],
+                                "default": "auto"
+                            },
                             "output_format": {
                                 "description": "输出格式",
                                 "type": "string",
                                 "options": ["png", "jpeg", "webp"],
                                 "default": "png"
+                            },
+                            "response_format": {
+                                "description": "响应图片格式",
+                                "type": "string",
+                                "hint": "留空由服务端决定；url 返回图片链接，b64_json 返回 Base64。部分 OpenAI 兼容服务只支持其中一种。",
+                                "options": ["", "url", "b64_json"],
+                                "default": ""
+                            },
+                            "output_compression": {
+                                "description": "输出压缩率",
+                                "type": "int",
+                                "hint": "仅 GPT Image 的 JPEG/WebP 输出生效。0 表示不传并使用服务端默认值，1-100 为压缩率。",
+                                "default": 0
+                            },
+                            "moderation": {
+                                "description": "审核模式",
+                                "type": "string",
+                                "hint": "仅 GPT Image 模型支持。留空不传；选择 low 时使用较低的审核强度。",
+                                "options": ["", "low"],
+                                "default": ""
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "图生图时最多发送的角色参考图数量。填 0 表示不发送参考图，适合只支持单纯文生图的中转服务。",
+                                "default": 6
+                            },
+                            "generations_only": {
+                                "description": "仅使用文生图",
+                                "type": "bool",
+                                "hint": "开启后忽略本次漫画角色参考图，始终调用 /images/generations。",
+                                "default": false
                             },
                             "timeout": {
                                 "description": "请求超时（秒）",
@@ -1030,16 +1076,83 @@
                                 "type": "string",
                                 "default": "doubao-seedream-5-0-260128"
                             },
+                            "endpoint_id": {
+                                "description": "Endpoint ID 覆盖",
+                                "type": "string",
+                                "hint": "留空使用模型名称；使用推理接入点时填写 Endpoint ID，其优先级高于模型名称。",
+                                "default": ""
+                            },
+                            "model_capability": {
+                                "description": "模型能力标记",
+                                "type": "string",
+                                "hint": "使用无法从 Endpoint ID 判断能力的自建接入点时，标记为 Seedream 5.0 Pro 可正确限制参考图并禁用组图。",
+                                "options": ["auto", "seedream_5_pro"],
+                                "default": "auto"
+                            },
+                            "size_mode": {
+                                "description": "尺寸模式",
+                                "type": "string",
+                                "hint": "preset 使用图像分辨率；custom 直接发送自定义尺寸。",
+                                "options": ["preset", "custom"],
+                                "default": "preset"
+                            },
                             "image_size": {
                                 "description": "图像分辨率",
                                 "type": "string",
                                 "default": "2K"
+                            },
+                            "size": {
+                                "description": "预设尺寸",
+                                "type": "string",
+                                "hint": "仅 preset 模式生效，支持 1K、2K、3K、4K；具体模型支持范围以火山方舟文档为准。",
+                                "options": ["1K", "2K", "3K", "4K"],
+                                "default": "2K",
+                                "condition": {"size_mode": "preset"}
+                            },
+                            "custom_size": {
+                                "description": "自定义尺寸",
+                                "type": "string",
+                                "hint": "仅 custom 模式生效，格式 WxH，例如 2048x2048 或 2304x1728。",
+                                "default": "2048x2048",
+                                "condition": {"size_mode": "custom"}
                             },
                             "output_format": {
                                 "description": "输出格式",
                                 "type": "string",
                                 "options": ["png", "jpeg", "webp"],
                                 "default": "png"
+                            },
+                            "watermark": {
+                                "description": "添加水印",
+                                "type": "bool",
+                                "hint": "启用后要求服务端在图片中添加水印。",
+                                "default": false
+                            },
+                            "optimize_prompt_mode": {
+                                "description": "提示词优化模式",
+                                "type": "string",
+                                "hint": "standard 偏向生成质量，fast 偏向更快的请求速度；留空不传。",
+                                "options": ["", "standard", "fast"],
+                                "default": "standard"
+                            },
+                            "sequential_image_generation": {
+                                "description": "组图生成模式",
+                                "type": "string",
+                                "hint": "auto 允许模型自主生成连续组图；Seedream 5.0 Pro 不支持该能力，会自动忽略。",
+                                "options": ["disabled", "auto"],
+                                "default": "disabled"
+                            },
+                            "sequential_max_images": {
+                                "description": "组图最大张数",
+                                "type": "int",
+                                "hint": "仅 auto 组图模式生效，合法范围为 1-12。",
+                                "default": 1
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "普通 Seedream 最多 14 张，Seedream 5.0 Pro 最多 10 张；超过后按顺序截取。",
+                                "default": 14
                             },
                             "timeout": {
                                 "description": "请求超时（秒）",
@@ -1082,6 +1195,19 @@
                                 "description": "宽高比",
                                 "type": "string",
                                 "default": "16:9"
+                            },
+                            "default_size": {
+                                "description": "默认图像尺寸",
+                                "type": "string",
+                                "hint": "宽高比无法映射时使用。必须为 SenseNova U1 Fast 官方支持的尺寸。",
+                                "options": ["2048x2048", "2752x1536", "1536x2752", "2368x1760", "1760x2368", "2496x1664", "1664x2496", "2272x1824", "1824x2272", "3072x1376", "1344x3136"],
+                                "default": "2752x1536"
+                            },
+                            "n": {
+                                "description": "单次生成数量",
+                                "type": "int",
+                                "hint": "SenseNova 单次支持 1-4 张，超出范围会自动限制。",
+                                "default": 1
                             },
                             "timeout": {
                                 "description": "请求超时（秒）",
@@ -1135,6 +1261,62 @@
                                 "description": "宽高比",
                                 "type": "string",
                                 "default": "16:9"
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "DashScope 单次最多使用 9 张角色参考图，超过后按顺序截取。填 0 表示不发送参考图。",
+                                "default": 9
+                            },
+                            "size_mode": {
+                                "description": "尺寸模式",
+                                "type": "string",
+                                "hint": "preset 根据分辨率和宽高比换算官方建议尺寸；custom 直接发送自定义尺寸。",
+                                "options": ["preset", "custom"],
+                                "default": "preset"
+                            },
+                            "custom_size": {
+                                "description": "自定义尺寸",
+                                "type": "string",
+                                "hint": "仅 custom 模式生效。支持 WxH、W*H、W×H，或 wan2.7 的 1K、2K、4K 简写。",
+                                "default": "2048*2048",
+                                "condition": {"size_mode": "custom"}
+                            },
+                            "n": {
+                                "description": "单次生成数量",
+                                "type": "int",
+                                "hint": "wan2.7 通常支持 1-4 张，顺序组图最多 12 张；qwen-image-2.0 最多 6 张，其他模型最多 1 张。",
+                                "default": 1
+                            },
+                            "watermark": {
+                                "description": "添加水印",
+                                "type": "bool",
+                                "hint": "启用后请求服务端在输出图片中添加水印。",
+                                "default": false
+                            },
+                            "negative_prompt": {
+                                "description": "负面提示词",
+                                "type": "string",
+                                "hint": "仅非 wan2.7 模型支持；wan2.7 会自动忽略该字段。",
+                                "default": ""
+                            },
+                            "prompt_extend": {
+                                "description": "提示词智能改写",
+                                "type": "bool",
+                                "hint": "仅非 wan2.7 模型生效。开启会让服务端改写提示词，通常会增加请求延迟。",
+                                "default": false
+                            },
+                            "thinking_mode": {
+                                "description": "增强推理",
+                                "type": "bool",
+                                "hint": "仅 wan2.7 生效。顺序组图模式开启时与 enable_sequential 互斥并自动不发送。",
+                                "default": true
+                            },
+                            "enable_sequential": {
+                                "description": "顺序组图生成",
+                                "type": "bool",
+                                "hint": "仅 wan2.7 生效。开启后关闭增强推理，并允许最多 12 张连续图片。",
+                                "default": false
                             },
                             "timeout": {
                                 "description": "请求超时（秒）",
