@@ -3,10 +3,12 @@ import asyncio
 import hashlib
 import json
 import mimetypes
+import os
 import re
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
@@ -53,6 +55,9 @@ def load_main_method(name: str):
         "DuplicateGroupTaskError": RuntimeError,
         "asyncio": asyncio,
         "logger": Mock(),
+        "os": os,
+        "PLUGIN_NAME": "test_plugin",
+        "StarTools": SimpleNamespace(get_data_dir=Mock()),
     }
     exec(compile(isolated_module, str(main_path), "exec"), namespace)
     return getattr(namespace["MainMethodHarness"], name)
@@ -85,7 +90,8 @@ def load_comic_service_method(name: str):
     method = next(
         node
         for node in service_class.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == name
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        and node.name == name
     )
     isolated_class = ast.ClassDef(
         name="ComicServiceHarness",
@@ -97,7 +103,7 @@ def load_comic_service_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
-    namespace = {"Path": Path, "mimetypes": mimetypes, "logger": Mock()}
+    namespace = {"Path": Path, "mimetypes": mimetypes, "logger": Mock(), "Any": Any}
     exec(compile(isolated_module, str(service_path), "exec"), namespace)
     return getattr(namespace["ComicServiceHarness"], name)
 
@@ -712,3 +718,398 @@ def test_comic_is_skipped_without_valid_topics():
     plugin._trigger_comic_generation.assert_not_called()
     assert plugin._comic_group_tasks == {}
     assert plugin._background_tasks == set()
+
+def _comic_config_manager(**overrides):
+    """构造 generate_comic 所需的配置替身。"""
+    defaults = {
+        "get_enable_daily_comic": Mock(return_value=True),
+        "get_selected_comic_character": Mock(return_value=None),
+        "get_comic_character_persona_id": Mock(return_value=""),
+        "get_comic_character_storyboard_prompt": Mock(return_value=""),
+        "get_drawing_reference_images": Mock(return_value=[]),
+        "get_drawing_backend": Mock(return_value="big_banana"),
+        "get_drawing_external_fallback": Mock(return_value=True),
+        "get_drawing_provider_configs": Mock(return_value=[{"name": "x"}]),
+        "get_drawing_output_exception_retry_keywords": Mock(return_value=[]),
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def _comic_service(config_manager, drawing_client, **methods):
+    """构造 generate_comic 所需的漫画服务替身。"""
+    service = {
+        "config_manager": config_manager,
+        "llm_analyzer": SimpleNamespace(
+            analyze_comic_storyboards=AsyncMock(
+                return_value=([{"scene": "comic scene prompt"}], None)
+            )
+        ),
+        "drawing_client": drawing_client,
+        "_fetch_reference_image": AsyncMock(),
+        "_generate_via_big_banana": AsyncMock(return_value=None),
+        "_generate_via_general_plugin": AsyncMock(return_value=None),
+    }
+    service.update(methods)
+    return SimpleNamespace(**service)
+
+
+def test_big_banana_backend_returns_none_when_plugin_missing():
+    """大香蕉插件未注册时应回退（返回 None）。"""
+    generate = load_comic_service_method("_generate_via_big_banana")
+    context = SimpleNamespace(get_registered_star=Mock(return_value=None))
+    service = SimpleNamespace(context=context)
+
+    result = asyncio.run(generate(service, "prompt", None))
+
+    assert result is None
+
+
+def test_big_banana_backend_returns_bytes_on_success():
+    """大香蕉绘图管线成功时应返回图片字节并带上参考图。"""
+    generate = load_comic_service_method("_generate_via_big_banana")
+
+    class FakeImageResource:
+        """模拟大香蕉解析参考图后使用的最小图片资源对象。"""
+
+        @staticmethod
+        def from_bytes(data_bytes: bytes) -> SimpleNamespace:
+            return SimpleNamespace(bytes=data_bytes, mime="image/png")
+
+    async def scenario():
+        pipeline = SimpleNamespace(
+            run=AsyncMock(
+                return_value=SimpleNamespace(
+                    images=[SimpleNamespace(bytes=b"comic-img")],
+                    error_message=None,
+                )
+            )
+        )
+        plugin = SimpleNamespace(drawing_pipeline=pipeline)
+        context = SimpleNamespace(
+            get_registered_star=Mock(
+                return_value=SimpleNamespace(star_cls=plugin, activated=True)
+            )
+        )
+        service = SimpleNamespace(
+            context=context,
+            _import_big_banana_image_resource=Mock(return_value=FakeImageResource),
+        )
+
+        result = await generate(
+            service,
+            "prompt",
+            [(b"\x89PNG\r\n\x1a\nimage", "image/png")],
+        )
+
+        assert result == b"comic-img"
+        pipeline.run.assert_awaited_once()
+        params, image_list = pipeline.run.call_args[0]
+        assert params["aspect_ratio"] == "16:9"
+        assert len(image_list) == 1
+
+    asyncio.run(scenario())
+
+
+def test_big_banana_backend_returns_none_on_provider_error():
+    """大香蕉提供商返回错误消息时应回退（返回 None）。"""
+    generate = load_comic_service_method("_generate_via_big_banana")
+
+    class FakeImageResource:
+        """模拟大香蕉图片资源类型，避免污染解释器模块缓存。"""
+
+        @staticmethod
+        def from_bytes(data_bytes: bytes) -> SimpleNamespace:
+            return SimpleNamespace(bytes=data_bytes, mime="image/png")
+
+    async def scenario():
+        pipeline = SimpleNamespace(
+            run=AsyncMock(
+                return_value=SimpleNamespace(
+                    images=[], error_message="provider boom"
+                )
+            )
+        )
+        plugin = SimpleNamespace(drawing_pipeline=pipeline)
+        context = SimpleNamespace(
+            get_registered_star=Mock(
+                return_value=SimpleNamespace(star_cls=plugin, activated=True)
+            )
+        )
+        service = SimpleNamespace(
+            context=context,
+            _import_big_banana_image_resource=Mock(return_value=FakeImageResource),
+        )
+
+        result = await generate(service, "prompt", None)
+
+        assert result is None
+
+    asyncio.run(scenario())
+
+
+def test_import_big_banana_image_resource_derives_package_from_module():
+    """应从插件类模块路径推导包名导入 ImageResource。"""
+    import sys
+    from types import ModuleType
+
+    loader = load_comic_service_method("_import_big_banana_image_resource")
+
+    fake_image_resource = type("ImageResource", (), {})
+    schemas = ModuleType("data.plugins.astrbot_plugin_big_banana.core.schemas")
+    schemas.ImageResource = fake_image_resource
+    core = ModuleType("data.plugins.astrbot_plugin_big_banana.core")
+    core.schemas = schemas
+    pkg = ModuleType("data.plugins.astrbot_plugin_big_banana")
+    pkg.core = core
+    sys.modules["data.plugins.astrbot_plugin_big_banana"] = pkg
+    sys.modules["data.plugins.astrbot_plugin_big_banana.core"] = core
+    sys.modules["data.plugins.astrbot_plugin_big_banana.core.schemas"] = schemas
+
+    class FakePlugin:
+        pass
+
+    FakePlugin.__module__ = "data.plugins.astrbot_plugin_big_banana.main"
+    try:
+        assert loader(FakePlugin()) is fake_image_resource
+    finally:
+        for name in list(sys.modules):
+            if name.startswith("data.plugins.astrbot_plugin_big_banana"):
+                del sys.modules[name]
+
+
+def test_import_big_banana_image_resource_returns_none_when_unavailable():
+    """无法推导包名且直接导入失败时返回 None。"""
+    import sys
+
+    for name in [
+        n
+        for n in sys.modules
+        if n == "astrbot_plugin_big_banana"
+        or n.startswith("astrbot_plugin_big_banana.")
+    ]:
+        del sys.modules[name]
+
+    loader = load_comic_service_method("_import_big_banana_image_resource")
+    assert loader(SimpleNamespace()) is None
+
+
+def test_generate_comic_prefers_big_banana_backend():
+    """配置 big_banana 后端时优先走大香蕉，不调用内置绘图客户端。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = _comic_config_manager(get_drawing_backend=Mock(return_value="big_banana"))
+        drawing_client = SimpleNamespace(generate_image=AsyncMock())
+        service = _comic_service(
+            config_manager,
+            drawing_client,
+            _generate_via_big_banana=AsyncMock(return_value=b"comic-bytes"),
+        )
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes == b"comic-bytes"
+        assert fallback_url is None
+        service._generate_via_big_banana.assert_awaited_once()
+        service._generate_via_general_plugin.assert_not_called()
+        drawing_client.generate_image.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_generate_comic_prefers_general_plugin_backend():
+    """配置 general_plugin 后端时优先走通用生图插件。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="general_plugin")
+        )
+        drawing_client = SimpleNamespace(generate_image=AsyncMock())
+        service = _comic_service(
+            config_manager,
+            drawing_client,
+            _generate_via_general_plugin=AsyncMock(return_value=b"comic-bytes"),
+        )
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes == b"comic-bytes"
+        assert fallback_url is None
+        service._generate_via_general_plugin.assert_awaited_once()
+        service._generate_via_big_banana.assert_not_called()
+        drawing_client.generate_image.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_generate_comic_falls_back_to_builtin_when_big_banana_empty():
+    """大香蕉后端无结果时应回退内置绘图客户端。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="big_banana"),
+            get_drawing_external_fallback=Mock(return_value=True),
+            get_drawing_provider_configs=Mock(return_value=[{"name": "x"}]),
+        )
+        drawing_client = SimpleNamespace(
+            generate_image=AsyncMock(return_value=(b"builtin-bytes", None))
+        )
+        service = _comic_service(config_manager, drawing_client)
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes == b"builtin-bytes"
+        assert fallback_url is None
+        drawing_client.generate_image.assert_awaited_once()
+
+    asyncio.run(scenario())
+
+
+def test_generate_comic_skips_builtin_when_external_fallback_disabled():
+    """关闭回退开关时，外部后端失败应直接取消漫画。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="big_banana"),
+            get_drawing_external_fallback=Mock(return_value=False),
+        )
+        drawing_client = SimpleNamespace(generate_image=AsyncMock())
+        service = _comic_service(config_manager, drawing_client)
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes is None
+        assert fallback_url is None
+        drawing_client.generate_image.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_generate_comic_skips_unconfigured_builtin_backend():
+    """外部后端失败且内置后端未配置供应商时，应直接取消漫画。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="big_banana"),
+            get_drawing_external_fallback=Mock(return_value=True),
+            get_drawing_provider_configs=Mock(return_value=[]),
+        )
+        drawing_client = SimpleNamespace(generate_image=AsyncMock())
+        service = _comic_service(config_manager, drawing_client)
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes is None
+        assert fallback_url is None
+        drawing_client.generate_image.assert_not_called()
+
+    asyncio.run(scenario())
+
+def test_detect_image_ext_sniffs_bytes():
+    """应从图片字节嗅探扩展名，无法识别时回退 .png。"""
+    detect = load_main_method("_detect_image_ext")
+    assert detect(b"\x89PNG\r\n\x1a\nrest") == ".png"
+    assert detect(b"\xff\xd8\xffjpeg") == ".jpg"
+    assert detect(b"RIFF....WEBP") == ".webp"
+    assert detect(b"GIF87a....") == ".gif"
+    assert detect(b"GIF89a....") == ".gif"
+    assert detect(b"\x00\x00\x00\x18ftypavif....") == ".avif"
+    assert detect(b"\x00\x00\x00\x18ftypavis....") == ".avif"
+    assert detect(b"unknown-bytes") == ".png"
+
+
+def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
+    """漫画生成成功后应按真实图片字节缓存，不能读取已删除的全局输出格式。
+
+    外部绘图后端可以返回与内置供应商配置不同的编码格式。此处覆盖从生成结果到
+    发送、相册上传的完整路径，确保 JPEG 不会因旧的 ``get_drawing_output_format``
+    回退逻辑触发 AttributeError 或被错误保存为 PNG。
+    """
+    trigger_comic = load_main_method("_trigger_comic_generation")
+    detect_image_ext = load_main_method("_detect_image_ext")
+    trigger_comic.__globals__["StarTools"] = SimpleNamespace(
+        get_data_dir=Mock(return_value=tmp_path)
+    )
+    adapter = SimpleNamespace(send_image=AsyncMock())
+    comic_bytes = b"\xff\xd8\xffjpeg-payload"
+    plugin = SimpleNamespace(
+        _comic_semaphore=asyncio.Semaphore(1),
+        _terminating=False,
+        _detect_image_ext=detect_image_ext,
+        comic_service=SimpleNamespace(
+            generate_comic=AsyncMock(return_value=(comic_bytes, None))
+        ),
+        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
+        _try_upload_image=AsyncMock(),
+    )
+
+    asyncio.run(trigger_comic(plugin, [{"topic": "测试"}], "123456", "onebot", "umo"))
+
+    sent_path = adapter.send_image.await_args.args[1]
+    assert sent_path.endswith(".jpg")
+    assert not Path(sent_path).exists()
+    plugin._try_upload_image.assert_awaited_once_with(
+        "123456", sent_path, "onebot", is_comic=True
+    )
+
+
+def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
+    """漫画相册上传应从本地缓存内容识别格式，而不是默认标记为 PNG。"""
+    upload_image = load_main_method("_try_upload_image")
+    detect_image_ext = load_main_method("_detect_image_ext")
+    image_path = tmp_path / "comic_cache" / "comic.jpg"
+    image_path.parent.mkdir()
+    image_path.write_bytes(b"\xff\xd8\xffjpeg-payload")
+    adapter = SimpleNamespace(
+        get_group_info=AsyncMock(return_value=None),
+        upload_group_album=AsyncMock(),
+    )
+    plugin = SimpleNamespace(
+        config_manager=SimpleNamespace(
+            get_enable_comic_album_upload=Mock(return_value=True),
+            get_comic_album_name=Mock(return_value="comic"),
+            get_group_album_strict_mode=Mock(return_value=False),
+        ),
+        bot_manager=SimpleNamespace(get_adapter=Mock(return_value=adapter)),
+        _detect_image_ext=detect_image_ext,
+    )
+
+    asyncio.run(upload_image(plugin, "123456", str(image_path), "onebot", True))
+
+    adapter.upload_group_album.assert_awaited_once_with(
+        "123456",
+        str(image_path.resolve()),
+        album_id=None,
+        album_name="comic",
+        strict_mode=False,
+    )

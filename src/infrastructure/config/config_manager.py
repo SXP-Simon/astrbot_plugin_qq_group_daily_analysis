@@ -1269,6 +1269,17 @@ class ConfigManager:
         """获取是否开启每日群漫画功能"""
         return self._get_group("daily_comic").get("enable_daily_comic", False)
 
+    def get_drawing_backend(self) -> str:
+        """获取漫画绘图后端 (builtin/general_plugin/big_banana)。"""
+        group = self._get_group("daily_comic")
+        return str(group.get("drawing_backend", "builtin")).strip() or "builtin"
+
+    def get_drawing_external_fallback(self) -> bool:
+        """外部绘图后端失败时是否回退内置后端。"""
+        return bool(
+            self._get_group("daily_comic").get("drawing_external_fallback", True)
+        )
+
     def get_drawing_provider_configs(self) -> list[dict]:
         """获取按优先级排序的已启用绘图供应商候选。
 

@@ -129,6 +129,7 @@ class GroupDailyAnalysis(Star):
             self.drawing_client,
             self.config_manager,
             plugin_data_dir,
+            context=context,
         )
 
         # 消息处理服务
@@ -490,23 +491,12 @@ class GroupDailyAnalysis(Star):
         if not enable_file and not enable_album:
             return
 
-        # 1. 构造一个更友好的文件名
+        # 1. 记录文件名的公共部分。漫画真实格式必须在读取图片字节后决定，
+        # 不能依据已经删除的全局输出格式，也不能盲信外部后端返回的文件后缀。
         now = datetime.now()
         timestamp = now.strftime("%H%M")
         date_str = now.strftime("%Y-%m-%d")
-
-        # 默认基础名和后缀
-        if is_comic:
-            output_format = self.config_manager.get_drawing_output_format().lower()
-            ext = ".jpg" if output_format in {"jpg", "jpeg"} else f".{output_format}"
-        else:
-            ext = (
-                ".jpg"
-                if (".jpg" in image_url.lower() or ".jpeg" in image_url.lower())
-                else ".png"
-            )
-        nice_filename = f"群分析报告_{group_id}_{date_str}_{timestamp}{ext}"
-
+        filename_stem = f"群分析报告_{group_id}_{date_str}_{timestamp}"
         try:
             # 尝试通过适配器获取群名称，使文件名更具辨识度
             group_info = await adapter.get_group_info(group_id)
@@ -514,9 +504,7 @@ class GroupDailyAnalysis(Star):
                 # 过滤非法文件名字符：\ / : * ? " < > |
                 safe_name = re.sub(r'[\\/:*?"<>|]', "", group_info.group_name).strip()
                 if safe_name:
-                    nice_filename = (
-                        f"群分析报告_{safe_name}_{date_str}_{timestamp}{ext}"
-                    )
+                    filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
         except Exception:
             pass
 
@@ -543,22 +531,21 @@ class GroupDailyAnalysis(Star):
             elif os.path.isfile(image_url):
                 image_file = os.path.abspath(image_url)
 
-            if is_comic and data:
-                if data.startswith(b"\x89PNG\r\n\x1a\n"):
-                    ext = ".png"
-                elif data.startswith(b"\xff\xd8\xff"):
-                    ext = ".jpg"
-                elif len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-                    ext = ".webp"
-                elif data.startswith((b"GIF87a", b"GIF89a")):
-                    ext = ".gif"
-                elif (
-                    len(data) >= 12
-                    and data[4:8] == b"ftyp"
-                    and data[8:12] in {b"avif", b"avis"}
-                ):
-                    ext = ".avif"
-                nice_filename = f"{os.path.splitext(nice_filename)[0]}{ext}"
+            if is_comic:
+                # 缓存文件通常已有正确后缀，但上传入口也允许接收 Base64/Data URI。
+                # 对本地文件读取少量头部字节即可，不需要把大图完整载入内存。
+                image_header = data
+                if image_header is None and image_file:
+                    with open(image_file, "rb") as image_stream:
+                        image_header = image_stream.read(32)
+                ext = self._detect_image_ext(image_header or b"")
+            else:
+                ext = (
+                    ".jpg"
+                    if (".jpg" in image_url.lower() or ".jpeg" in image_url.lower())
+                    else ".png"
+                )
+            nice_filename = f"{filename_stem}{ext}"
 
             if data and not image_file:
                 # 使用 tempfile 生成唯一后缀，防止并发冲突
@@ -936,6 +923,25 @@ class GroupDailyAnalysis(Star):
             )
         )
 
+    @staticmethod
+    def _detect_image_ext(data: bytes) -> str:
+        """从图片字节嗅探扩展名，无法识别时回退 .png。"""
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return ".png"
+        if data.startswith(b"\xff\xd8\xff"):
+            return ".jpg"
+        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return ".webp"
+        if data.startswith((b"GIF87a", b"GIF89a")):
+            return ".gif"
+        if (
+            len(data) >= 12
+            and data[4:8] == b"ftyp"
+            and data[8:12] in {b"avif", b"avis"}
+        ):
+            return ".avif"
+        return ".png"
+
     async def _trigger_comic_generation(
         self,
         topics: list[dict],
@@ -955,14 +961,7 @@ class GroupDailyAnalysis(Star):
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和上传相册...")
                     import time
 
-                    output_format = (
-                        self.config_manager.get_drawing_output_format().lower()
-                    )
-                    ext = (
-                        ".jpg"
-                        if output_format in {"jpg", "jpeg"}
-                        else f".{output_format}"
-                    )
+                    ext = self._detect_image_ext(comic_bytes)
 
                     comic_dir = StarTools.get_data_dir(PLUGIN_NAME) / "comic_cache"
                     comic_dir.mkdir(parents=True, exist_ok=True)
