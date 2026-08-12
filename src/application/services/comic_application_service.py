@@ -1,5 +1,8 @@
 import mimetypes
 from pathlib import Path
+from typing import Any
+
+from astrbot.api.star import Context
 
 from ...infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from ...infrastructure.config.config_manager import ConfigManager
@@ -24,11 +27,13 @@ class ComicApplicationService:
         drawing_client: DrawingClient,
         config_manager: ConfigManager,
         plugin_data_dir: Path,
+        context: Context | None = None,
     ):
         self.llm_analyzer = llm_analyzer
         self.drawing_client = drawing_client
         self.config_manager = config_manager
         self.plugin_data_dir = plugin_data_dir
+        self.context = context
 
     async def generate_comic(
         self,
@@ -96,7 +101,37 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
-        # 4. 调用绘图 API，捕获"有 URL 但下载失败"的情况
+        # 4. 若配置为外部绘图后端，优先走对应插件（流式/异步，避免网关超时）
+        backend = self.config_manager.get_drawing_backend()
+        if backend in {"general_plugin", "big_banana"}:
+            if backend == "general_plugin":
+                external_comic_bytes = await self._generate_via_general_plugin(
+                    scene_prompt, images_data
+                )
+            else:
+                external_comic_bytes = await self._generate_via_big_banana(
+                    scene_prompt, images_data
+                )
+            if external_comic_bytes:
+                logger.info(
+                    f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
+                )
+                return external_comic_bytes, None
+            if not self.config_manager.get_drawing_external_fallback():
+                logger.warning(
+                    f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
+                )
+                return None, None
+            logger.warning(f"[Comic] {backend} 后端未产出结果，回退内置绘图后端。")
+
+        # 5. 内置绘图后端未配置时直接取消，避免空跑
+        if not self.config_manager.get_drawing_provider_configs():
+            logger.warning(
+                "[Comic] 未配置绘图供应商（drawing_provider_overrides），取消漫画生成。"
+            )
+            return None, None
+
+        # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
         fallback_url: str | None = None
         try:
             final_comic_bytes, last_error = await self.drawing_client.generate_image(
@@ -140,6 +175,193 @@ class ComicApplicationService:
             logger.error("[Comic] 漫画生成最终失败。")
 
         return final_comic_bytes, fallback_url
+
+    async def _generate_via_general_plugin(
+        self,
+        scene_prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+    ) -> bytes | None:
+        """通过「通用生图」插件的公共 API 生成漫画。
+
+        通用生图插件内部使用流式/异步轮询，可规避非流式请求撞上游网关超时 (HTTP 504)。
+        未安装、未激活、未配置 API 或调用失败时返回 None，由调用方回退内置 DrawingClient。
+
+        Returns:
+            生成图片的二进制数据；失败时返回 None。
+        """
+        if self.context is None:
+            logger.debug("[Comic] 未注入插件 Context，跳过通用生图后端。")
+            return None
+        try:
+            meta = self.context.get_registered_star("astrbot_plugin_image_generation")
+        except Exception as exc:
+            logger.debug(f"[Comic] 获取通用生图插件注册信息失败: {exc}")
+            return None
+        image_plugin = meta.star_cls if meta and meta.activated else None
+        if image_plugin is None:
+            logger.warning(
+                "[Comic] 未检测到已激活的「通用生图」插件，回退内置绘图后端。"
+            )
+            return None
+
+        public_api = getattr(image_plugin, "public_api", None)
+        if public_api is None:
+            logger.warning("[Comic] 通用生图插件未暴露 public_api，回退内置绘图后端。")
+            return None
+
+        try:
+            logger.info("[Comic] 通过「通用生图」插件公共 API 生成漫画...")
+            result = await public_api.generate_image_files(
+                prompt=scene_prompt,
+                source="群分析插件",
+                aspect_ratio="16:9",
+                reference_image_data=images_data,
+                timeout_seconds=600,
+            )
+        except Exception as exc:
+            logger.error(f"[Comic] 通用生图后端调用异常: {exc}")
+            return None
+
+        if not getattr(result, "ok", False):
+            code = str(getattr(result, "code", ""))
+            message = getattr(result, "message", "") or getattr(result, "error", "")
+            hint = ""
+            if code == "prompt_blocked":
+                hint = "（提示词被通用生图插件安全审核拦截，可调整其审核配置或精简 scene 提示词）"
+            elif code == "api_key_missing":
+                hint = "（通用生图插件未配置 API Key，需先在通用生图插件中配置）"
+            elif code == "timeout":
+                hint = "（等待通用生图任务结果超时）"
+            elif code == "rate_limited":
+                hint = "（命中通用生图插件额度/频率限制）"
+            logger.warning(f"[Comic] 通用生图后端失败 [{code}]: {message}{hint}")
+            return None
+
+        paths = list(getattr(result, "paths", None) or [])
+        if not paths:
+            logger.warning(
+                "[Comic] 通用生图后端未返回图片路径（可能参考图被忽略或结果为空，请检查通用生图插件配置与参考图大小限制）。"
+            )
+            return None
+        try:
+            return Path(paths[0]).read_bytes()
+        except OSError as exc:
+            logger.warning(f"[Comic] 读取通用生图后端结果失败: {exc}")
+            return None
+
+    async def _generate_via_big_banana(
+        self,
+        scene_prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+    ) -> bytes | None:
+        """通过「大香蕉」插件的绘图管线生成漫画。
+
+        大香蕉支持 Gemini、SiliconFlow、OpenAI 等提供商及流式响应，
+        可规避内置非流式请求撞上游网关超时 (HTTP 504)。
+
+        Returns:
+            生成图片的二进制数据；失败时返回 None。
+        """
+        if self.context is None:
+            logger.debug("[Comic] 未注入插件 Context，跳过「大香蕉」后端。")
+            return None
+        try:
+            meta = self.context.get_registered_star("astrbot_plugin_big_banana")
+        except Exception as exc:
+            logger.debug(f"[Comic] 获取「大香蕉」插件注册信息失败: {exc}")
+            return None
+        plugin = meta.star_cls if meta and meta.activated else None
+        if plugin is None:
+            logger.warning("[Comic] 未检测到已激活的「大香蕉」插件，回退内置绘图后端。")
+            return None
+
+        drawing_pipeline = getattr(plugin, "drawing_pipeline", None)
+        if drawing_pipeline is None:
+            logger.warning("[Comic] 「大香蕉」插件未初始化绘图管线，回退内置绘图后端。")
+            return None
+
+        ImageResource = self._import_big_banana_image_resource(plugin)
+        if ImageResource is None:
+            logger.warning("[Comic] 无法导入「大香蕉」图片资源类型，回退内置绘图后端。")
+            return None
+
+        image_list = None
+        if images_data:
+            image_list = []
+            for img_bytes, _mime in images_data:
+                resource = ImageResource.from_bytes(img_bytes)
+                if resource:
+                    image_list.append(resource)
+            if not image_list:
+                logger.warning(
+                    "[Comic] 参考图无法解析为「大香蕉」图片资源，将不带参考图生成。"
+                )
+
+        params: dict[str, Any] = {
+            "prompt": scene_prompt,
+            "capability": "image_generation",
+            "sub_brain": False,
+            "url": False,
+            "aspect_ratio": "16:9",
+            "image_size": "1K",
+        }
+
+        try:
+            logger.info("[Comic] 通过「大香蕉」插件绘图管线生成漫画...")
+            result = await drawing_pipeline.run(params, image_list)
+        except Exception as exc:
+            logger.error(f"[Comic] 「大香蕉」绘图管线调用异常: {exc}")
+            return None
+
+        if getattr(result, "error_message", None):
+            logger.warning(f"[Comic] 「大香蕉」生成失败: {result.error_message}")
+            return None
+
+        images = getattr(result, "images", None) or []
+        if not images:
+            logger.warning("[Comic] 「大香蕉」未返回图片。")
+            return None
+        try:
+            image_bytes = images[0].bytes
+        except Exception as exc:
+            logger.warning(f"[Comic] 读取「大香蕉」生成结果失败: {exc}")
+            return None
+        if not image_bytes:
+            logger.warning("[Comic] 「大香蕉」返回的图片为空。")
+            return None
+        return image_bytes
+
+    @staticmethod
+    def _import_big_banana_image_resource(plugin: Any):
+        """导入「大香蕉」插件的 ImageResource 类型。
+
+        AstrBot 以 ``data.plugins.<插件名>.main`` 形式加载插件，模块名并非
+        ``astrbot_plugin_big_banana``，因此先从插件类的模块路径推导包名导入；
+        推导失败时回退直接导入，兼容 pip 安装或测试环境注入的场景。
+
+        Args:
+            plugin: 已激活的大香蕉插件实例。
+
+        Returns:
+            ImageResource 类型；无法导入时返回 None。
+        """
+        import importlib
+
+        module_name = getattr(type(plugin), "__module__", "") or ""
+        candidate_modules = []
+        if module_name and "." in module_name:
+            candidate_modules.append(module_name.rsplit(".", 1)[0] + ".core.schemas")
+        candidate_modules.append("astrbot_plugin_big_banana.core.schemas")
+
+        for module_path in candidate_modules:
+            try:
+                schemas_module = importlib.import_module(module_path)
+            except Exception:
+                continue
+            image_resource = getattr(schemas_module, "ImageResource", None)
+            if image_resource is not None:
+                return image_resource
+        return None
 
     async def _fetch_reference_image(
         self, relative_path: str

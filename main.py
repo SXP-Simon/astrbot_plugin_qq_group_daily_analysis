@@ -129,6 +129,7 @@ class GroupDailyAnalysis(Star):
             self.drawing_client,
             self.config_manager,
             plugin_data_dir,
+            context=context,
         )
 
         # 消息处理服务
