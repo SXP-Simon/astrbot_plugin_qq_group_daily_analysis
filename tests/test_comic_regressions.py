@@ -1047,3 +1047,13 @@ def test_generate_comic_skips_unconfigured_builtin_backend():
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
+
+def test_detect_image_ext_sniffs_bytes():
+    """应从图片字节嗅探扩展名，无法识别时回退 .png。"""
+    detect = load_main_method("_detect_image_ext")
+    assert detect(b"\x89PNG\r\n\x1a\nrest") == ".png"
+    assert detect(b"\xff\xd8\xffjpeg") == ".jpg"
+    assert detect(b"RIFF....WEBP") == ".webp"
+    assert detect(b"GIF89a....") == ".gif"
+    assert detect(b"\x00\x00\x00\x18ftypavif....") == ".avif"
+    assert detect(b"unknown-bytes") == ".png"

@@ -498,8 +498,7 @@ class GroupDailyAnalysis(Star):
 
         # 默认基础名和后缀
         if is_comic:
-            output_format = self.config_manager.get_drawing_output_format().lower()
-            ext = ".jpg" if output_format in {"jpg", "jpeg"} else f".{output_format}"
+            ext = ".png"  # 漫画真实格式会在下方按图片字节嗅探修正
         else:
             ext = (
                 ".jpg"
@@ -937,6 +936,21 @@ class GroupDailyAnalysis(Star):
             )
         )
 
+    @staticmethod
+    def _detect_image_ext(data: bytes) -> str:
+        """从图片字节嗅探扩展名，无法识别时回退 .png。"""
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return ".png"
+        if data.startswith(b"\xff\xd8\xff"):
+            return ".jpg"
+        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+            return ".webp"
+        if data.startswith((b"GIF87a", b"GIF89a")):
+            return ".gif"
+        if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in {b"avif", b"avis"}:
+            return ".avif"
+        return ".png"
+
     async def _trigger_comic_generation(
         self,
         topics: list[dict],
@@ -956,14 +970,7 @@ class GroupDailyAnalysis(Star):
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和上传相册...")
                     import time
 
-                    output_format = (
-                        self.config_manager.get_drawing_output_format().lower()
-                    )
-                    ext = (
-                        ".jpg"
-                        if output_format in {"jpg", "jpeg"}
-                        else f".{output_format}"
-                    )
+                    ext = self._detect_image_ext(comic_bytes)
 
                     comic_dir = StarTools.get_data_dir(PLUGIN_NAME) / "comic_cache"
                     comic_dir.mkdir(parents=True, exist_ok=True)
