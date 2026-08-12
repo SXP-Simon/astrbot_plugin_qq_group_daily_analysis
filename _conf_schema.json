@@ -224,26 +224,26 @@
             },
             "t2i_viewport_width": {
                 "type": "int",
-                "description": "报告渲染视口宽度 (px)",
+                "description": "报告渲染视口兜底宽度 (px)",
                 "default": 1440,
                 "slider": {
                     "min": 800,
                     "max": 1920,
                     "step": 10
                 },
-                "hint": "显式传给 AstrBot T2I，避免服务升级后回退到 800px 默认宽度而挤压宽版报告模板。内置主题建议保持 1440；自定义模板可按其桌面设计宽度调整。",
+                "hint": "仅在模板未提供 T2I 可识别的数字 width 时传给 AstrBot T2I，避免服务升级后回退到 800px 默认宽度而挤压宽版报告模板。内置主题建议保持 1440；自定义模板可用 meta viewport 的数字 width 指定自身宽度。",
                 "collapsed": true
             },
             "t2i_viewport_height": {
                 "type": "int",
-                "description": "报告渲染视口高度 (px)",
+                "description": "报告渲染视口兜底高度 (px)",
                 "default": 900,
                 "slider": {
                     "min": 400,
                     "max": 1440,
                     "step": 10
                 },
-                "hint": "显式传给 AstrBot T2I 的初始视口高度。图片报告始终使用 full_page，不会按此高度截断整张报告。",
+                "hint": "仅在模板未提供 T2I 可识别的数字 height 时传给 AstrBot T2I。图片报告始终使用 full_page，不会按此高度截断整张报告。",
                 "collapsed": true
             },
             "t2i_r2_type": {
