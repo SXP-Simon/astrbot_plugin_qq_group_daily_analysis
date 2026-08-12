@@ -947,7 +947,11 @@ class GroupDailyAnalysis(Star):
             return ".webp"
         if data.startswith((b"GIF87a", b"GIF89a")):
             return ".gif"
-        if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in {b"avif", b"avis"}:
+        if (
+            len(data) >= 12
+            and data[4:8] == b"ftyp"
+            and data[8:12] in {b"avif", b"avis"}
+        ):
             return ".avif"
         return ".png"
 
