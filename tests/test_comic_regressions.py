@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
+from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.templates import HTMLTemplates
 
 
@@ -493,6 +494,30 @@ def test_t2i_rendering_strategies_explicitly_set_desktop_viewport(tmp_path: Path
     assert len(strategies) == 2
     assert all(strategy["viewport_width"] == 1360 for strategy in strategies)
     assert all(strategy["viewport_height"] == 900 for strategy in strategies)
+
+
+def test_t2i_viewport_fallback_respects_numeric_template_meta():
+    """固定数字 meta 应优先于插件兜底视口。"""
+    options, description = ReportGenerator._resolve_t2i_viewport_options(
+        '<meta name="viewport" content="width=980, height=590">',
+        {"viewport_width": 1440, "viewport_height": 900},
+    )
+
+    assert "viewport_width" not in options
+    assert "viewport_height" not in options
+    assert description == "模板width=980，模板height=590"
+
+
+def test_t2i_viewport_fallback_only_fills_missing_meta_dimension():
+    """模板只指定宽度时，插件只补充高度兜底。"""
+    options, description = ReportGenerator._resolve_t2i_viewport_options(
+        '<meta name="viewport" content="width=980, initial-scale=1">',
+        {"viewport_width": 1440, "viewport_height": 900},
+    )
+
+    assert "viewport_width" not in options
+    assert options["viewport_height"] == 900
+    assert description == "模板width=980，兜底height=900"
 
 
 def test_custom_t2i_template_is_copied_after_user_edit(tmp_path: Path):

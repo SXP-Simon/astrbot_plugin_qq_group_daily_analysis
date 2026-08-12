@@ -411,6 +411,12 @@ class ReportGenerator(IReportGenerator):
 
                 for attempt, image_options in enumerate(render_strategies, 1):
                     try:
+                        image_options, viewport_description = (
+                            self._resolve_t2i_viewport_options(
+                                html_content, image_options
+                            )
+                        )
+
                         # Cleanse options
                         if image_options.get("type") == "png":
                             image_options.pop("quality", None)
@@ -419,8 +425,7 @@ class ReportGenerator(IReportGenerator):
                             "正在尝试第 "
                             f"{attempt} 轮渲染策略: type={image_options['type']}, "
                             f"full_page={image_options['full_page']}, "
-                            f"viewport={image_options.get('viewport_width')}x"
-                            f"{image_options.get('viewport_height')}, "
+                            f"viewport={viewport_description}, "
                             f"scale={image_options.get('device_scale_factor_level')}, "
                             f"timeout={image_options.get('timeout')}"
                         )
@@ -491,18 +496,14 @@ class ReportGenerator(IReportGenerator):
                                     image_url = f"base64://{b64}"
                                     logger.info(
                                         "图片生成成功 "
-                                        f"(轮次 {attempt}, 视口 "
-                                        f"{image_options.get('viewport_width')}x"
-                                        f"{image_options.get('viewport_height')}): "
+                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
                                         f"[Base64 数据 {len(image_data)} 字节]"
                                     )
                                     return image_url, html_content
                                 elif isinstance(image_data, str):
                                     logger.info(
                                         "图片生成成功 "
-                                        f"(轮次 {attempt}, 视口 "
-                                        f"{image_options.get('viewport_width')}x"
-                                        f"{image_options.get('viewport_height')}): "
+                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
                                         f"{image_data}"
                                     )
                                     return image_data, html_content
@@ -525,6 +526,41 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
             return None, html_content
+
+    @staticmethod
+    def _resolve_t2i_viewport_options(
+        html_content: str, image_options: dict
+    ) -> tuple[dict, str]:
+        """优先使用 T2I 可识别的模板视口，缺失维度使用插件兜底值。
+
+        Args:
+            html_content: 已渲染完成的报告 HTML。
+            image_options: 当前轮次的 T2I 渲染参数，包含兜底视口。
+
+        Returns:
+            实际传给 T2I 的参数，以及用于日志的视口来源说明。
+        """
+        resolved_options = image_options.copy()
+        head_snippet = html_content[:4096]
+        descriptions = []
+        for dimension, option_key in (
+            ("width", "viewport_width"),
+            ("height", "viewport_height"),
+        ):
+            # 与新版 T2I 的 meta 解析规则保持一致，避免误删兜底参数。
+            pattern = (
+                r'<meta\s+[^>]*name=["\']viewport["\'][^>]*'
+                rf'content=["\'][^"\']*{dimension}\s*=\s*(\d+)[^"\']*["\'][^>]*>'
+            )
+            match = re.search(pattern, head_snippet, re.IGNORECASE)
+            if match:
+                resolved_options.pop(option_key, None)
+                descriptions.append(f"模板{dimension}={match.group(1)}")
+            else:
+                descriptions.append(
+                    f"兜底{dimension}={resolved_options.get(option_key)}"
+                )
+        return resolved_options, "，".join(descriptions)
 
     async def generate_html_report(
         self,
