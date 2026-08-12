@@ -136,13 +136,13 @@
                 "type": "bool",
                 "description": "图片传输使用 Base64 编码",
                 "default": true,
-                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
+                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 Napcat/LLbot/SnowLuma 等支持本地路径的实现，可降低内存占用。"
             },
             "napcat_stream_threshold_mb": {
                 "type": "float",
-                "description": "NapCat 流式上传阈值（MB）",
+                "description": "NapCat/Snowluma 流式上传阈值（MB）",
                 "default": 2.0,
-                "hint": "先按现有图片发送策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 OneBot/NapCat 连接调用 upload_file_stream 并重试一次。填 0 禁用。Docker / docker compose 环境建议保持默认或按图片大小调大。"
+                "hint": "先按现有图片发送策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 NapCat/Snowluma 连接调用 upload_file_stream 并重试一次。填 0 禁用。Docker / docker compose 环境建议保持默认或按图片大小调大。"
             },
             "enable_analysis_reply": {
                 "type": "bool",
