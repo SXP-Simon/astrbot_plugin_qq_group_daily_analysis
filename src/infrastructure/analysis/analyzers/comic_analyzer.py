@@ -129,9 +129,20 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         topics: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
     ) -> tuple[list[dict], TokenUsage]:
-        """执行分析，返回 storyboards 和 token 消耗"""
-        storyboards, usage = await self.analyze(topics, umo, session_id)
+        """执行分析，返回 storyboards 和 token 消耗。
+
+        Args:
+            topics: 已提取的有效群聊话题。
+            umo: 群聊统一消息来源标识。
+            session_id: 调试会话标识。
+            persona_id: 漫画分镜专用人格 ID。
+
+        Returns:
+            分镜列表和 Token 使用统计。
+        """
+        storyboards, usage = await self.analyze(topics, umo, session_id, persona_id)
 
         if storyboards:
             if isinstance(storyboards, list):

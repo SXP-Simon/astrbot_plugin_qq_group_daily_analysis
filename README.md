@@ -181,8 +181,10 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 1. 在 `每日群漫画` 配置组开启 `enable_daily_comic`，并在 `分析功能` 配置组保持 `topic_analysis_enabled` 开启。
 2. 填写 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和 `drawing_api_protocol`。协议必须与上游接口一致：OpenAI Images 用 `images`，OpenAI 兼容聊天接口用 `chat`，xAI Grok Imagine 用 `grok`，Google Gemini Interactions 用 `gemini`。
 3. 可选填写 `drawing_prompt_provider_id`。它用于把分析结果整理成绘图分镜提示词；留空时使用插件的常规 Provider 回退策略。
-4. 可选在 `漫画参考图` 中上传 `jpg`、`jpeg`、`png` 或 `webp`，再点击目标文件的 `+` 加入配置。列表中最后加入的一张作为当前图生图参考图。
-5. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
+4. 可选在 `漫画角色方案` 中新增一个或多个方案：每个方案可单独选择漫画专用人格，并上传 `jpg`、`jpeg`、`png` 或 `webp` 参考图。每个方案会使用其最后加入的一张图片进行图生图；不配置方案或参考图时仍可文生图。
+5. 默认固定使用第一个已启用角色方案。开启 `每天随机切换漫画角色` 后，插件会在上海时区的每天首次生成漫画时随机选择一个已启用方案，并在当天持续使用同一方案；重启不会重新随机。该人格只作用于漫画分镜提示词，不会改变话题、金句或最终报告的人格。
+6. 升级前已配置的 `漫画参考图` 会自动迁移为 `默认角色方案`，迁移前数据会备份到插件数据目录的 `config_backups`。绘图尺寸、输出格式、重试和代理等低频参数已收纳到 WebUI 的“更多配置”。
+7. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
 
 分析结果完成后，漫画任务会立即在后台运行，报告渲染与发送不会等待出图完成。反过来，报告发送失败也不会取消已经开始的漫画任务。漫画只使用有效的话题总结作为分镜素材，因此需要开启话题分析；话题功能关闭、话题 LLM 无结果或标题为空时，插件仅记录调试日志并跳过本次漫画。
 

@@ -458,12 +458,58 @@
                 "default": false,
                 "hint": "开启后，每次群分析话题结果完成就会在后台并行生成漫画。需要启用话题分析并获得有效话题；没有有效话题时静默跳过。报告发送失败不会取消已开始的漫画任务。"
             },
+            "random_daily_comic_character": {
+                "description": "每天随机切换漫画角色",
+                "type": "bool",
+                "default": false,
+                "hint": "开启后每天首次生成漫画时，会从下方已启用的角色方案随机选择一个，并在当天持续使用；重启不会改变当天选择。关闭时固定使用第一个已启用方案。"
+            },
+            "comic_characters": {
+                "description": "漫画角色方案",
+                "type": "template_list",
+                "default": [],
+                "hint": "每个方案可绑定漫画专用人格和参考图。方案条目可展开编辑；请使用不同的方案名称，方便识别当天随机选中的角色。未配置方案时仍可正常文生图。",
+                "templates": {
+                    "character": {
+                        "name": "漫画角色方案",
+                        "display_item": "name",
+                        "items": {
+                            "name": {
+                                "description": "方案名称",
+                                "type": "string",
+                                "default": "",
+                                "hint": "仅用于在配置面板和运行日志中识别此方案。"
+                            },
+                            "enable": {
+                                "description": "启用此方案",
+                                "type": "bool",
+                                "default": true
+                            },
+                            "persona_id": {
+                                "description": "漫画专用人格",
+                                "type": "string",
+                                "_special": "select_persona",
+                                "default": "",
+                                "hint": "仅影响漫画分镜提示词，不会改变群分析报告、话题或金句使用的人格。"
+                            },
+                            "reference_images": {
+                                "description": "角色参考图",
+                                "type": "file",
+                                "default": [],
+                                "file_types": ["jpg", "jpeg", "png", "webp"],
+                                "hint": "上传后点击 + 加入此角色方案。已选择多张时，最后添加的一张会用于图生图。"
+                            }
+                        }
+                    }
+                }
+            },
             "drawing_reference_image": {
-                "description": "漫画参考图",
+                "description": "旧版漫画参考图（兼容迁移）",
                 "type": "file",
                 "default": [],
                 "file_types": ["jpg", "jpeg", "png", "webp"],
-                "hint": "上传后点击 + 将图片设为参考图。已添加多张时，最后添加的一张会用于图生图。"
+                "invisible": true,
+                "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
             },
             "drawing_api_url": {
                 "description": "绘图 API URL",
@@ -500,7 +546,8 @@
                     "2K",
                     "4K"
                 ],
-                "hint": "支持填写实际分辨率（如 3840x2160）或 1K、2K、4K 别名。Images 将其作为 size；Chat 写入 Prompt；Gemini 映射为 1K、2K、4K。Grok 当前使用官方默认分辨率。"
+                "hint": "支持填写实际分辨率（如 3840x2160）或 1K、2K、4K 别名。Images 将其作为 size；Chat 写入 Prompt；Gemini 映射为 1K、2K、4K。Grok 当前使用官方默认分辨率。",
+                "collapsed": true
             },
             "drawing_aspect_ratio": {
                 "description": "默认宽高比",
@@ -518,64 +565,74 @@
                     "16:9",
                     "21:9"
                 ],
-                "hint": "当默认图片尺寸使用 1K、2K、4K、auto 或比例值时，会结合该宽高比换算为实际分辨率。"
+                "hint": "当默认图片尺寸使用 1K、2K、4K、auto 或比例值时，会结合该宽高比换算为实际分辨率。",
+                "collapsed": true
             },
             "drawing_image_quality": {
                 "description": "默认图片质量",
                 "type": "string",
                 "options": ["auto", "high", "medium", "low"],
                 "default": "high",
-                "hint": "仅 Images 协议生效。可选 low、medium、high；auto 表示不发送质量参数。具体取值是否受支持由上游接口决定。"
+                "hint": "仅 Images 协议生效。可选 low、medium、high；auto 表示不发送质量参数。具体取值是否受支持由上游接口决定。",
+                "collapsed": true
             },
             "drawing_background": {
                 "description": "默认背景",
                 "type": "string",
                 "default": "auto",
-                "hint": "仅 Images 协议生效，transparent 仅 PNG/WebP 输出格式可用。"
+                "hint": "仅 Images 协议生效，transparent 仅 PNG/WebP 输出格式可用。",
+                "collapsed": true
             },
             "drawing_output_format": {
                 "description": "默认输出格式",
                 "type": "string",
                 "options": ["png", "jpeg", "webp"],
                 "default": "png",
-                "hint": "Images 协议作为 output_format 发送；Gemini 协议映射为响应 MIME 类型（WebP 由所选模型决定，无法确认时使用服务默认格式）；Chat 和 Grok 当前不发送此项。"
+                "hint": "Images 协议作为 output_format 发送；Gemini 协议映射为响应 MIME 类型（WebP 由所选模型决定，无法确认时使用服务默认格式）；Chat 和 Grok 当前不发送此项。",
+                "collapsed": true
             },
             "drawing_timeout": {
                 "description": "请求超时时间 (秒)",
                 "type": "int",
                 "default": 600,
-                "hint": "出图模型耗时较长，建议 120-600。"
+                "hint": "出图模型耗时较长，建议 120-600。",
+                "collapsed": true
             },
             "drawing_output_exception_retries": {
                 "description": "输出异常重试次数",
                 "type": "int",
                 "default": 3,
-                "hint": "当触发屏蔽词/审核等异常时的自动重试次数。次数耗尽后会交给LLM进行改写救场。"
+                "hint": "当触发屏蔽词/审核等异常时的自动重试次数。次数耗尽后会交给LLM进行改写救场。",
+                "collapsed": true
             },
             "drawing_output_exception_retry_keywords": {
                 "description": "输出异常触发关键词",
                 "type": "list",
                 "items": { "type": "string" },
                 "default": [],
-                "hint": "当绘图错误信息包含任一关键词时，将其视为内容生成或安全审核异常，并使用同一接口配置重试；重试耗尽后可由 LLM 改写 Prompt。留空则不执行此类内容重试和 Prompt 改写。"
+                "hint": "当绘图错误信息包含任一关键词时，将其视为内容生成或安全审核异常，并使用同一接口配置重试；重试耗尽后可由 LLM 改写 Prompt。留空则不执行此类内容重试和 Prompt 改写。",
+                "collapsed": true
             },
             "drawing_retry_delay": {
                 "description": "画图重试等待时间 (秒)",
                 "type": "int",
                 "default": 2,
-                "hint": "遇到异常或网络报错时，等待多长时间后重试。针对容易超载的接口建议调高，如 5 或 10。"
+                "hint": "遇到异常或网络报错时，等待多长时间后重试。针对容易超载的接口建议调高，如 5 或 10。",
+                "collapsed": true
             },
             "drawing_network_retries": {
                 "description": "网络错误重试次数",
                 "type": "int",
                 "default": 2,
-                "hint": "请求超时、限流或服务端错误时的重试次数；内容审核重试次数请单独配置。"
+                "hint": "请求超时、限流或服务端错误时的重试次数；内容审核重试次数请单独配置。",
+                "collapsed": true
             },
             "drawing_download_proxy": {
                 "description": "图片下载代理",
                 "type": "string",
                 "default": "",
-                "hint": "下载绘图 API 返回的图片 URL 时使用的代理，格式为 http://host:port 或 socks5://host:port。留空则不使用代理。"
+                "hint": "下载绘图 API 返回的图片 URL 时使用的代理，格式为 http://host:port 或 socks5://host:port。留空则不使用代理。",
+                "collapsed": true
             }
         }
     },
