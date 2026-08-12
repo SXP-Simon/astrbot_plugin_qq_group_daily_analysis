@@ -51,10 +51,10 @@ class ConfigManager:
         previous_version = str(previous_state.get("version", "")).strip()
         version_changed = bool(previous_version and previous_version != current_version)
 
-        if (
-            version_changed
-            and previous_state.get("schema_fingerprint") != current_schema_fingerprint
-            and isinstance(previous_state.get("config"), dict)
+        if previous_state.get(
+            "schema_fingerprint"
+        ) != current_schema_fingerprint and isinstance(
+            previous_state.get("config"), dict
         ):
             if not self._write_upgrade_config_backup(
                 previous_state["config"], previous_version
@@ -157,7 +157,7 @@ class ConfigManager:
             logger.warning(f"保存插件升级保护状态失败: {exc}")
 
     def _write_upgrade_config_backup(self, config: dict, version: str) -> bool:
-        """保存旧版本配置快照，并最多保留十份。
+        """保存旧版本配置快照，并最多保留二十份。
 
         Args:
             config: 上一次正常加载时记录的插件配置快照。
@@ -188,9 +188,13 @@ class ConfigManager:
                 backup_dir.glob("plugin_config_*.json"),
                 key=lambda path: (path.stat().st_mtime, path.name),
             )
-            for expired_backup in backups[:-10]:
+            for expired_backup in backups[:-20]:
                 expired_backup.unlink()
-            logger.info(f"检测到插件配置结构更新，已备份旧版配置: {backup_path.name}")
+            logger.info(
+                "检测到插件配置结构变化，已备份上次记录的配置："
+                f"旧版本={version}，文件={backup_path.name}，路径={backup_path.resolve()}，"
+                f"当前保留={min(len(backups), 20)} 份。"
+            )
             return True
         except OSError as exc:
             logger.warning(f"备份插件旧配置失败: {exc}")

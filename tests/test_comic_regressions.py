@@ -409,8 +409,8 @@ def test_reference_image_migration_keeps_old_config_when_backup_fails(tmp_path: 
     config.save_config.assert_not_called()
 
 
-def test_upgrade_config_backup_requires_version_and_schema_change(tmp_path: Path):
-    """仅版本变更不备份，配置结构变更时备份上一次快照。"""
+def test_upgrade_config_backup_requires_schema_change(tmp_path: Path):
+    """仅配置结构变更才备份，版本只作为旧快照的标识。"""
     config_manager_class = load_config_manager_class(tmp_path)
     plugin_root = tmp_path / "plugin"
     plugin_root.mkdir()
@@ -439,7 +439,6 @@ def test_upgrade_config_backup_requires_version_and_schema_change(tmp_path: Path
     backup_dir = tmp_path / "config_backups"
     assert not list(backup_dir.glob("plugin_config_*.json"))
 
-    metadata_path.write_text("version: v1.1.0\n", encoding="utf-8")
     schema_path.write_text(
         json.dumps(
             {
@@ -460,12 +459,12 @@ def test_upgrade_config_backup_requires_version_and_schema_change(tmp_path: Path
     }
 
 
-def test_upgrade_config_backups_keep_only_ten_newest(tmp_path: Path):
-    """插件配置备份超过十份时应清理最早文件。"""
+def test_upgrade_config_backups_keep_only_twenty_newest(tmp_path: Path):
+    """插件配置备份超过二十份时应清理最早文件。"""
     config_manager_class = load_config_manager_class(tmp_path)
     backup_dir = tmp_path / "config_backups"
     backup_dir.mkdir()
-    for index in range(10):
+    for index in range(20):
         backup_path = backup_dir / f"plugin_config_v1.0.0_20260812_00000{index}.json"
         backup_path.write_text("{}", encoding="utf-8")
 
@@ -473,7 +472,7 @@ def test_upgrade_config_backups_keep_only_ten_newest(tmp_path: Path):
     assert config_manager._write_upgrade_config_backup({"basic": {}}, "v1.0.1")
 
     backups = sorted(backup_dir.glob("plugin_config_*.json"))
-    assert len(backups) == 10
+    assert len(backups) == 20
     assert not (backup_dir / "plugin_config_v1.0.0_20260812_000000.json").exists()
 
 
