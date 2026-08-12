@@ -632,6 +632,14 @@ class ConfigManager:
         """获取是否启用 Base64 图片传输"""
         return self._get_group("basic").get("enable_base64_image", False)
 
+    def get_napcat_stream_threshold_mb(self) -> float:
+        """获取可触发 NapCat 流式上传兜底的本地图片最小大小。"""
+        value = self._get_group("basic").get("napcat_stream_threshold_mb", 2.0)
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return 0.0
+
     def get_t2i_rendering_strategies(self) -> list[dict]:
         """获取用户配置的两轮 T2I 渲染策略"""
         group = self._get_group("t2i_rendering")
@@ -1265,6 +1273,43 @@ class ConfigManager:
         """获取绘图 API 地址，空值由所选协议补全默认地址。"""
         return self._get_group("daily_comic").get("drawing_api_url", "")
 
+    def get_drawing_provider_configs(self) -> list[dict]:
+        """获取按优先级排序的已启用绘图供应商候选。
+
+        空条目或格式错误的条目会被忽略。没有有效候选时，调用方继续使用旧版单供应商字段。
+
+        Returns:
+            已启用供应商的配置字典列表。
+        """
+        providers = self._get_group("daily_comic").get("drawing_provider_overrides", [])
+        if not isinstance(providers, list):
+            return []
+
+        valid_protocols = {"images", "chat", "grok", "gemini"}
+        candidates = []
+        for index, provider in enumerate(providers):
+            if not isinstance(provider, dict) or not provider.get("enable", True):
+                continue
+            protocol = str(provider.get("api_protocol", "images")).strip()
+            api_key = str(provider.get("api_key", "")).strip()
+            if protocol not in valid_protocols or not api_key:
+                logger.warning("跳过索引 %s 处无效的漫画绘图供应商配置", index)
+                continue
+            candidate = provider.copy()
+            candidate["api_protocol"] = protocol
+            candidate["api_key"] = api_key
+            candidate["_index"] = index
+            try:
+                candidate["_priority"] = int(provider.get("priority", 0))
+            except (TypeError, ValueError):
+                candidate["_priority"] = 0
+            candidates.append(candidate)
+
+        return sorted(
+            candidates,
+            key=lambda item: (-item["_priority"], item["_index"]),
+        )
+
     def get_drawing_api_key(self) -> str:
         """获取绘图API Key"""
         return self._get_group("daily_comic").get("drawing_api_key", "")
@@ -1341,13 +1386,36 @@ class ConfigManager:
             if character
             else self._get_group("daily_comic").get("drawing_reference_image", [])
         )
+        if isinstance(reference_images, str):
+            reference_images = [reference_images]
         if not isinstance(reference_images, list):
             return ""
-
         for reference_image in reversed(reference_images):
             if isinstance(reference_image, str) and reference_image.strip():
                 return reference_image.strip()
         return ""
+
+    def get_drawing_reference_images(self) -> list[str]:
+        """Get every valid reference image for the selected comic character.
+
+        Returns:
+            Relative image paths in their configured order.
+        """
+        character = self.get_selected_comic_character()
+        reference_images = (
+            character.get("reference_images", [])
+            if character
+            else self._get_group("daily_comic").get("drawing_reference_image", [])
+        )
+        if isinstance(reference_images, str):
+            reference_images = [reference_images]
+        if not isinstance(reference_images, list):
+            return []
+        return [
+            reference_image.strip()
+            for reference_image in reference_images
+            if isinstance(reference_image, str) and reference_image.strip()
+        ]
 
     def get_selected_comic_character(self) -> dict | None:
         """获取本次漫画应使用的角色方案。

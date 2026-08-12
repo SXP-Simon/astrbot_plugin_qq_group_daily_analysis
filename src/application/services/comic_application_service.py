@@ -83,26 +83,24 @@ class ComicApplicationService:
 
         logger.debug(f"[Comic] 漫画 Prompt 已生成，长度: {len(scene_prompt)}")
 
-        # 3. 处理参考图
-        images_data = None
-        reference_image_path = self.config_manager.get_drawing_reference_image()
-        if reference_image_path:
+        # 3. 加载当前角色方案配置的全部参考图。
+        images_data = []
+        reference_image_paths = self.config_manager.get_drawing_reference_images()
+        for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
             if reference_image:
-                images_data = [reference_image]
-                logger.info(
-                    f"[Comic] 成功加载 WebUI 参考图: {Path(reference_image_path).name}"
-                )
+                images_data.append(reference_image)
+                logger.info(f"[Comic] 已加载参考图: {Path(reference_image_path).name}")
             else:
                 logger.warning(
-                    f"[Comic] 无法加载 WebUI 参考图: {Path(reference_image_path).name}，将不使用参考图。"
+                    f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
         # 4. 调用绘图 API，捕获"有 URL 但下载失败"的情况
         fallback_url: str | None = None
         try:
             final_comic_bytes, last_error = await self.drawing_client.generate_image(
-                scene_prompt, images_data=images_data
+                scene_prompt, images_data=images_data or None
             )
         except ImageDownloadFailedError as exc:
             logger.warning(
@@ -128,7 +126,7 @@ class ComicApplicationService:
                 logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
                 try:
                     final_comic_bytes, _ = await self.drawing_client.generate_image(
-                        new_prompt, images_data=images_data, disable_retry=True
+                        new_prompt, images_data=images_data or None, disable_retry=True
                     )
                 except ImageDownloadFailedError as exc:
                     logger.warning(

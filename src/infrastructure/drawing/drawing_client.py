@@ -87,7 +87,31 @@ class DrawingClient:
         调用 API 根据提示词生成单张图片 (支持参考图)
         返回图片的二进制数据和最后一次异常信息
         """
-        api_protocol = self.config_manager.get_drawing_api_protocol()
+        provider_configs = self.config_manager.get_drawing_provider_configs() or [{}]
+        last_error_msg = None
+        for provider in provider_configs:
+            result, last_error_msg = await self._generate_image_with_provider(
+                prompt, images_data, disable_retry, provider
+            )
+            if result:
+                return result, None
+            if provider_configs != [{}]:
+                provider_name = str(provider.get("name", "unnamed")).strip()
+                logger.warning(
+                    "[Comic] 绘图供应商 %s 失败，尝试下一个候选。",
+                    provider_name or "unnamed",
+                )
+        return None, last_error_msg
+
+    async def _generate_image_with_provider(
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+        disable_retry: bool,
+        provider: dict,
+    ) -> tuple[bytes | None, str | None]:
+        """通过一个已配置的供应商候选生成图片。"""
+        api_protocol = self._get_provider_value("api_protocol", provider)
         max_retries = self.config_manager.get_drawing_network_retries()
         output_exception_retries = (
             0
@@ -107,13 +131,13 @@ class DrawingClient:
         while True:
             try:
                 if api_protocol == "images":
-                    result = await self._call_images_api(prompt, images_data)
+                    result = await self._call_images_api(prompt, images_data, provider)
                 elif api_protocol == "chat":
-                    result = await self._call_chat_api(prompt, images_data)
+                    result = await self._call_chat_api(prompt, images_data, provider)
                 elif api_protocol == "grok":
-                    result = await self._call_grok_api(prompt, images_data)
+                    result = await self._call_grok_api(prompt, images_data, provider)
                 elif api_protocol == "gemini":
-                    result = await self._call_gemini_api(prompt, images_data)
+                    result = await self._call_gemini_api(prompt, images_data, provider)
                 else:
                     raise ValueError(f"不支持的绘图 API 协议: {api_protocol}")
 
@@ -165,25 +189,37 @@ class DrawingClient:
         logger.debug("[Comic] 画图重试次数耗尽或请求失败，任务终止。")
         return None, last_error_msg
 
+    def _get_provider_value(self, name: str, provider: dict) -> Any:
+        """读取供应商覆盖配置，同时保留旧版全局默认值。"""
+        value = provider.get(name)
+        if value not in (None, ""):
+            return value
+        getter = getattr(self.config_manager, f"get_drawing_{name}")
+        return getter()
+
     async def _call_images_api(
-        self, prompt: str, images_data: list[tuple[bytes, str]] | None = None
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None = None,
+        provider: dict | None = None,
     ) -> bytes | None:
-        raw_url = self.config_manager.get_drawing_api_url()
+        provider = provider or {}
+        raw_url = self._get_provider_value("api_url", provider)
         target_url = self._build_target_url(raw_url, "images")
 
-        api_key = self.config_manager.get_drawing_api_key()
-        model = self.config_manager.get_drawing_model()
-        timeout = self.config_manager.get_drawing_timeout()
+        api_key = self._get_provider_value("api_key", provider)
+        model = self._get_provider_value("model", provider)
+        timeout = self._get_provider_value("timeout", provider)
 
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
-        raw_size = self.config_manager.get_drawing_image_size()
+        raw_size = self._get_provider_value("image_size", provider)
         resolved_size = self._resolve_size(raw_size)
-        ar = self.config_manager.get_drawing_aspect_ratio()
-        output_format = self.config_manager.get_drawing_output_format()
+        ar = self._get_provider_value("aspect_ratio", provider)
+        output_format = self._get_provider_value("output_format", provider)
 
         payload: dict[str, Any] = {
             "prompt": prompt,
@@ -194,11 +230,11 @@ class DrawingClient:
         }
 
         # 添加可选控制参数
-        quality = self.config_manager.get_drawing_image_quality()
+        quality = self._get_provider_value("image_quality", provider)
         if quality in {"low", "medium", "high"}:
             payload["quality"] = quality
 
-        bg = self.config_manager.get_drawing_background()
+        bg = self._get_provider_value("background", provider)
         if bg and bg != "auto":
             payload["background"] = bg
 
@@ -222,15 +258,15 @@ class DrawingClient:
             if bg and bg != "auto":
                 multipart_data["background"] = bg
 
-            img_bytes, mime = images_data[0]
-            ext = mime.split("/")[-1] if "/" in mime else "png"
-
-            files = {"image[]": (f"image.{ext}", img_bytes, mime)}
+            files = []
+            for index, (img_bytes, mime) in enumerate(images_data, start=1):
+                ext = mime.split("/")[-1] if "/" in mime else "png"
+                files.append(("image[]", (f"image_{index}.{ext}", img_bytes, mime)))
 
             logger.info(
                 f"[Comic] 发起 Images API 请求 (含图) -> {self._sanitize_url(target_url)} "
                 f"(model={model}, size={resolved_size}, aspect_ratio={ar}, "
-                f"reference_bytes={len(img_bytes)})..."
+                f"references={len(images_data)}, reference_bytes={sum(len(image[0]) for image in images_data)})..."
             )
             api_timeout = httpx.Timeout(
                 connect=20.0, read=timeout, write=20.0, pool=20.0
@@ -268,7 +304,10 @@ class DrawingClient:
         raise Exception(f"API 返回格式异常: {self._summarize_response(data)}")
 
     async def _call_grok_api(
-        self, prompt: str, images_data: list[tuple[bytes, str]] | None = None
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None = None,
+        provider: dict | None = None,
     ) -> bytes | None:
         """调用 xAI Grok Imagine 官方图片接口。
 
@@ -282,12 +321,13 @@ class DrawingClient:
         Raises:
             Exception: 请求失败、响应不是 JSON 或响应中没有有效图片。
         """
-        raw_url = self.config_manager.get_drawing_api_url()
+        provider = provider or {}
+        raw_url = self._get_provider_value("api_url", provider)
         target_url = self._build_target_url(raw_url, "grok")
-        api_key = self.config_manager.get_drawing_api_key()
-        model = self.config_manager.get_drawing_model()
-        timeout = self.config_manager.get_drawing_timeout()
-        aspect_ratio = self.config_manager.get_drawing_aspect_ratio()
+        api_key = self._get_provider_value("api_key", provider)
+        model = self._get_provider_value("model", provider)
+        timeout = self._get_provider_value("timeout", provider)
+        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -340,7 +380,10 @@ class DrawingClient:
         raise Exception(f"Grok API 返回格式异常: {self._summarize_response(data)}")
 
     async def _call_gemini_api(
-        self, prompt: str, images_data: list[tuple[bytes, str]] | None = None
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None = None,
+        provider: dict | None = None,
     ) -> bytes | None:
         """调用 Google Gemini Interactions 图片接口。
 
@@ -354,14 +397,15 @@ class DrawingClient:
         Raises:
             Exception: 请求失败、响应不是 JSON 或响应中没有最终图片。
         """
-        raw_url = self.config_manager.get_drawing_api_url()
+        provider = provider or {}
+        raw_url = self._get_provider_value("api_url", provider)
         target_url = self._build_target_url(raw_url, "gemini")
-        api_key = self.config_manager.get_drawing_api_key()
-        model = self.config_manager.get_drawing_model()
-        timeout = self.config_manager.get_drawing_timeout()
-        aspect_ratio = self.config_manager.get_drawing_aspect_ratio()
+        api_key = self._get_provider_value("api_key", provider)
+        model = self._get_provider_value("model", provider)
+        timeout = self._get_provider_value("timeout", provider)
+        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
 
-        raw_size = self.config_manager.get_drawing_image_size().strip()
+        raw_size = str(self._get_provider_value("image_size", provider)).strip()
         if raw_size.upper() in {"1K", "2K", "4K"}:
             image_size = raw_size.upper()
         elif re.fullmatch(r"\d+x\d+", raw_size.lower()):
@@ -376,7 +420,7 @@ class DrawingClient:
         else:
             image_size = "1K"
 
-        output_format = self.config_manager.get_drawing_output_format().lower()
+        output_format = str(self._get_provider_value("output_format", provider)).lower()
         output_mime = {
             "png": "image/png",
             "jpeg": "image/jpeg",
@@ -385,8 +429,7 @@ class DrawingClient:
 
         input_content: list[dict[str, str]] = [{"type": "text", "text": prompt}]
         reference_bytes = 0
-        if images_data:
-            image_bytes, mime = images_data[0]
+        for image_bytes, mime in images_data or []:
             image_mime = mime if mime.startswith("image/") else "image/png"
             input_content.append(
                 {
@@ -395,7 +438,7 @@ class DrawingClient:
                     "mime_type": image_mime,
                 }
             )
-            reference_bytes = len(image_bytes)
+            reference_bytes += len(image_bytes)
 
         response_format: dict[str, str] = {
             "type": "image",
@@ -478,24 +521,28 @@ class DrawingClient:
         )
 
     async def _call_chat_api(
-        self, prompt: str, images_data: list[tuple[bytes, str]] | None = None
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None = None,
+        provider: dict | None = None,
     ) -> bytes | None:
-        raw_url = self.config_manager.get_drawing_api_url()
+        provider = provider or {}
+        raw_url = self._get_provider_value("api_url", provider)
         target_url = self._build_target_url(raw_url, "chat")
 
-        api_key = self.config_manager.get_drawing_api_key()
-        model = self.config_manager.get_drawing_model()
+        api_key = self._get_provider_value("api_key", provider)
+        model = self._get_provider_value("model", provider)
 
-        timeout = self.config_manager.get_drawing_timeout()
+        timeout = self._get_provider_value("timeout", provider)
 
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
-        raw_size = self.config_manager.get_drawing_image_size()
+        raw_size = self._get_provider_value("image_size", provider)
         resolved_size = self._resolve_size(raw_size)
-        ar = self.config_manager.get_drawing_aspect_ratio()
+        ar = self._get_provider_value("aspect_ratio", provider)
 
         # 将长宽比与分辨率要求显式追加到 prompt 结尾，防止 Chat 协议模型忽略
         width, height = map(int, resolved_size.split("x", 1))
@@ -510,8 +557,7 @@ class DrawingClient:
         full_prompt = f"{prompt}\n\n[Image Layout & Spec Requirements: Aspect Ratio {effective_aspect_ratio}, Resolution {resolved_size}, {orientation}]"
 
         content = []
-        if images_data and len(images_data) > 0:
-            img_bytes, mime = images_data[0]
+        for img_bytes, mime in images_data or []:
             b64 = base64.b64encode(img_bytes).decode("utf-8")
             content.append(
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
