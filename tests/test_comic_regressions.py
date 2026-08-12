@@ -144,6 +144,7 @@ def load_config_manager_class(plugin_data_dir: Path):
         "get_use_plugin_specific_persona",
         "get_plugin_specific_persona_id",
         "get_drawing_provider_configs",
+        "get_drawing_proxy",
         "get_drawing_reference_image",
         "get_drawing_reference_images",
         "get_custom_report_template_dir",

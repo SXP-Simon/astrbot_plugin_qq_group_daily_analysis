@@ -1362,6 +1362,10 @@ class ConfigManager:
         group = self._get_group("daily_comic")
         return group.get("drawing_download_proxy", "").strip()
 
+    def get_drawing_proxy(self) -> str:
+        """获取漫画生图 API 的全局代理地址。"""
+        return str(self._get_group("daily_comic").get("drawing_proxy", "")).strip()
+
     def get_drawing_image_size(self) -> str:
         group = self._get_group("daily_comic")
         return group.get("drawing_image_size", "1024x1024")

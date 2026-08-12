@@ -572,6 +572,12 @@
                                 "type": "string",
                                 "default": "https://generativelanguage.googleapis.com/v1beta"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -612,6 +618,12 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": ""
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
                             },
                             "model": {
                                 "description": "模型名称",
@@ -654,6 +666,12 @@
                                 "type": "string",
                                 "default": "https://api.z.ai/api/paas/v4"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -695,6 +713,12 @@
                                 "type": "string",
                                 "default": ""
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -735,6 +759,12 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": "https://apihub.agnes-ai.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
                             },
                             "model": {
                                 "description": "模型名称",
@@ -783,6 +813,12 @@
                                 "type": "string",
                                 "default": "https://api.x.ai"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -830,6 +866,12 @@
                                 "type": "string",
                                 "default": "https://api.minimaxi.com"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -871,6 +913,12 @@
                                 "type": "string",
                                 "default": "https://api.stepfun.com"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -911,6 +959,12 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": "https://api.openai.com/v1"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
                             },
                             "model": {
                                 "description": "模型名称",
@@ -965,6 +1019,12 @@
                                 "type": "string",
                                 "default": "https://ark.cn-beijing.volces.com"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型或 Endpoint ID",
                                 "type": "string",
@@ -1007,6 +1067,12 @@
                                 "type": "string",
                                 "default": "https://token.sensenova.cn"
                             },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
                             "model": {
                                 "description": "模型名称",
                                 "type": "string",
@@ -1048,6 +1114,12 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": "https://dashscope.aliyuncs.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
                             },
                             "model": {
                                 "description": "模型名称",
@@ -1100,6 +1172,12 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": ""
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
                             },
                             "model": {
                                 "description": "模型名称",
@@ -1205,6 +1283,12 @@
                 "type": "int",
                 "default": 600,
                 "hint": "出图模型耗时较长，建议 120-600。"
+            },
+            "drawing_proxy": {
+                "description": "全局生图代理地址",
+                "type": "string",
+                "default": "",
+                "hint": "填写即代理漫画生图 API 及其返回图片下载，留空不使用。支持 http://host:port、https://host:port、socks5://host:port；供应商配置表中的代理优先于此设置。"
             },
             "drawing_output_exception_retries": {
                 "description": "输出异常重试次数",
