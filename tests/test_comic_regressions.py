@@ -719,35 +719,6 @@ def test_comic_is_skipped_without_valid_topics():
     assert plugin._comic_group_tasks == {}
     assert plugin._background_tasks == set()
 
-def _install_fake_big_banana_image_resource():
-    """向 sys.modules 注入假的大香蕉 ImageResource，供懒加载导入使用。"""
-    import sys
-    from types import ModuleType
-
-    fake_image_resource = type(
-        "ImageResource",
-        (),
-        {
-            "from_bytes": staticmethod(
-                lambda data_bytes, url=None: SimpleNamespace(
-                    bytes=data_bytes, mime="image/png"
-                )
-            )
-        },
-    )
-
-    schemas = ModuleType("astrbot_plugin_big_banana.core.schemas")
-    schemas.ImageResource = fake_image_resource
-    core = ModuleType("astrbot_plugin_big_banana.core")
-    core.schemas = schemas
-    pkg = ModuleType("astrbot_plugin_big_banana")
-    pkg.core = core
-    sys.modules["astrbot_plugin_big_banana"] = pkg
-    sys.modules["astrbot_plugin_big_banana.core"] = core
-    sys.modules["astrbot_plugin_big_banana.core.schemas"] = schemas
-    return fake_image_resource
-
-
 def _comic_config_manager(**overrides):
     """构造 generate_comic 所需的配置替身。"""
     defaults = {
@@ -797,7 +768,13 @@ def test_big_banana_backend_returns_none_when_plugin_missing():
 def test_big_banana_backend_returns_bytes_on_success():
     """大香蕉绘图管线成功时应返回图片字节并带上参考图。"""
     generate = load_comic_service_method("_generate_via_big_banana")
-    fake_image_resource = _install_fake_big_banana_image_resource()
+
+    class FakeImageResource:
+        """模拟大香蕉解析参考图后使用的最小图片资源对象。"""
+
+        @staticmethod
+        def from_bytes(data_bytes: bytes) -> SimpleNamespace:
+            return SimpleNamespace(bytes=data_bytes, mime="image/png")
 
     async def scenario():
         pipeline = SimpleNamespace(
@@ -816,7 +793,7 @@ def test_big_banana_backend_returns_bytes_on_success():
         )
         service = SimpleNamespace(
             context=context,
-            _import_big_banana_image_resource=Mock(return_value=fake_image_resource),
+            _import_big_banana_image_resource=Mock(return_value=FakeImageResource),
         )
 
         result = await generate(
@@ -837,7 +814,13 @@ def test_big_banana_backend_returns_bytes_on_success():
 def test_big_banana_backend_returns_none_on_provider_error():
     """大香蕉提供商返回错误消息时应回退（返回 None）。"""
     generate = load_comic_service_method("_generate_via_big_banana")
-    fake_image_resource = _install_fake_big_banana_image_resource()
+
+    class FakeImageResource:
+        """模拟大香蕉图片资源类型，避免污染解释器模块缓存。"""
+
+        @staticmethod
+        def from_bytes(data_bytes: bytes) -> SimpleNamespace:
+            return SimpleNamespace(bytes=data_bytes, mime="image/png")
 
     async def scenario():
         pipeline = SimpleNamespace(
@@ -855,7 +838,7 @@ def test_big_banana_backend_returns_none_on_provider_error():
         )
         service = SimpleNamespace(
             context=context,
-            _import_big_banana_image_resource=Mock(return_value=fake_image_resource),
+            _import_big_banana_image_resource=Mock(return_value=FakeImageResource),
         )
 
         result = await generate(service, "prompt", None)
@@ -1058,8 +1041,10 @@ def test_detect_image_ext_sniffs_bytes():
     assert detect(b"\x89PNG\r\n\x1a\nrest") == ".png"
     assert detect(b"\xff\xd8\xffjpeg") == ".jpg"
     assert detect(b"RIFF....WEBP") == ".webp"
+    assert detect(b"GIF87a....") == ".gif"
     assert detect(b"GIF89a....") == ".gif"
     assert detect(b"\x00\x00\x00\x18ftypavif....") == ".avif"
+    assert detect(b"\x00\x00\x00\x18ftypavis....") == ".avif"
     assert detect(b"unknown-bytes") == ".png"
 
 
