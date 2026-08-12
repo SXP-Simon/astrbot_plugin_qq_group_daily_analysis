@@ -182,15 +182,15 @@ class ComicApplicationService:
             logger.debug("[Comic] 未注入插件 Context，跳过通用生图后端。")
             return None
         try:
-            meta = self.context.get_registered_star(
-                "astrbot_plugin_image_generation"
-            )
+            meta = self.context.get_registered_star("astrbot_plugin_image_generation")
         except Exception as exc:
             logger.debug(f"[Comic] 获取通用生图插件注册信息失败: {exc}")
             return None
         image_plugin = meta.star_cls if meta and meta.activated else None
         if image_plugin is None:
-            logger.warning("[Comic] 未检测到已激活的「通用生图」插件，回退内置绘图后端。")
+            logger.warning(
+                "[Comic] 未检测到已激活的「通用生图」插件，回退内置绘图后端。"
+            )
             return None
 
         public_api = getattr(image_plugin, "public_api", None)
@@ -282,7 +282,9 @@ class ComicApplicationService:
                 if resource:
                     image_list.append(resource)
             if not image_list:
-                logger.warning("[Comic] 参考图无法解析为「大香蕉」图片资源，将不带参考图生成。")
+                logger.warning(
+                    "[Comic] 参考图无法解析为「大香蕉」图片资源，将不带参考图生成。"
+                )
 
         params: dict[str, Any] = {
             "prompt": scene_prompt,
@@ -339,9 +341,7 @@ class ComicApplicationService:
         module_name = getattr(type(plugin), "__module__", "") or ""
         candidate_modules = []
         if module_name and "." in module_name:
-            candidate_modules.append(
-                module_name.rsplit(".", 1)[0] + ".core.schemas"
-            )
+            candidate_modules.append(module_name.rsplit(".", 1)[0] + ".core.schemas")
         candidate_modules.append("astrbot_plugin_big_banana.core.schemas")
 
         for module_path in candidate_modules:
