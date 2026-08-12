@@ -21,7 +21,7 @@ class DrawingRequestHooks(Protocol):
 
     def _get_request_proxy(self, provider: dict | None = None) -> str | None: ...
 
-    def _resolve_size(self, size_or_ratio: str) -> str: ...
+    def _resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str: ...
 
     def _sanitize_url(self, url: str) -> str: ...
 
@@ -51,8 +51,17 @@ class DrawingRequestContext:
     def get_request_proxy(self, provider: dict | None = None) -> str | None:
         return self.hooks._get_request_proxy(provider)
 
-    def resolve_size(self, size_or_ratio: str) -> str:
-        return self.hooks._resolve_size(size_or_ratio)
+    def resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
+        """按当前供应商条目的宽高比解析尺寸别名。
+
+        Args:
+            size_or_ratio: 条目中的尺寸别名、分辨率或比例。
+            aspect_ratio: 同一条目中的目标宽高比。
+
+        Returns:
+            对应的 ``宽x高`` 尺寸字符串。
+        """
+        return self.hooks._resolve_size(size_or_ratio, aspect_ratio)
 
     def sanitize_url(self, url: str) -> str:
         return self.hooks._sanitize_url(url)

@@ -1269,14 +1269,11 @@ class ConfigManager:
         """获取是否开启每日群漫画功能"""
         return self._get_group("daily_comic").get("enable_daily_comic", False)
 
-    def get_drawing_api_url(self) -> str:
-        """获取绘图 API 地址，空值由所选协议补全默认地址。"""
-        return self._get_group("daily_comic").get("drawing_api_url", "")
-
     def get_drawing_provider_configs(self) -> list[dict]:
         """获取按优先级排序的已启用绘图供应商候选。
 
-        空条目或格式错误的条目会被忽略。没有有效候选时，调用方继续使用旧版单供应商字段。
+        空条目或格式错误的条目会被忽略。绘图供应商配置表是唯一的连接配置
+        来源；没有有效候选时，调用方会返回明确的未配置错误。
 
         Returns:
             已启用供应商的配置字典列表。
@@ -1327,18 +1324,6 @@ class ConfigManager:
             key=lambda item: (-item["_priority"], item["_index"]),
         )
 
-    def get_drawing_api_key(self) -> str:
-        """获取绘图API Key"""
-        return self._get_group("daily_comic").get("drawing_api_key", "")
-
-    def get_drawing_model(self) -> str:
-        group = self._get_group("daily_comic")
-        return group.get("drawing_model", "gpt-image-2")
-
-    def get_drawing_api_protocol(self) -> str:
-        group = self._get_group("daily_comic")
-        return group.get("drawing_api_protocol", "images")
-
     def get_drawing_output_exception_retries(self) -> int:
         group = self._get_group("daily_comic")
         return int(group.get("drawing_output_exception_retries", 3))
@@ -1365,23 +1350,6 @@ class ConfigManager:
     def get_drawing_proxy(self) -> str:
         """获取漫画生图 API 的全局代理地址。"""
         return str(self._get_group("daily_comic").get("drawing_proxy", "")).strip()
-
-    def get_drawing_image_size(self) -> str:
-        group = self._get_group("daily_comic")
-        return group.get("drawing_image_size", "1024x1024")
-
-    def get_drawing_aspect_ratio(self) -> str:
-        return self._get_group("daily_comic").get("drawing_aspect_ratio", "16:9")
-
-    def get_drawing_image_quality(self) -> str:
-        group = self._get_group("daily_comic")
-        return group.get("drawing_image_quality", "high")
-
-    def get_drawing_background(self) -> str:
-        return self._get_group("daily_comic").get("drawing_background", "auto")
-
-    def get_drawing_output_format(self) -> str:
-        return self._get_group("daily_comic").get("drawing_output_format", "png")
 
     def get_drawing_timeout(self) -> int:
         return int(self._get_group("daily_comic").get("drawing_timeout", 600))

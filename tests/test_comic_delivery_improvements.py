@@ -96,6 +96,28 @@ def test_drawing_provider_schema_keeps_all_reference_presets():
     assert "drawing_proxy" in schema["daily_comic"]["items"]
 
 
+def test_drawing_schema_has_a_single_provider_configuration_entry():
+    """供应商连接和出图参数只应配置在供应商表条目中。
+
+    这能防止配置面板重新显示旧的外层 API URL、模型、尺寸等字段，造成同一
+    供应商参数有两处来源、实际优先级难以判断的问题。
+    """
+    schema = json.loads((PLUGIN_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    comic_items = schema["daily_comic"]["items"]
+
+    assert {
+        "drawing_api_url",
+        "drawing_api_key",
+        "drawing_model",
+        "drawing_api_protocol",
+        "drawing_image_size",
+        "drawing_aspect_ratio",
+        "drawing_image_quality",
+        "drawing_background",
+        "drawing_output_format",
+    }.isdisjoint(comic_items)
+
+
 def test_drawing_provider_schema_exposes_advanced_preset_controls():
     """四个重点预设必须公开其实际支持的专属控制项。
 
@@ -174,6 +196,23 @@ def test_drawing_provider_presets_map_to_runtime_protocols(tmp_path):
     assert [provider["api_protocol"] for provider in providers] == list(
         expected_protocols.values()
     )
+
+
+def test_drawing_client_requires_a_provider_entry():
+    """供应商表为空时不应使用已移除的外层旧配置回退。"""
+
+    async def scenario():
+        drawing_client_class = _load_drawing_client_class()
+        client = drawing_client_class(
+            SimpleNamespace(get_drawing_provider_configs=lambda: [])
+        )
+
+        image, error = await client.generate_image("漫画提示词")
+
+        assert image is None
+        assert error == "未配置有效的漫画绘图供应商，请在绘图供应商配置表中添加条目。"
+
+    asyncio.run(scenario())
 
 
 def test_google_and_preset_requests_use_the_expected_endpoints_and_payloads():
@@ -365,7 +404,6 @@ def test_drawing_proxy_prefers_provider_and_is_reused_for_image_download(monkeyp
     monkeypatch.setattr(drawing_client_module.httpx, "AsyncClient", AsyncClient)
     config_manager = SimpleNamespace(
         get_drawing_proxy=lambda: "http://global-proxy:7890",
-        get_drawing_aspect_ratio=lambda: "1:1",
     )
     drawing_client = drawing_client_class(config_manager)
     drawing_client._extract_image_from_response = AsyncMock(return_value=PNG_BYTES)
@@ -426,9 +464,7 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             "src.infrastructure.drawing.api_requests.images"
         ]
         monkeypatch.setattr(images_module.httpx, "AsyncClient", AsyncClient)
-        drawing_client = drawing_client_class(
-            SimpleNamespace(get_drawing_aspect_ratio=lambda: "1:1")
-        )
+        drawing_client = drawing_client_class(SimpleNamespace())
         provider = {
             "api_url": "https://api.openai.com/v1",
             "api_key": "api-key",
@@ -495,13 +531,7 @@ def test_preset_requests_apply_provider_specific_advanced_controls():
 
     async def scenario():
         drawing_client_class = _load_drawing_client_class()
-        drawing_client = drawing_client_class(
-            SimpleNamespace(
-                get_drawing_aspect_ratio=lambda: "16:9",
-                get_drawing_output_format=lambda: "png",
-                get_drawing_image_size=lambda: "2K",
-            )
-        )
+        drawing_client = drawing_client_class(SimpleNamespace())
         drawing_client._post_json_for_image = AsyncMock(return_value=PNG_BYTES)
         references = [(f"reference-{index}".encode(), "image/png") for index in range(15)]
 

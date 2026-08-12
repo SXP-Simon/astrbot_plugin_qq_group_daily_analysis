@@ -29,8 +29,8 @@ async def call_chat_api(
     }
 
     raw_size = context.get_provider_value("image_size", provider)
-    resolved_size = context.resolve_size(raw_size)
     ar = context.get_provider_value("aspect_ratio", provider)
+    resolved_size = context.resolve_size(raw_size, ar)
 
     # 将长宽比与分辨率要求显式追加到 prompt 结尾，防止 Chat 协议模型忽略
     width, height = map(int, resolved_size.split("x", 1))
