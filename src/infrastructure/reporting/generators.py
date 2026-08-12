@@ -415,7 +415,15 @@ class ReportGenerator(IReportGenerator):
                         if image_options.get("type") == "png":
                             image_options.pop("quality", None)
 
-                        logger.info(f"正在尝试第 {attempt} 轮渲染策略: {image_options}")
+                        logger.info(
+                            "正在尝试第 "
+                            f"{attempt} 轮渲染策略: type={image_options['type']}, "
+                            f"full_page={image_options['full_page']}, "
+                            f"viewport={image_options.get('viewport_width')}x"
+                            f"{image_options.get('viewport_height')}, "
+                            f"scale={image_options.get('device_scale_factor_level')}, "
+                            f"timeout={image_options.get('timeout')}"
+                        )
 
                         # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
                         image_data = await html_render_func(

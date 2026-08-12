@@ -51,6 +51,9 @@ class ConfigManager:
         previous_version = str(previous_state.get("version", "")).strip()
         version_changed = bool(previous_version and previous_version != current_version)
 
+        if not previous_state:
+            logger.debug("升级保护基线已建立，后续配置结构变化时可备份本次快照。")
+
         if previous_state.get(
             "schema_fingerprint"
         ) != current_schema_fingerprint and isinstance(
@@ -191,7 +194,7 @@ class ConfigManager:
             for expired_backup in backups[:-20]:
                 expired_backup.unlink()
             logger.info(
-                "检测到插件配置结构变化，已备份上次记录的配置："
+                "检测到插件配置结构变化，已备份上一次正常启动保存的配置快照："
                 f"旧版本={version}，文件={backup_path.name}，路径={backup_path.resolve()}，"
                 f"当前保留={min(len(backups), 20)} 份。"
             )
@@ -600,6 +603,8 @@ class ConfigManager:
     def get_t2i_rendering_strategies(self) -> list[dict]:
         """获取用户配置的两轮 T2I 渲染策略"""
         group = self._get_group("t2i_rendering")
+        viewport_width = max(1, int(group.get("t2i_viewport_width", 1440)))
+        viewport_height = max(1, int(group.get("t2i_viewport_height", 900)))
 
         return [
             # 第一轮：质量优先
@@ -609,6 +614,8 @@ class ConfigManager:
                 "quality": group.get("t2i_r1_quality", 100),
                 "device_scale_factor_level": group.get("t2i_r1_device_scale", "ultra"),
                 "timeout": group.get("t2i_r1_timeout", 30000),
+                "viewport_width": viewport_width,
+                "viewport_height": viewport_height,
             },
             # 第二轮：稳定性/回退优先
             {
@@ -617,6 +624,8 @@ class ConfigManager:
                 "quality": group.get("t2i_r2_quality", 80),
                 "device_scale_factor_level": group.get("t2i_r2_device_scale", "normal"),
                 "timeout": group.get("t2i_r2_timeout", 60000),
+                "viewport_width": viewport_width,
+                "viewport_height": viewport_height,
             },
         ]
 
