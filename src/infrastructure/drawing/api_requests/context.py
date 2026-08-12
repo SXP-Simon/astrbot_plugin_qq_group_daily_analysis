@@ -1,3 +1,10 @@
+"""绘图请求服务与客户端之间的显式依赖契约。
+
+供应商请求模块不直接依赖 ``DrawingClient``，只通过本上下文访问 URL 解析、
+配置回退、代理、尺寸换算和响应解析能力。这样服务商文件保持可独立阅读，且
+不会因继承关系隐式获得不相关的客户端状态。
+"""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -25,7 +32,11 @@ class DrawingRequestHooks(Protocol):
 
 @dataclass(slots=True)
 class DrawingRequestContext:
-    """聚合绘图请求执行所需的显式依赖。"""
+    """聚合绘图请求执行所需的显式依赖。
+
+    该数据对象是组合关系的边界：请求模块只接收这个最小能力集合，HTTP JSON
+    请求和图片提取则以函数形式注入，方便保留原有可替换入口。
+    """
 
     hooks: DrawingRequestHooks
     request_json: Callable[..., Awaitable[bytes | None]]

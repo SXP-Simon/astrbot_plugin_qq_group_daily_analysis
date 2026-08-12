@@ -1,3 +1,10 @@
+"""绘图接口响应的图片提取、下载与安全校验。
+
+不同供应商会把图片放在 Base64、Data URI、Markdown 或 URL 字段中。本服务按
+可靠性由高到低依次处理这些候选内容，并对公网下载地址及图片签名做校验，防止
+将接口错误页、内网地址或超大内容作为漫画图片继续投递。
+"""
+
 import asyncio
 import base64
 import binascii
@@ -30,7 +37,11 @@ class DrawingImageResponseHooks(Protocol):
 
 @dataclass(slots=True)
 class DrawingImageResponseService:
-    """封装绘图响应解析、图片下载和安全校验。"""
+    """封装绘图响应解析、图片下载和安全校验。
+
+    ``hooks`` 只保存下载代理所需的配置访问能力，实际下载函数显式注入，使
+    响应处理独立于 ``DrawingClient`` 的具体实现，也允许测试安全地替换下载。
+    """
 
     hooks: DrawingImageResponseHooks
     download_image: Callable[[str, str | None], Awaitable[bytes | None]]
