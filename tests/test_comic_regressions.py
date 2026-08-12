@@ -143,6 +143,7 @@ def load_config_manager_class(plugin_data_dir: Path):
         "get_plugin_specific_persona_id",
         "get_drawing_reference_image",
         "get_custom_report_template_dir",
+        "get_t2i_rendering_strategies",
         "get_selected_comic_character",
         "get_comic_character_persona_id",
         "_get_comic_character_state_path",
@@ -474,6 +475,24 @@ def test_upgrade_config_backups_keep_only_twenty_newest(tmp_path: Path):
     backups = sorted(backup_dir.glob("plugin_config_*.json"))
     assert len(backups) == 20
     assert not (backup_dir / "plugin_config_v1.0.0_20260812_000000.json").exists()
+
+
+def test_t2i_rendering_strategies_explicitly_set_desktop_viewport(tmp_path: Path):
+    """图片报告应显式传入视口，避免依赖 T2I 服务的默认尺寸。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    config_manager = object.__new__(config_manager_class)
+    config_manager.config = {
+        "t2i_rendering": {
+            "t2i_viewport_width": 1360,
+            "t2i_viewport_height": 900,
+        }
+    }
+
+    strategies = config_manager.get_t2i_rendering_strategies()
+
+    assert len(strategies) == 2
+    assert all(strategy["viewport_width"] == 1360 for strategy in strategies)
+    assert all(strategy["viewport_height"] == 900 for strategy in strategies)
 
 
 def test_custom_t2i_template_is_copied_after_user_edit(tmp_path: Path):

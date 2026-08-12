@@ -222,6 +222,30 @@
                 "hint": "单次渲染的最长等待时间。复杂页面建议调大。",
                 "collapsed": true
             },
+            "t2i_viewport_width": {
+                "type": "int",
+                "description": "报告渲染视口宽度 (px)",
+                "default": 1440,
+                "slider": {
+                    "min": 800,
+                    "max": 1920,
+                    "step": 10
+                },
+                "hint": "显式传给 AstrBot T2I，避免服务升级后回退到 800px 默认宽度而挤压宽版报告模板。内置主题建议保持 1440；自定义模板可按其桌面设计宽度调整。",
+                "collapsed": true
+            },
+            "t2i_viewport_height": {
+                "type": "int",
+                "description": "报告渲染视口高度 (px)",
+                "default": 900,
+                "slider": {
+                    "min": 400,
+                    "max": 1440,
+                    "step": 10
+                },
+                "hint": "显式传给 AstrBot T2I 的初始视口高度。图片报告始终使用 full_page，不会按此高度截断整张报告。",
+                "collapsed": true
+            },
             "t2i_r2_type": {
                 "type": "string",
                 "description": "第二轮 (回退)：图片格式",
