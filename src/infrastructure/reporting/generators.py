@@ -415,7 +415,7 @@ class ReportGenerator(IReportGenerator):
                         if image_options.get("type") == "png":
                             image_options.pop("quality", None)
 
-                        logger.info(
+                        logger.debug(
                             "正在尝试第 "
                             f"{attempt} 轮渲染策略: type={image_options['type']}, "
                             f"full_page={image_options['full_page']}, "
@@ -490,12 +490,20 @@ class ReportGenerator(IReportGenerator):
                                     b64 = base64.b64encode(image_data).decode("utf-8")
                                     image_url = f"base64://{b64}"
                                     logger.info(
-                                        f"图片生成成功 (轮次 {attempt}): [Base64 Data {len(image_data)} bytes]"
+                                        "图片生成成功 "
+                                        f"(轮次 {attempt}, 视口 "
+                                        f"{image_options.get('viewport_width')}x"
+                                        f"{image_options.get('viewport_height')}): "
+                                        f"[Base64 数据 {len(image_data)} 字节]"
                                     )
                                     return image_url, html_content
                                 elif isinstance(image_data, str):
                                     logger.info(
-                                        f"图片生成成功 (轮次 {attempt}): {image_data}"
+                                        "图片生成成功 "
+                                        f"(轮次 {attempt}, 视口 "
+                                        f"{image_options.get('viewport_width')}x"
+                                        f"{image_options.get('viewport_height')}): "
+                                        f"{image_data}"
                                     )
                                     return image_data, html_content
 
@@ -507,7 +515,7 @@ class ReportGenerator(IReportGenerator):
                         logger.warning(f"渲染轮次 {attempt} 失败: {e}")
                         last_exception = e
                         if attempt < len(render_strategies):
-                            logger.info("准备尝试下一轮回退策略")
+                            logger.debug("准备尝试下一轮回退策略")
                         continue
 
                 # 如果所有策略都失败
@@ -587,7 +595,7 @@ class ReportGenerator(IReportGenerator):
                     render_data.get("avatar_reuse_registry", {}),
                     render_data.get("avatar_reuse_aliases", {}),
                 )
-                logger.info("使用 html_template.html 渲染成功")
+                logger.debug("使用 html_template.html 渲染成功")
             except Exception as e:
                 logger.warning(
                     f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
@@ -600,7 +608,7 @@ class ReportGenerator(IReportGenerator):
                     render_data.get("avatar_reuse_registry", {}),
                     render_data.get("avatar_reuse_aliases", {}),
                 )
-                logger.info("使用 image_template.html 渲染成功")
+                logger.debug("使用 image_template.html 渲染成功")
 
             # 检查HTML内容是否有效
             if not html_content:
