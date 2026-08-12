@@ -846,9 +846,15 @@ class ConfigManager:
         return self._get_group("daily_comic").get("enable_daily_comic", False)
 
     def get_drawing_backend(self) -> str:
-        """获取漫画绘图后端 (builtin/general_plugin)。"""
+        """获取漫画绘图后端 (builtin/general_plugin/big_banana)。"""
         group = self._get_group("daily_comic")
         return str(group.get("drawing_backend", "builtin")).strip() or "builtin"
+
+    def get_drawing_external_fallback(self) -> bool:
+        """外部绘图后端失败时是否回退内置后端。"""
+        return bool(
+            self._get_group("daily_comic").get("drawing_external_fallback", True)
+        )
 
     def get_drawing_api_url(self) -> str:
         """获取绘图 API 地址，空值由所选协议补全默认地址。"""
