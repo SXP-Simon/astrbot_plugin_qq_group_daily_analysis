@@ -551,7 +551,7 @@
                 "description": "绘图供应商配置表",
                 "type": "template_list",
                 "default": [],
-                "hint": "可添加多个绘图供应商。按 priority 从高到低尝试，同优先级按表中顺序尝试；所有候选失败后才判定漫画生成失败。留空时继续使用下方旧版单接口配置。",
+                "hint": "可添加多个绘图供应商。按 priority 从高到低尝试，同优先级按表中顺序尝试；所有候选失败后才判定漫画生成失败。至少添加一个包含 API Key 的启用条目。",
                 "templates": {
                     "google": {
                         "name": "google",
@@ -1384,12 +1384,6 @@
                         }
                     }
                 }
-            },
-            "drawing_timeout": {
-                "description": "请求超时时间 (秒)",
-                "type": "int",
-                "default": 600,
-                "hint": "出图模型耗时较长，建议 120-600。"
             },
             "drawing_proxy": {
                 "description": "全局生图代理地址",
