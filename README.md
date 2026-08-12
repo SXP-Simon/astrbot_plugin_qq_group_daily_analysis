@@ -182,7 +182,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 2. 填写 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和 `drawing_api_protocol`。协议必须与上游接口一致：OpenAI Images 用 `images`，OpenAI 兼容聊天接口用 `chat`，xAI Grok Imagine 用 `grok`，Google Gemini Interactions 用 `gemini`。
 3. 可选填写 `drawing_prompt_provider_id`。它用于把分析结果整理成绘图分镜提示词；留空时使用插件的常规 Provider 回退策略。
 4. 可选在 `漫画角色方案` 中新增一个或多个方案：每个方案可单独选择漫画专用人格，并上传 `jpg`、`jpeg`、`png` 或 `webp` 参考图。每个方案会使用其最后加入的一张图片进行图生图；不配置方案或参考图时仍可文生图。
-5. 默认固定使用第一个已启用角色方案。开启 `每天随机切换漫画角色` 后，插件会在上海时区的每天首次生成漫画时随机选择一个已启用方案，并在当天持续使用同一方案；重启不会重新随机。该人格只作用于漫画分镜提示词，不会改变话题、金句或最终报告的人格。
+5. 默认固定使用第一个已启用角色方案。开启 `每天随机切换漫画角色` 后，插件会在运行环境时区的每天首次生成漫画时随机选择一个已启用方案，并在当天持续使用同一方案；优先读取 `TZ` 环境变量，未设置或无效时使用系统本地时区。重启不会重新随机。该人格只作用于漫画分镜提示词，不会改变话题、金句或最终报告的人格。
 6. 升级前已配置的 `漫画参考图` 会自动迁移为 `默认角色方案`，迁移前数据会备份到插件数据目录的 `config_backups`。绘图尺寸、输出格式、重试和代理等低频参数已收纳到 WebUI 的“更多配置”。
 7. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
 
