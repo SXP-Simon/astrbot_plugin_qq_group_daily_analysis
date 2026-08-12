@@ -111,7 +111,16 @@ class ComicApplicationService:
                 return None, None
             logger.warning(f"[Comic] {backend} 后端未产出结果，回退内置绘图后端。")
 
-        # 5. 调用内置绘图 API，捕获"有 URL 但下载失败"的情况
+        # 5. 内置绘图后端未配置时直接取消，避免向默认地址发送空请求
+        api_url = (self.config_manager.get_drawing_api_url() or "").strip()
+        api_key = (self.config_manager.get_drawing_api_key() or "").strip()
+        if not api_url and not api_key:
+            logger.warning(
+                "[Comic] 未配置绘图 API（drawing_api_url/drawing_api_key），取消漫画生成。"
+            )
+            return None, None
+
+        # 6. 调用内置绘图 API，捕获"有 URL 但下载失败"的情况
         fallback_url: str | None = None
         try:
             final_comic_bytes, last_error = await self.drawing_client.generate_image(

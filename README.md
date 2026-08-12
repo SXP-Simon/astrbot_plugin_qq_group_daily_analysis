@@ -179,10 +179,11 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 每日群漫画不按自然日限流：每次成功得到群分析结果时都会尝试生成一张。手动群分析、定时传统分析、定时增量最终报告，以及开启“增量分析立即报告”后的即时增量最终报告都适用。同一群已有漫画在排队或生成时，新请求会直接跳过，避免重复出图；不同群仍受漫画并发配置限制。
 
 1. 在 `每日群漫画` 配置组开启 `enable_daily_comic`，并在 `分析功能` 配置组保持 `topic_analysis_enabled` 开启。
-2. 填写 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和 `drawing_api_protocol`。协议必须与上游接口一致：OpenAI Images 用 `images`，OpenAI 兼容聊天接口用 `chat`，xAI Grok Imagine 用 `grok`，Google Gemini Interactions 用 `gemini`。
-3. 可选填写 `drawing_prompt_provider_id`。它用于把分析结果整理成绘图分镜提示词；留空时使用插件的常规 Provider 回退策略。
-4. 可选在 `漫画参考图` 中上传 `jpg`、`jpeg`、`png` 或 `webp`，再点击目标文件的 `+` 加入配置。列表中最后加入的一张作为当前图生图参考图。
-5. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
+2. 选择绘图后端 `drawing_backend`：`builtin`（默认，使用本插件内置绘图客户端）；`general_plugin`（调用 [「通用生图」插件](https://github.com/Railgun19457/astrbot_plugin_image_generation) 公共 API）；`big_banana`（调用 [「大香蕉」插件](https://github.com/sukafon/astrbot_plugin_big_banana) 绘图管线）。使用外部后端时需在对应插件中配置其自身的 API/提供商；外部后端支持流式/异步请求，可规避慢模型撞上游网关超时。外部后端失败时由 `drawing_external_fallback` 决定是否回退内置后端（默认回退，关闭则直接取消本次漫画）。
+3. 内置后端填写 `drawing_api_url`、`drawing_api_key`、`drawing_model` 和 `drawing_api_protocol`。协议必须与上游接口一致：OpenAI Images 用 `images`，OpenAI 兼容聊天接口用 `chat`，xAI Grok Imagine 用 `grok`，Google Gemini Interactions 用 `gemini`。
+4. 可选填写 `drawing_prompt_provider_id`。它用于把分析结果整理成绘图分镜提示词；留空时使用插件的常规 Provider 回退策略。
+5. 可选在 `漫画参考图` 中上传 `jpg`、`jpeg`、`png` 或 `webp`，再点击目标文件的 `+` 加入配置。列表中最后加入的一张作为当前图生图参考图。
+6. 按上游能力调整 `drawing_image_size`、`drawing_aspect_ratio`、`drawing_output_format`、`drawing_timeout` 和重试项；没有参考图也可以文生图。
 
 分析结果完成后，漫画任务会立即在后台运行，报告渲染与发送不会等待出图完成。反过来，报告发送失败也不会取消已经开始的漫画任务。漫画只使用有效的话题总结作为分镜素材，因此需要开启话题分析；话题功能关闭、话题 LLM 无结果或标题为空时，插件仅记录调试日志并跳过本次漫画。
 

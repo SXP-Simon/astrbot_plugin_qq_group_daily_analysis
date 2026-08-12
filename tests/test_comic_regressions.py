@@ -498,6 +498,8 @@ def test_generate_comic_falls_back_to_builtin_when_big_banana_empty():
             get_drawing_reference_image=Mock(return_value=""),
             get_drawing_output_exception_retry_keywords=Mock(return_value=[]),
             get_drawing_external_fallback=Mock(return_value=True),
+            get_drawing_api_url=Mock(return_value="https://api.openai.com/v1"),
+            get_drawing_api_key=Mock(return_value="sk-test"),
         )
         llm_analyzer = SimpleNamespace(
             analyze_comic_storyboards=AsyncMock(
@@ -540,6 +542,48 @@ def test_generate_comic_skips_builtin_when_external_fallback_disabled():
             get_drawing_backend=Mock(return_value="big_banana"),
             get_drawing_reference_image=Mock(return_value=""),
             get_drawing_external_fallback=Mock(return_value=False),
+        )
+        llm_analyzer = SimpleNamespace(
+            analyze_comic_storyboards=AsyncMock(
+                return_value=([{"scene": "comic scene prompt"}], None)
+            )
+        )
+        drawing_client = SimpleNamespace(generate_image=AsyncMock())
+        service = SimpleNamespace(
+            config_manager=config_manager,
+            llm_analyzer=llm_analyzer,
+            drawing_client=drawing_client,
+            _fetch_reference_image=AsyncMock(),
+            _generate_via_big_banana=AsyncMock(return_value=None),
+            _generate_via_general_plugin=AsyncMock(),
+        )
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes is None
+        assert fallback_url is None
+        drawing_client.generate_image.assert_not_called()
+
+    asyncio.run(scenario())
+
+
+def test_generate_comic_skips_unconfigured_builtin_backend():
+    """外部后端失败且内置后端未配置时，应直接取消漫画，不向默认地址发空请求。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        config_manager = SimpleNamespace(
+            get_enable_daily_comic=Mock(return_value=True),
+            get_drawing_backend=Mock(return_value="big_banana"),
+            get_drawing_reference_image=Mock(return_value=""),
+            get_drawing_external_fallback=Mock(return_value=True),
+            get_drawing_api_url=Mock(return_value=""),
+            get_drawing_api_key=Mock(return_value=""),
         )
         llm_analyzer = SimpleNamespace(
             analyze_comic_storyboards=AsyncMock(
