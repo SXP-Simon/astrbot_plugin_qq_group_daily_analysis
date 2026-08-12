@@ -85,6 +85,21 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         """
         pass
 
+    def build_prompt_with_override(
+        self, data: TInputData, prompt_override: str | None
+    ) -> str:
+        """构建提示词，默认忽略调用方覆盖模板。
+
+        Args:
+            data: 分析器输入数据。
+            prompt_override: 调用方指定的提示词模板。
+
+        Returns:
+            可提交给 LLM 的提示词。
+        """
+        del prompt_override
+        return self.build_prompt(data)
+
     @abstractmethod
     def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
@@ -339,6 +354,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         umo: str | None = None,
         session_id: str | None = None,
         persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[list[TDataObject], TokenUsage]:
         """
         统一的分析流程
@@ -348,6 +364,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             umo: 模型唯一标识符
             session_id: 会话ID (用于调试模式)
             persona_id: 显式指定的人格 ID，传入时优先于常规人格选择逻辑
+            prompt_override: 调用方指定的提示词模板，供支持专属模板的分析器使用
 
         Returns:
             (分析结果列表, Token使用统计)
@@ -360,7 +377,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             data_length = len(data) if isinstance(data, Sized) else "N/A"
             logger.debug(f"{self.get_data_type()}分析输入数据长度: {data_length}")
 
-            prompt = self.build_prompt(data)
+            prompt = self.build_prompt_with_override(data, prompt_override)
             logger.info(f"开始{self.get_data_type()}分析，构建提示词完成")
             logger.debug(
                 f"{self.get_data_type()}分析prompt长度: {len(prompt) if prompt else 0}"

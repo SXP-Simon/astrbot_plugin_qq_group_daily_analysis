@@ -133,6 +133,7 @@ def load_config_manager_class(plugin_data_dir: Path):
         "_get_plugin_version",
         "_get_schema_fingerprint",
         "_migrate_daily_comic_characters",
+        "_migrate_daily_comic_character_prompts",
         "_protect_upgrade_data",
         "_protect_custom_t2i_templates",
         "_read_upgrade_protection_state",
@@ -145,8 +146,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         "get_drawing_reference_image",
         "get_custom_report_template_dir",
         "get_t2i_rendering_strategies",
+        "get_comic_storyboard_prompt",
         "get_selected_comic_character",
         "get_comic_character_persona_id",
+        "get_comic_character_storyboard_prompt",
         "_get_comic_character_state_path",
         "_read_comic_character_state",
         "_save_comic_character_state",
@@ -304,6 +307,90 @@ def test_reference_image_migrates_old_config_and_uses_last_selected_file(
     assert config["daily_comic"]["drawing_reference_image"] == []
     assert (tmp_path / character["reference_images"][-1]).read_bytes() == b"selected"
     assert config_manager.get_drawing_reference_image().endswith("selected.webp")
+
+
+def test_existing_comic_character_inherits_global_storyboard_prompt(tmp_path: Path):
+    """升级时既有角色应保留当时的全局分镜提示词。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config = Config(
+        daily_comic={"comic_characters": [{"name": "角色甲", "reference_images": []}]},
+        prompts={"comic_analysis_prompts": {"comic_storyboard_prompt": "旧版全局模板"}},
+    )
+    config_manager = config_manager_class(config)
+
+    character = config["daily_comic"]["comic_characters"][0]
+    assert character["storyboard_prompt"] == "旧版全局模板"
+    assert (
+        config_manager.get_comic_character_storyboard_prompt(character)
+        == "旧版全局模板"
+    )
+    config.save_config.assert_called_once()
+
+
+def test_comic_character_empty_storyboard_prompt_falls_back_to_global(tmp_path: Path):
+    """新角色留空专属模板时应使用全局默认模板。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    config_manager = object.__new__(config_manager_class)
+    config_manager.config = {
+        "prompts": {
+            "comic_analysis_prompts": {"comic_storyboard_prompt": "全局默认模板"}
+        }
+    }
+
+    assert (
+        config_manager.get_comic_character_storyboard_prompt({"storyboard_prompt": ""})
+        == "全局默认模板"
+    )
+
+
+def test_comic_generation_passes_character_storyboard_prompt():
+    """漫画生成应把选中角色的专属模板传给分镜分析器。"""
+    generate_comic = load_comic_service_method("generate_comic")
+    topics = [{"topic": "话题", "detail": "详情"}]
+    character = {"name": "角色甲", "storyboard_prompt": "角色模板"}
+    llm_analyzer = SimpleNamespace(
+        analyze_comic_storyboards=AsyncMock(return_value=([], object()))
+    )
+    config_manager = SimpleNamespace(
+        get_enable_daily_comic=Mock(return_value=True),
+        get_selected_comic_character=Mock(return_value=character),
+        get_comic_character_persona_id=Mock(return_value="persona-a"),
+        get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
+    )
+    service = SimpleNamespace(
+        config_manager=config_manager,
+        llm_analyzer=llm_analyzer,
+    )
+
+    asyncio.run(generate_comic(service, topics, "123456", "umo"))
+
+    llm_analyzer.analyze_comic_storyboards.assert_awaited_once_with(
+        topics,
+        "umo",
+        persona_id="persona-a",
+        prompt_template="角色模板",
+    )
+
+
+def test_comic_character_schema_has_storyboard_prompt_default():
+    """新建角色方案时应自带可编辑的默认分镜提示词。"""
+    schema = json.loads(
+        (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
+    )
+    character_prompt = schema["daily_comic"]["items"]["comic_characters"]["templates"][
+        "character"
+    ]["items"]["storyboard_prompt"]["default"]
+    global_prompt = schema["prompts"]["items"]["comic_analysis_prompts"]["items"][
+        "comic_storyboard_prompt"
+    ]["default"]
+
+    assert schema["daily_comic"]["items"]["comic_characters"]["default"] == []
+    assert character_prompt.strip()
+    assert character_prompt == global_prompt
 
 
 def test_daily_random_character_is_stable_and_recovers_from_disabled_choice(
