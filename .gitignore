@@ -8,6 +8,7 @@ src/analysis/ARCHITECTURE.md
 debug_output.html
 **/__pycache__
 data/cmd_config.json
+data/t2i_templates/astrbot_vitepress.html
 data/t2i_templates/astrbot_powershell.html
 data/t2i_templates/base.html
 .sisyphus/

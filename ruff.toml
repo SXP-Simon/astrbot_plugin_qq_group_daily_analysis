@@ -1,5 +1,5 @@
 # 独立配置，避免插件被单独检出时与嵌套在 AstrBot 内时使用不同规则。
-exclude = ["tests"]
+exclude = ["tests", "_conf_schema.json"]
 line-length = 88
 target-version = "py310"
 

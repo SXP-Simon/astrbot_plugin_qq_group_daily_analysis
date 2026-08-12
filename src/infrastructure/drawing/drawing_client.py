@@ -1,38 +1,45 @@
 import asyncio
-import base64
-import binascii
-import ipaddress
 import re
-import socket
-from math import gcd
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from ...utils.logger import logger
 from ..config.config_manager import ConfigManager
+from .api_requests import DrawingApiRequestService
+from .api_requests.context import DrawingRequestContext
+from .api_requests.presets import resolve_dashscope_size
+from .drawing_image_response import (
+    DrawingImageResponseService,
+    ImageDownloadFailedError,
+)
 
-
-class ImageDownloadFailedError(Exception):
-    """图片下载失败，但保留了最后一次尝试的原始 URL 供兜底发送。"""
-
-    def __init__(self, message: str, fallback_url: str | None = None):
-        super().__init__(message)
-        self.fallback_url = fallback_url
+__all__ = ["DrawingClient", "ImageDownloadFailedError"]
 
 
 class DrawingClient:
-    """调用已配置的绘图 API 生成图片。"""
-
-    MAX_IMAGE_BYTES = 100 * 1024 * 1024
-    MAX_IMAGE_REDIRECTS = 5
+    """协调绘图供应商选择、重试、请求服务和图片响应处理。"""
 
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
+        self._image_response_service = DrawingImageResponseService(
+            hooks=self,
+            # 保持实例替换下载方法时，响应服务也会使用替换后的实现。
+            download_image=lambda url, proxy: self.download_public_image(url, proxy),
+        )
+        self._request_service = DrawingApiRequestService(
+            DrawingRequestContext(
+                hooks=self,
+                # 保持既有测试和扩展对兼容入口的动态替换能力。
+                request_json=lambda *args: self._post_json_for_image(*args),
+                extract_image=lambda data, proxy: self._extract_image_from_response(
+                    data, proxy
+                ),
+            )
+        )
 
     def _build_target_url(self, raw_url: str, protocol: str) -> str:
-        """智能解析补全用户配置的 API URL"""
+        """智能解析补全用户配置的 API URL。"""
         url = (raw_url or "").strip().rstrip("/")
         if not url:
             if protocol == "grok":
@@ -58,7 +65,6 @@ class DrawingClient:
             if "/v1/" in url:
                 return url if "chat" in url else f"{url}/chat/completions"
             return f"{url}/v1/chat/completions"
-
         if protocol == "grok":
             if url.endswith(("/images/generations", "/images/edits")):
                 return url
@@ -67,14 +73,12 @@ class DrawingClient:
             if "/v1/" in url:
                 return url if "/images/" in url else f"{url}/images/generations"
             return f"{url}/v1/images/generations"
-
         if protocol == "gemini":
             if url.endswith("/interactions"):
                 return url
             if url.endswith(("/v1beta", "/v1")):
                 return f"{url}/interactions"
             return f"{url}/v1beta/interactions"
-
         raise ValueError(f"不支持的绘图 API 协议: {protocol}")
 
     async def generate_image(
@@ -83,9 +87,15 @@ class DrawingClient:
         images_data: list[tuple[bytes, str]] | None = None,
         disable_retry: bool = False,
     ) -> tuple[bytes | None, str | None]:
-        """
-        调用 API 根据提示词生成单张图片 (支持参考图)
-        返回图片的二进制数据和最后一次异常信息
+        """调用候选供应商生成单张图片。
+
+        Args:
+            prompt: 用于生成图片的提示词。
+            images_data: 可选参考图片及其 MIME 类型。
+            disable_retry: 是否禁用请求失败后的重试。
+
+        Returns:
+            图片二进制数据与最后一次错误信息组成的元组。
         """
         provider_configs = self.config_manager.get_drawing_provider_configs() or [{}]
         last_error_msg = None
@@ -110,7 +120,7 @@ class DrawingClient:
         disable_retry: bool,
         provider: dict,
     ) -> tuple[bytes | None, str | None]:
-        """通过一个已配置的供应商候选生成图片。"""
+        """使用一个已配置供应商执行生成并处理重试。"""
         api_protocol = self._get_provider_value("api_protocol", provider)
         max_retries = self.config_manager.get_drawing_network_retries()
         output_exception_retries = (
@@ -122,12 +132,10 @@ class DrawingClient:
             self.config_manager.get_drawing_output_exception_retry_keywords()
         )
         retry_delay = self.config_manager.get_drawing_retry_delay()
-
         exception_retry_count = 0
         network_retry_count = 0
         last_error_msg = None
 
-        # 首次尝试 + 最多 max_retries 次网络重试，异常重试独立计数
         while True:
             try:
                 if api_protocol == "images":
@@ -154,51 +162,46 @@ class DrawingClient:
                     )
                 else:
                     raise ValueError(f"不支持的绘图 API 协议: {api_protocol}")
-
                 if result:
                     return result, None
                 break
-
-            except Exception as e:
-                last_error_msg = str(e)
-                logger.error(f"[Comic] 画图报错 ({type(e).__name__}): {last_error_msg}")
-
+            except Exception as exc:
+                last_error_msg = str(exc)
+                logger.error(
+                    "[Comic] 画图报错 (%s): %s", type(exc).__name__, last_error_msg
+                )
                 if disable_retry:
                     break
-
-                # 检查是否命中输出异常触发关键词
                 is_exception = any(
-                    kw in last_error_msg for kw in exception_keywords if kw
+                    keyword in last_error_msg
+                    for keyword in exception_keywords
+                    if keyword
                 )
                 if is_exception:
                     if exception_retry_count < output_exception_retries:
                         exception_retry_count += 1
                         logger.info(
-                            f"[Comic] 命中异常关键词，开始第 {exception_retry_count} 次内容重试..."
+                            "[Comic] 命中异常关键词，开始第 %d 次内容重试...",
+                            exception_retry_count,
                         )
                         await asyncio.sleep(retry_delay)
                         continue
-                    # 内容重试耗尽
                     break
-                else:
-                    status_match = re.search(r"HTTP (\d{3})", last_error_msg)
-                    status_code = int(status_match.group(1)) if status_match else None
-                    is_retryable_network_error = isinstance(e, httpx.RequestError) or (
-                        status_code in {408, 409, 429}
-                        or status_code is not None
-                        and status_code >= 500
-                    )
-                    if not is_retryable_network_error:
-                        break
-                    if network_retry_count < max_retries:
-                        network_retry_count += 1
-                        logger.info(
-                            f"[Comic] 网络或服务报错，开始第 {network_retry_count} 次网络重试..."
-                        )
-                        await asyncio.sleep(retry_delay)
-                        continue
-                    # 网络重试耗尽
+                status_match = re.search(r"HTTP (\d{3})", last_error_msg)
+                status_code = int(status_match.group(1)) if status_match else None
+                is_retryable_network_error = isinstance(exc, httpx.RequestError) or (
+                    status_code in {408, 409, 429}
+                    or status_code is not None
+                    and status_code >= 500
+                )
+                if not is_retryable_network_error or network_retry_count >= max_retries:
                     break
+                network_retry_count += 1
+                logger.info(
+                    "[Comic] 网络或服务报错，开始第 %d 次网络重试...",
+                    network_retry_count,
+                )
+                await asyncio.sleep(retry_delay)
 
         logger.debug("[Comic] 画图重试次数耗尽或请求失败，任务终止。")
         return None, last_error_msg
@@ -220,54 +223,58 @@ class DrawingClient:
         global_proxy = getter() if callable(getter) else ""
         return str(global_proxy).strip() or None
 
-    async def _call_google_api(
-        self,
-        prompt: str,
-        images_data: list[tuple[bytes, str]] | None,
-        provider: dict,
-    ) -> bytes | None:
-        """调用 Google Gemini generateContent 官方接口。"""
-        api_base = str(self._get_provider_value("api_url", provider)).rstrip("/")
-        model = self._get_provider_value("model", provider)
-        if ":generateContent" in api_base:
-            target_url = api_base
+    def _resolve_size(self, size_or_ratio: str) -> str:
+        """将比例或尺寸别名解析为 API 支持的 WxH 格式。"""
+        size = (size_or_ratio or "").strip().lower()
+        aspect_ratio = self.config_manager.get_drawing_aspect_ratio().strip().lower()
+        if not aspect_ratio:
+            aspect_ratio = "16:9"
+        size_aliases = {"1k": 1024, "2k": 2560, "4k": 3840}
+        if size in size_aliases:
+            result = self._build_size_from_ratio(size_aliases[size], aspect_ratio)
+        elif size in {"auto", ""}:
+            result = self._build_size_from_ratio(1792, aspect_ratio)
+        elif ":" in size and re.fullmatch(r"\d+:\d+", size):
+            result = self._build_size_from_ratio(1792, size)
+        elif re.fullmatch(r"\d+x\d+", size):
+            result = size
         else:
-            if not api_base:
-                api_base = "https://generativelanguage.googleapis.com/v1beta"
-            if not api_base.endswith(("/v1", "/v1beta")):
-                api_base = f"{api_base}/v1beta"
-            target_url = f"{api_base}/models/{model}:generateContent"
+            result = self._build_size_from_ratio(1792, aspect_ratio)
+        if re.fullmatch(r"\d+x\d+", result):
+            try:
+                width, height = map(int, result.split("x"))
+                result = (
+                    f"{max(16, ((width + 15) // 16) * 16)}"
+                    f"x{max(16, ((height + 15) // 16) * 16)}"
+                )
+            except ValueError:
+                pass
+        return result
 
-        image_size = str(self._get_provider_value("image_size", provider)).upper()
-        parts: list[dict[str, Any]] = [{"text": prompt}]
-        for image_bytes, mime in (images_data or [])[:14]:
-            parts.append(
-                {
-                    "inlineData": {
-                        "mimeType": mime if mime.startswith("image/") else "image/png",
-                        "data": base64.b64encode(image_bytes).decode("ascii"),
-                    }
-                }
-            )
-        payload = {
-            "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {
-                "responseModalities": ["TEXT", "IMAGE"],
-                "imageConfig": {
-                    "image_size": image_size
-                    if image_size in {"1K", "2K", "4K"}
-                    else "2K",
-                    "aspect_ratio": self._get_provider_value("aspect_ratio", provider),
-                },
-            },
-        }
-        return await self._post_json_for_image(
-            target_url,
-            {"x-goog-api-key": self._get_provider_value("api_key", provider)},
-            payload,
-            self._get_provider_value("timeout", provider),
-            "Google Gemini",
-            provider,
+    @staticmethod
+    def _build_size_from_ratio(long_edge: int, aspect_ratio: str) -> str:
+        """按长边和宽高比构建 16 的倍数尺寸。"""
+        if not aspect_ratio or ":" not in aspect_ratio:
+            aspect_ratio = "16:9"
+        try:
+            width_ratio, height_ratio = map(int, aspect_ratio.split(":", 1))
+        except ValueError:
+            width_ratio, height_ratio = 16, 9
+        if width_ratio >= height_ratio:
+            width = long_edge
+            height = max(2, round(long_edge * height_ratio / width_ratio))
+        else:
+            height = long_edge
+            width = max(2, round(long_edge * width_ratio / height_ratio))
+        width = max(16, ((width + 15) // 16) * 16)
+        height = max(16, ((height + 15) // 16) * 16)
+        return f"{width}x{height}"
+
+    async def _call_google_api(
+        self, prompt: str, images_data: list[tuple[bytes, str]] | None, provider: dict
+    ) -> bytes | None:
+        return await self._request_service.call_google_api(
+            prompt, images_data, provider
         )
 
     async def _call_preset_api(
@@ -277,154 +284,8 @@ class DrawingClient:
         provider: dict,
         provider_type: str,
     ) -> bytes | None:
-        """调用使用专有请求格式的绘图供应商预设。"""
-        api_key = self._get_provider_value("api_key", provider)
-        api_base = str(self._get_provider_value("api_url", provider)).rstrip("/")
-        model = self._get_provider_value("model", provider)
-        timeout = self._get_provider_value("timeout", provider)
-        image_size = str(self._get_provider_value("image_size", provider))
-        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
-        output_format = self._get_provider_value("output_format", provider)
-        data_uris = [
-            f"data:{mime if mime.startswith('image/') else 'image/png'};base64,"
-            f"{base64.b64encode(image_bytes).decode('ascii')}"
-            for image_bytes, mime in images_data or []
-        ]
-        headers = {"Authorization": f"Bearer {api_key}"}
-
-        if provider_type == "agnes_ai":
-            base = api_base or "https://apihub.agnes-ai.com"
-            target_url = (
-                f"{base}/images/generations"
-                if "/v1" in base
-                else f"{base}/v1/images/generations"
-            )
-            payload: dict[str, Any] = {
-                "model": model,
-                "prompt": prompt,
-                "size": self._resolve_size(image_size),
-                "extra_body": {"response_format": output_format or "url"},
-            }
-            if data_uris:
-                payload["extra_body"]["image"] = data_uris
-            provider_name = "Agnes AI"
-        elif provider_type == "xai":
-            base = api_base or "https://api.x.ai"
-            base = base if base.endswith("/v1") else f"{base}/v1"
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "n": 1,
-                "resolution": image_size.lower()
-                if image_size.upper() in {"1K", "2K"}
-                else "2k",
-                "response_format": output_format or "url",
-            }
-            target_url = f"{base}/images/generations"
-            if data_uris:
-                target_url = f"{base}/images/edits"
-                image_items = [
-                    {"type": "image_url", "url": data_uri} for data_uri in data_uris[:5]
-                ]
-                payload["image" if len(image_items) == 1 else "images"] = (
-                    image_items[0] if len(image_items) == 1 else image_items
-                )
-            payload["aspect_ratio"] = aspect_ratio
-            provider_name = "xAI"
-        elif provider_type == "minimax":
-            base = (api_base or "https://api.minimaxi.com").removesuffix("/v1")
-            target_url = f"{base}/v1/image_generation"
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "response_format": "url",
-                "n": 1,
-                "aspect_ratio": aspect_ratio,
-            }
-            if data_uris:
-                payload["subject_reference"] = [
-                    {"type": "character", "image_file": data_uri}
-                    for data_uri in data_uris[:9]
-                ]
-            provider_name = "MiniMax"
-        elif provider_type == "doubao":
-            base = api_base or "https://ark.cn-beijing.volces.com"
-            endpoint = (
-                "/api/plan/v3/images/generations"
-                if provider.get("endpoint_mode") == "agent_plan"
-                else "/api/v3/images/generations"
-            )
-            target_url = f"{base}{endpoint}"
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "response_format": "url",
-                "output_format": output_format or "png",
-                "watermark": False,
-                "size": image_size.upper()
-                if image_size.upper() in {"1K", "2K", "3K", "4K"}
-                else self._resolve_size(image_size),
-            }
-            if data_uris:
-                payload["image"] = (
-                    data_uris[0] if len(data_uris) == 1 else data_uris[:14]
-                )
-            provider_name = "豆包"
-        elif provider_type == "sensenova":
-            base = api_base or "https://token.sensenova.cn"
-            target_url = (
-                f"{base}/images/generations"
-                if base.endswith("/v1")
-                else f"{base}/v1/images/generations"
-            )
-            if data_uris:
-                logger.info(
-                    "[Comic] SenseNova U1 Fast 不支持参考图，已忽略 %d 张。",
-                    len(data_uris),
-                )
-            size_map = {
-                "1:1": "2048x2048",
-                "16:9": "2752x1536",
-                "9:16": "1536x2752",
-                "4:3": "2368x1760",
-                "3:4": "1760x2368",
-            }
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "size": size_map.get(aspect_ratio, "2752x1536"),
-                "n": 1,
-            }
-            provider_name = "SenseNova"
-        elif provider_type == "dashscope":
-            endpoint_mode = str(provider.get("endpoint_mode", "dashscope"))
-            base = api_base or (
-                "https://token-plan.cn-beijing.maas.aliyuncs.com"
-                if endpoint_mode == "token_plan"
-                else "https://dashscope.aliyuncs.com"
-            )
-            target_url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
-            content: list[dict[str, str]] = [{"text": prompt}]
-            content.extend({"image": data_uri} for data_uri in data_uris[:9])
-            payload = {
-                "model": model,
-                "input": {"messages": [{"role": "user", "content": content}]},
-                "parameters": {
-                    "size": self._resolve_dashscope_size(image_size, aspect_ratio),
-                    "n": 1,
-                    "watermark": False,
-                },
-            }
-            provider_name = "DashScope"
-        elif provider_type == "stepfun":
-            return await self._call_stepfun_api(
-                prompt, images_data, provider, api_key, model, timeout
-            )
-        else:
-            raise ValueError(f"不支持的绘图供应商预设: {provider_type}")
-
-        return await self._post_json_for_image(
-            target_url, headers, payload, timeout, provider_name, provider
+        return await self._request_service.call_preset_api(
+            prompt, images_data, provider, provider_type
         )
 
     async def _call_stepfun_api(
@@ -436,66 +297,9 @@ class DrawingClient:
         model: str,
         timeout: int | float,
     ) -> bytes | None:
-        """调用阶跃星辰图片接口，图生图使用官方 multipart 字段。"""
-        target_url = self._build_target_url(
-            self._get_provider_value("api_url", provider), "images"
+        return await self._request_service.call_stepfun_api(
+            prompt, images_data, provider, api_key, model, timeout
         )
-        headers = {"Authorization": f"Bearer {api_key}"}
-        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-
-        if images_data:
-            target_url = target_url.replace("/generations", "/edits")
-            image_bytes, mime = images_data[0]
-            extension = mime.split("/")[-1] if "/" in mime else "png"
-            form_data = {
-                "model": model,
-                "prompt": prompt,
-                "response_format": "url",
-            }
-            files = {
-                "image": (f"reference.{extension}", image_bytes, mime),
-            }
-            logger.info(
-                f"[Comic] 发起阶跃星辰图生图请求 -> {self._sanitize_url(target_url)}"
-            )
-            async with httpx.AsyncClient(
-                timeout=api_timeout, proxy=self._get_request_proxy(provider)
-            ) as client:
-                response = await client.post(
-                    target_url, headers=headers, data=form_data, files=files
-                )
-        else:
-            payload = {
-                "model": model,
-                "prompt": prompt,
-                "size": self._resolve_size(
-                    self._get_provider_value("image_size", provider)
-                ),
-                "response_format": "url",
-            }
-            logger.info(
-                f"[Comic] 发起阶跃星辰文生图请求 -> {self._sanitize_url(target_url)}"
-            )
-            async with httpx.AsyncClient(
-                timeout=api_timeout, proxy=self._get_request_proxy(provider)
-            ) as client:
-                response = await client.post(target_url, headers=headers, json=payload)
-
-        if not 200 <= response.status_code < 300:
-            message = response.text[:500] if response.text else "(空响应)"
-            raise Exception(
-                f"阶跃星辰 API 请求失败 [HTTP {response.status_code}]: {message}"
-            )
-        try:
-            data = response.json()
-        except ValueError as exc:
-            raise Exception("阶跃星辰 API 未返回合法 JSON") from exc
-        image = await self._extract_image_from_response(
-            data, self._get_request_proxy(provider)
-        )
-        if image:
-            return image
-        raise Exception(f"阶跃星辰 API 返回格式异常: {self._summarize_response(data)}")
 
     async def _post_json_for_image(
         self,
@@ -506,52 +310,12 @@ class DrawingClient:
         provider_name: str,
         provider: dict,
     ) -> bytes | None:
-        """发送 JSON 图片生成请求，并从响应中提取图片。"""
-        headers["Content-Type"] = "application/json"
-        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        logger.info(
-            f"[Comic] 发起 {provider_name} 图片请求 -> {self._sanitize_url(target_url)}"
-        )
-        async with httpx.AsyncClient(
-            timeout=api_timeout, proxy=self._get_request_proxy(provider)
-        ) as client:
-            response = await client.post(target_url, headers=headers, json=payload)
-        if not 200 <= response.status_code < 300:
-            message = response.text[:500] if response.text else "(空响应)"
-            raise Exception(
-                f"{provider_name} API 请求失败 [HTTP {response.status_code}]: {message}"
-            )
-        try:
-            data = response.json()
-        except ValueError as exc:
-            raise Exception(f"{provider_name} API 未返回合法 JSON") from exc
-        image = await self._extract_image_from_response(
-            data, self._get_request_proxy(provider)
-        )
-        if image:
-            return image
-        raise Exception(
-            f"{provider_name} API 返回格式异常: {self._summarize_response(data)}"
+        return await self._request_service.post_json_for_image(
+            target_url, headers, payload, timeout, provider_name, provider
         )
 
     def _resolve_dashscope_size(self, image_size: str, aspect_ratio: str) -> str:
-        """将漫画尺寸和比例换算为 DashScope 的 size 格式。"""
-        long_edge = {"1K": 1280, "2K": 2048, "4K": 4096}.get(image_size.upper(), 2048)
-        try:
-            width_ratio, height_ratio = (
-                int(value) for value in aspect_ratio.split(":", 1)
-            )
-            if width_ratio <= 0 or height_ratio <= 0:
-                raise ValueError
-        except (AttributeError, TypeError, ValueError):
-            width_ratio, height_ratio = 1, 1
-        if width_ratio >= height_ratio:
-            width = long_edge
-            height = round(long_edge * height_ratio / width_ratio / 16) * 16
-        else:
-            height = long_edge
-            width = round(long_edge * width_ratio / height_ratio / 16) * 16
-        return f"{max(512, width)}*{max(512, height)}"
+        return resolve_dashscope_size(image_size, aspect_ratio)
 
     async def _call_images_api(
         self,
@@ -559,111 +323,9 @@ class DrawingClient:
         images_data: list[tuple[bytes, str]] | None = None,
         provider: dict | None = None,
     ) -> bytes | None:
-        provider = provider or {}
-        raw_url = self._get_provider_value("api_url", provider)
-        target_url = self._build_target_url(raw_url, "images")
-
-        api_key = self._get_provider_value("api_key", provider)
-        model = self._get_provider_value("model", provider)
-        timeout = self._get_provider_value("timeout", provider)
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        raw_size = self._get_provider_value("image_size", provider)
-        resolved_size = self._resolve_size(raw_size)
-        ar = self._get_provider_value("aspect_ratio", provider)
-        output_format = self._get_provider_value("output_format", provider)
-
-        payload: dict[str, Any] = {
-            "prompt": prompt,
-            "model": model,
-            "n": 1,
-            "size": resolved_size,
-            "output_format": output_format,
-        }
-
-        # 添加可选控制参数
-        quality = self._get_provider_value("image_quality", provider)
-        if quality in {"low", "medium", "high"}:
-            payload["quality"] = quality
-
-        bg = self._get_provider_value("background", provider)
-        if bg and bg != "auto":
-            payload["background"] = bg
-
-        if images_data and len(images_data) > 0:
-            if target_url.endswith("/generations"):
-                target_url = target_url.replace("/generations", "/edits")
-
-            headers.pop(
-                "Content-Type", None
-            )  # 移除 JSON 的 Content-Type，让 httpx 自动设置为 multipart/form-data
-
-            multipart_data = {
-                "prompt": prompt,
-                "model": model,
-                "n": "1",
-                "size": resolved_size,
-                "output_format": output_format,
-            }
-            if quality in {"low", "medium", "high"}:
-                multipart_data["quality"] = quality
-            if bg and bg != "auto":
-                multipart_data["background"] = bg
-
-            files = []
-            for index, (img_bytes, mime) in enumerate(images_data, start=1):
-                ext = mime.split("/")[-1] if "/" in mime else "png"
-                files.append(("image[]", (f"image_{index}.{ext}", img_bytes, mime)))
-
-            logger.info(
-                f"[Comic] 发起 Images API 请求 (含图) -> {self._sanitize_url(target_url)} "
-                f"(model={model}, size={resolved_size}, aspect_ratio={ar}, "
-                f"references={len(images_data)}, reference_bytes={sum(len(image[0]) for image in images_data)})..."
-            )
-            api_timeout = httpx.Timeout(
-                connect=20.0, read=timeout, write=20.0, pool=20.0
-            )
-            async with httpx.AsyncClient(
-                timeout=api_timeout, proxy=self._get_request_proxy(provider)
-            ) as client:
-                resp = await client.post(
-                    target_url, headers=headers, data=multipart_data, files=files
-                )
-        else:
-            logger.info(
-                f"[Comic] 发起 Images API 请求 -> {self._sanitize_url(target_url)} (model={model}, size={resolved_size}, aspect_ratio={ar})..."
-            )
-            api_timeout = httpx.Timeout(
-                connect=20.0, read=timeout, write=20.0, pool=20.0
-            )
-            async with httpx.AsyncClient(
-                timeout=api_timeout, proxy=self._get_request_proxy(provider)
-            ) as client:
-                resp = await client.post(target_url, headers=headers, json=payload)
-
-        if resp.status_code != 200:
-            snippet = resp.text[:500] if resp.text else "(Empty Response)"
-            raise Exception(f"API 请求失败 [HTTP {resp.status_code}]: {snippet}")
-
-        try:
-            data = resp.json()
-        except Exception:
-            snippet = resp.text[:500] if resp.text else "(Empty Body)"
-            raise Exception(
-                f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
-            )
-
-        image = await self._extract_image_from_response(
-            data, self._get_request_proxy(provider)
+        return await self._request_service.call_images_api(
+            prompt, images_data, provider
         )
-        if image:
-            return image
-
-        raise Exception(f"API 返回格式异常: {self._summarize_response(data)}")
 
     async def _call_grok_api(
         self,
@@ -671,79 +333,7 @@ class DrawingClient:
         images_data: list[tuple[bytes, str]] | None = None,
         provider: dict | None = None,
     ) -> bytes | None:
-        """调用 xAI Grok Imagine 官方图片接口。
-
-        Args:
-            prompt: 图片生成或编辑提示词。
-            images_data: 可选参考图片及其 MIME 类型列表，当前只使用第一张。
-
-        Returns:
-            API 返回的图片二进制数据。
-
-        Raises:
-            Exception: 请求失败、响应不是 JSON 或响应中没有有效图片。
-        """
-        provider = provider or {}
-        raw_url = self._get_provider_value("api_url", provider)
-        target_url = self._build_target_url(raw_url, "grok")
-        api_key = self._get_provider_value("api_key", provider)
-        model = self._get_provider_value("model", provider)
-        timeout = self._get_provider_value("timeout", provider)
-        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload: dict[str, Any] = {"model": model, "prompt": prompt}
-
-        reference_bytes = 0
-        if images_data:
-            if target_url.endswith("/generations"):
-                target_url = target_url.removesuffix("/generations") + "/edits"
-            image_bytes, mime = images_data[0]
-            image_mime = mime if mime.startswith("image/") else "image/png"
-            encoded = base64.b64encode(image_bytes).decode("ascii")
-            payload["image"] = {
-                "type": "image_url",
-                "url": f"data:{image_mime};base64,{encoded}",
-            }
-            reference_bytes = len(image_bytes)
-        elif target_url.endswith("/edits"):
-            target_url = target_url.removesuffix("/edits") + "/generations"
-
-        logger.info(
-            f"[Comic] 发起 Grok Images API 请求 -> {self._sanitize_url(target_url)} "
-            f"(model={model}, aspect_ratio={aspect_ratio}, "
-            f"reference_bytes={reference_bytes})..."
-        )
-        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(
-            timeout=api_timeout, proxy=self._get_request_proxy(provider)
-        ) as client:
-            resp = await client.post(target_url, headers=headers, json=payload)
-
-        if not 200 <= resp.status_code < 300:
-            error_summary = resp.text[:500] if resp.text else "(Empty Response)"
-            raise Exception(
-                f"Grok API 请求失败 [HTTP {resp.status_code}]: {error_summary}"
-            )
-
-        try:
-            data = resp.json()
-        except Exception:
-            raise Exception(
-                f"Grok API 未返回合法的 JSON [HTTP {resp.status_code}]: "
-                f"<body len={len(resp.content)}>"
-            )
-
-        image = await self._extract_image_from_response(
-            data, self._get_request_proxy(provider)
-        )
-        if image:
-            return image
-
-        raise Exception(f"Grok API 返回格式异常: {self._summarize_response(data)}")
+        return await self._request_service.call_grok_api(prompt, images_data, provider)
 
     async def _call_gemini_api(
         self,
@@ -751,143 +341,8 @@ class DrawingClient:
         images_data: list[tuple[bytes, str]] | None = None,
         provider: dict | None = None,
     ) -> bytes | None:
-        """调用 Google Gemini Interactions 图片接口。
-
-        Args:
-            prompt: 图片生成或编辑提示词。
-            images_data: 可选参考图片及其 MIME 类型列表，当前只使用第一张。
-
-        Returns:
-            最后一个模型输出中的图片二进制数据。
-
-        Raises:
-            Exception: 请求失败、响应不是 JSON 或响应中没有最终图片。
-        """
-        provider = provider or {}
-        raw_url = self._get_provider_value("api_url", provider)
-        target_url = self._build_target_url(raw_url, "gemini")
-        api_key = self._get_provider_value("api_key", provider)
-        model = self._get_provider_value("model", provider)
-        timeout = self._get_provider_value("timeout", provider)
-        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
-
-        raw_size = str(self._get_provider_value("image_size", provider)).strip()
-        if raw_size.upper() in {"1K", "2K", "4K"}:
-            image_size = raw_size.upper()
-        elif re.fullmatch(r"\d+x\d+", raw_size.lower()):
-            width, height = map(int, raw_size.lower().split("x", 1))
-            longest_edge = max(width, height)
-            if longest_edge <= 1024:
-                image_size = "1K"
-            elif longest_edge <= 2048:
-                image_size = "2K"
-            else:
-                image_size = "4K"
-        else:
-            image_size = "1K"
-
-        output_format = str(self._get_provider_value("output_format", provider)).lower()
-        output_mime = {
-            "png": "image/png",
-            "jpeg": "image/jpeg",
-            "jpg": "image/jpeg",
-        }.get(output_format)
-
-        input_content: list[dict[str, str]] = [{"type": "text", "text": prompt}]
-        reference_bytes = 0
-        for image_bytes, mime in images_data or []:
-            image_mime = mime if mime.startswith("image/") else "image/png"
-            input_content.append(
-                {
-                    "type": "image",
-                    "data": base64.b64encode(image_bytes).decode("ascii"),
-                    "mime_type": image_mime,
-                }
-            )
-            reference_bytes += len(image_bytes)
-
-        response_format: dict[str, str] = {
-            "type": "image",
-            "aspect_ratio": aspect_ratio,
-            "image_size": image_size,
-        }
-        if output_mime:
-            response_format["mime_type"] = output_mime
-
-        payload: dict[str, Any] = {
-            "model": model,
-            "input": input_content,
-            "response_format": response_format,
-            "store": False,
-        }
-        headers = {
-            "x-goog-api-key": api_key,
-            "Content-Type": "application/json",
-        }
-
-        logger.info(
-            f"[Comic] 发起 Gemini Interactions API 请求 -> {self._sanitize_url(target_url)} "
-            f"(model={model}, image_size={image_size}, "
-            f"aspect_ratio={aspect_ratio}, reference_bytes={reference_bytes})..."
-        )
-        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(
-            timeout=api_timeout, proxy=self._get_request_proxy(provider)
-        ) as client:
-            resp = await client.post(target_url, headers=headers, json=payload)
-
-        if not 200 <= resp.status_code < 300:
-            error_summary = resp.text[:500] if resp.text else "(Empty Response)"
-            raise Exception(
-                f"Gemini API 请求失败 [HTTP {resp.status_code}]: {error_summary}"
-            )
-
-        try:
-            data = resp.json()
-        except Exception:
-            raise Exception(
-                f"Gemini API 未返回合法的 JSON [HTTP {resp.status_code}]: "
-                f"<body len={len(resp.content)}>"
-            )
-
-        steps = data.get("steps") if isinstance(data, dict) else None
-        model_outputs = (
-            [
-                step
-                for step in steps
-                if isinstance(step, dict) and step.get("type") == "model_output"
-            ]
-            if isinstance(steps, list)
-            else []
-        )
-        for step in reversed(model_outputs):
-            content = step.get("content")
-            if not isinstance(content, list):
-                continue
-            for item in reversed(content):
-                if not isinstance(item, dict) or item.get("type") != "image":
-                    continue
-                encoded = item.get("data")
-                if not isinstance(encoded, str) or not encoded.strip():
-                    continue
-                try:
-                    return self._decode_base64(encoded)
-                except (ValueError, TypeError, binascii.Error) as exc:
-                    logger.debug(f"[Comic] 跳过无效 Gemini 最终图片: {exc}")
-
-        # When steps are present, limit compatibility parsing to model outputs so
-        # temporary thought images cannot be selected as final output.
-        fallback_data: Any = model_outputs if isinstance(steps, list) else data
-        image = await self._extract_image_from_response(
-            fallback_data, self._get_request_proxy(provider)
-        )
-        if image:
-            return image
-
-        status = data.get("status") if isinstance(data, dict) else None
-        raise Exception(
-            f"Gemini API 未返回最终图片 (status={status or 'unknown'}): "
-            f"{self._summarize_response(data)}"
+        return await self._request_service.call_gemini_api(
+            prompt, images_data, provider
         )
 
     async def _call_chat_api(
@@ -896,432 +351,36 @@ class DrawingClient:
         images_data: list[tuple[bytes, str]] | None = None,
         provider: dict | None = None,
     ) -> bytes | None:
-        provider = provider or {}
-        raw_url = self._get_provider_value("api_url", provider)
-        target_url = self._build_target_url(raw_url, "chat")
-
-        api_key = self._get_provider_value("api_key", provider)
-        model = self._get_provider_value("model", provider)
-
-        timeout = self._get_provider_value("timeout", provider)
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-
-        raw_size = self._get_provider_value("image_size", provider)
-        resolved_size = self._resolve_size(raw_size)
-        ar = self._get_provider_value("aspect_ratio", provider)
-
-        # 将长宽比与分辨率要求显式追加到 prompt 结尾，防止 Chat 协议模型忽略
-        width, height = map(int, resolved_size.split("x", 1))
-        divisor = gcd(width, height)
-        effective_aspect_ratio = f"{width // divisor}:{height // divisor}"
-        if width > height:
-            orientation = "Horizontal Landscape Orientation"
-        elif width < height:
-            orientation = "Vertical Portrait Orientation"
-        else:
-            orientation = "Square Orientation"
-        full_prompt = f"{prompt}\n\n[Image Layout & Spec Requirements: Aspect Ratio {effective_aspect_ratio}, Resolution {resolved_size}, {orientation}]"
-
-        content = []
-        for img_bytes, mime in images_data or []:
-            b64 = base64.b64encode(img_bytes).decode("utf-8")
-            content.append(
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
-            )
-
-        content.append({"type": "text", "text": full_prompt})
-
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": [{"role": "user", "content": content}],
-        }
-
-        logger.info(
-            f"[Comic] 发起 Chat API 请求 -> {self._sanitize_url(target_url)} (model={model}, size={resolved_size}, aspect_ratio={ar})..."
-        )
-
-        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
-        async with httpx.AsyncClient(
-            timeout=api_timeout, proxy=self._get_request_proxy(provider)
-        ) as client:
-            resp = await client.post(target_url, headers=headers, json=payload)
-
-            if resp.status_code != 200:
-                snippet = resp.text[:500] if resp.text else "(Empty Response)"
-                raise Exception(f"API 请求失败 [HTTP {resp.status_code}]: {snippet}")
-
-            try:
-                data = resp.json()
-            except Exception:
-                snippet = resp.text[:500] if resp.text else "(Empty Body)"
-                raise Exception(
-                    f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
-                )
-
-            image = await self._extract_image_from_response(
-                data, self._get_request_proxy(provider)
-            )
-            if image:
-                return image
-
-            raise Exception(
-                f"无法从 Chat API 的回复中提取到图片: {self._summarize_response(data)}"
-            )
+        return await self._request_service.call_chat_api(prompt, images_data, provider)
 
     async def _extract_image_from_response(
         self, data: Any, proxy: str | None = None
     ) -> bytes | None:
-        """递归提取中转站响应中的图片数据。"""
-        encoded: list[tuple[str, str]] = []
-        image_fields: list[tuple[str, str]] = []
-        content_images: list[tuple[str, str]] = []
-        content_urls: list[tuple[str, str]] = []
-        fallback_urls: list[tuple[str, str]] = []
-
-        def collect(value: Any, path: tuple[str, ...] = ()) -> None:
-            if isinstance(value, dict):
-                for name, item in value.items():
-                    collect(item, (*path, name.lower()))
-            elif isinstance(value, list):
-                for item in value:
-                    collect(item, path)
-            elif isinstance(value, str):
-                text = value.strip()
-                if not text:
-                    return
-                key = path[-1] if path else ""
-                if key in {"b64_json", "base64"}:
-                    encoded.append(("base64", text))
-                    return
-                if key in {"image_url", "image"} or (
-                    key == "url"
-                    and any(
-                        name in {"image", "images", "image_url"} for name in path[:-1]
-                    )
-                ):
-                    image_fields.append(("value", text))
-                    return
-
-                data_uris = re.findall(
-                    r"data:image/[^\s,;]+(?:;[^\s,;]+)*;base64,[A-Za-z0-9+/=_-]+",
-                    text,
-                    re.IGNORECASE,
-                )
-                content_images.extend(("value", item) for item in data_uris)
-
-                markdown_urls = re.findall(
-                    r"!\[[^\]]*\]\((https?://[^\s<>\"')\]]+)", text
-                )
-                content_images.extend(
-                    ("url", item.rstrip(".,;`")) for item in markdown_urls
-                )
-
-                urls = re.findall(r"https?://[^\s<>\"')\]]+", text)
-                markdown_url_set = set(markdown_urls)
-                target = content_urls if key in {"content", "text"} else fallback_urls
-                target.extend(
-                    ("url", item.rstrip(".,;`"))
-                    for item in urls
-                    if item not in markdown_url_set
-                )
-
-                if not data_uris and not urls and len(text) >= 100:
-                    encoded.append(("base64", text))
-
-        collect(data)
-        last_download_error: Exception | None = None
-        last_download_url: str | None = None
-        candidates = (
-            encoded + image_fields + content_images + content_urls + fallback_urls
+        return await self._image_response_service.extract_image_from_response(
+            data, proxy
         )
-        for candidate_type, candidate in candidates:
-            try:
-                if candidate_type == "url" or candidate.startswith(
-                    ("http://", "https://")
-                ):
-                    last_download_url = candidate
-                    image = await self.download_public_image(candidate, proxy)
-                elif candidate.startswith("data:image/"):
-                    image = self._decode_data_uri(candidate)
-                elif candidate.startswith("base64://"):
-                    image = self._decode_base64(candidate[len("base64://") :])
-                else:
-                    image = self._decode_base64(candidate)
-                if image:
-                    return image
-            except (httpx.HTTPError, httpx.TimeoutException) as exc:
-                logger.warning(f"[Comic] 图片下载失败 ({type(exc).__name__}): {exc}")
-                last_download_error = exc
-            except (ValueError, TypeError, binascii.Error) as exc:
-                logger.warning(f"[Comic] 跳过无效图片候选内容: {exc}")
-
-        if last_download_error:
-            raise ImageDownloadFailedError(
-                str(last_download_error), fallback_url=last_download_url
-            )
-        return None
 
     @staticmethod
     def _decode_data_uri(data_uri: str) -> bytes:
-        """解码 image/* Data URI。"""
-        header, encoded = data_uri.split(",", 1)
-        if ";base64" not in header.lower():
-            raise ValueError("Data URI 不是 Base64 图片")
-        return DrawingClient._decode_base64(encoded)
+        return DrawingImageResponseService.decode_data_uri(data_uri)
 
     @staticmethod
     def _decode_base64(encoded: str) -> bytes:
-        """解码标准或 URL-safe Base64，并确认结果是图片。"""
-        normalized = re.sub(r"\s+", "", encoded).replace("-", "+").replace("_", "/")
-        # 含非 ASCII 字符的字符串不可能是合法 Base64，提前拒绝
-        try:
-            normalized.encode("ascii")
-        except UnicodeEncodeError:
-            raise ValueError("Base64 候选内容含非 ASCII 字符，跳过")
-        if len(normalized) > DrawingClient.MAX_IMAGE_BYTES * 4 // 3 + 4:
-            raise ValueError("Base64 图片负载超过 100MB")
-        normalized += "=" * (-len(normalized) % 4)
-        decoded = base64.b64decode(normalized, validate=True)
-        DrawingClient._validate_image_bytes(decoded)
-        return decoded
+        return DrawingImageResponseService.decode_base64(encoded)
 
     @staticmethod
     def _validate_image_bytes(data: bytes) -> None:
-        """拒绝 HTML、JSON 等非图片响应。"""
-        if not data:
-            raise ValueError("响应内容为空")
-
-        # 扫描前 32 字节，兼容部分代理在图片前附加少量额外字节的情况
-        probe = data[:32]
-
-        is_webp = len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
-        is_avif = (
-            len(data) >= 12
-            and data[4:8] == b"ftyp"
-            and data[8:12]
-            in {
-                b"avif",
-                b"avis",
-            }
-        )
-        # JPEG 2000 / JP2
-        is_jp2 = len(data) >= 12 and data[4:8] == b"ftyp" and b"jp2" in data[8:12]
-
-        signatures = (
-            b"\x89PNG\r\n\x1a\n",
-            b"\xff\xd8\xff",
-            b"GIF87a",
-            b"GIF89a",
-            b"BM",
-            b"II*\x00",
-            b"MM\x00*",
-            b"\x00\x00\x00\x0cjP  ",  # JPEG 2000
-        )
-        starts_with_sig = any(probe.find(sig) < 4 for sig in signatures)
-
-        if not (starts_with_sig or is_webp or is_avif or is_jp2):
-            # 最后兜底：检查 Content-Type 无法识别的情况下，确认不是 HTML/JSON 文本
-            try:
-                head = data[:64].decode("ascii", errors="ignore").lower()
-                if head.startswith(("<!doctype", "<html", "{", "[")):
-                    raise ValueError("响应内容不是图片（检测到 HTML/JSON）")
-            except UnicodeDecodeError:
-                pass  # 无法解码为 ASCII，说明是二进制内容，允许通过
-            # 若内容是未知二进制格式（可能是不常见图片格式），放行而不是强制拒绝
-            return
-        # 已匹配已知图片签名，直接通过
-
-    # 图片下载整体超时（秒），防止代理服务器慢速发送导致无限等待
-    IMAGE_DOWNLOAD_TOTAL_TIMEOUT = 90
+        DrawingImageResponseService.validate_image_bytes(data)
 
     async def download_public_image(
         self, url: str, proxy: str | None = None
     ) -> bytes | None:
-        """从公网 URL 下载已校验且大小受限的图片。"""
-        try:
-            return await asyncio.wait_for(
-                self._download_image_inner(url, proxy),
-                timeout=self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            raise httpx.TimeoutException(
-                f"图片下载超过 {self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT}s 总超时限制: {self._sanitize_url(url)}"
-            )
-
-    async def _download_image_inner(
-        self, url: str, proxy: str | None = None
-    ) -> bytes | None:
-        """实际下载逻辑（由 _download_image 包裹超时）。"""
-        current_url = url
-        # connect/write 超时 20s，read 超时 60s（单次 socket read）
-        download_timeout = httpx.Timeout(connect=20.0, read=60.0, write=20.0, pool=20.0)
-        request_proxy = (
-            proxy or self.config_manager.get_drawing_download_proxy() or None
-        )
-        if request_proxy:
-            logger.debug(
-                f"[Comic] 图片下载使用代理: {self._sanitize_url(request_proxy)}"
-            )
-        async with httpx.AsyncClient(
-            timeout=download_timeout,
-            follow_redirects=False,
-            proxy=request_proxy,
-        ) as client:
-            for redirect_count in range(self.MAX_IMAGE_REDIRECTS + 1):
-                await self._validate_public_image_url(current_url)
-                logger.info(
-                    f"[Comic] 正在下载图片 URL: {self._sanitize_url(current_url)}"
-                )
-                resp = await client.get(current_url)
-                if resp.status_code in {301, 302, 303, 307, 308}:
-                    location = resp.headers.get("Location")
-                    if not location:
-                        raise httpx.HTTPStatusError(
-                            f"图片重定向缺少地址 [HTTP {resp.status_code}]",
-                            request=resp.request,
-                            response=resp,
-                        )
-                    if redirect_count >= self.MAX_IMAGE_REDIRECTS:
-                        raise ValueError("图片下载重定向次数超过限制")
-                    current_url = str(resp.url.join(location))
-                    continue
-
-                if resp.status_code != 200:
-                    raise httpx.HTTPStatusError(
-                        f"图片下载失败 [HTTP {resp.status_code}]",
-                        request=resp.request,
-                        response=resp,
-                    )
-
-                image_bytes = resp.content
-                if len(image_bytes) > self.MAX_IMAGE_BYTES:
-                    raise ValueError("图片下载内容超过 100MB")
-
-                self._validate_image_bytes(image_bytes)
-                return image_bytes
-
-        raise ValueError("图片下载失败")
-
-    async def _validate_public_image_url(self, url: str) -> None:
-        """拒绝非 HTTP 协议及解析到本机或私网的图片地址。"""
-        parsed = urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise ValueError("图片地址必须是有效的 HTTP/HTTPS URL")
-        if parsed.username or parsed.password:
-            raise ValueError("图片地址不允许包含用户凭据")
-
-        hostname = parsed.hostname.rstrip(".").lower()
-        if hostname == "localhost" or hostname.endswith(".localhost"):
-            raise ValueError("图片地址不允许访问本机或私网")
-
-        try:
-            addresses = await asyncio.to_thread(
-                socket.getaddrinfo,
-                hostname,
-                parsed.port or (443 if parsed.scheme == "https" else 80),
-                type=socket.SOCK_STREAM,
-            )
-        except socket.gaierror as exc:
-            request = httpx.Request("GET", url)
-            raise httpx.ConnectError("图片地址 DNS 解析失败", request=request) from exc
-
-        if not addresses or any(
-            not ipaddress.ip_address(item[4][0]).is_global for item in addresses
-        ):
-            raise ValueError("图片地址不允许访问本机或私网")
+        return await self._image_response_service.download_public_image(url, proxy)
 
     @staticmethod
     def _sanitize_url(url: str) -> str:
-        """移除日志中的查询参数、片段和用户凭据。"""
-        parsed = urlsplit(url)
-        host = parsed.hostname or ""
-        if parsed.port:
-            host = f"{host}:{parsed.port}"
-        return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
+        return DrawingImageResponseService.sanitize_url(url)
 
     @staticmethod
     def _summarize_response(data: Any) -> str:
-        """生成不包含响应正文和 Base64 的结构摘要。"""
-
-        def summarize(value: Any, depth: int = 0) -> str:
-            if isinstance(value, str):
-                return f"<str len={len(value)}>"
-            if depth >= 3:
-                return type(value).__name__
-            if isinstance(value, dict):
-                items = list(value.items())[:10]
-                body = ", ".join(
-                    f"{str(key)[:64]}: {summarize(item, depth + 1)}"
-                    for key, item in items
-                )
-                suffix = ", ..." if len(value) > len(items) else ""
-                return f"{{{body}{suffix}}}"
-            if isinstance(value, list):
-                items = value[:3]
-                body = ", ".join(summarize(item, depth + 1) for item in items)
-                suffix = ", ..." if len(value) > len(items) else ""
-                return f"[{body}{suffix}] (len={len(value)})"
-            return f"<{type(value).__name__}>"
-
-        return summarize(data)
-
-    def _resolve_size(self, size_or_ratio: str) -> str:
-        """将比例（如 16:9）或尺寸别名解析为 API 支持的 WxH 格式"""
-        s = (size_or_ratio or "").strip().lower()
-        ar = self.config_manager.get_drawing_aspect_ratio().strip().lower()
-        if not ar:
-            ar = "16:9"
-
-        # 别名映射到长边像素
-        size_aliases = {
-            "1k": 1024,
-            "2k": 2560,
-            "4k": 3840,
-        }
-
-        if s in size_aliases:
-            long_edge = size_aliases[s]
-            res = self._build_size_from_ratio(long_edge, ar)
-        elif s in ["auto", ""]:
-            res = self._build_size_from_ratio(1792, ar)
-        elif ":" in s and re.fullmatch(r"\d+:\d+", s):
-            res = self._build_size_from_ratio(1792, s)
-        elif re.fullmatch(r"\d+x\d+", s):
-            res = s
-        else:
-            res = self._build_size_from_ratio(1792, ar)
-
-        if re.fullmatch(r"\d+x\d+", res):
-            try:
-                w, h = map(int, res.split("x"))
-                w = max(16, ((w + 15) // 16) * 16)
-                h = max(16, ((h + 15) // 16) * 16)
-                res = f"{w}x{h}"
-            except Exception:
-                pass
-
-        return res
-
-    @staticmethod
-    def _build_size_from_ratio(long_edge: int, aspect_ratio: str) -> str:
-        if not aspect_ratio or ":" not in aspect_ratio:
-            aspect_ratio = "16:9"
-        try:
-            w_r, h_r = map(int, aspect_ratio.split(":", 1))
-        except Exception:
-            w_r, h_r = 16, 9
-
-        if w_r >= h_r:
-            width = long_edge
-            height = max(2, round(long_edge * h_r / w_r))
-        else:
-            height = long_edge
-            width = max(2, round(long_edge * w_r / h_r))
-
-        width = max(16, ((width + 15) // 16) * 16)
-        height = max(16, ((height + 15) // 16) * 16)
-        return f"{width}x{height}"
+        return DrawingImageResponseService.summarize_response(data)
