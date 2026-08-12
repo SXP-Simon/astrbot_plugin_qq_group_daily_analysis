@@ -5,6 +5,7 @@ import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+from zoneinfo import ZoneInfoNotFoundError
 
 
 def load_main_method(name: str):
@@ -154,8 +155,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         "StarTools": SimpleNamespace(get_data_dir=Mock(return_value=plugin_data_dir)),
         "PLUGIN_NAME": "test_plugin",
         "Path": Path,
+        "os": __import__("os"),
         "datetime": __import__("datetime").datetime,
         "ZoneInfo": __import__("zoneinfo").ZoneInfo,
+        "ZoneInfoNotFoundError": ZoneInfoNotFoundError,
         "json": json,
         "random": __import__("random"),
         "shutil": __import__("shutil"),
@@ -325,6 +328,68 @@ def test_daily_random_character_is_stable_and_recovers_from_disabled_choice(
 
     selected["enable"] = False
     assert config_manager.get_selected_comic_character() != selected
+
+
+def test_daily_random_character_uses_tz_environment_variable(
+    tmp_path: Path, monkeypatch
+):
+    """每日随机角色的日期边界应优先使用 TZ 环境变量。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config = Config(
+        daily_comic={
+            "random_daily_comic_character": True,
+            "comic_characters": [{"name": "角色甲", "enable": True}],
+        }
+    )
+    config_manager = config_manager_class(config)
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+
+    original_datetime = config_manager_class.get_selected_comic_character.__globals__[
+        "datetime"
+    ]
+    observed_timezones = []
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls, timezone=None):
+            observed_timezones.append(timezone)
+            return original_datetime(2026, 8, 12, 0, 30, tzinfo=timezone)
+
+    config_manager_class.get_selected_comic_character.__globals__["datetime"] = (
+        FixedDateTime
+    )
+    try:
+        config_manager.get_selected_comic_character()
+    finally:
+        config_manager_class.get_selected_comic_character.__globals__["datetime"] = (
+            original_datetime
+        )
+
+    assert observed_timezones[0].key == "Pacific/Kiritimati"
+
+
+def test_reference_image_migration_keeps_old_config_when_backup_fails(tmp_path: Path):
+    """备份失败时不得清空旧参考图配置。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config = Config(daily_comic={})
+    config_manager = config_manager_class(config)
+    config["daily_comic"]["drawing_reference_image"] = "https://example.com/a.png"
+    config_manager._write_comic_config_backup = Mock(return_value=False)
+
+    config_manager._migrate_daily_comic_characters()
+
+    assert (
+        config["daily_comic"]["drawing_reference_image"] == "https://example.com/a.png"
+    )
+    config.save_config.assert_not_called()
 
 
 def test_comic_is_skipped_without_valid_topics():

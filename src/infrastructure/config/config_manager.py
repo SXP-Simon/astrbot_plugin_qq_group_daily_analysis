@@ -4,11 +4,12 @@
 """
 
 import json
+import os
 import random
 import shutil
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
@@ -50,8 +51,12 @@ class ConfigManager:
         if isinstance(old_references, str):
             # 早期版本允许 URL 或任意本地路径，原生文件控件不能安全地继续使用它们。
             backup_data = {"drawing_reference_image": old_references}
+            if not self._write_comic_config_backup(backup_data):
+                logger.warning(
+                    "旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。"
+                )
+                return
             daily_comic["drawing_reference_image"] = []
-            self._write_comic_config_backup(backup_data)
             self.config.save_config()
             logger.info(
                 "已备份并清除不受支持的旧版漫画参考图配置，请在 WebUI 重新选择图片。"
@@ -84,7 +89,9 @@ class ConfigManager:
             "use_plugin_specific_persona": self.get_use_plugin_specific_persona(),
             "plugin_specific_persona_id": specific_persona_id,
         }
-        self._write_comic_config_backup(backup_data)
+        if not self._write_comic_config_backup(backup_data):
+            logger.warning("旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。")
+            return
         daily_comic["comic_characters"] = [
             {
                 "__template_key": "character",
@@ -101,11 +108,14 @@ class ConfigManager:
             "已将旧版漫画参考图迁移到“默认角色方案”，原始配置已备份到插件数据目录。"
         )
 
-    def _write_comic_config_backup(self, data: dict) -> None:
+    def _write_comic_config_backup(self, data: dict) -> bool:
         """写入漫画配置迁移备份。
 
         Args:
             data: 需要保留的旧版漫画相关配置。
+
+        Returns:
+            备份写入是否成功。
         """
         try:
             backup_dir = StarTools.get_data_dir(PLUGIN_NAME) / "config_backups"
@@ -123,8 +133,10 @@ class ConfigManager:
                 ),
                 encoding="utf-8",
             )
+            return True
         except OSError as exc:
             logger.warning(f"保存漫画配置迁移备份失败: {exc}")
+            return False
 
     def _copy_legacy_comic_reference_images(self, references: list[str]) -> list[str]:
         """复制旧参考图到角色模板对应的原生上传目录。
@@ -1064,7 +1076,7 @@ class ConfigManager:
     def get_selected_comic_character(self) -> dict | None:
         """获取本次漫画应使用的角色方案。
 
-        开启随机后，同一上海自然日内固定选择同一个已启用方案；关闭时始终使用
+        开启随机后，同一运行环境自然日内固定选择同一个已启用方案；关闭时始终使用
         第一个已启用方案。角色列表为空时返回 None，调用方将回退到既有文生图行为。
 
         Returns:
@@ -1088,7 +1100,19 @@ class ConfigManager:
         ):
             return enabled_characters[0]
 
-        today = datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat()
+        timezone_name = os.environ.get("TZ", "").strip()
+        if timezone_name:
+            try:
+                current_time = datetime.now(ZoneInfo(timezone_name))
+            except ZoneInfoNotFoundError:
+                logger.warning(
+                    f"环境变量 TZ={timezone_name!r} 不是有效 IANA 时区，"
+                    "每日漫画角色将使用系统本地时区。"
+                )
+                current_time = datetime.now().astimezone()
+        else:
+            current_time = datetime.now().astimezone()
+        today = current_time.date().isoformat()
         state_path = self._get_comic_character_state_path()
         state = self._read_comic_character_state(state_path)
         selected_character = state.get("selected_character")
