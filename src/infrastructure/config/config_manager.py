@@ -37,6 +37,7 @@ class ConfigManager:
     def __init__(self, config: AstrBotConfig):
         self.config = config
         self._migrate_daily_comic_characters()
+        self._migrate_daily_comic_character_prompts()
         self._protect_upgrade_data()
 
     def _protect_upgrade_data(self) -> None:
@@ -100,7 +101,7 @@ class ConfigManager:
 
     @staticmethod
     def _get_schema_fingerprint(plugin_root: Path) -> str:
-        """计算配置结构指纹，忽略描述和收纳等纯界面字段。"""
+        """计算配置结构指纹，忽略描述等纯界面字段。"""
         try:
             schema = json.loads(
                 (plugin_root / "_conf_schema.json").read_text(encoding="utf-8-sig")
@@ -337,6 +338,7 @@ class ConfigManager:
                 "enable": True,
                 "persona_id": specific_persona_id,
                 "reference_images": migrated_references,
+                "storyboard_prompt": self.get_comic_storyboard_prompt(),
             }
         ]
         # 已迁移的数据不再保留在兼容字段，避免用户主动清空角色方案后被重复迁移。
@@ -345,6 +347,36 @@ class ConfigManager:
         logger.info(
             "已将旧版漫画参考图迁移到“默认角色方案”，原始配置已备份到插件数据目录。"
         )
+
+    def _migrate_daily_comic_character_prompts(self) -> None:
+        """将旧版全局分镜提示词复制到既有角色方案。"""
+        state_path = (
+            StarTools.get_data_dir(PLUGIN_NAME)
+            / "comic_character_prompt_migration.json"
+        )
+        if state_path.exists():
+            return
+
+        daily_comic = self._get_group("daily_comic")
+        characters = daily_comic.get("comic_characters", [])
+        default_prompt = self.get_comic_storyboard_prompt()
+        modified = False
+        if isinstance(characters, list):
+            for character in characters:
+                if not isinstance(character, dict):
+                    continue
+                if not str(character.get("storyboard_prompt", "")).strip():
+                    character["storyboard_prompt"] = default_prompt
+                    modified = True
+
+        try:
+            if modified:
+                self.config.save_config()
+                logger.info("已将默认漫画场景分析提示词迁移到既有角色方案。")
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps({"completed": True}), encoding="utf-8")
+        except OSError as exc:
+            logger.warning(f"迁移漫画角色场景提示词失败，将在下次重载时重试: {exc}")
 
     def _write_comic_config_backup(self, data: dict) -> bool:
         """写入漫画配置迁移备份。
@@ -1384,6 +1416,21 @@ class ConfigManager:
         if not isinstance(character, dict):
             return ""
         return str(character.get("persona_id", "")).strip()
+
+    def get_comic_character_storyboard_prompt(self, character: dict | None) -> str:
+        """获取角色专属分镜提示词，未配置时回退全局默认模板。
+
+        Args:
+            character: 当前选中的角色方案。
+
+        Returns:
+            本次漫画分镜应使用的提示词模板。
+        """
+        if isinstance(character, dict):
+            prompt = str(character.get("storyboard_prompt", "")).strip()
+            if prompt:
+                return prompt
+        return self.get_comic_storyboard_prompt()
 
     @staticmethod
     def _get_comic_character_state_path() -> Path:

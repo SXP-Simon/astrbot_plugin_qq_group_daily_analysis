@@ -22,8 +22,10 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
     def get_max_count(self) -> int:
         return self.config_manager.get_max_topics()
 
-    def build_prompt(self, data: list[dict]) -> str:
-        prompt_template = self.config_manager.get_comic_storyboard_prompt()
+    def build_prompt(self, data: list[dict], prompt_template: str | None = None) -> str:
+        prompt_template = (
+            prompt_template or self.config_manager.get_comic_storyboard_prompt()
+        )
         if not prompt_template:
             # 默认的 Prompt
             prompt_template = (
@@ -69,6 +71,12 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         except Exception as e:
             logger.warning(f"漫画分镜提示词格式化失败，使用默认格式: {e}")
             return f"请从以下群聊话题中提取并生成包含 scene 的 JSON：\n{chat_content}"
+
+    def build_prompt_with_override(
+        self, data: list[dict], prompt_override: str | None
+    ) -> str:
+        """使用角色专属模板构建漫画分镜提示词。"""
+        return self.build_prompt(data, prompt_override)
 
     def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         del max_count
@@ -130,6 +138,7 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         umo: str | None = None,
         session_id: str | None = None,
         persona_id: str | None = None,
+        prompt_template: str | None = None,
     ) -> tuple[list[dict], TokenUsage]:
         """执行分析，返回 storyboards 和 token 消耗。
 
@@ -138,11 +147,14 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
             umo: 群聊统一消息来源标识。
             session_id: 调试会话标识。
             persona_id: 漫画分镜专用人格 ID。
+            prompt_template: 角色专属的漫画分镜提示词模板。
 
         Returns:
             分镜列表和 Token 使用统计。
         """
-        storyboards, usage = await self.analyze(topics, umo, session_id, persona_id)
+        storyboards, usage = await self.analyze(
+            topics, umo, session_id, persona_id, prompt_template
+        )
 
         if storyboards:
             if isinstance(storyboards, list):
