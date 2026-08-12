@@ -1285,12 +1285,29 @@ class ConfigManager:
         if not isinstance(providers, list):
             return []
 
-        valid_protocols = {"images", "chat", "grok", "gemini"}
+        template_protocols = {
+            "google": "google",
+            "openai": "chat",
+            "zai": "chat",
+            "grok2api": "chat",
+            "agnes_ai": "agnes_ai",
+            "xai": "xai",
+            "minimax": "minimax",
+            "stepfun": "stepfun",
+            "openai_images": "images",
+            "doubao": "doubao",
+            "sensenova": "sensenova",
+            "dashscope": "dashscope",
+        }
+        valid_protocols = {"images", "chat", "grok", "gemini", *template_protocols}
         candidates = []
         for index, provider in enumerate(providers):
             if not isinstance(provider, dict) or not provider.get("enable", True):
                 continue
-            protocol = str(provider.get("api_protocol", "images")).strip()
+            template_key = str(provider.get("__template_key", "")).strip()
+            protocol = template_protocols.get(
+                template_key, str(provider.get("api_protocol", "images")).strip()
+            )
             api_key = str(provider.get("api_key", "")).strip()
             if protocol not in valid_protocols or not api_key:
                 logger.warning("跳过索引 %s 处无效的漫画绘图供应商配置", index)

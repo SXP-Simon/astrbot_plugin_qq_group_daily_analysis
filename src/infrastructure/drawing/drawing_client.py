@@ -134,10 +134,24 @@ class DrawingClient:
                     result = await self._call_images_api(prompt, images_data, provider)
                 elif api_protocol == "chat":
                     result = await self._call_chat_api(prompt, images_data, provider)
+                elif api_protocol == "google":
+                    result = await self._call_google_api(prompt, images_data, provider)
                 elif api_protocol == "grok":
                     result = await self._call_grok_api(prompt, images_data, provider)
                 elif api_protocol == "gemini":
                     result = await self._call_gemini_api(prompt, images_data, provider)
+                elif api_protocol in {
+                    "agnes_ai",
+                    "xai",
+                    "minimax",
+                    "doubao",
+                    "sensenova",
+                    "dashscope",
+                    "stepfun",
+                }:
+                    result = await self._call_preset_api(
+                        prompt, images_data, provider, api_protocol
+                    )
                 else:
                     raise ValueError(f"不支持的绘图 API 协议: {api_protocol}")
 
@@ -196,6 +210,327 @@ class DrawingClient:
             return value
         getter = getattr(self.config_manager, f"get_drawing_{name}")
         return getter()
+
+    async def _call_google_api(
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+        provider: dict,
+    ) -> bytes | None:
+        """调用 Google Gemini generateContent 官方接口。"""
+        api_base = str(self._get_provider_value("api_url", provider)).rstrip("/")
+        model = self._get_provider_value("model", provider)
+        if ":generateContent" in api_base:
+            target_url = api_base
+        else:
+            if not api_base:
+                api_base = "https://generativelanguage.googleapis.com/v1beta"
+            if not api_base.endswith(("/v1", "/v1beta")):
+                api_base = f"{api_base}/v1beta"
+            target_url = f"{api_base}/models/{model}:generateContent"
+
+        image_size = str(self._get_provider_value("image_size", provider)).upper()
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        for image_bytes, mime in (images_data or [])[:14]:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": mime if mime.startswith("image/") else "image/png",
+                        "data": base64.b64encode(image_bytes).decode("ascii"),
+                    }
+                }
+            )
+        payload = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                "imageConfig": {
+                    "image_size": image_size
+                    if image_size in {"1K", "2K", "4K"}
+                    else "2K",
+                    "aspect_ratio": self._get_provider_value("aspect_ratio", provider),
+                },
+            },
+        }
+        return await self._post_json_for_image(
+            target_url,
+            {"x-goog-api-key": self._get_provider_value("api_key", provider)},
+            payload,
+            self._get_provider_value("timeout", provider),
+            "Google Gemini",
+        )
+
+    async def _call_preset_api(
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+        provider: dict,
+        provider_type: str,
+    ) -> bytes | None:
+        """调用使用专有请求格式的绘图供应商预设。"""
+        api_key = self._get_provider_value("api_key", provider)
+        api_base = str(self._get_provider_value("api_url", provider)).rstrip("/")
+        model = self._get_provider_value("model", provider)
+        timeout = self._get_provider_value("timeout", provider)
+        image_size = str(self._get_provider_value("image_size", provider))
+        aspect_ratio = self._get_provider_value("aspect_ratio", provider)
+        output_format = self._get_provider_value("output_format", provider)
+        data_uris = [
+            f"data:{mime if mime.startswith('image/') else 'image/png'};base64,"
+            f"{base64.b64encode(image_bytes).decode('ascii')}"
+            for image_bytes, mime in images_data or []
+        ]
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        if provider_type == "agnes_ai":
+            base = api_base or "https://apihub.agnes-ai.com"
+            target_url = (
+                f"{base}/images/generations"
+                if "/v1" in base
+                else f"{base}/v1/images/generations"
+            )
+            payload: dict[str, Any] = {
+                "model": model,
+                "prompt": prompt,
+                "size": self._resolve_size(image_size),
+                "extra_body": {"response_format": output_format or "url"},
+            }
+            if data_uris:
+                payload["extra_body"]["image"] = data_uris
+            provider_name = "Agnes AI"
+        elif provider_type == "xai":
+            base = api_base or "https://api.x.ai"
+            base = base if base.endswith("/v1") else f"{base}/v1"
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "n": 1,
+                "resolution": image_size.lower()
+                if image_size.upper() in {"1K", "2K"}
+                else "2k",
+                "response_format": output_format or "url",
+            }
+            target_url = f"{base}/images/generations"
+            if data_uris:
+                target_url = f"{base}/images/edits"
+                image_items = [
+                    {"type": "image_url", "url": data_uri} for data_uri in data_uris[:5]
+                ]
+                payload["image" if len(image_items) == 1 else "images"] = (
+                    image_items[0] if len(image_items) == 1 else image_items
+                )
+            payload["aspect_ratio"] = aspect_ratio
+            provider_name = "xAI"
+        elif provider_type == "minimax":
+            base = (api_base or "https://api.minimaxi.com").removesuffix("/v1")
+            target_url = f"{base}/v1/image_generation"
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "response_format": "url",
+                "n": 1,
+                "aspect_ratio": aspect_ratio,
+            }
+            if data_uris:
+                payload["subject_reference"] = [
+                    {"type": "character", "image_file": data_uri}
+                    for data_uri in data_uris[:9]
+                ]
+            provider_name = "MiniMax"
+        elif provider_type == "doubao":
+            base = api_base or "https://ark.cn-beijing.volces.com"
+            endpoint = (
+                "/api/plan/v3/images/generations"
+                if provider.get("endpoint_mode") == "agent_plan"
+                else "/api/v3/images/generations"
+            )
+            target_url = f"{base}{endpoint}"
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "response_format": "url",
+                "output_format": output_format or "png",
+                "watermark": False,
+                "size": image_size.upper()
+                if image_size.upper() in {"1K", "2K", "3K", "4K"}
+                else self._resolve_size(image_size),
+            }
+            if data_uris:
+                payload["image"] = (
+                    data_uris[0] if len(data_uris) == 1 else data_uris[:14]
+                )
+            provider_name = "豆包"
+        elif provider_type == "sensenova":
+            base = api_base or "https://token.sensenova.cn"
+            target_url = (
+                f"{base}/images/generations"
+                if base.endswith("/v1")
+                else f"{base}/v1/images/generations"
+            )
+            if data_uris:
+                logger.info(
+                    "[Comic] SenseNova U1 Fast 不支持参考图，已忽略 %d 张。",
+                    len(data_uris),
+                )
+            size_map = {
+                "1:1": "2048x2048",
+                "16:9": "2752x1536",
+                "9:16": "1536x2752",
+                "4:3": "2368x1760",
+                "3:4": "1760x2368",
+            }
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "size": size_map.get(aspect_ratio, "2752x1536"),
+                "n": 1,
+            }
+            provider_name = "SenseNova"
+        elif provider_type == "dashscope":
+            endpoint_mode = str(provider.get("endpoint_mode", "dashscope"))
+            base = api_base or (
+                "https://token-plan.cn-beijing.maas.aliyuncs.com"
+                if endpoint_mode == "token_plan"
+                else "https://dashscope.aliyuncs.com"
+            )
+            target_url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
+            content: list[dict[str, str]] = [{"text": prompt}]
+            content.extend({"image": data_uri} for data_uri in data_uris[:9])
+            payload = {
+                "model": model,
+                "input": {"messages": [{"role": "user", "content": content}]},
+                "parameters": {
+                    "size": self._resolve_dashscope_size(image_size, aspect_ratio),
+                    "n": 1,
+                    "watermark": False,
+                },
+            }
+            provider_name = "DashScope"
+        elif provider_type == "stepfun":
+            return await self._call_stepfun_api(
+                prompt, images_data, provider, api_key, model, timeout
+            )
+        else:
+            raise ValueError(f"不支持的绘图供应商预设: {provider_type}")
+
+        return await self._post_json_for_image(
+            target_url, headers, payload, timeout, provider_name
+        )
+
+    async def _call_stepfun_api(
+        self,
+        prompt: str,
+        images_data: list[tuple[bytes, str]] | None,
+        provider: dict,
+        api_key: str,
+        model: str,
+        timeout: int | float,
+    ) -> bytes | None:
+        """调用阶跃星辰图片接口，图生图使用官方 multipart 字段。"""
+        target_url = self._build_target_url(
+            self._get_provider_value("api_url", provider), "images"
+        )
+        headers = {"Authorization": f"Bearer {api_key}"}
+        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
+
+        if images_data:
+            target_url = target_url.replace("/generations", "/edits")
+            image_bytes, mime = images_data[0]
+            extension = mime.split("/")[-1] if "/" in mime else "png"
+            form_data = {
+                "model": model,
+                "prompt": prompt,
+                "response_format": "url",
+            }
+            files = {
+                "image": (f"reference.{extension}", image_bytes, mime),
+            }
+            logger.info(
+                f"[Comic] 发起阶跃星辰图生图请求 -> {self._sanitize_url(target_url)}"
+            )
+            async with httpx.AsyncClient(timeout=api_timeout) as client:
+                response = await client.post(
+                    target_url, headers=headers, data=form_data, files=files
+                )
+        else:
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "size": self._resolve_size(
+                    self._get_provider_value("image_size", provider)
+                ),
+                "response_format": "url",
+            }
+            logger.info(
+                f"[Comic] 发起阶跃星辰文生图请求 -> {self._sanitize_url(target_url)}"
+            )
+            async with httpx.AsyncClient(timeout=api_timeout) as client:
+                response = await client.post(target_url, headers=headers, json=payload)
+
+        if not 200 <= response.status_code < 300:
+            message = response.text[:500] if response.text else "(空响应)"
+            raise Exception(
+                f"阶跃星辰 API 请求失败 [HTTP {response.status_code}]: {message}"
+            )
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise Exception("阶跃星辰 API 未返回合法 JSON") from exc
+        image = await self._extract_image_from_response(data)
+        if image:
+            return image
+        raise Exception(f"阶跃星辰 API 返回格式异常: {self._summarize_response(data)}")
+
+    async def _post_json_for_image(
+        self,
+        target_url: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+        timeout: int | float,
+        provider_name: str,
+    ) -> bytes | None:
+        """发送 JSON 图片生成请求，并从响应中提取图片。"""
+        headers["Content-Type"] = "application/json"
+        api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
+        logger.info(
+            f"[Comic] 发起 {provider_name} 图片请求 -> {self._sanitize_url(target_url)}"
+        )
+        async with httpx.AsyncClient(timeout=api_timeout) as client:
+            response = await client.post(target_url, headers=headers, json=payload)
+        if not 200 <= response.status_code < 300:
+            message = response.text[:500] if response.text else "(空响应)"
+            raise Exception(
+                f"{provider_name} API 请求失败 [HTTP {response.status_code}]: {message}"
+            )
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise Exception(f"{provider_name} API 未返回合法 JSON") from exc
+        image = await self._extract_image_from_response(data)
+        if image:
+            return image
+        raise Exception(
+            f"{provider_name} API 返回格式异常: {self._summarize_response(data)}"
+        )
+
+    def _resolve_dashscope_size(self, image_size: str, aspect_ratio: str) -> str:
+        """将漫画尺寸和比例换算为 DashScope 的 size 格式。"""
+        long_edge = {"1K": 1280, "2K": 2048, "4K": 4096}.get(image_size.upper(), 2048)
+        try:
+            width_ratio, height_ratio = (
+                int(value) for value in aspect_ratio.split(":", 1)
+            )
+            if width_ratio <= 0 or height_ratio <= 0:
+                raise ValueError
+        except (AttributeError, TypeError, ValueError):
+            width_ratio, height_ratio = 1, 1
+        if width_ratio >= height_ratio:
+            width = long_edge
+            height = round(long_edge * height_ratio / width_ratio / 16) * 16
+        else:
+            height = long_edge
+            width = round(long_edge * width_ratio / height_ratio / 16) * 16
+        return f"{max(512, width)}*{max(512, height)}"
 
     async def _call_images_api(
         self,
