@@ -62,7 +62,7 @@ async def call_preset_api(
         payload: dict[str, Any] = {
             "model": model,
             "prompt": prompt,
-            "size": context.resolve_size(image_size),
+            "size": context.resolve_size(image_size, aspect_ratio),
             "extra_body": {"response_format": output_format or "url"},
         }
         if data_uris:
@@ -127,7 +127,9 @@ async def call_preset_api(
         if "x" in resolved_doubao_size.lower() or "×" in resolved_doubao_size:
             resolved_doubao_size = resolved_doubao_size.lower().replace("×", "x")
         elif resolved_doubao_size.upper() not in {"1K", "2K", "3K", "4K"}:
-            resolved_doubao_size = context.resolve_size(resolved_doubao_size)
+            resolved_doubao_size = context.resolve_size(
+                resolved_doubao_size, aspect_ratio
+            )
         is_seedream_5_pro = (
             str(provider.get("model_capability") or "").lower() == "seedream_5_pro"
             or "seedream-5.0-pro" in model.lower()
@@ -339,7 +341,8 @@ async def call_stepfun_api(
             "model": model,
             "prompt": prompt,
             "size": context.resolve_size(
-                context.get_provider_value("image_size", provider)
+                context.get_provider_value("image_size", provider),
+                context.get_provider_value("aspect_ratio", provider),
             ),
             "response_format": "url",
         }

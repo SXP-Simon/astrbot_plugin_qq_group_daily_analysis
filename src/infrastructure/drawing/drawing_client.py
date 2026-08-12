@@ -24,6 +24,22 @@ from .drawing_image_response import (
 __all__ = ["DrawingClient", "ImageDownloadFailedError"]
 
 
+# 供应商条目是唯一的连接配置来源。这里的默认值只用于兼容手工编辑的缺失字段，
+# 不再读取配置面板中已移除的外层绘图参数。
+DRAWING_PROVIDER_DEFAULTS: dict[str, Any] = {
+    "api_url": "",
+    "api_key": "",
+    "model": "gpt-image-2",
+    "api_protocol": "images",
+    "image_size": "1024x1024",
+    "aspect_ratio": "16:9",
+    "image_quality": "high",
+    "background": "auto",
+    "output_format": "png",
+    "timeout": 600,
+}
+
+
 class DrawingClient:
     """协调绘图供应商选择、重试、请求服务和图片响应处理。
 
@@ -109,7 +125,12 @@ class DrawingClient:
         Returns:
             图片二进制数据与最后一次错误信息组成的元组。
         """
-        provider_configs = self.config_manager.get_drawing_provider_configs() or [{}]
+        provider_configs = self.config_manager.get_drawing_provider_configs()
+        if not provider_configs:
+            message = "未配置有效的漫画绘图供应商，请在绘图供应商配置表中添加条目。"
+            logger.warning("[Comic] %s", message)
+            return None, message
+
         last_error_msg = None
         for provider in provider_configs:
             result, last_error_msg = await self._generate_image_with_provider(
@@ -117,12 +138,11 @@ class DrawingClient:
             )
             if result:
                 return result, None
-            if provider_configs != [{}]:
-                provider_name = str(provider.get("name", "unnamed")).strip()
-                logger.warning(
-                    "[Comic] 绘图供应商 %s 失败，尝试下一个候选。",
-                    provider_name or "unnamed",
-                )
+            provider_name = str(provider.get("name", "unnamed")).strip()
+            logger.warning(
+                "[Comic] 绘图供应商 %s 失败，尝试下一个候选。",
+                provider_name or "unnamed",
+            )
         return None, last_error_msg
 
     async def _generate_image_with_provider(
@@ -219,12 +239,15 @@ class DrawingClient:
         return None, last_error_msg
 
     def _get_provider_value(self, name: str, provider: dict) -> Any:
-        """读取供应商覆盖配置，同时保留旧版全局默认值。"""
+        """读取供应商条目字段，并为缺失字段提供安全默认值。
+
+        绘图连接参数只允许来自当前条目，避免删除面板外层字段后仍出现不可见的
+        回退来源。模板正常保存时会提供完整字段，默认值仅保护旧数据或手工配置。
+        """
         value = provider.get(name)
         if value not in (None, ""):
             return value
-        getter = getattr(self.config_manager, f"get_drawing_{name}")
-        return getter()
+        return DRAWING_PROVIDER_DEFAULTS.get(name, "")
 
     def _get_request_proxy(self, provider: dict | None = None) -> str | None:
         """获取当前绘图请求的代理，供应商配置优先于全局配置。"""
@@ -235,10 +258,10 @@ class DrawingClient:
         global_proxy = getter() if callable(getter) else ""
         return str(global_proxy).strip() or None
 
-    def _resolve_size(self, size_or_ratio: str) -> str:
-        """将比例或尺寸别名解析为 API 支持的 WxH 格式。"""
+    def _resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
+        """按当前供应商条目的比例解析 API 支持的 WxH 尺寸。"""
         size = (size_or_ratio or "").strip().lower()
-        aspect_ratio = self.config_manager.get_drawing_aspect_ratio().strip().lower()
+        aspect_ratio = (aspect_ratio or "").strip().lower()
         if not aspect_ratio:
             aspect_ratio = "16:9"
         size_aliases = {"1k": 1024, "2k": 2560, "4k": 3840}

@@ -39,8 +39,8 @@ async def call_images_api(
     }
 
     raw_size = context.get_provider_value("image_size", provider)
-    resolved_size = context.resolve_size(raw_size)
     ar = context.get_provider_value("aspect_ratio", provider)
+    resolved_size = context.resolve_size(raw_size, ar)
     output_format = context.get_provider_value("output_format", provider)
 
     payload: dict[str, Any] = {
