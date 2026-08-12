@@ -115,6 +115,7 @@ def test_drawing_schema_has_a_single_provider_configuration_entry():
         "drawing_image_quality",
         "drawing_background",
         "drawing_output_format",
+        "drawing_timeout",
     }.isdisjoint(comic_items)
 
 

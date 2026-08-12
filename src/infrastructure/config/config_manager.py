@@ -1351,9 +1351,6 @@ class ConfigManager:
         """获取漫画生图 API 的全局代理地址。"""
         return str(self._get_group("daily_comic").get("drawing_proxy", "")).strip()
 
-    def get_drawing_timeout(self) -> int:
-        return int(self._get_group("daily_comic").get("drawing_timeout", 600))
-
     def get_enable_comic_album_upload(self) -> bool:
         group = self._get_group("qq_group_upload")
         return bool(group.get("enable_comic_album_upload", False))
