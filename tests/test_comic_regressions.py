@@ -1,11 +1,16 @@
 import ast
 import asyncio
+import hashlib
 import json
 import mimetypes
+import re
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
+
+from src.infrastructure.reporting.templates import HTMLTemplates
 
 
 def load_main_method(name: str):
@@ -123,12 +128,21 @@ def load_config_manager_class(plugin_data_dir: Path):
     required_names = {
         "__init__",
         "_get_group",
+        "_get_plugin_root",
+        "_get_plugin_version",
+        "_get_schema_fingerprint",
         "_migrate_daily_comic_characters",
+        "_protect_upgrade_data",
+        "_protect_custom_t2i_templates",
+        "_read_upgrade_protection_state",
+        "_save_upgrade_protection_state",
+        "_write_upgrade_config_backup",
         "_write_comic_config_backup",
         "_copy_legacy_comic_reference_images",
         "get_use_plugin_specific_persona",
         "get_plugin_specific_persona_id",
         "get_drawing_reference_image",
+        "get_custom_report_template_dir",
         "get_selected_comic_character",
         "get_comic_character_persona_id",
         "_get_comic_character_state_path",
@@ -154,14 +168,17 @@ def load_config_manager_class(plugin_data_dir: Path):
         "AstrBotConfig": object,
         "StarTools": SimpleNamespace(get_data_dir=Mock(return_value=plugin_data_dir)),
         "PLUGIN_NAME": "test_plugin",
+        "__file__": str(config_path),
         "Path": Path,
+        "hashlib": hashlib,
         "os": __import__("os"),
         "datetime": __import__("datetime").datetime,
         "ZoneInfo": __import__("zoneinfo").ZoneInfo,
         "ZoneInfoNotFoundError": ZoneInfoNotFoundError,
         "json": json,
         "random": __import__("random"),
-        "shutil": __import__("shutil"),
+        "re": re,
+        "shutil": shutil,
         "logger": Mock(),
     }
     exec(compile(isolated_module, str(config_path), "exec"), namespace)
@@ -390,6 +407,160 @@ def test_reference_image_migration_keeps_old_config_when_backup_fails(tmp_path: 
         config["daily_comic"]["drawing_reference_image"] == "https://example.com/a.png"
     )
     config.save_config.assert_not_called()
+
+
+def test_upgrade_config_backup_requires_version_and_schema_change(tmp_path: Path):
+    """仅版本变更不备份，配置结构变更时备份上一次快照。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    plugin_root = tmp_path / "plugin"
+    plugin_root.mkdir()
+    metadata_path = plugin_root / "metadata.yaml"
+    schema_path = plugin_root / "_conf_schema.json"
+    metadata_path.write_text("version: v1.0.0\n", encoding="utf-8")
+    schema_path.write_text(
+        json.dumps(
+            {
+                "basic": {
+                    "type": "object",
+                    "items": {"old": {"type": "int", "default": 1}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager_class(Config(basic={"old": 7}))
+    metadata_path.write_text("version: v1.0.1\n", encoding="utf-8")
+    config_manager_class(Config(basic={"old": 7}))
+    backup_dir = tmp_path / "config_backups"
+    assert not list(backup_dir.glob("plugin_config_*.json"))
+
+    metadata_path.write_text("version: v1.1.0\n", encoding="utf-8")
+    schema_path.write_text(
+        json.dumps(
+            {
+                "basic": {
+                    "type": "object",
+                    "items": {"new": {"type": "int", "default": 2}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_manager_class(Config(basic={"new": 2}))
+
+    backups = list(backup_dir.glob("plugin_config_v1.0.1_*.json"))
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text(encoding="utf-8"))["config"] == {
+        "basic": {"old": 7}
+    }
+
+
+def test_upgrade_config_backups_keep_only_ten_newest(tmp_path: Path):
+    """插件配置备份超过十份时应清理最早文件。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    backup_dir = tmp_path / "config_backups"
+    backup_dir.mkdir()
+    for index in range(10):
+        backup_path = backup_dir / f"plugin_config_v1.0.0_20260812_00000{index}.json"
+        backup_path.write_text("{}", encoding="utf-8")
+
+    config_manager = object.__new__(config_manager_class)
+    assert config_manager._write_upgrade_config_backup({"basic": {}}, "v1.0.1")
+
+    backups = sorted(backup_dir.glob("plugin_config_*.json"))
+    assert len(backups) == 10
+    assert not (backup_dir / "plugin_config_v1.0.0_20260812_000000.json").exists()
+
+
+def test_custom_t2i_template_is_copied_after_user_edit(tmp_path: Path):
+    """模板哈希变化时应保留用户修改的副本。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    plugin_root = tmp_path / "plugin"
+    template_path = (
+        plugin_root
+        / "src"
+        / "infrastructure"
+        / "reporting"
+        / "templates"
+        / "simple"
+        / "image_template.html"
+    )
+    template_path.parent.mkdir(parents=True)
+    template_path.write_text("官方模板", encoding="utf-8")
+    (plugin_root / "metadata.yaml").write_text("version: v1.0.0\n", encoding="utf-8")
+    (plugin_root / "_conf_schema.json").write_text("{}", encoding="utf-8")
+    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager_class(Config())
+    template_path.write_text("用户修改模板", encoding="utf-8")
+    config_manager_class(Config())
+
+    protected_template = (
+        tmp_path
+        / "custom_t2i_templates"
+        / "reporting_templates"
+        / "simple"
+        / "image_template.html"
+    )
+    assert protected_template.read_text(encoding="utf-8") == "用户修改模板"
+
+
+def test_standalone_t2i_template_is_copied_on_first_start(tmp_path: Path):
+    """插件目录中的独立 T2I 模板首次启动即应归档。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+    plugin_root = tmp_path / "plugin"
+    standalone_template = plugin_root / "data" / "t2i_templates" / "custom.html"
+    standalone_template.parent.mkdir(parents=True)
+    standalone_template.write_text("独立自定义模板", encoding="utf-8")
+    (plugin_root / "metadata.yaml").write_text("version: v1.0.0\n", encoding="utf-8")
+    (plugin_root / "_conf_schema.json").write_text("{}", encoding="utf-8")
+    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager_class(Config())
+
+    protected_template = (
+        tmp_path / "custom_t2i_templates" / "standalone_templates" / "custom.html"
+    )
+    assert protected_template.read_text(encoding="utf-8") == "独立自定义模板"
+
+
+def test_custom_report_template_overrides_only_matching_file(tmp_path: Path):
+    """用户模板副本应优先加载，缺失文件仍回退到内置模板。"""
+    builtin_template_dir = tmp_path / "builtin" / "simple"
+    custom_template_dir = tmp_path / "custom" / "simple"
+    builtin_template_dir.mkdir(parents=True)
+    custom_template_dir.mkdir(parents=True)
+    (builtin_template_dir / "image_template.html").write_text(
+        "内置图片模板", encoding="utf-8"
+    )
+    (builtin_template_dir / "topic_item.html").write_text(
+        "内置话题模板", encoding="utf-8"
+    )
+    (custom_template_dir / "image_template.html").write_text(
+        "用户图片模板", encoding="utf-8"
+    )
+    templates = HTMLTemplates(
+        SimpleNamespace(
+            get_report_template=Mock(return_value="simple"),
+            get_custom_report_template_dir=Mock(return_value=custom_template_dir),
+        )
+    )
+    templates.base_dir = str(tmp_path / "builtin")
+    environment = templates._get_env_sync()
+
+    assert environment.get_template("image_template.html").render() == "用户图片模板"
+    assert environment.get_template("topic_item.html").render() == "内置话题模板"
 
 
 def test_comic_is_skipped_without_valid_topics():

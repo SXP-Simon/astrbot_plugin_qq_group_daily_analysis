@@ -7,7 +7,7 @@ import asyncio
 import os
 import threading
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import ChoiceLoader, Environment, FileSystemLoader, select_autoescape
 
 from ...utils.logger import logger
 
@@ -40,10 +40,24 @@ class HTMLTemplates:
         template_dir = os.path.join(self.base_dir, template_name)
         if not os.path.exists(template_dir):
             logger.warning(f"模板目录不存在: {template_dir}，回退到 scrapbook")
-            template_dir = os.path.join(self.base_dir, "scrapbook")
+            template_name = "scrapbook"
+            template_dir = os.path.join(self.base_dir, template_name)
+
+        get_custom_template_dir = getattr(
+            self.config_manager, "get_custom_report_template_dir", None
+        )
+        custom_template_dir = (
+            get_custom_template_dir(template_name)
+            if callable(get_custom_template_dir)
+            else None
+        )
+        loaders = [FileSystemLoader(template_dir)]
+        if custom_template_dir:
+            # 用户副本排在前面，缺少的子模板仍从当前版本内置模板读取。
+            loaders.insert(0, FileSystemLoader(str(custom_template_dir)))
 
         env = Environment(
-            loader=FileSystemLoader(template_dir),
+            loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml"]),
             trim_blocks=True,
             lstrip_blocks=True,

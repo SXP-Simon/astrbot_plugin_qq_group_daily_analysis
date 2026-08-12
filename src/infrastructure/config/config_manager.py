@@ -3,9 +3,11 @@
 负责处理插件配置
 """
 
+import hashlib
 import json
 import os
 import random
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +37,235 @@ class ConfigManager:
     def __init__(self, config: AstrBotConfig):
         self.config = config
         self._migrate_daily_comic_characters()
+        self._protect_upgrade_data()
+
+    def _protect_upgrade_data(self) -> None:
+        """在插件升级时备份发生结构变更的旧配置，并保护用户修改的模板。"""
+        plugin_root = self._get_plugin_root()
+        current_version = self._get_plugin_version(plugin_root)
+        current_schema_fingerprint = self._get_schema_fingerprint(plugin_root)
+        state_path = (
+            StarTools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
+        )
+        previous_state = self._read_upgrade_protection_state(state_path)
+        previous_version = str(previous_state.get("version", "")).strip()
+        version_changed = bool(previous_version and previous_version != current_version)
+
+        if (
+            version_changed
+            and previous_state.get("schema_fingerprint") != current_schema_fingerprint
+            and isinstance(previous_state.get("config"), dict)
+        ):
+            if not self._write_upgrade_config_backup(
+                previous_state["config"], previous_version
+            ):
+                logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
+                return
+
+        template_hashes = self._protect_custom_t2i_templates(
+            plugin_root,
+            previous_state.get("template_hashes", {}),
+            version_changed,
+            bool(previous_state),
+        )
+        self._save_upgrade_protection_state(
+            state_path,
+            {
+                "version": current_version,
+                "schema_fingerprint": current_schema_fingerprint,
+                "config": dict(self.config),
+                "template_hashes": template_hashes,
+            },
+        )
+
+    @staticmethod
+    def _get_plugin_root() -> Path:
+        """获取插件根目录。"""
+        return Path(__file__).resolve().parents[3]
+
+    @staticmethod
+    def _get_plugin_version(plugin_root: Path) -> str:
+        """从 metadata.yaml 读取当前插件版本。"""
+        try:
+            metadata = (plugin_root / "metadata.yaml").read_text(encoding="utf-8")
+            match = re.search(r"^version:\s*([^\s#]+)", metadata, re.MULTILINE)
+            if match:
+                return match.group(1)
+        except OSError as exc:
+            logger.warning(f"读取插件版本失败，将使用未知版本标识: {exc}")
+        return "unknown"
+
+    @staticmethod
+    def _get_schema_fingerprint(plugin_root: Path) -> str:
+        """计算配置结构指纹，忽略描述和收纳等纯界面字段。"""
+        try:
+            schema = json.loads(
+                (plugin_root / "_conf_schema.json").read_text(encoding="utf-8-sig")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(f"读取插件配置结构失败: {exc}")
+            return ""
+
+        def extract_shape(items: dict) -> dict:
+            shape = {}
+            for key, item in items.items():
+                if not isinstance(item, dict):
+                    continue
+                entry = {"type": item.get("type")}
+                for property_name in ("default", "options", "file_types"):
+                    if property_name in item:
+                        entry[property_name] = item[property_name]
+                if isinstance(item.get("items"), dict):
+                    entry["items"] = extract_shape(item["items"])
+                if isinstance(item.get("templates"), dict):
+                    entry["templates"] = {
+                        template_key: extract_shape(template.get("items", {}))
+                        for template_key, template in item["templates"].items()
+                        if isinstance(template, dict)
+                    }
+                shape[key] = entry
+            return shape
+
+        serialized_shape = json.dumps(
+            extract_shape(schema),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized_shape.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _read_upgrade_protection_state(state_path: Path) -> dict:
+        """读取上一次正常启动记录的升级保护状态。"""
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            return state if isinstance(state, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    @staticmethod
+    def _save_upgrade_protection_state(state_path: Path, state: dict) -> None:
+        """原子保存升级保护状态。"""
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = state_path.with_suffix(".tmp")
+            temporary_path.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            temporary_path.replace(state_path)
+        except OSError as exc:
+            logger.warning(f"保存插件升级保护状态失败: {exc}")
+
+    def _write_upgrade_config_backup(self, config: dict, version: str) -> bool:
+        """保存旧版本配置快照，并最多保留十份。
+
+        Args:
+            config: 上一次正常加载时记录的插件配置快照。
+            version: 该配置快照对应的旧插件版本。
+
+        Returns:
+            备份写入并完成轮换时返回 True，否则返回 False。
+        """
+        try:
+            backup_dir = StarTools.get_data_dir(PLUGIN_NAME) / "config_backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            safe_version = re.sub(r"[^A-Za-z0-9._-]", "_", version) or "unknown"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            backup_path = backup_dir / f"plugin_config_{safe_version}_{timestamp}.json"
+            backup_path.write_text(
+                json.dumps(
+                    {
+                        "backed_up_at": datetime.now().isoformat(),
+                        "plugin_version": version,
+                        "config": config,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            backups = sorted(
+                backup_dir.glob("plugin_config_*.json"),
+                key=lambda path: (path.stat().st_mtime, path.name),
+            )
+            for expired_backup in backups[:-10]:
+                expired_backup.unlink()
+            logger.info(f"检测到插件配置结构更新，已备份旧版配置: {backup_path.name}")
+            return True
+        except OSError as exc:
+            logger.warning(f"备份插件旧配置失败: {exc}")
+            return False
+
+    def _protect_custom_t2i_templates(
+        self,
+        plugin_root: Path,
+        previous_hashes: object,
+        version_changed: bool,
+        has_previous_state: bool,
+    ) -> dict[str, str]:
+        """将本版本内用户改动过的 T2I 模板保存到插件数据目录。
+
+        Args:
+            plugin_root: 当前插件根目录。
+            previous_hashes: 上一次启动记录的官方或用户模板哈希。
+            version_changed: 当前版本是否已发生变化。
+            has_previous_state: 是否已有上一次启动的完整状态。
+
+        Returns:
+            本次启动读取到的模板哈希。
+        """
+        known_hashes = previous_hashes if isinstance(previous_hashes, dict) else {}
+        template_roots = {
+            "reporting_templates": plugin_root
+            / "src/infrastructure/reporting/templates",
+            "standalone_templates": plugin_root / "data/t2i_templates",
+        }
+        current_hashes = {}
+        plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
+        for category, template_root in template_roots.items():
+            if not template_root.is_dir():
+                continue
+            for template_path in template_root.rglob("*.html"):
+                relative_path = template_path.relative_to(template_root)
+                state_key = f"{category}/{relative_path.as_posix()}"
+                try:
+                    content_hash = hashlib.sha256(
+                        template_path.read_bytes()
+                    ).hexdigest()
+                except OSError as exc:
+                    logger.warning(
+                        f"读取 T2I 模板失败，跳过保护: {template_path}: {exc}"
+                    )
+                    continue
+                is_standalone_template = category == "standalone_templates"
+                if (
+                    (not has_previous_state and not is_standalone_template)
+                    or (version_changed and not is_standalone_template)
+                    or known_hashes.get(state_key) == content_hash
+                ):
+                    current_hashes[state_key] = content_hash
+                    continue
+
+                backup_path = plugin_data_dir / "custom_t2i_templates" / state_key
+                try:
+                    backup_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(template_path, backup_path)
+                    current_hashes[state_key] = content_hash
+                    logger.info(f"已保护用户修改的 T2I 模板: {relative_path}")
+                except OSError as exc:
+                    if state_key in known_hashes:
+                        current_hashes[state_key] = known_hashes[state_key]
+                    logger.warning(f"保存用户 T2I 模板失败: {template_path}: {exc}")
+        return current_hashes
+
+    def get_custom_report_template_dir(self, template_name: str) -> Path | None:
+        """获取指定报告模板的用户覆盖目录。"""
+        custom_dir = (
+            StarTools.get_data_dir(PLUGIN_NAME)
+            / "custom_t2i_templates/reporting_templates"
+            / template_name
+        )
+        return custom_dir if custom_dir.is_dir() else None
 
     def _migrate_daily_comic_characters(self) -> None:
         """迁移旧版漫画参考图配置，并保存迁移前备份。
