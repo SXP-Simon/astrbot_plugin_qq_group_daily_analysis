@@ -101,7 +101,7 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
-        # 4. 若配置为外部绘图后端，优先走对应插件（流式/异步，避免网关超时）
+        # 4. 若配置为外部绘图后端，优先走对应插件出图
         backend = self.config_manager.get_drawing_backend()
         if backend in {"general_plugin", "big_banana"}:
             if backend == "general_plugin":
@@ -183,7 +183,6 @@ class ComicApplicationService:
     ) -> bytes | None:
         """通过「通用生图」插件的公共 API 生成漫画。
 
-        通用生图插件内部使用流式/异步轮询，可规避非流式请求撞上游网关超时 (HTTP 504)。
         未安装、未激活、未配置 API 或调用失败时返回 None，由调用方回退内置 DrawingClient。
 
         Returns:
@@ -256,8 +255,7 @@ class ComicApplicationService:
     ) -> bytes | None:
         """通过「大香蕉」插件的绘图管线生成漫画。
 
-        大香蕉支持 Gemini、SiliconFlow、OpenAI 等提供商及流式响应，
-        可规避内置非流式请求撞上游网关超时 (HTTP 504)。
+        大香蕉支持 Gemini、SiliconFlow、OpenAI 等多家提供商。
 
         Returns:
             生成图片的二进制数据；失败时返回 None。

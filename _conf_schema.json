@@ -552,7 +552,7 @@
                 "type": "string",
                 "options": ["builtin", "general_plugin", "big_banana"],
                 "default": "builtin",
-                "hint": "builtin=使用本插件内置绘图客户端（非流式请求，慢模型可能撞上游网关超时）；general_plugin=调用已安装的「通用生图」插件的公共 API（流式+异步任务）；big_banana=调用已安装的「大香蕉」插件的绘图管线（支持 Gemini/SiliconFlow 等及流式响应）。使用外部后端时，需先在对应插件中配置其自身的 API/提供商；未安装、未激活或调用失败时自动回退内置后端。"
+                "hint": "builtin=使用本插件内置绘图客户端；general_plugin=调用已安装的「通用生图」插件的公共 API；big_banana=调用已安装的「大香蕉」插件的绘图管线（支持 Gemini、SiliconFlow 等多家服务）。使用外部后端时，需先在对应插件中配置其自身的 API/提供商；未安装、未激活或调用失败时自动回退内置后端。"
             },
             "drawing_external_fallback": {
                 "description": "外部后端失败时回退内置后端",
