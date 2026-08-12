@@ -3,6 +3,7 @@ import asyncio
 import mimetypes
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 
@@ -90,7 +91,7 @@ def load_comic_service_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
-    namespace = {"Path": Path, "mimetypes": mimetypes, "logger": Mock()}
+    namespace = {"Path": Path, "mimetypes": mimetypes, "logger": Mock(), "Any": Any}
     exec(compile(isolated_module, str(service_path), "exec"), namespace)
     return getattr(namespace["ComicServiceHarness"], name)
 
@@ -342,6 +343,7 @@ def test_big_banana_backend_returns_bytes_on_success():
                 get_drawing_image_size=Mock(return_value="2K"),
             ),
             _map_comic_image_size=Mock(return_value="2K"),
+            _import_big_banana_image_resource=Mock(return_value=fake_image_resource),
         )
 
         result = await generate(
@@ -365,7 +367,7 @@ def test_big_banana_backend_returns_bytes_on_success():
 def test_big_banana_backend_returns_none_on_provider_error():
     """大香蕉提供商返回错误消息时应回退（返回 None）。"""
     generate = load_comic_service_method("_generate_via_big_banana")
-    _install_fake_big_banana_image_resource()
+    fake_image_resource = _install_fake_big_banana_image_resource()
 
     async def scenario():
         pipeline = SimpleNamespace(
@@ -388,6 +390,7 @@ def test_big_banana_backend_returns_none_on_provider_error():
                 get_drawing_image_size=Mock(return_value="1K"),
             ),
             _map_comic_image_size=Mock(return_value="1K"),
+            _import_big_banana_image_resource=Mock(return_value=fake_image_resource),
         )
 
         result = await generate(service, "prompt", None)
@@ -395,6 +398,52 @@ def test_big_banana_backend_returns_none_on_provider_error():
         assert result is None
 
     asyncio.run(scenario())
+
+
+def test_import_big_banana_image_resource_derives_package_from_module():
+    """应从插件类模块路径推导包名导入 ImageResource。"""
+    import sys
+    from types import ModuleType
+
+    loader = load_comic_service_method("_import_big_banana_image_resource")
+
+    fake_image_resource = type("ImageResource", (), {})
+    schemas = ModuleType("data.plugins.astrbot_plugin_big_banana.core.schemas")
+    schemas.ImageResource = fake_image_resource
+    core = ModuleType("data.plugins.astrbot_plugin_big_banana.core")
+    core.schemas = schemas
+    pkg = ModuleType("data.plugins.astrbot_plugin_big_banana")
+    pkg.core = core
+    sys.modules["data.plugins.astrbot_plugin_big_banana"] = pkg
+    sys.modules["data.plugins.astrbot_plugin_big_banana.core"] = core
+    sys.modules["data.plugins.astrbot_plugin_big_banana.core.schemas"] = schemas
+
+    class FakePlugin:
+        pass
+
+    FakePlugin.__module__ = "data.plugins.astrbot_plugin_big_banana.main"
+    try:
+        assert loader(FakePlugin()) is fake_image_resource
+    finally:
+        for name in list(sys.modules):
+            if name.startswith("data.plugins.astrbot_plugin_big_banana"):
+                del sys.modules[name]
+
+
+def test_import_big_banana_image_resource_returns_none_when_unavailable():
+    """无法推导包名且直接导入失败时返回 None。"""
+    import sys
+
+    for name in [
+        n
+        for n in sys.modules
+        if n == "astrbot_plugin_big_banana"
+        or n.startswith("astrbot_plugin_big_banana.")
+    ]:
+        del sys.modules[name]
+
+    loader = load_comic_service_method("_import_big_banana_image_resource")
+    assert loader(SimpleNamespace()) is None
 
 
 def test_generate_comic_prefers_big_banana_backend():

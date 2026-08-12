@@ -260,10 +260,9 @@ class ComicApplicationService:
             logger.warning("[Comic] 「大香蕉」插件未初始化绘图管线，回退内置绘图后端。")
             return None
 
-        try:
-            from astrbot_plugin_big_banana.core.schemas import ImageResource
-        except Exception as exc:
-            logger.warning(f"[Comic] 无法导入「大香蕉」图片资源类型: {exc}")
+        ImageResource = self._import_big_banana_image_resource(plugin)
+        if ImageResource is None:
+            logger.warning("[Comic] 无法导入「大香蕉」图片资源类型，回退内置绘图后端。")
             return None
 
         image_list = None
@@ -311,6 +310,40 @@ class ComicApplicationService:
             logger.warning("[Comic] 「大香蕉」返回的图片为空。")
             return None
         return image_bytes
+
+    @staticmethod
+    def _import_big_banana_image_resource(plugin: Any):
+        """导入「大香蕉」插件的 ImageResource 类型。
+
+        AstrBot 以 ``data.plugins.<插件名>.main`` 形式加载插件，模块名并非
+        ``astrbot_plugin_big_banana``，因此先从插件类的模块路径推导包名导入；
+        推导失败时回退直接导入，兼容 pip 安装或测试环境注入的场景。
+
+        Args:
+            plugin: 已激活的大香蕉插件实例。
+
+        Returns:
+            ImageResource 类型；无法导入时返回 None。
+        """
+        import importlib
+
+        module_name = getattr(type(plugin), "__module__", "") or ""
+        candidate_modules = []
+        if module_name and "." in module_name:
+            candidate_modules.append(
+                module_name.rsplit(".", 1)[0] + ".core.schemas"
+            )
+        candidate_modules.append("astrbot_plugin_big_banana.core.schemas")
+
+        for module_path in candidate_modules:
+            try:
+                schemas_module = importlib.import_module(module_path)
+            except Exception:
+                continue
+            image_resource = getattr(schemas_module, "ImageResource", None)
+            if image_resource is not None:
+                return image_resource
+        return None
 
     @staticmethod
     def _map_comic_image_size(size: str) -> str:
