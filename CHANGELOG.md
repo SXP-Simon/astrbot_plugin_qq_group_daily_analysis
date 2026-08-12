@@ -1,5 +1,10 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.0.2] - ✨ 每日群漫画功能完善，支持通用生图与大香蕉外部绘图后端 (#214)
+
+*   **✨ 外部绘图后端支持**：新增支持[通用生图插件](https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation)和[大香蕉插件](https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana)作为外部绘图后端，提升绘图能力和灵活性。可选切换绘图后端 `drawing_backend`：`builtin`（默认，使用本插件内置绘图客户端）；`general_plugin`（调用 [「通用生图」插件](https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation) 公共 API）；`big_banana`（调用 [「大香蕉」插件](https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana) 绘图管线）。外部后端需在对应插件中配置其自身的 API/提供商。外部后端失败时由 `drawing_external_fallback` 决定是否回退内置后端（默认回退，关闭则直接取消本次漫画）。
+*   **🛠️ 生图**：``'ConfigManager' object has no attribute 'get_drawing_output_format'`` 问题修复
+
 ## [v5.0.1] - ✨ 每日群漫画功能完善，更多的服务商支持，实现配置迁移与保护，T2I 视口兼容
 
 感谢 [piexian/astrbot_plugin_gemini_image_generation](https://cloud.astrbot.app/plugin/piexian/astrbot_plugin_gemini_image_generation)
