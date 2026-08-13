@@ -26,6 +26,31 @@ class RecordingHistoryManager:
         self.calls.append(kwargs)
 
 
+class LegacyRecordingHistoryManager:
+    """模拟 AstrBot 4.26.x 不支持 max_messages 的历史管理器。"""
+
+    def __init__(self):
+        self.calls = []
+
+    async def insert(
+        self,
+        platform_id,
+        user_id,
+        content,
+        sender_id=None,
+        sender_name=None,
+    ):
+        self.calls.append(
+            {
+                "platform_id": platform_id,
+                "user_id": user_id,
+                "content": content,
+                "sender_id": sender_id,
+                "sender_name": sender_name,
+            }
+        )
+
+
 class FakeGroupRegistry:
     def __init__(self):
         self.upsert_calls = 0
@@ -118,6 +143,24 @@ def test_new_qq_official_message_replaces_mentions_before_storage():
     assert "KNOWN_OPENID" not in stored_parts[0]["text"]
     assert "UNKNOWN_OPENID" not in stored_parts[0]["text"]
     assert history_manager.calls[0]["max_messages"] == 10000
+
+
+def test_legacy_history_manager_retries_without_max_messages():
+    """旧版 AstrBot 历史接口不支持上限参数时应自动降级写入。"""
+    history_manager = LegacyRecordingHistoryManager()
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager), FakeGroupRegistry()
+    )
+
+    first_event = FakeOfficialEvent()
+    second_event = FakeOfficialEvent(text="second")
+    second_event.message_obj.message_id = "OFFICIAL-MSG-2"
+
+    assert asyncio.run(service.process_message(first_event)) is True
+    assert asyncio.run(service.process_message(second_event)) is True
+
+    assert len(history_manager.calls) == 2
+    assert all("max_messages" not in call for call in history_manager.calls)
 
 
 def test_qq_official_bot_mention_is_removed_before_storage():
