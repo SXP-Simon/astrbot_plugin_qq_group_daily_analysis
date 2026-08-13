@@ -34,6 +34,9 @@ class MessageProcessingService:
         self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
         self._inflight_event_ids: set[str] = set()
         self._seen_event_ids_limit = 4096
+        # AstrBot 4.26.x 的消息历史接口尚未提供 max_messages 参数。
+        # 首次探测到旧签名后缓存结果，避免每条消息都触发一次失败调用。
+        self._supports_history_max_messages: bool | None = None
 
     async def process_message(self, event: AstrMessageEvent) -> bool:
         """
@@ -99,13 +102,12 @@ class MessageProcessingService:
 
         # 7. 存储到数据库
         try:
-            await self.context.message_history_manager.insert(
+            await self._insert_message_history(
                 platform_id=platform_id,
-                user_id=group_id,
+                group_id=group_id,
                 content=history_content,
                 sender_id=sender_id,
                 sender_name=sender_name,
-                max_messages=_LOCAL_HISTORY_MAX_MESSAGES,
             )
         except BaseException:
             if reserved_event_id:
@@ -135,6 +137,53 @@ class MessageProcessingService:
             f"[{platform_id}] 已缓存群 {group_id} 的消息 (发送者: {sender_name})"
         )
         return True
+
+    async def _insert_message_history(
+        self,
+        platform_id: str,
+        group_id: str,
+        content: dict,
+        sender_id: str,
+        sender_name: str,
+    ) -> None:
+        """兼容不同 AstrBot 版本的消息历史写入接口。
+
+        Args:
+            platform_id: AstrBot 平台实例 ID。
+            group_id: 当前群组 ID。
+            content: 待持久化的标准化消息内容。
+            sender_id: 发送者 ID。
+            sender_name: 发送者展示名称。
+
+        Raises:
+            Exception: 消息历史管理器写入失败时原样抛出。
+        """
+        insert = self.context.message_history_manager.insert
+        insert_kwargs = {
+            "platform_id": platform_id,
+            "user_id": group_id,
+            "content": content,
+            "sender_id": sender_id,
+            "sender_name": sender_name,
+        }
+        if self._supports_history_max_messages is False:
+            await insert(**insert_kwargs)
+            return
+
+        try:
+            await insert(**insert_kwargs, max_messages=_LOCAL_HISTORY_MAX_MESSAGES)
+        except TypeError as exc:
+            if "unexpected keyword argument 'max_messages'" not in str(exc):
+                raise
+
+            self._supports_history_max_messages = False
+            logger.warning(
+                "[消息历史] 当前 AstrBot 核心不支持 max_messages 参数，"
+                "将使用兼容模式写入消息历史；建议升级核心以启用本地历史上限。"
+            )
+            await insert(**insert_kwargs)
+        else:
+            self._supports_history_max_messages = True
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
         """从消息事件中安全获取群组 ID"""
