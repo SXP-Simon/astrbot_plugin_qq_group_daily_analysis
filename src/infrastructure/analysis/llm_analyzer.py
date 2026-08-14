@@ -240,7 +240,7 @@ class LLMAnalyzer(IAnalysisProvider):
             session_id = self._make_session_id(None, umo)
 
             logger.info(
-                f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled})，会话ID: {session_id}"
+                f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled}, 质量:{chat_quality_enabled})，会话ID: {session_id}"
             )
 
             # 保存原始消息数据 (Debug Mode)

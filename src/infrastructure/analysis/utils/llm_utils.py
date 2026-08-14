@@ -4,6 +4,7 @@ LLM API请求处理工具模块
 """
 
 import asyncio
+import inspect
 import random
 import time
 
@@ -20,6 +21,76 @@ _circuit_breakers = {}
 _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 30.0
+_LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
+
+
+def _format_task_await_chain(task: asyncio.Task, max_depth: int = 16) -> str:
+    """格式化异步任务当前 await 链路。
+
+    这里只输出协程的文件、行号与函数名，不读取 frame locals，避免将 prompt、
+    API Key 或 Provider 请求参数写入日志。该链路用于定位长时间 LLM 请求到底
+    卡在插件、AstrBot Context、Provider SDK 还是 HTTP 客户端层。
+
+    Args:
+        task: 正在执行的 asyncio 任务。
+        max_depth: 最大追踪层数，避免异常 await 链导致日志过长。
+
+    Returns:
+        可直接写入日志的 await 链路描述。
+    """
+    chain: list[str] = []
+    current = task.get_coro()
+    seen: set[int] = set()
+
+    for _ in range(max_depth):
+        if current is None:
+            break
+
+        current_id = id(current)
+        if current_id in seen:
+            chain.append("<循环 await 链>")
+            break
+        seen.add(current_id)
+
+        frame = None
+        code = None
+        next_awaitable = None
+
+        if inspect.iscoroutine(current):
+            frame = current.cr_frame
+            code = current.cr_code
+            next_awaitable = current.cr_await
+        elif inspect.isgenerator(current):
+            frame = current.gi_frame
+            code = current.gi_code
+            next_awaitable = current.gi_yieldfrom
+        elif inspect.isasyncgen(current):
+            frame = current.ag_frame
+            code = current.ag_code
+            next_awaitable = current.ag_await
+        elif isinstance(current, asyncio.Task):
+            next_awaitable = current.get_coro()
+            chain.append(
+                f"Task(done={current.done()}, cancelled={current.cancelled()})"
+            )
+            current = next_awaitable
+            continue
+        else:
+            chain.append(type(current).__name__)
+            break
+
+        if frame is not None and code is not None:
+            chain.append(f"{code.co_filename}:{frame.f_lineno} in {code.co_name}")
+        elif code is not None:
+            chain.append(f"{code.co_filename}:? in {code.co_name}")
+        else:
+            chain.append(type(current).__name__)
+
+        current = next_awaitable
+
+    if not chain:
+        return "<无可用 await 链>"
+    return " -> ".join(chain)
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -392,6 +463,7 @@ async def call_provider_with_retry(
                         context.llm_generate(**llm_kwargs)
                     )
 
+                next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
                 try:
                     while True:
                         try:
@@ -401,15 +473,29 @@ async def call_provider_with_retry(
                             )
                             break
                         except TimeoutError:
+                            elapsed_seconds = time.monotonic() - request_started_at
                             logger.warning(
                                 f"[LLM 调用观测] Provider 请求仍在运行超过 "
-                                f"{time.monotonic() - request_started_at:.0f}s: "
+                                f"{elapsed_seconds:.0f}s: "
                                 f"group={observation_group}, "
                                 f"stage={observation_stage}, area={observation_area}, "
                                 f"attempt={attempt_num}, "
                                 f"fallback={is_fallback_request}, provider={pid}, "
                                 f"block_point={call_path}"
                             )
+                            if elapsed_seconds >= next_stack_dump_seconds:
+                                logger.warning(
+                                    f"[LLM 栈观测] Provider 请求 await 链: "
+                                    f"group={observation_group}, "
+                                    f"stage={observation_stage}, "
+                                    f"area={observation_area}, "
+                                    f"attempt={attempt_num}, "
+                                    f"fallback={is_fallback_request}, "
+                                    f"provider={pid}, elapsed={elapsed_seconds:.0f}s, "
+                                    f"block_point={call_path}, "
+                                    f"await_chain={_format_task_await_chain(request_task)}"
+                                )
+                                next_stack_dump_seconds *= 2
                 except asyncio.CancelledError:
                     if not request_task.done():
                         request_task.cancel()
