@@ -145,6 +145,48 @@ def test_incremental_final_report_requires_successful_delivery():
     asyncio.run(scenario())
 
 
+def test_scheduled_traditional_reports_observe_and_release_dispatch_slot():
+    """定时普通全量分析应通过调度槽位串行控制并在结束后释放。"""
+    active = 0
+    peak_active = 0
+    calls = []
+
+    async def run_group(group_id, platform_id):
+        nonlocal active, peak_active
+        active += 1
+        peak_active = max(peak_active, active)
+        calls.append((group_id, platform_id))
+        await asyncio.sleep(0)
+        active -= 1
+        return {"success": True}
+
+    async def scenario():
+        scheduler = object.__new__(AutoScheduler)
+        scheduler._terminating = False
+        scheduler.incremental_trigger = None
+        scheduler.config_manager = SimpleNamespace(
+            get_max_concurrent_tasks=Mock(return_value=1),
+            get_stagger_seconds=Mock(return_value=0),
+        )
+        scheduler._get_scheduled_targets = AsyncMock(
+            return_value=[
+                ("group-a", "onebot-main", "traditional"),
+                ("group-b", "onebot-main", "traditional"),
+            ]
+        )
+        scheduler._perform_auto_analysis_for_group_with_timeout = run_group
+
+        await scheduler._run_scheduled_report()
+
+        assert calls == [
+            ("group-a", "onebot-main"),
+            ("group-b", "onebot-main"),
+        ]
+        assert peak_active == 1
+
+    asyncio.run(scenario())
+
+
 def test_incremental_final_report_does_not_send_after_target_is_removed():
     async def scenario():
         scheduler = object.__new__(AutoScheduler)

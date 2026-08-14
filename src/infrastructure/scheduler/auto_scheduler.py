@@ -17,6 +17,9 @@ from ..platform.factory import PlatformAdapterFactory
 from ..reporting.dispatcher import ReportDispatcher
 from .incremental_trigger import IncrementalTriggerCoordinator
 
+_SCHEDULED_DISPATCH_INFO_SECONDS = 1.0
+_SCHEDULED_DISPATCH_WARN_SECONDS = 15.0
+
 
 class AutoScheduler:
     """自动调度器，支持传统模式和增量模式"""
@@ -360,7 +363,51 @@ class AutoScheduler:
             )
 
             async def dispatch_group(gid, pid, mode):
-                async with sem:
+                wait_started_at = time_mod.monotonic()
+                logger.debug(
+                    "定时报告等待调度槽位: platform=%s, group=%s, mode=%s, available=%s/%s",
+                    pid or "default",
+                    gid,
+                    mode,
+                    getattr(sem, "_value", None),
+                    max_concurrent,
+                )
+                while True:
+                    try:
+                        await asyncio.wait_for(
+                            sem.acquire(), timeout=_SCHEDULED_DISPATCH_WARN_SECONDS
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "定时报告等待调度槽位超过 %.0fs: platform=%s, group=%s, "
+                            "mode=%s, available=%s/%s",
+                            time_mod.monotonic() - wait_started_at,
+                            pid or "default",
+                            gid,
+                            mode,
+                            getattr(sem, "_value", None),
+                            max_concurrent,
+                        )
+
+                waited_seconds = time_mod.monotonic() - wait_started_at
+                log_method = (
+                    logger.info
+                    if waited_seconds >= _SCHEDULED_DISPATCH_INFO_SECONDS
+                    else logger.debug
+                )
+                log_method(
+                    "定时报告已取得调度槽位: platform=%s, group=%s, mode=%s, "
+                    "wait=%.2fs, available=%s/%s",
+                    pid or "default",
+                    gid,
+                    mode,
+                    waited_seconds,
+                    getattr(sem, "_value", None),
+                    max_concurrent,
+                )
+                run_started_at = time_mod.monotonic()
+                try:
                     if mode == "incremental":
                         return await self._perform_incremental_final_report_for_group_with_timeout(
                             gid, pid
@@ -369,6 +416,18 @@ class AutoScheduler:
                         return await self._perform_auto_analysis_for_group_with_timeout(
                             gid, pid
                         )
+                finally:
+                    sem.release()
+                    logger.debug(
+                        "定时报告已释放调度槽位: platform=%s, group=%s, mode=%s, "
+                        "duration=%.2fs, available=%s/%s",
+                        pid or "default",
+                        gid,
+                        mode,
+                        time_mod.monotonic() - run_started_at,
+                        getattr(sem, "_value", None),
+                        max_concurrent,
+                    )
 
             tasks = []
             stagger = self.config_manager.get_stagger_seconds() or 2

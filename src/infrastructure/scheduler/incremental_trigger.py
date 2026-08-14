@@ -15,6 +15,7 @@ class IncrementalTriggerCoordinator:
     _KV_KEY = "incremental_trigger_states_v1"
     _SEEN_EVENT_LIMIT = 8192
     _FLUSH_DELAY_SECONDS = 5
+    _SEMAPHORE_WARN_SECONDS = 15.0
 
     def __init__(
         self,
@@ -359,7 +360,38 @@ class IncrementalTriggerCoordinator:
                 self._semaphore = asyncio.Semaphore(
                     max(1, self.config_manager.get_max_concurrent_tasks())
                 )
-            async with self._semaphore:
+            wait_started_at = time.monotonic()
+            logger.debug(
+                "增量分析等待调度槽位: platform=%s, group=%s, available=%s, active_tasks=%s",
+                platform_id,
+                group_id,
+                getattr(self._semaphore, "_value", None),
+                len(self._analysis_tasks),
+            )
+            while True:
+                try:
+                    await asyncio.wait_for(
+                        self._semaphore.acquire(), timeout=self._SEMAPHORE_WARN_SECONDS
+                    )
+                    break
+                except TimeoutError:
+                    logger.warning(
+                        "增量分析等待调度槽位超过 %.0fs: platform=%s, group=%s, "
+                        "available=%s, active_tasks=%s",
+                        time.monotonic() - wait_started_at,
+                        platform_id,
+                        group_id,
+                        getattr(self._semaphore, "_value", None),
+                        len(self._analysis_tasks),
+                    )
+            logger.debug(
+                "增量分析已取得调度槽位: platform=%s, group=%s, wait=%.2fs, available=%s",
+                platform_id,
+                group_id,
+                time.monotonic() - wait_started_at,
+                getattr(self._semaphore, "_value", None),
+            )
+            try:
                 async with self._state_lock:
                     state = self._states.get(state_key)
                     if (
@@ -373,6 +405,14 @@ class IncrementalTriggerCoordinator:
                     result = await self.analyze_callback(group_id, platform_id)
                 finally:
                     self._running_state_keys.discard(state_key)
+            finally:
+                self._semaphore.release()
+                logger.debug(
+                    "增量分析已释放调度槽位: platform=%s, group=%s, available=%s",
+                    platform_id,
+                    group_id,
+                    getattr(self._semaphore, "_value", None),
+                )
 
             result = result if isinstance(result, dict) else {}
             consumed = max(0, int(result.get("messages_count", 0)))

@@ -110,6 +110,7 @@ class GlobalRateLimiter:
 
     _instance: "GlobalRateLimiter | None" = None
     _semaphore: asyncio.Semaphore | None = None
+    _max_concurrency: int | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -132,29 +133,47 @@ class GlobalRateLimiter:
             instance.reconfigure(max_concurrency)
         elif cls._semaphore is None:
             # 默认兜底
-            cls._semaphore = asyncio.Semaphore(3)
+            cls._semaphore = asyncio.Semaphore(4)
+            cls._max_concurrency = 4
         return instance
 
     def reconfigure(self, max_concurrency: int):
-        """重新配置并发上限。注意：这会替换信号量对象。"""
-        if self._semaphore is None or (
-            hasattr(self._semaphore, "_value")
-            and self._semaphore._value != max_concurrency  # type: ignore
+        """重新配置并发上限。注意：这会替换信号量对象。
+
+        Args:
+            max_concurrency: 新的全局 LLM 并发上限。
+        """
+        max_concurrency = max(1, int(max_concurrency))
+        if self.__class__._semaphore is None or (
+            self.__class__._max_concurrency != max_concurrency
         ):
-            old_val = (
-                getattr(self._semaphore, "_value", "None")
-                if self._semaphore
-                else "None"
-            )
+            old_val = self.__class__._max_concurrency or "None"
             logger.info(
                 f"GlobalRateLimiter 重新配置并发上限：{old_val} -> {max_concurrency}"
             )
             self.__class__._semaphore = asyncio.Semaphore(max_concurrency)
+            self.__class__._max_concurrency = max_concurrency
 
     @property
     def semaphore(self) -> asyncio.Semaphore:
         """返回核心的异步信号量对象。"""
         if self._semaphore is None:
-            self.__class__._semaphore = asyncio.Semaphore(3)
+            self.__class__._semaphore = asyncio.Semaphore(4)
+            self.__class__._max_concurrency = 4
         assert self._semaphore is not None
         return self._semaphore
+
+    @property
+    def max_concurrency(self) -> int:
+        """返回当前配置的全局并发上限。"""
+        if self.__class__._max_concurrency is None:
+            return 4
+        return self.__class__._max_concurrency
+
+    @property
+    def available_slots(self) -> int | None:
+        """返回当前可用槽位数量，仅用于诊断日志。"""
+        semaphore = self.__class__._semaphore
+        if semaphore is None:
+            return None
+        return getattr(semaphore, "_value", None)
