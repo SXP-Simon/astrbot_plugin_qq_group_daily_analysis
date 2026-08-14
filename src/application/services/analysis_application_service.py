@@ -30,6 +30,9 @@ from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.persistence.incremental_store import IncrementalStore
 from ...utils.logger import logger
 
+_LLM_SEMAPHORE_INFO_SECONDS = 1.0
+_LLM_SEMAPHORE_WARN_SECONDS = 15.0
+
 
 class DuplicateGroupTaskError(Exception):
     """当同一个群组在同一时间尝试启动相同类型的重复分析任务时抛出。"""
@@ -64,7 +67,8 @@ class AnalysisApplicationService:
         self._locks = weakref.WeakValueDictionary()
         # 全局 LLM 分析信号量，控制对外 API 的并发压力
         # 使用专用的 LLM 并发配置项
-        max_concurrent = self.config_manager.get_llm_max_concurrent()
+        max_concurrent = max(1, int(self.config_manager.get_llm_max_concurrent()))
+        self._llm_max_concurrent = max_concurrent
         self.llm_semaphore = asyncio.Semaphore(max_concurrent)
         # 用于追踪当前正在执行的任务，实现原子的“检查并设置”逻辑，避免 locked() 竞态
         self._active_tasks = set()
@@ -100,6 +104,79 @@ class AnalysisApplicationService:
             # 释放：标记任务结束
             self._active_tasks.discard(lock_key)
             logger.debug(f"[Lock] 已释放群 {group_id} 的 {task_type} 排他锁")
+
+    @asynccontextmanager
+    async def _llm_slot(self, group_id: str, stage: str):
+        """观察并占用一次 LLM 分析槽位。
+
+        Args:
+            group_id: 当前分析任务所属群号。
+            stage: 分析阶段名称，用于区分全量、增量、最终报告等入口。
+
+        Yields:
+            None: 成功进入 LLM 分析槽位后交还给调用方执行实际分析。
+
+        Raises:
+            asyncio.CancelledError: 调用方任务被取消时原样抛出。
+        """
+        wait_started_at = time_mod.monotonic()
+        logger.debug(
+            "[LLM 队列观测] 等待分析槽位: group=%s, stage=%s, available=%s/%s, active=%s",
+            group_id,
+            stage,
+            getattr(self.llm_semaphore, "_value", None),
+            self._llm_max_concurrent,
+            len(self._active_tasks),
+        )
+        while True:
+            try:
+                await asyncio.wait_for(
+                    self.llm_semaphore.acquire(), timeout=_LLM_SEMAPHORE_WARN_SECONDS
+                )
+                break
+            except TimeoutError:
+                logger.warning(
+                    "[LLM 队列观测] 等待分析槽位超过 %.0fs: group=%s, stage=%s, "
+                    "available=%s/%s, active=%s",
+                    time_mod.monotonic() - wait_started_at,
+                    group_id,
+                    stage,
+                    getattr(self.llm_semaphore, "_value", None),
+                    self._llm_max_concurrent,
+                    len(self._active_tasks),
+                )
+
+        waited_seconds = time_mod.monotonic() - wait_started_at
+        log_method = (
+            logger.info
+            if waited_seconds >= _LLM_SEMAPHORE_INFO_SECONDS
+            else logger.debug
+        )
+        log_method(
+            "[LLM 队列观测] 已进入分析槽位: group=%s, stage=%s, wait=%.2fs, "
+            "available=%s/%s, active=%s",
+            group_id,
+            stage,
+            waited_seconds,
+            getattr(self.llm_semaphore, "_value", None),
+            self._llm_max_concurrent,
+            len(self._active_tasks),
+        )
+        run_started_at = time_mod.monotonic()
+        try:
+            yield
+        finally:
+            self.llm_semaphore.release()
+            logger.debug(
+                "[LLM 队列观测] 已释放分析槽位: group=%s, stage=%s, duration=%.2fs, "
+                "available=%s/%s, active=%s",
+                group_id,
+                stage,
+                time_mod.monotonic() - run_started_at,
+                getattr(self.llm_semaphore, "_value", None),
+                self._llm_max_concurrent,
+                len(self._active_tasks),
+            )
 
     async def execute_daily_analysis(
         self,
@@ -261,6 +338,7 @@ class AnalysisApplicationService:
             unified_msg_origin = (
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
+            analysis_stage = "full_manual" if manual else "full_scheduled"
 
             if (
                 topic_enabled
@@ -268,8 +346,11 @@ class AnalysisApplicationService:
                 or golden_quote_enabled
                 or chat_quality_enabled
             ):
-                async with self.llm_semaphore:
-                    logger.debug(f"[LLM] 已进入分析队列 (群: {group_id})")
+                async with self._llm_slot(group_id, analysis_stage):
+                    logger.debug(
+                        f"[LLM] 已进入普通全量分析队列 "
+                        f"(群: {group_id}, stage: {analysis_stage})"
+                    )
                     (
                         topics,
                         user_titles,
@@ -510,7 +591,7 @@ class AnalysisApplicationService:
             chat_quality_review = None
 
             if topic_enabled or golden_quote_enabled or chat_quality_enabled:
-                async with self.llm_semaphore:
+                async with self._llm_slot(group_id, "incremental"):
                     logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
                     (
                         topics,
@@ -760,7 +841,7 @@ class AnalysisApplicationService:
                 top_users = state.get_user_activity_ranking(max_user_titles)
 
                 try:
-                    async with self.llm_semaphore:
+                    async with self._llm_slot(group_id, "incremental_final_title"):
                         logger.debug(f"[LLM] 已进入称号分析队列 (群: {group_id})")
                         (
                             user_titles_result,
@@ -795,7 +876,7 @@ class AnalysisApplicationService:
                 and state.all_quality_reviews
             ):
                 try:
-                    async with self.llm_semaphore:
+                    async with self._llm_slot(group_id, "incremental_final_quality"):
                         logger.debug(
                             f"[LLM] 已进入聊天质量汇总分析队列 (群: {group_id})"
                         )

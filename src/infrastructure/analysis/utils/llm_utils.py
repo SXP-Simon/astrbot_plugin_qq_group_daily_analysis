@@ -5,6 +5,7 @@ LLM API请求处理工具模块
 
 import asyncio
 import random
+import time
 
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context
@@ -15,6 +16,8 @@ from ...config.config_manager import ConfigManager
 from .structured_output_schema import JSONObject, JSONValue
 
 _circuit_breakers = {}
+_LLM_LIMITER_INFO_SECONDS = 1.0
+_LLM_LIMITER_WARN_SECONDS = 15.0
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -296,7 +299,47 @@ async def call_provider_with_retry(
             raise Exception("Circuit breaker open")
 
         try:
-            async with GlobalRateLimiter.get_instance().semaphore:
+            limiter = GlobalRateLimiter.get_instance()
+            semaphore = limiter.semaphore
+            wait_started_at = time.monotonic()
+            logger.debug(
+                "[LLM 限流观测] 等待全局 Provider 槽位: provider=%s, available=%s/%s",
+                pid,
+                limiter.available_slots,
+                limiter.max_concurrency,
+            )
+            while True:
+                try:
+                    await asyncio.wait_for(
+                        semaphore.acquire(), timeout=_LLM_LIMITER_WARN_SECONDS
+                    )
+                    break
+                except TimeoutError:
+                    logger.warning(
+                        "[LLM 限流观测] 等待全局 Provider 槽位超过 %.0fs: "
+                        "provider=%s, available=%s/%s",
+                        time.monotonic() - wait_started_at,
+                        pid,
+                        limiter.available_slots,
+                        limiter.max_concurrency,
+                    )
+
+            waited_seconds = time.monotonic() - wait_started_at
+            log_method = (
+                logger.info
+                if waited_seconds >= _LLM_LIMITER_INFO_SECONDS
+                else logger.debug
+            )
+            log_method(
+                "[LLM 限流观测] 已取得全局 Provider 槽位: provider=%s, "
+                "wait=%.2fs, available=%s/%s",
+                pid,
+                waited_seconds,
+                limiter.available_slots,
+                limiter.max_concurrency,
+            )
+            request_started_at = time.monotonic()
+            try:
                 llm_kwargs: dict[str, JSONValue] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
@@ -312,6 +355,16 @@ async def call_provider_with_retry(
                     resp = await _call_provider_stream(context, pid, llm_kwargs)
                 else:
                     resp = await context.llm_generate(**llm_kwargs)
+            finally:
+                semaphore.release()
+                logger.debug(
+                    "[LLM 限流观测] 已释放全局 Provider 槽位: provider=%s, "
+                    "duration=%.2fs, available=%s/%s",
+                    pid,
+                    time.monotonic() - request_started_at,
+                    limiter.available_slots,
+                    limiter.max_concurrency,
+                )
             cb.record_success()
             return resp
         except Exception as err:

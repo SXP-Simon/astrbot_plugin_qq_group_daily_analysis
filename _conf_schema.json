@@ -1672,7 +1672,7 @@
             "max_concurrent_llm": {
                 "type": "int",
                 "description": "最大 LLM 请求并发数（API 闸口）",
-                "default": 3,
+                "default": 4,
                 "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。"
             },
             "max_concurrent_t2i": {
