@@ -28,6 +28,7 @@ from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.persistence.incremental_store import IncrementalStore
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 _LLM_SEMAPHORE_INFO_SECONDS = 1.0
@@ -119,14 +120,22 @@ class AnalysisApplicationService:
         Raises:
             asyncio.CancelledError: 调用方任务被取消时原样抛出。
         """
+        trace = TraceContext.current()
+        missing_marker = object()
+        previous_stage = missing_marker
+        previous_group_id = missing_marker
+        if trace:
+            # 将外层分析阶段写入 Trace 元数据，供更底层的 Provider 调用日志读取。
+            previous_stage = trace.metadata.get("llm_stage", missing_marker)
+            previous_group_id = trace.metadata.get("llm_group_id", missing_marker)
+            trace.metadata["llm_stage"] = stage
+            trace.metadata["llm_group_id"] = group_id
+
         wait_started_at = time_mod.monotonic()
         logger.debug(
-            "[LLM 队列观测] 等待分析槽位: group=%s, stage=%s, available=%s/%s, active=%s",
-            group_id,
-            stage,
-            getattr(self.llm_semaphore, "_value", None),
-            self._llm_max_concurrent,
-            len(self._active_tasks),
+            f"[LLM 队列观测] 等待分析槽位: group={group_id}, stage={stage}, "
+            f"available={getattr(self.llm_semaphore, '_value', None)}/"
+            f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
         )
         while True:
             try:
@@ -136,14 +145,11 @@ class AnalysisApplicationService:
                 break
             except TimeoutError:
                 logger.warning(
-                    "[LLM 队列观测] 等待分析槽位超过 %.0fs: group=%s, stage=%s, "
-                    "available=%s/%s, active=%s",
-                    time_mod.monotonic() - wait_started_at,
-                    group_id,
-                    stage,
-                    getattr(self.llm_semaphore, "_value", None),
-                    self._llm_max_concurrent,
-                    len(self._active_tasks),
+                    f"[LLM 队列观测] 等待分析槽位超过 "
+                    f"{time_mod.monotonic() - wait_started_at:.0f}s: "
+                    f"group={group_id}, stage={stage}, "
+                    f"available={getattr(self.llm_semaphore, '_value', None)}/"
+                    f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
                 )
 
         waited_seconds = time_mod.monotonic() - wait_started_at
@@ -153,14 +159,10 @@ class AnalysisApplicationService:
             else logger.debug
         )
         log_method(
-            "[LLM 队列观测] 已进入分析槽位: group=%s, stage=%s, wait=%.2fs, "
-            "available=%s/%s, active=%s",
-            group_id,
-            stage,
-            waited_seconds,
-            getattr(self.llm_semaphore, "_value", None),
-            self._llm_max_concurrent,
-            len(self._active_tasks),
+            f"[LLM 队列观测] 已进入分析槽位: group={group_id}, stage={stage}, "
+            f"wait={waited_seconds:.2f}s, "
+            f"available={getattr(self.llm_semaphore, '_value', None)}/"
+            f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
         )
         run_started_at = time_mod.monotonic()
         try:
@@ -168,15 +170,21 @@ class AnalysisApplicationService:
         finally:
             self.llm_semaphore.release()
             logger.debug(
-                "[LLM 队列观测] 已释放分析槽位: group=%s, stage=%s, duration=%.2fs, "
-                "available=%s/%s, active=%s",
-                group_id,
-                stage,
-                time_mod.monotonic() - run_started_at,
-                getattr(self.llm_semaphore, "_value", None),
-                self._llm_max_concurrent,
-                len(self._active_tasks),
+                f"[LLM 队列观测] 已释放分析槽位: group={group_id}, stage={stage}, "
+                f"duration={time_mod.monotonic() - run_started_at:.2f}s, "
+                f"available={getattr(self.llm_semaphore, '_value', None)}/"
+                f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
             )
+            if trace:
+                # 恢复原有 Trace 元数据，避免嵌套或后续任务误读上一段分析阶段。
+                if previous_stage is missing_marker:
+                    trace.metadata.pop("llm_stage", None)
+                else:
+                    trace.metadata["llm_stage"] = previous_stage
+                if previous_group_id is missing_marker:
+                    trace.metadata.pop("llm_group_id", None)
+                else:
+                    trace.metadata["llm_group_id"] = previous_group_id
 
     async def execute_daily_analysis(
         self,
