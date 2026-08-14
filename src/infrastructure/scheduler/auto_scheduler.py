@@ -284,13 +284,6 @@ class AutoScheduler:
         # 获取基础信息
         all_groups = await self._get_all_groups()
 
-        # 预加载所有配置名单和模式
-        sched_list = self.config_manager.get_scheduled_group_list()
-        sched_list_mode = self.config_manager.get_scheduled_group_list_mode()
-
-        incr_list = self.config_manager.get_incremental_group_list()
-        incr_list_mode = self.config_manager.get_incremental_group_list_mode()
-
         result = []
 
         # 遍历所有平台上的群组
@@ -298,21 +291,12 @@ class AutoScheduler:
             group_id = str(group_id_orig)
             umo = f"{platform_id}:GroupMessage:{group_id}"
 
-            # 1. 准入层判定 (基础黑白名单)
-            if not self.config_manager.is_group_allowed(umo):
+            # 配置管理器统一处理基础名单与定时 inherit/白黑名单。
+            if not self.config_manager.is_scheduled_group_allowed(umo):
                 continue
 
-            # 2. 定时层判定 (定时分析黑白名单)
-            if not self.config_manager.is_group_in_filtered_list(
-                umo, sched_list_mode, sched_list
-            ):
-                continue
-
-            # 3. 模式层判定 (增量黑白名单)
-            # 3. 模式层判定 (增量黑白名单)
-            if self.config_manager.is_group_in_filtered_list(
-                umo, incr_list_mode, incr_list
-            ):
+            # 配置管理器统一处理增量 inherit/白黑名单。
+            if self.config_manager.is_incremental_group_allowed(umo):
                 # 如果在增量名单内，则执行增量模式
                 effective_mode = "incremental"
             else:

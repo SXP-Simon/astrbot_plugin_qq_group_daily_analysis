@@ -53,19 +53,7 @@ class IncrementalTriggerCoordinator:
         """判断消息所属群是否启用了增量分析。"""
         if not self.config_manager.get_incremental_enabled():
             return False
-        if not self.config_manager.is_group_allowed(unified_msg_origin):
-            return False
-        if not self.config_manager.is_group_in_filtered_list(
-            unified_msg_origin,
-            self.config_manager.get_scheduled_group_list_mode(),
-            self.config_manager.get_scheduled_group_list(),
-        ):
-            return False
-        return self.config_manager.is_group_in_filtered_list(
-            unified_msg_origin,
-            self.config_manager.get_incremental_group_list_mode(),
-            self.config_manager.get_incremental_group_list(),
-        )
+        return self.config_manager.is_incremental_group_allowed(unified_msg_origin)
 
     def _get_target_config_signature(self) -> tuple[Any, ...]:
         """生成影响增量目标群判定的配置快照。"""

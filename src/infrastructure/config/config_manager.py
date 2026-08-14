@@ -1023,17 +1023,28 @@ class ConfigManager:
     def is_auto_analysis_enabled(self) -> bool:
         """
         判断自动分析功能是否通过名单“按需开启”。
-        逻辑：如果是白名单模式且名单不为空，或者为黑名单模式，则视为开启。
+        inherit 模式会继承基础群权限的开启状态；其他模式沿用自身名单判断。
         """
         mode = self.get_scheduled_group_list_mode()
+        if mode == "inherit":
+            basic_mode = self.get_group_list_mode().lower()
+            if basic_mode == "whitelist":
+                return bool(self.get_group_list())
+            return True
+
         lst = self.get_scheduled_group_list()
         return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
 
     def get_scheduled_group_list_mode(self) -> str:
-        """获取定时分析名单模式 (whitelist/blacklist)"""
-        return self._get_group("auto_analysis").get(
-            "scheduled_group_list_mode", "whitelist"
-        )
+        """获取定时分析名单模式 (inherit/whitelist/blacklist)。"""
+        mode = str(
+            self._get_group("auto_analysis").get(
+                "scheduled_group_list_mode", "whitelist"
+            )
+        ).lower()
+        if mode not in ("inherit", "whitelist", "blacklist"):
+            return "whitelist"
+        return mode
 
     def set_scheduled_group_list_mode(self, mode: str):
         """设置定时分析名单模式"""
@@ -1048,6 +1059,25 @@ class ConfigManager:
         """设置定时分析目标群列表"""
         self._ensure_group("auto_analysis")["scheduled_group_list"] = groups
         self.config.save_config()
+
+    def is_scheduled_group_allowed(self, group_umo_or_id: str) -> bool:
+        """判断当前群是否允许参与定时分析。
+
+        Args:
+            group_umo_or_id: 要检查的完整 UMO 或纯群号。
+
+        Returns:
+            当前群是否同时通过基础群权限和定时分析名单。
+        """
+        if not self.is_group_allowed(group_umo_or_id):
+            return False
+
+        mode = self.get_scheduled_group_list_mode()
+        if mode == "inherit":
+            return True
+        return self.is_group_in_filtered_list(
+            group_umo_or_id, mode, self.get_scheduled_group_list()
+        )
 
     def is_group_in_filtered_list(
         self, group_umo_or_id: str, mode: str, group_list: list
@@ -1221,19 +1251,46 @@ class ConfigManager:
     def get_incremental_enabled(self) -> bool:
         """获取是否开启了增量分析（由名单状态决定）"""
         mode = self.get_incremental_group_list_mode()
+        if mode == "inherit":
+            return self.is_auto_analysis_enabled()
+
         lst = self.get_incremental_group_list()
         # 如果是白名单且不为空，或者是黑名单模式，则视为功能“开启”
         return (mode == "whitelist" and len(lst) > 0) or (mode == "blacklist")
 
     def get_incremental_group_list_mode(self) -> str:
-        """获取增量分析名单模式 (whitelist/blacklist)"""
-        return self._get_group("incremental").get(
-            "incremental_group_list_mode", "whitelist"
-        )
+        """获取增量分析名单模式 (inherit/whitelist/blacklist)。"""
+        mode = str(
+            self._get_group("incremental").get(
+                "incremental_group_list_mode", "whitelist"
+            )
+        ).lower()
+        if mode not in ("inherit", "whitelist", "blacklist"):
+            return "whitelist"
+        return mode
 
     def get_incremental_group_list(self) -> list[str]:
         """获取增量分析群列表"""
         return self._get_group("incremental").get("incremental_group_list", [])
+
+    def is_incremental_group_allowed(self, group_umo_or_id: str) -> bool:
+        """判断当前群是否应使用增量分析。
+
+        Args:
+            group_umo_or_id: 要检查的完整 UMO 或纯群号。
+
+        Returns:
+            当前群是否通过基础、定时和增量三级名单。
+        """
+        if not self.is_scheduled_group_allowed(group_umo_or_id):
+            return False
+
+        mode = self.get_incremental_group_list_mode()
+        if mode == "inherit":
+            return True
+        return self.is_group_in_filtered_list(
+            group_umo_or_id, mode, self.get_incremental_group_list()
+        )
 
     def get_incremental_fallback_enabled(self) -> bool:
         """获取增量分析失败回退到全量分析的开关（默认启用）"""
@@ -1266,8 +1323,63 @@ class ConfigManager:
     # ========== 每日群漫画配置 ==========
 
     def get_enable_daily_comic(self) -> bool:
-        """获取是否开启每日群漫画功能"""
+        """获取漫画功能总开关。"""
         return self._get_group("daily_comic").get("enable_daily_comic", False)
+
+    def get_enable_auto_daily_comic(self) -> bool:
+        """获取是否在分析完成后自动生成漫画。"""
+        return self._get_group("daily_comic").get("enable_auto_daily_comic", True)
+
+    def get_comic_group_list_mode(self) -> str:
+        """获取漫画生成名单模式。
+
+        Returns:
+            规范化后的漫画名单模式。默认 inherit，表示继承基础群权限，
+            避免同一批群需要在多个配置里重复填写。
+        """
+        mode = str(
+            self._get_group("daily_comic").get("comic_group_list_mode", "inherit")
+        ).lower()
+        if mode not in ("inherit", "whitelist", "blacklist"):
+            return "inherit"
+        return mode
+
+    def get_comic_group_list(self) -> list[str]:
+        """获取漫画生成白/黑名单列表。
+
+        Returns:
+            配置的群 UMO 或纯群号列表。配置格式异常时按空列表处理。
+        """
+        group_list = self._get_group("daily_comic").get("comic_group_list", [])
+        if not isinstance(group_list, list):
+            return []
+        return group_list
+
+    def is_comic_group_allowed(
+        self, group_umo_or_id: str, inherit_allowed: bool | None = None
+    ) -> bool:
+        """判断当前群是否允许生成漫画。
+
+        Args:
+            group_umo_or_id: 要检查的完整 UMO 或纯群号。
+            inherit_allowed: 上游入口已完成权限判断时传入其结果。自动报告
+                漫画会传入 True，避免重复读取基础/定时/增量名单；手动漫画
+                不传入时会按基础群权限实时判断。
+
+        Returns:
+            当前群是否允许生成漫画。
+        """
+        mode = self.get_comic_group_list_mode()
+        if mode == "inherit":
+            if inherit_allowed is not None:
+                return bool(inherit_allowed)
+            return self.is_group_allowed(group_umo_or_id)
+
+        return self.is_group_in_filtered_list(
+            group_umo_or_id,
+            mode,
+            self.get_comic_group_list(),
+        )
 
     def get_drawing_backend(self) -> str:
         """获取漫画绘图后端 (builtin/general_plugin/big_banana)。"""
