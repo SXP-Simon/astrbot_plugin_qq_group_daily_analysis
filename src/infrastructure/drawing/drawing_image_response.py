@@ -78,7 +78,8 @@ class DrawingImageResponseService:
                 if key in {"image_url", "image"} or (
                     key == "url"
                     and any(
-                        name in {"image", "images", "image_url"} for name in path[:-1]
+                        name in {"data", "image", "images", "image_url"}
+                        for name in path[:-1]
                     )
                 ):
                     image_fields.append(("value", text))

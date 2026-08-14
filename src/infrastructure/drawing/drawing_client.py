@@ -132,10 +132,17 @@ class DrawingClient:
             return None, message
 
         last_error_msg = None
+        last_download_error: ImageDownloadFailedError | None = None
         for provider in provider_configs:
-            result, last_error_msg = await self._generate_image_with_provider(
-                prompt, images_data, disable_retry, provider
-            )
+            try:
+                result, last_error_msg = await self._generate_image_with_provider(
+                    prompt, images_data, disable_retry, provider
+                )
+            except ImageDownloadFailedError as exc:
+                # 图片已经由上游生成，但当前候选返回的 URL 无法下载；继续尝试后备供应商。
+                last_download_error = exc
+                last_error_msg = str(exc)
+                result = None
             if result:
                 return result, None
             provider_name = str(provider.get("name", "unnamed")).strip()
@@ -143,6 +150,8 @@ class DrawingClient:
                 "[Comic] 绘图供应商 %s 失败，尝试下一个候选。",
                 provider_name or "unnamed",
             )
+        if last_download_error:
+            raise last_download_error
         return None, last_error_msg
 
     async def _generate_image_with_provider(
@@ -198,6 +207,8 @@ class DrawingClient:
                     return result, None
                 break
             except Exception as exc:
+                if isinstance(exc, ImageDownloadFailedError):
+                    raise
                 last_error_msg = str(exc)
                 logger.error(
                     "[Comic] 画图报错 (%s): %s", type(exc).__name__, last_error_msg

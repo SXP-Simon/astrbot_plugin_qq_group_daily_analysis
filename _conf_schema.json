@@ -783,7 +783,7 @@
                     },
                     "agnes_ai": {
                         "name": "agnes_ai",
-                        "description": "配置 Agnes AI /v1/images/generations 端点，支持文生图和参考图",
+                        "description": "Agnes AI 国际站（apihub.agnes-ai.com），支持文生图和参考图",
                         "items": {
                             "priority": {
                                 "description": "优先级",
@@ -799,6 +799,59 @@
                                 "description": "API 端点",
                                 "type": "string",
                                 "default": "https://apihub.agnes-ai.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "agnes-image-2.1-flash"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "agnes_ai_china": {
+                        "name": "agnes_ai_china",
+                        "description": "Agnes AI 中国站（api.agnes-ai.cn），API Key 仅可在所属站点使用",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.agnes-ai.cn"
                             },
                             "proxy": {
                                 "description": "代理地址",

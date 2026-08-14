@@ -112,11 +112,17 @@ class ComicApplicationService:
                 external_comic_bytes = await self._generate_via_big_banana(
                     scene_prompt, images_data
                 )
-            if external_comic_bytes:
+            if external_comic_bytes and not any(
+                external_comic_bytes == reference[0] for reference in images_data
+            ):
                 logger.info(
                     f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
                 )
                 return external_comic_bytes, None
+            if external_comic_bytes:
+                logger.warning(
+                    f"[Comic] {backend} 后端原样返回了参考图，拒绝发送并回退内置绘图后端。"
+                )
             if not self.config_manager.get_drawing_external_fallback():
                 logger.warning(
                     f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
@@ -143,6 +149,13 @@ class ComicApplicationService:
             )
             return None, exc.fallback_url
 
+        if final_comic_bytes and any(
+            final_comic_bytes == reference[0] for reference in images_data
+        ):
+            logger.warning("[Comic] 内建绘图原样返回了参考图，拒绝发送。")
+            final_comic_bytes = None
+            last_error = "绘图服务原样返回了参考图"
+
         exception_keywords = (
             self.config_manager.get_drawing_output_exception_retry_keywords()
         )
@@ -168,6 +181,11 @@ class ComicApplicationService:
                         f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
                     )
                     return None, exc.fallback_url
+                if final_comic_bytes and any(
+                    final_comic_bytes == reference[0] for reference in images_data
+                ):
+                    logger.warning("[Comic] 重写 Prompt 后仍原样返回参考图，拒绝发送。")
+                    final_comic_bytes = None
 
         if final_comic_bytes:
             logger.info(f"[Comic] 漫画生成成功，大小: {len(final_comic_bytes)} bytes")

@@ -1322,6 +1322,38 @@ def test_generate_comic_skips_unconfigured_builtin_backend():
     asyncio.run(scenario())
 
 
+def test_generate_comic_rejects_builtin_response_identical_to_reference_image():
+    """内建绘图原样回传参考图时不应将其作为漫画发送。"""
+    generate_comic = load_comic_service_method("generate_comic")
+
+    async def scenario():
+        reference = b"reference-image"
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="builtin"),
+            get_drawing_reference_images=Mock(return_value=["reference.png"]),
+        )
+        drawing_client = SimpleNamespace(
+            generate_image=AsyncMock(return_value=(reference, None))
+        )
+        service = _comic_service(
+            config_manager,
+            drawing_client,
+            _fetch_reference_image=AsyncMock(return_value=(reference, "image/png")),
+        )
+
+        comic_bytes, fallback_url = await generate_comic(
+            service,
+            [{"topic": "t1", "detail": "d1"}],
+            "123456",
+            "umo",
+        )
+
+        assert comic_bytes is None
+        assert fallback_url is None
+
+    asyncio.run(scenario())
+
+
 def test_detect_image_ext_sniffs_bytes():
     """应从图片字节嗅探扩展名，无法识别时回退 .png。"""
     detect = load_main_method("_detect_image_ext")

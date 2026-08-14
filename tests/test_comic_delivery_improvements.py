@@ -78,6 +78,7 @@ def test_drawing_provider_schema_keeps_all_reference_presets():
         "zai",
         "grok2api",
         "agnes_ai",
+        "agnes_ai_china",
         "xai",
         "minimax",
         "stepfun",
@@ -175,6 +176,7 @@ def test_drawing_provider_presets_map_to_runtime_protocols(tmp_path):
         "zai": "chat",
         "grok2api": "chat",
         "agnes_ai": "agnes_ai",
+        "agnes_ai_china": "agnes_ai",
         "xai": "xai",
         "minimax": "minimax",
         "stepfun": "stepfun",
@@ -214,6 +216,57 @@ def test_drawing_client_requires_a_provider_entry():
         assert error == "未配置有效的漫画绘图供应商，请在绘图供应商配置表中添加条目。"
 
     asyncio.run(scenario())
+
+
+def test_drawing_client_preserves_last_image_download_failure_after_fallbacks():
+    """图片 URL 无法下载时应继续尝试候选，全部失败后保留可用链接。"""
+
+    async def scenario():
+        drawing_client_class = _load_drawing_client_class()
+        drawing_module = sys.modules[drawing_client_class.__module__]
+        download_error = drawing_module.ImageDownloadFailedError
+        config_manager = SimpleNamespace(
+            get_drawing_provider_configs=lambda: [
+                {"name": "first"},
+                {"name": "second"},
+            ],
+        )
+        client = drawing_client_class(config_manager)
+        client._generate_image_with_provider = AsyncMock(
+            side_effect=[
+                download_error(
+                    "图片下载失败 [HTTP 403]",
+                    fallback_url="https://image.example.com/generated.png",
+                ),
+                (None, "second provider failed"),
+            ]
+        )
+
+        try:
+            await client.generate_image("漫画提示词")
+        except download_error as exc:
+            assert exc.fallback_url == "https://image.example.com/generated.png"
+        else:
+            raise AssertionError("预期保留最后一个图片下载失败")
+
+        assert client._generate_image_with_provider.await_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_agnes_china_preset_uses_china_endpoint():
+    """Agnes 中国站和国际站应作为独立预设，避免 API Key 跨站鉴权。"""
+    schema = json.loads((PLUGIN_ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    templates = schema["daily_comic"]["items"]["drawing_provider_overrides"][
+        "templates"
+    ]
+
+    assert templates["agnes_ai"]["items"]["api_url"]["default"] == (
+        "https://apihub.agnes-ai.com"
+    )
+    assert templates["agnes_ai_china"]["items"]["api_url"]["default"] == (
+        "https://api.agnes-ai.cn"
+    )
 
 
 def test_google_and_preset_requests_use_the_expected_endpoints_and_payloads():
@@ -461,9 +514,7 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
 
     async def scenario():
         drawing_client_class = _load_drawing_client_class()
-        images_module = sys.modules[
-            "src.infrastructure.drawing.api_requests.images"
-        ]
+        images_module = sys.modules["src.infrastructure.drawing.api_requests.images"]
         monkeypatch.setattr(images_module.httpx, "AsyncClient", AsyncClient)
         drawing_client = drawing_client_class(SimpleNamespace())
         provider = {
@@ -481,7 +532,9 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             "max_reference_images": 2,
             "timeout": 60,
         }
-        references = [(f"reference-{index}".encode(), "image/png") for index in range(3)]
+        references = [
+            (f"reference-{index}".encode(), "image/png") for index in range(3)
+        ]
 
         assert await drawing_client._call_images_api("漫画提示词", provider=provider)
         generation_url, generation_request = requests[-1]
@@ -499,9 +552,7 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
             "moderation": "low",
         }
 
-        assert await drawing_client._call_images_api(
-            "漫画提示词", references, provider
-        )
+        assert await drawing_client._call_images_api("漫画提示词", references, provider)
         edits_url, edits_request = requests[-1]
         assert edits_url.endswith("/images/edits")
         assert len(edits_request["files"]) == 2
@@ -519,9 +570,7 @@ def test_openai_images_request_applies_advanced_controls_and_reference_limit(
         }
 
         provider["generations_only"] = True
-        assert await drawing_client._call_images_api(
-            "漫画提示词", references, provider
-        )
+        assert await drawing_client._call_images_api("漫画提示词", references, provider)
         assert requests[-1][0].endswith("/images/generations")
 
     asyncio.run(scenario())
@@ -534,7 +583,9 @@ def test_preset_requests_apply_provider_specific_advanced_controls():
         drawing_client_class = _load_drawing_client_class()
         drawing_client = drawing_client_class(SimpleNamespace())
         drawing_client._post_json_for_image = AsyncMock(return_value=PNG_BYTES)
-        references = [(f"reference-{index}".encode(), "image/png") for index in range(15)]
+        references = [
+            (f"reference-{index}".encode(), "image/png") for index in range(15)
+        ]
 
         doubao_provider = {
             "api_url": "https://ark.cn-beijing.volces.com",

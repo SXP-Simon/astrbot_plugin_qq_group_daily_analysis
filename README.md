@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -204,7 +204,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 | OpenAI / Z.ai / grok2api | OpenAI 兼容 Chat Completions | 支持 | 将尺寸与布局要求写入提示词，图片从聊天响应中提取；由上游模型决定是否支持生图。 |
 | OpenAI Images | `/v1/images/generations`、`/edits` | 支持，可设置上限 | GPT Image 可设置质量、背景、响应格式、JPEG/WebP 压缩、审核和仅文生图模式。 |
 | xAI | xAI Images | 支持，最多 5 张 | 自动在文生图与 edits 间切换。 |
-| Agnes AI | 原生 Images | 支持 | 通过 `extra_body.image` 发送参考图。 |
+| Agnes AI | 原生 Images | 支持 | 通过 `extra_body.image` 发送参考图。国际站使用 `apihub.agnes-ai.com`，中国站使用 `api.agnes-ai.cn`，请按 API Key 所属站点选择预设。 |
 | MiniMax | `/v1/image_generation` | 支持，最多 9 张 | 使用 `subject_reference` 角色参考图字段。 |
 | 阶跃星辰 | Images generations / edits | 支持，首张 | 有参考图时使用官方 multipart edits 请求。 |
 | 豆包 Seedream | 火山方舟 Images | 支持 | 普通模型最多 14 张，Seedream 5.0 Pro 最多 10 张且不支持组图；支持 Endpoint ID、自定义尺寸、提示词优化和组图。 |
