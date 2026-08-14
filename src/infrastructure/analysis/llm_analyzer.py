@@ -513,6 +513,7 @@ class LLMAnalyzer(IAnalysisProvider):
             prompt,
             umo,
             provider_id_key,
+            observation_label=provider_id_key or "兼容LLM调用入口",
         )
 
     def _fix_json(self, text: str) -> str:
@@ -564,6 +565,7 @@ class LLMAnalyzer(IAnalysisProvider):
                 prompt=prompt,
                 umo=umo,
                 provider_id_key="drawing_prompt_provider_id",
+                observation_label="绘图提示词修复",
             )
             if not llm_response or not llm_response.completion_text:
                 return None

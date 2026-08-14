@@ -10,6 +10,7 @@ import time
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context
 
+from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
 from ...config.config_manager import ConfigManager
@@ -18,6 +19,7 @@ from .structured_output_schema import JSONObject, JSONValue
 _circuit_breakers = {}
 _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
+_LLM_REQUEST_WARN_SECONDS = 30.0
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -250,6 +252,7 @@ async def call_provider_with_retry(
     system_prompt: str | None = None,
     response_format: JSONObject | None = None,
     extra_generate_kwargs: dict[str, JSONValue] | None = None,
+    observation_label: str | None = None,
 ) -> LLMResponse | None:
     """
     调用LLM提供者，带超时、重试与退避。支持自定义服务商和配置化 Provider 选择。
@@ -263,6 +266,7 @@ async def call_provider_with_retry(
         system_prompt: 系统提示词
         response_format: 结构化输出约束（OpenAI 风格）
         extra_generate_kwargs: 传递给 context.llm_generate 的附加参数（用于内部高级重试策略）
+        observation_label: 本次调用所属的业务区域标签，用于日志追踪具体分析器。
 
     Returns:
         LLM生成的结果，失败时返回None
@@ -272,6 +276,15 @@ async def call_provider_with_retry(
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
     enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()
+    trace = TraceContext.current()
+    trace_metadata = trace.metadata if trace else {}
+    observation_stage = str(trace_metadata.get("llm_stage") or "unknown")
+    observation_group = str(
+        trace_metadata.get("llm_group_id")
+        or getattr(trace, "group_id", "")
+        or "unknown"
+    )
+    observation_area = observation_label or provider_id_key or "未标注"
 
     # 1. 确定我们要尝试的 Provider 队列
     attempt_queue = []
@@ -291,7 +304,10 @@ async def call_provider_with_retry(
 
     # 2. 核心请求执行闭包
     async def _execute_llm_request(
-        pid: str, r_format: JSONObject | None
+        pid: str,
+        r_format: JSONObject | None,
+        attempt_num: int,
+        is_fallback_request: bool,
     ) -> LLMResponse:
         cb = _get_circuit_breaker(pid)
         if not cb.allow_request():
@@ -303,10 +319,11 @@ async def call_provider_with_retry(
             semaphore = limiter.semaphore
             wait_started_at = time.monotonic()
             logger.debug(
-                "[LLM 限流观测] 等待全局 Provider 槽位: provider=%s, available=%s/%s",
-                pid,
-                limiter.available_slots,
-                limiter.max_concurrency,
+                f"[LLM 限流观测] 等待全局 Provider 槽位: "
+                f"group={observation_group}, stage={observation_stage}, "
+                f"area={observation_area}, attempt={attempt_num}, "
+                f"fallback={is_fallback_request}, provider={pid}, "
+                f"available={limiter.available_slots}/{limiter.max_concurrency}"
             )
             while True:
                 try:
@@ -316,12 +333,13 @@ async def call_provider_with_retry(
                     break
                 except TimeoutError:
                     logger.warning(
-                        "[LLM 限流观测] 等待全局 Provider 槽位超过 %.0fs: "
-                        "provider=%s, available=%s/%s",
-                        time.monotonic() - wait_started_at,
-                        pid,
-                        limiter.available_slots,
-                        limiter.max_concurrency,
+                        f"[LLM 限流观测] 等待全局 Provider 槽位超过 "
+                        f"{time.monotonic() - wait_started_at:.0f}s: "
+                        f"group={observation_group}, stage={observation_stage}, "
+                        f"area={observation_area}, attempt={attempt_num}, "
+                        f"fallback={is_fallback_request}, provider={pid}, "
+                        f"available={limiter.available_slots}/"
+                        f"{limiter.max_concurrency}"
                     )
 
             waited_seconds = time.monotonic() - wait_started_at
@@ -331,12 +349,12 @@ async def call_provider_with_retry(
                 else logger.debug
             )
             log_method(
-                "[LLM 限流观测] 已取得全局 Provider 槽位: provider=%s, "
-                "wait=%.2fs, available=%s/%s",
-                pid,
-                waited_seconds,
-                limiter.available_slots,
-                limiter.max_concurrency,
+                f"[LLM 限流观测] 已取得全局 Provider 槽位: "
+                f"group={observation_group}, stage={observation_stage}, "
+                f"area={observation_area}, attempt={attempt_num}, "
+                f"fallback={is_fallback_request}, provider={pid}, "
+                f"wait={waited_seconds:.2f}s, available={limiter.available_slots}/"
+                f"{limiter.max_concurrency}"
             )
             request_started_at = time.monotonic()
             try:
@@ -351,19 +369,69 @@ async def call_provider_with_retry(
                 if extra_generate_kwargs:
                     llm_kwargs.update(extra_generate_kwargs)
 
+                call_path = (
+                    "provider.text_chat_stream"
+                    if enable_streaming_llm_call
+                    else "context.llm_generate"
+                )
+                logger.info(
+                    f"[LLM 调用观测] 开始 Provider 请求: "
+                    f"group={observation_group}, stage={observation_stage}, "
+                    f"area={observation_area}, attempt={attempt_num}, "
+                    f"fallback={is_fallback_request}, provider={pid}, "
+                    f"path={call_path}, prompt_len={len(prompt) if prompt else 0}, "
+                    f"response_format={r_format is not None}, "
+                    f"streaming={enable_streaming_llm_call}"
+                )
                 if enable_streaming_llm_call:
-                    resp = await _call_provider_stream(context, pid, llm_kwargs)
+                    request_task = asyncio.create_task(
+                        _call_provider_stream(context, pid, llm_kwargs)
+                    )
                 else:
-                    resp = await context.llm_generate(**llm_kwargs)
+                    request_task = asyncio.create_task(
+                        context.llm_generate(**llm_kwargs)
+                    )
+
+                try:
+                    while True:
+                        try:
+                            resp = await asyncio.wait_for(
+                                asyncio.shield(request_task),
+                                timeout=_LLM_REQUEST_WARN_SECONDS,
+                            )
+                            break
+                        except TimeoutError:
+                            logger.warning(
+                                f"[LLM 调用观测] Provider 请求仍在运行超过 "
+                                f"{time.monotonic() - request_started_at:.0f}s: "
+                                f"group={observation_group}, "
+                                f"stage={observation_stage}, area={observation_area}, "
+                                f"attempt={attempt_num}, "
+                                f"fallback={is_fallback_request}, provider={pid}, "
+                                f"block_point={call_path}"
+                            )
+                except asyncio.CancelledError:
+                    if not request_task.done():
+                        request_task.cancel()
+                    raise
+
+                logger.info(
+                    f"[LLM 调用观测] Provider 请求完成: "
+                    f"group={observation_group}, stage={observation_stage}, "
+                    f"area={observation_area}, attempt={attempt_num}, "
+                    f"fallback={is_fallback_request}, provider={pid}, "
+                    f"duration={time.monotonic() - request_started_at:.2f}s, "
+                    f"path={call_path}"
+                )
             finally:
                 semaphore.release()
                 logger.debug(
-                    "[LLM 限流观测] 已释放全局 Provider 槽位: provider=%s, "
-                    "duration=%.2fs, available=%s/%s",
-                    pid,
-                    time.monotonic() - request_started_at,
-                    limiter.available_slots,
-                    limiter.max_concurrency,
+                    f"[LLM 限流观测] 已释放全局 Provider 槽位: "
+                    f"group={observation_group}, stage={observation_stage}, "
+                    f"area={observation_area}, attempt={attempt_num}, "
+                    f"fallback={is_fallback_request}, provider={pid}, "
+                    f"duration={time.monotonic() - request_started_at:.2f}s, "
+                    f"available={limiter.available_slots}/{limiter.max_concurrency}"
                 )
             cb.record_success()
             return resp
@@ -393,6 +461,7 @@ async def call_provider_with_retry(
         prefix = "[降级补偿] " if is_fallback else "[LLM 调用] "
         logger.info(
             f"{prefix}尝试 #{attempt_num} | Provider ID: {current_pid} | "
+            f"stage={observation_stage} | area={observation_area} | "
             f"prompt长度={len(prompt) if prompt else 0}字符"
         )
 
@@ -401,7 +470,12 @@ async def call_provider_with_retry(
             return None
 
         try:
-            return await _execute_llm_request(current_pid, current_response_format)
+            return await _execute_llm_request(
+                current_pid,
+                current_response_format,
+                attempt_num,
+                is_fallback,
+            )
 
         except Exception as e:
             last_exc = e
@@ -418,7 +492,10 @@ async def call_provider_with_retry(
                 # 在当前尝试额度内立即再试一次剥离了 schema 的请求
                 try:
                     return await _execute_llm_request(
-                        current_pid, current_response_format
+                        current_pid,
+                        current_response_format,
+                        attempt_num,
+                        is_fallback,
                     )
                 except Exception as inner_e:
                     last_exc = inner_e

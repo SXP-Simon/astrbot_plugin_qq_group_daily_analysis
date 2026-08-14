@@ -437,6 +437,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 provider_id=resolved_provider_id,
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=self.get_data_type(),
             )
 
             if response is None:
@@ -483,6 +484,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         system_prompt=system_prompt,
                         response_format=self.get_response_format(),
                         extra_generate_kwargs={"temperature": temperature},
+                        observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
                     )
                     if retry_response is None:
                         continue

@@ -240,6 +240,7 @@ ${messages_text}
                 system_prompt=system_prompt,
                 response_format=response_format,
                 extra_generate_kwargs={"temperature": temperature},
+                observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
             )
             if retry_response is None:
                 continue
@@ -348,6 +349,7 @@ ${messages_text}
                 provider_id_key=self.get_provider_id_key(),
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=self.get_data_type(),
             )
 
             if response is None:
@@ -443,6 +445,7 @@ ${messages_text}
                 provider_id_key=self.get_provider_id_key(),
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=f"{self.get_data_type()}#batch_summary",
             )
 
             if response is None:
