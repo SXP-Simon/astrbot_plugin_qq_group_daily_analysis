@@ -1411,6 +1411,7 @@ class ConfigManager:
             "zai": "chat",
             "grok2api": "chat",
             "agnes_ai": "agnes_ai",
+            "agnes_ai_china": "agnes_ai",
             "xai": "xai",
             "minimax": "minimax",
             "stepfun": "stepfun",
