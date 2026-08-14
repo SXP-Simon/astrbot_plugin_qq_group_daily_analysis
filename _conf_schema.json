@@ -275,7 +275,7 @@
                 "description": "t2i 渲染环境切换",
                 "options": ["Mainland", "Overseas"],
                 "default": "Overseas",
-                "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文）"
+                "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文，没有特殊的情况都建议使用 Overseas，Mainland 配置下建议检查镜像站可用性，或者配置可靠的站点）"
             },
             "t2i_mainland_google_fonts": {
                 "type": "string",
@@ -323,17 +323,18 @@
                 "type": "string",
                 "description": "定时分析名单模式",
                 "options": [
+                    "inherit",
                     "whitelist",
                     "blacklist"
                 ],
                 "default": "whitelist",
-                "hint": "定时任务要作用到哪些群。whitelist=只跑下面列表里的群；blacklist=除了下面列表，其他都跑。注意：这里只对“已通过基础群权限”的群生效。"
+                "hint": "定时任务要作用到哪些群。inherit=直接继承基础群权限，不需要重复填写；whitelist=只跑下面列表里的群；blacklist=除了下面列表，其他都跑。定时名单始终不会绕过基础群权限。"
             },
             "scheduled_group_list": {
                 "type": "list",
                 "description": "定时分析群列表",
                 "default": [],
-                "hint": "定时任务群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。注意：whitelist + 空列表 = 不会开启定时任务。即使某群在增量名单里，只要不在定时白名单里，也不会自动触发。",
+                "hint": "仅在 whitelist 或 blacklist 模式下使用。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。inherit 模式会忽略此列表并复用基础名单。whitelist + 空列表 = 不会开启定时任务。",
                 "items": {
                     "type": "string"
                 }
@@ -481,10 +482,36 @@
         "hint": "群聊分析结果完成后，后台并行生成并发送趣味漫画，不等待报告渲染或发送结束。可选上传至群相册，支持配置独立绘图接口和图生图参考图。",
         "items": {
             "enable_daily_comic": {
-                "description": "启用每日群漫画",
+                "description": "启用漫画功能",
                 "type": "bool",
                 "default": false,
-                "hint": "开启后，每次群分析话题结果完成就会在后台并行生成漫画。需要启用话题分析并获得有效话题；没有有效话题时静默跳过。报告发送失败不会取消已开始的漫画任务。"
+                "hint": "漫画总开关。关闭时，/群漫画 和所有自动联动漫画都会停止。开启后可继续通过下方“分析后自动生成漫画”单独控制自动联动。"
+            },
+            "enable_auto_daily_comic": {
+                "description": "分析后自动生成漫画",
+                "type": "bool",
+                "default": true,
+                "hint": "控制手动群分析、定时分析和增量最终报告完成后是否自动生成漫画。关闭后仍可手动使用 /群漫画，且不会重复执行话题分析链路。"
+            },
+            "comic_group_list_mode": {
+                "description": "漫画群名单模式",
+                "type": "string",
+                "options": [
+                    "inherit",
+                    "whitelist",
+                    "blacklist"
+                ],
+                "default": "inherit",
+                "hint": "只控制漫画生成，不影响报告名单。inherit=继承基础群权限，适合漫画和分析使用同一批群且无需重复填写；blacklist=除列表外都允许生成漫画，适合只开放漫画不开放分析；whitelist=只允许列表里的群生成漫画。白名单为空时不会为任何群生成漫画。"
+            },
+            "comic_group_list": {
+                "type": "list",
+                "description": "漫画群白/黑名单列表",
+                "default": [],
+                "hint": "用于漫画生成的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号。自动漫画和 /群漫画 手动命令都会检查这里。",
+                "items": {
+                    "type": "string"
+                }
             },
             "random_daily_comic_character": {
                 "description": "每天随机切换漫画角色",
@@ -1446,17 +1473,18 @@
                 "type": "string",
                 "description": "增量分析名单模式",
                 "options": [
+                    "inherit",
                     "whitelist",
                     "blacklist"
                 ],
                 "default": "whitelist",
-                "hint": "哪些群用“增量分析”。whitelist=只有列表里的群用增量；blacklist=除了列表外都用增量。没命中的群会走普通模式。注意：增量名单不负责放行群，只负责选模式。"
+                "hint": "哪些群用“增量分析”。inherit=直接继承定时分析的最终名单；whitelist=只有列表里的群用增量；blacklist=除了列表外都用增量。没命中的群会走普通模式。增量名单不负责绕过基础或定时名单，只负责选模式。"
             },
             "incremental_group_list": {
                 "type": "list",
                 "description": "增量分析群列表",
                 "default": [],
-                "hint": "增量分析群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只有这个群增量。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不用增量，其他群用增量。注意：whitelist + 空列表 = 不启用增量。只有先通过基础群权限 + 定时名单的群，才会在这里判断。",
+                "hint": "仅在 whitelist 或 blacklist 模式下使用。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只有这个群增量。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不用增量，其他群用增量。inherit 模式会忽略此列表并复用定时分析名单。whitelist + 空列表 = 不启用增量。",
                 "items": {
                     "type": "string"
                 }

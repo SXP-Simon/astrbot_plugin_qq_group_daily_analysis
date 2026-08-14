@@ -149,6 +149,24 @@ def load_config_manager_class(plugin_data_dir: Path):
         "_copy_legacy_comic_reference_images",
         "get_use_plugin_specific_persona",
         "get_plugin_specific_persona_id",
+        "_is_group_match",
+        "get_group_list_mode",
+        "get_group_list",
+        "is_group_allowed",
+        "is_auto_analysis_enabled",
+        "get_scheduled_group_list_mode",
+        "get_scheduled_group_list",
+        "is_scheduled_group_allowed",
+        "is_group_in_filtered_list",
+        "get_incremental_enabled",
+        "get_incremental_group_list_mode",
+        "get_incremental_group_list",
+        "is_incremental_group_allowed",
+        "get_enable_daily_comic",
+        "get_enable_auto_daily_comic",
+        "get_comic_group_list_mode",
+        "get_comic_group_list",
+        "is_comic_group_allowed",
         "get_drawing_provider_configs",
         "get_drawing_proxy",
         "get_drawing_reference_image",
@@ -719,6 +737,274 @@ def test_comic_is_skipped_without_valid_topics():
     assert plugin._comic_group_tasks == {}
     assert plugin._background_tasks == set()
 
+
+def test_comic_generation_observes_comic_group_filter():
+    """漫画名单拒绝当前群时不应创建漫画任务。"""
+    trigger_comic = load_main_method("_try_trigger_comic_generation")
+    plugin = SimpleNamespace(
+        _terminating=False,
+        config_manager=SimpleNamespace(
+            get_enable_daily_comic=Mock(return_value=True),
+            is_comic_group_allowed=Mock(return_value=False),
+        ),
+        _comic_group_tasks={},
+        _background_tasks=set(),
+        _trigger_comic_generation=AsyncMock(),
+    )
+
+    status = trigger_comic(
+        plugin,
+        "123456",
+        "onebot-main",
+        {"topics": [{"topic": "测试话题", "detail": "详情"}]},
+    )
+
+    assert status == "blocked"
+    plugin.config_manager.is_comic_group_allowed.assert_called_once_with(
+        "onebot-main:GroupMessage:123456", True
+    )
+    plugin._trigger_comic_generation.assert_not_called()
+    assert plugin._comic_group_tasks == {}
+    assert plugin._background_tasks == set()
+
+
+def test_auto_comic_switch_skips_report_trigger():
+    """关闭自动联动时，报告入口不应创建漫画任务。"""
+    trigger_comic = load_main_method("_try_trigger_comic_generation")
+    plugin = SimpleNamespace(
+        _terminating=False,
+        config_manager=SimpleNamespace(
+            get_enable_daily_comic=Mock(return_value=True),
+            get_enable_auto_daily_comic=Mock(return_value=False),
+            is_comic_group_allowed=Mock(return_value=True),
+        ),
+        _comic_group_tasks={},
+        _background_tasks=set(),
+        _trigger_comic_generation=AsyncMock(),
+    )
+
+    status = trigger_comic(
+        plugin,
+        "123456",
+        "onebot-main",
+        {"topics": [{"topic": "测试话题", "detail": "详情"}]},
+    )
+
+    assert status == "auto_disabled"
+    plugin.config_manager.is_comic_group_allowed.assert_not_called()
+    plugin._trigger_comic_generation.assert_not_called()
+
+
+def test_standalone_comic_command_is_decoupled_from_analysis_permission():
+    """手动漫画命令不应直接检查分析名单，避免只开漫画时被分析权限拦住。"""
+    main_path = Path(__file__).parents[1] / "main.py"
+    module = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
+    plugin_class = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "GroupDailyAnalysis"
+    )
+    method = next(
+        node
+        for node in plugin_class.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "generate_group_comic"
+    )
+    attribute_names = {
+        node.attr for node in ast.walk(method) if isinstance(node, ast.Attribute)
+    }
+
+    assert "is_group_allowed" not in attribute_names
+    assert "get_enable_daily_comic" in attribute_names
+    assert "is_comic_group_allowed" in attribute_names
+    assert "execute_comic_topic_analysis" in attribute_names
+
+
+def test_comic_group_filter_defaults_to_inherit_basic_permission(tmp_path: Path):
+    """默认漫画名单应继承基础群权限，避免重复填写名单。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager = config_manager_class(
+        Config(
+            basic={
+                "group_list_mode": "whitelist",
+                "group_list": ["onebot-main:GroupMessage:123456"],
+            },
+            daily_comic={},
+        )
+    )
+
+    assert config_manager.get_comic_group_list_mode() == "inherit"
+    assert config_manager.get_comic_group_list() == []
+    assert config_manager.is_comic_group_allowed("onebot-main:GroupMessage:123456")
+    assert not config_manager.is_comic_group_allowed("onebot-main:GroupMessage:654321")
+
+
+def test_comic_group_filter_can_override_basic_permission(tmp_path: Path):
+    """只开放漫画时，漫画名单可独立放行未启用分析的群。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager = config_manager_class(
+        Config(
+            basic={"group_list_mode": "whitelist", "group_list": []},
+            daily_comic={"comic_group_list_mode": "blacklist", "comic_group_list": []},
+        )
+    )
+
+    assert not config_manager.is_group_allowed("onebot-main:GroupMessage:123456")
+    assert config_manager.is_comic_group_allowed("onebot-main:GroupMessage:123456")
+
+
+def test_comic_group_filter_supports_whitelist_and_blacklist(tmp_path: Path):
+    """漫画名单应复用 UMO 与纯群号兼容匹配。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    whitelist_manager = config_manager_class(
+        Config(
+            daily_comic={
+                "comic_group_list_mode": "whitelist",
+                "comic_group_list": ["onebot-main:GroupMessage:123456"],
+            }
+        )
+    )
+    assert whitelist_manager.is_comic_group_allowed("onebot-main:GroupMessage:123456")
+    assert not whitelist_manager.is_comic_group_allowed("telegram:GroupMessage:123456")
+
+    blacklist_manager = config_manager_class(
+        Config(
+            daily_comic={
+                "comic_group_list_mode": "blacklist",
+                "comic_group_list": ["123456"],
+            }
+        )
+    )
+    assert not blacklist_manager.is_comic_group_allowed(
+        "onebot-main:GroupMessage:123456"
+    )
+    assert blacklist_manager.is_comic_group_allowed("onebot-main:GroupMessage:654321")
+
+
+def test_scheduled_and_incremental_inherit_chain(tmp_path: Path):
+    """定时继承基础、增量继承定时，且 inherit 忽略自身列表。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager = config_manager_class(
+        Config(
+            basic={
+                "group_list_mode": "whitelist",
+                "group_list": ["onebot-main:GroupMessage:123456"],
+            },
+            auto_analysis={
+                "scheduled_group_list_mode": "inherit",
+                "scheduled_group_list": ["onebot-main:GroupMessage:654321"],
+            },
+            incremental={
+                "incremental_group_list_mode": "inherit",
+                "incremental_group_list": ["onebot-main:GroupMessage:654321"],
+            },
+        )
+    )
+
+    allowed_group = "onebot-main:GroupMessage:123456"
+    blocked_group = "onebot-main:GroupMessage:654321"
+    assert config_manager.is_auto_analysis_enabled()
+    assert config_manager.is_scheduled_group_allowed(allowed_group)
+    assert not config_manager.is_scheduled_group_allowed(blocked_group)
+    assert config_manager.get_incremental_enabled()
+    assert config_manager.is_incremental_group_allowed(allowed_group)
+    assert not config_manager.is_incremental_group_allowed(blocked_group)
+
+
+def test_inherited_incremental_uses_scheduled_final_result(tmp_path: Path):
+    """增量 inherit 必须继承定时名单的最终结果，而不是直接继承基础名单。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager = config_manager_class(
+        Config(
+            basic={"group_list_mode": "none", "group_list": []},
+            auto_analysis={
+                "scheduled_group_list_mode": "whitelist",
+                "scheduled_group_list": ["onebot-main:GroupMessage:123456"],
+            },
+            incremental={"incremental_group_list_mode": "inherit"},
+        )
+    )
+
+    assert config_manager.is_incremental_group_allowed(
+        "onebot-main:GroupMessage:123456"
+    )
+    assert not config_manager.is_incremental_group_allowed(
+        "onebot-main:GroupMessage:654321"
+    )
+
+
+def test_inherit_modes_do_not_change_default_disabled_behavior(tmp_path: Path):
+    """未显式选择 inherit 时，空白名单仍不会意外开启自动或增量任务。"""
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    class Config(dict):
+        save_config = Mock()
+
+    config_manager = config_manager_class(
+        Config(
+            basic={"group_list_mode": "none", "group_list": []},
+            auto_analysis={},
+            incremental={},
+        )
+    )
+
+    assert not config_manager.is_auto_analysis_enabled()
+    assert not config_manager.get_incremental_enabled()
+
+
+def test_comic_schema_exposes_group_filter():
+    """配置面板应公开漫画专用名单，不复用分析报告名单。"""
+    schema = json.loads(
+        (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
+    )
+    comic_items = schema["daily_comic"]["items"]
+
+    assert comic_items["comic_group_list_mode"]["default"] == "inherit"
+    assert comic_items["comic_group_list_mode"]["options"] == [
+        "inherit",
+        "whitelist",
+        "blacklist",
+    ]
+    assert comic_items["comic_group_list"]["type"] == "list"
+    assert comic_items["enable_auto_daily_comic"]["default"] is True
+
+
+def test_analysis_schema_exposes_inherit_modes():
+    """定时和增量名单配置应公开 inherit 模式。"""
+    schema = json.loads(
+        (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
+    )
+
+    assert (
+        "inherit"
+        in schema["auto_analysis"]["items"]["scheduled_group_list_mode"]["options"]
+    )
+    assert (
+        "inherit"
+        in schema["incremental"]["items"]["incremental_group_list_mode"]["options"]
+    )
+
+
 def _comic_config_manager(**overrides):
     """构造 generate_comic 所需的配置替身。"""
     defaults = {
@@ -825,9 +1111,7 @@ def test_big_banana_backend_returns_none_on_provider_error():
     async def scenario():
         pipeline = SimpleNamespace(
             run=AsyncMock(
-                return_value=SimpleNamespace(
-                    images=[], error_message="provider boom"
-                )
+                return_value=SimpleNamespace(images=[], error_message="provider boom")
             )
         )
         plugin = SimpleNamespace(drawing_pipeline=pipeline)
@@ -899,7 +1183,9 @@ def test_generate_comic_prefers_big_banana_backend():
     generate_comic = load_comic_service_method("generate_comic")
 
     async def scenario():
-        config_manager = _comic_config_manager(get_drawing_backend=Mock(return_value="big_banana"))
+        config_manager = _comic_config_manager(
+            get_drawing_backend=Mock(return_value="big_banana")
+        )
         drawing_client = SimpleNamespace(generate_image=AsyncMock())
         service = _comic_service(
             config_manager,
@@ -1034,6 +1320,7 @@ def test_generate_comic_skips_unconfigured_builtin_backend():
         drawing_client.generate_image.assert_not_called()
 
     asyncio.run(scenario())
+
 
 def test_detect_image_ext_sniffs_bytes():
     """应从图片字节嗅探扩展名，无法识别时回退 .png。"""

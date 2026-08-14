@@ -736,6 +736,102 @@ class GroupDailyAnalysis(Star):
             if current_task:
                 self._background_tasks.discard(current_task)
 
+    @filter.command("群漫画", alias={"group_comic", "daily_comic"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def generate_group_comic(
+        self, event: AstrMessageEvent, days: int | None = None
+    ):
+        """
+        生成群聊趣味漫画（跨平台支持）
+        用法: /群漫画 [天数]
+        """
+        if self._terminating:
+            return
+
+        current_task = asyncio.current_task()
+        if current_task:
+            self._background_tasks.add(current_task)
+
+        try:
+            event.should_call_llm(True)
+            group_id = self._get_group_id_from_event(event)
+            platform_id = self._get_platform_id_from_event(event)
+
+            if not group_id:
+                yield event.plain_result("❌ 请在群聊中使用此命令")
+                return
+
+            self.bot_manager.update_from_event(event)
+
+            check_target = getattr(event, "unified_msg_origin", None)
+            if not check_target:
+                check_target = f"{platform_id}:GroupMessage:{group_id}"
+
+            if not self.config_manager.get_enable_daily_comic():
+                yield event.plain_result("❌ 漫画生成功能未启用")
+                return
+
+            if not self.config_manager.is_comic_group_allowed(check_target):
+                yield event.plain_result("❌ 此群未启用漫画生成功能")
+                return
+
+            task_key = f"{platform_id or 'default'}:{group_id}"
+            existing_task = self._comic_group_tasks.get(task_key)
+            if existing_task and not existing_task.done():
+                yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
+                return
+
+            TraceContext.set(TraceContext.generate(prefix="comic", group_name=group_id))
+            yield event.plain_result("🎨 正在提取群聊话题并生成漫画...")
+
+            result = await self.analysis_service.execute_comic_topic_analysis(
+                group_id=group_id, platform_id=platform_id, days=days
+            )
+            if not result.get("success"):
+                reason = result.get("reason")
+                if reason == "no_messages":
+                    yield event.plain_result("❌ 未找到可用于生成漫画的群聊记录")
+                elif reason == "no_topics":
+                    yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
+                elif reason == "muted":
+                    logger.warning(
+                        "群 %s 开启了禁言，跳过手动漫画回复",
+                        group_id,
+                    )
+                else:
+                    yield event.plain_result("❌ 漫画话题提取失败，原因未知")
+                return
+
+            status = self._try_trigger_comic_generation(
+                group_id,
+                platform_id,
+                {"topics": result.get("topics", [])},
+                require_auto_enabled=False,
+            )
+            if status == "started":
+                yield event.plain_result("✅ 漫画生成任务已启动，完成后会发送到群里")
+            elif status == "duplicate":
+                yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
+            elif status == "blocked":
+                yield event.plain_result("❌ 此群未启用漫画生成功能")
+            elif status == "no_topics":
+                yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
+            else:
+                yield event.plain_result("⚠️ 漫画生成任务未启动，请查看插件日志")
+
+        except DuplicateGroupTaskError:
+            yield event.plain_result("🎨 该群的漫画话题提取任务正在执行，请稍后再试哦~")
+        except asyncio.CancelledError:
+            logger.info("手动漫画任务被取消（插件正在关闭或重载）")
+        except Exception as e:
+            logger.error("手动漫画生成失败: %s", e, exc_info=True)
+            yield event.plain_result(
+                f"❌ 漫画生成失败: {str(e)}。请检查消息获取、LLM 和绘图配置"
+            )
+        finally:
+            if current_task:
+                self._background_tasks.discard(current_task)
+
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict
     ) -> AsyncGenerator:
@@ -871,12 +967,37 @@ class GroupDailyAnalysis(Star):
             )
 
     def _try_trigger_comic_generation(
-        self, group_id: str, platform_id: str | None, analysis_result: dict
-    ):
-        if self._terminating or not self.config_manager.get_enable_daily_comic():
-            return
+        self,
+        group_id: str,
+        platform_id: str | None,
+        analysis_result: dict,
+        *,
+        require_auto_enabled: bool = True,
+    ) -> str:
+        if self._terminating:
+            return "terminating"
+        if not self.config_manager.get_enable_daily_comic():
+            return "disabled"
+        auto_comic_enabled = getattr(
+            self.config_manager, "get_enable_auto_daily_comic", None
+        )
+        if (
+            require_auto_enabled
+            and callable(auto_comic_enabled)
+            and not auto_comic_enabled()
+        ):
+            return "auto_disabled"
 
         umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        comic_allowed = getattr(self.config_manager, "is_comic_group_allowed", None)
+        inherit_allowed = True if require_auto_enabled else None
+        if callable(comic_allowed) and not comic_allowed(umo, inherit_allowed):
+            logger.info(
+                "群 %s 未通过漫画名单判定，跳过漫画生成。platform=%s",
+                group_id,
+                platform_id or "default",
+            )
+            return "blocked"
 
         topics = analysis_result.get("topics", [])
         statistics = analysis_result.get("statistics")
@@ -901,13 +1022,13 @@ class GroupDailyAnalysis(Star):
                 )
         if not comic_topics:
             logger.warning(f"群 {group_id} 没有有效话题，跳过漫画生成。")
-            return
+            return "no_topics"
 
         task_key = f"{platform_id or 'default'}:{group_id}"
         existing_task = self._comic_group_tasks.get(task_key)
         if existing_task and not existing_task.done():
             logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过重复任务。")
-            return
+            return "duplicate"
 
         task = asyncio.create_task(
             self._trigger_comic_generation(comic_topics, group_id, platform_id, umo)
@@ -922,6 +1043,7 @@ class GroupDailyAnalysis(Star):
                 else None
             )
         )
+        return "started"
 
     @staticmethod
     def _detect_image_ext(data: bytes) -> str:

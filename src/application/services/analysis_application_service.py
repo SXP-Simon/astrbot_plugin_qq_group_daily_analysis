@@ -402,6 +402,115 @@ class AnalysisApplicationService:
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
+    async def execute_comic_topic_analysis(
+        self,
+        group_id: str,
+        platform_id: str | None = None,
+        days: int | None = None,
+    ) -> dict[str, Any]:
+        """为独立漫画命令提取话题。
+
+        Args:
+            group_id: 目标群 ID。
+            platform_id: 平台适配器 ID。为空时使用默认适配器。
+            days: 可选消息回溯天数。为空时使用普通分析的默认天数。
+
+        Returns:
+            成功时返回提取到的话题和适配器信息；失败时返回 no_messages、
+            muted 或 no_topics 等原因。
+
+        Raises:
+            ValueError: 找不到对应平台适配器时抛出。
+        """
+        async with self.group_lock(group_id, "comic"):
+            logger.info(
+                "开始执行手动漫画话题分析: group=%s, platform=%s, days=%s",
+                group_id,
+                platform_id or "default",
+                days or "default",
+            )
+
+            adapter = self.bot_manager.get_adapter(platform_id)
+            if not adapter:
+                raise ValueError(f"未找到平台 {platform_id} 的适配器")
+
+            if hasattr(adapter, "is_group_muted"):
+                try:
+                    if await adapter.is_group_muted(group_id):
+                        logger.info(
+                            "群 %s 开启了禁言，跳过本次手动漫画话题分析",
+                            group_id,
+                        )
+                        return {"success": False, "reason": "muted"}
+                except Exception as e:
+                    logger.warning(
+                        "检查群 %s 禁言状态时出错: %s",
+                        group_id,
+                        e,
+                    )
+
+            if days is None:
+                days = self.config_manager.get_analysis_days()
+            max_count = self.config_manager.get_max_messages()
+
+            raw_messages = await adapter.fetch_messages(
+                group_id=group_id, days=days, max_count=max_count
+            )
+            logger.info(
+                "手动漫画消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
+                group_id,
+                platform_id or "default",
+                len(raw_messages),
+                days,
+                max_count,
+            )
+            if not raw_messages:
+                return {"success": False, "reason": "no_messages"}
+
+            from ...domain.services.message_cleaner_service import MessageCleanerService
+
+            cleaner = MessageCleanerService()
+            bot_self_ids = self.config_manager.get_bot_self_ids()
+            if not self.config_manager.get_filter_bot_messages():
+                bot_self_ids = []
+            unified_messages = cleaner.clean_messages(
+                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            )
+            logger.info(
+                "手动漫画消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
+                group_id,
+                platform_id or "default",
+                len(unified_messages),
+                max(len(raw_messages) - len(unified_messages), 0),
+            )
+            if not unified_messages:
+                return {"success": False, "reason": "no_messages"}
+
+            legacy_messages = self.statistics_service._convert_to_legacy_dict(
+                unified_messages
+            )
+            unified_msg_origin = (
+                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+            )
+
+            async with self._llm_slot(group_id, "comic_manual"):
+                topics, token_usage = await self.llm_analyzer.analyze_topics(
+                    legacy_messages, unified_msg_origin
+                )
+
+            if not topics:
+                return {"success": False, "reason": "no_topics"}
+
+            return {
+                "success": True,
+                "topics": topics,
+                "token_usage": token_usage,
+                "messages_count": len(unified_messages),
+                "adapter": adapter,
+                "group_id": group_id,
+                "platform_id": getattr(adapter, "platform_id", platform_id),
+            }
+
     # ----------------------------------------------------------------
     # 增量分析用例
     # ----------------------------------------------------------------

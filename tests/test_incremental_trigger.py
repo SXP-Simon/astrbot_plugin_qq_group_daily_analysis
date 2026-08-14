@@ -33,6 +33,9 @@ class FakeConfigManager:
     def is_group_in_filtered_list(self, unified_msg_origin, mode, group_list):
         return True
 
+    def is_scheduled_group_allowed(self, unified_msg_origin):
+        return self.allowed
+
     def get_scheduled_group_list_mode(self):
         return "blacklist"
 
@@ -44,6 +47,9 @@ class FakeConfigManager:
 
     def get_incremental_group_list(self):
         return []
+
+    def is_incremental_group_allowed(self, unified_msg_origin):
+        return self.allowed
 
     def get_incremental_min_messages(self):
         return 3
