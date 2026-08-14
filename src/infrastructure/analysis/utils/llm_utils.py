@@ -20,11 +20,15 @@ from .structured_output_schema import JSONObject, JSONValue
 _circuit_breakers = {}
 _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
-_LLM_REQUEST_WARN_SECONDS = 30.0
+_LLM_REQUEST_WARN_SECONDS = 120.0
 _LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
+_LLM_REQUEST_STACK_MAX_DEPTH = 32
 
 
-def _format_task_await_chain(task: asyncio.Task, max_depth: int = 16) -> str:
+def _format_task_await_chain(
+    task: asyncio.Task,
+    max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
+) -> str:
     """格式化异步任务当前 await 链路。
 
     这里只输出协程的文件、行号与函数名，不读取 frame locals，避免将 prompt、
@@ -42,7 +46,9 @@ def _format_task_await_chain(task: asyncio.Task, max_depth: int = 16) -> str:
     current = task.get_coro()
     seen: set[int] = set()
 
-    for _ in range(max_depth):
+    truncated = False
+
+    for depth in range(max_depth):
         if current is None:
             break
 
@@ -87,9 +93,12 @@ def _format_task_await_chain(task: asyncio.Task, max_depth: int = 16) -> str:
             chain.append(type(current).__name__)
 
         current = next_awaitable
+        truncated = depth == max_depth - 1 and current is not None
 
     if not chain:
         return "<无可用 await 链>"
+    if truncated:
+        chain.append("<await 链已截断>")
     return " -> ".join(chain)
 
 
