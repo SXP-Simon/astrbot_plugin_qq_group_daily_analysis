@@ -77,7 +77,14 @@ jobs:
         working-directory: ./dashboard
         run: pnpm build
 
-      - name: Verify Bundle Outputs
+      - name: Verify Bundle Outputs & Consistency
         run: |
           test -f pages/daily-analysis/index.html || exit 1
           test -f pages/daily-analysis/assets/index.js || exit 1
+          if ! git diff --quiet pages/; then
+            echo "::error::WebUI 源码已修改，但未在本地执行 'cd dashboard && pnpm build' 提交打包产物！"
+            echo "请在本地运行 'cd dashboard && pnpm build'，并将更新后的 pages/ 目录一起提交。"
+            git status --porcelain pages/
+            git diff pages/
+            exit 1
+          fi
