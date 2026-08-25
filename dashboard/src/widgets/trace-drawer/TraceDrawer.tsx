@@ -14,6 +14,7 @@ import { ReloadOutlined, DatabaseOutlined, ClockCircleOutlined, SyncOutlined } f
 import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
+import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
 import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
 import { formatDuration, formatTokens, formatTimestamp, formatPercent, formatStageName } from "../../shared/lib/formatters";
 
@@ -200,7 +201,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               <Tag style={{ margin: 0 }}>{trace.platform || "qq"}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="触发方式">
-              <Tag style={{ margin: 0 }}>{trace.trigger_type === "manual" ? "手动触发" : trace.trigger_type === "auto" ? "定时触发" : trace.trigger_type}</Tag>
+              <TriggerTypeTag triggerType={trace.trigger_type} />
             </Descriptions.Item>
             <Descriptions.Item label="开始时间">
               <span>{formatTimestamp(trace.started_at)}</span>
