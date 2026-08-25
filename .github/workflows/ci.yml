@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, release/* ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  python-test:
+    name: Python CI (${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+        python-version: [ "3.10", "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install -e ".[dev]" pytest pytest-asyncio pytest-cov ruff
+
+      - name: Lint and Format Check (Ruff)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Run Test Suite (Pytest)
+        run: |
+          uv run pytest tests/ -v
+
+  frontend-check:
+    name: Frontend Dashboard CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "dashboard/pnpm-lock.yaml"
+
+      - name: Install frontend dependencies
+        working-directory: ./dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint Check (Zero Warnings)
+        working-directory: ./dashboard
+        run: pnpm lint
+
+      - name: TypeScript Typecheck
+        working-directory: ./dashboard
+        run: pnpm typecheck
+
+      - name: Build Single Bundle
+        working-directory: ./dashboard
+        run: pnpm build
+
+      - name: Verify Bundle Outputs
+        run: |
+          test -f pages/daily-analysis/index.html || exit 1
+          test -f pages/daily-analysis/assets/index.js || exit 1
+          echo "Frontend static single-bundle artifacts verified successfully."

@@ -86,6 +86,13 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **圣经识别**: 自动筛选出群聊中的精彩发言
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
+### 🎛️ WebUI 控制台
+- **内嵌 WebUI 管理面板**: 原生集成在 AstrBot 插件页面，提供数据密集型运行大盘与历史报告归档
+- **全链路阶段级打点 (Tracing)**: 基于 SQLite WAL 记录分析流水线各阶段毫秒级耗时，支持甘特图瀑布流与调用栈追溯
+- **30 天 Checkpoint 阶段快照**: 关键分析成果持久化，支持长程断点恢复与零 Token 成本切换模板重新渲染
+- **开机自愈与孤儿清理**: 崩溃对账扫描自愈，Task Reaper 守护协程自动强杀死锁孤儿
+- **上下文演进透视**: 实时洞察消息清洗漏斗、Token 账单消耗与分词留存率
+
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
     - **精美图片**: 生成美观的可视化报告
@@ -428,130 +435,17 @@ AstrBot 更新插件时会先删除旧插件目录，再解压或移动新目录
 **忽略**：如果只是偶尔出现（如回复久远消息），不影响机器人核心功能（收发消息），可以直接忽略。
 
 
-## 贡献
+## 🤝 参与贡献 (Contributing)
 
+我们非常欢迎社区参与插件的开发与改进！
 
-### 开发环境设置
+如果你希望：
+* 🛠️ 参与 Python 后端或 WebUI 前端代码开发
+* 🎨 贡献新的精美视觉模板（提供离线热调预览工具）
+* 🐛 提交 Bug 修复或性能优化 PR
+* 📝 了解代码规范（Google-style Docstring、FSD、0 any、Ruff 格式化、Conventional Commits）
 
-为了保持代码质量，本项目使用 [pre-commit](https://pre-commit.com/) 钩子进行代码规范检查和自动修复。所有的贡献代码都必须通过 pre-commit 检查。
-
-#### 1. 安装 pre-commit
-```bash
-pip install pre-commit
-```
-
-#### 2. 安装 git hook
-在项目根目录下运行，这将确保在每次提交时自动运行检查：
-```bash
-pre-commit install
-```
-
-#### 3. 手动运行检查
-如果需要手动触发所有文件的检查（推荐在提交前运行一次）：
-```bash
-pre-commit run --all-files
-```
-
-### 模板贡献指南
-
-<details>
-<summary>🎨 点击展开查看如何贡献你的自定义模板给更多人玩</summary>
-
-如果您想为插件贡献新的报告模板，请按照以下步骤操作：
-
-#### 1. 创建模板目录
-在 `src/infrastructure/reporting/templates/` 目录下创建一个新的文件夹，例如 `my_theme`。
-
-#### 2. 必需文件结构
-您的模板目录需要包含以下文件：
-
-```text
-src/infrastructure/reporting/templates/your_theme_name/
-├── image_template.html      # 图片报告主模板
-├── activity_chart.html      # 活跃度图表组件
-├── topic_item.html          # 话题列表项组件
-├── user_title_item.html     # 用户称号项组件
-└── quote_item.html          # 金句项组件
-```
-
-#### 3. 模板变量说明
-
-**主模板 (`image_template.html`) 可用变量:**
-- `current_date`: 当前日期 (YYYY年MM月DD日)
-- `current_datetime`: 当前时间 (YYYY-MM-DD HH:MM:SS)
-- `message_count`: 消息总数
-- `participant_count`: 参与人数
-- `total_characters`: 总字符数
-- `emoji_count`: 表情数量
-- `most_active_period`: 最活跃时段
-- `hourly_chart_html`: 渲染后的活跃度图表 HTML
-- `topics_html`: 渲染后的热门话题 HTML
-- `titles_html`: 渲染后的用户称号 HTML
-- `quotes_html`: 渲染后的金句 HTML
-- `total_tokens`: Token 消耗统计
-- `prompt_tokens`: 提示词 Token 消耗
-- `completion_tokens`: 生成内容 Token 消耗
-
-**组件模板可用变量:**
-- `activity_chart.html`: `chart_data` (包含 `hour`, `count`, `percentage` 的列表)
-- `topic_item.html`: `topics` (列表，每一项包含 `index`, `topic` 对象, `contributors`, `detail`)
-- `user_title_item.html`: `titles` (列表，包含 `name`, `title`, `mbti`, `reason`, `avatar_data` (Base64))
-- `quote_item.html`: `quotes` (列表，包含 `content`, `sender`, `reason`, `avatar_url` (Base64))
-
-#### 4. 参考示例
-您可以参考 `src/infrastructure/reporting/templates/simple/` 目录下的文件，这是一个最简化的模板实现，包含了所有必需的基本结构。
-
-#### 5. 模板调试工具
-
-Image 模板调试：
-
-本项目提供了一个专门用于模板开发的调试工具 `scripts/debug_render.py`，可以在不启动完整 AstrBot 环境的情况下快速预览模板渲染效果。
-
-**使用方法：**
-
-```bash
-# 进入项目目录
-cd astrbot-qq-group-daily-analysis
-
-# 使用默认模板 (scrapbook) 渲染
-python scripts/debug_render.py
-
-# 指定模板名称渲染
-python scripts/debug_render.py -t simple
-
-# 指定输出文件路径
-python scripts/debug_render.py -t retro_futurism -o my_output.html
-
-# 查看帮助信息
-python scripts/debug_render.py -h
-```
-
-```
-uv run scripts\debug_render.py -t scrapbook -o debug_scrapbook.html
-uv run scripts\debug_render.py -t hack -o debug_hack.html
-uv run scripts\debug_render.py -t retro_futurism -o debug_retro.html
-uv run scripts\debug_render.py -t format -o debug_format.html
-uv run scripts\debug_render.py -t simple -o debug_simple.html
-uv run scripts\debug_render.py -t spring_festival -o debug_spring.html
-uv run scripts\debug_render.py -t HatsuneMiku -o debug_miku.html
-```
-
-
-**工具特性：**
-
-- 使用 Mock 数据模拟真实的群聊分析结果
-- 无需配置 LLM 服务或启动 AstrBot
-- 输出可使用 live server 打开 HTML 文件，并进行修改查看
-- 支持所有内置模板的快速切换预览
-
-**开发工作流推荐：**
-
-1. 修改模板文件
-2. 运行调试工具生成预览
-3. 在浏览器中打开生成的 HTML 文件查看效果
-4. 重复上述步骤直到满意
-
-</details>
+👉 请参阅完整的 **[贡献指南 (CONTRIBUTING.md)](./CONTRIBUTING.md)**。
 
 ## ❤️ Special Thanks
 
