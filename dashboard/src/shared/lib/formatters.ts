@@ -49,3 +49,24 @@ export function formatStageName(stage?: string): string {
   return stageMap[stage] || stage;
 }
 
+export function formatTriggerType(triggerType?: string): { text: string; color: string } {
+  switch (triggerType) {
+    case "manual":
+      return { text: "手动触发", color: "blue" };
+    case "auto":
+    case "scheduled":
+      return { text: "定时分析", color: "green" };
+    case "incremental":
+      return { text: "增量分析", color: "purple" };
+    case "auto_report":
+    case "incremental_report":
+      return { text: "增量日报", color: "cyan" };
+    case "web_ui":
+    case "web_manual":
+      return { text: "控制台触发", color: "geekblue" };
+    default:
+      return { text: triggerType || "常规分析", color: "default" };
+  }
+}
+
+

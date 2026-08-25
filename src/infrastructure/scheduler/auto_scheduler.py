@@ -980,7 +980,7 @@ class AutoScheduler:
                 group_id=group_id,
                 group_name=group_name,
                 platform=target_platform_id or "",
-                trigger_type="auto_report",
+                trigger_type="incremental_report",
             )
 
             if self._terminating:

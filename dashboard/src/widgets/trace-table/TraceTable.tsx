@@ -5,6 +5,7 @@ import type { FilterValue, SorterResult } from "antd/es/table/interface";
 import { EyeOutlined } from "@ant-design/icons";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
+import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
 import { formatDuration, formatTokens, formatTimestamp } from "../../shared/lib/formatters";
 
 interface TraceTableProps {
@@ -68,8 +69,8 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       title: "触发方式",
       dataIndex: "trigger_type",
       key: "trigger_type",
-      width: 90,
-      render: (t: string) => <Tag>{t === "manual" ? "手动" : t === "auto" ? "定时" : t}</Tag>,
+      width: 100,
+      render: (t: string) => <TriggerTypeTag triggerType={t} />,
     },
     {
       title: "状态",
