@@ -276,22 +276,6 @@ class GroupDailyAnalysis(Star):
                 # 平台对象，可以安全重复执行；这样后加载的平台也不会被遗漏。
                 await self.bot_manager.initialize_from_config()
 
-                # 自动对齐历史 Trace 中可能残留的旧占位符
-                bot_mgr = getattr(self, "bot_manager", None)
-                trace_st = getattr(self, "trace_store", None)
-                if (
-                    bot_mgr
-                    and trace_st
-                    and hasattr(trace_st, "reconcile_platform_identities")
-                    and hasattr(bot_mgr, "get_all_adapters")
-                ):
-                    active_platforms = list(bot_mgr.get_all_adapters().keys())
-                    if active_platforms:
-                        try:
-                            trace_st.reconcile_platform_identities(active_platforms)
-                        except Exception:
-                            pass
-
                 # 模板预览处理器依赖平台实例，因此每个平台加载时都要刷新。
                 if self.template_preview_router:
                     await self.template_preview_router.ensure_handlers_registered(
