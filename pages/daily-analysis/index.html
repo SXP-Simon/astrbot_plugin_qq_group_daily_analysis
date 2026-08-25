@@ -24,17 +24,21 @@
       (function() {
         try {
           var params = new URLSearchParams(window.location.search);
+          var themeVal = params.get("theme");
           var isDark = false;
-          if (params.get("theme") === "dark" || params.get("isDark") === "true") {
+          if (themeVal === "dark" || params.get("isDark") === "true") {
             isDark = true;
+          } else if (themeVal === "light" || params.get("isDark") === "false") {
+            isDark = false;
           } else if (localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
-            isDark = true;
-          } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
             isDark = true;
           }
           if (isDark) {
             document.documentElement.style.background = "#000000";
             document.documentElement.style.color = "#ffffff";
+          } else {
+            document.documentElement.style.background = "#f5f5f5";
+            document.documentElement.style.color = "#000000";
           }
         } catch(e) {}
       })();

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Timeline, Tag, Typography, Progress, Space, Tooltip } from "antd";
+import { Timeline, Tag, Typography, Progress, Space, Tooltip, theme } from "antd";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -10,7 +10,6 @@ import {
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
-import { useTheme } from "../../../shared/lib/useTheme";
 
 const { Text } = Typography;
 
@@ -67,7 +66,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
   spans,
   totalDurationMs = 1,
 }) => {
-  const { isDark } = useTheme();
+  const { token } = theme.useToken();
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
   if (!spans || spans.length === 0) {
@@ -120,11 +119,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
         <div
           style={{
             marginBottom: 12,
-            background: isExpanded
-              ? isDark
-                ? "rgba(255,255,255,0.06)"
-                : "rgba(0,0,0,0.02)"
-              : "transparent",
+            background: isExpanded ? token.colorFillAlter : "transparent",
             borderRadius: 6,
             padding: isExpanded ? "8px 10px" : "0",
             transition: "all 0.2s ease",
@@ -143,11 +138,11 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
           >
             <Space size={6}>
               {isExpanded ? (
-                <DownOutlined style={{ fontSize: 10, color: "#8c8c8c" }} />
+                <DownOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
               ) : (
-                <RightOutlined style={{ fontSize: 10, color: "#8c8c8c" }} />
+                <RightOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
               )}
-              <span style={{ fontWeight: 600, fontSize: 13, color: isDark ? "#e6edf3" : "#262626" }}>
+              <span style={{ fontWeight: 600, fontSize: 13, color: token.colorText }}>
                 {formatStageName(span.stage_name)}
               </span>
               {isSlaExceeded && (
@@ -164,7 +159,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             </Space>
 
             <Space size={6}>
-              <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#8c8c8c" }}>
+              <span style={{ fontSize: 11, color: token.colorTextSecondary }}>
                 占 {durationPct}%
               </span>
               <Tag
@@ -196,10 +191,10 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                 <div
                   style={{
                     padding: "6px 8px",
-                    background: isDark ? "rgba(255, 77, 79, 0.15)" : "rgba(255, 77, 79, 0.08)",
-                    border: `1px solid ${isDark ? "rgba(255, 77, 79, 0.3)" : "rgba(255, 77, 79, 0.2)"}`,
+                    background: token.colorErrorBg,
+                    border: `1px solid ${token.colorErrorBorder}`,
                     borderRadius: 4,
-                    color: isDark ? "#ff7875" : "#cf1322",
+                    color: token.colorErrorText,
                     fontSize: 12,
                     marginBottom: 6,
                   }}
@@ -213,7 +208,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
               {hasPayload ? (
                 <div>
-                  <div style={{ fontSize: 11, color: isDark ? "#8b949e" : "#8c8c8c", marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>
                     阶段调用参数与上下文指标：
                   </div>
                   <pre
@@ -221,8 +216,9 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                       fontSize: 11,
                       fontFamily:
                         'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
-                      background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                      color: isDark ? "#e6edf3" : "#262626",
+                      background: token.colorFillAlter,
+                      color: token.colorText,
+                      border: `1px solid ${token.colorBorderSecondary}`,
                       padding: "6px 8px",
                       borderRadius: 4,
                       margin: 0,
