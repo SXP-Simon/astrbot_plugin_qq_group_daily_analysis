@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, Table, Empty, Button, Tag } from "antd";
-import { ReloadOutlined, FileImageOutlined } from "@ant-design/icons";
+import { ReloadOutlined, FileImageOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { formatTimestamp } from "../../../shared/lib/formatters";
 import { useReportsViewModel } from "../model/useReportsViewModel";
 
@@ -13,7 +13,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
 
   const columns = [
     {
-      title: "文件名 / 报告标识",
+      title: "报告文件",
       dataIndex: "filename",
       key: "filename",
       render: (fn: string) => (
@@ -49,14 +49,19 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       title: "状态",
       key: "status",
       width: 90,
-      render: () => <Tag color="success">已落盘</Tag>,
+      render: () => <Tag color="success">已生成</Tag>,
     },
   ];
 
   return (
     <Card
       size="small"
-      title="📁 已生成历史报告长图归档 (Report History)"
+      title={
+        <span>
+          <FolderOpenOutlined style={{ marginRight: 6, color: "#1677ff" }} />
+          历史生成的日报长图
+        </span>
+      }
       extra={
         <Button
           size="small"

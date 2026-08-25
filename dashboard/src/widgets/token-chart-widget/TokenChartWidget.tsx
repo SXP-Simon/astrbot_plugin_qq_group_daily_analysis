@@ -12,10 +12,10 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
   const perAnalyzer = tokenUsage.per_analyzer || {};
 
   const analyzerLabels: Record<string, string> = {
-    topics: "话题挖掘 (Topics)",
-    user_titles: "人物画像 (Titles)",
-    golden_quotes: "金句提取 (Quotes)",
-    comic_storyboard: "漫画分镜 (Comics)",
+    topics: "话题挖掘",
+    user_titles: "群友画像",
+    golden_quotes: "精彩金句",
+    comic_storyboard: "今日漫画",
   };
 
   const pieData = Object.entries(perAnalyzer).map(([k, v]) => ({
@@ -26,7 +26,7 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
   const pieOption = {
     tooltip: {
       trigger: "item",
-      formatter: "{b}: {c} Tokens ({d}%)",
+      formatter: "{b}: {c} ({d}%)",
     },
     legend: {
       bottom: "0%",
@@ -35,7 +35,7 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
     },
     series: [
       {
-        name: "Token 消耗",
+        name: "模型消耗",
         type: "pie",
         radius: ["40%", "70%"],
         avoidLabelOverlap: false,
@@ -56,7 +56,7 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
       title={
         <span style={{ fontSize: 13 }}>
           <PieChartOutlined style={{ color: "#722ed1", marginRight: 6 }} />
-          子分析器 Token 消耗占比 (Token Breakdown)
+          各模块模型消耗分布
         </span>
       }
     >
