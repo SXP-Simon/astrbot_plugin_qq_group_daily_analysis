@@ -1,0 +1,109 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v5.1.0)"
+        required: true
+        default: "v5.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Release Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          else
+            TAG_NAME="${{ inputs.tag }}"
+          fi
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "Building Release for Tag: $TAG_NAME"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv & Test Dependencies
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Run Backend Tests
+        run: |
+          uv venv
+          uv pip install -e ".[dev]" pytest pytest-asyncio pytest-cov ruff
+          uv run pytest tests/ -v
+
+      - name: Set up Node.js & pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "dashboard/pnpm-lock.yaml"
+
+      - name: Build WebUI Dashboard
+        working-directory: ./dashboard
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm typecheck
+          pnpm build
+
+      - name: Verify WebUI Artifacts
+        run: |
+          test -f pages/daily-analysis/index.html || (echo "Missing pages/daily-analysis/index.html" && exit 1)
+          test -f pages/daily-analysis/assets/index.js || (echo "Missing pages/daily-analysis/assets/index.js" && exit 1)
+          echo "WebUI single-bundle distribution artifacts verified."
+
+      - name: Package Plugin ZIP
+        run: |
+          ZIP_NAME="astrbot_plugin_qq_group_daily_analysis_${{ steps.vars.outputs.tag }}.zip"
+          zip -r "$ZIP_NAME" . \
+            -x "*.git*" \
+            -x "dashboard/node_modules/*" \
+            -x "dashboard/.pnpm-store/*" \
+            -x "*/__pycache__/*" \
+            -x "*.pytest_cache/*" \
+            -x "*.ruff_cache/*" \
+            -x "data/*" \
+            -x "*.db" \
+            -x "*.sqlite*"
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+        id: pkg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: "Release ${{ steps.vars.outputs.tag }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ${{ steps.pkg.outputs.zip_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
