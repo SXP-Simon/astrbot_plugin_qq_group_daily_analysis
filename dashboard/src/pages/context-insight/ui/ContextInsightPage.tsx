@@ -1,10 +1,10 @@
 import React from "react";
 import { Space, Card, Row, Col, Typography, Select } from "antd";
-import { DollarOutlined, BranchesOutlined, PieChartOutlined, DatabaseOutlined, BarChartOutlined } from "@ant-design/icons";
+import { BranchesOutlined, PieChartOutlined, DatabaseOutlined, BarChartOutlined, FilterOutlined } from "@ant-design/icons";
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/ContextFunnelWidget";
 import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
-import { formatTokens, formatCost, formatPercent } from "../../../shared/lib/formatters";
+import { formatTokens, formatPercent } from "../../../shared/lib/formatters";
 import { useContextInsightViewModel } from "../model/useContextInsightViewModel";
 
 const { Text } = Typography;
@@ -88,11 +88,11 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({ viewMode
         </Col>
         <Col xs={12} sm={6}>
           <MetricCard
-            title="单次预估费用"
-            value={formatCost(tokenUsage.estimated_cost)}
-            prefix={<DollarOutlined style={{ color: "#faad14" }} />}
+            title="剔除噪音消息"
+            value={`${Math.max(0, contextMetrics.raw_message_count - contextMetrics.cleaned_message_count).toLocaleString()} 条`}
+            prefix={<FilterOutlined style={{ color: "#faad14" }} />}
             valueStyle={{ color: "#faad14" }}
-            subTitle="基于模型单价估算"
+            subTitle="广告/空消息/噪音指令"
             loading={loading}
           />
         </Col>
