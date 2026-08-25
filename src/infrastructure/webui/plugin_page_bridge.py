@@ -598,43 +598,52 @@ class PluginPageWebUIBridge:
                 try:
                     stat = file_path.stat()
                     is_html = file_path.suffix.lower() in {".html", ".htm"}
-                    trace_id = ""
-                    # 1. 尝试从嵌入式文件名中提取群号与 trace_id
-                    m = re.match(
-                        r"^(?:report|群聊分析报告)_(.+?)_\d{8}_\d{6}_([a-zA-Z0-9_\-]+)\.(?:jpg|jpeg|png|webp|html|htm)$",
-                        file_path.name,
-                        re.IGNORECASE,
-                    )
-                    if m:
-                        group_id = m.group(1)
-                        trace_id = m.group(2)
-                    else:
+                    trace_id = report_trace_map.get(file_path.name, "")
+                    stem = file_path.stem
+                    group_id = ""
+
+                    # 1. 优先通过数据库已登记群号精确匹配（最长匹配优先，避免前缀歧义）
+                    for known_gid in sorted(
+                        group_info_map.keys(), key=len, reverse=True
+                    ):
+                        if not known_gid:
+                            continue
+                        if re.search(
+                            rf"(?:^|_){re.escape(known_gid)}(?:_|$)", stem
+                        ):
+                            group_id = known_gid
+                            break
+
+                    # 2. 若未匹配到已知群，按结构化模式解析群号
+                    if not group_id:
                         m = re.match(
-                            r"^(?:report|群聊分析报告)_(.+?)_\d{8}_\d{6}\.(?:jpg|jpeg|png|webp|html|htm)$",
-                            file_path.name,
+                            r"^(?:report|群聊分析报告)_(.+?)_(?:\d{4}-?\d{2}-?\d{2}|\d{8})(?:_\d{6})?(?:_([a-zA-Z0-9_\-]+))?$",
+                            stem,
                             re.IGNORECASE,
                         )
-                        if not m:
+                        if m:
+                            group_id = m.group(1)
+                            if m.group(2) and not trace_id:
+                                cand = m.group(2)
+                                if "_" in cand or len(cand) < 26:
+                                    trace_id = cand
+                        else:
                             m = re.match(
-                                r"^(?:report|群聊分析报告)_(.+?)_\d{4}-\d{2}-\d{2}_([a-zA-Z0-9_\-]+)\.(?:jpg|jpeg|png|webp|html|htm)$",
-                                file_path.name,
+                                r"^(?:report|群聊分析报告)_(.+?)_\d+$",
+                                stem,
                                 re.IGNORECASE,
                             )
-                        if not m:
-                            m = re.match(
-                                r"^(?:report|群聊分析报告)_(.+?)_\d+\.(?:jpg|jpeg|png|webp|html|htm)$",
-                                file_path.name,
-                                re.IGNORECASE,
-                            )
-                        if not m:
-                            m = re.match(
-                                r"^(?:report|群聊分析报告)_(.+?)\.(?:jpg|jpeg|png|webp|html|htm)$",
-                                file_path.name,
-                                re.IGNORECASE,
-                            )
-                        group_id = m.group(1) if m else ""
+                            if m:
+                                group_id = m.group(1)
+                            else:
+                                m = re.match(
+                                    r"^(?:report|群聊分析报告)_(.+?)$",
+                                    stem,
+                                    re.IGNORECASE,
+                                )
+                                group_id = m.group(1) if m else stem
 
-                    # 2. 若文件名未显式包含 trace_id，则从 TraceContext / 历史存储的 report_files 映射中精准匹配
+                    # 3. 兜底获取 trace_id
                     if not trace_id:
                         trace_id = report_trace_map.get(file_path.name, "")
 
