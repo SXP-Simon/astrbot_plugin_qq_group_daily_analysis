@@ -56,6 +56,23 @@ export const App: React.FC = () => {
     tracesVM.refresh();
   });
 
+  // 当 activeTab 切换时，自动将选中的 Tab 元素平滑居中滚动至可视区域中央（防止移动端右侧 Tab 溢出不可见）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const activeTabEl = document.querySelector<HTMLElement>(
+        `.ant-tabs-tab-active, [data-node-key="${activeTab}"]`
+      );
+      if (activeTabEl && typeof activeTabEl.scrollIntoView === "function") {
+        activeTabEl.scrollIntoView({
+          behavior: "smooth",
+          inline: "center",
+          block: "nearest",
+        });
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
+
   // SSE 实时事件订阅：接收到后端任务状态变更时精准失效相关缓存
   useEffect(() => {
     const unsubscribe = subscribeSSE({
