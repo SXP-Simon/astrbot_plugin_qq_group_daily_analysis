@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from astrbot.api.star import Context
     from astrbot.api.web import (
         error_response,
         json_response,
@@ -19,6 +20,8 @@ try:
         stream_response,
     )
 except (ImportError, AttributeError):
+    Context: Any = Any  # type: ignore
+
     def json_response(data: Any, status_code: int = 200) -> Any:  # type: ignore
         return {"status_code": status_code, "data": data}
 
@@ -29,6 +32,7 @@ except (ImportError, AttributeError):
 
     def stream_response(gen: Any) -> Any:  # type: ignore
         return gen
+
 
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext

@@ -50,7 +50,7 @@ jobs:
       - name: Run Backend Tests
         run: |
           uv venv
-          uv pip install -e ".[dev]" pytest pytest-asyncio pytest-cov ruff
+          uv pip install -r requirements.txt pytest pytest-asyncio pytest-cov ruff
           uv run pytest tests/ -v
 
       - name: Set up Node.js & pnpm
