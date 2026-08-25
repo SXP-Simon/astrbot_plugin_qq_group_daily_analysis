@@ -64,7 +64,8 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     try {
       const res = await triggerNewTask(trimmedId, groupName.trim(), platform);
       if (res.status === "ok") {
-        message.success("分析任务已提交到执行队列");
+        const traceInfo = res.trace_id ? ` (任务编号: ${res.trace_id})` : "";
+        message.success(`分析任务已提交到执行队列${traceInfo}`);
         setOpen(false);
         if (onSuccess) onSuccess();
       } else {

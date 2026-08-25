@@ -27,19 +27,37 @@ export async function fetchConnectedPlatforms(): Promise<ConnectedPlatform[]> {
   return [];
 }
 
+export interface TriggerTaskResult {
+  status: string;
+  trace_id?: string;
+  message?: string;
+  data?: unknown;
+}
+
 export async function triggerNewTask(
   groupId: string,
   groupName: string = "",
   platform: string = "auto"
-): Promise<{ status: string; data?: unknown; message?: string }> {
-  const res = await apiPost<{ trace_id: string }>("tasks/trigger", {
+): Promise<TriggerTaskResult> {
+  const res = await apiPost<{ trace_id?: string; message?: string }>("tasks/trigger", {
     group_id: groupId,
     group_name: groupName,
     platform: platform,
   });
+
+  const data = extractData<{ trace_id?: string; message?: string }>(res);
+  const rawObj = (res && typeof res === "object" ? res : {}) as Record<string, unknown>;
+  const traceId = data?.trace_id || (rawObj.trace_id as string | undefined);
+  const isOk =
+    rawObj.status === "ok" ||
+    rawObj.status === "success" ||
+    !!traceId ||
+    (typeof rawObj.message === "string" && rawObj.message.includes("successfully"));
+
   return {
-    status: res?.status || (res?.data ? "ok" : "error"),
-    data: res?.data,
-    message: res?.message,
+    status: isOk ? "ok" : "error",
+    trace_id: traceId,
+    data: data || undefined,
+    message: data?.message || (rawObj.message as string | undefined) || (isOk ? "任务提交成功" : "任务提交失败"),
   };
 }

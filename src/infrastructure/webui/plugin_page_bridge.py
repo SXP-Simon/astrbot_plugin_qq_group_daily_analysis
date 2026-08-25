@@ -53,12 +53,14 @@ class PluginPageWebUIBridge:
         trace_store: TraceSQLiteStore,
         active_task_manager: ActiveTaskManager,
         analysis_service: Any,
+        report_dispatcher: Any = None,
         report_output_dir: Path | None = None,
     ):
         self.context = context
         self.trace_store = trace_store
         self.active_task_manager = active_task_manager
         self.analysis_service = analysis_service
+        self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
 
     def register_routes(self) -> None:
@@ -276,6 +278,31 @@ class PluginPageWebUIBridge:
                     manual=True,
                 )
                 if result and result.get("success"):
+                    analysis_result = result.get("analysis_result")
+                    adapter = result.get("adapter")
+                    dispatch_platform_id = (
+                        getattr(adapter, "platform_id", None)
+                        or (
+                            platform
+                            if platform and platform not in ("all", "auto", "default")
+                            else None
+                        )
+                    )
+                    # 调度生成报告长图并推送到目标群聊
+                    if self.report_dispatcher and analysis_result:
+                        try:
+                            with trace_ctx.span("DISPATCH_REPORT"):
+                                await self.report_dispatcher.dispatch(
+                                    group_id,
+                                    analysis_result,
+                                    dispatch_platform_id,
+                                )
+                        except Exception as dispatch_err:
+                            logger.error(
+                                f"WebUI 触发报告发送异常 (群 {group_id}): {dispatch_err}",
+                                exc_info=True,
+                            )
+
                     if trace_ctx.status == "running":
                         trace_ctx.finish(status="succeeded")
                 else:
