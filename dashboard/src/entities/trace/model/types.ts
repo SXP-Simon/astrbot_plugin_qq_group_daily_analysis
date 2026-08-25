@@ -48,4 +48,5 @@ export interface TraceRecord {
   spans?: TraceSpan[];
   context_metrics?: ContextMetrics | null;
   token_usage?: TokenUsage | null;
+  current_stage?: string;
 }
