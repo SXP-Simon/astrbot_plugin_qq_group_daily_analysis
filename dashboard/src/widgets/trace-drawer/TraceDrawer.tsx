@@ -11,6 +11,7 @@ import {
   Button,
   message,
   Tooltip,
+  theme,
 } from "antd";
 import {
   ReloadOutlined,
@@ -45,6 +46,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   onClose,
 }) => {
   const { isDark } = useTheme();
+  const { token } = theme.useToken();
   const [trace, setTrace] = useState<TraceRecord | null>(null);
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -209,8 +211,9 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                               style={{
                                 fontSize: 11,
                                 fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
-                                background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
-                                color: isDark ? "#e6edf3" : "#262626",
+                                background: token.colorFillAlter,
+                                color: token.colorText,
+                                border: `1px solid ${token.colorBorderSecondary}`,
                                 padding: 8,
                                 borderRadius: 4,
                                 maxHeight: 200,
@@ -236,8 +239,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             size="small"
             bordered
             column={2}
-            labelStyle={{ width: 85, color: isDark ? "#8c8c8c" : "#595959", fontSize: 12 }}
-            contentStyle={{ color: isDark ? "#e6edf3" : "#262626", fontSize: 12 }}
+            labelStyle={{ width: 85, fontSize: 12 }}
+            contentStyle={{ fontSize: 12 }}
           >
             <Descriptions.Item label="任务编号" span={2}>
               <Text copyable style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontSize: 12 }}>
@@ -277,8 +280,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               size="small"
               bordered
               column={2}
-              labelStyle={{ width: 100, color: isDark ? "#8c8c8c" : "#595959", fontSize: 12 }}
-              contentStyle={{ color: isDark ? "#e6edf3" : "#262626", fontSize: 12 }}
+              labelStyle={{ width: 100, fontSize: 12 }}
+              contentStyle={{ fontSize: 12 }}
             >
               {trace.context_metrics && (
                 <>
