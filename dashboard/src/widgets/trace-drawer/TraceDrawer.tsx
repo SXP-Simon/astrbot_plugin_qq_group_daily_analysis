@@ -253,7 +253,11 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               </span>
             </Descriptions.Item>
             <Descriptions.Item label="接入平台">
-              <Tag style={{ margin: 0 }}>{trace.platform || "qq"}</Tag>
+              <Tag style={{ margin: 0 }}>
+                {!trace.platform || trace.platform === "auto" || trace.platform === "default"
+                  ? "qq"
+                  : trace.platform}
+              </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="触发方式">
               <TriggerTypeTag triggerType={trace.trigger_type} />

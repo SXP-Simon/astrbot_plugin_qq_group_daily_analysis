@@ -50,20 +50,26 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       title: "群聊",
       dataIndex: "group_id",
       key: "group_id",
-      render: (gid: string, r: TraceRecord) => (
-        <Tooltip title={`群号: ${gid} | 平台: ${r.platform || "qq"}`}>
-          <span className="font-mono text-xs">
-            {r.group_name || "未知群"} ({gid})
-          </span>
-        </Tooltip>
-      ),
+      render: (gid: string, r: TraceRecord) => {
+        const p = !r.platform || r.platform === "auto" || r.platform === "default" ? "qq" : r.platform;
+        return (
+          <Tooltip title={`群号: ${gid} | 平台: ${p}`}>
+            <span className="font-mono text-xs">
+              {r.group_name || "未知群"} ({gid})
+            </span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "平台",
       dataIndex: "platform",
       key: "platform",
       width: 80,
-      render: (p: string) => <Tag>{p || "qq"}</Tag>,
+      render: (p: string) => {
+        const displayP = !p || p === "auto" || p === "default" ? "qq" : p;
+        return <Tag>{displayP}</Tag>;
+      },
     },
     {
       title: "触发方式",
