@@ -279,21 +279,6 @@ class TraceSQLiteStore:
             reconciled_count = cursor.rowcount
             return reconciled_count
 
-    def reconcile_platform_identities(self, current_platform_ids: list[str]) -> None:
-        """根据当前 AstrBot 活跃平台实例列表，将历史遗留的旧协议名/占位符更新为规范的实例 ID"""
-        if not current_platform_ids:
-            return
-        primary_id = current_platform_ids[0]
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                UPDATE analysis_traces
-                SET platform = ?
-                WHERE platform IN ('qq', 'onebot', 'aiocqhttp', 'auto', 'default', 'none', '') OR platform IS NULL
-                """,
-                (primary_id,),
-            )
-
     def get_distinct_groups(self) -> list[dict[str, str]]:
         """获取所有有历史分析记录的唯一群组列表（按 group_id 分组，取每个群最新一次运行的群名与平台标识）"""
         with self._get_connection() as conn:
