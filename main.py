@@ -38,11 +38,13 @@ from .src.infrastructure.analysis.llm_analyzer import LLMAnalyzer
 from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.drawing.drawing_client import DrawingClient
 from .src.infrastructure.messaging.message_sender import MessageSender
+from .src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.platform_group_registry import (
     PlatformGroupRegistry,
 )
+from .src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.platform.template_preview import (
     TelegramTemplatePreviewHandler,
@@ -51,6 +53,8 @@ from .src.infrastructure.platform.template_preview import (
 from .src.infrastructure.reporting.generators import ReportGenerator
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
+from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
+from .src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
 from .src.shared.constants import PLUGIN_NAME
 from .src.shared.trace_context import TraceContext, TraceLogFilter
 from .src.utils.logger import logger
@@ -80,6 +84,10 @@ class GroupDailyAnalysis(Star):
     template_preview_router: TemplatePreviewRouter
     auto_scheduler: AutoScheduler
     message_sender: MessageSender
+    trace_store: TraceSQLiteStore
+    checkpoint_store: CheckpointStore
+    active_task_manager: ActiveTaskManager
+    webui_bridge: PluginPageWebUIBridge
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -98,6 +106,11 @@ class GroupDailyAnalysis(Star):
 
         # Telegram 注册表 (持久层)
         self.platform_group_registry = PlatformGroupRegistry(self)
+
+        # 1.1 Trace & Checkpoint 基础设施 (持久化)
+        self.trace_store = TraceSQLiteStore(plugin_data_dir / "traces.db")
+        TraceContext.set_global_store(self.trace_store)
+        self.checkpoint_store = CheckpointStore(plugin_data_dir / "traces.db")
 
         # 2. 领域层
         activity_visualizer = ActivityVisualizer()
@@ -163,6 +176,18 @@ class GroupDailyAnalysis(Star):
             self.html_render,
             plugin_instance=self,
         )
+
+        # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
+        self.active_task_manager = ActiveTaskManager(trace_store=self.trace_store)
+        self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=600)
+        self.webui_bridge = PluginPageWebUIBridge(
+            context=context,
+            trace_store=self.trace_store,
+            active_task_manager=self.active_task_manager,
+            analysis_service=self.analysis_service,
+            report_output_dir=plugin_data_dir / "reports",
+        )
+        self.webui_bridge.register_routes()
 
         # 同步全局限流并进行初始化配置
         GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
