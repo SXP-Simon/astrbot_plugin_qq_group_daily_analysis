@@ -4,7 +4,7 @@ import { BranchesOutlined, PieChartOutlined, DatabaseOutlined, BarChartOutlined,
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/ContextFunnelWidget";
 import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
-import { formatTokens, formatPercent } from "../../../shared/lib/formatters";
+import { formatSmartTokens, formatPercent } from "../../../shared/lib/formatters";
 import { useContextInsightViewModel } from "../model/useContextInsightViewModel";
 
 const { Text } = Typography;
@@ -80,9 +80,9 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({ viewMode
         <Col xs={12} sm={6}>
           <MetricCard
             title="本次模型消耗"
-            value={formatTokens(tokenUsage.total_tokens)}
+            value={formatSmartTokens(tokenUsage.total_tokens)}
             prefix={<PieChartOutlined style={{ color: "#722ed1" }} />}
-            subTitle={`输入: ${formatTokens(tokenUsage.prompt_tokens)} / 输出: ${formatTokens(tokenUsage.completion_tokens)}`}
+            subTitle={`输入: ${formatSmartTokens(tokenUsage.prompt_tokens)} / 输出: ${formatSmartTokens(tokenUsage.completion_tokens)}`}
             loading={loading}
           />
         </Col>
