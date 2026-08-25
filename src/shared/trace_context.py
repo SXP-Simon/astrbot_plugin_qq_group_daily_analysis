@@ -324,9 +324,23 @@ class TraceContext:
         return f"📊 每日群聊分析报告已生成 | {ts}"
 
     @classmethod
-    def set(cls, trace_id: str) -> None:
-        ctx = cls(trace_id=trace_id)
-        _current_trace.set(ctx)
+    def set(
+        cls,
+        trace_id: str,
+        group_id: str = "",
+        group_name: str = "",
+        platform: str = "",
+        trigger_type: str = "manual",
+    ) -> TraceContext:
+        ctx = cls(
+            trace_id=trace_id,
+            group_id=str(group_id),
+            group_name=group_name,
+            platform=platform,
+            trigger_type=trigger_type,
+        )
+        ctx._token = _current_trace.set(ctx)
+        return ctx
 
     @classmethod
     def get(cls) -> str:

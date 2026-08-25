@@ -104,14 +104,32 @@ class ReportDispatcher:
                     return await adapter.get_user_avatar_url(user_id, size=40)
                 return None
 
-            image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result,
-                group_id,
-                self._html_render_func,
-                avatar_url_getter=avatar_url_getter,
-                avatar_cache_namespace=platform_id,
-                allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
-            )
+            trace = TraceContext.current()
+            if trace:
+                with trace.span("RENDER_REPORT", {"format": "image"}):
+                    (
+                        image_url,
+                        html_content,
+                    ) = await self.report_generator.generate_image_report(
+                        analysis_result,
+                        group_id,
+                        self._html_render_func,
+                        avatar_url_getter=avatar_url_getter,
+                        avatar_cache_namespace=platform_id,
+                        allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                    )
+            else:
+                (
+                    image_url,
+                    html_content,
+                ) = await self.report_generator.generate_image_report(
+                    analysis_result,
+                    group_id,
+                    self._html_render_func,
+                    avatar_url_getter=avatar_url_getter,
+                    avatar_cache_namespace=platform_id,
+                    allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
             # image_url and html_content remain None
@@ -163,13 +181,27 @@ class ReportDispatcher:
                     return await adapter.get_user_avatar_url(user_id, size=40)
                 return None
 
-            html_path, json_path = await self.report_generator.generate_html_report(
-                analysis_result,
-                group_id,
-                avatar_url_getter=avatar_url_getter,
-                avatar_cache_namespace=platform_id,
-                allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
-            )
+            trace = TraceContext.current()
+            if trace:
+                with trace.span("RENDER_REPORT", {"format": "html"}):
+                    (
+                        html_path,
+                        json_path,
+                    ) = await self.report_generator.generate_html_report(
+                        analysis_result,
+                        group_id,
+                        avatar_url_getter=avatar_url_getter,
+                        avatar_cache_namespace=platform_id,
+                        allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                    )
+            else:
+                html_path, json_path = await self.report_generator.generate_html_report(
+                    analysis_result,
+                    group_id,
+                    avatar_url_getter=avatar_url_getter,
+                    avatar_cache_namespace=platform_id,
+                    allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 

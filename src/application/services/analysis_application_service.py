@@ -207,6 +207,21 @@ class AnalysisApplicationService:
         8. 返回结果
         """
 
+        trace = TraceContext.current()
+        if not trace:
+            trace = TraceContext.get_or_create(
+                group_id=str(group_id),
+                platform=platform_id or "",
+                trigger_type="manual" if manual else "auto",
+                auto_bind=True,
+            )
+        else:
+            if not trace.group_id:
+                trace.group_id = str(group_id)
+            if not trace.platform and platform_id:
+                trace.platform = platform_id
+            trace.trigger_type = "manual" if manual else "auto"
+
         async with self.group_lock(group_id, "daily"):
             logger.info(
                 f"开始执行分析用例: 群 {group_id}, platform_id={platform_id or '默认'}, days={days or '默认'}"
@@ -254,9 +269,10 @@ class AnalysisApplicationService:
                 days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
 
-            raw_messages = await adapter.fetch_messages(
-                group_id=group_id, days=days, max_count=max_count
-            )
+            with trace.span("FETCH_MESSAGES", {"days": days, "max_count": max_count}):
+                raw_messages = await adapter.fetch_messages(
+                    group_id=group_id, days=days, max_count=max_count
+                )
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -284,8 +300,13 @@ class AnalysisApplicationService:
             )
 
             # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
-            unified_messages = cleaner.clean_messages(
-                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            with trace.span("CLEAN_MESSAGES"):
+                unified_messages = cleaner.clean_messages(
+                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+                )
+            trace.set_context_metrics(
+                raw_message_count=len(raw_messages),
+                cleaned_message_count=len(unified_messages),
             )
             logger.info(
                 "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
@@ -304,16 +325,15 @@ class AnalysisApplicationService:
                 return {"success": False, "reason": "below_threshold"}
 
             # 5. 基础统计 (Domain Service)
-            statistics = await asyncio.to_thread(
-                self.statistics_service.calculate_group_statistics, unified_messages
-            )
-
-            # 4. 用户分析 (Domain Service)
-            user_activity = await asyncio.to_thread(
-                self.analysis_domain_service.analyze_user_activity,
-                unified_messages,
-                bot_self_ids,
-            )
+            with trace.span("STATS_ANALYSIS"):
+                statistics = await asyncio.to_thread(
+                    self.statistics_service.calculate_group_statistics, unified_messages
+                )
+                user_activity = await asyncio.to_thread(
+                    self.analysis_domain_service.analyze_user_activity,
+                    unified_messages,
+                    bot_self_ids,
+                )
 
             max_user_titles = self.config_manager.get_max_user_titles()
             top_users = self.analysis_domain_service.get_top_users(
@@ -321,7 +341,6 @@ class AnalysisApplicationService:
             )
 
             # 5. LLM 语义分析 (为了保持兼容，目前直接传 UnifiedMessage，后续如需传 raw dict 再加转换)
-            # LLMAnalyzer 内部可能已经处理了转换（见之前代码）
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
             golden_quote_enabled = (
@@ -337,8 +356,6 @@ class AnalysisApplicationService:
             chat_quality_review = None
             total_token_usage = TokenUsage()
 
-            # Note: LLMAnalyzer 目前可能只接收 legacy 格式或特定的 UnifiedMessage 适配
-            # 暂时转换回 legacy 格式以确保稳定性，直到 LLMAnalyzer 被重构
             legacy_messages = self.statistics_service._convert_to_legacy_dict(
                 unified_messages
             )
@@ -354,27 +371,28 @@ class AnalysisApplicationService:
                 or golden_quote_enabled
                 or chat_quality_enabled
             ):
-                async with self._llm_slot(group_id, analysis_stage):
-                    logger.debug(
-                        f"[LLM] 已进入普通全量分析队列 "
-                        f"(群: {group_id}, stage: {analysis_stage})"
-                    )
-                    (
-                        topics,
-                        user_titles,
-                        golden_quotes,
-                        total_token_usage,
-                        chat_quality_review,
-                    ) = await self.llm_analyzer.analyze_all_concurrent(
-                        legacy_messages,
-                        user_activity,
-                        umo=unified_msg_origin,
-                        top_users=top_users,
-                        topic_enabled=topic_enabled,
-                        user_title_enabled=user_title_enabled,
-                        golden_quote_enabled=golden_quote_enabled,
-                        chat_quality_enabled=chat_quality_enabled,
-                    )
+                with trace.span("LLM_ANALYSIS"):
+                    async with self._llm_slot(group_id, analysis_stage):
+                        logger.debug(
+                            f"[LLM] 已进入普通全量分析队列 "
+                            f"(群: {group_id}, stage: {analysis_stage})"
+                        )
+                        (
+                            topics,
+                            user_titles,
+                            golden_quotes,
+                            total_token_usage,
+                            chat_quality_review,
+                        ) = await self.llm_analyzer.analyze_all_concurrent(
+                            legacy_messages,
+                            user_activity,
+                            umo=unified_msg_origin,
+                            top_users=top_users,
+                            topic_enabled=topic_enabled,
+                            user_title_enabled=user_title_enabled,
+                            golden_quote_enabled=golden_quote_enabled,
+                            chat_quality_enabled=chat_quality_enabled,
+                        )
 
             # 回填结果
             statistics.golden_quotes = golden_quotes
@@ -389,7 +407,8 @@ class AnalysisApplicationService:
             }
 
             # 6. 持久化摘要 (Persistence)
-            await self.history_manager.save_analysis(group_id, analysis_result)
+            with trace.span("SAVE_SUMMARY"):
+                await self.history_manager.save_analysis(group_id, analysis_result)
 
             # 7. 生成报告并发送 (应用层编排发送动作)
             # 这里由调用方处理发送，本服务只返回分析结果和可能的视觉产物
@@ -546,6 +565,15 @@ class AnalysisApplicationService:
         Returns:
             dict: 包含 success、batch_summary 等信息
         """
+        trace = TraceContext.current()
+        if not trace:
+            trace = TraceContext.get_or_create(
+                group_id=str(group_id),
+                platform=platform_id or "",
+                trigger_type="incremental",
+                auto_bind=True,
+            )
+
         async with self.group_lock(group_id, "incremental"):
             analysis_started_at = time_mod.monotonic()
             if not self.incremental_store:
@@ -583,12 +611,13 @@ class AnalysisApplicationService:
 
             # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
             fetch_started_at = time_mod.monotonic()
-            raw_messages = await adapter.fetch_messages(
-                group_id=group_id,
-                days=days,
-                max_count=max_count,
-                since_ts=last_analyzed_ts,
-            )
+            with trace.span("FETCH_MESSAGES", {"days": days, "max_count": max_count}):
+                raw_messages = await adapter.fetch_messages(
+                    group_id=group_id,
+                    days=days,
+                    max_count=max_count,
+                    since_ts=last_analyzed_ts,
+                )
             raw_count = len(raw_messages)
             fetch_duration = time_mod.monotonic() - fetch_started_at
 
@@ -609,10 +638,16 @@ class AnalysisApplicationService:
                 self.config_manager.get_filter_bot_messages(),
                 len(bot_self_ids),
             )
-            unified_messages = cleaner.clean_messages(
-                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
-            )
+            with trace.span("CLEAN_MESSAGES"):
+                unified_messages = cleaner.clean_messages(
+                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+                )
             cleaned_count = len(unified_messages)
+            trace.set_context_metrics(
+                raw_message_count=raw_count,
+                cleaned_message_count=cleaned_count,
+                incremental_batches=1,
+            )
 
             # 5. 复合游标去重，避免同一秒内分批时遗漏消息。
             if last_analyzed_ts > 0:
@@ -667,14 +702,15 @@ class AnalysisApplicationService:
             )
 
             # 6. 计算基础统计
-            statistics = await asyncio.to_thread(
-                self.statistics_service.calculate_group_statistics, unified_messages
-            )
-            user_activity = await asyncio.to_thread(
-                self.analysis_domain_service.analyze_user_activity,
-                unified_messages,
-                bot_self_ids,
-            )
+            with trace.span("STATS_ANALYSIS"):
+                statistics = await asyncio.to_thread(
+                    self.statistics_service.calculate_group_statistics, unified_messages
+                )
+                user_activity = await asyncio.to_thread(
+                    self.analysis_domain_service.analyze_user_activity,
+                    unified_messages,
+                    bot_self_ids,
+                )
 
             # 计算本批次的小时分布
             hourly_msg_counts, hourly_char_counts = self._compute_hourly_counts(
@@ -708,22 +744,23 @@ class AnalysisApplicationService:
             chat_quality_review = None
 
             if topic_enabled or golden_quote_enabled or chat_quality_enabled:
-                async with self._llm_slot(group_id, "incremental"):
-                    logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
-                    (
-                        topics,
-                        golden_quotes,
-                        token_usage,
-                        chat_quality_review,
-                    ) = await self.llm_analyzer.analyze_incremental_concurrent(
-                        legacy_messages,
-                        umo=unified_msg_origin,
-                        topics_per_batch=topics_per_batch,
-                        quotes_per_batch=quotes_per_batch,
-                        topic_enabled=topic_enabled,
-                        golden_quote_enabled=golden_quote_enabled,
-                        chat_quality_enabled=chat_quality_enabled,
-                    )
+                with trace.span("LLM_ANALYSIS"):
+                    async with self._llm_slot(group_id, "incremental"):
+                        logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
+                        (
+                            topics,
+                            golden_quotes,
+                            token_usage,
+                            chat_quality_review,
+                        ) = await self.llm_analyzer.analyze_incremental_concurrent(
+                            legacy_messages,
+                            umo=unified_msg_origin,
+                            topics_per_batch=topics_per_batch,
+                            quotes_per_batch=quotes_per_batch,
+                            topic_enabled=topic_enabled,
+                            golden_quote_enabled=golden_quote_enabled,
+                            chat_quality_enabled=chat_quality_enabled,
+                        )
 
             # 8. 构建 IncrementalBatch
             # 8a. 转换话题: SummaryTopic -> dict
