@@ -282,12 +282,14 @@ class PluginPageWebUIBridge:
                     adapter = result.get("adapter")
                     dispatch_platform_id = (
                         getattr(adapter, "platform_id", None)
+                        or getattr(adapter, "platform_name", None)
                         or (
                             platform
                             if platform and platform not in ("all", "auto", "default")
-                            else None
+                            else "qq"
                         )
                     )
+                    trace_ctx.platform = str(dispatch_platform_id)
                     # 调度生成报告长图并推送到目标群聊
                     if self.report_dispatcher and analysis_result:
                         try:
