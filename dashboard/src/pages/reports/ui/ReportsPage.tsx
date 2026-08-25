@@ -1,16 +1,5 @@
-import React, { useState } from "react";
-import {
-  Card,
-  Table,
-  Empty,
-  Button,
-  Tag,
-  Modal,
-  Typography,
-  Space,
-  Spin,
-  message,
-} from "antd";
+import React from "react";
+import { Card, Table, Empty, Button, Tag, Typography, Space } from "antd";
 import {
   ReloadOutlined,
   FileImageOutlined,
@@ -20,8 +9,8 @@ import {
 } from "@ant-design/icons";
 import { formatTimestamp } from "../../../shared/lib/formatters";
 import { useReportsViewModel } from "../model/useReportsViewModel";
-import { fetchReportContent } from "../../../entities/report/api/reportApi";
 import { ReportItem } from "../../../entities/report/model/types";
+import { ReportPreviewModal } from "../../../widgets/report-preview-modal/ReportPreviewModal";
 
 const { Text, Paragraph } = Typography;
 
@@ -30,56 +19,17 @@ interface ReportsPageProps {
 }
 
 export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
-  const { reports, loading, refresh } = viewModel;
-
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [currentReport, setCurrentReport] = useState<ReportItem | null>(null);
-
-  const handleOpenPreview = async (report: ReportItem) => {
-    setCurrentReport(report);
-    setPreviewOpen(true);
-    setPreviewLoading(true);
-    try {
-      const data = await fetchReportContent(report.filename);
-      if (data && data.data_url) {
-        setCurrentReport((prev) => ({
-          ...(prev || report),
-          ...data,
-        }));
-      } else {
-        message.warning("未能读取到报告图片数据");
-      }
-    } catch {
-      message.error("加载报告图片失败");
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handleDirectDownload = async (report: ReportItem) => {
-    try {
-      let dataUrl = report.data_url;
-      if (!dataUrl) {
-        const data = await fetchReportContent(report.filename);
-        dataUrl = data?.data_url;
-      }
-      if (!dataUrl) {
-        message.error("获取下载图片失败");
-        return;
-      }
-
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = report.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      message.success(`已开始下载 ${report.filename}`);
-    } catch {
-      message.error("下载文件异常");
-    }
-  };
+  const {
+    reports,
+    loading,
+    refresh,
+    previewOpen,
+    previewLoading,
+    selectedReport,
+    openPreview,
+    closePreview,
+    downloadReport,
+  } = viewModel;
 
   const columns = [
     {
@@ -155,14 +105,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
             type="primary"
             ghost
             icon={<EyeOutlined />}
-            onClick={() => handleOpenPreview(r)}
+            onClick={() => openPreview(r)}
           >
             预览大图
           </Button>
           <Button
             size="small"
             icon={<DownloadOutlined />}
-            onClick={() => handleDirectDownload(r)}
+            onClick={() => downloadReport(r)}
           >
             下载
           </Button>
@@ -209,86 +159,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
         )}
       </Card>
 
-      {/* 图片预览 Modal */}
-      <Modal
+      {/* 独立抽离的图片预览 Widget */}
+      <ReportPreviewModal
         open={previewOpen}
-        onCancel={() => setPreviewOpen(false)}
-        title={
-          <Space>
-            <FileImageOutlined style={{ color: "#1677ff" }} />
-            <span style={{ fontSize: 15, fontWeight: 600 }}>
-              {currentReport?.filename || "日报长图预览"}
-            </span>
-          </Space>
-        }
-        width={720}
-        footer={[
-          <Button key="close" onClick={() => setPreviewOpen(false)}>
-            关闭
-          </Button>,
-          currentReport && (
-            <Button
-              key="download"
-              type="primary"
-              icon={<DownloadOutlined />}
-              onClick={() => handleDirectDownload(currentReport)}
-            >
-              下载图片
-            </Button>
-          ),
-        ]}
-        destroyOnHidden
-      >
-        {previewLoading ? (
-          <div style={{ textAlign: "center", padding: "60px 0" }}>
-            <Spin tip="正在加载高清报告图片..." />
-          </div>
-        ) : currentReport?.data_url ? (
-          <div style={{ textAlign: "center" }}>
-            {currentReport.absolute_path && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: "6px 12px",
-                  background: "rgba(0,0,0,0.03)",
-                  borderRadius: 4,
-                  textAlign: "left",
-                  fontSize: 12,
-                }}
-              >
-                <Text type="secondary">文件路径：</Text>
-                <Text copyable style={{ fontSize: 12 }}>
-                  {currentReport.absolute_path}
-                </Text>
-              </div>
-            )}
-            <div
-              style={{
-                maxHeight: "65vh",
-                overflowY: "auto",
-                border: "1px solid #f0f0f0",
-                borderRadius: 4,
-                padding: 8,
-                background: "#fafafa",
-              }}
-            >
-              <img
-                src={currentReport.data_url}
-                alt={currentReport.filename}
-                style={{
-                  maxWidth: "100%",
-                  height: "auto",
-                  display: "block",
-                  margin: "0 auto",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          <Empty description="未找到图片数据" />
-        )}
-      </Modal>
+        loading={previewLoading}
+        report={selectedReport}
+        onClose={closePreview}
+        onDownload={downloadReport}
+      />
     </>
   );
 };
