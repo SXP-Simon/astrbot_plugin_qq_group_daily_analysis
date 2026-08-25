@@ -1,0 +1,72 @@
+import { apiGet } from "../../../shared/api/bridge";
+import { TraceRecord } from "../model/types";
+
+export interface ListTracesParams {
+  limit?: number;
+  offset?: number;
+  group_id?: string;
+  status?: string;
+  search?: string;
+  start_time?: number;
+  end_time?: number;
+  sort_by?: string;
+  sort_order?: string;
+  [key: string]: unknown;
+}
+
+// 内存不可变详情缓存 (最大 100 条 LRU 策略)
+const MAX_CACHE_ENTRIES = 100;
+const traceDetailCache = new Map<string, TraceRecord>();
+
+export function invalidateTraceCache(traceId?: string): void {
+  if (traceId) {
+    traceDetailCache.delete(traceId);
+  } else {
+    traceDetailCache.clear();
+  }
+}
+
+export async function fetchTraceList(
+  params: ListTracesParams
+): Promise<{ items: TraceRecord[]; total: number }> {
+  const res = await apiGet<{ items: TraceRecord[]; total: number }>("traces", params);
+  if (res?.data && Array.isArray(res.data.items)) {
+    return res.data;
+  }
+  return {
+    items: Array.isArray(res?.items) ? (res.items as TraceRecord[]) : [],
+    total: typeof res?.total === "number" ? res.total : 0,
+  };
+}
+
+export async function fetchTraceDetail(
+  traceId: string,
+  forceRefresh = false
+): Promise<TraceRecord | null> {
+  // 1. 检查缓存命中（仅在未强制刷新且已存在缓存时）
+  if (!forceRefresh && traceDetailCache.has(traceId)) {
+    return traceDetailCache.get(traceId)!;
+  }
+
+  const res = await apiGet<TraceRecord>(`traces/${traceId}`);
+  let data: TraceRecord | null = null;
+  if (res?.data && typeof res.data === "object") {
+    data = res.data as TraceRecord;
+  } else if (res && "trace_id" in res) {
+    data = res as unknown as TraceRecord;
+  }
+
+  // 2. 只有已终态（非 running）的不可变 Trace 才允许存入缓存，防止运行中阶段状态陈旧
+  if (data && data.status !== "running") {
+    if (traceDetailCache.size >= MAX_CACHE_ENTRIES) {
+      const oldestKey = traceDetailCache.keys().next().value;
+      if (oldestKey) traceDetailCache.delete(oldestKey);
+    }
+    traceDetailCache.set(traceId, data);
+  } else if (data && data.status === "running") {
+    // 若当前正在运行，务必清除缓存
+    traceDetailCache.delete(traceId);
+  }
+
+  return data;
+}
