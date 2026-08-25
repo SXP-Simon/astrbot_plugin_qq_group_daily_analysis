@@ -20,6 +20,25 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
       }
     </style>
+    <script>
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var isDark = false;
+          if (params.get("theme") === "dark" || params.get("isDark") === "true") {
+            isDark = true;
+          } else if (localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
+            isDark = true;
+          } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            isDark = true;
+          }
+          if (isDark) {
+            document.documentElement.style.background = "#000000";
+            document.documentElement.style.color = "#ffffff";
+          }
+        } catch(e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
