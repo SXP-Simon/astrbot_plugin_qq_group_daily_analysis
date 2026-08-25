@@ -1,0 +1,194 @@
+import React, { useEffect, useState } from "react";
+import {
+  Drawer,
+  Descriptions,
+  Tag,
+  Alert,
+  Typography,
+  Spin,
+  Collapse,
+  Space,
+} from "antd";
+import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
+import { TraceRecord } from "../../entities/trace/model/types";
+import { StatusTag } from "../../shared/ui/StatusTag";
+import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
+import { formatDuration, formatTokens, formatTimestamp, formatPercent } from "../../shared/lib/formatters";
+
+const { Text, Paragraph } = Typography;
+
+interface TraceDrawerProps {
+  traceId: string | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+export const TraceDrawer: React.FC<TraceDrawerProps> = ({
+  traceId,
+  open,
+  onClose,
+}) => {
+  const [trace, setTrace] = useState<TraceRecord | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && traceId) {
+      setLoading(true);
+      fetchTraceDetail(traceId)
+        .then((data) => setTrace(data))
+        .catch(() => setTrace(null))
+        .finally(() => setLoading(false));
+    } else {
+      setTrace(null);
+    }
+  }, [open, traceId]);
+
+  const totalDuration = trace?.duration_ms || 1;
+
+  return (
+    <Drawer
+      title={
+        <Space>
+          <span>链路追溯详情 (Trace Detail)</span>
+          {trace && <StatusTag status={trace.status} />}
+        </Space>
+      }
+      placement="right"
+      width={640}
+      onClose={onClose}
+      open={open}
+      destroyOnClose
+    >
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "60px 0" }}>
+          <Spin tip="正在加载链路详情..." />
+        </div>
+      ) : trace ? (
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          {/* 1. 错误告警 */}
+          {trace.status === "failed" && (
+            <Alert
+              type="error"
+              showIcon
+              message={`阶段 ${trace.error_stage || "UNKNOWN"} 发生异常`}
+              description={
+                <div>
+                  <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}>
+                    {trace.error_message || "未知错误"}
+                  </Paragraph>
+                  {trace.stack_trace && (
+                    <Collapse
+                      size="small"
+                      ghost
+                      items={[
+                        {
+                          key: "stack",
+                          label: "调用栈 (Stack Trace)",
+                          children: (
+                            <pre
+                              className="font-mono"
+                              style={{
+                                fontSize: 11,
+                                background: "rgba(0,0,0,0.03)",
+                                padding: 8,
+                                borderRadius: 4,
+                                maxHeight: 200,
+                                overflow: "auto",
+                              }}
+                            >
+                              {trace.stack_trace}
+                            </pre>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </div>
+              }
+            />
+          )}
+
+          {/* 2. 基本信息 */}
+          <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }}>
+            <Descriptions.Item label="Trace ID">
+              <Text copyable className="font-mono">{trace.trace_id}</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="群组">
+              <span className="font-mono">
+                {trace.group_name || "未知群"} ({trace.group_id})
+              </span>
+            </Descriptions.Item>
+            <Descriptions.Item label="平台">
+              <Tag>{trace.platform || "qq"}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="触发方式">
+              <Tag>{trace.trigger_type}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="启动时间">
+              <span className="font-mono">
+                {formatTimestamp(trace.started_at)}
+              </span>
+            </Descriptions.Item>
+            <Descriptions.Item label="总耗时">
+              <span className="font-mono font-semibold" style={{ color: "#1677ff" }}>
+                {formatDuration(trace.duration_ms)}
+              </span>
+            </Descriptions.Item>
+          </Descriptions>
+
+          {/* 3. 上下文演进与 Token (dsh-context) */}
+          {(trace.context_metrics || trace.token_usage) && (
+            <Descriptions
+              title={<span style={{ fontSize: 13 }}>🧠 上下文演进与 Token 审计</span>}
+              size="small"
+              bordered
+              column={{ xs: 1, sm: 2 }}
+            >
+              {trace.context_metrics && (
+                <>
+                  <Descriptions.Item label="原始消息数">
+                    <span className="font-mono">{trace.context_metrics.raw_message_count} 条</span>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="清洗后保留">
+                    <span className="font-mono">
+                      {trace.context_metrics.cleaned_message_count} 条 (
+                      {formatPercent(trace.context_metrics.compression_ratio)})
+                    </span>
+                  </Descriptions.Item>
+                </>
+              )}
+              {trace.token_usage && (
+                <>
+                  <Descriptions.Item label="总 Token 消耗">
+                    <span className="font-mono font-semibold">
+                      {formatTokens(trace.token_usage.total_tokens)}
+                    </span>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Prompt / Output">
+                    <span className="font-mono text-xs">
+                      {formatTokens(trace.token_usage.prompt_tokens)} /{" "}
+                      {formatTokens(trace.token_usage.completion_tokens)}
+                    </span>
+                  </Descriptions.Item>
+                </>
+              )}
+            </Descriptions>
+          )}
+
+          {/* 4. 阶段耗时甘特瀑布流 (Gantt Waterfall) */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+              ⏱️ 阶段耗时瀑布流 (Stage Execution Waterfall)
+            </div>
+            <SpanTimeline
+              spans={trace.spans || []}
+              totalDurationMs={totalDuration}
+            />
+          </div>
+        </Space>
+      ) : (
+        <Text type="secondary">未能获取到 Trace 详情</Text>
+      )}
+    </Drawer>
+  );
+};
