@@ -308,7 +308,11 @@ class AnalysisApplicationService:
             from ...domain.services.message_cleaner_service import MessageCleanerService
 
             cleaner = MessageCleanerService()
-            bot_self_ids = self.config_manager.get_bot_self_ids()
+            bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
+            if hasattr(adapter, "bot_self_ids") and adapter.bot_self_ids:
+                for b_id in adapter.bot_self_ids:
+                    if b_id and str(b_id) not in bot_self_ids:
+                        bot_self_ids.append(str(b_id))
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
             logger.debug(

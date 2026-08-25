@@ -19,10 +19,16 @@ import {
   ClockCircleOutlined,
   SyncOutlined,
   FileTextOutlined,
+  FileImageOutlined,
+  EyeOutlined,
+  DownloadOutlined,
   CopyOutlined,
 } from "@ant-design/icons";
 import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { fetchTraceLogs } from "../../entities/log/api/logApi";
+import { fetchReportContent } from "../../entities/report/api/reportApi";
+import { ReportItem } from "../../entities/report/model/types";
+import { ReportPreviewModal } from "../report-preview-modal/ReportPreviewModal";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { PluginLogItem, TAG_STYLE_MAP } from "../../entities/log/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
@@ -50,8 +56,73 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   const [trace, setTrace] = useState<TraceRecord | null>(null);
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [previewReport, setPreviewReport] = useState<ReportItem | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logBoxRef = useRef<HTMLDivElement>(null);
+
+  const handlePreviewFile = async (filename: string, isHtml: boolean) => {
+    const baseItem: ReportItem = {
+      filename,
+      size_bytes: 0,
+      modified_at: Date.now() / 1000,
+      is_html: isHtml,
+      group_id: trace?.group_id,
+      group_name: trace?.group_name,
+      platform: trace?.platform,
+      trace_id: trace?.trace_id,
+    };
+    setPreviewReport(baseItem);
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    try {
+      const data = await fetchReportContent(filename);
+      if (data) {
+        setPreviewReport((prev) => ({
+          ...(prev || baseItem),
+          ...data,
+        }));
+      }
+    } catch {
+      message.error("加载产物报告文件失败");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleDownloadFile = async (filename: string, isHtml: boolean) => {
+    try {
+      const data = await fetchReportContent(filename);
+      if (!data) {
+        message.error("获取下载文件失败");
+        return;
+      }
+      let href = data.data_url;
+      let cleanupBlobUrl: string | null = null;
+      if (isHtml && data.html_content) {
+        const blob = new Blob([data.html_content], { type: "text/html;charset=utf-8" });
+        cleanupBlobUrl = URL.createObjectURL(blob);
+        href = cleanupBlobUrl;
+      }
+      if (!href) {
+        message.error("未找到文件下载地址");
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (cleanupBlobUrl) {
+        URL.revokeObjectURL(cleanupBlobUrl);
+      }
+      message.success(`已开始下载 ${filename}`);
+    } catch {
+      message.error("下载文件异常");
+    }
+  };
 
   const loadDetail = (forceRefresh = false) => {
     if (!traceId) return;
@@ -316,7 +387,86 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             </Descriptions>
           )}
 
-          {/* 4. 阶段耗时甘特瀑布流 */}
+          {/* 4. 产物报告文件 */}
+          {(() => {
+            const reportFiles =
+              trace.report_files ||
+              (Array.isArray(trace.extra?.report_files)
+                ? (trace.extra.report_files as TraceRecord["report_files"])
+                : []) ||
+              [];
+            if (!reportFiles || reportFiles.length === 0) return null;
+            return (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  <FileImageOutlined style={{ marginRight: 6, color: "#52c41a" }} />
+                  产物报告文件 ({reportFiles.length} 个)
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {reportFiles.map((file, idx) => {
+                    const isHtml = Boolean(
+                      file.format === "html" ||
+                        file.filename.toLowerCase().endsWith(".html") ||
+                        file.filename.toLowerCase().endsWith(".htm")
+                    );
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
+                          border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
+                          borderRadius: 4,
+                        }}
+                      >
+                        <Space size="small">
+                          {isHtml ? (
+                            <FileTextOutlined style={{ color: "#fa8c16" }} />
+                          ) : (
+                            <FileImageOutlined style={{ color: "#1677ff" }} />
+                          )}
+                          <span style={{ fontSize: 12, fontWeight: 600 }}>{file.filename}</span>
+                          <Tag color={isHtml ? "orange" : "blue"} style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}>
+                            {isHtml ? "HTML" : "图片"}
+                          </Tag>
+                          {file.size_bytes ? (
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                              ({(file.size_bytes / 1024).toFixed(1)} KB)
+                            </Text>
+                          ) : null}
+                        </Space>
+                        <Space size="small">
+                          <Button
+                            size="small"
+                            type="primary"
+                            ghost
+                            icon={<EyeOutlined />}
+                            onClick={() => handlePreviewFile(file.filename, isHtml)}
+                            style={{ fontSize: 11, height: 24 }}
+                          >
+                            {isHtml ? "预览 HTML" : "预览大图"}
+                          </Button>
+                          <Button
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => handleDownloadFile(file.filename, isHtml)}
+                            style={{ fontSize: 11, height: 24 }}
+                          >
+                            下载
+                          </Button>
+                        </Space>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 5. 阶段耗时甘特瀑布流 */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
               <ClockCircleOutlined style={{ marginRight: 6, color: "#fa8c16" }} />
@@ -328,7 +478,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             />
           </div>
 
-          {/* 5. 专属执行日志流 */}
+          {/* 6. 专属执行日志流 */}
           {logs && logs.length > 0 && (
             <Collapse
               size="small"
@@ -424,6 +574,16 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
       ) : (
         <Text type="secondary">未能获取到任务详情</Text>
       )}
+      <ReportPreviewModal
+        open={previewOpen}
+        loading={previewLoading}
+        report={previewReport}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewReport(null);
+        }}
+        onDownload={(r) => handleDownloadFile(r.filename, Boolean(r.is_html))}
+      />
     </Drawer>
   );
 };

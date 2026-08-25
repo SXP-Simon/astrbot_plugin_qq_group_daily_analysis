@@ -27,6 +27,7 @@ from markupsafe import Markup
 from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
@@ -308,6 +309,7 @@ class ReportGenerator(IReportGenerator):
             "group_id": group_id,
             "date": date,
             "ulid": generated_ulid,
+            "trace_id": str(TraceContext.get() or ""),
         }
 
         try:
