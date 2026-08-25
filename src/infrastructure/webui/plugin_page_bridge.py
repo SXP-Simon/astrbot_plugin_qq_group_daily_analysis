@@ -9,6 +9,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -363,9 +364,13 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_get_report_history(self) -> Any:
-        """获取历史生成的报告图片列表"""
+        """获取历史生成的报告图片列表（包含群号与群名解析）"""
         try:
             reports: list[dict[str, Any]] = []
+            group_names = {
+                str(g["group_id"]): str(g.get("group_name", ""))
+                for g in self.trace_store.get_distinct_groups()
+            }
             if self.report_output_dir and self.report_output_dir.exists():
                 image_files = [
                     p
@@ -377,15 +382,31 @@ class PluginPageWebUIBridge:
                     image_files,
                     key=lambda p: p.stat().st_mtime,
                     reverse=True,
-                )[:50]:
+                )[:100]:
                     try:
                         stat = file_path.stat()
+                        m = re.match(
+                            r"^report_(.+?)_\d{8}_\d{6}\.(?:jpg|jpeg|png|webp)$",
+                            file_path.name,
+                            re.IGNORECASE,
+                        )
+                        if not m:
+                            m = re.match(
+                                r"^report_(.+?)_\d+\.(?:jpg|jpeg|png|webp)$",
+                                file_path.name,
+                                re.IGNORECASE,
+                            )
+                        group_id = m.group(1) if m else ""
+                        group_name = group_names.get(group_id, "")
+
                         reports.append(
                             {
                                 "filename": file_path.name,
                                 "size_bytes": stat.st_size,
                                 "modified_at": stat.st_mtime,
                                 "absolute_path": str(file_path.resolve()),
+                                "group_id": group_id,
+                                "group_name": group_name,
                             }
                         )
                     except Exception:

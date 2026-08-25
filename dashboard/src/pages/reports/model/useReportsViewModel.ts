@@ -1,11 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { message } from "antd";
 import { fetchReportHistory, fetchReportContent } from "../../../entities/report/api/reportApi";
+import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
 import { ReportItem } from "../../../entities/report/model/types";
+import { GroupItem } from "../../../entities/group/model/types";
 
 export function useReportsViewModel() {
   const [reports, setReports] = useState<ReportItem[]>([]);
+  const [groups, setGroups] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // 过滤筛选状态
+  const [search, setSearch] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<[number, number] | null>(null);
+
+  // 预览状态
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
@@ -13,8 +23,12 @@ export function useReportsViewModel() {
   const loadReports = async () => {
     setLoading(true);
     try {
-      const list = await fetchReportHistory();
-      setReports(list);
+      const [reportList, groupList] = await Promise.all([
+        fetchReportHistory(),
+        fetchDistinctGroups().catch(() => []),
+      ]);
+      setReports(reportList);
+      setGroups(groupList);
     } catch {
       // 忽略加载异常
     } finally {
@@ -72,13 +86,72 @@ export function useReportsViewModel() {
     }
   };
 
+  // 综合计算筛选后的报告列表
+  const filteredReports = useMemo(() => {
+    return reports.filter((item) => {
+      // 1. 群聊筛选
+      if (selectedGroup) {
+        if (item.group_id !== selectedGroup && !item.filename.includes(selectedGroup)) {
+          return false;
+        }
+      }
+
+      // 2. 日期范围筛选 (基于 modified_at 时间戳)
+      if (dateRange && dateRange[0] && dateRange[1]) {
+        if (item.modified_at < dateRange[0] || item.modified_at > dateRange[1]) {
+          return false;
+        }
+      }
+
+      // 3. 关键字搜索（支持文件名、群号、群名）
+      if (search.trim()) {
+        const kw = search.trim().toLowerCase();
+        const matchName = item.filename.toLowerCase().includes(kw);
+        const matchGid = (item.group_id || "").toLowerCase().includes(kw);
+        const matchGname = (item.group_name || "").toLowerCase().includes(kw);
+        const matchPath = (item.absolute_path || "").toLowerCase().includes(kw);
+        if (!matchName && !matchGid && !matchGname && !matchPath) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [reports, selectedGroup, dateRange, search]);
+
+  // 合并来自报告元数据的群聊选项，保证未入库群聊也能正常筛选
+  const mergedGroups = useMemo(() => {
+    const map = new Map<string, GroupItem>();
+    for (const g of groups) {
+      map.set(g.group_id, g);
+    }
+    for (const r of reports) {
+      if (r.group_id && !map.has(r.group_id)) {
+        map.set(r.group_id, {
+          group_id: r.group_id,
+          group_name: r.group_name || `群 ${r.group_id}`,
+          platform: "qq",
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [groups, reports]);
+
   useEffect(() => {
     loadReports();
   }, []);
 
   return {
-    reports,
+    reports: filteredReports,
+    rawReports: reports,
+    groups: mergedGroups,
     loading,
+    search,
+    setSearch,
+    selectedGroup,
+    setSelectedGroup,
+    dateRange,
+    setDateRange,
     refresh: loadReports,
     previewOpen,
     previewLoading,
@@ -88,4 +161,5 @@ export function useReportsViewModel() {
     downloadReport,
   };
 }
+
 
