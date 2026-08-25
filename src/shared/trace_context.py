@@ -105,7 +105,7 @@ class TraceContext:
     @contextmanager
     def span(
         self, stage_name: str, payload: dict[str, Any] | None = None
-    ) -> Generator[dict[str, Any], None, None]:
+    ) -> Generator[dict[str, Any]]:
         """
         创建一个细粒度 Span 上下文，自动记录该步骤耗时与执行状态。
 

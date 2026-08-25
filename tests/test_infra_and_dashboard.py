@@ -7,16 +7,16 @@ import sys
 import time
 from pathlib import Path
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-if str(PLUGIN_ROOT) not in sys.path:
-    sys.path.insert(0, str(PLUGIN_ROOT))
-
 import pytest
 
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.active_task_manager import ActiveTaskManager
 from src.shared.trace_context import TraceContext
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+if str(PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_ROOT))
 
 
 @pytest.fixture
@@ -171,7 +171,9 @@ def test_trace_context_spans_and_auto_persistence(temp_db: Path):
             time.sleep(0.01)
 
         ctx.set_context_metrics(raw_message_count=500, cleaned_message_count=250)
-        ctx.add_token_usage(prompt_tokens=1000, completion_tokens=200, analyzer_name="topics")
+        ctx.add_token_usage(
+            prompt_tokens=1000, completion_tokens=200, analyzer_name="topics"
+        )
 
     # 退出上下文后应自动调用 finish 并持久化入库
     saved = store.get_trace("auto_save_001")
