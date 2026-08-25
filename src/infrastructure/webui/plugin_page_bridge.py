@@ -109,6 +109,12 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get distinct groups list for filtering",
             ),
+            (
+                f"/{PLUGIN_NAME}/platforms",
+                self.api_get_platforms,
+                ["GET"],
+                "Get active connected bot platforms list",
+            ),
             # 4. 历史产物
             (
                 f"/{PLUGIN_NAME}/reports/history",
@@ -264,7 +270,9 @@ class PluginPageWebUIBridge:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
                 result = await self.analysis_service.execute_daily_analysis(
                     group_id=group_id,
-                    platform_id=platform if platform and platform != "all" else None,
+                    platform_id=platform
+                    if platform and platform not in ("all", "auto", "default")
+                    else None,
                     manual=True,
                 )
                 if result and result.get("success"):
@@ -342,6 +350,41 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": groups})
         except Exception as e:
             logger.error(f"查询群组列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_platforms(self) -> Any:
+        """获取当前已连接并就绪的所有聊天平台实例列表（供 WebUI 手动触发时动态选择）"""
+        try:
+            bot_manager = getattr(self.analysis_service, "bot_manager", None)
+            platforms = []
+            if bot_manager:
+                adapters = bot_manager.get_all_adapters()
+                for p_id, adp in adapters.items():
+                    p_name = getattr(adp, "platform_name", "unknown")
+                    class_name = type(adp).__name__
+                    label = f"{p_id} ({class_name.replace('Adapter', '')})"
+                    if "OneBot" in class_name or "aiocqhttp" in p_name:
+                        label = f"QQ / OneBot ({p_id})"
+                    elif "QQOfficial" in class_name or "qq_official" in p_name:
+                        label = f"QQ 官方机器人 ({p_id})"
+                    elif "Telegram" in class_name or "telegram" in p_name:
+                        label = f"Telegram ({p_id})"
+                    elif "Lark" in class_name or "lark" in p_name:
+                        label = f"飞书 ({p_id})"
+                    elif "Discord" in class_name or "discord" in p_name:
+                        label = f"Discord ({p_id})"
+
+                    platforms.append(
+                        {
+                            "id": p_id,
+                            "name": p_name,
+                            "type": class_name,
+                            "label": label,
+                        }
+                    )
+            return json_response({"status": "ok", "data": platforms})
+        except Exception as e:
+            logger.error(f"获取平台列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_get_trace_detail(self, trace_id: str) -> Any:
