@@ -4,13 +4,15 @@ from types import SimpleNamespace
 
 from astrbot.api.provider import LLMResponse
 
+from src.application.services.analysis_application_service import (
+    AnalysisApplicationService,
+)
 from src.domain.models.data_models import TokenUsage
 from src.domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
     UnifiedMessage,
 )
-from src.application.services.analysis_application_service import AnalysisApplicationService
 from src.infrastructure.analysis.utils import llm_utils
 from src.infrastructure.analysis.utils.llm_utils import call_provider_with_retry
 from src.shared.trace_context import TraceContext
