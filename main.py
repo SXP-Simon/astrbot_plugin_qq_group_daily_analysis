@@ -186,6 +186,7 @@ class GroupDailyAnalysis(Star):
             trace_store=self.trace_store,
             active_task_manager=self.active_task_manager,
             analysis_service=self.analysis_service,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
             report_output_dir=plugin_data_dir / "reports",
         )
         self.webui_bridge.register_routes()
