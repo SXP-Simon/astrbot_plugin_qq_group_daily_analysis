@@ -41,6 +41,7 @@ from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..persistence.trace_sqlite_store import TraceSQLiteStore
+from ..platform.factory import PlatformAdapterFactory
 from .active_task_manager import ActiveTaskManager
 
 
@@ -281,12 +282,12 @@ class PluginPageWebUIBridge:
                     analysis_result = result.get("analysis_result")
                     adapter = result.get("adapter")
                     dispatch_platform_id = (
-                        getattr(adapter, "platform_id", None)
-                        or getattr(adapter, "platform_name", None)
+                        getattr(adapter, "platform_name", None)
+                        or getattr(adapter, "platform_id", None)
                         or (
                             platform
                             if platform and platform not in ("all", "auto", "default")
-                            else "qq"
+                            else ""
                         )
                     )
                     trace_ctx.platform = str(dispatch_platform_id)
@@ -386,6 +387,13 @@ class PluginPageWebUIBridge:
         try:
             platforms: list[dict[str, Any]] = []
             seen_ids = set()
+            type_display_map = {
+                "aiocqhttp": "OneBot v11",
+                "qq_official": "QQ 官方机器人",
+                "qq_official_webhook": "QQ 官方 Webhook",
+                "telegram": "Telegram",
+                "discord": "Discord",
+            }
 
             # 1. 优先从 AstrBot 原生 platform_manager 获取标准元数据
             platform_manager = getattr(self.context, "platform_manager", None)
@@ -407,8 +415,6 @@ class PluginPageWebUIBridge:
                             )
                             or ""
                         )
-                        if not p_id or p_id in seen_ids:
-                            continue
                         p_type = (
                             getattr(meta, "name", "")
                             or (
@@ -418,19 +424,33 @@ class PluginPageWebUIBridge:
                             )
                             or ""
                         )
+                        # 仅保留插件适配器工厂支持的聊天平台
+                        if (
+                            not p_id
+                            or p_id in seen_ids
+                            or not PlatformAdapterFactory.is_supported(p_type)
+                        ):
+                            continue
+
+                        meta_display = getattr(meta, "adapter_display_name", "")
                         display_name = (
-                            getattr(meta, "adapter_display_name", "")
-                            or getattr(meta, "name", "")
-                            or p_type
-                            or p_id
+                            meta_display
+                            if (meta_display and meta_display != p_type)
+                            else type_display_map.get(p_type, p_type)
                         )
+                        label = (
+                            display_name
+                            if (p_id == p_type or p_id == display_name)
+                            else f"{display_name} ({p_id})"
+                        )
+
                         seen_ids.add(p_id)
                         platforms.append(
                             {
                                 "id": str(p_id),
                                 "type": str(p_type),
                                 "display_name": str(display_name),
-                                "label": f"{display_name} ({p_id})",
+                                "label": str(label),
                             }
                         )
                     except Exception:
@@ -443,14 +463,19 @@ class PluginPageWebUIBridge:
                     if p_id in seen_ids:
                         continue
                     p_name = getattr(adp, "platform_name", "unknown")
-                    class_name = type(adp).__name__.replace("Adapter", "")
+                    display_name = type_display_map.get(
+                        p_name, type(adp).__name__.replace("Adapter", "")
+                    )
+                    label = (
+                        display_name if p_id == p_name else f"{display_name} ({p_id})"
+                    )
                     seen_ids.add(p_id)
                     platforms.append(
                         {
                             "id": str(p_id),
                             "type": str(p_name),
-                            "display_name": str(class_name),
-                            "label": f"{class_name} ({p_id})",
+                            "display_name": str(display_name),
+                            "label": str(label),
                         }
                     )
 
@@ -521,7 +546,7 @@ class PluginPageWebUIBridge:
             group_info_map = {
                 str(g["group_id"]): {
                     "group_name": str(g.get("group_name", "")),
-                    "platform": str(g.get("platform", "qq")),
+                    "platform": str(g.get("platform", "")),
                 }
                 for g in self.trace_store.get_distinct_groups()
             }
@@ -553,7 +578,7 @@ class PluginPageWebUIBridge:
                         group_id = m.group(1) if m else ""
                         g_info = group_info_map.get(group_id, {})
                         group_name = g_info.get("group_name", "")
-                        platform = g_info.get("platform", "qq")
+                        platform = g_info.get("platform", "")
 
                         reports.append(
                             {

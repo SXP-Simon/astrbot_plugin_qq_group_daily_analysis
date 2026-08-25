@@ -234,9 +234,13 @@ class AnalysisApplicationService:
 
             # 确立并回填实际运行的真实平台标识 (Real Platform Identity)
             actual_platform = (
-                getattr(adapter, "platform_id", None)
-                or getattr(adapter, "platform_name", None)
-                or (platform_id if platform_id and platform_id not in ("auto", "default", "all") else "qq")
+                getattr(adapter, "platform_name", None)
+                or getattr(adapter, "platform_id", None)
+                or (
+                    platform_id
+                    if platform_id and platform_id not in ("auto", "default", "all")
+                    else "unknown"
+                )
             )
             if trace:
                 trace.platform = str(actual_platform)

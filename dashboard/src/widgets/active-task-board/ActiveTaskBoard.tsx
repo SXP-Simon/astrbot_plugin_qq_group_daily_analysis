@@ -52,7 +52,10 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
       dataIndex: "platform",
       key: "platform",
       width: 85,
-      render: (p: string) => <Tag>{p || "qq"}</Tag>,
+      render: (p: string) => {
+        const displayP = !p || p === "auto" || p === "default" ? "-" : p;
+        return <Tag>{displayP}</Tag>;
+      },
     },
     {
       title: "触发源",

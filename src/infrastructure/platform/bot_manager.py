@@ -318,30 +318,16 @@ class BotManager:
             if k.lower().strip() == p_id_lower:
                 return adp
 
-        # 3. 平台别名与协议族智能匹配
-        alias_map: dict[str, list[str]] = {
-            "qq": ["aiocqhttp", "onebot", "qq_official"],
-            "onebot": ["aiocqhttp", "onebot"],
-            "aiocqhttp": ["aiocqhttp", "onebot"],
-            "qq_official": ["qq_official"],
-            "telegram": ["telegram", "tg"],
-            "tg": ["telegram", "tg"],
-            "lark": ["lark", "feishu"],
-            "feishu": ["lark", "feishu"],
-            "discord": ["discord"],
-        }
-
-        target_keywords = alias_map.get(p_id_lower, [p_id_lower])
-        for k, adp in self._adapters.items():
-            adp_pname = str(getattr(adp, "platform_name", "") or "").lower()
-            adp_class = type(adp).__name__.lower()
-            k_lower = k.lower()
-            for kw in target_keywords:
-                if kw in adp_pname or kw in adp_class or kw in k_lower:
-                    logger.info(
-                        f"[BotManager] 平台标识 '{platform_id}' 智能匹配到适配器 '{k}' (类型: {type(adp).__name__})"
-                    )
-                    return adp
+        # 3. 通过 PlatformAdapterFactory 注册类型匹配
+        if PlatformAdapterFactory.is_supported(p_id_lower):
+            expected_adapter_cls = PlatformAdapterFactory._adapters.get(p_id_lower)
+            if expected_adapter_cls:
+                for k, adp in self._adapters.items():
+                    if isinstance(adp, expected_adapter_cls):
+                        logger.info(
+                            f"[BotManager] 平台类型 '{platform_id}' 匹配到已注册适配器 '{k}'"
+                        )
+                        return adp
 
         # 4. 单实例容错兜底：若系统仅有 1 个活跃适配器，自动作为兜底并记录日志
         if len(self._adapters) == 1:
