@@ -301,12 +301,47 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_get_trace_detail(self, trace_id: str) -> Any:
-        """获取单个 Trace 的完整 Span 树与上下文指标"""
+        """获取单个 Trace 的完整 Span 树与上下文指标
+
+        优先查 SQLite 持久化记录；若未入库（任务尚在运行中），则回退到
+        ActiveTaskManager 的内存活跃快照，让前端可以展示运行中的实时状态。
+        """
         try:
             trace = self.trace_store.get_trace(trace_id)
-            if not trace:
-                return error_response(f"Trace {trace_id} not found", status_code=404)
-            return json_response({"status": "ok", "data": trace})
+            if trace:
+                return json_response({"status": "ok", "data": trace})
+
+            # 回退：从内存活跃任务列表中查找运行中的任务快照
+            for task_info in self.active_task_manager.get_active_tasks():
+                if task_info.get("task_id") == trace_id:
+                    return json_response(
+                        {
+                            "status": "ok",
+                            "data": {
+                                "trace_id": trace_id,
+                                "group_id": task_info.get("group_id", ""),
+                                "group_name": task_info.get("group_name", ""),
+                                "platform": task_info.get("platform", ""),
+                                "trigger_type": task_info.get("trigger_type", "manual"),
+                                "status": "running",
+                                "started_at": task_info.get("started_at"),
+                                "completed_at": None,
+                                "duration_ms": round(
+                                    task_info.get("duration_s", 0) * 1000
+                                ),
+                                "error_stage": None,
+                                "error_message": None,
+                                "stack_trace": None,
+                                "extra": {},
+                                "spans": [],
+                                "context_metrics": None,
+                                "token_usage": None,
+                                "current_stage": task_info.get("current_stage", ""),
+                            },
+                        }
+                    )
+
+            return error_response(f"Trace {trace_id} not found", status_code=404)
         except Exception as e:
             logger.error(f"查询 Trace 详情异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

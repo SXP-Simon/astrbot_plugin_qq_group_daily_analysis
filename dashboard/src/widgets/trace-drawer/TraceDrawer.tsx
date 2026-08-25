@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Drawer,
   Descriptions,
@@ -10,7 +10,7 @@ import {
   Space,
   Button,
 } from "antd";
-import { ReloadOutlined, DatabaseOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { ReloadOutlined, DatabaseOutlined, ClockCircleOutlined, SyncOutlined } from "@ant-design/icons";
 import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
@@ -32,6 +32,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
 }) => {
   const [trace, setTrace] = useState<TraceRecord | null>(null);
   const [loading, setLoading] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadDetail = (forceRefresh = false) => {
     if (!traceId) return;
@@ -44,12 +45,40 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
 
   useEffect(() => {
     if (open && traceId) {
-      loadDetail(false);
+      loadDetail(true);
     } else {
       setTrace(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, traceId]);
+
+  // 运行中任务自动轮询刷新（每 3 秒）
+  useEffect(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (open && trace?.status === "running" && traceId) {
+      pollRef.current = setInterval(() => {
+        fetchTraceDetail(traceId, true)
+          .then((data) => {
+            setTrace(data);
+            // 任务已结束，停止轮询
+            if (data && data.status !== "running" && pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          })
+          .catch(() => {});
+      }, 3000);
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [open, trace?.status, traceId]);
 
   const totalDuration = trace?.duration_ms || 1;
 
@@ -83,7 +112,28 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
         </div>
       ) : trace ? (
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-          {/* 1. 错误告警 */}
+          {/* 1a. 运行中状态提示 */}
+          {trace.status === "running" && (
+            <Alert
+              type="info"
+              showIcon
+              icon={<SyncOutlined spin />}
+              message="任务正在执行中"
+              description={
+                <span>
+                  当前阶段：
+                  <Tag color="processing" style={{ margin: "0 4px" }}>
+                    {trace.current_stage ? formatStageName(trace.current_stage) : "准备中"}
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    （已自动每 3 秒刷新，任务结束后将显示完整数据）
+                  </Text>
+                </span>
+              }
+            />
+          )}
+
+          {/* 1b. 错误告警 */}
           {trace.status === "failed" && (
             <Alert
               type="error"
