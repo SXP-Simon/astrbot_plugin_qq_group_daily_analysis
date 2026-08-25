@@ -1,10 +1,10 @@
-import { apiGet, apiPost } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ActiveTask } from "../model/types";
 
 export async function fetchActiveTasks(): Promise<ActiveTask[]> {
   const res = await apiGet<ActiveTask[]>("tasks/active");
-  if (Array.isArray(res?.data)) return res.data;
-  if (Array.isArray(res)) return res as unknown as ActiveTask[];
+  const data = extractData<ActiveTask[]>(res);
+  if (Array.isArray(data)) return data;
   return [];
 }
 

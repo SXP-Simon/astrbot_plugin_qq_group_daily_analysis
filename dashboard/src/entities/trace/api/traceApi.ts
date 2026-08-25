@@ -1,4 +1,4 @@
-import { apiGet } from "../../../shared/api/bridge";
+import { apiGet, extractData } from "../../../shared/api/bridge";
 import { TraceRecord } from "../model/types";
 
 export interface ListTracesParams {
@@ -30,12 +30,13 @@ export async function fetchTraceList(
   params: ListTracesParams
 ): Promise<{ items: TraceRecord[]; total: number }> {
   const res = await apiGet<{ items: TraceRecord[]; total: number }>("traces", params);
-  if (res?.data && Array.isArray(res.data.items)) {
-    return res.data;
+  const data = extractData<{ items: TraceRecord[]; total: number }>(res);
+  if (data && Array.isArray(data.items)) {
+    return data;
   }
   return {
-    items: Array.isArray(res?.items) ? (res.items as TraceRecord[]) : [],
-    total: typeof res?.total === "number" ? res.total : 0,
+    items: [],
+    total: 0,
   };
 }
 
@@ -49,12 +50,7 @@ export async function fetchTraceDetail(
   }
 
   const res = await apiGet<TraceRecord>(`traces/${traceId}`);
-  let data: TraceRecord | null = null;
-  if (res?.data && typeof res.data === "object") {
-    data = res.data as TraceRecord;
-  } else if (res && "trace_id" in res) {
-    data = res as unknown as TraceRecord;
-  }
+  const data = extractData<TraceRecord>(res);
 
   // 2. 只有已终态（非 running）的不可变 Trace 才允许存入缓存，防止运行中阶段状态陈旧
   if (data && data.status !== "running") {

@@ -67,6 +67,8 @@ export const App: React.FC = () => {
         invalidateGroupsCache();
         overviewVM.refresh();
         tracesVM.refresh();
+        contextInsightVM.refresh();
+        reportsVM.refresh();
       },
     });
 
@@ -138,7 +140,9 @@ export const App: React.FC = () => {
           colorPrimary: "#1677ff",
           borderRadius: 4,
           fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
+          fontFamilyCode:
+            "SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace",
         },
       }}
     >
@@ -148,6 +152,8 @@ export const App: React.FC = () => {
           background: isDark ? "#000000" : "#f5f5f5",
           padding: 12,
           color: isDark ? "#ffffff" : "#000000",
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
         }}
       >
         {/* 顶部 HeaderBar 微件 */}
@@ -161,7 +167,13 @@ export const App: React.FC = () => {
         {/* 核心 Tab 导航与页面路由 */}
         <Tabs
           activeKey={activeTab}
-          onChange={setActiveTab}
+          onChange={(key) => {
+            setActiveTab(key);
+            if (key === "overview") overviewVM.refresh();
+            else if (key === "traces") tracesVM.refresh();
+            else if (key === "context") contextInsightVM.refresh();
+            else if (key === "reports") reportsVM.refresh();
+          }}
           items={tabItems}
           type="card"
           size="small"

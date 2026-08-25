@@ -111,3 +111,30 @@ export function subscribeSSE(handlers: {
   }
   return null;
 }
+
+/**
+ * 健壮地解包 AstrBot 插件 Web API 返回的数据结构
+ * 兼容 AstrBot 标准响应封装与嵌套 data 结构
+ */
+export function extractData<T>(res: unknown): T | null {
+  if (!res || typeof res !== "object") return null;
+  const anyRes = res as Record<string, unknown>;
+
+  // 1. 深度嵌套解包：res.data.data (标准 json_response 经由 AstrBot PageBridge 转发)
+  if (
+    anyRes.data &&
+    typeof anyRes.data === "object" &&
+    "data" in (anyRes.data as Record<string, unknown>)
+  ) {
+    return (anyRes.data as Record<string, unknown>).data as T;
+  }
+
+  // 2. 单层解包：res.data
+  if (anyRes.data !== undefined) {
+    return anyRes.data as T;
+  }
+
+  // 3. 顶层对象
+  return anyRes as unknown as T;
+}
+

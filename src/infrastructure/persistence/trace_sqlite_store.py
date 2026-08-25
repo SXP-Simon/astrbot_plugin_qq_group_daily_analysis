@@ -373,7 +373,11 @@ class TraceSQLiteStore:
     def get_metrics_summary(self) -> dict[str, Any]:
         """获取控制台顶部 KPI 指标与聚合数据"""
         now = time.time()
-        start_of_today = now - (now % 86400)  # 今日零点时间戳概算
+        local_tm = time.localtime(now)
+        # 本地时间今日零点时间戳
+        start_of_today = time.mktime(
+            (local_tm.tm_year, local_tm.tm_mon, local_tm.tm_mday, 0, 0, 0, 0, 0, -1)
+        )
 
         with self._get_connection() as conn:
             # 1. 总体概况

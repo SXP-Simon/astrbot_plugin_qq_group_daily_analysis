@@ -34,3 +34,18 @@ export function formatPercent(ratio?: number): string {
   if (ratio === undefined || ratio === null) return "-";
   return `${Math.round(ratio * 100)}%`;
 }
+
+export function formatStageName(stage?: string): string {
+  if (!stage) return "未指定阶段";
+  const stageMap: Record<string, string> = {
+    FETCH_MESSAGES: "拉取聊天记录",
+    CLEAN_MESSAGES: "消息清洗过滤",
+    STATS_ANALYSIS: "基础统计分析",
+    LLM_ANALYSIS: "大模型话题与画像分析",
+    SAVE_SUMMARY: "历史记录持久化",
+    RENDER_REPORT: "报告图片渲染与发送",
+    CRASH_RECOVERY: "异常终止恢复",
+  };
+  return stageMap[stage] || stage;
+}
+

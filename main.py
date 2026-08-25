@@ -8,6 +8,7 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Callable
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -101,6 +102,7 @@ class GroupDailyAnalysis(Star):
         self.history_manager = HistoryManager(self)
 
         plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
+        self.plugin_data_dir = plugin_data_dir
 
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
 
@@ -897,6 +899,25 @@ class GroupDailyAnalysis(Star):
             if current_task:
                 self._background_tasks.discard(current_task)
 
+    def _save_report_to_history(self, image_url: str, group_id: str) -> None:
+        """将生成的图片报告副本保存到持久化 reports 目录以供 WebUI 历史报告查阅"""
+        try:
+            reports_dir = self.plugin_data_dir / "reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest = reports_dir / f"report_{group_id}_{ts_str}.jpg"
+            if Path(image_url).exists():
+                import shutil
+
+                shutil.copy2(image_url, dest)
+            elif image_url.startswith("base64://"):
+                import base64
+
+                data = base64.b64decode(image_url[9:])
+                dest.write_bytes(data)
+        except Exception as e:
+            logger.warning(f"保存历史报告副本失败: {e}")
+
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict
     ) -> AsyncGenerator:
@@ -961,6 +982,7 @@ class GroupDailyAnalysis(Star):
                 )
 
             if image_url:
+                self._save_report_to_history(image_url, group_id)
                 caption = (
                     TraceContext.make_report_caption()
                     if self.config_manager.get_show_report_caption()

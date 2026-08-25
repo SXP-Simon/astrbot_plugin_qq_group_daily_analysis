@@ -20,7 +20,9 @@ try:
         stream_response,
     )
 except (ImportError, AttributeError):
-    Context: Any = Any  # type: ignore
+
+    class Context:  # type: ignore
+        pass
 
     def json_response(data: Any, status_code: int = 200) -> Any:  # type: ignore
         return {"status_code": status_code, "data": data}
@@ -323,19 +325,28 @@ class PluginPageWebUIBridge:
         try:
             reports: list[dict[str, Any]] = []
             if self.report_output_dir and self.report_output_dir.exists():
+                image_files = [
+                    p
+                    for p in self.report_output_dir.iterdir()
+                    if p.is_file()
+                    and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+                ]
                 for file_path in sorted(
-                    self.report_output_dir.glob("*.jpg"),
+                    image_files,
                     key=lambda p: p.stat().st_mtime,
                     reverse=True,
                 )[:50]:
-                    stat = file_path.stat()
-                    reports.append(
-                        {
-                            "filename": file_path.name,
-                            "size_bytes": stat.st_size,
-                            "modified_at": stat.st_mtime,
-                        }
-                    )
+                    try:
+                        stat = file_path.stat()
+                        reports.append(
+                            {
+                                "filename": file_path.name,
+                                "size_bytes": stat.st_size,
+                                "modified_at": stat.st_mtime,
+                            }
+                        )
+                    except Exception:
+                        pass
             return json_response({"status": "ok", "data": reports})
         except Exception as e:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)

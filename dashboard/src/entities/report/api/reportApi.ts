@@ -1,9 +1,9 @@
-import { apiGet } from "../../../shared/api/bridge";
+import { apiGet, extractData } from "../../../shared/api/bridge";
 import { ReportItem } from "../model/types";
 
 export async function fetchReportHistory(): Promise<ReportItem[]> {
   const res = await apiGet<ReportItem[]>("reports/history");
-  if (Array.isArray(res?.data)) return res.data;
-  if (Array.isArray(res)) return res as unknown as ReportItem[];
+  const data = extractData<ReportItem[]>(res);
+  if (Array.isArray(data)) return data;
   return [];
 }
