@@ -161,15 +161,18 @@ class ReportDispatcher:
                 trace_ctx = TraceContext.current()
                 if trace_ctx:
                     rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                    rfiles.append(
-                        {
-                            "filename": dest.name,
-                            "path": str(dest.resolve()),
-                            "format": "image",
-                            "size_bytes": dest.stat().st_size if dest.exists() else 0,
-                            "created_at": time.time(),
-                        }
-                    )
+                    if not any(rf.get("filename") == dest.name for rf in rfiles):
+                        rfiles.append(
+                            {
+                                "filename": dest.name,
+                                "path": str(dest.resolve()),
+                                "format": "image",
+                                "size_bytes": dest.stat().st_size
+                                if dest.exists()
+                                else 0,
+                                "created_at": time.time(),
+                            }
+                        )
                     from ...shared.trace_context import _global_trace_store
 
                     if _global_trace_store is not None:
@@ -254,17 +257,18 @@ class ReportDispatcher:
                 trace_ctx = TraceContext.current()
                 if trace_ctx:
                     rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                    rfiles.append(
-                        {
-                            "filename": html_file.name,
-                            "path": str(html_file.resolve()),
-                            "format": "html",
-                            "size_bytes": html_file.stat().st_size
-                            if html_file.exists()
-                            else 0,
-                            "created_at": time.time(),
-                        }
-                    )
+                    if not any(rf.get("filename") == html_file.name for rf in rfiles):
+                        rfiles.append(
+                            {
+                                "filename": html_file.name,
+                                "path": str(html_file.resolve()),
+                                "format": "html",
+                                "size_bytes": html_file.stat().st_size
+                                if html_file.exists()
+                                else 0,
+                                "created_at": time.time(),
+                            }
+                        )
                     from ...shared.trace_context import _global_trace_store
 
                     if _global_trace_store is not None:

@@ -261,9 +261,15 @@ class TraceSQLiteStore:
             else:
                 trace_data["token_usage"] = None
 
-            trace_data["report_files"] = trace_data.get("extra", {}).get(
-                "report_files", []
-            )
+            raw_rfiles = trace_data.get("extra", {}).get("report_files", [])
+            seen_rfiles = set()
+            deduped_rfiles = []
+            for rf in raw_rfiles:
+                fn = rf.get("filename") if isinstance(rf, dict) else None
+                if fn and fn not in seen_rfiles:
+                    seen_rfiles.add(fn)
+                    deduped_rfiles.append(rf)
+            trace_data["report_files"] = deduped_rfiles
             return trace_data
 
     def get_report_trace_map(self) -> dict[str, str]:
