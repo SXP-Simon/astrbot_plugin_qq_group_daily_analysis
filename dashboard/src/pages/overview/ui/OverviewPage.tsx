@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ActiveTaskBoard } from "../../../widgets/active-task-board/ActiveTaskBoard";
-import { formatDuration, formatTokens, formatCost } from "../../../shared/lib/formatters";
+import { formatDuration, formatTokens } from "../../../shared/lib/formatters";
 import { useOverviewViewModel } from "../model/useOverviewViewModel";
 
 interface OverviewPageProps {
@@ -65,7 +65,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             title="今日模型消耗"
             value={formatTokens(metrics.today_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#722ed1" }} />}
-            subTitle={`今日预估: ${formatCost(metrics.today_cost_spent)}`}
+            subTitle="今日大模型消耗总量"
             loading={loading}
           />
         </Col>
@@ -75,7 +75,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             title="30天模型消耗"
             value={formatTokens(metrics.total_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#13c2c2" }} />}
-            subTitle={`累计预估: ${formatCost(metrics.total_cost_spent)}`}
+            subTitle="近30天累计消耗总量"
             loading={loading}
           />
         </Col>
