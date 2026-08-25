@@ -420,25 +420,67 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                           background: isDark ? "rgba(255,255,255,0.03)" : "#f8fafc",
                           border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`,
                           borderRadius: 4,
+                          gap: 8,
                         }}
                       >
-                        <Space size="small">
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            minWidth: 0,
+                            flex: 1,
+                            gap: 6,
+                            overflow: "hidden",
+                          }}
+                        >
                           {isHtml ? (
-                            <FileTextOutlined style={{ color: "#fa8c16" }} />
+                            <FileTextOutlined
+                              style={{ color: "#fa8c16", flexShrink: 0 }}
+                            />
                           ) : (
-                            <FileImageOutlined style={{ color: "#1677ff" }} />
+                            <FileImageOutlined
+                              style={{ color: "#1677ff", flexShrink: 0 }}
+                            />
                           )}
-                          <span style={{ fontSize: 12, fontWeight: 600 }}>{file.filename}</span>
-                          <Tag color={isHtml ? "orange" : "blue"} style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}>
+                          <Tooltip title={file.filename} placement="topLeft">
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
+                              }}
+                            >
+                              {file.filename}
+                            </span>
+                          </Tooltip>
+                          <Tag
+                            color={isHtml ? "orange" : "blue"}
+                            style={{
+                              margin: 0,
+                              fontSize: 10,
+                              lineHeight: "16px",
+                              flexShrink: 0,
+                            }}
+                          >
                             {isHtml ? "HTML" : "图片"}
                           </Tag>
                           {file.size_bytes ? (
-                            <Text type="secondary" style={{ fontSize: 11 }}>
+                            <Text
+                              type="secondary"
+                              style={{
+                                fontSize: 11,
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
+                              }}
+                            >
                               ({(file.size_bytes / 1024).toFixed(1)} KB)
                             </Text>
                           ) : null}
-                        </Space>
-                        <Space size="small">
+                        </div>
+                        <Space size="small" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
                           <Button
                             size="small"
                             type="primary"

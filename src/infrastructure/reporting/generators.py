@@ -698,6 +698,30 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"JSON 数据已保存: {json_path}")
 
+            # 实时记录产物报告到当前 TraceContext 与数据库
+            trace_ctx = TraceContext.current()
+            if trace_ctx:
+                rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                if not any(rf.get("filename") == html_path.name for rf in rfiles):
+                    rfiles.append(
+                        {
+                            "filename": html_path.name,
+                            "path": str(html_path.resolve()),
+                            "format": "html",
+                            "size_bytes": html_path.stat().st_size
+                            if html_path.exists()
+                            else 0,
+                            "created_at": time.time(),
+                        }
+                    )
+                from ...shared.trace_context import _global_trace_store
+
+                if _global_trace_store is not None:
+                    try:
+                        _global_trace_store.save_trace(trace_ctx.to_dict())
+                    except Exception:
+                        pass
+
             return str(html_path.absolute()), str(json_path.absolute())
 
         except Exception as e:
@@ -1579,10 +1603,9 @@ class ReportGenerator(IReportGenerator):
         try:
             with Image.open(BytesIO(payload)) as image:
                 image.load()
-                resampling = getattr(Image, "Resampling", Image)
                 image.thumbnail(
                     (AVATAR_MAX_EDGE_LENGTH, AVATAR_MAX_EDGE_LENGTH),
-                    resampling.LANCZOS,
+                    Image.Resampling.LANCZOS,
                 )
                 output = BytesIO()
                 if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
