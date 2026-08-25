@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
@@ -23,7 +23,7 @@ _MAX_GROUP_NAME_LEN = 10
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 # 当前追踪的上下文变量
-_current_trace: ContextVar[Optional["TraceContext"]] = ContextVar(
+_current_trace: ContextVar[TraceContext | None] = ContextVar(
     "current_trace", default=None
 )
 
@@ -255,7 +255,7 @@ class TraceContext:
             "checkpoints": {k: v.isoformat() for k, v in self._checkpoints.items()},
         }
 
-    def __enter__(self) -> "TraceContext":
+    def __enter__(self) -> TraceContext:
         self._token = _current_trace.set(self)
         return self
 
@@ -276,7 +276,7 @@ class TraceContext:
             self._token = None
 
     @classmethod
-    def current(cls) -> Optional["TraceContext"]:
+    def current(cls) -> TraceContext | None:
         return _current_trace.get()
 
     @classmethod
@@ -288,7 +288,7 @@ class TraceContext:
         operation: str = "",
         trigger_type: str = "manual",
         auto_bind: bool = False,
-    ) -> "TraceContext":
+    ) -> TraceContext:
         current = cls.current()
         if current:
             return current
