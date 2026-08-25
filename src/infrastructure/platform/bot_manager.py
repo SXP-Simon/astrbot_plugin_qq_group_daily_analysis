@@ -282,32 +282,78 @@ class BotManager:
         """
         获取指定平台的 PlatformAdapter。
 
-        这是 DDD 架构操作的主要方法。
+        支持平台实例 ID 精确匹配、大小写不敏感匹配、协议别名匹配 (如 qq -> aiocqhttp) 与单实例兜底。
         """
-        if platform_id:
-            # 无论是否存在适配器，都尝试检测一次 client 是否有变（如重启后 session 变化）
-            if platform_id in self._platforms:
-                self._refresh_from_stored_platforms()
+        # 如果没有任何适配器，尝试全局刷新一次
+        if not self._adapters:
+            self._refresh_from_stored_platforms()
 
-            return self._adapters.get(platform_id)
-
-        if self._adapters:
-            if len(self._adapters) == 1:
-                return list(self._adapters.values())[0]
-
-            logger.warning(
-                f"存在多个适配器 {list(self._adapters.keys())}，但未指定 platform_id。"
-            )
+        if not platform_id or str(platform_id).lower().strip() in (
+            "auto",
+            "default",
+            "all",
+            "none",
+            "",
+        ):
+            if self._adapters:
+                if len(self._adapters) == 1:
+                    return list(self._adapters.values())[0]
+                # 多个适配器且未指定，优先返回第一个就绪的适配器
+                for adp in self._adapters.values():
+                    if adp:
+                        return adp
             return None
 
-        # 如果没有任何适配器，尝试全局刷新一次
-        self._refresh_from_stored_platforms()
-        if self._adapters:
-            if platform_id:
-                return self._adapters.get(platform_id)
-            if len(self._adapters) == 1:
-                return list(self._adapters.values())[0]
+        # 检查存储的平台实例是否有最新变动
+        if platform_id in self._platforms:
+            self._refresh_from_stored_platforms()
 
+        # 1. 精确匹配平台 ID
+        if platform_id in self._adapters:
+            return self._adapters[platform_id]
+
+        # 2. 大小写不敏感匹配
+        p_id_lower = str(platform_id).lower().strip()
+        for k, adp in self._adapters.items():
+            if k.lower().strip() == p_id_lower:
+                return adp
+
+        # 3. 平台别名与协议族智能匹配
+        alias_map: dict[str, list[str]] = {
+            "qq": ["aiocqhttp", "onebot", "qq_official"],
+            "onebot": ["aiocqhttp", "onebot"],
+            "aiocqhttp": ["aiocqhttp", "onebot"],
+            "qq_official": ["qq_official"],
+            "telegram": ["telegram", "tg"],
+            "tg": ["telegram", "tg"],
+            "lark": ["lark", "feishu"],
+            "feishu": ["lark", "feishu"],
+            "discord": ["discord"],
+        }
+
+        target_keywords = alias_map.get(p_id_lower, [p_id_lower])
+        for k, adp in self._adapters.items():
+            adp_pname = str(getattr(adp, "platform_name", "") or "").lower()
+            adp_class = type(adp).__name__.lower()
+            k_lower = k.lower()
+            for kw in target_keywords:
+                if kw in adp_pname or kw in adp_class or kw in k_lower:
+                    logger.info(
+                        f"[BotManager] 平台标识 '{platform_id}' 智能匹配到适配器 '{k}' (类型: {type(adp).__name__})"
+                    )
+                    return adp
+
+        # 4. 单实例容错兜底：若系统仅有 1 个活跃适配器，自动作为兜底并记录日志
+        if len(self._adapters) == 1:
+            fallback_k, fallback_adp = list(self._adapters.items())[0]
+            logger.info(
+                f"[BotManager] 未找到指定平台 '{platform_id}'，系统当前仅有 1 个活跃适配器 '{fallback_k}'，已自动作为容错兜底使用"
+            )
+            return fallback_adp
+
+        logger.warning(
+            f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
+        )
         return None
 
     def get_all_adapters(self) -> dict:
@@ -317,7 +363,7 @@ class BotManager:
     def has_adapter(self, platform_id: str | None = None) -> bool:
         """检查指定平台是否有适配器"""
         if platform_id:
-            return platform_id in self._adapters
+            return self.get_adapter(platform_id) is not None
         return bool(self._adapters)
 
     def can_analyze(self, platform_id: str | None = None) -> bool:

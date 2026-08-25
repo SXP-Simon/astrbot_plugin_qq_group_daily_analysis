@@ -50,7 +50,7 @@ export const App: React.FC = () => {
     logsVM.refresh();
   };
 
-  const triggerVM = useTriggerTask(() => {
+  const triggerVM = useTriggerTask(tracesVM.groups, () => {
     invalidateGroupsCache();
     overviewVM.refresh();
     tracesVM.refresh();
@@ -203,6 +203,8 @@ export const App: React.FC = () => {
           groupName={triggerVM.groupName}
           platform={triggerVM.platform}
           submitting={triggerVM.submitting}
+          connectedPlatforms={triggerVM.connectedPlatforms}
+          loadingPlatforms={triggerVM.loadingPlatforms}
           onGroupIdChange={triggerVM.setGroupId}
           onGroupNameChange={triggerVM.setGroupName}
           onPlatformChange={triggerVM.setPlatform}

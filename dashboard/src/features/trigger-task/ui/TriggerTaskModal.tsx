@@ -1,5 +1,6 @@
 import React from "react";
 import { Modal, Form, Input, Select } from "antd";
+import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
 
 interface TriggerTaskModalProps {
   open: boolean;
@@ -7,6 +8,8 @@ interface TriggerTaskModalProps {
   groupName: string;
   platform: string;
   submitting: boolean;
+  connectedPlatforms?: ConnectedPlatform[];
+  loadingPlatforms?: boolean;
   onGroupIdChange: (val: string) => void;
   onGroupNameChange: (val: string) => void;
   onPlatformChange: (val: string) => void;
@@ -20,12 +23,30 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   groupName,
   platform,
   submitting,
+  connectedPlatforms = [],
+  loadingPlatforms = false,
   onGroupIdChange,
   onGroupNameChange,
   onPlatformChange,
   onClose,
   onSubmit,
 }) => {
+  const platformOptions = [
+    { label: "⚡ 自动识别 / 默认平台 (推荐)", value: "auto" },
+    ...(connectedPlatforms.length > 0
+      ? connectedPlatforms.map((p) => ({
+          label: `🟢 ${p.label}`,
+          value: p.id,
+        }))
+      : [
+          { label: "QQ (OneBot 协议端)", value: "qq" },
+          { label: "QQ 官方机器人", value: "qq_official" },
+          { label: "Telegram", value: "telegram" },
+          { label: "飞书", value: "lark" },
+          { label: "Discord", value: "discord" },
+        ]),
+  ];
+
   return (
     <Modal
       title="手动触发群聊日报分析"
@@ -56,17 +77,19 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
           />
         </Form.Item>
 
-        <Form.Item label="聊天平台">
+        <Form.Item
+          label="接入平台"
+          extra={
+            connectedPlatforms.length > 0
+              ? `已自动检测到 ${connectedPlatforms.length} 个活跃平台实例，支持自由指定`
+              : "自动调用当前已连接的 Bot 平台进行消息抓取与报告发送"
+          }
+        >
           <Select
             value={platform}
             onChange={onPlatformChange}
-            options={[
-              { label: "QQ (OneBot 协议端)", value: "qq" },
-              { label: "QQ 官方机器人", value: "qq_official" },
-              { label: "Telegram", value: "telegram" },
-              { label: "飞书", value: "lark" },
-              { label: "Discord", value: "discord" },
-            ]}
+            loading={loadingPlatforms}
+            options={platformOptions}
           />
         </Form.Item>
       </Form>
