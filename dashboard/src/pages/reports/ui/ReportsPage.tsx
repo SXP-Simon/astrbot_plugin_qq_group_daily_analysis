@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, Table, Empty, Button, Tag, Typography, Space, Tooltip } from "antd";
+import { Card, Table, Empty, Button, Tag, Typography, Space, Tooltip, Skeleton } from "antd";
 import {
   FileImageOutlined,
   EyeOutlined,
@@ -75,7 +75,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       key: "modified_at",
       width: 170,
       render: (ts: number) => (
-        <span style={{ color: "#595959", fontSize: 12 }}>
+        <span style={{ fontSize: 12 }}>
           {formatTimestamp(ts)}
         </span>
       ),
@@ -101,7 +101,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
             style={{
               marginBottom: 0,
               fontSize: 12,
-              color: "#595959",
               maxWidth: 320,
               fontFamily:
                 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
@@ -147,7 +146,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
   ];
 
   return (
-    <Card size="small">
+    <Card size="small" style={{ minHeight: 520 }}>
       {/* 历史报告筛选工具栏 (Feature) */}
       <ReportFilterBar
         search={search}
@@ -160,11 +159,21 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
         onRefresh={refresh}
       />
 
-      {rawReports.length === 0 ? (
+      {loading && rawReports.length === 0 ? (
+        <div style={{ padding: "24px 12px" }}>
+          <Skeleton
+            active
+            paragraph={{
+              rows: 7,
+              width: ["100%", "92%", "96%", "88%", "100%", "94%", "75%"],
+            }}
+          />
+        </div>
+      ) : rawReports.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="暂无历史图片报告产物"
-          style={{ margin: "32px 0" }}
+          description="暂无符合条件的历史图片报告产物"
+          style={{ margin: "64px 0" }}
         />
       ) : (
         <Table
