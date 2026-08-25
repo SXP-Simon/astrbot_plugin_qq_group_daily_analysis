@@ -1,6 +1,13 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ActiveTask } from "../model/types";
 
+export interface ConnectedPlatform {
+  id: string;
+  name: string;
+  type: string;
+  label: string;
+}
+
 export async function fetchActiveTasks(): Promise<ActiveTask[]> {
   const res = await apiGet<ActiveTask[]>("tasks/active");
   const data = extractData<ActiveTask[]>(res);
@@ -13,10 +20,17 @@ export async function cancelActiveTask(taskId: string): Promise<boolean> {
   return res?.status === "ok";
 }
 
+export async function fetchConnectedPlatforms(): Promise<ConnectedPlatform[]> {
+  const res = await apiGet<ConnectedPlatform[]>("platforms");
+  const data = extractData<ConnectedPlatform[]>(res);
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
 export async function triggerNewTask(
   groupId: string,
   groupName: string = "",
-  platform: string = "qq"
+  platform: string = "auto"
 ): Promise<{ status: string; data?: unknown; message?: string }> {
   const res = await apiPost<{ trace_id: string }>("tasks/trigger", {
     group_id: groupId,
