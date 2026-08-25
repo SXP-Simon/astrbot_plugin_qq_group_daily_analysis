@@ -45,7 +45,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       title: "报告文件",
       dataIndex: "filename",
       key: "filename",
-      width: 260,
+      width: 240,
+      ellipsis: true,
       render: (fn: string, r: ReportItem) => {
         const isHtml = Boolean(
           r.is_html ||
@@ -53,31 +54,84 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             fn.toLowerCase().endsWith(".htm")
         );
         return (
-          <span style={{ fontSize: 13, fontWeight: 600 }}>
-            {isHtml ? (
-              <FileTextOutlined style={{ marginRight: 6, color: "#fa8c16" }} />
-            ) : (
-              <FileImageOutlined style={{ marginRight: 6, color: "#1677ff" }} />
-            )}
-            {fn}
-          </span>
+          <Tooltip title={fn} placement="topLeft">
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isHtml ? (
+                <FileTextOutlined
+                  style={{ marginRight: 6, color: "#fa8c16", flexShrink: 0 }}
+                />
+              ) : (
+                <FileImageOutlined
+                  style={{ marginRight: 6, color: "#1677ff", flexShrink: 0 }}
+                />
+              )}
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {fn}
+              </span>
+            </span>
+          </Tooltip>
         );
       },
     },
     {
       title: "所属群聊",
       key: "group",
-      width: 190,
+      width: 180,
+      ellipsis: true,
       render: (_: unknown, r: ReportItem) => {
         if (!r.group_id) {
           return <Text type="secondary">-</Text>;
         }
-        const p = !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
+        const p =
+          !r.platform || r.platform === "auto" || r.platform === "default"
+            ? ""
+            : r.platform;
+        const label = `${r.group_name || "未知群"} (${r.group_id})`;
         return (
-          <Tooltip title={`群号: ${r.group_id}${p ? ` | 平台: ${p}` : ""}`}>
-            <span style={{ fontSize: 12 }}>
-              <TeamOutlined style={{ marginRight: 4, color: "#722ed1" }} />
-              {r.group_name || "未知群"} ({r.group_id})
+          <Tooltip
+            title={`群号: ${r.group_id}${p ? ` | 平台: ${p}` : ""}${r.group_name ? ` | 群名: ${r.group_name}` : ""}`}
+            placement="topLeft"
+          >
+            <span
+              style={{
+                fontSize: 12,
+                display: "inline-flex",
+                alignItems: "center",
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <TeamOutlined
+                style={{ marginRight: 4, color: "#722ed1", flexShrink: 0 }}
+              />
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </span>
             </span>
           </Tooltip>
         );
@@ -88,16 +142,19 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       dataIndex: "platform",
       key: "platform",
       width: 75,
+      align: "center" as const,
       render: (p?: string) => {
         const displayP = !p || p === "auto" || p === "default" ? "-" : p;
-        return <Tag>{displayP}</Tag>;
+        return <Tag style={{ margin: 0 }}>{displayP}</Tag>;
       },
     },
     {
       title: "关联任务",
       dataIndex: "trace_id",
       key: "trace_id",
-      width: 140,
+      width: 130,
+      align: "center" as const,
+      ellipsis: true,
       render: (tId?: string) => {
         if (!tId) return <Text type="secondary">-</Text>;
         return (
@@ -109,6 +166,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 fontFamily:
                   'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
                 fontSize: 11,
+                margin: 0,
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
               onClick={() => onViewTrace?.(tId)}
             >
@@ -122,9 +183,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       title: "生成时间",
       dataIndex: "modified_at",
       key: "modified_at",
-      width: 160,
+      width: 150,
       render: (ts: number) => (
-        <span style={{ fontSize: 12 }}>
+        <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
           {formatTimestamp(ts)}
         </span>
       ),
@@ -133,15 +194,20 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       title: "文件大小",
       dataIndex: "size_bytes",
       key: "size_bytes",
-      width: 100,
+      width: 90,
+      align: "right" as const,
       render: (sz: number) => (
-        <span style={{ fontSize: 12 }}>{(sz / 1024).toFixed(1)} KB</span>
+        <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+          {(sz / 1024).toFixed(1)} KB
+        </span>
       ),
     },
     {
-      title: "服务器/容器存储路径",
+      title: <span style={{ whiteSpace: "nowrap" }}>服务器/容器存储路径</span>,
       dataIndex: "absolute_path",
       key: "absolute_path",
+      width: 220,
+      ellipsis: true,
       render: (path: string) =>
         path ? (
           <Paragraph
@@ -150,9 +216,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             style={{
               marginBottom: 0,
               fontSize: 12,
-              maxWidth: 320,
+              maxWidth: "100%",
               fontFamily:
                 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+              whiteSpace: "nowrap",
             }}
           >
             {path}
@@ -164,13 +231,19 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
     {
       title: "状态",
       key: "status",
-      width: 85,
-      render: () => <Tag color="success">已生成</Tag>,
+      width: 75,
+      align: "center" as const,
+      render: () => (
+        <Tag color="success" style={{ margin: 0 }}>
+          已生成
+        </Tag>
+      ),
     },
     {
       title: "操作",
       key: "actions",
-      width: 170,
+      width: 160,
+      fixed: "right" as const,
       render: (_: unknown, r: ReportItem) => {
         const isHtml = Boolean(
           r.is_html ||
@@ -178,7 +251,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             r.filename.toLowerCase().endsWith(".htm")
         );
         return (
-          <Space size="small">
+          <Space size="small" style={{ whiteSpace: "nowrap" }}>
             <Button
               size="small"
               type="primary"
@@ -238,6 +311,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
           dataSource={reports}
           rowKey="filename"
           loading={loading}
+          scroll={{ x: 1200 }}
           pagination={{ pageSize: 10 }}
         />
       )}
