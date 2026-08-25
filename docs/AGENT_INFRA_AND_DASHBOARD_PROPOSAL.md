@@ -1,350 +1,212 @@
-# 群日常分析插件基础设施升级与仪表盘架构提案
-(Agent Infra & Context Insights & Web Dashboard Proposal)
+# 群日常分析插件基础设施升级与仪表盘架构白皮书
+(Agent Infra & Context Insights & Web Dashboard Architecture Whitepaper)
 
 ---
 
 ## 1. 概述与核心愿景
 
-### 1.1 背景与定位
-`astrbot_plugin_qq_group_daily_analysis`（群日常分析插件）表面上是一个聊天机器人分析扩展，但系统本质是一个**多阶段、长耗时、高计算与网络密集型的异步 LLM 流水线（Multi-Stage Async Pipeline with Heavy LLM Workloads）**。
+### 1.1 背景与系统本质
+`astrbot_plugin_qq_group_daily_analysis`（群日常分析插件）表面上是一个聊天机器人扩展，但其系统本质是一个**多阶段、长耗时、高计算与网络密集型的异步 LLM 流水线（Multi-Stage Async Pipeline with Heavy LLM Workloads）**。
 
-整个管线包含：
-`海量原始消息拉取` $\to$ `规则清洗与剪枝` $\to$ `增量合并/滑动窗口切分` $\to$ `多维度并行 LLM 分析（话题/头衔/金句/漫画）` $\to$ `HTML/Playwright 图像排版渲染` $\to$ `跨平台静默推送`。
+整个管线涵盖：
+$$\text{海量原始消息拉取} \longrightarrow \text{规则清洗与剪枝} \longrightarrow \text{增量合并/滑动窗口切分} \longrightarrow \text{多维度并行 LLM 分析} \longrightarrow \text{HTML/Playwright 图像排版渲染} \longrightarrow \text{跨平台静默推送}$$
 
-当前插件在面对长程运行、多群并发时，存在长程任务缺乏细粒度追踪、失败重试成本高（无断点续跑）、上下文演进与 Token 消耗黑盒、缺乏统一可视化运维面板等痛点。
-
----
-
-### 1.2 核心理念融合
-
-#### ① 大模型评测/执行基础设施（Agent Infra）的工程借鉴
-在工业级大模型出题、评测与智能体沙箱执行基础设施（如 SWE-bench Runner、Agent 评测平台）中，核心关注的是：
-* **任务状态机与生命周期管理**（Queued $\to$ Running $\to$ Succeeded / Failed $\to$ Retry）。
-* **阶段快照与局部断点续跑（Stage Checkpoints & Partial Resume）**：当多个分析器（Analyzer）部分成功但后续渲染或单项超时失败时，保留已成功的阶段结果，重试时仅重跑失败步骤，节省巨额 Token 与时间。
-* **任务防重、并发限流与自愈（Locking & Task Reaper）**：防止同群并发打架，并在后台自动回收超时假死的孤儿任务。
-
-#### ② 上下文洞察与生命周期透视（深度参考 `dsh-context`）
-* **什么是 `dsh-context`？**
-  * 开源项目地址：[bowenliang123/dsh-context](https://github.com/bowenliang123/dsh-context)
-  * **核心概念**：`dsh-context` 是面向 DeepSeek Harness 的一站式上下文洞察与管理插件。它致力于**透视上下文组成（System Prompt、历史消息、工具定义、检索上下文等）、追踪上下文在多轮交互与增量聚合中的演进/压缩/剪枝过程，并提供清晰的 Token 构成与成本统计面板**。
-* **在群日常分析中的映射落地**：
-  * **上下文演进漏斗（Context Funnel）**：追踪数千条群聊记录从“原始抓取”到“过滤无意义消息”，再到“增量压缩聚合”，最后进入各 Prompt 的保留率与剪枝比例。
-  * **模块级 Token 账单（Token Usage Breakdown）**：清晰区分话题挖掘、人物画像、金句提取、漫画分镜各自消耗的 Prompt 与 Completion Token。
-  * **交互快照（Prompt & Trajectory Inspector）**：支持抽屉式查看当时发送给 LLM 的实际上下文快照与原始回复，让上下文不再是“黑盒”。
-
-#### ③ 优雅的交互分层原则（IM 极简反馈 + Web 控制台深度可观测）
-* **IM 聊天端（QQ/TG/Lark/Discord）**：
-  * 保持克制、标准、优雅的必要反馈：手动指令触发时给出轻量确认，执行失败时输出带 `TraceID` 的友好错误归因，最终产物呈递高清日报图片；**严禁**在 IM 群内反复高频编辑或刷屏发送多条百分比进度文本。
-* **Web 控制台端（AstrBot 插件独立面板）**：
-  * 承载所有深度可观测性能力：实时活跃任务、全链路甘特图瀑布流、Token 消耗账单、上下文演进漏斗、历史报告画廊与调试工具。
+为了彻底解决长程任务缺乏细粒度追踪、失败重试成本高（无断点续跑）、上下文演进与 Token 消耗黑盒、缺乏统一可视化运维面板等痛点，本工程借鉴了工业级 **Agent Infra（大模型评测与执行基础设施）** 与 **dsh-context（上下文洞察与生命周期管理）** 的设计哲学，并构建了自包含的现代 Web 控制台。
 
 ---
 
-## 2. 关键参考文档与生态索引（相对路径）
-
-在开发与实现过程中，请严格遵循 AstrBot 官方规范并参考成熟生态方案：
-
-### 2.1 官方与项目规范文档
-* **AstrBot 插件存储规范**：
-  * 相对路径：`docs/zh/dev/star/guides/storage.md`
-  * 规范要求：所有持久化数据（如 SQLite 数据库、缓存文件、图片产物）必须存放在 `StarTools.get_data_dir(PLUGIN_NAME)`（即 `data/plugin_data/<plugin_name>/`）。
-* **AstrBot 插件 Pages 指南**：
-  * 相对路径：`docs/zh/dev/star/guides/plugin-pages.md`
-  * 规范要求：插件页面通过 `pages/<page_name>/index.html` 托管在受限 iframe 中，通过 `window.AstrBotPluginPage` bridge 与后端通过 `context.register_web_api()` 注册的 API 交互。
-* **前端设计系统与 UI 风格规范（重要）**：
-  * 相对路径：`docs/DASHBOARD_UI_STYLE_GUIDE.md`
-  * 规范说明：控制台全面遵循 **数据密集与响应式设计系统（Data Dense & Responsive Utility）**。桌面端追求紧凑行高、等宽数据展示与零冗余留白；移动端自适应为紧凑卡片流。所有前端代码开发必须严格遵循该文档中的 Token 字典、禁止项与自检清单。
-
-### 2.2 核心开源参考
-* **上下文洞察参考**：
-  * [bowenliang123/dsh-context](https://github.com/bowenliang123/dsh-context)：透视上下文组成、演进、压缩、剪枝等动作的最佳实践。
-* **插件面板成熟实现参考**：
-  * [exynos967/astrbot_plugin_memorix](https://github.com/exynos967/astrbot_plugin_memorix)（本地参考目录：`data/temp/memorix_ref`）：AstrBot 插件内嵌 WebUI 面板、Single-Bundle 编译、Iframe Bridge 适配与主题联动的完整工程范式。
-* **Prompt 角色参考**：
-  * [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents)：专有角色 Agent 提示词设计。
-
----
-
-## 3. 系统总体架构设计
+## 2. 完整系统架构与端到端运行流程 (End-to-End Pipeline)
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                            AstrBot WebUI Shell (Parent)                          │
-└────────────────────────────────────────┬─────────────────────────────────────────┘
-                                         │ Iframe Bridge (window.AstrBotPluginPage)
-┌────────────────────────────────────────▼─────────────────────────────────────────┐
-│                 Plugin Dashboard (React 18/19 + Ant Design 5)                    │
-│  ┌────────────────────┬────────────────────┬──────────────────┬───────────────┐  │
-│  │ 🚀 实时任务看板    │ 🔍 链路追溯(甘特图)│ 🧠 上下文&Token  │ 📁 历史报告库 │  │
-│  └────────────────────┴────────────────────┴──────────────────┴───────────────┘  │
-└────────────────────────────────────────┬─────────────────────────────────────────┘
-                                         │ HTTP REST / SSE (context.register_web_api)
-┌────────────────────────────────────────▼─────────────────────────────────────────┐
-│                      Plugin Backend Infrastructure Layer                          │
-│                                                                                  │
-│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
-│  │  PluginPageWebUIBridge │  │   ActiveTaskManager   │  │   TaskReaperDaemon   │  │
-│  │  (REST / SSE Handlers)│  │   (Concurrency/Locks) │  │   (Timeout Recovery) │  │
-│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
-│              │                          │                         │              │
-│  ┌───────────▼──────────────────────────▼─────────────────────────▼───────────┐  │
-│  │                 TraceStore & CheckpointStore (SQLite)                      │  │
-│  │     (Located at: StarTools.get_data_dir(PLUGIN_NAME) / "traces.db")        │  │
-│  └──────────────────────────────────────┬─────────────────────────────────────┘  │
-│                                         │                                        │
-│  ┌──────────────────────────────────────▼─────────────────────────────────────┐  │
-│  │               Enhanced TraceContext (Span-based Tracing)                   │  │
-│  └──────────────────────────────────────┬─────────────────────────────────────┘  │
-└─────────────────────────────────────────┼────────────────────────────────────────┘
-                                          │
-┌─────────────────────────────────────────▼────────────────────────────────────────┐
-│                   Multi-Stage Analysis Pipeline (Core Domain)                     │
-│                                                                                  │
-│  [ Stage 1: Fetch & Stats ] ──> [ Stage 2: Clean & Context Funnel ]              │
-│                                                │                                 │
-│        ┌───────────────────────────────────────┴──────────────────────┐          │
-│        ▼ (Parallel Analyzers with Stage Checkpoint Cache)             ▼          │
-│   [ Topic LLM ]    [ Persona LLM ]    [ Quote LLM ]    [ Comic LLM & T2I ]       │
-│        └───────────────────────────────────────┬──────────────────────┘          │
-│                                                │                                 │
-│  [ Stage 4: HTML / Chart Image Render ] ───> [ Stage 5: Multi-Platform Push ]     │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                       AstrBot WebUI Shell (宿主环境)                                     │
+└───────────────────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                                    │ Iframe Bridge (window.AstrBotPluginPage)
+┌───────────────────────────────────────────────────▼────────────────────────────────────────────────────┐
+│                    Web 控制台前端 (React 18 + FSD + Atomic Design + MVVM + AntD 5)                      │
+│   ┌────────────────────┬────────────────────┬─────────────────────────────┬────────────────────────┐   │
+│   │ 🚀 实时任务看板    │ 🔍 链路追溯(甘特图)│ 🧠 上下文演进与 Token 账单  │ 📁 历史报告长图归档    │   │
+│   └────────────────────┴────────────────────┴─────────────────────────────┴────────────────────────┘   │
+└───────────────────────────────────────────────────┬────────────────────────────────────────────────────┘
+                                                    │ HTTP REST / SSE 事件管道 (context.register_web_api)
+┌───────────────────────────────────────────────────▼────────────────────────────────────────────────────┐
+│                                Plugin Backend Infrastructure Layer                                     │
+│                                                                                                        │
+│   ┌────────────────────────┐    ┌────────────────────────┐    ┌───────────────────────────────────┐    │
+│   │ PluginPageWebUIBridge  │    │   ActiveTaskManager    │    │      TaskReaperDaemon & Sweep     │    │
+│   │  (REST / SSE Handlers) │    │  (Concurrency & Locks) │    │ (600s 超时强杀 & 开机崩溃自愈对账) │    │
+│   └───────────┬────────────┘    └───────────┬────────────┘    └─────────────────┬─────────────────┘    │
+│               │                             │                                   │                      │
+│   ┌───────────▼─────────────────────────────▼───────────────────────────────────▼──────────────────┐   │
+│   │                               SQLite 持久化仓储 (WAL 模式)                                      │   │
+│   │         TraceSQLiteStore (30天/20000条链路)  +  CheckpointStore (30天阶段快照)                 │   │
+│   │                  存储路径: StarTools.get_data_dir(PLUGIN_NAME) / "traces.db"                   │   │
+│   └─────────────────────────────────────────┬──────────────────────────────────────────────────────┘   │
+│                                             │                                                          │
+│   ┌─────────────────────────────────────────▼──────────────────────────────────────────────────────┐   │
+│   │                 Enhanced TraceContext (Span 阶段打点、Token 累计与上下文演进漏斗)               │   │
+│   └─────────────────────────────────────────┬──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────┼──────────────────────────────────────────────────────────┘
+                                              │
+┌─────────────────────────────────────────────▼──────────────────────────────────────────────────────────┐
+│                             Multi-Stage Analysis Pipeline (核心流水线)                                 │
+│                                                                                                        │
+│   [ 阶段 1: 消息拉取 ] ──> [ 阶段 2: 规则清洗与剪枝 ] ──> [ 阶段 3: 并行 LLM 分析与 Checkpoint 缓存 ]    │
+│    - OneBot/QQ/TG/DC        - 过滤系统/无意义字符          - 话题分析 (Topic LLM)                      │
+│    - 指数退避重试 (3次)     - 计算压缩比与留存率           - 头衔画像 (Persona LLM)                    │
+│    - 增量缓存降级兜底       - dsh-context 漏斗记录         - 精彩金句 (Quote LLM)                      │
+│                                                            - 每日漫画 (Comic LLM & T2I)                │
+│                                                            - 自动保存阶段快照 (30天有效)               │
+│                                                                           │                            │
+│   [ 阶段 5: 跨平台安全推送 ] <── [ 阶段 4: 两轮降级图像排版渲染 ] <───────────────┘                            │
+│    - 图片/HTML/群文件推送         - Round 1: PNG + Ultra 清晰度                                        │
+│    - 断网安全兜底(控制台查看)     - Round 2: JPEG + High 宽容度回退                                    │
+│    - 杜绝向断开 WebSocket 盲发    - 失败回退纯文本报告                                                 │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 4. 核心模块与实现细节
-
-### 4.1 数据持久化设计 (SQLite Store)
-
-* **存储路径**：`StarTools.get_data_dir(PLUGIN_NAME) / "traces.db"`
-* **技术特性**：轻量级嵌入式 SQLite，WAL 模式，零额外守护进程，单任务写入耗时 $< 1\text{ms}$，内置 30 天 / 最近 1000 条自动滚动清理。
-
-#### 核心数据表设计
-1. **`analysis_traces`**：主任务链路快照
-   * `trace_id` (TEXT PK): 语义化链路 ID（如 `manual_交流群_2105`）
-   * `group_id` (TEXT): 群组 ID
-   * `platform` (TEXT): 来源平台 (`qq`, `telegram`, `lark`, `discord`)
-   * `trigger_type` (TEXT): 触发模式 (`manual`, `auto`, `api`)
-   * `status` (TEXT): 状态 (`running`, `succeeded`, `failed`, `aborted`)
-   * `started_at` (REAL), `completed_at` (REAL), `duration_ms` (REAL)
-   * `error_stage` (TEXT), `error_message` (TEXT), `stack_trace` (TEXT)
-2. **`trace_spans`**：细粒度步骤与耗时（用于甘特图）
-   * `span_id` (TEXT PK), `trace_id` (TEXT FK)
-   * `stage_name` (TEXT): `FETCH_MESSAGES`, `CLEAN_PRUNE`, `LLM_TOPICS`, `LLM_TITLES`, `LLM_QUOTES`, `DRAW_COMIC`, `RENDER_REPORT`, `PUSH_MESSAGE`
-   * `status` (TEXT): `success`, `failed`, `skipped`
-   * `started_at` (REAL), `duration_ms` (REAL)
-   * `stage_payload_json` (TEXT): 阶段调试快照
-3. **`context_metrics`**：上下文演进指标（`dsh-context` 特性）
-   * `trace_id` (TEXT PK_FK)
-   * `raw_message_count` (INT): 原始拉取消息数
-   * `cleaned_message_count` (INT): 清洗后有效消息数
-   * `compression_ratio` (REAL): 消息保留比例 ($Cleaned / Raw$)
-   * `incremental_batches` (INT): 增量分批数
-4. **`token_usage`**：Token 账单审计
-   * `trace_id` (TEXT PK_FK)
-   * `prompt_tokens` (INT), `completion_tokens` (INT), `total_tokens` (INT)
-   * `estimated_cost` (REAL): 预估花费
-   * `per_analyzer_tokens_json` (TEXT): 各 Analyzer 细分消耗
+### 2.1 详细阶段执行流转
+1. **触发与互斥锁获取**：
+   * 支持指令（`/群分析`）、Web 控制台手动触发或定时任务触发；
+   * 通过 `ActiveTaskManager` 获取目标群的互斥并发锁，防止同一群聊并发任务打架。
+2. **消息拉取与清洗 (Stages 1 & 2)**：
+   * 从平台适配器抓取原始消息，经过过滤规则剔除无效文本，同时在 `TraceContext` 中记录原始消息数、清洗后有效数与压缩率（`compression_ratio`）。
+3. **多任务并行 LLM 分析与阶段快照 (Stage 3)**：
+   * 话题、头衔、金句、漫画分镜四个分析器并发执行；
+   * 每个分析器执行完毕后，即刻将其结果持久化到 `CheckpointStore`（30 天有效期），并分别将耗时写入 `trace_spans`、Token 消耗写入 `token_usage`。
+4. **图像排版与容错渲染 (Stage 4)**：
+   * 加载所选 HTML 模板，注入统计数据与 LLM 成果；
+   * 采用两轮渲染回退策略（PNG Ultra $\to$ JPEG High $\to$ 文本总结），保障出图成功率。
+5. **跨平台安全分发 (Stage 5)**：
+   * 向群聊下发生成的高清长图。若检测到底层 IM 连接异常断开，则静默标记完成并安全退出，保障生成的产物在 Web 控制台内可随时查阅与下载。
 
 ---
 
-### 4.2 任务状态机、断点续跑与自愈机制
+## 3. 全景容错矩阵与开机自愈对账 (Fault-Tolerance & Self-Healing)
 
-```mermaid
-stateDiagram-v2
-    [*] --> QUEUED : 触发分析
-    QUEUED --> FETCHING : 获得群锁 (group_lock)
-    FETCHING --> CLEANING : 消息抓取就绪
-    CLEANING --> ANALYZING : 上下文剪枝完成
-    
-    state ANALYZING {
-        [*] --> RUNNING_ANALYZERS : 并发执行
-        RUNNING_ANALYZERS --> CHECKPOINT_SAVED : 保存阶段产物
-    }
-    
-    ANALYZING --> RENDERING : 所有阶段就绪 / 从缓存恢复
-    RENDERING --> SENDING : 报告图片生成完毕
-    SENDING --> SUCCEEDED : 推送成功
-    
-    FETCHING --> FAILED : 异常/超时
-    CLEANING --> FAILED
-    ANALYZING --> FAILED
-    RENDERING --> FAILED
-    SENDING --> FAILED
-    
-    FAILED --> [*] : 释放群锁 & 归档 Trace
-    SUCCEEDED --> [*] : 释放群锁 & 归档
+为了应对真实生产环境中可能发生的进程崩溃、网络闪断与第三方服务超时，系统构建了全方位的容错与自愈矩阵：
+
+| 故障场景 | 故障现象 | 容错与自愈应对机制 | 最终效果 |
+|---|---|---|---|
+| **宿主进程异常重启 / OOM 崩溃** | 运行中的任务在 SQLite 中永久残留为 `running` 假死状态，导致群锁无法释放 | **开机对账自愈扫描 (`reconcile_crashed_traces_on_startup`)**：插件启动时自动遍历所有处于 `running` 的孤儿 Trace，将其批量更新为 `aborted` 并打上 `CRASH_RECOVERY` 标签，释放所有锁 | 系统重启后 0ms 恢复正常，彻底消除假死与群锁死锁 |
+| **异步长程任务卡死 / 僵尸死锁** | 外部 API（如无超时的 LLM 或第三方绘图服务）无限挂起 | **Task Reaper 守护协程**：后台常驻巡检，对超过 600s 未更新心跳的任务执行超时强杀（标记为 `timed_out`）并释放并发锁 | 杜绝单次任务卡死耗尽系统协程资源 |
+| **OneBot 历史接口抖动** | 消息拉取阶段偶发性网络超时或抛出网络异常 | **指数退避重试 (Backoff Retry)**：`history_manager` 在接口失败时以 1s、2s 间隔自动重试 3 次；若完全失效则降级使用本地增量缓存 | 显著提升高并发网络抖动下的拉取成功率 |
+| **Playwright / Chromium 渲染超时** | 复杂 HTML 模板导致 T2I 渲染超时或 OOM 崩溃 | **两轮多格式渲染降级 (`render_strategies`)**：第一轮 PNG Ultra 追求极致清晰；超时则自动回退第二轮 JPEG High 并延长超时，仍失败则安全回退纯文本报告 | 100% 保证有分析结果交付，不抛出阻断异常 |
+| **IM WebSocket 中途断开** | 报告生成完成后，向群聊下发消息时抛出 `NetworkError` | **静默安全处理与控制台查看**：任务状态正常落盘标记为已完成，产物保存至历史归档；不尝试向已断开的连接盲目回发错误提示 | 保证产物不丢失，管理员可在 WebUI 随时下载 |
+
+---
+
+## 4. WebUI 前端工程架构与规范落地
+
+Web 控制台前端（`dashboard/`）采用 **React 18 + TypeScript + Ant Design 5 + ECharts + Vite** 构建，完全践行了现代前端工程的最佳实践：
+
+### 4.1 FSD (Feature-Sliced Design) 六层单向依赖
+```
+dashboard/src/
+├── 1. shared/                      # [基础共享层]
+│   ├── api/bridge.ts               # 强类型 Iframe Bridge 通信与 SSE 订阅 (0 any)
+│   ├── lib/                        # 纯工具库 (formatters.ts, useTheme.ts)
+│   └── ui/                         # 【Atoms 原子组件】(MetricCard, StatusTag, SectionHeader)
+├── 2. entities/                    # [领域实体层]
+│   ├── task/                       # 活跃任务实体 (types / api / ui / TaskStageBadge)
+│   ├── trace/                      # 链路实体 (types / api / ui / SpanTimeline 分子组件)
+│   ├── group/                      # 群组实体 (types / api)
+│   ├── metric/                     # 统计大盘实体 (types / api)
+│   └── report/                     # 历史产物实体 (types / api)
+├── 3. features/                    # [用户交互功能切片层]
+│   ├── trigger-task/               # 手动触发分析 (ViewModel 校验 + TriggerModal UI)
+│   ├── filter-traces/              # 多维筛选器 (【Molecules 分子组件】RangePicker + 群选择 + 状态)
+│   └── cancel-task/                # 中止任务操作 (二次确认气泡 + CancelButton)
+├── 4. widgets/                     # [复合微件层 / Organisms]
+│   ├── header-bar/HeaderBar.tsx    # 顶部品牌导航与暗黑主题同步微件
+│   ├── active-task-board/          # 活跃任务看板微件 (集成实时 Duration 计时器)
+│   ├── trace-table/TraceTable.tsx  # 数据密集型链路表格微件 (服务端分页 + 排序)
+│   ├── trace-drawer/TraceDrawer.tsx# 链路详情抽屉微件 (瀑布流甘特图 + 调用栈)
+│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (dsh-context 核心透视)
+│   └── token-chart-widget/         # Token 消耗占比 ECharts 微件
+├── 5. pages/                       # [页面与组合视图层] (MVVM 模式落地)
+│   ├── overview/                   # useOverviewViewModel (VM) + OverviewPage (V)
+│   ├── traces/                     # useTracesViewModel (VM) + TracesPage (V)
+│   ├── context-insight/            # useContextInsightViewModel (VM) + ContextInsightPage (V)
+│   └── reports/                    # useReportsViewModel (VM) + ReportsPage (V)
+└── 6. app/                         # [应用根层]
+    ├── App.tsx                     # 全局 Antd ConfigProvider、Tab 导航与 SSE 调度总线
+    └── main.tsx                    # React 18 入口挂载
 ```
 
-1. **群组互斥锁与防重（Idempotency & Group Locking）**：
-   * 基于 `WeakValueDictionary` 维护 `f"{task_type}:{group_id}"`。
-   * 同群同一时间只允许一个分析任务执行，重复请求直接阻断（抛出 `DuplicateGroupTaskError`）。
-2. **Stage Checkpoint 缓存与局部断点续跑（Partial Resume）**：
-   * 话题分析、头衔分析、金句分析独立执行。完成任一阶段后，将 JSON 结果存入临时 Checkpoint 缓存（有效时间 30 分钟）。
-   * 若后续因绘图接口超时或渲染抖动导致任务失败，重试触发时**直接复用已完成阶段的数据**，只重跑失败的 Step，将重试时间缩短至秒级并节省 80%+ 的 Token。
-3. **孤儿任务超时回收守护器（Task Reaper Daemon）**：
-   * 后台异步巡检协程定期扫描长时间处于 `running` 且未更新心跳的任务（如超时 10 分钟），自动标记为 `TIMED_OUT` 并强制释放残留群锁，杜绝 Bot 重启或崩溃引发的群组假死。
+### 4.2 MVVM 响应式模式与 0 `any` 强类型治理
+1. **MVVM 逻辑解耦**：
+   * **ViewModel (`use*ViewModel.ts`)**：纯自定义 Hooks，集中封装异步请求、防抖、排序状态、计算衍生属性与秒级自增计时器；
+   * **View (`*Page.tsx`)**：纯声明式 UI，不含任何直接网络请求或复杂数学计算，保持代码极度纯净。
+2. **0 `any` 严格类型策略**：
+   * 全局开启 `@typescript-eslint/no-explicit-any: 'error'`；
+   * 宿主通信定义强类型 `AstrBotPluginPageBridge`、`AstrBotContext` 与泛型 `ApiResponse<T>`；
+   * 未定型数据一律使用 `unknown` 并配合 `instanceof` / 类型守卫收敛。
+3. **0ms 不可变冷数据 LRU 内存缓存 + SSE 精准失效**：
+   * 仅对终态（`succeeded` / `failed` / `aborted`）记录进行 100 条容量的 LRU 内存缓存，实现秒开抽屉；
+   * 运行中（`running`）任务强制穿透拉取实时进度；
+   * 抽屉右上角支持「刷新」按钮（`forceRefresh=true`）随时强制穿透；
+   * SSE 在接收到状态流转事件时，主动精准淘汰相关缓存，确保数据 100% 同步。
+4. **单文件固定 Bundle 输出**：
+   * Vite 构建固定输出为 `pages/daily-analysis/assets/index.js`，彻底消除动态哈希在 Git 历史中产生的噪音。
 
 ---
 
-### 4.3 IM 端交互体验与错误归因设计
+## 5. 带来的核心用户体验与工程价值 (Value Proposition)
 
-保持 IM 交互简洁优雅，拒绝粗糙刷屏：
+### 5.1 对于群聊普通用户与群友 (End-User Experience)
+* **交互克制优雅**：群内不再有反复编辑或多条百分比刷屏的“进度骚扰”，只有启动时的轻量提示与最终的高清长图。
+* **清晰可信的错误归因**：若偶发分析失败，机器人返回通俗原因与语义化短 Trace ID（如 `TraceID: manual_交流群_2105`），方便群管理员一键溯源。
 
-1. **手动触发响应（Manual Trigger）**：
-   * 收到 `/群分析` 指令后，立即返回一条简明确认（例如：`⏳ 正在分析群聊数据并生成报告，请稍候...`）。
-2. **优雅错误归因（Explainable Failure）**：
-   * 若分析失败，输出清晰归因与短 Trace ID：
-     > `❌ 今日群分析生成失败：LLM 接口响应超时 (429 RateLimit)`  
-     > `TraceID: manual_系统交流群_2105`  
-     > `管理员可在 Web 控制台查看详细链路。`
-3. **定时任务静默执行（Scheduled Run）**：
-   * 每日自动定时分析在后台静默进行，渲染完成后直接发送最终精美图片，不发送中间过渡消息。
+### 5.2 对于 Bot 管理员与运维者 (Admin & Ops Experience)
+* **大盘与运行状态一目了然**：
+  * 秒级查看各群活跃分析任务当前卡在哪个 Stage、已运行多少秒；
+  * 支持在控制台一键手动触发分析或强行中止卡死任务。
+* **30 天断点快照与零成本极速重渲染 (Zero-Token Re-render)**：
+  * 分析成果在 Checkpoint 中保留 30 天；
+  * 如果换了新的 HTML 主题模板，或因网络抖动未收到图片，可在控制台**直接复用已提取的话题与金句，0 Token 消耗秒级重新出图**，无需再耗费数万 Token 重新请求大模型。
+* **调用账单与性能瓶颈深度透明 (dsh-context)**：
+  * **甘特图瀑布流**：一眼看清是哪个 LLM 模型或哪个生图服务商响应缓慢；
+  * **Token 消耗账单**：清晰透视话题、头衔、金句、漫画各自消耗的 Prompt/Completion Tokens 与预估花费；
+  * **消息清洗漏斗**：直观了解 3000 条原始消息是如何经过清洗剔除无效灌水、最终保留有效上下文的。
+* **系统永不假死死锁**：
+  * 即使机器异常掉电或 Docker 重启，开机自愈机制会自动修复所有异常任务并释放群锁。
 
----
-
-### 4.4 前端控制台设计 (React + Ant Design 5)
-
-> 💡 **前端设计系统与代码规范**：控制台开发严格遵循 [`docs/DASHBOARD_UI_STYLE_GUIDE.md`](./DASHBOARD_UI_STYLE_GUIDE.md) 中定义的 **数据密集与响应式设计系统（Data Dense & Responsive Utility）**。桌面端优先保证高信息密度与严格紧凑排版，移动端自适应为轻量卡片流。
-
-#### 1. 前端目录与打包规范
-* **源码目录**：`dashboard/`（与 AstrBot 根项目规范对齐）。
-* **产物目录**：`pages/daily-analysis/`。
-* **技术栈**：`React 18/19` + `TypeScript` + `Ant Design 5` (`antd`) + `@ant-design/icons` + `ECharts`。
-* **Vite 单 Bundle 配置（解决 Iframe 沙箱 CORS 限制）**：
-  ```typescript
-  // dashboard/vite.config.ts
-  import { defineConfig } from "vite";
-  import react from "@vitejs/plugin-react";
-  import { fileURLToPath, URL } from "node:url";
-
-  export default defineConfig({
-    base: "./", // 必须使用相对路径
-    plugins: [react()],
-    resolve: {
-      alias: {
-        "@": fileURLToPath(new URL("./src", import.meta.url)),
-      },
-    },
-    build: {
-      outDir: "../pages/daily-analysis",
-      emptyOutDir: true,
-      cssCodeSplit: false,
-      rollupOptions: {
-        output: {
-          inlineDynamicImports: true, // 单 bundle 杜绝 iframe CORS
-        },
-      },
-    },
-  });
-  ```
-* **主题自适应**：
-  ```tsx
-  import React, { useEffect, useState } from "react";
-  import { ConfigProvider, theme } from "antd";
-
-  export const App: React.FC = () => {
-    const [isDark, setIsDark] = useState(false);
-
-    useEffect(() => {
-      const bridge = (window as any).AstrBotPluginPage;
-      if (bridge) {
-        bridge.ready().then((ctx: any) => setIsDark(!!ctx?.isDark));
-        const off = bridge.onContext((ctx: any) => setIsDark(!!ctx?.isDark));
-        return () => off();
-      }
-    }, []);
-
-    return (
-      <ConfigProvider theme={{ algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm }}>
-        {/* 控制台路由与面板组件 */}
-      </ConfigProvider>
-    );
-  };
-  ```
-
-#### 2. 控制台四大核心视图
-* **视图 1：实时任务与总览（Overview & Active Tasks）**
-  * 统计卡片：今日分析群数、平均耗时、Token 累计花费。
-  * 正在运行的任务实时列表，支持手动 **【中止】** 或 **【立即触发分析】**。
-* **视图 2：链路追踪追溯台（Trace Explorer & Waterfall）**
-  * `<Table>` 展示历史所有分析记录（支持按群号、日期、状态过滤）。
-  * 点击记录弹出 `<Drawer>` 抽屉：
-    * **甘特图/时间轴 (`<Timeline>`)**：清晰展现拉取 $\to$ 清洗 $\to$ 并行 LLM $\to$ 渲染的各阶段耗时。
-    * **调用栈排查器 (`<Alert>`)**：直接显示失败原因与 Python Traceback。
-* **视图 3：上下文与 Token 演进洞察（Context & Token Insights - `dsh-context`）**
-  * **消息清洗漏斗 (`<Progress>`)**：展示原始消息经过规则过滤后的留存比例。
-  * **Token 消耗占比饼图**：话题 vs 头衔 vs 金句 vs 漫画分镜消耗分布。
-  * **Prompt 快照抽屉**：折叠查看发给大模型的实际提示词与原始返回。
-* **视图 4：历史报告归档库（Report Gallery）**
-  * 画廊式浏览已生成的日报长图与漫画。
-  * 支持在 Web 端基于已持久化数据“切换模板一键重新渲染”。
+### 5.3 对于开源协作者与二次开发者 (Developer Experience)
+* **分层严密，开发爽快**：FSD + Atomic Design 让组件各司其职，新增一个分析维度或图表组件只需增加相应 Slice，不影响其他业务。
+* **全自动化质量门禁**：
+  * GitHub CI 流水线自动校验 Python 测试与前端构建一致性，防止漏跑 build 导致代码脱节；
+  * GitHub Release 流水线在推送版本 Tag 时自动编译前端并打包纯净发布 ZIP；
+  * 提供 `scripts/debug_render.py` 离线模板热调工具，无需连接 LLM 即可秒级调试 HTML 主题。
 
 ---
 
-### 4.5 后端 Web API 路由设计
-
-在 Python 侧通过 `context.register_web_api()` 注册轻量 REST/SSE 接口：
-
-| HTTP 方法 | 路径 (相对于插件前缀) | 说明 |
-| :--- | :--- | :--- |
-| `GET` | `/tasks/active` | 获取当前活跃执行的任务列表 |
-| `POST` | `/tasks/trigger` | Web 界面手动触发指定群的分析任务 |
-| `POST` | `/tasks/cancel` | 中止指定正在运行的任务 |
-| `GET` | `/traces` | 分页与多维查询 Trace 记录 (支持群组、日期范围、状态、关键词筛选及耗时/Token排序) |
-| `GET` | `/traces/<trace_id>` | 获取单个 Trace 的完整 Span 树、错误调用栈与上下文详情 |
-| `GET` | `/groups` | 获取所有有分析记录的群组列表 (供前端下拉快速检索) |
-| `GET` | `/metrics/summary` | 获取控制台统计卡片与 30 天 Token 趋势数据 |
-| `GET` | `/reports/history` | 查询历史生成的报告图片文件列表 |
-| `GET` | `/events/stream` | SSE 实时事件流 (向 WebUI 实时广播任务进度与状态变更) |
-
----
-
-## 5. 重构与死代码清理指导原则
-
-在本次基础设施升级与 Web 控制台接入过程中，**明确允许并鼓励对不再有效的设计与死代码进行合理重构**，遵循以下原则：
-
-1. **剔除无用抽象（No Unnecessary Abstraction & KISS）**：
-   * 凡是仅调用一次、却跨越了多层转发的冗余 Helper 类，坚决内联或重构简化。
-   * 移除散落在各处的临时全局调试变量，统一收敛至 `TraceContext`。
-2. **清理过时产物与代码**：
-   * 彻底清理历史残留的 PDF 生成废弃逻辑与临时测试脚本，全面统一为 HTML-to-Image / Playwright 图像管线。
-   * 清理此前为了在 IM 端实现非标准进度汇报所写的临时 hack 逻辑。
-3. **数据层规范收敛**：
-   * 将散落在 `debug_data/`、临时 JSON 文件中的零散日志与状态，全面平移整合至 SQLite 数据库中，保持 `plugin_data` 目录整洁合规。
-4. **保持核心领域逻辑稳定**：
-   * 消息清洗规则、Prompt 模板、图像渲染引擎作为核心资产予以保留，仅对调度器、上下文传递层与持久化层进行适配改造。
-
----
-
-## 6. 分阶段落地实施路线图与交付状态 (Phased Roadmap & Status)
+## 6. 实施路线图与交付验证总结
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│ [✓] Phase 1: 基础设施持久化层 (SQLite TraceStore + 增强版 TraceContext)  │
-│   - 实现 traces.db 数据库创建与读写 (存储于 plugin_data 规范路径)       │
-│   - 完善 Span 耗时打点、Token 统计与 Context Funnel 计数器             │
-│   - 支持 30 天 / 20000 条滚动容量与全字段索引检索                       │
-├────────────────────────────────────────────────────────────────────────┤
-│ [✓] Phase 2: 后端 Web API 与桥接适配 (PluginPageWebUIBridge)             │
-│   - 注册 /traces, /tasks, /metrics, /groups, /events 等 REST & SSE 接口│
-│   - 实现 Task Reaper 孤儿锁清理机制与开机自愈对账 (Startup Sweep)       │
-├────────────────────────────────────────────────────────────────────────┤
-│ [✓] Phase 3: 前端控制台工程开发 (dashboard/ - React + Ant Design 5)      │
-│   - 初始化 React 18 + Antd 5 + Vite 脚手架                             │
-│   - 封装 bridge.ts 通信层与暗黑主题联动                                │
-│   - 完成 Overview, TraceList, Drawer, Token Insights 四大核心视图      │
-│   - 集成 DatePicker.RangePicker 日期区间、群组下拉搜索与多字段排序     │
-│   - 编译输出至 pages/daily-analysis/ 单文件 Bundle 适配受限 Iframe     │
-├────────────────────────────────────────────────────────────────────────┤
-│ [✓] Phase 4: 断点续跑与 Stage Checkpoint 缓存 (30 天生命周期)           │
-│   - 实现 Analyzer 阶段产物缓存与局部重试逻辑                           │
-│   - Checkpoint 与 Trace 保留期完全对齐 (30 天)，杜绝短命失效           │
-├────────────────────────────────────────────────────────────────────────┤
-│ [✓] Phase 5: 测试验证与代码质量治理                                    │
-│   - 覆盖 TraceStore, CheckpointStore, ActiveTaskManager 全套测试       │
-│   - 141 项自动化单元测试 100% 全部通过 (耗时 12.74s)                    │
-│   - 运行 ruff format 与 ruff check，代码 0 错误 0 警告                  │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ [✓] 阶段 1: 基础设施持久化层 (SQLite TraceStore + CheckpointStore 30天生命周期)          │
+│   - SQLite WAL 模式，WAL 并发性能极佳，traces.db 规范存储于 plugin_data 目录            │
+│   - TraceSpan 阶段打点、Token 细分累计与 Context Funnel 上下文漏斗指标                 │
+│   - 30 天 / 20000 条滚动容量对齐，支持多字段索引与分页排序                             │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ [✓] 阶段 2: 后端 Web API、ActiveTaskManager 与开机自愈对账                              │
+│   - REST API 矩阵 (/traces, /tasks, /metrics, /groups, /reports) 与 SSE 实时事件广播   │
+│   - TaskReaper 超时自动终止 (600s) 与开机对账扫描 (reconcile_crashed_traces_on_startup)│
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ [✓] 阶段 3: WebUI 前端现代化重构 (React 18 + Antd 5 + FSD + Atomic Design + MVVM)      │
+│   - FSD 六层单向依赖架构与 MVVM Hooks 状态解耦                                         │
+│   - 严格 0 any 强类型治理与 ESLint 0 警告静态规则                                      │
+│   - 0ms 内存不可变 LRU 缓存与 SSE 精准失效，TraceDrawer 局部强制刷新                   │
+│   - Vite 固定单 Bundle 编译输出 (pages/daily-analysis/assets/index.js)                 │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ [✓] 阶段 4: 工程化规范、CI/CD 流水线与文档体系                                          │
+│   - 新增 .github/workflows/ci.yml (代码与 Bundle 一致性校验门禁)                        │
+│   - 新增 .github/workflows/release.yml (自动化打包构建与 GitHub Release 发布)          │
+│   - 编写标准 GitHub CONTRIBUTING.md 与架构白皮书                                       │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ [✓] 阶段 5: 全流程回归测试验证                                                         │
+│   - 141 项 Python 单元测试 100% 全部通过 (耗时 17.32s)                                 │
+│   - 前端 pnpm lint, typecheck, build 全部通过                                          │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
