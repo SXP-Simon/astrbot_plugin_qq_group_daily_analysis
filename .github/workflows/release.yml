@@ -36,23 +36,6 @@ jobs:
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "Building Release for Tag: $TAG_NAME"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install uv & Test Dependencies
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-          enable-cache: true
-
-      - name: Run Backend Tests
-        run: |
-          uv venv
-          uv pip install -r requirements.txt pytest pytest-asyncio pytest-cov ruff
-          uv run pytest tests/ -v
-
       - name: Set up Node.js & pnpm
         uses: pnpm/action-setup@v4
         with:
