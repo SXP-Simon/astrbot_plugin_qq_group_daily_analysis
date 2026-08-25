@@ -234,8 +234,13 @@ class AnalysisApplicationService:
 
             # 确立并回填实际运行的真实平台标识 (Real Platform Identity: 优先使用具体平台实例 ID 如 nuits)
             actual_platform = (
-                getattr(adapter, "platform_id", None)
-                or getattr(adapter, "platform_name", None)
+                (
+                    self.bot_manager.get_adapter_platform_id(adapter)
+                    if hasattr(self.bot_manager, "get_adapter_platform_id")
+                    else ""
+                )
+                or getattr(adapter, "platform_id", "")
+                or getattr(adapter, "platform_name", "")
                 or (
                     platform_id
                     if platform_id and platform_id not in ("auto", "default", "all")

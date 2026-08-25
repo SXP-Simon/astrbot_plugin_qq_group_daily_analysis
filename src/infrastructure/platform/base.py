@@ -46,8 +46,14 @@ class PlatformAdapter(
         """
         self.bot = bot_instance
         self.config: dict[str, object] = dict(config) if config is not None else {}
+        self._platform_id: str = str(self.config.get("platform_id", "")).strip()
         self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
+
+    @property
+    def platform_id(self) -> str:
+        """获取当前适配器的平台实例 ID（如 nuits）"""
+        return self._platform_id
 
     def set_context(self, context: Any):
         """

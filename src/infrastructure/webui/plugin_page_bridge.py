@@ -281,9 +281,10 @@ class PluginPageWebUIBridge:
                 if result and result.get("success"):
                     analysis_result = result.get("analysis_result")
                     adapter = result.get("adapter")
+                    bot_mgr = getattr(self.analysis_service, "bot_manager", None)
                     dispatch_platform_id = (
-                        getattr(adapter, "platform_id", None)
-                        or getattr(adapter, "platform_name", None)
+                        (bot_mgr.get_adapter_platform_id(adapter) if bot_mgr and adapter else "")
+                        or getattr(adapter, "platform_id", "")
                         or (
                             platform
                             if platform and platform not in ("all", "auto", "default")
