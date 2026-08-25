@@ -246,7 +246,7 @@ def test_call_provider_with_retry_releases_global_slot_on_provider_error():
     asyncio.run(scenario())
 
 
-def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(capsys):
+def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog):
     """慢 Provider 调用应持续输出阶段、业务区域和具体阻塞点。"""
 
     class FakeConfig:
@@ -274,12 +274,12 @@ def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(capsys):
         _reset_global_limiter()
         llm_utils._circuit_breakers.clear()
         original_warn_seconds = llm_utils._LLM_REQUEST_WARN_SECONDS
-            llm_utils._LLM_REQUEST_WARN_SECONDS = 0.005
-            try:
-                GlobalRateLimiter.get_instance(1)
-                with TraceContext(trace_id="trace-for-provider") as trace:
-                    trace.metadata["llm_stage"] = "full_manual"
-                    trace.metadata["llm_group_id"] = "group-1"
+        llm_utils._LLM_REQUEST_WARN_SECONDS = 0.005
+        try:
+            GlobalRateLimiter.get_instance(1)
+            with TraceContext(trace_id="trace-for-provider") as trace:
+                trace.metadata["llm_stage"] = "full_manual"
+                trace.metadata["llm_group_id"] = "group-1"
                 result = await call_provider_with_retry(
                     context=FakeContext(),
                     config_manager=FakeConfig(),
@@ -287,15 +287,14 @@ def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(capsys):
                     provider_id="provider-a",
                     observation_label="话题",
                 )
-
-            assert result is not None
+                assert result is not None
         finally:
             llm_utils._LLM_REQUEST_WARN_SECONDS = original_warn_seconds
             _reset_global_limiter()
             llm_utils._circuit_breakers.clear()
 
     asyncio.run(scenario())
-    messages = capsys.readouterr().out
+    messages = caplog.text
     assert "group=group-1" in messages
     assert "stage=full_manual" in messages
     assert "area=话题" in messages
