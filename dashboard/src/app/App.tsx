@@ -5,6 +5,7 @@ import {
   ApartmentOutlined,
   ExperimentOutlined,
   FolderOpenOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -20,6 +21,8 @@ import { ContextInsightPage } from "../pages/context-insight/ui/ContextInsightPa
 import { useContextInsightViewModel } from "../pages/context-insight/model/useContextInsightViewModel";
 import { ReportsPage } from "../pages/reports/ui/ReportsPage";
 import { useReportsViewModel } from "../pages/reports/model/useReportsViewModel";
+import { LogsPage } from "../pages/logs/ui/LogsPage";
+import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -34,6 +37,7 @@ export const App: React.FC = () => {
   const tracesVM = useTracesViewModel();
   const contextInsightVM = useContextInsightViewModel();
   const reportsVM = useReportsViewModel();
+  const logsVM = useLogsViewModel();
 
   const handleRefreshAll = () => {
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
@@ -43,6 +47,7 @@ export const App: React.FC = () => {
     tracesVM.refresh();
     contextInsightVM.refresh();
     reportsVM.refresh();
+    logsVM.refresh();
   };
 
   const triggerVM = useTriggerTask(() => {
@@ -130,6 +135,17 @@ export const App: React.FC = () => {
       ),
       children: <ReportsPage viewModel={reportsVM} />,
     },
+    {
+      key: "logs",
+      label: (
+        <span>
+          <FileTextOutlined /> 运行日志
+        </span>
+      ),
+      children: (
+        <LogsPage viewModel={logsVM} onViewTrace={handleViewTrace} />
+      ),
+    },
   ];
 
   return (
@@ -173,6 +189,7 @@ export const App: React.FC = () => {
             else if (key === "traces") tracesVM.refresh();
             else if (key === "context") contextInsightVM.refresh();
             else if (key === "reports") reportsVM.refresh();
+            else if (key === "logs") logsVM.refresh();
           }}
           items={tabItems}
           type="card"
