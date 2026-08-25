@@ -207,33 +207,50 @@ class PluginPageWebUIBridge:
         self, trace_id: str, group_id: str, group_name: str, platform: str
     ) -> None:
         """后台异步执行触发任务"""
+        trace_ctx = TraceContext.set(
+            trace_id=trace_id,
+            group_id=group_id,
+            group_name=group_name,
+            platform=platform,
+            trigger_type="web_ui",
+        )
         try:
-            trace_ctx = TraceContext(
-                trace_id=trace_id,
-                group_id=group_id,
-                group_name=group_name,
-                platform=platform,
-                operation="WEB_TRIGGERED_ANALYSIS",
-                trigger_type="web_ui",
-            )
-            with trace_ctx:
-                # 尝试调用 analysis_service
-                if hasattr(self.analysis_service, "analyze_group_daily"):
-                    await self.analysis_service.analyze_group_daily(
-                        group_id=group_id,
-                        platform_name=platform,
-                        is_manual=True,
-                        trace_ctx=trace_ctx,
-                    )
+            if hasattr(self.analysis_service, "execute_daily_analysis"):
+                result = await self.analysis_service.execute_daily_analysis(
+                    group_id=group_id,
+                    platform_id=platform if platform and platform != "all" else None,
+                    manual=True,
+                )
+                if result and result.get("success"):
+                    if trace_ctx.status == "running":
+                        trace_ctx.finish(status="succeeded")
                 else:
-                    # 模拟打点
-                    with trace_ctx.span("FETCH_MESSAGES"):
-                        await asyncio.sleep(0.5)
-                    with trace_ctx.span("LLM_ANALYSIS"):
-                        await asyncio.sleep(1.0)
-                    trace_ctx.set_context_metrics(1200, 800)
-                    trace_ctx.add_token_usage(1500, 300, "topics")
+                    if trace_ctx.status == "running":
+                        trace_ctx.finish(
+                            status="failed",
+                            error_message=str(result.get("reason", "unknown")),
+                        )
+            elif hasattr(self.analysis_service, "analyze_group_daily"):
+                await self.analysis_service.analyze_group_daily(
+                    group_id=group_id,
+                    platform_name=platform,
+                    is_manual=True,
+                    trace_ctx=trace_ctx,
+                )
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(status="succeeded")
+            else:
+                with trace_ctx.span("FETCH_MESSAGES"):
+                    await asyncio.sleep(0.5)
+                with trace_ctx.span("LLM_ANALYSIS"):
+                    await asyncio.sleep(1.0)
+                trace_ctx.set_context_metrics(1200, 800)
+                trace_ctx.add_token_usage(1500, 300, "topics")
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(status="succeeded")
         except Exception as e:
+            if trace_ctx.status == "running":
+                trace_ctx.finish(status="failed", error_message=str(e))
             logger.error(f"任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)

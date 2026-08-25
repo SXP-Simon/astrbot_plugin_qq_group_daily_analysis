@@ -14,6 +14,7 @@ from ...domain.models.data_models import (
 )
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...shared.constants import PLUGIN_NAME
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .analyzers.chat_quality_analyzer import ChatQualityAnalyzer
 from .analyzers.comic_analyzer import ComicStoryboardAnalyzer
@@ -326,6 +327,34 @@ class LLMAnalyzer(IAnalysisProvider):
                 + quality_usage.total_tokens,
             )
 
+            # 记录 Token 消耗到 TraceContext
+            trace = TraceContext.current()
+            if trace:
+                if topic_usage.total_tokens > 0:
+                    trace.add_token_usage(
+                        topic_usage.prompt_tokens,
+                        topic_usage.completion_tokens,
+                        analyzer_name="topics",
+                    )
+                if title_usage.total_tokens > 0:
+                    trace.add_token_usage(
+                        title_usage.prompt_tokens,
+                        title_usage.completion_tokens,
+                        analyzer_name="user_titles",
+                    )
+                if quote_usage.total_tokens > 0:
+                    trace.add_token_usage(
+                        quote_usage.prompt_tokens,
+                        quote_usage.completion_tokens,
+                        analyzer_name="golden_quotes",
+                    )
+                if quality_usage.total_tokens > 0:
+                    trace.add_token_usage(
+                        quality_usage.prompt_tokens,
+                        quality_usage.completion_tokens,
+                        analyzer_name="chat_quality",
+                    )
+
             logger.info(
                 f"并发分析完成 - 话题: {len(topics)}, 称号: {len(user_titles)}, 金句: {len(golden_quotes)}, 质量锐评: {1 if chat_quality_review else 0}"
             )
@@ -448,6 +477,28 @@ class LLMAnalyzer(IAnalysisProvider):
                     + quote_usage.total_tokens
                     + quality_usage.total_tokens,
                 )
+
+                # 记录 Token 消耗到 TraceContext
+                trace = TraceContext.current()
+                if trace:
+                    if topic_usage.total_tokens > 0:
+                        trace.add_token_usage(
+                            topic_usage.prompt_tokens,
+                            topic_usage.completion_tokens,
+                            analyzer_name="topics",
+                        )
+                    if quote_usage.total_tokens > 0:
+                        trace.add_token_usage(
+                            quote_usage.prompt_tokens,
+                            quote_usage.completion_tokens,
+                            analyzer_name="golden_quotes",
+                        )
+                    if quality_usage.total_tokens > 0:
+                        trace.add_token_usage(
+                            quality_usage.prompt_tokens,
+                            quality_usage.completion_tokens,
+                            analyzer_name="chat_quality",
+                        )
 
                 logger.info(
                     f"增量并发分析完成 - 话题: {len(topics)}, 金句: {len(golden_quotes)}, 质量锐评: {1 if chat_quality_review else 0}, "
