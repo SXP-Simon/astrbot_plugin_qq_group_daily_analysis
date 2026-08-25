@@ -5,11 +5,11 @@ import {
   ClockCircleOutlined,
   PieChartOutlined,
   TeamOutlined,
-  CalendarOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ActiveTaskBoard } from "../../../widgets/active-task-board/ActiveTaskBoard";
-import { formatDuration, formatTokens } from "../../../shared/lib/formatters";
+import { formatDuration, formatSmartTokens } from "../../../shared/lib/formatters";
 import { useOverviewViewModel } from "../model/useOverviewViewModel";
 
 interface OverviewPageProps {
@@ -33,7 +33,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           <MetricCard
             title="今日分析次数"
             value={metrics.today_traces}
-            prefix={<CalendarOutlined style={{ color: "#1677ff" }} />}
+            prefix={<ThunderboltOutlined style={{ color: "#1677ff" }} />}
             subTitle={`覆盖 ${metrics.today_active_groups} 个群聊`}
             loading={loading}
           />
@@ -44,6 +44,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             title="历史总运行"
             value={metrics.total_traces}
             prefix={<CheckCircleOutlined style={{ color: "#52c41a" }} />}
+            valueStyle={{ color: "#52c41a" }}
             subTitle={`成功率: ${metrics.success_rate}%`}
             loading={loading}
           />
@@ -63,7 +64,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <Col xs={12} sm={8} md={4}>
           <MetricCard
             title="今日模型消耗"
-            value={formatTokens(metrics.today_tokens_spent)}
+            value={formatSmartTokens(metrics.today_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#722ed1" }} />}
             subTitle="今日大模型消耗总量"
             loading={loading}
@@ -73,7 +74,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         <Col xs={12} sm={8} md={4}>
           <MetricCard
             title="30天模型消耗"
-            value={formatTokens(metrics.total_tokens_spent)}
+            value={formatSmartTokens(metrics.total_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#13c2c2" }} />}
             subTitle="近30天累计消耗总量"
             loading={loading}
