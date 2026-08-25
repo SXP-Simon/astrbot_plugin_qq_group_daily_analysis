@@ -44,6 +44,11 @@ class PluginLogBuffer(logging.Handler):
             ),
         ),
         (
+            "Album",
+            "群相册",
+            re.compile(r"(album|相册|qun_album|group_album)", re.I),
+        ),
+        (
             "OneBot",
             "OneBot协议",
             re.compile(r"(onebot|napcat|llonebot|aiocqhttp|gocq)", re.I),
@@ -54,6 +59,7 @@ class PluginLogBuffer(logging.Handler):
             re.compile(r"(qq_official|botpy|c2c|guild)", re.I),
         ),
         ("Telegram", "Telegram平台", re.compile(r"(telegram|telethon)", re.I)),
+        ("Discord", "Discord平台", re.compile(r"(discord|discord_bot)", re.I)),
         (
             "Scheduler",
             "定时与调度",
