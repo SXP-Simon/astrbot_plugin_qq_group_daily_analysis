@@ -15,7 +15,7 @@ import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
 import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
-import { formatDuration, formatTokens, formatTimestamp, formatPercent } from "../../shared/lib/formatters";
+import { formatDuration, formatTokens, formatTimestamp, formatPercent, formatStageName } from "../../shared/lib/formatters";
 
 const { Text, Paragraph } = Typography;
 
@@ -56,8 +56,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   return (
     <Drawer
       title={
-        <Space>
-          <span>任务详情</span>
+        <Space size="middle">
+          <span style={{ fontSize: 16, fontWeight: 600 }}>任务执行详情</span>
           {trace && <StatusTag status={trace.status} />}
         </Space>
       }
@@ -72,7 +72,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
         </Button>
       }
       placement="right"
-      width={640}
+      width={600}
       onClose={onClose}
       open={open}
       destroyOnHidden
@@ -88,10 +88,10 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             <Alert
               type="error"
               showIcon
-              message={trace.error_stage ? `在【${trace.error_stage}】阶段发生异常` : "分析过程发生异常"}
+              message={trace.error_stage ? `在【${formatStageName(trace.error_stage)}】阶段发生异常` : "分析过程发生异常"}
               description={
                 <div>
-                  <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}>
+                  <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }} style={{ marginBottom: 4 }}>
                     {trace.error_message || "未知错误"}
                   </Paragraph>
                   {trace.stack_trace && (
@@ -101,17 +101,19 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                       items={[
                         {
                           key: "stack",
-                          label: "详细错误日志",
+                          label: "详细错误调用栈",
                           children: (
                             <pre
-                              className="font-mono"
                               style={{
                                 fontSize: 11,
-                                background: "rgba(0,0,0,0.03)",
+                                fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                background: "rgba(0,0,0,0.04)",
                                 padding: 8,
                                 borderRadius: 4,
                                 maxHeight: 200,
                                 overflow: "auto",
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-all",
                               }}
                             >
                               {trace.stack_trace}
@@ -127,28 +129,34 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
           )}
 
           {/* 2. 基本信息 */}
-          <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }}>
-            <Descriptions.Item label="任务编号">
-              <Text copyable className="font-mono">{trace.trace_id}</Text>
+          <Descriptions
+            size="small"
+            bordered
+            column={2}
+            labelStyle={{ width: 85, color: "#595959", fontSize: 12 }}
+            contentStyle={{ color: "#262626", fontSize: 12 }}
+          >
+            <Descriptions.Item label="任务编号" span={2}>
+              <Text copyable style={{ fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace', fontSize: 12 }}>
+                {trace.trace_id}
+              </Text>
             </Descriptions.Item>
-            <Descriptions.Item label="群聊">
-              <span className="font-mono">
-                {trace.group_name || "未知群"} ({trace.group_id})
+            <Descriptions.Item label="分析群聊" span={2}>
+              <span>
+                {trace.group_name || "未知群"} <Text type="secondary">({trace.group_id})</Text>
               </span>
             </Descriptions.Item>
-            <Descriptions.Item label="平台">
-              <Tag>{trace.platform || "qq"}</Tag>
+            <Descriptions.Item label="接入平台">
+              <Tag style={{ margin: 0 }}>{trace.platform || "qq"}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="触发方式">
-              <Tag>{trace.trigger_type === "manual" ? "手动触发" : trace.trigger_type === "auto" ? "定时触发" : trace.trigger_type}</Tag>
+              <Tag style={{ margin: 0 }}>{trace.trigger_type === "manual" ? "手动触发" : trace.trigger_type === "auto" ? "定时触发" : trace.trigger_type}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="开始时间">
-              <span className="font-mono">
-                {formatTimestamp(trace.started_at)}
-              </span>
+              <span>{formatTimestamp(trace.started_at)}</span>
             </Descriptions.Item>
-            <Descriptions.Item label="总耗时">
-              <span className="font-mono font-semibold" style={{ color: "#1677ff" }}>
+            <Descriptions.Item label="执行总耗时">
+              <span style={{ color: "#1677ff", fontWeight: 600 }}>
                 {formatDuration(trace.duration_ms)}
               </span>
             </Descriptions.Item>
@@ -158,24 +166,25 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
           {(trace.context_metrics || trace.token_usage) && (
             <Descriptions
               title={
-                <span style={{ fontSize: 13 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>
                   <DatabaseOutlined style={{ marginRight: 6, color: "#1677ff" }} />
                   消息处理与模型消耗
                 </span>
               }
               size="small"
               bordered
-              column={{ xs: 1, sm: 2 }}
+              column={2}
+              labelStyle={{ width: 100, color: "#595959", fontSize: 12 }}
+              contentStyle={{ color: "#262626", fontSize: 12 }}
             >
               {trace.context_metrics && (
                 <>
-                  <Descriptions.Item label="读取消息数">
-                    <span className="font-mono">{trace.context_metrics.raw_message_count} 条</span>
+                  <Descriptions.Item label="读取原始消息">
+                    <span>{trace.context_metrics.raw_message_count.toLocaleString()} 条</span>
                   </Descriptions.Item>
-                  <Descriptions.Item label="有效消息保留">
-                    <span className="font-mono">
-                      {trace.context_metrics.cleaned_message_count} 条 (
-                      {formatPercent(trace.context_metrics.compression_ratio)})
+                  <Descriptions.Item label="有效消息留存">
+                    <span style={{ color: "#52c41a", fontWeight: 500 }}>
+                      {trace.context_metrics.cleaned_message_count.toLocaleString()} 条 ({formatPercent(trace.context_metrics.compression_ratio)})
                     </span>
                   </Descriptions.Item>
                 </>
@@ -183,12 +192,12 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               {trace.token_usage && (
                 <>
                   <Descriptions.Item label="模型消耗总量">
-                    <span className="font-mono font-semibold">
+                    <span style={{ fontWeight: 600 }}>
                       {formatTokens(trace.token_usage.total_tokens)}
                     </span>
                   </Descriptions.Item>
-                  <Descriptions.Item label="输入 / 输出消耗">
-                    <span className="font-mono text-xs">
+                  <Descriptions.Item label="输入 / 输出">
+                    <span style={{ fontSize: 11 }}>
                       输入: {formatTokens(trace.token_usage.prompt_tokens)} / 输出: {formatTokens(trace.token_usage.completion_tokens)}
                     </span>
                   </Descriptions.Item>

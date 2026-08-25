@@ -6,7 +6,7 @@ import {
   ClockCircleOutlined,
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
-import { formatDuration } from "../../../shared/lib/formatters";
+import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
 
 const { Text } = Typography;
 
@@ -20,7 +20,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
   totalDurationMs = 1,
 }) => {
   if (!spans || spans.length === 0) {
-    return <Text type="secondary">无 Span 阶段打点记录</Text>;
+    return <Text type="secondary">无执行阶段记录</Text>;
   }
 
   const items = spans.map((span) => {
@@ -45,10 +45,10 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
       children: (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontWeight: 600, fontSize: 12, fontFamily: "monospace" }}>
-              {span.stage_name}
+            <span style={{ fontWeight: 500, fontSize: 13, color: "#262626" }}>
+              {formatStageName(span.stage_name)}
             </span>
-            <Tag color={color} className="font-mono text-xs">
+            <Tag color={color} style={{ fontSize: 11, borderRadius: 4, margin: 0 }}>
               {formatDuration(span.duration_ms)}
             </Tag>
           </div>
@@ -57,7 +57,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             size="small"
             showInfo={false}
             strokeColor={color === "green" ? "#52c41a" : color === "red" ? "#ff4d4f" : "#1677ff"}
-            style={{ margin: "3px 0 0 0" }}
+            style={{ margin: "4px 0 0 0" }}
           />
         </div>
       ),
