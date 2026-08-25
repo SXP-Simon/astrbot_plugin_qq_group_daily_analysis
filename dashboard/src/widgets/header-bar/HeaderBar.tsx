@@ -1,10 +1,10 @@
 import React from "react";
 import { Typography, Space, Button } from "antd";
 import {
-  RobotOutlined,
   ReloadOutlined,
   PlayCircleOutlined,
 } from "@ant-design/icons";
+import logoImg from "../../shared/assets/logo.png";
 
 const { Title } = Typography;
 
@@ -34,7 +34,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       }}
     >
       <Space align="center" size="middle">
-        <RobotOutlined style={{ fontSize: 20, color: "#1677ff" }} />
+        <img
+          src={logoImg}
+          alt="Logo"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            objectFit: "contain",
+            display: "block",
+          }}
+        />
         <div>
           <Title level={5} style={{ margin: 0, fontSize: 15 }}>
             QQ群日常分析控制台
