@@ -5,6 +5,7 @@ import { ActiveTask } from "../../entities/task/model/types";
 import { TaskStageBadge } from "../../entities/task/ui/TaskStageBadge";
 import { CancelTaskButton } from "../../features/cancel-task/ui/CancelTaskButton";
 import { SectionHeader } from "../../shared/ui/SectionHeader";
+import { TriggerTypeTag } from "../../shared/ui/TriggerTypeTag";
 
 interface ActiveTaskBoardProps {
   tasks: ActiveTask[];
@@ -57,8 +58,8 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
       title: "触发源",
       dataIndex: "trigger_type",
       key: "trigger_type",
-      width: 90,
-      render: (t: string) => <Tag>{t === "manual" ? "手动" : t === "auto" ? "定时" : t}</Tag>,
+      width: 100,
+      render: (t: string) => <TriggerTypeTag triggerType={t} />,
     },
     {
       title: "当前进度",

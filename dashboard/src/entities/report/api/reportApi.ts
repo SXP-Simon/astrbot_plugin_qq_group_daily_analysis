@@ -7,3 +7,10 @@ export async function fetchReportHistory(): Promise<ReportItem[]> {
   if (Array.isArray(data)) return data;
   return [];
 }
+
+export async function fetchReportContent(filename: string): Promise<ReportItem | null> {
+  const res = await apiGet<ReportItem>("reports/content", { filename });
+  const data = extractData<ReportItem>(res);
+  return data || null;
+}
+

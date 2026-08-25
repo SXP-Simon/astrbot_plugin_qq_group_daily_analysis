@@ -6,6 +6,7 @@ AstrBot 插件 Pages 后端 Web API 桥接服务
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from pathlib import Path
@@ -115,6 +116,12 @@ class PluginPageWebUIBridge:
                 self.api_get_report_history,
                 ["GET"],
                 "Get generated report image list",
+            ),
+            (
+                f"/{PLUGIN_NAME}/reports/content",
+                self.api_get_report_content,
+                ["GET"],
+                "Get generated report image base64 content",
             ),
             # 5. SSE 实时事件流
             (
@@ -378,6 +385,7 @@ class PluginPageWebUIBridge:
                                 "filename": file_path.name,
                                 "size_bytes": stat.st_size,
                                 "modified_at": stat.st_mtime,
+                                "absolute_path": str(file_path.resolve()),
                             }
                         )
                     except Exception:
@@ -385,6 +393,49 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": reports})
         except Exception as e:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_report_content(self) -> Any:
+        """获取单个历史报告图片的 base64 data URL 用于在线预览与下载"""
+        try:
+            filename = (
+                request.query.get("filename", "").strip()
+                if request and hasattr(request, "query")
+                else ""
+            )
+            if not filename:
+                return error_response("Missing filename parameter", status_code=400)
+
+            safe_filename = Path(filename).name
+            if not self.report_output_dir or not self.report_output_dir.exists():
+                return error_response("Report directory not found", status_code=404)
+
+            target_file = self.report_output_dir / safe_filename
+            if not target_file.is_file() or not target_file.exists():
+                return error_response(
+                    f"Report file {safe_filename} not found", status_code=404
+                )
+
+            ext = target_file.suffix.lower().lstrip(".")
+            mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            with open(target_file, "rb") as f:
+                b64_content = base64.b64encode(f.read()).decode("utf-8")
+
+            stat = target_file.stat()
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "filename": safe_filename,
+                        "size_bytes": stat.st_size,
+                        "modified_at": stat.st_mtime,
+                        "absolute_path": str(target_file.resolve()),
+                        "data_url": f"data:{mime_type};base64,{b64_content}",
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"读取历史报告内容异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_stream_events(self) -> Any:
