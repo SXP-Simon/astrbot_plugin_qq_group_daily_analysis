@@ -35,12 +35,7 @@ def load_initialization_method():
         ast.Module(body=[isolated_class], type_ignores=[])
     )
 
-    class TraceLogFilter(logging.Filter):
-        pass
-
     namespace = {
-        "TraceLogFilter": TraceLogFilter,
-        "astrbot_logger": logging.getLogger("startup-initialization-test"),
         "logger": Mock(),
     }
     exec(compile(isolated_module, str(main_path), "exec"), namespace)

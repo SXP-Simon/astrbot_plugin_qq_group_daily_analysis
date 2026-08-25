@@ -13,7 +13,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 from astrbot.api import AstrBotConfig
-from astrbot.api import logger as astrbot_logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
@@ -57,7 +56,7 @@ from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
 from .src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
 from .src.shared.constants import PLUGIN_NAME
-from .src.shared.trace_context import TraceContext, TraceLogFilter
+from .src.shared.trace_context import TraceContext
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
 
@@ -259,14 +258,6 @@ class GroupDailyAnalysis(Star):
             try:
                 # 核心配置迁移和定时任务只执行一次。
                 if not self._initialized:
-                    # 注册 TraceID 过滤器。
-                    trace_filter = TraceLogFilter()
-                    if not any(
-                        isinstance(f, TraceLogFilter) for f in astrbot_logger.filters
-                    ):
-                        astrbot_logger.addFilter(trace_filter)
-                        astrbot_logger.info("[Trace] 已启用 TraceID 日志追踪")
-
                     logger.info(f"开始初始化插件（来源：{source}）...")
 
                     # 升级旧版 prompt 模板并回写迁移后的配置。
