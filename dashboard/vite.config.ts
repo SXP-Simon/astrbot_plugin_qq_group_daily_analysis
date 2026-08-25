@@ -14,6 +14,7 @@ export default defineConfig({
     outDir: "../pages/daily-analysis",
     emptyOutDir: true,
     cssCodeSplit: false,
+    assetsInlineLimit: 150000,
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
