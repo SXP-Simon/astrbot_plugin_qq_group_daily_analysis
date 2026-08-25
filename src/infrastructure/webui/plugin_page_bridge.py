@@ -283,7 +283,11 @@ class PluginPageWebUIBridge:
                     adapter = result.get("adapter")
                     bot_mgr = getattr(self.analysis_service, "bot_manager", None)
                     dispatch_platform_id = (
-                        (bot_mgr.get_adapter_platform_id(adapter) if bot_mgr and adapter else "")
+                        (
+                            bot_mgr.get_adapter_platform_id(adapter)
+                            if bot_mgr and adapter
+                            else ""
+                        )
                         or getattr(adapter, "platform_id", "")
                         or (
                             platform
@@ -541,7 +545,7 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_get_report_history(self) -> Any:
-        """获取历史生成的报告图片列表（包含群号、群名与平台归属精准解析）"""
+        """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
             reports: list[dict[str, Any]] = []
             group_info_map = {
@@ -551,56 +555,115 @@ class PluginPageWebUIBridge:
                 }
                 for g in self.trace_store.get_distinct_groups()
             }
+            candidate_dirs: list[Path] = []
             if self.report_output_dir and self.report_output_dir.exists():
-                image_files = [
-                    p
-                    for p in self.report_output_dir.iterdir()
-                    if p.is_file()
-                    and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
-                ]
-                for file_path in sorted(
-                    image_files,
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )[:100]:
-                    try:
-                        stat = file_path.stat()
+                candidate_dirs.append(self.report_output_dir)
+
+            # 兼容自托管 HTML 输出目录
+            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
+                self.report_dispatcher, "config_manager", None
+            )
+            if cfg_mgr:
+                custom_html_dir = getattr(cfg_mgr, "get_html_output_dir", lambda: "")()
+                if custom_html_dir:
+                    p = Path(custom_html_dir)
+                    if p.exists() and p not in candidate_dirs:
+                        candidate_dirs.append(p)
+
+            seen_paths = set()
+            all_files: list[Path] = []
+            for d in candidate_dirs:
+                for p in d.iterdir():
+                    if (
+                        p.is_file()
+                        and p.suffix.lower()
+                        in {".jpg", ".jpeg", ".png", ".webp", ".html", ".htm"}
+                        and p.resolve() not in seen_paths
+                    ):
+                        seen_paths.add(p.resolve())
+                        all_files.append(p)
+
+            report_trace_map: dict[str, str] = {}
+            if hasattr(self.trace_store, "get_report_trace_map"):
+                try:
+                    report_trace_map = self.trace_store.get_report_trace_map()
+                except Exception:
+                    pass
+
+            for file_path in sorted(
+                all_files,
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[:150]:
+                try:
+                    stat = file_path.stat()
+                    is_html = file_path.suffix.lower() in {".html", ".htm"}
+                    trace_id = ""
+                    # 1. 尝试从嵌入式文件名中提取群号与 trace_id
+                    m = re.match(
+                        r"^(?:report|群聊分析报告)_(.+?)_\d{8}_\d{6}_([a-zA-Z0-9_\-]+)\.(?:jpg|jpeg|png|webp|html|htm)$",
+                        file_path.name,
+                        re.IGNORECASE,
+                    )
+                    if m:
+                        group_id = m.group(1)
+                        trace_id = m.group(2)
+                    else:
                         m = re.match(
-                            r"^report_(.+?)_\d{8}_\d{6}\.(?:jpg|jpeg|png|webp)$",
+                            r"^(?:report|群聊分析报告)_(.+?)_\d{8}_\d{6}\.(?:jpg|jpeg|png|webp|html|htm)$",
                             file_path.name,
                             re.IGNORECASE,
                         )
                         if not m:
                             m = re.match(
-                                r"^report_(.+?)_\d+\.(?:jpg|jpeg|png|webp)$",
+                                r"^(?:report|群聊分析报告)_(.+?)_\d{4}-\d{2}-\d{2}_([a-zA-Z0-9_\-]+)\.(?:jpg|jpeg|png|webp|html|htm)$",
+                                file_path.name,
+                                re.IGNORECASE,
+                            )
+                        if not m:
+                            m = re.match(
+                                r"^(?:report|群聊分析报告)_(.+?)_\d+\.(?:jpg|jpeg|png|webp|html|htm)$",
+                                file_path.name,
+                                re.IGNORECASE,
+                            )
+                        if not m:
+                            m = re.match(
+                                r"^(?:report|群聊分析报告)_(.+?)\.(?:jpg|jpeg|png|webp|html|htm)$",
                                 file_path.name,
                                 re.IGNORECASE,
                             )
                         group_id = m.group(1) if m else ""
-                        g_info = group_info_map.get(group_id, {})
-                        group_name = g_info.get("group_name", "")
-                        platform = g_info.get("platform", "")
 
-                        reports.append(
-                            {
-                                "filename": file_path.name,
-                                "size_bytes": stat.st_size,
-                                "modified_at": stat.st_mtime,
-                                "absolute_path": str(file_path.resolve()),
-                                "group_id": group_id,
-                                "group_name": group_name,
-                                "platform": platform,
-                            }
-                        )
-                    except Exception:
-                        pass
+                    # 2. 若文件名未显式包含 trace_id，则从 TraceContext / 历史存储的 report_files 映射中精准匹配
+                    if not trace_id:
+                        trace_id = report_trace_map.get(file_path.name, "")
+
+                    g_info = group_info_map.get(group_id, {})
+                    group_name = g_info.get("group_name", "")
+                    platform = g_info.get("platform", "")
+
+                    reports.append(
+                        {
+                            "filename": file_path.name,
+                            "size_bytes": stat.st_size,
+                            "modified_at": stat.st_mtime,
+                            "absolute_path": str(file_path.resolve()),
+                            "is_html": is_html,
+                            "group_id": group_id,
+                            "group_name": group_name,
+                            "platform": platform,
+                            "trace_id": trace_id,
+                        }
+                    )
+                except Exception:
+                    pass
             return json_response({"status": "ok", "data": reports})
         except Exception as e:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_get_report_content(self) -> Any:
-        """获取单个历史报告图片的 base64 data URL 用于在线预览与下载"""
+        """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
         try:
             filename = (
                 request.query.get("filename", "").strip()
@@ -611,33 +674,72 @@ class PluginPageWebUIBridge:
                 return error_response("Missing filename parameter", status_code=400)
 
             safe_filename = Path(filename).name
-            if not self.report_output_dir or not self.report_output_dir.exists():
-                return error_response("Report directory not found", status_code=404)
+            target_file: Path | None = None
 
-            target_file = self.report_output_dir / safe_filename
-            if not target_file.is_file() or not target_file.exists():
+            # 搜索输出目录与自托管 HTML 目录
+            search_dirs = []
+            if self.report_output_dir and self.report_output_dir.exists():
+                search_dirs.append(self.report_output_dir)
+            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
+                self.report_dispatcher, "config_manager", None
+            )
+            if cfg_mgr:
+                custom_html_dir = getattr(cfg_mgr, "get_html_output_dir", lambda: "")()
+                if custom_html_dir:
+                    p = Path(custom_html_dir)
+                    if p.exists() and p not in search_dirs:
+                        search_dirs.append(p)
+
+            for d in search_dirs:
+                cand = d / safe_filename
+                if cand.is_file() and cand.exists():
+                    target_file = cand
+                    break
+
+            if not target_file:
                 return error_response(
                     f"Report file {safe_filename} not found", status_code=404
                 )
 
             ext = target_file.suffix.lower().lstrip(".")
-            mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-            with open(target_file, "rb") as f:
-                b64_content = base64.b64encode(f.read()).decode("utf-8")
-
+            is_html = ext in ("html", "htm")
             stat = target_file.stat()
-            return json_response(
-                {
-                    "status": "ok",
-                    "data": {
-                        "filename": safe_filename,
-                        "size_bytes": stat.st_size,
-                        "modified_at": stat.st_mtime,
-                        "absolute_path": str(target_file.resolve()),
-                        "data_url": f"data:{mime_type};base64,{b64_content}",
-                    },
-                }
-            )
+
+            if is_html:
+                raw_text = target_file.read_text(encoding="utf-8", errors="replace")
+                b64_content = base64.b64encode(raw_text.encode("utf-8")).decode("utf-8")
+                data_url = f"data:text/html;charset=utf-8;base64,{b64_content}"
+                return json_response(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "filename": safe_filename,
+                            "size_bytes": stat.st_size,
+                            "modified_at": stat.st_mtime,
+                            "absolute_path": str(target_file.resolve()),
+                            "is_html": True,
+                            "html_content": raw_text,
+                            "data_url": data_url,
+                        },
+                    }
+                )
+            else:
+                mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+                with open(target_file, "rb") as f:
+                    b64_content = base64.b64encode(f.read()).decode("utf-8")
+                return json_response(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "filename": safe_filename,
+                            "size_bytes": stat.st_size,
+                            "modified_at": stat.st_mtime,
+                            "absolute_path": str(target_file.resolve()),
+                            "is_html": False,
+                            "data_url": f"data:{mime_type};base64,{b64_content}",
+                        },
+                    }
+                )
         except Exception as e:
             logger.error(f"读取历史报告内容异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

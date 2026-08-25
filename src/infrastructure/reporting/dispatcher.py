@@ -1,6 +1,7 @@
 import base64
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -141,7 +142,12 @@ class ReportDispatcher:
                 reports_dir = self.report_generator.data_dir / "reports"
                 reports_dir.mkdir(parents=True, exist_ok=True)
                 ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                dest = reports_dir / f"report_{group_id}_{ts_str}.jpg"
+                filename = (
+                    f"report_{group_id}_{ts_str}_{trace_id}.jpg"
+                    if trace_id
+                    else f"report_{group_id}_{ts_str}.jpg"
+                )
+                dest = reports_dir / filename
                 if os.path.exists(image_url):
                     import shutil
 
@@ -149,6 +155,27 @@ class ReportDispatcher:
                 elif image_url.startswith("base64://"):
                     data = base64.b64decode(image_url[9:])
                     dest.write_bytes(data)
+
+                # 关联到 TraceContext 并在数据库中更新元数据
+                trace_ctx = TraceContext.current()
+                if trace_ctx:
+                    rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                    rfiles.append(
+                        {
+                            "filename": dest.name,
+                            "path": str(dest.resolve()),
+                            "format": "image",
+                            "size_bytes": dest.stat().st_size if dest.exists() else 0,
+                            "created_at": time.time(),
+                        }
+                    )
+                    from ...shared.trace_context import _global_trace_store
+
+                    if _global_trace_store is not None:
+                        try:
+                            _global_trace_store.save_trace(trace_ctx.to_dict())
+                        except Exception:
+                            pass
             except Exception as e:
                 logger.warning(f"[{trace_id}] 保存历史报告副本失败: {e}")
 
@@ -221,6 +248,43 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 
         if html_path:
+            try:
+                reports_dir = self.report_generator.data_dir / "reports"
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = (
+                    f"report_{group_id}_{ts_str}_{trace_id}.html"
+                    if trace_id
+                    else f"report_{group_id}_{ts_str}.html"
+                )
+                dest = reports_dir / filename
+                if os.path.exists(html_path):
+                    import shutil
+
+                    shutil.copy2(html_path, dest)
+
+                trace_ctx = TraceContext.current()
+                if trace_ctx:
+                    rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                    rfiles.append(
+                        {
+                            "filename": dest.name,
+                            "path": str(dest.resolve()),
+                            "format": "html",
+                            "size_bytes": dest.stat().st_size if dest.exists() else 0,
+                            "created_at": time.time(),
+                        }
+                    )
+                    from ...shared.trace_context import _global_trace_store
+
+                    if _global_trace_store is not None:
+                        try:
+                            _global_trace_store.save_trace(trace_ctx.to_dict())
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.warning(f"[{trace_id}] 保存历史 HTML 报告副本失败: {e}")
+
             is_only_url = self.config_manager.get_html_only_url()
             base_url = self.config_manager.get_html_base_url()
 
@@ -426,7 +490,7 @@ class ReportDispatcher:
 
             date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = os.path.join(
-                tempfile.gettempdir(), f"群聊分析报告_{group_id}_{date_str}.png"
+                tempfile.gettempdir(), f"report_{group_id}_{date_str}.png"
             )
             with open(path, "wb") as f:
                 f.write(image_data)

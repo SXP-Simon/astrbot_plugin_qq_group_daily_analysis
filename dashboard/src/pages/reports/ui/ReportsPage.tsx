@@ -2,6 +2,7 @@ import React from "react";
 import { Card, Table, Empty, Button, Tag, Typography, Space, Tooltip, Skeleton } from "antd";
 import {
   FileImageOutlined,
+  FileTextOutlined,
   EyeOutlined,
   DownloadOutlined,
   TeamOutlined,
@@ -16,9 +17,10 @@ const { Text, Paragraph } = Typography;
 
 interface ReportsPageProps {
   viewModel: ReturnType<typeof useReportsViewModel>;
+  onViewTrace?: (traceId: string) => void;
 }
 
-export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
+export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace }) => {
   const {
     reports,
     rawReports,
@@ -44,17 +46,28 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       dataIndex: "filename",
       key: "filename",
       width: 260,
-      render: (fn: string) => (
-        <span style={{ fontSize: 13, fontWeight: 600 }}>
-          <FileImageOutlined style={{ marginRight: 6, color: "#1677ff" }} />
-          {fn}
-        </span>
-      ),
+      render: (fn: string, r: ReportItem) => {
+        const isHtml = Boolean(
+          r.is_html ||
+            fn.toLowerCase().endsWith(".html") ||
+            fn.toLowerCase().endsWith(".htm")
+        );
+        return (
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            {isHtml ? (
+              <FileTextOutlined style={{ marginRight: 6, color: "#fa8c16" }} />
+            ) : (
+              <FileImageOutlined style={{ marginRight: 6, color: "#1677ff" }} />
+            )}
+            {fn}
+          </span>
+        );
+      },
     },
     {
       title: "所属群聊",
       key: "group",
-      width: 200,
+      width: 190,
       render: (_: unknown, r: ReportItem) => {
         if (!r.group_id) {
           return <Text type="secondary">-</Text>;
@@ -74,17 +87,42 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       title: "平台",
       dataIndex: "platform",
       key: "platform",
-      width: 80,
+      width: 75,
       render: (p?: string) => {
         const displayP = !p || p === "auto" || p === "default" ? "-" : p;
         return <Tag>{displayP}</Tag>;
       },
     },
     {
+      title: "关联任务",
+      dataIndex: "trace_id",
+      key: "trace_id",
+      width: 140,
+      render: (tId?: string) => {
+        if (!tId) return <Text type="secondary">-</Text>;
+        return (
+          <Tooltip title="点击在右侧抽屉查看任务详情与链路明细">
+            <Tag
+              color="blue"
+              style={{
+                cursor: "pointer",
+                fontFamily:
+                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                fontSize: 11,
+              }}
+              onClick={() => onViewTrace?.(tId)}
+            >
+              {tId}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: "生成时间",
       dataIndex: "modified_at",
       key: "modified_at",
-      width: 170,
+      width: 160,
       render: (ts: number) => (
         <span style={{ fontSize: 12 }}>
           {formatTimestamp(ts)}
@@ -133,26 +171,33 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       title: "操作",
       key: "actions",
       width: 170,
-      render: (_: unknown, r: ReportItem) => (
-        <Space size="small">
-          <Button
-            size="small"
-            type="primary"
-            ghost
-            icon={<EyeOutlined />}
-            onClick={() => openPreview(r)}
-          >
-            预览大图
-          </Button>
-          <Button
-            size="small"
-            icon={<DownloadOutlined />}
-            onClick={() => downloadReport(r)}
-          >
-            下载
-          </Button>
-        </Space>
-      ),
+      render: (_: unknown, r: ReportItem) => {
+        const isHtml = Boolean(
+          r.is_html ||
+            r.filename.toLowerCase().endsWith(".html") ||
+            r.filename.toLowerCase().endsWith(".htm")
+        );
+        return (
+          <Space size="small">
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<EyeOutlined />}
+              onClick={() => openPreview(r)}
+            >
+              {isHtml ? "预览 HTML" : "预览大图"}
+            </Button>
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              onClick={() => downloadReport(r)}
+            >
+              下载
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 

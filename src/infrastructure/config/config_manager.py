@@ -775,7 +775,7 @@ class ConfigManager:
     def get_html_filename_format(self) -> str:
         """获取HTML文件名格式"""
         return self._get_group("html").get(
-            "html_filename_format", "群聊分析报告_{group_id}_{date}.html"
+            "html_filename_format", "群聊分析报告_${group_id}_${date}_${ulid}.html"
         )
 
     def get_topic_analysis_prompt(self, style: str = "topic_prompt") -> str:
