@@ -100,7 +100,7 @@ export const App: React.FC = () => {
       key: "traces",
       label: (
         <span>
-          <ApartmentOutlined /> 链路追溯
+          <ApartmentOutlined /> 分析记录
         </span>
       ),
       children: (
@@ -114,7 +114,7 @@ export const App: React.FC = () => {
       key: "context",
       label: (
         <span>
-          <ExperimentOutlined /> 上下文洞察
+          <ExperimentOutlined /> 统计与消耗
         </span>
       ),
       children: <ContextInsightPage viewModel={contextInsightVM} />,
@@ -123,7 +123,7 @@ export const App: React.FC = () => {
       key: "reports",
       label: (
         <span>
-          <FolderOpenOutlined /> 报告归档
+          <FolderOpenOutlined /> 历史报告
         </span>
       ),
       children: <ReportsPage viewModel={reportsVM} />,

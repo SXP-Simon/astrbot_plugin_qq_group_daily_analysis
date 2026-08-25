@@ -31,10 +31,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       <Row gutter={[10, 10]}>
         <Col xs={12} sm={8} md={4}>
           <MetricCard
-            title="今日分析任务"
+            title="今日分析次数"
             value={metrics.today_traces}
             prefix={<CalendarOutlined style={{ color: "#1677ff" }} />}
-            subTitle={`覆盖 ${metrics.today_active_groups} 个群组`}
+            subTitle={`覆盖 ${metrics.today_active_groups} 个群聊`}
             loading={loading}
           />
         </Col>
@@ -55,14 +55,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             value={formatDuration(metrics.avg_duration_ms)}
             prefix={<ClockCircleOutlined style={{ color: "#fa8c16" }} />}
             valueStyle={{ color: "#fa8c16" }}
-            subTitle="全阶段端到端耗时"
+            subTitle="平均端到端耗时"
             loading={loading}
           />
         </Col>
 
         <Col xs={12} sm={8} md={4}>
           <MetricCard
-            title="今日 Token 消耗"
+            title="今日模型消耗"
             value={formatTokens(metrics.today_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#722ed1" }} />}
             subTitle={`今日预估: ${formatCost(metrics.today_cost_spent)}`}
@@ -72,20 +72,20 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
         <Col xs={12} sm={8} md={4}>
           <MetricCard
-            title="30天累计 Token"
+            title="30天模型消耗"
             value={formatTokens(metrics.total_tokens_spent)}
             prefix={<PieChartOutlined style={{ color: "#13c2c2" }} />}
-            subTitle={`累计账单: ${formatCost(metrics.total_cost_spent)}`}
+            subTitle={`累计预估: ${formatCost(metrics.total_cost_spent)}`}
             loading={loading}
           />
         </Col>
 
         <Col xs={12} sm={8} md={4}>
           <MetricCard
-            title="活跃群组"
+            title="今日分析群聊"
             value={metrics.today_active_groups}
             prefix={<TeamOutlined style={{ color: "#eb2f96" }} />}
-            subTitle="今日参与分析"
+            subTitle="今日已分析群数"
             loading={loading}
           />
         </Col>

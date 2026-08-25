@@ -21,7 +21,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
 }) => {
   const columns = [
     {
-      title: "任务 / Trace ID",
+      title: "任务编号",
       dataIndex: "task_id",
       key: "task_id",
       width: 170,
@@ -35,7 +35,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
       ),
     },
     {
-      title: "群组",
+      title: "群聊",
       dataIndex: "group_id",
       key: "group_id",
       render: (gid: string, r: ActiveTask) => (
@@ -58,22 +58,22 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
       dataIndex: "trigger_type",
       key: "trigger_type",
       width: 90,
-      render: (t: string) => <Tag>{t}</Tag>,
+      render: (t: string) => <Tag>{t === "manual" ? "手动" : t === "auto" ? "定时" : t}</Tag>,
     },
     {
-      title: "当前执行阶段",
+      title: "当前进度",
       dataIndex: "current_stage",
       key: "current_stage",
       render: (stage: string) => <TaskStageBadge stage={stage} />,
     },
     {
-      title: "运行时长",
+      title: "已耗时",
       dataIndex: "duration_s",
       key: "duration_s",
       width: 95,
       render: (d: number) => (
         <span className="font-mono text-xs font-semibold" style={{ color: "#fa8c16" }}>
-          {d}s
+          {d}秒
         </span>
       ),
     },
@@ -89,7 +89,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
             icon={<EyeOutlined />}
             onClick={() => onViewTrace(r.task_id)}
           >
-            追踪
+            查看
           </Button>
           <CancelTaskButton taskId={r.task_id} onCancel={onCancelTask} />
         </div>
@@ -100,7 +100,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
   return (
     <div>
       <SectionHeader
-        title="正在执行中的任务 (Active Tasks)"
+        title="正在执行中的分析任务"
         badge={
           <Tag color={tasks.length > 0 ? "processing" : "default"} className="font-mono text-xs">
             {tasks.length} 运行中

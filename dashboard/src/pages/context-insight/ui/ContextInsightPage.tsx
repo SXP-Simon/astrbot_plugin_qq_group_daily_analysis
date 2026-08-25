@@ -1,6 +1,6 @@
 import React from "react";
 import { Space, Card, Row, Col, Typography, Select } from "antd";
-import { DollarOutlined, BranchesOutlined, PieChartOutlined, DatabaseOutlined } from "@ant-design/icons";
+import { DollarOutlined, BranchesOutlined, PieChartOutlined, DatabaseOutlined, BarChartOutlined } from "@ant-design/icons";
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/ContextFunnelWidget";
 import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
@@ -30,14 +30,15 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({ viewMode
         <Space size="middle" style={{ width: "100%", justifyContent: "space-between", flexWrap: "wrap" }}>
           <div>
             <Text strong style={{ fontSize: 13, marginRight: 8 }}>
-              🧠 上下文演进与 Token 洞察 (dsh-context Insight)
+              <BarChartOutlined style={{ color: "#1677ff", marginRight: 6 }} />
+              消息统计与模型消耗
             </Text>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              透视消息清洗漏斗、各 Analyzer 提示词占用与 Token 成本
+              查看群聊消息过滤留存情况与各分析模块的模型消耗分布
             </Text>
           </div>
           <Space>
-            <span style={{ fontSize: 12 }}>选择分析样本:</span>
+            <span style={{ fontSize: 12 }}>选择记录:</span>
             <Select
               size="small"
               style={{ width: 240 }}
@@ -59,39 +60,39 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({ viewMode
       <Row gutter={[10, 10]}>
         <Col xs={12} sm={6}>
           <MetricCard
-            title="原始摄取消息"
+            title="读取消息数"
             value={`${contextMetrics.raw_message_count.toLocaleString()} 条`}
             prefix={<DatabaseOutlined style={{ color: "#1677ff" }} />}
-            subTitle="IM 协议拉取/增量池"
+            subTitle="从聊天记录抓取"
             loading={loading}
           />
         </Col>
         <Col xs={12} sm={6}>
           <MetricCard
-            title="清洗留存率"
+            title="有效消息留存率"
             value={formatPercent(contextMetrics.compression_ratio)}
             prefix={<BranchesOutlined style={{ color: "#52c41a" }} />}
             valueStyle={{ color: "#52c41a" }}
-            subTitle={`清洗后 ${contextMetrics.cleaned_message_count.toLocaleString()} 条有效`}
+            subTitle={`过滤后 ${contextMetrics.cleaned_message_count.toLocaleString()} 条有效`}
             loading={loading}
           />
         </Col>
         <Col xs={12} sm={6}>
           <MetricCard
-            title="样本 Token 消耗"
+            title="本次模型消耗"
             value={formatTokens(tokenUsage.total_tokens)}
             prefix={<PieChartOutlined style={{ color: "#722ed1" }} />}
-            subTitle={`Prompt: ${formatTokens(tokenUsage.prompt_tokens)} / Output: ${formatTokens(tokenUsage.completion_tokens)}`}
+            subTitle={`输入: ${formatTokens(tokenUsage.prompt_tokens)} / 输出: ${formatTokens(tokenUsage.completion_tokens)}`}
             loading={loading}
           />
         </Col>
         <Col xs={12} sm={6}>
           <MetricCard
-            title="单次预估成本"
+            title="单次预估费用"
             value={formatCost(tokenUsage.estimated_cost)}
             prefix={<DollarOutlined style={{ color: "#faad14" }} />}
             valueStyle={{ color: "#faad14" }}
-            subTitle="基于模型费率计算"
+            subTitle="基于模型单价估算"
             loading={loading}
           />
         </Col>

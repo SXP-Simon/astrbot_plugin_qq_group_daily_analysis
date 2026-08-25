@@ -10,7 +10,7 @@ import {
   Space,
   Button,
 } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { ReloadOutlined, DatabaseOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
@@ -57,7 +57,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
     <Drawer
       title={
         <Space>
-          <span>链路追溯详情 (Trace Detail)</span>
+          <span>任务详情</span>
           {trace && <StatusTag status={trace.status} />}
         </Space>
       }
@@ -79,7 +79,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
     >
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <Spin tip="正在加载链路详情..." />
+          <Spin tip="正在加载任务详情..." />
         </div>
       ) : trace ? (
         <Space direction="vertical" size="middle" style={{ width: "100%" }}>
@@ -88,7 +88,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             <Alert
               type="error"
               showIcon
-              message={`阶段 ${trace.error_stage || "UNKNOWN"} 发生异常`}
+              message={trace.error_stage ? `在【${trace.error_stage}】阶段发生异常` : "分析过程发生异常"}
               description={
                 <div>
                   <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}>
@@ -101,7 +101,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                       items={[
                         {
                           key: "stack",
-                          label: "调用栈 (Stack Trace)",
+                          label: "详细错误日志",
                           children: (
                             <pre
                               className="font-mono"
@@ -128,10 +128,10 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
 
           {/* 2. 基本信息 */}
           <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }}>
-            <Descriptions.Item label="Trace ID">
+            <Descriptions.Item label="任务编号">
               <Text copyable className="font-mono">{trace.trace_id}</Text>
             </Descriptions.Item>
-            <Descriptions.Item label="群组">
+            <Descriptions.Item label="群聊">
               <span className="font-mono">
                 {trace.group_name || "未知群"} ({trace.group_id})
               </span>
@@ -140,9 +140,9 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               <Tag>{trace.platform || "qq"}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="触发方式">
-              <Tag>{trace.trigger_type}</Tag>
+              <Tag>{trace.trigger_type === "manual" ? "手动触发" : trace.trigger_type === "auto" ? "定时触发" : trace.trigger_type}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="启动时间">
+            <Descriptions.Item label="开始时间">
               <span className="font-mono">
                 {formatTimestamp(trace.started_at)}
               </span>
@@ -154,20 +154,25 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             </Descriptions.Item>
           </Descriptions>
 
-          {/* 3. 上下文演进与 Token (dsh-context) */}
+          {/* 3. 上下文演进与 Token */}
           {(trace.context_metrics || trace.token_usage) && (
             <Descriptions
-              title={<span style={{ fontSize: 13 }}>🧠 上下文演进与 Token 审计</span>}
+              title={
+                <span style={{ fontSize: 13 }}>
+                  <DatabaseOutlined style={{ marginRight: 6, color: "#1677ff" }} />
+                  消息处理与模型消耗
+                </span>
+              }
               size="small"
               bordered
               column={{ xs: 1, sm: 2 }}
             >
               {trace.context_metrics && (
                 <>
-                  <Descriptions.Item label="原始消息数">
+                  <Descriptions.Item label="读取消息数">
                     <span className="font-mono">{trace.context_metrics.raw_message_count} 条</span>
                   </Descriptions.Item>
-                  <Descriptions.Item label="清洗后保留">
+                  <Descriptions.Item label="有效消息保留">
                     <span className="font-mono">
                       {trace.context_metrics.cleaned_message_count} 条 (
                       {formatPercent(trace.context_metrics.compression_ratio)})
@@ -177,15 +182,14 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
               )}
               {trace.token_usage && (
                 <>
-                  <Descriptions.Item label="总 Token 消耗">
+                  <Descriptions.Item label="模型消耗总量">
                     <span className="font-mono font-semibold">
                       {formatTokens(trace.token_usage.total_tokens)}
                     </span>
                   </Descriptions.Item>
-                  <Descriptions.Item label="Prompt / Output">
+                  <Descriptions.Item label="输入 / 输出消耗">
                     <span className="font-mono text-xs">
-                      {formatTokens(trace.token_usage.prompt_tokens)} /{" "}
-                      {formatTokens(trace.token_usage.completion_tokens)}
+                      输入: {formatTokens(trace.token_usage.prompt_tokens)} / 输出: {formatTokens(trace.token_usage.completion_tokens)}
                     </span>
                   </Descriptions.Item>
                 </>
@@ -193,10 +197,11 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             </Descriptions>
           )}
 
-          {/* 4. 阶段耗时甘特瀑布流 (Gantt Waterfall) */}
+          {/* 4. 阶段耗时甘特瀑布流 */}
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-              ⏱️ 阶段耗时瀑布流 (Stage Execution Waterfall)
+              <ClockCircleOutlined style={{ marginRight: 6, color: "#fa8c16" }} />
+              各阶段耗时明细
             </div>
             <SpanTimeline
               spans={trace.spans || []}
@@ -205,7 +210,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
           </div>
         </Space>
       ) : (
-        <Text type="secondary">未能获取到 Trace 详情</Text>
+        <Text type="secondary">未能获取到任务详情</Text>
       )}
     </Drawer>
   );

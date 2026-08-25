@@ -44,7 +44,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
       <Space wrap size="small">
         <Input
           size="small"
-          placeholder="搜索 Trace ID / 群号 / 群名"
+          placeholder="搜索 任务编号 / 群号 / 群名"
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
@@ -54,7 +54,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
 
         <Select
           size="small"
-          placeholder="筛选目标群组"
+          placeholder="选择群聊"
           value={selectedGroup}
           onChange={onGroupChange}
           style={{ width: 170 }}
@@ -69,17 +69,17 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
 
         <Select
           size="small"
-          placeholder="筛选状态"
+          placeholder="执行状态"
           value={statusFilter}
           onChange={onStatusChange}
           style={{ width: 115 }}
           allowClear
           options={[
             { label: "全部状态", value: undefined },
-            { label: "成功 (Succeeded)", value: "succeeded" },
-            { label: "失败 (Failed)", value: "failed" },
-            { label: "运行中 (Running)", value: "running" },
-            { label: "已中止 (Aborted)", value: "aborted" },
+            { label: "执行成功", value: "succeeded" },
+            { label: "执行失败", value: "failed" },
+            { label: "正在运行", value: "running" },
+            { label: "已手动中止", value: "aborted" },
           ]}
         />
 

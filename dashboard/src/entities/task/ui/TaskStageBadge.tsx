@@ -26,7 +26,7 @@ export const TaskStageBadge: React.FC<TaskStageBadgeProps> = ({ stage }) => {
 
   return (
     <Tag icon={<SyncOutlined spin />} color={color} className="font-mono text-xs">
-      {label} ({stage})
+      {label}
     </Tag>
   );
 };

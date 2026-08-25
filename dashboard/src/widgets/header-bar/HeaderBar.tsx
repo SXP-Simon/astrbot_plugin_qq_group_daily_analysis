@@ -1,5 +1,5 @@
 import React from "react";
-import { Typography, Space, Tag, Button } from "antd";
+import { Typography, Space, Button } from "antd";
 import {
   RobotOutlined,
   ReloadOutlined,
@@ -36,16 +36,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       <Space align="center" size="middle">
         <RobotOutlined style={{ fontSize: 20, color: "#1677ff" }} />
         <div>
-          <Space align="center" size="small">
-            <Title level={5} style={{ margin: 0, fontSize: 15 }}>
-              QQ群日常分析控制台
-            </Title>
-            <Tag color="blue" className="font-mono text-xs">
-              v4.25 Agent Infra
-            </Tag>
-          </Space>
+          <Title level={5} style={{ margin: 0, fontSize: 15 }}>
+            QQ群日常分析控制台
+          </Title>
           <div style={{ fontSize: 11, color: "#8c8c8c", marginTop: 2 }}>
-            基于 dsh-context 上下文洞察与 SQLite 全链路执行追踪
+            查看群聊分析记录、执行进度与大模型消耗统计
           </div>
         </div>
       </Space>

@@ -19,13 +19,13 @@ export const ContextFunnelWidget: React.FC<ContextFunnelWidgetProps> = ({ metric
       title={
         <span style={{ fontSize: 13 }}>
           <DatabaseOutlined style={{ color: "#1677ff", marginRight: 6 }} />
-          消息摄取与剪枝漏斗 (Context Funnel)
+          消息清洗与过滤统计
         </span>
       }
     >
       <div style={{ padding: "8px 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <Text style={{ fontSize: 12 }}>消息保留率 (Retention Rate)</Text>
+          <Text style={{ fontSize: 12 }}>有效消息留存率</Text>
           <Text strong style={{ fontSize: 12 }}>
             {formatPercent(metrics.compression_ratio)}
           </Text>
@@ -38,20 +38,20 @@ export const ContextFunnelWidget: React.FC<ContextFunnelWidgetProps> = ({ metric
       </div>
 
       <Descriptions size="small" column={1} bordered style={{ marginTop: 12 }}>
-        <Descriptions.Item label="原始抓取消息">
+        <Descriptions.Item label="读取原始消息">
           <span className="font-mono">{metrics.raw_message_count.toLocaleString()} 条</span>
         </Descriptions.Item>
-        <Descriptions.Item label="规则清洗后保留">
+        <Descriptions.Item label="过滤后有效消息">
           <span className="font-mono font-semibold" style={{ color: "#52c41a" }}>
             {metrics.cleaned_message_count.toLocaleString()} 条
           </span>
         </Descriptions.Item>
-        <Descriptions.Item label="剪枝剔除噪音">
+        <Descriptions.Item label="剔除的无效消息">
           <span className="font-mono" style={{ color: "#8c8c8c" }}>
             {(metrics.raw_message_count - metrics.cleaned_message_count).toLocaleString()} 条
           </span>
         </Descriptions.Item>
-        <Descriptions.Item label="分段增量批次">
+        <Descriptions.Item label="分批处理批次">
           <span className="font-mono">{metrics.incremental_batches || 1} 批</span>
         </Descriptions.Item>
       </Descriptions>

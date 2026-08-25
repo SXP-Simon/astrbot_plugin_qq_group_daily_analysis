@@ -122,7 +122,7 @@ dashboard/src/
 │   ├── active-task-board/          # 活跃任务看板微件 (集成实时 Duration 计时器)
 │   ├── trace-table/TraceTable.tsx  # 数据密集型链路表格微件 (服务端分页 + 排序)
 │   ├── trace-drawer/TraceDrawer.tsx# 链路详情抽屉微件 (瀑布流甘特图 + 调用栈)
-│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (dsh-context 核心透视)
+│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (消息清洗漏斗与留存分析)
 │   └── token-chart-widget/         # Token 消耗占比 ECharts 微件
 ├── 5. pages/                       # [页面与组合视图层] (MVVM 模式落地)
 │   ├── overview/                   # useOverviewViewModel (VM) + OverviewPage (V)
@@ -149,6 +149,9 @@ dashboard/src/
    * SSE 在接收到状态流转事件时，主动精准淘汰相关缓存，确保数据 100% 同步。
 4. **单文件固定 Bundle 输出**：
    * Vite 构建固定输出为 `pages/daily-analysis/assets/index.js`，彻底消除动态哈希在 Git 历史中产生的噪音。
+5. **零 Emoji 与纯矢量 Icon 规范 (Zero-Emoji & Pure-Icon Policy)**：
+   * **严禁在 UI 界面中使用 Unicode Emoji**：全站所有标题、指示器、按钮、Tab 全部统一使用 `@ant-design/icons` 矢量图标，杜绝跨系统平台渲染割裂；
+   * **文案清晰直观、小白友好**：坚决杜绝中英混杂（如带英文括号后缀）及晦涩技术黑话，面向普通用户打造纯净通俗的直观中文界面。
 
 ---
 
@@ -165,9 +168,9 @@ dashboard/src/
 * **30 天断点快照与零成本极速重渲染 (Zero-Token Re-render)**：
   * 分析成果在 Checkpoint 中保留 30 天；
   * 如果换了新的 HTML 主题模板，或因网络抖动未收到图片，可在控制台**直接复用已提取的话题与金句，0 Token 消耗秒级重新出图**，无需再耗费数万 Token 重新请求大模型。
-* **调用账单与性能瓶颈深度透明 (dsh-context)**：
-  * **甘特图瀑布流**：一眼看清是哪个 LLM 模型或哪个生图服务商响应缓慢；
-  * **Token 消耗账单**：清晰透视话题、头衔、金句、漫画各自消耗的 Prompt/Completion Tokens 与预估花费；
+* **调用账单与性能瓶颈深度透明**：
+  * **阶段耗时瀑布流**：一眼看清是哪个 LLM 模型或哪个生图服务商响应缓慢；
+  * **模型消耗账单**：清晰透视话题、头衔、金句、漫画各自消耗的输入/输出 Tokens 与预估花费；
   * **消息清洗漏斗**：直观了解 3000 条原始消息是如何经过清洗剔除无效灌水、最终保留有效上下文的。
 * **系统永不假死死锁**：
   * 即使机器异常掉电或 Docker 重启，开机自愈机制会自动修复所有异常任务并释放群锁。

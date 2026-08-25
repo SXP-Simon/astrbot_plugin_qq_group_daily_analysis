@@ -35,7 +35,7 @@ dashboard/src/
 │   ├── active-task-board/          # 活跃任务看板微件 (集成实时 Duration 计时器)
 │   ├── trace-table/TraceTable.tsx  # 数据密集型链路表格微件 (服务端分页 + 排序)
 │   ├── trace-drawer/TraceDrawer.tsx# 链路详情抽屉微件 (瀑布流甘特图 + 调用栈)
-│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (dsh-context 核心透视)
+│   ├── context-funnel-widget/      # 上下文演进漏斗微件 (消息清洗漏斗与留存分析)
 │   └── token-chart-widget/         # Token 消耗占比 ECharts 微件
 │
 ├── 5. pages/                       # [页面与组合视图层] (MVVM 模式落地)
@@ -66,6 +66,14 @@ dashboard/src/
 * **Atoms (原子)**：`StatusTag`、`MetricCard`、`TaskStageBadge`、`SectionHeader`。
 * **Molecules (分子)**：`TraceFilterBar`（复合筛选条）、`SpanTimeline`（阶段进度条与时间轴组合）、`CancelTaskButton`。
 * **Organisms / Widgets (微件)**：`TraceTable`、`ActiveTaskBoard`、`ContextFunnelWidget`、`TokenChartWidget`、`TraceDrawer`。
+
+### 2.3 UI 视觉与文案设计规范 (Zero-Emoji & Pure-Icon Policy)
+* **全站严禁使用 Unicode Emoji 作为 UI 视觉元素**：
+  * 所有页面标题、描述卡片、按钮前缀图标、时间轴标记一律使用 `@ant-design/icons` 提供的矢量矢量图标（如 `<BarChartOutlined />`、`<FolderOpenOutlined />`、`<ClockCircleOutlined />`、`<DatabaseOutlined />` 等）；
+  * 杜绝跨平台/跨操作系统因系统 Emoji 渲染差异导致的对齐错位、彩色割裂或样式不一致。
+* **文案清晰直观、小白友好（杜绝中英混杂与技术黑话）**：
+  * **禁止中英混杂括号**：界面文案严禁出现 `中文 (English)` 的冗余双语后缀（如禁止出现 `话题 (Topics)`、`群组 (Group)`、`调用栈 (Stack Trace)` 等）；
+  * **通俗化表达**：用用户熟悉的自然概念替代晦涩的后端内部黑话（如使用 `任务编号` 代替 `Trace ID`，使用 `模型消耗` 代替 `Tokens`，使用 `各阶段耗时明细` 代替 `Span Waterfall`）。
 
 ---
 

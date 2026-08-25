@@ -32,7 +32,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
 }) => {
   const columns = [
     {
-      title: "Trace ID",
+      title: "任务编号",
       dataIndex: "trace_id",
       key: "trace_id",
       width: 170,
@@ -46,7 +46,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       ),
     },
     {
-      title: "群组 (Group)",
+      title: "群聊",
       dataIndex: "group_id",
       key: "group_id",
       render: (gid: string, r: TraceRecord) => (
@@ -65,11 +65,11 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       render: (p: string) => <Tag>{p || "qq"}</Tag>,
     },
     {
-      title: "触发",
+      title: "触发方式",
       dataIndex: "trigger_type",
       key: "trigger_type",
       width: 90,
-      render: (t: string) => <Tag>{t}</Tag>,
+      render: (t: string) => <Tag>{t === "manual" ? "手动" : t === "auto" ? "定时" : t}</Tag>,
     },
     {
       title: "状态",
@@ -91,7 +91,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       ),
     },
     {
-      title: "Tokens",
+      title: "模型消耗",
       dataIndex: "total_tokens",
       key: "total_tokens",
       width: 95,
@@ -112,21 +112,21 @@ export const TraceTable: React.FC<TraceTableProps> = ({
         if (ratio === undefined || ratio === null) return <span className="text-xs">-</span>;
         const pct = Math.round(ratio * 100);
         return (
-          <Tooltip title={`原始: ${r.raw_message_count || 0}条 / 清洗后: ${r.cleaned_message_count || 0}条`}>
+          <Tooltip title={`读取: ${r.raw_message_count || 0}条 / 有效: ${r.cleaned_message_count || 0}条`}>
             <Progress percent={pct} size="small" style={{ width: 80 }} />
           </Tooltip>
         );
       },
     },
     {
-      title: "启动时间",
+      title: "开始时间",
       dataIndex: "started_at",
       key: "started_at",
       width: 165,
       sorter: true,
       defaultSortOrder: "descend" as const,
       render: (ts: number) => (
-        <Tooltip title={`Unix 时间戳: ${ts}`}>
+        <Tooltip title={`记录时间戳: ${ts}`}>
           <span className="font-mono text-xs" style={{ color: "#595959" }}>
             {formatTimestamp(ts)}
           </span>
@@ -144,7 +144,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
           icon={<EyeOutlined />}
           onClick={() => onViewTrace(r.trace_id)}
         >
-          链路
+          详情
         </Button>
       ),
     },
@@ -164,7 +164,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
         total: total,
         showSizeChanger: true,
         pageSizeOptions: ["10", "15", "20", "50", "100"],
-        showTotal: (t) => `共 ${t} 条链路记录`,
+        showTotal: (t) => `共 ${t} 条记录`,
       }}
     />
   );

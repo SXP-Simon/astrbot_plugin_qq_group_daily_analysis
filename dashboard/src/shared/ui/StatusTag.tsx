@@ -9,32 +9,32 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
   switch (status) {
     case "succeeded":
       return (
-        <Tag color="success" className="font-mono text-xs font-semibold">
-          SUCCEEDED
+        <Tag color="success" className="text-xs font-semibold">
+          成功
         </Tag>
       );
     case "failed":
       return (
-        <Tag color="error" className="font-mono text-xs font-semibold">
-          FAILED
+        <Tag color="error" className="text-xs font-semibold">
+          失败
         </Tag>
       );
     case "running":
       return (
-        <Tag color="processing" className="font-mono text-xs font-semibold">
-          RUNNING
+        <Tag color="processing" className="text-xs font-semibold">
+          运行中
         </Tag>
       );
     case "aborted":
       return (
-        <Tag color="default" className="font-mono text-xs font-semibold">
-          ABORTED
+        <Tag color="default" className="text-xs font-semibold">
+          已中止
         </Tag>
       );
     default:
       return (
-        <Tag className="font-mono text-xs">
-          {String(status).toUpperCase()}
+        <Tag className="text-xs">
+          {String(status)}
         </Tag>
       );
   }

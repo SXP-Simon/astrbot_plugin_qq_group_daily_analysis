@@ -39,7 +39,7 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
       width={440}
     >
       <Form layout="vertical" style={{ marginTop: 16 }}>
-        <Form.Item label="群号 / 会话唯一标识 (Group ID)" required>
+        <Form.Item label="群号 / 会话标识" required>
           <Input
             placeholder="例如: 123456789"
             value={groupId}
@@ -56,15 +56,15 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
           />
         </Form.Item>
 
-        <Form.Item label="平台类型 (Platform)">
+        <Form.Item label="聊天平台">
           <Select
             value={platform}
             onChange={onPlatformChange}
             options={[
-              { label: "QQ (OneBot / NapCat / Lagrange)", value: "qq" },
+              { label: "QQ (OneBot 协议端)", value: "qq" },
+              { label: "QQ 官方机器人", value: "qq_official" },
               { label: "Telegram", value: "telegram" },
-              { label: "QQ 官方机器人 (QQ Official)", value: "qq_official" },
-              { label: "飞书 (Lark)", value: "lark" },
+              { label: "飞书", value: "lark" },
               { label: "Discord", value: "discord" },
             ]}
           />
