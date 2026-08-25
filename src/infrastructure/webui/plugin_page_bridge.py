@@ -353,35 +353,78 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_get_platforms(self) -> Any:
-        """获取当前已连接并就绪的所有聊天平台实例列表（供 WebUI 手动触发时动态选择）"""
+        """获取当前 AstrBot 中已注册并就绪的所有聊天平台列表（基于 AstrBot 原生 PlatformMetadata）"""
         try:
-            bot_manager = getattr(self.analysis_service, "bot_manager", None)
-            platforms = []
-            if bot_manager:
-                adapters = bot_manager.get_all_adapters()
-                for p_id, adp in adapters.items():
-                    p_name = getattr(adp, "platform_name", "unknown")
-                    class_name = type(adp).__name__
-                    label = f"{p_id} ({class_name.replace('Adapter', '')})"
-                    if "OneBot" in class_name or "aiocqhttp" in p_name:
-                        label = f"QQ / OneBot ({p_id})"
-                    elif "QQOfficial" in class_name or "qq_official" in p_name:
-                        label = f"QQ 官方机器人 ({p_id})"
-                    elif "Telegram" in class_name or "telegram" in p_name:
-                        label = f"Telegram ({p_id})"
-                    elif "Lark" in class_name or "lark" in p_name:
-                        label = f"飞书 ({p_id})"
-                    elif "Discord" in class_name or "discord" in p_name:
-                        label = f"Discord ({p_id})"
+            platforms: list[dict[str, Any]] = []
+            seen_ids = set()
 
+            # 1. 优先从 AstrBot 原生 platform_manager 获取标准元数据
+            platform_manager = getattr(self.context, "platform_manager", None)
+            if platform_manager and hasattr(platform_manager, "get_insts"):
+                insts = platform_manager.get_insts() or []
+                for inst in insts:
+                    try:
+                        meta = (
+                            inst.meta()
+                            if callable(getattr(inst, "meta", None))
+                            else None
+                        )
+                        p_id = (
+                            getattr(meta, "id", None)
+                            or (
+                                getattr(inst, "config", {}).get("id")
+                                if isinstance(getattr(inst, "config", None), dict)
+                                else None
+                            )
+                            or ""
+                        )
+                        if not p_id or p_id in seen_ids:
+                            continue
+                        p_type = (
+                            getattr(meta, "name", "")
+                            or (
+                                getattr(inst, "config", {}).get("type", "")
+                                if isinstance(getattr(inst, "config", None), dict)
+                                else ""
+                            )
+                            or ""
+                        )
+                        display_name = (
+                            getattr(meta, "adapter_display_name", "")
+                            or getattr(meta, "name", "")
+                            or p_type
+                            or p_id
+                        )
+                        seen_ids.add(p_id)
+                        platforms.append(
+                            {
+                                "id": str(p_id),
+                                "type": str(p_type),
+                                "display_name": str(display_name),
+                                "label": f"{display_name} ({p_id})",
+                            }
+                        )
+                    except Exception:
+                        pass
+
+            # 2. 兜底补全已在 bot_manager 注册的适配器
+            bot_manager = getattr(self.analysis_service, "bot_manager", None)
+            if bot_manager:
+                for p_id, adp in bot_manager.get_all_adapters().items():
+                    if p_id in seen_ids:
+                        continue
+                    p_name = getattr(adp, "platform_name", "unknown")
+                    class_name = type(adp).__name__.replace("Adapter", "")
+                    seen_ids.add(p_id)
                     platforms.append(
                         {
-                            "id": p_id,
-                            "name": p_name,
-                            "type": class_name,
-                            "label": label,
+                            "id": str(p_id),
+                            "type": str(p_name),
+                            "display_name": str(class_name),
+                            "label": f"{class_name} ({p_id})",
                         }
                     )
+
             return json_response({"status": "ok", "data": platforms})
         except Exception as e:
             logger.error(f"获取平台列表异常: {e}", exc_info=True)
@@ -443,11 +486,14 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_get_report_history(self) -> Any:
-        """获取历史生成的报告图片列表（包含群号与群名解析）"""
+        """获取历史生成的报告图片列表（包含群号、群名与平台归属精准解析）"""
         try:
             reports: list[dict[str, Any]] = []
-            group_names = {
-                str(g["group_id"]): str(g.get("group_name", ""))
+            group_info_map = {
+                str(g["group_id"]): {
+                    "group_name": str(g.get("group_name", "")),
+                    "platform": str(g.get("platform", "qq")),
+                }
                 for g in self.trace_store.get_distinct_groups()
             }
             if self.report_output_dir and self.report_output_dir.exists():
@@ -476,7 +522,9 @@ class PluginPageWebUIBridge:
                                 re.IGNORECASE,
                             )
                         group_id = m.group(1) if m else ""
-                        group_name = group_names.get(group_id, "")
+                        g_info = group_info_map.get(group_id, {})
+                        group_name = g_info.get("group_name", "")
+                        platform = g_info.get("platform", "qq")
 
                         reports.append(
                             {
@@ -486,6 +534,7 @@ class PluginPageWebUIBridge:
                                 "absolute_path": str(file_path.resolve()),
                                 "group_id": group_id,
                                 "group_name": group_name,
+                                "platform": platform,
                             }
                         )
                     except Exception:

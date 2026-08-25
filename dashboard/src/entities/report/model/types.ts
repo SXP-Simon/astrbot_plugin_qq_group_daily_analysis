@@ -6,5 +6,6 @@ export interface ReportItem {
   data_url?: string;
   group_id?: string;
   group_name?: string;
+  platform?: string;
 }
 
