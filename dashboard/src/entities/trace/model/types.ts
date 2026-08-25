@@ -49,4 +49,11 @@ export interface TraceRecord {
   context_metrics?: ContextMetrics | null;
   token_usage?: TokenUsage | null;
   current_stage?: string;
+  report_files?: Array<{
+    filename: string;
+    path?: string;
+    format?: string;
+    size_bytes?: number;
+    created_at?: number;
+  }>;
 }

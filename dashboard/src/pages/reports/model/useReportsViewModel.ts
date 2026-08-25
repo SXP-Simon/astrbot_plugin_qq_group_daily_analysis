@@ -42,16 +42,16 @@ export function useReportsViewModel() {
     setPreviewLoading(true);
     try {
       const data = await fetchReportContent(report.filename);
-      if (data && data.data_url) {
+      if (data && (data.data_url || data.html_content)) {
         setSelectedReport((prev) => ({
           ...(prev || report),
           ...data,
         }));
       } else {
-        message.warning("未能读取到报告图片数据");
+        message.warning("未能读取到报告文件数据");
       }
     } catch {
-      message.error("加载报告图片失败");
+      message.error("加载报告文件失败");
     } finally {
       setPreviewLoading(false);
     }
@@ -64,22 +64,45 @@ export function useReportsViewModel() {
 
   const downloadReport = async (report: ReportItem) => {
     try {
-      let dataUrl = report.data_url;
-      if (!dataUrl) {
+      const isHtml = Boolean(
+        report.is_html ||
+          report.filename.toLowerCase().endsWith(".html") ||
+          report.filename.toLowerCase().endsWith(".htm")
+      );
+      let href = report.data_url;
+      let cleanupBlobUrl: string | null = null;
+
+      if (isHtml && report.html_content) {
+        const blob = new Blob([report.html_content], { type: "text/html;charset=utf-8" });
+        cleanupBlobUrl = URL.createObjectURL(blob);
+        href = cleanupBlobUrl;
+      } else if (!href) {
         const data = await fetchReportContent(report.filename);
-        dataUrl = data?.data_url;
+        if (data) {
+          if (isHtml && data.html_content) {
+            const blob = new Blob([data.html_content], { type: "text/html;charset=utf-8" });
+            cleanupBlobUrl = URL.createObjectURL(blob);
+            href = cleanupBlobUrl;
+          } else {
+            href = data.data_url;
+          }
+        }
       }
-      if (!dataUrl) {
-        message.error("获取下载图片失败");
+
+      if (!href) {
+        message.error("获取下载文件失败");
         return;
       }
 
       const a = document.createElement("a");
-      a.href = dataUrl;
+      a.href = href;
       a.download = report.filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      if (cleanupBlobUrl) {
+        URL.revokeObjectURL(cleanupBlobUrl);
+      }
       message.success(`已开始下载 ${report.filename}`);
     } catch {
       message.error("下载文件异常");
@@ -103,14 +126,15 @@ export function useReportsViewModel() {
         }
       }
 
-      // 3. 关键字搜索（支持文件名、群号、群名）
+      // 3. 关键字搜索（支持文件名、群号、群名、绝对路径、TraceID）
       if (search.trim()) {
         const kw = search.trim().toLowerCase();
         const matchName = item.filename.toLowerCase().includes(kw);
         const matchGid = (item.group_id || "").toLowerCase().includes(kw);
         const matchGname = (item.group_name || "").toLowerCase().includes(kw);
         const matchPath = (item.absolute_path || "").toLowerCase().includes(kw);
-        if (!matchName && !matchGid && !matchGname && !matchPath) {
+        const matchTrace = (item.trace_id || "").toLowerCase().includes(kw);
+        if (!matchName && !matchGid && !matchGname && !matchPath && !matchTrace) {
           return false;
         }
       }

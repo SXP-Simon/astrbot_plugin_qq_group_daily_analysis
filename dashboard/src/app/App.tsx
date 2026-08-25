@@ -133,7 +133,9 @@ export const App: React.FC = () => {
           <FolderOpenOutlined /> 历史报告
         </span>
       ),
-      children: <ReportsPage viewModel={reportsVM} />,
+      children: (
+        <ReportsPage viewModel={reportsVM} onViewTrace={handleViewTrace} />
+      ),
     },
     {
       key: "logs",

@@ -40,11 +40,11 @@ export const ReportFilterBar: React.FC<ReportFilterBarProps> = ({
       <Space wrap size="small">
         <Input
           size="small"
-          placeholder="搜索 群号 / 群名 / 文件名"
+          placeholder="搜索 群号 / 群名 / 文件名 / TraceID"
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          style={{ width: 220 }}
+          style={{ width: 260 }}
           allowClear
         />
 

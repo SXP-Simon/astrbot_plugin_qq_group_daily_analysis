@@ -261,7 +261,29 @@ class TraceSQLiteStore:
             else:
                 trace_data["token_usage"] = None
 
+            trace_data["report_files"] = trace_data.get("extra", {}).get(
+                "report_files", []
+            )
             return trace_data
+
+    def get_report_trace_map(self) -> dict[str, str]:
+        """获取已生成的报告文件名与 trace_id 的双向映射"""
+        mapping: dict[str, str] = {}
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT trace_id, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%'"
+            ).fetchall()
+            for r in rows:
+                t_id = str(r["trace_id"])
+                try:
+                    extra = json.loads(r["extra_json"] or "{}")
+                    for rf in extra.get("report_files", []):
+                        fn = rf.get("filename")
+                        if fn:
+                            mapping[fn] = t_id
+                except Exception:
+                    pass
+        return mapping
 
     def reconcile_crashed_traces_on_startup(self) -> int:
         """开机对账扫描：将上次因系统异常终止/重启而未正常收尾的 running 任务标记为 aborted。"""

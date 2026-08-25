@@ -260,12 +260,7 @@ class OneBotAdapter(PlatformAdapter):
                     if not msg_id or msg_id in seen_raw_ids:
                         continue
 
-                    # 身份过滤（排除机器人自己）
-                    sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
-                    if self.filter_bot_messages and sender_id in self.bot_self_ids:
-                        continue
-
-                    # 时间范围判定
+                    # 时间范围判定与集合去重
                     if start_timestamp <= msg_time <= int(datetime.now().timestamp()):
                         all_raw_messages.append(raw_msg)
                         seen_raw_ids.add(msg_id)

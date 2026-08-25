@@ -2,7 +2,9 @@ import React from "react";
 import { Modal, Button, Space, Typography, Spin, Empty } from "antd";
 import {
   FileImageOutlined,
+  FileTextOutlined,
   DownloadOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
 import { ReportItem } from "../../entities/report/model/types";
 
@@ -23,23 +25,53 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
   onClose,
   onDownload,
 }) => {
+  const isHtml = Boolean(
+    report?.is_html ||
+      report?.filename.toLowerCase().endsWith(".html") ||
+      report?.filename.toLowerCase().endsWith(".htm")
+  );
+
+  const handleOpenInNewTab = () => {
+    if (!report) return;
+    if (isHtml && report.html_content) {
+      const blob = new Blob([report.html_content], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } else if (report.data_url) {
+      window.open(report.data_url, "_blank");
+    }
+  };
+
   return (
     <Modal
       open={open}
       onCancel={onClose}
       title={
         <Space>
-          <FileImageOutlined style={{ color: "#1677ff" }} />
+          {isHtml ? (
+            <FileTextOutlined style={{ color: "#fa8c16" }} />
+          ) : (
+            <FileImageOutlined style={{ color: "#1677ff" }} />
+          )}
           <span style={{ fontSize: 15, fontWeight: 600 }}>
-            {report?.filename || "日报长图预览"}
+            {report?.filename || (isHtml ? "HTML 报告预览" : "日报长图预览")}
           </span>
         </Space>
       }
-      width={720}
+      width={isHtml ? 920 : 760}
       footer={[
         <Button key="close" onClick={onClose}>
           关闭
         </Button>,
+        report && (
+          <Button
+            key="open-tab"
+            icon={<ExportOutlined />}
+            onClick={handleOpenInNewTab}
+          >
+            新窗口打开
+          </Button>
+        ),
         report && (
           <Button
             key="download"
@@ -47,7 +79,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
             icon={<DownloadOutlined />}
             onClick={() => onDownload(report)}
           >
-            下载图片
+            {isHtml ? "下载 HTML" : "下载图片"}
           </Button>
         ),
       ]}
@@ -55,10 +87,10 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
     >
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 0" }}>
-          <Spin tip="正在加载高清报告图片..." />
+          <Spin tip={isHtml ? "正在加载 HTML 报告内容..." : "正在加载高清报告图片..."} />
         </div>
-      ) : report?.data_url ? (
-        <div style={{ textAlign: "center" }}>
+      ) : report?.data_url || (isHtml && report?.html_content) ? (
+        <div>
           {report.absolute_path && (
             <div
               style={{
@@ -83,31 +115,55 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
               </Text>
             </div>
           )}
-          <div
-            style={{
-              maxHeight: "65vh",
-              overflowY: "auto",
-              border: "1px solid #f0f0f0",
-              borderRadius: 4,
-              padding: 8,
-              background: "#fafafa",
-            }}
-          >
-            <img
-              src={report.data_url}
-              alt={report.filename}
+          {isHtml ? (
+            <div
               style={{
-                maxWidth: "100%",
-                height: "auto",
-                display: "block",
-                margin: "0 auto",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                border: "1px solid #f0f0f0",
+                borderRadius: 6,
+                overflow: "hidden",
+                background: "#ffffff",
               }}
-            />
-          </div>
+            >
+              <iframe
+                title={report.filename}
+                srcDoc={report.html_content || undefined}
+                src={!report.html_content ? report.data_url : undefined}
+                sandbox="allow-scripts allow-same-origin"
+                style={{
+                  width: "100%",
+                  height: "68vh",
+                  border: "none",
+                  display: "block",
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                maxHeight: "68vh",
+                overflowY: "auto",
+                border: "1px solid #f0f0f0",
+                borderRadius: 4,
+                padding: 8,
+                background: "#fafafa",
+              }}
+            >
+              <img
+                src={report.data_url}
+                alt={report.filename}
+                style={{
+                  maxWidth: "100%",
+                  height: "auto",
+                  display: "block",
+                  margin: "0 auto",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                }}
+              />
+            </div>
+          )}
         </div>
       ) : (
-        <Empty description="未找到图片数据" style={{ margin: "40px 0" }} />
+        <Empty description="未找到报告文件内容" style={{ margin: "40px 0" }} />
       )}
     </Modal>
   );
