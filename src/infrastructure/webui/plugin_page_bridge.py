@@ -608,9 +608,7 @@ class PluginPageWebUIBridge:
                     ):
                         if not known_gid:
                             continue
-                        if re.search(
-                            rf"(?:^|_){re.escape(known_gid)}(?:_|$)", stem
-                        ):
+                        if re.search(rf"(?:^|_){re.escape(known_gid)}(?:_|$)", stem):
                             group_id = known_gid
                             break
 

@@ -4,6 +4,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
@@ -249,29 +250,18 @@ class ReportDispatcher:
 
         if html_path:
             try:
-                reports_dir = self.report_generator.data_dir / "reports"
-                reports_dir.mkdir(parents=True, exist_ok=True)
-                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = (
-                    f"report_{group_id}_{ts_str}_{trace_id}.html"
-                    if trace_id
-                    else f"report_{group_id}_{ts_str}.html"
-                )
-                dest = reports_dir / filename
-                if os.path.exists(html_path):
-                    import shutil
-
-                    shutil.copy2(html_path, dest)
-
+                html_file = Path(html_path)
                 trace_ctx = TraceContext.current()
                 if trace_ctx:
                     rfiles = trace_ctx.metadata.setdefault("report_files", [])
                     rfiles.append(
                         {
-                            "filename": dest.name,
-                            "path": str(dest.resolve()),
+                            "filename": html_file.name,
+                            "path": str(html_file.resolve()),
                             "format": "html",
-                            "size_bytes": dest.stat().st_size if dest.exists() else 0,
+                            "size_bytes": html_file.stat().st_size
+                            if html_file.exists()
+                            else 0,
                             "created_at": time.time(),
                         }
                     )
@@ -283,7 +273,7 @@ class ReportDispatcher:
                         except Exception:
                             pass
             except Exception as e:
-                logger.warning(f"[{trace_id}] 保存历史 HTML 报告副本失败: {e}")
+                logger.warning(f"[{trace_id}] 关联 HTML 报告元数据失败: {e}")
 
             is_only_url = self.config_manager.get_html_only_url()
             base_url = self.config_manager.get_html_base_url()
