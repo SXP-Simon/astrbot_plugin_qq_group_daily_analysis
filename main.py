@@ -661,6 +661,9 @@ class GroupDailyAnalysis(Star):
         if current_task:
             self._background_tasks.add(current_task)
 
+        trace = None
+        trace_id = ""
+
         try:
             event.should_call_llm(True)  # 阻止默认 LLM 解析
             group_id = self._get_group_id_from_event(event)
@@ -701,7 +704,23 @@ class GroupDailyAnalysis(Star):
             trace_id = TraceContext.generate(
                 prefix="manual", group_name=group_name or group_id
             )
-            TraceContext.set(trace_id)
+            trace = TraceContext.set(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=platform_id or "",
+                trigger_type="manual",
+            )
+            if self.active_task_manager:
+                await self.active_task_manager.register_task(
+                    task_id=trace_id,
+                    group_id=group_id,
+                    group_name=group_name,
+                    platform=platform_id or "",
+                    trigger_type="manual",
+                    current_stage="FETCH_MESSAGES",
+                    asyncio_task=current_task,
+                )
 
             # 表情回应 或 文本提示（二选一，由配置开关控制）
             adapter = self.bot_manager.get_adapter(platform_id)
@@ -730,6 +749,11 @@ class GroupDailyAnalysis(Star):
 
             if not result.get("success"):
                 reason = result.get("reason")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed",
+                        error_message=f"Analysis skipped/failed: {reason}",
+                    )
                 if reason == "no_messages":
                     yield event.plain_result("❌ 未找到足够的群聊记录")
                 elif reason == "muted":
@@ -745,19 +769,35 @@ class GroupDailyAnalysis(Star):
                     event.get_group_id(), orig_msg_id, "analysis_done"
                 )
 
+            if self.active_task_manager:
+                await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
+
             async for res in self._send_analysis_report(event, result):
                 yield res
 
+            if trace and trace.status == "running":
+                trace.finish(status="succeeded")
+
         except DuplicateGroupTaskError:
+            if trace and trace.status == "running":
+                trace.finish(
+                    status="aborted", error_message="Task already running in group"
+                )
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except asyncio.CancelledError:
+            if trace and trace.status == "running":
+                trace.finish(status="aborted", error_message="Task cancelled by system")
             logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
+            if trace and trace.status == "running":
+                trace.finish(status="failed", error_message=str(e))
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
             )
         finally:
+            if trace_id and self.active_task_manager:
+                await self.active_task_manager.finish_task(trace_id)
             if current_task:
                 self._background_tasks.discard(current_task)
 
@@ -889,16 +929,36 @@ class GroupDailyAnalysis(Star):
                 pass
             return None
 
+        trace = TraceContext.current()
+
         if output_format == "image":
-            image_url, html_content = await self.report_generator.generate_image_report(
-                analysis_result,
-                group_id,
-                self.html_render,
-                avatar_url_getter=avatar_url_getter,
-                nickname_getter=nickname_getter,
-                avatar_cache_namespace=platform_id,
-                allow_alphanumeric_user_ids=is_qq_official,
-            )
+            if trace:
+                with trace.span("RENDER_REPORT", {"format": "image"}):
+                    (
+                        image_url,
+                        html_content,
+                    ) = await self.report_generator.generate_image_report(
+                        analysis_result,
+                        group_id,
+                        self.html_render,
+                        avatar_url_getter=avatar_url_getter,
+                        nickname_getter=nickname_getter,
+                        avatar_cache_namespace=platform_id,
+                        allow_alphanumeric_user_ids=is_qq_official,
+                    )
+            else:
+                (
+                    image_url,
+                    html_content,
+                ) = await self.report_generator.generate_image_report(
+                    analysis_result,
+                    group_id,
+                    self.html_render,
+                    avatar_url_getter=avatar_url_getter,
+                    nickname_getter=nickname_getter,
+                    avatar_cache_namespace=platform_id,
+                    allow_alphanumeric_user_ids=is_qq_official,
+                )
 
             if image_url:
                 caption = (
@@ -919,14 +979,28 @@ class GroupDailyAnalysis(Star):
             return
 
         elif output_format == "html":
-            html_path, json_path = await self.report_generator.generate_html_report(
-                analysis_result,
-                group_id,
-                avatar_url_getter=avatar_url_getter,
-                nickname_getter=nickname_getter,
-                avatar_cache_namespace=platform_id,
-                allow_alphanumeric_user_ids=is_qq_official,
-            )
+            if trace:
+                with trace.span("RENDER_REPORT", {"format": "html"}):
+                    (
+                        html_path,
+                        json_path,
+                    ) = await self.report_generator.generate_html_report(
+                        analysis_result,
+                        group_id,
+                        avatar_url_getter=avatar_url_getter,
+                        nickname_getter=nickname_getter,
+                        avatar_cache_namespace=platform_id,
+                        allow_alphanumeric_user_ids=is_qq_official,
+                    )
+            else:
+                html_path, json_path = await self.report_generator.generate_html_report(
+                    analysis_result,
+                    group_id,
+                    avatar_url_getter=avatar_url_getter,
+                    nickname_getter=nickname_getter,
+                    avatar_cache_namespace=platform_id,
+                    allow_alphanumeric_user_ids=is_qq_official,
+                )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
                 base_url = self.config_manager.get_html_base_url()

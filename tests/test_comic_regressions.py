@@ -49,6 +49,8 @@ def load_main_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
+    from src.shared.trace_context import TraceContext
+
     namespace = {
         "AsyncGenerator": object,
         "AstrMessageEvent": object,
@@ -58,6 +60,7 @@ def load_main_method(name: str):
         "os": os,
         "PLUGIN_NAME": "test_plugin",
         "StarTools": SimpleNamespace(get_data_dir=Mock()),
+        "TraceContext": TraceContext,
     }
     exec(compile(isolated_module, str(main_path), "exec"), namespace)
     return getattr(namespace["MainMethodHarness"], name)
