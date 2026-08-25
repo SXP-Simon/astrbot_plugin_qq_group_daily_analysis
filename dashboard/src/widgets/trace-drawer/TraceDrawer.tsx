@@ -255,7 +255,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             <Descriptions.Item label="接入平台">
               <Tag style={{ margin: 0 }}>
                 {!trace.platform || trace.platform === "auto" || trace.platform === "default"
-                  ? "qq"
+                  ? "-"
                   : trace.platform}
               </Tag>
             </Descriptions.Item>

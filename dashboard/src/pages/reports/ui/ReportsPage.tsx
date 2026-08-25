@@ -59,8 +59,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
         if (!r.group_id) {
           return <Text type="secondary">-</Text>;
         }
+        const p = !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
         return (
-          <Tooltip title={`群号: ${r.group_id} | 平台: ${r.platform || "qq"}`}>
+          <Tooltip title={`群号: ${r.group_id}${p ? ` | 平台: ${p}` : ""}`}>
             <span style={{ fontSize: 12 }}>
               <TeamOutlined style={{ marginRight: 4, color: "#722ed1" }} />
               {r.group_name || "未知群"} ({r.group_id})
@@ -74,7 +75,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
       dataIndex: "platform",
       key: "platform",
       width: 80,
-      render: (p?: string) => <Tag>{p || "qq"}</Tag>,
+      render: (p?: string) => {
+        const displayP = !p || p === "auto" || p === "default" ? "-" : p;
+        return <Tag>{displayP}</Tag>;
+      },
     },
     {
       title: "生成时间",

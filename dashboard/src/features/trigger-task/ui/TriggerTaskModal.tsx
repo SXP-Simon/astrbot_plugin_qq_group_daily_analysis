@@ -32,17 +32,16 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   onSubmit,
 }) => {
   const platformOptions = [
-    { label: "⚡ 自动识别 / 默认平台 (推荐)", value: "auto" },
+    { label: "自动识别 / 默认平台 (推荐)", value: "auto" },
     ...(connectedPlatforms.length > 0
       ? connectedPlatforms.map((p) => ({
-          label: `🟢 ${p.label}`,
+          label: p.label,
           value: p.id,
         }))
       : [
-          { label: "QQ (OneBot 协议端)", value: "qq" },
+          { label: "OneBot (aiocqhttp)", value: "aiocqhttp" },
           { label: "QQ 官方机器人", value: "qq_official" },
           { label: "Telegram", value: "telegram" },
-          { label: "飞书", value: "lark" },
           { label: "Discord", value: "discord" },
         ]),
   ];
