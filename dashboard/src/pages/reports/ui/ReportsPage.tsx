@@ -60,7 +60,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
           return <Text type="secondary">-</Text>;
         }
         return (
-          <Tooltip title={`群号: ${r.group_id}`}>
+          <Tooltip title={`群号: ${r.group_id} | 平台: ${r.platform || "qq"}`}>
             <span style={{ fontSize: 12 }}>
               <TeamOutlined style={{ marginRight: 4, color: "#722ed1" }} />
               {r.group_name || "未知群"} ({r.group_id})
@@ -68,6 +68,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel }) => {
           </Tooltip>
         );
       },
+    },
+    {
+      title: "平台",
+      dataIndex: "platform",
+      key: "platform",
+      width: 80,
+      render: (p?: string) => <Tag>{p || "qq"}</Tag>,
     },
     {
       title: "生成时间",

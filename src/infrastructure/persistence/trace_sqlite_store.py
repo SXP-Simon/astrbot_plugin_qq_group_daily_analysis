@@ -277,17 +277,32 @@ class TraceSQLiteStore:
             return reconciled_count
 
     def get_distinct_groups(self) -> list[dict[str, str]]:
-        """获取所有有历史分析记录的群组列表（用于控制台下拉快速筛选）"""
+        """获取所有有历史分析记录的唯一群组列表（按 group_id 聚合，优先保留有效名称并附带最新平台）"""
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
-                SELECT DISTINCT group_id, group_name, platform
+                SELECT group_id,
+                       COALESCE(
+                           NULLIF(MAX(CASE WHEN group_name != '' AND group_name NOT LIKE '群 %' AND group_name != '未知群' THEN group_name END), ''),
+                           NULLIF(MAX(group_name), ''),
+                           group_id
+                       ) AS group_name,
+                       MAX(platform) AS platform,
+                       MAX(started_at) AS last_seen
                 FROM analysis_traces
                 WHERE group_id != ''
-                ORDER BY started_at DESC
+                GROUP BY group_id
+                ORDER BY last_seen DESC
                 """
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [
+                {
+                    "group_id": str(r["group_id"]),
+                    "group_name": str(r["group_name"]),
+                    "platform": str(r["platform"] or "qq"),
+                }
+                for r in rows
+            ]
 
     def list_traces(
         self,
