@@ -1,4 +1,4 @@
-import { apiGet } from "../../../shared/api/bridge";
+import { apiGet, extractData } from "../../../shared/api/bridge";
 import { GroupItem } from "../model/types";
 
 let cachedGroups: GroupItem[] | null = null;
@@ -13,12 +13,8 @@ export async function fetchDistinctGroups(forceRefresh = false): Promise<GroupIt
   }
 
   const res = await apiGet<GroupItem[]>("groups");
-  let list: GroupItem[] = [];
-  if (Array.isArray(res?.data)) {
-    list = res.data;
-  } else if (Array.isArray(res)) {
-    list = res as unknown as GroupItem[];
-  }
+  const data = extractData<GroupItem[]>(res);
+  const list: GroupItem[] = Array.isArray(data) ? data : [];
 
   cachedGroups = list;
   return list;

@@ -1,5 +1,5 @@
 import React from "react";
-import { Card } from "antd";
+import { Card, Empty } from "antd";
 import ReactECharts from "echarts-for-react";
 import { PieChartOutlined } from "@ant-design/icons";
 import { TokenUsage } from "../../entities/trace/model/types";
@@ -12,16 +12,21 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
   const perAnalyzer = tokenUsage.per_analyzer || {};
 
   const analyzerLabels: Record<string, string> = {
-    topics: "话题挖掘",
+    topics: "话题分析",
     user_titles: "群友画像",
     golden_quotes: "精彩金句",
-    comic_storyboard: "今日漫画",
+    chat_quality: "群聊质量",
+    comic_storyboard: "趣味漫画",
   };
 
-  const pieData = Object.entries(perAnalyzer).map(([k, v]) => ({
-    name: analyzerLabels[k] || k,
-    value: v.total_tokens || 0,
-  }));
+  const pieData = Object.entries(perAnalyzer)
+    .filter(([, v]) => (v.total_tokens || 0) > 0)
+    .map(([k, v]) => ({
+      name: analyzerLabels[k] || k,
+      value: v.total_tokens || 0,
+    }));
+
+  const hasTokens = (tokenUsage.total_tokens || 0) > 0 || pieData.length > 0;
 
   const pieOption = {
     tooltip: {
@@ -60,8 +65,16 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
         </span>
       }
     >
-      <div style={{ height: 230 }}>
-        <ReactECharts option={pieOption} style={{ height: "100%", width: "100%" }} />
+      <div style={{ height: 230, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {hasTokens ? (
+          <ReactECharts option={pieOption} style={{ height: "100%", width: "100%" }} />
+        ) : (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="本次分析未产生模型消耗（纯统计模式或未启用大模型）"
+            style={{ margin: 0 }}
+          />
+        )}
       </div>
     </Card>
   );

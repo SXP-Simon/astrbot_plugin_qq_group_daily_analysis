@@ -137,6 +137,21 @@ class ReportDispatcher:
         # 4. 发送图片
         sent = False
         if image_url:
+            try:
+                reports_dir = self.report_generator.data_dir / "reports"
+                reports_dir.mkdir(parents=True, exist_ok=True)
+                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                dest = reports_dir / f"report_{group_id}_{ts_str}.jpg"
+                if os.path.exists(image_url):
+                    import shutil
+
+                    shutil.copy2(image_url, dest)
+                elif image_url.startswith("base64://"):
+                    data = base64.b64decode(image_url[9:])
+                    dest.write_bytes(data)
+            except Exception as e:
+                logger.warning(f"[{trace_id}] 保存历史报告副本失败: {e}")
+
             caption = (
                 TraceContext.make_report_caption()
                 if self.config_manager.get_show_report_caption()
