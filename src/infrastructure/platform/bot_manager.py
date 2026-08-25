@@ -6,6 +6,7 @@ Bot实例管理模块 - 基础设施层
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
@@ -341,6 +342,23 @@ class BotManager:
             f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
         )
         return None
+
+    def get_adapter_platform_id(self, adapter: Any) -> str:
+        """获取适配器对应的真实平台实例 ID（如 'nuits'）"""
+        if not adapter:
+            return ""
+        # 1. 优先从 _adapters 映射表反查实例 ID
+        for p_id, adp in self._adapters.items():
+            if adp is adapter:
+                return str(p_id)
+        # 2. 从 adapter 属性读取
+        p_id = getattr(adapter, "platform_id", None)
+        if callable(p_id):
+            p_id = p_id()
+        if p_id:
+            return str(p_id)
+        # 3. 兜底读取 platform_name
+        return str(getattr(adapter, "platform_name", "") or "")
 
     def get_all_adapters(self) -> dict:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
