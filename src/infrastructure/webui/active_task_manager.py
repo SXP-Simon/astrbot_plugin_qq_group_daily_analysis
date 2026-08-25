@@ -72,9 +72,7 @@ class ActiveTaskManager:
                 asyncio_task=asyncio_task,
             )
             self._tasks[task_id] = info
-        await self._broadcast_event(
-            {"event": "task_started", "data": info.to_dict()}
-        )
+        await self._broadcast_event({"event": "task_started", "data": info.to_dict()})
 
     async def update_stage(self, task_id: str, stage_name: str) -> None:
         """更新当前活跃任务的阶段名称并更新心跳"""
@@ -166,11 +164,15 @@ class ActiveTaskManager:
         self, interval_seconds: int = 30, timeout_seconds: int = 600
     ) -> None:
         """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录"""
-        if self.trace_store and hasattr(self.trace_store, "reconcile_crashed_traces_on_startup"):
+        if self.trace_store and hasattr(
+            self.trace_store, "reconcile_crashed_traces_on_startup"
+        ):
             try:
                 reconciled = self.trace_store.reconcile_crashed_traces_on_startup()
                 if reconciled > 0:
-                    logger.info(f"[TaskReaper] 开机自愈对账：已回收 {reconciled} 条异常中断的幽灵任务")
+                    logger.info(
+                        f"[TaskReaper] 开机自愈对账：已回收 {reconciled} 条异常中断的幽灵任务"
+                    )
             except Exception as e:
                 logger.error(f"[TaskReaper] 开机自愈对账异常: {e}")
 
@@ -184,9 +186,7 @@ class ActiveTaskManager:
         if self._reaper_task and not self._reaper_task.done():
             self._reaper_task.cancel()
 
-    async def _reaper_loop(
-        self, interval_seconds: int, timeout_seconds: int
-    ) -> None:
+    async def _reaper_loop(self, interval_seconds: int, timeout_seconds: int) -> None:
         while True:
             try:
                 await asyncio.sleep(interval_seconds)

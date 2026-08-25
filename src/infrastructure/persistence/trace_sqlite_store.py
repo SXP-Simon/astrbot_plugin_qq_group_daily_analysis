@@ -343,9 +343,9 @@ class TraceSQLiteStore:
 
             # 查询列表与关联 Token 汇总
             query_sql = f"""
-                SELECT 
-                    t.*, 
-                    tu.total_tokens, 
+                SELECT
+                    t.*,
+                    tu.total_tokens,
                     tu.estimated_cost,
                     cm.raw_message_count,
                     cm.cleaned_message_count,
@@ -379,7 +379,7 @@ class TraceSQLiteStore:
             # 1. 总体概况
             overview = conn.execute(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_traces,
                     SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END) as succeeded_count,
                     SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
@@ -391,7 +391,7 @@ class TraceSQLiteStore:
             # 2. 今日数据
             today_data = conn.execute(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as today_traces,
                     COUNT(DISTINCT group_id) as today_active_groups
                 FROM analysis_traces
@@ -403,7 +403,7 @@ class TraceSQLiteStore:
             # 3. Token 累计总数与成本
             token_stats = conn.execute(
                 """
-                SELECT 
+                SELECT
                     SUM(total_tokens) as total_tokens_spent,
                     SUM(estimated_cost) as total_cost_spent
                 FROM token_usage;
@@ -413,7 +413,7 @@ class TraceSQLiteStore:
             # 4. 今日 Token 消耗
             today_tokens = conn.execute(
                 """
-                SELECT 
+                SELECT
                     SUM(tu.total_tokens) as today_tokens_spent,
                     SUM(tu.estimated_cost) as today_cost_spent
                 FROM token_usage tu
@@ -464,9 +464,9 @@ class TraceSQLiteStore:
                 excess = total_count - max_count
                 conn.execute(
                     """
-                    DELETE FROM analysis_traces 
+                    DELETE FROM analysis_traces
                     WHERE trace_id IN (
-                        SELECT trace_id FROM analysis_traces 
+                        SELECT trace_id FROM analysis_traces
                         ORDER BY started_at ASC LIMIT ?
                     );
                     """,
