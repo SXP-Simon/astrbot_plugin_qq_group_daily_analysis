@@ -1,18 +1,48 @@
 import { useEffect, useState } from "react";
 import { fetchTraceList, fetchTraceDetail } from "../../../entities/trace/api/traceApi";
+import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
 import { TraceRecord, ContextMetrics, TokenUsage } from "../../../entities/trace/model/types";
+import { GroupItem } from "../../../entities/group/model/types";
 
 export function useContextInsightViewModel() {
-  const [recentTraces, setRecentTraces] = useState<TraceRecord[]>([]);
+  const [traces, setTraces] = useState<TraceRecord[]>([]);
+  const [total, setTotal] = useState(0);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedTraceDetail, setSelectedTraceDetail] = useState<TraceRecord | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const loadRecentTraces = async () => {
+  // 筛选状态
+  const [search, setSearch] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<[number, number] | null>(null);
+  const [groups, setGroups] = useState<GroupItem[]>([]);
+
+  const loadGroups = async () => {
+    try {
+      const gList = await fetchDistinctGroups();
+      setGroups(gList);
+    } catch {
+      // 忽略群组加载异常
+    }
+  };
+
+  const loadTraces = async () => {
     setLoading(true);
     try {
-      const res = await fetchTraceList({ limit: 15, status: "succeeded" });
-      setRecentTraces(res.items);
+      const res = await fetchTraceList({
+        limit: 200,
+        group_id: selectedGroup || undefined,
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+        start_time: dateRange ? dateRange[0] : undefined,
+        end_time: dateRange ? dateRange[1] : undefined,
+        sort_by: "started_at",
+        sort_order: "desc",
+      });
+      setTraces(res.items);
+      setTotal(res.total);
+
       if (res.items.length > 0) {
         if (!selectedTraceId || !res.items.some((t) => t.trace_id === selectedTraceId)) {
           setSelectedTraceId(res.items[0].trace_id);
@@ -29,9 +59,13 @@ export function useContextInsightViewModel() {
   };
 
   useEffect(() => {
-    loadRecentTraces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadGroups();
   }, []);
+
+  useEffect(() => {
+    loadTraces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, selectedGroup, statusFilter, dateRange]);
 
   useEffect(() => {
     if (selectedTraceId) {
@@ -43,7 +77,7 @@ export function useContextInsightViewModel() {
     }
   }, [selectedTraceId]);
 
-  const selectedSummary = recentTraces.find((t) => t.trace_id === selectedTraceId) || selectedTraceDetail;
+  const selectedSummary = traces.find((t) => t.trace_id === selectedTraceId) || selectedTraceDetail;
 
   const defaultContextMetrics: ContextMetrics = {
     trace_id: selectedTraceId || "",
@@ -67,14 +101,24 @@ export function useContextInsightViewModel() {
   const tokenUsage = selectedTraceDetail?.token_usage || defaultTokenUsage;
 
   return {
-    recentTraces,
+    traces,
+    total,
     selectedTrace: selectedSummary,
     setSelectedTrace: (trace: TraceRecord | null) => setSelectedTraceId(trace?.trace_id || null),
     contextMetrics,
     tokenUsage,
     loading,
+    search,
+    selectedGroup,
+    statusFilter,
+    dateRange,
+    groups,
+    setSearch,
+    setSelectedGroup,
+    setStatusFilter,
+    setDateRange,
     refresh: () => {
-      loadRecentTraces();
+      loadTraces();
       if (selectedTraceId) {
         fetchTraceDetail(selectedTraceId, true).then((detail) => {
           if (detail) setSelectedTraceDetail(detail);
