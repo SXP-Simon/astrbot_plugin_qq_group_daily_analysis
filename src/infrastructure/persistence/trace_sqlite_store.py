@@ -86,6 +86,14 @@ class TraceSQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
                 """
             )
+            # 兼容性清洗：将历史旧记录中出现的 'auto'/'default' 等未决平台标记归一化为真实默认平台 'qq'
+            conn.execute(
+                """
+                UPDATE analysis_traces
+                SET platform = 'qq'
+                WHERE platform IN ('auto', 'default', 'all', '', 'none') OR platform IS NULL;
+                """
+            )
 
     def save_trace(self, trace_dict: dict[str, Any]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
@@ -103,6 +111,9 @@ class TraceSQLiteStore:
                     error_stage, error_message, stack_trace, extra_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(trace_id) DO UPDATE SET
+                    group_id=CASE WHEN excluded.group_id != '' THEN excluded.group_id ELSE analysis_traces.group_id END,
+                    group_name=CASE WHEN excluded.group_name != '' AND excluded.group_name != '未知群' THEN excluded.group_name ELSE analysis_traces.group_name END,
+                    platform=CASE WHEN excluded.platform != '' AND excluded.platform NOT IN ('auto', 'default', 'all') THEN excluded.platform ELSE analysis_traces.platform END,
                     status=excluded.status,
                     completed_at=excluded.completed_at,
                     duration_ms=excluded.duration_ms,
