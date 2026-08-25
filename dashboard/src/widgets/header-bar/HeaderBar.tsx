@@ -27,10 +27,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        padding: "10px 16px",
+        padding: "10px 14px",
         background: isDark ? "#141414" : "#ffffff",
         borderBottom: `1px solid ${isDark ? "#303030" : "#f0f0f0"}`,
         marginBottom: 12,
+        flexWrap: "wrap",
+        gap: 8,
       }}
     >
       <Space align="center" size="middle">
