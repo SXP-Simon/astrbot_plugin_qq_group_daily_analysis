@@ -389,12 +389,18 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
 
           {/* 4. 产物报告文件 */}
           {(() => {
-            const reportFiles =
+            const rawFiles =
               trace.report_files ||
               (Array.isArray(trace.extra?.report_files)
                 ? (trace.extra.report_files as TraceRecord["report_files"])
                 : []) ||
               [];
+            const seenNames = new Set<string>();
+            const reportFiles = rawFiles.filter((f) => {
+              if (!f || !f.filename || seenNames.has(f.filename)) return false;
+              seenNames.add(f.filename);
+              return true;
+            });
             if (!reportFiles || reportFiles.length === 0) return null;
             return (
               <div>
