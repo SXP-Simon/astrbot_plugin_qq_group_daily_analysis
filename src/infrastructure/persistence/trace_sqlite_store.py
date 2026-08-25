@@ -86,14 +86,6 @@ class TraceSQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
                 """
             )
-            # 兼容性清洗：将历史旧记录中出现的 'auto'/'default' 等未决平台标记归一化为真实默认平台 'qq'
-            conn.execute(
-                """
-                UPDATE analysis_traces
-                SET platform = 'qq'
-                WHERE platform IN ('auto', 'default', 'all', '', 'none') OR platform IS NULL;
-                """
-            )
 
     def save_trace(self, trace_dict: dict[str, Any]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
@@ -287,30 +279,54 @@ class TraceSQLiteStore:
             reconciled_count = cursor.rowcount
             return reconciled_count
 
+    def reconcile_platform_identities(self, current_platform_ids: list[str]) -> None:
+        """根据当前 AstrBot 活跃平台实例列表，将历史遗留的旧协议名/占位符更新为规范的实例 ID"""
+        if not current_platform_ids:
+            return
+        primary_id = current_platform_ids[0]
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE analysis_traces
+                SET platform = ?
+                WHERE platform IN ('qq', 'onebot', 'aiocqhttp', 'auto', 'default', 'none', '') OR platform IS NULL
+                """,
+                (primary_id,),
+            )
+
     def get_distinct_groups(self) -> list[dict[str, str]]:
-        """获取所有有历史分析记录的唯一群组列表（按 group_id 聚合，优先保留有效名称并附带最新平台）"""
+        """获取所有有历史分析记录的唯一群组列表（按 group_id 分组，取每个群最新一次运行的群名与平台标识）"""
         with self._get_connection() as conn:
             rows = conn.execute(
                 """
-                SELECT group_id,
+                WITH ranked_traces AS (
+                    SELECT group_id,
+                           group_name,
+                           platform,
+                           started_at,
+                           ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY started_at DESC) AS rn
+                    FROM analysis_traces
+                    WHERE group_id != ''
+                )
+                SELECT r.group_id,
                        COALESCE(
-                           NULLIF(MAX(CASE WHEN group_name != '' AND group_name NOT LIKE '群 %' AND group_name != '未知群' THEN group_name END), ''),
-                           NULLIF(MAX(group_name), ''),
-                           group_id
+                           NULLIF(r.group_name, ''),
+                           NULLIF(r.group_name, '未知群'),
+                           (SELECT group_name FROM analysis_traces WHERE group_id = r.group_id AND group_name != '' AND group_name != '未知群' ORDER BY started_at DESC LIMIT 1),
+                           r.group_id
                        ) AS group_name,
-                       MAX(platform) AS platform,
-                       MAX(started_at) AS last_seen
-                FROM analysis_traces
-                WHERE group_id != ''
-                GROUP BY group_id
-                ORDER BY last_seen DESC
+                       r.platform,
+                       r.started_at AS last_seen
+                FROM ranked_traces r
+                WHERE r.rn = 1
+                ORDER BY r.started_at DESC;
                 """
             ).fetchall()
             return [
                 {
                     "group_id": str(r["group_id"]),
                     "group_name": str(r["group_name"]),
-                    "platform": str(r["platform"] or "qq"),
+                    "platform": str(r["platform"] or ""),
                 }
                 for r in rows
             ]

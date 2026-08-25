@@ -282,8 +282,8 @@ class PluginPageWebUIBridge:
                     analysis_result = result.get("analysis_result")
                     adapter = result.get("adapter")
                     dispatch_platform_id = (
-                        getattr(adapter, "platform_name", None)
-                        or getattr(adapter, "platform_id", None)
+                        getattr(adapter, "platform_id", None)
+                        or getattr(adapter, "platform_name", None)
                         or (
                             platform
                             if platform and platform not in ("all", "auto", "default")

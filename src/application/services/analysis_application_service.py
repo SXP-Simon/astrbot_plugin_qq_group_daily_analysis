@@ -232,17 +232,17 @@ class AnalysisApplicationService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            # 确立并回填实际运行的真实平台标识 (Real Platform Identity)
+            # 确立并回填实际运行的真实平台标识 (Real Platform Identity: 优先使用具体平台实例 ID 如 nuits)
             actual_platform = (
-                getattr(adapter, "platform_name", None)
-                or getattr(adapter, "platform_id", None)
+                getattr(adapter, "platform_id", None)
+                or getattr(adapter, "platform_name", None)
                 or (
                     platform_id
                     if platform_id and platform_id not in ("auto", "default", "all")
-                    else "unknown"
+                    else ""
                 )
             )
-            if trace:
+            if trace and actual_platform:
                 trace.platform = str(actual_platform)
 
             # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
