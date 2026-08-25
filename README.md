@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.5-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.6-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -87,11 +87,14 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
 ### 🎛️ WebUI 控制台
-- **内嵌 WebUI 管理面板**: 原生集成在 AstrBot 插件页面，提供数据密集型运行大盘与历史报告归档
-- **全链路阶段级打点 (Tracing)**: 基于 SQLite WAL 记录分析流水线各阶段毫秒级耗时，支持甘特图瀑布流与调用栈追溯
-- **30 天 Checkpoint 阶段快照**: 关键分析成果持久化，支持长程断点恢复与零 Token 成本切换模板重新渲染
-- **开机自愈与孤儿清理**: 崩溃对账扫描自愈，Task Reaper 守护协程自动强杀死锁孤儿
-- **上下文演进透视**: 实时洞察消息清洗漏斗、Token 账单消耗与分词留存率
+- **内嵌 WebUI 管理面板**: 原生集成在 AstrBot 插件管理页面，支持查看运行概览、分析记录与历史报告列表
+- **任务详情与报告关联**: 在任务详情中直接查看并下载生成的图片和 HTML 报告，支持在线预览；点击历史报告上的任务编号可直接查看对应的任务执行明细
+- **HTML 与图片报告预览**: 历史报告支持在线查看 HTML 页面或在新标签页独立打开，支持一键下载
+- **任务执行追踪**: 记录每次分析各阶段的耗时与状态，方便排查慢步骤或执行错误
+- **分析快照保存**: 支持保存分析中间结果，更换主题模板时无需重新调用大模型即可重新生成图片
+- **消息过滤与 Token 消耗统计**: 统一的搜索、群聊、状态和时间筛选栏，可按群查看清洗前后的消息数量及各模块消耗的 Token
+- **异常任务自动处理**: AstrBot 重启时自动标记并清理未正常结束的中断任务
+- **表格排版优化**: 超长文件名、群名和路径自动省略并支持悬浮查看完整内容，防止页面变形
 
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
