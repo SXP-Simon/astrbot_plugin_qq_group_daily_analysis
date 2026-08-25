@@ -13,6 +13,23 @@ export function formatTokens(tokens?: number): string {
   return tokens.toLocaleString();
 }
 
+/**
+ * 智能 Token 格式化：
+ * - 小于 100万 时完整显示千分位数值（如 16,292）
+ * - 达到或超过 100万 时紧凑显示 M（如 1.25M）
+ * - 达到或超过 10亿 时紧凑显示 B（如 2.50B）
+ */
+export function formatSmartTokens(tokens?: number): string {
+  if (tokens === undefined || tokens === null) return "-";
+  if (tokens >= 1_000_000_000) {
+    return `${(tokens / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(2)}M`;
+  }
+  return tokens.toLocaleString();
+}
+
 export function formatCost(costUsd?: number): string {
   if (costUsd === undefined || costUsd === null) return "$0.00";
   return `$${costUsd.toFixed(4)}`;
