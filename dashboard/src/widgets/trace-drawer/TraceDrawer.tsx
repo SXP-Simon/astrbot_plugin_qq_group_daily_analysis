@@ -75,7 +75,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
       width={640}
       onClose={onClose}
       open={open}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 0" }}>
