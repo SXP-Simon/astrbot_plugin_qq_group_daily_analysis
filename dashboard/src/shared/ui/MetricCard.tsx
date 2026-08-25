@@ -1,5 +1,5 @@
 import React from "react";
-import { Card, Statistic } from "antd";
+import { Card, Statistic, Skeleton } from "antd";
 
 interface MetricCardProps {
   title: string;
@@ -23,7 +23,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   return (
     <Card
       size="small"
-      style={{ minHeight: 88, height: "100%", display: "flex", flexDirection: "column" }}
+      style={{ minHeight: 90, height: "100%", display: "flex", flexDirection: "column" }}
       bodyStyle={{
         padding: "10px 14px",
         height: "100%",
@@ -36,8 +36,6 @@ export const MetricCard: React.FC<MetricCardProps> = ({
     >
       <div
         style={{
-          opacity: loading ? 0.6 : 1,
-          transition: "opacity 0.2s ease-in-out",
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
@@ -45,19 +43,29 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           flex: 1,
         }}
       >
-        <Statistic
-          title={<span style={{ fontSize: 12, color: "#8c8c8c", lineHeight: "18px" }}>{title}</span>}
-          value={value}
-          prefix={prefix}
-          suffix={suffix}
-          valueStyle={{
-            fontSize: 18,
-            fontWeight: 600,
-            fontFamily: "monospace",
-            lineHeight: "24px",
-            ...valueStyle,
-          }}
-        />
+        <div style={{ fontSize: 12, color: "#8c8c8c", lineHeight: "18px", marginBottom: 2 }}>
+          {title}
+        </div>
+
+        {loading ? (
+          <div style={{ margin: "3px 0 2px 0" }}>
+            <Skeleton.Input active size="small" style={{ width: "70%", height: 22, minWidth: 64, borderRadius: 4 }} />
+          </div>
+        ) : (
+          <Statistic
+            value={value}
+            prefix={prefix}
+            suffix={suffix}
+            valueStyle={{
+              fontSize: 18,
+              fontWeight: 600,
+              fontFamily: "monospace",
+              lineHeight: "24px",
+              ...valueStyle,
+            }}
+          />
+        )}
+
         <div
           style={{
             marginTop: 4,
@@ -70,7 +78,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             textOverflow: "ellipsis",
           }}
         >
-          {subTitle || "\u00A0"}
+          {loading ? (
+            <Skeleton.Input active size="small" style={{ width: "88%", height: 12, borderRadius: 2 }} />
+          ) : (
+            subTitle || "\u00A0"
+          )}
         </div>
       </div>
     </Card>
