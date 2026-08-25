@@ -3,14 +3,15 @@ import { Card, Empty } from "antd";
 import ReactECharts from "echarts-for-react";
 import { PieChartOutlined } from "@ant-design/icons";
 import { TokenUsage } from "../../entities/trace/model/types";
-
 import { formatTokens } from "../../shared/lib/formatters";
+import { useTheme } from "../../shared/lib/useTheme";
 
 interface TokenChartWidgetProps {
   tokenUsage: TokenUsage;
 }
 
 export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }) => {
+  const { isDark } = useTheme();
   const perAnalyzer = tokenUsage.per_analyzer || {};
 
   const analyzerLabels: Record<string, string> = {
@@ -35,11 +36,11 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
   const pieOption = {
     tooltip: {
       trigger: "item",
-      backgroundColor: "rgba(255, 255, 255, 0.96)",
-      borderColor: "#f0f0f0",
+      backgroundColor: isDark ? "rgba(24, 24, 28, 0.96)" : "rgba(255, 255, 255, 0.96)",
+      borderColor: isDark ? "#383838" : "#f0f0f0",
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: "#262626", fontSize: 12 },
+      textStyle: { color: isDark ? "#e6edf3" : "#262626", fontSize: 12 },
       formatter: (params: {
         name: string;
         value: number;
@@ -60,13 +61,13 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
         return `
           <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
             <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${color};"></span>
-            <span style="font-weight: 600; font-size: 13px;">${name}</span>
+            <span style="font-weight: 600; font-size: 13px; color: ${isDark ? "#ffffff" : "#262626"};">${name}</span>
           </div>
-          <div style="color: #595959; font-size: 12px; margin-bottom: 4px;">
-            总消耗: <span style="font-weight: 600; color: #722ed1;">${total}</span> (${percent}%)
+          <div style="color: ${isDark ? "#bfbfbf" : "#595959"}; font-size: 12px; margin-bottom: 4px;">
+            总消耗: <span style="font-weight: 600; color: #9254de;">${total}</span> (${percent}%)
           </div>
-          <div style="color: #8c8c8c; font-size: 11px; padding-top: 4px; border-top: 1px dashed #f0f0f0;">
-            输入: <span style="color: #595959;">${prompt}</span> / 输出: <span style="color: #595959;">${completion}</span>
+          <div style="color: ${isDark ? "#8c8c8c" : "#8c8c8c"}; font-size: 11px; padding-top: 4px; border-top: 1px dashed ${isDark ? "#383838" : "#f0f0f0"};">
+            输入: <span style="color: ${isDark ? "#d9d9d9" : "#595959"};">${prompt}</span> / 输出: <span style="color: ${isDark ? "#d9d9d9" : "#595959"};">${completion}</span>
           </div>
         `;
       },
@@ -74,7 +75,7 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
     legend: {
       bottom: "0%",
       left: "center",
-      textStyle: { fontSize: 11 },
+      textStyle: { fontSize: 11, color: isDark ? "#e6edf3" : "#595959" },
     },
     series: [
       {
@@ -84,7 +85,7 @@ export const TokenChartWidget: React.FC<TokenChartWidgetProps> = ({ tokenUsage }
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 4,
-          borderColor: "#fff",
+          borderColor: isDark ? "#141414" : "#fff",
           borderWidth: 2,
         },
         label: { show: false },

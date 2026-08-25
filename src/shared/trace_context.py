@@ -226,7 +226,9 @@ class TraceContext:
             try:
                 _global_trace_store.save_trace(self.to_dict())
             except Exception as e:
-                logging.getLogger(__name__).warning(f"Trace 持久化保存失败: {e}")
+                from ..utils.logger import logger
+
+                logger.warning(f"Trace 持久化保存失败: {e}")
 
     def to_dict(self) -> dict[str, Any]:
         """将完整链路快照序列化为字典"""

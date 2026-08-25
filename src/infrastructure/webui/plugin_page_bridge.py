@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -40,10 +39,9 @@ except (ImportError, AttributeError):
 
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
+from ...utils.logger import logger
 from ..persistence.trace_sqlite_store import TraceSQLiteStore
 from .active_task_manager import ActiveTaskManager
-
-logger = logging.getLogger(__name__)
 
 
 class PluginPageWebUIBridge:
@@ -131,6 +129,25 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "SSE stream for real-time task progress events",
             ),
+            # 6. 插件专属日志
+            (
+                f"/{PLUGIN_NAME}/logs",
+                self.api_get_plugin_logs,
+                ["GET"],
+                "Get plugin live logs with filters",
+            ),
+            (
+                f"/{PLUGIN_NAME}/traces/<trace_id>/logs",
+                self.api_get_trace_logs,
+                ["GET"],
+                "Get execution logs for a specific trace",
+            ),
+            (
+                f"/{PLUGIN_NAME}/logs/clear",
+                self.api_clear_plugin_logs,
+                ["POST"],
+                "Clear in-memory plugin log buffer",
+            ),
         ]
 
         for path, handler, methods, desc in routes:
@@ -138,6 +155,25 @@ class PluginPageWebUIBridge:
                 self.context.register_web_api(path, handler, methods, desc)
             except Exception as e:
                 logger.error(f"注册 Web API 路由 {path} 失败: {e}")
+
+        # 挂载日志流至 SSE 广播通道，实现毫秒级实时日志推送
+        try:
+            from ..logging.plugin_log_buffer import global_log_buffer
+
+            def _forward_log_to_sse(entry: Any) -> None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        self.active_task_manager._broadcast_event(
+                            {"event": "log_entry", "data": entry.to_dict()}
+                        )
+                    )
+                except RuntimeError:
+                    pass
+
+            global_log_buffer.register_listener(_forward_log_to_sse)
+        except Exception as e:
+            logger.warning(f"挂载日志 SSE 监听器失败: {e}")
 
     async def api_get_active_tasks(self) -> Any:
         """获取当前正在执行的任务列表"""
@@ -481,3 +517,86 @@ class PluginPageWebUIBridge:
                 self.active_task_manager.unsubscribe(q)
 
         return stream_response(sse_generator())
+
+    async def api_get_plugin_logs(self) -> Any:
+        """获取群分析专属日志列表"""
+        try:
+            limit = (
+                int(request.query.get("limit", 100))
+                if request and hasattr(request, "query")
+                else 100
+            )
+            offset = (
+                int(request.query.get("offset", 0))
+                if request and hasattr(request, "query")
+                else 0
+            )
+            level = (
+                request.query.get("level")
+                if request and hasattr(request, "query")
+                else None
+            )
+            trace_id = (
+                request.query.get("trace_id")
+                if request and hasattr(request, "query")
+                else None
+            )
+            tag = (
+                request.query.get("tag")
+                if request and hasattr(request, "query")
+                else None
+            )
+            search = (
+                request.query.get("search")
+                if request and hasattr(request, "query")
+                else None
+            )
+
+            from ..logging.plugin_log_buffer import global_log_buffer
+
+            items, total = global_log_buffer.query(
+                limit=limit,
+                offset=offset,
+                level=level,
+                trace_id=trace_id,
+                tag=tag,
+                search=search,
+            )
+            tags = [
+                {"key": t[0], "label": t[1]} for t in global_log_buffer.TAG_PATTERNS
+            ]
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "items": items,
+                        "total": total,
+                        "available_tags": tags,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"查询插件日志异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_trace_logs(self, trace_id: str) -> Any:
+        """获取指定 TraceID 的专属执行日志"""
+        try:
+            from ..logging.plugin_log_buffer import global_log_buffer
+
+            logs = global_log_buffer.get_trace_logs(trace_id)
+            return json_response({"status": "ok", "data": logs})
+        except Exception as e:
+            logger.error(f"查询 Trace 日志异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_plugin_logs(self) -> Any:
+        """清空内存中的插件日志"""
+        try:
+            from ..logging.plugin_log_buffer import global_log_buffer
+
+            global_log_buffer.clear()
+            return json_response({"status": "ok", "message": "Logs cleared"})
+        except Exception as e:
+            logger.error(f"清空插件日志异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
