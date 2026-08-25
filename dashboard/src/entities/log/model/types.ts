@@ -29,7 +29,7 @@ export const TAG_STYLE_MAP: Record<string, { label: string; color: string }> = {
   Telegram: { label: "Telegram平台", color: "geekblue" },
   Scheduler: { label: "定时与调度", color: "green" },
   Resilience: { label: "容错与重试", color: "lime" },
-  Render: { label: "报告与长图", color: "magenta" },
+  Render: { label: "报告与长图", color: "cyan" },
   WebUI: { label: "控制台交互", color: "processing" },
   Trace: { label: "链路追踪", color: "purple" },
 };

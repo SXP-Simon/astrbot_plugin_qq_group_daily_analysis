@@ -1,5 +1,5 @@
 import React from "react";
-import { Table, Tag, Tooltip, Progress, Button } from "antd";
+import { Table, Tag, Tooltip, Progress, Button, Skeleton, Empty } from "antd";
 import type { TablePaginationConfig } from "antd/es/table";
 import type { FilterValue, SorterResult } from "antd/es/table/interface";
 import { EyeOutlined } from "@ant-design/icons";
@@ -128,7 +128,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       defaultSortOrder: "descend" as const,
       render: (ts: number) => (
         <Tooltip title={`记录时间戳: ${ts}`}>
-          <span className="font-mono text-xs" style={{ color: "#595959" }}>
+          <span className="font-mono text-xs">
             {formatTimestamp(ts)}
           </span>
         </Tooltip>
@@ -151,22 +151,46 @@ export const TraceTable: React.FC<TraceTableProps> = ({
     },
   ];
 
+  if (loading && traces.length === 0) {
+    return (
+      <div style={{ padding: "24px 12px", minHeight: 460 }}>
+        <Skeleton
+          active
+          paragraph={{
+            rows: 8,
+            width: ["100%", "95%", "90%", "100%", "92%", "96%", "85%", "70%"],
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <Table
-      size="small"
-      columns={columns}
-      dataSource={traces}
-      rowKey="trace_id"
-      loading={loading}
-      onChange={onTableChange}
-      pagination={{
-        current: page,
-        pageSize: pageSize,
-        total: total,
-        showSizeChanger: true,
-        pageSizeOptions: ["10", "15", "20", "50", "100"],
-        showTotal: (t) => `共 ${t} 条记录`,
-      }}
-    />
+    <div style={{ minHeight: 460 }}>
+      {traces.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="暂无符合条件的分析记录"
+          style={{ margin: "64px 0" }}
+        />
+      ) : (
+        <Table
+          size="small"
+          columns={columns}
+          dataSource={traces}
+          rowKey="trace_id"
+          loading={loading}
+          onChange={onTableChange}
+          pagination={{
+            current: page,
+            pageSize: pageSize,
+            total: total,
+            showSizeChanger: true,
+            pageSizeOptions: ["10", "15", "20", "50", "100"],
+            showTotal: (t) => `共 ${t} 条记录`,
+          }}
+        />
+      )}
+    </div>
   );
 };
