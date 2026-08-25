@@ -70,7 +70,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 fontSize: 12,
               }}
             >
-              <Text type="secondary">文件路径：</Text>
+              <Text type="secondary">服务器/容器文件路径：</Text>
               <Text
                 copyable
                 style={{
