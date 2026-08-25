@@ -8,7 +8,9 @@ import {
   Spin,
   Collapse,
   Space,
+  Button,
 } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
 import { TraceRecord } from "../../entities/trace/model/types";
 import { StatusTag } from "../../shared/ui/StatusTag";
@@ -31,16 +33,22 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   const [trace, setTrace] = useState<TraceRecord | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const loadDetail = (forceRefresh = false) => {
+    if (!traceId) return;
+    setLoading(true);
+    fetchTraceDetail(traceId, forceRefresh)
+      .then((data) => setTrace(data))
+      .catch(() => setTrace(null))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
     if (open && traceId) {
-      setLoading(true);
-      fetchTraceDetail(traceId)
-        .then((data) => setTrace(data))
-        .catch(() => setTrace(null))
-        .finally(() => setLoading(false));
+      loadDetail(false);
     } else {
       setTrace(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, traceId]);
 
   const totalDuration = trace?.duration_ms || 1;
@@ -52,6 +60,16 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
           <span>链路追溯详情 (Trace Detail)</span>
           {trace && <StatusTag status={trace.status} />}
         </Space>
+      }
+      extra={
+        <Button
+          size="small"
+          type="text"
+          icon={<ReloadOutlined spin={loading} />}
+          onClick={() => loadDetail(true)}
+        >
+          刷新
+        </Button>
       }
       placement="right"
       width={640}

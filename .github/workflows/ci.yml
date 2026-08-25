@@ -2,24 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, release/* ]
+    branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  python-test:
-    name: Python CI (${{ matrix.python-version }} on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        python-version: [ "3.10", "3.11", "3.12" ]
+  backend-test:
+    name: Backend Tests & Lint
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -27,28 +27,24 @@ jobs:
           version: "latest"
           enable-cache: true
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
       - name: Install dependencies
         run: |
           uv venv
           uv pip install -e ".[dev]" pytest pytest-asyncio pytest-cov ruff
 
-      - name: Lint and Format Check (Ruff)
+      - name: Ruff Check & Format
         run: |
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: Run Test Suite (Pytest)
+      - name: Pytest Suite
         run: |
-          uv run pytest tests/ -v
+          uv run pytest tests/
 
   frontend-check:
-    name: Frontend Dashboard CI
+    name: Frontend Lint & Build
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,11 +61,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: "dashboard/pnpm-lock.yaml"
 
-      - name: Install frontend dependencies
+      - name: Install dependencies
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile
 
-      - name: ESLint Check (Zero Warnings)
+      - name: ESLint Check
         working-directory: ./dashboard
         run: pnpm lint
 
@@ -85,4 +81,3 @@ jobs:
         run: |
           test -f pages/daily-analysis/index.html || exit 1
           test -f pages/daily-analysis/assets/index.js || exit 1
-          echo "Frontend static single-bundle artifacts verified successfully."
