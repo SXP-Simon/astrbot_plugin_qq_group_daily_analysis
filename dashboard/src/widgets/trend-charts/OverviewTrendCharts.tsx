@@ -270,16 +270,40 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
   };
 
   // 3. 服务商消耗占比环形饼图 (Donut Chart Option)
-  const donutColors = [
-    "#2563eb",
-    "#3b82f6",
-    "#60a5fa",
-    "#93c5fd",
-    "#0284c7",
-    "#0ea5e9",
-    "#38bdf8",
-    "#64748b",
+  // 专业沉稳的调色板（支持动态扩展与循环）
+  const DONUT_PALETTE = [
+    "#2563eb", // 主蓝
+    "#0284c7", // 浅蓝
+    "#0d9488", // 青绿
+    "#16a34a", // 翠绿
+    "#7c3aed", // 紫罗兰
+    "#9333ea", // 紫色
+    "#ea580c", // 暖橙
+    "#0891b2", // 湖蓝
+    "#475569", // 蓝灰
+    "#94a3b8", // 浅灰（其他）
   ];
+
+  // 超过 7 个服务商时进行 Top 6 聚合，其余归入“其他服务商”，保证环形图始终清晰易读
+  const sortedProviders = [...providers].sort(
+    (a, b) => (b.total_tokens || 0) - (a.total_tokens || 0)
+  );
+
+  let pieDataList: { name: string; value: number }[] = [];
+  if (sortedProviders.length <= 7) {
+    pieDataList = sortedProviders.map((p) => ({
+      name: p.name,
+      value: p.total_tokens,
+    }));
+  } else {
+    const top6 = sortedProviders.slice(0, 6);
+    const others = sortedProviders.slice(6);
+    const otherTokens = others.reduce((acc, p) => acc + (p.total_tokens || 0), 0);
+    pieDataList = [
+      ...top6.map((p) => ({ name: p.name, value: p.total_tokens })),
+      { name: `其他服务商 (${others.length}个)`, value: otherTokens },
+    ];
+  }
 
   const pieChartOption = {
     backgroundColor: "transparent",
@@ -313,9 +337,8 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         fontFamily: "monospace",
       },
       formatter: (name: string) => {
-        const item = providers.find((p) => p.name === name);
         const shortName = name.length > 14 ? `${name.slice(0, 12)}...` : name;
-        return item ? `${shortName}` : name;
+        return shortName;
       },
     },
     series: [
@@ -333,10 +356,10 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         label: {
           show: false,
         },
-        data: providers.map((p, idx) => ({
-          name: p.name,
-          value: p.total_tokens,
-          itemStyle: { color: donutColors[idx % donutColors.length] },
+        data: pieDataList.map((item, idx) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: DONUT_PALETTE[idx % DONUT_PALETTE.length] },
         })),
       },
     ],
@@ -351,7 +374,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         background: isDark ? "#161b22" : "#ffffff",
         borderColor: isDark ? "#30363d" : "#e2e8f0",
       }}
-      bodyStyle={{ padding: "14px 16px" }}
+      styles={{ body: { padding: "14px 16px" } }}
     >
       {/* 顶部标题与时间跨度切换器 */}
       <div
