@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/当前版本-v5.0.7-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Plugin Version](https://img.shields.io/badge/当前版本-v5.0.8-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/Soulter/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
@@ -88,32 +88,44 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
 ### 🎛️ WebUI 控制台
-- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，支持查看运行概览、分析记录与历史报告列表
-- **报告浏览与主题切换**: 历史报告可直接在控制台在线预览（长图与 HTML 均支持），支持一键下载；也可免费切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已保存的分析数据，无需再次调用 AI，0 Token 成本
-- **任务与报告双向关联**: 在任务详情中可直接查看对应产生的所有报告文件；从历史报告中点击任务编号，可快速跳转到该次任务的执行明细，并且可快速查看和检索任务日志
-- **全流程可观测**: 每次分析任务（含群漫画）的各阶段耗时、大模型产出内容、Token 分布、子模块启停状态与异常原因均可在控制台查看，出了问题知道问题在哪
-- **数据统计与消耗追踪**: 按群、按时间、按状态多维筛选历史分析记录，查看消息清洗数量与各模块 Token 消耗分布
+- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供运行总览、分析记录、统计与消耗、历史报告、运行日志与配置中心六大板块
+- **插件配置中心**: 内置专属可视化配置界面，提供 12 个功能分组导航与即时搜索；支持已有人格与大模型服务商下拉点选、漫画参考图本地上传与灯箱预览，修改保存即时生效
+- **趋势分析与消耗看板**: 支持近48小时、近7天、近14天、近30天等不同时间跨度切换，直观呈现 API 请求走势、大模型 Tokens 消耗堆叠图与服务商消耗占比环形饼图
+- **报告浏览与主题重绘**: 历史报告支持长图与 HTML 在线预览及一键下载；支持切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已有数据，0 Token 成本
+- **时序事件时间线**: 在统计与消耗页面提供连续水平时间轴，支持鼠标拖拽平移与快速回溯历史样本，直观查看各群聊的消息清洗留存与模块消耗
+- **全流程可观测性与实时监控**: 运行中任务状态与步骤实时同步感知；任务详情中完整记录各分析阶段耗时、大模型 Prompt 审计、调用与渲染重试/降级链路，故障原因一目了然
+- **任务与报告双向关联**: 在任务详情中可直接查看对应产生的所有报告文件；从历史报告中点击任务编号，可快速跳转到该次任务的执行明细与日志
 - **异常任务自动清理**: AstrBot 重启时自动标记并清理未正常结束的中断任务，不留烂尾
 
 <table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>运行总览</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png" alt="运行总览" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>配置中心</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png" alt="配置中心" width="100%"></a>
+    </td>
+  </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>分析记录</b></p>
       <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情与断点续跑</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
+      <p><b>历史报告列表</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
-      <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
+      <p><b>任务执行详情与断点续跑</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
-      <p><b>历史报告列表</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
+      <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
     </td>
   </tr>
   <tr>
