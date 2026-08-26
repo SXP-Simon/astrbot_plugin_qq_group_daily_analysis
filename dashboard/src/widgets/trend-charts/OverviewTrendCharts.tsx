@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Card, Empty, Typography, Space, Radio, Tooltip } from "antd";
+import { Row, Col, Card, Empty, Typography, Space, Radio } from "antd";
 import ReactECharts from "echarts-for-react";
 import {
   AreaChartOutlined,
   BarChartOutlined,
-  ApartmentOutlined,
-  AppstoreOutlined,
+  PieChartOutlined,
 } from "@ant-design/icons";
 import {
   AnalyticsTrendsResponse,
   AnalyticsTrendPoint,
   ProviderBreakdownItem,
-  ModelBreakdownItem,
 } from "../../entities/metric/model/types";
 import { fetchAnalyticsTrends } from "../../entities/metric/api/metricApi";
 import { formatTokens, formatSmartTokens } from "../../shared/lib/formatters";
@@ -76,8 +74,9 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
   };
 
   const points: AnalyticsTrendPoint[] = trendData?.points || [];
-  const providers: ProviderBreakdownItem[] = trendData?.provider_breakdown || [];
-  const models: ModelBreakdownItem[] = trendData?.model_breakdown || [];
+  const providers: ProviderBreakdownItem[] = (trendData?.provider_breakdown || []).filter(
+    (p) => p.total_tokens > 0 || p.request_count > 0
+  );
 
   const hasData = points.length > 0;
   const dates = points.map((t) => t.date);
@@ -99,7 +98,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       borderWidth: 1,
       padding: [8, 12],
       textStyle: { color: isDark ? "#c9d1d9" : "#1e293b", fontSize: 12 },
-      formatter: (params: Array<{ dataIndex: number; value: number }>) => {
+      formatter: (params: Array<{ dataIndex: number }>) => {
         if (!params || params.length === 0) return "";
         const idx = params[0].dataIndex;
         const item = points[idx];
@@ -137,7 +136,6 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     },
     yAxis: {
       type: "value",
-      minInterval: 1,
       splitLine: {
         lineStyle: {
           color: isDark ? "#21262d" : "#f1f5f9",
@@ -202,7 +200,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           <div style="font-weight: 600; font-family: monospace; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#0f172a"};">
             ${item.date_full || item.date}
           </div>
-          <div style="font-size: 12px; color: #7c3aed; margin-bottom: 3px;">
+          <div style="font-size: 12px; color: #2563eb; margin-bottom: 3px;">
             总消耗: <b style="font-family: monospace;">${formatTokens(item.total_tokens)}</b>
           </div>
           <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
@@ -249,25 +247,97 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     },
     series: [
       {
-        name: "输入 Tokens",
+        name: "输入 Tokens (Prompt)",
         type: "bar",
         stack: "tokens",
-        barMaxWidth: 16,
-        itemStyle: {
-          color: "#7c3aed",
-        },
         data: promptTokens,
+        itemStyle: {
+          color: "#2563eb",
+          borderRadius: [0, 0, 0, 0],
+        },
       },
       {
-        name: "输出 Tokens",
+        name: "输出 Tokens (Completion)",
         type: "bar",
         stack: "tokens",
-        barMaxWidth: 16,
-        itemStyle: {
-          color: "#a78bfa",
-          borderRadius: [2, 2, 0, 0],
-        },
         data: completionTokens,
+        itemStyle: {
+          color: "#60a5fa",
+          borderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+  };
+
+  // 3. 服务商消耗占比环形饼图 (Donut Chart Option)
+  const donutColors = [
+    "#2563eb",
+    "#3b82f6",
+    "#60a5fa",
+    "#93c5fd",
+    "#0284c7",
+    "#0ea5e9",
+    "#38bdf8",
+    "#64748b",
+  ];
+
+  const pieChartOption = {
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "item",
+      backgroundColor: isDark ? "rgba(22, 27, 34, 0.96)" : "rgba(255, 255, 255, 0.98)",
+      borderColor: isDark ? "#30363d" : "#e2e8f0",
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: isDark ? "#c9d1d9" : "#1e293b", fontSize: 12 },
+      formatter: (params: { name: string; value: number; percent: number }) => {
+        return `
+          <div style="font-weight: 600; font-family: monospace; font-size: 12px; margin-bottom: 4px; color: ${isDark ? "#ffffff" : "#0f172a"};">
+            ${params.name}
+          </div>
+          <div style="font-size: 11px; color: #2563eb;">
+            消耗: <b>${formatSmartTokens(params.value)}</b> Tokens (${params.percent}%)
+          </div>
+        `;
+      },
+    },
+    legend: {
+      orient: "vertical",
+      right: 4,
+      top: "center",
+      itemWidth: 8,
+      itemHeight: 8,
+      textStyle: {
+        color: isDark ? "#8b949e" : "#64748b",
+        fontSize: 11,
+        fontFamily: "monospace",
+      },
+      formatter: (name: string) => {
+        const item = providers.find((p) => p.name === name);
+        const shortName = name.length > 14 ? `${name.slice(0, 12)}...` : name;
+        return item ? `${shortName}` : name;
+      },
+    },
+    series: [
+      {
+        name: "消耗分布",
+        type: "pie",
+        radius: ["48%", "72%"],
+        center: ["36%", "50%"],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 3,
+          borderColor: isDark ? "#161b22" : "#ffffff",
+          borderWidth: 2,
+        },
+        label: {
+          show: false,
+        },
+        data: providers.map((p, idx) => ({
+          name: p.name,
+          value: p.total_tokens,
+          itemStyle: { color: donutColors[idx % donutColors.length] },
+        })),
       },
     ],
   };
@@ -277,39 +347,54 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
   return (
     <Card
       size="small"
-      title={
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <Space size={6}>
-            <AreaChartOutlined style={{ color: "#2563eb" }} />
-            <Text strong style={{ fontSize: 13, letterSpacing: "-0.2px" }}>
-              分析行为与 Token 消耗可观测趋势
-            </Text>
-          </Space>
-
-          {/* 紧凑型时间跨度切换控制器 (符合 Data-Dense 设计规范) */}
-          <Radio.Group
-            size="small"
-            value={selectedRange}
-            onChange={(e) => handleRangeChange(e.target.value as RangeOption)}
-            buttonStyle="solid"
-          >
-            <Radio.Button value="48h" style={{ fontSize: 12 }}>近48小时</Radio.Button>
-            <Radio.Button value="7d" style={{ fontSize: 12 }}>近7天</Radio.Button>
-            <Radio.Button value="14d" style={{ fontSize: 12 }}>近14天</Radio.Button>
-            <Radio.Button value="30d" style={{ fontSize: 12 }}>近30天</Radio.Button>
-          </Radio.Group>
-        </div>
-      }
+      style={{
+        background: isDark ? "#161b22" : "#ffffff",
+        borderColor: isDark ? "#30363d" : "#e2e8f0",
+      }}
+      bodyStyle={{ padding: "14px 16px" }}
     >
-      <Row gutter={[12, 12]}>
-        {/* API 请求次数面积图 */}
-        <Col xs={24} md={12}>
+      {/* 顶部标题与时间跨度切换器 */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <Space size={6} align="center">
+          <AreaChartOutlined style={{ color: "#2563eb", fontSize: 13 }} />
+          <Text strong style={{ fontSize: 13, letterSpacing: "-0.2px", color: isDark ? "#c9d1d9" : "#1e293b" }}>
+            分析行为与 Token 消耗可观测趋势
+          </Text>
+        </Space>
+
+        <Radio.Group
+          size="small"
+          value={selectedRange}
+          onChange={(e) => handleRangeChange(e.target.value)}
+          buttonStyle="solid"
+        >
+          <Radio.Button value="48h" style={{ fontSize: 12 }}>近48小时</Radio.Button>
+          <Radio.Button value="7d" style={{ fontSize: 12 }}>近7天</Radio.Button>
+          <Radio.Button value="14d" style={{ fontSize: 12 }}>近14天</Radio.Button>
+          <Radio.Button value="30d" style={{ fontSize: 12 }}>近30天</Radio.Button>
+        </Radio.Group>
+      </div>
+
+      {/* 趋势图表三大矩阵：请求次数面积图 + Token 柱状图 + 服务商占比环形图 */}
+      <Row gutter={[16, 16]}>
+        {/* 1. API 请求次数趋势图 */}
+        <Col xs={24} lg={8}>
           <div
             style={{
-              padding: "8px 12px",
-              background: isDark ? "#161b22" : "#f8fafc",
-              borderRadius: 4,
-              border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+              padding: "10px 12px",
+              background: isDark ? "#0d1117" : "#f8fafc",
+              border: `1px solid ${isDark ? "#21262d" : "#e2e8f0"}`,
+              borderRadius: 6,
+              height: "100%",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -317,8 +402,8 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
                 <AreaChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                 API 请求次数
               </Text>
-              <Text strong className="font-mono" style={{ fontSize: 13, color: "#2563eb" }}>
-                {rangeTotalRequests > 0 ? rangeTotalRequests.toLocaleString() : totalTraces.toLocaleString()} 次
+              <Text strong className="font-mono" style={{ fontSize: 12, color: "#2563eb" }}>
+                {rangeTotalRequests > 0 ? `${rangeTotalRequests} 次` : `${totalTraces} 次`}
               </Text>
             </div>
 
@@ -339,22 +424,23 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           </div>
         </Col>
 
-        {/* Tokens 消耗柱状图 */}
-        <Col xs={24} md={12}>
+        {/* 2. Tokens 消耗趋势图 */}
+        <Col xs={24} lg={8}>
           <div
             style={{
-              padding: "8px 12px",
-              background: isDark ? "#161b22" : "#f8fafc",
-              borderRadius: 4,
-              border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+              padding: "10px 12px",
+              background: isDark ? "#0d1117" : "#f8fafc",
+              border: `1px solid ${isDark ? "#21262d" : "#e2e8f0"}`,
+              borderRadius: 6,
+              height: "100%",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
-                <BarChartOutlined style={{ color: "#7c3aed", marginRight: 6 }} />
+                <BarChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                 Tokens 消耗趋势
               </Text>
-              <Text strong className="font-mono" style={{ fontSize: 13, color: "#7c3aed" }}>
+              <Text strong className="font-mono" style={{ fontSize: 12, color: "#2563eb" }}>
                 {rangeTotalTokens > 0 ? formatSmartTokens(rangeTotalTokens) : formatSmartTokens(totalTokens)}
               </Text>
             </div>
@@ -375,78 +461,45 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
             )}
           </div>
         </Col>
+
+        {/* 3. 服务商消耗占比环形图 */}
+        <Col xs={24} lg={8}>
+          <div
+            style={{
+              padding: "10px 12px",
+              background: isDark ? "#0d1117" : "#f8fafc",
+              border: `1px solid ${isDark ? "#21262d" : "#e2e8f0"}`,
+              borderRadius: 6,
+              height: "100%",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                <PieChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
+                服务商消耗占比
+              </Text>
+              <Text strong className="font-mono" style={{ fontSize: 12, color: "#64748b" }}>
+                {providers.length} 个渠道
+              </Text>
+            </div>
+
+            {providers.length > 0 ? (
+              <ReactECharts
+                option={pieChartOption}
+                style={{ height: 160, width: "100%" }}
+                opts={{ renderer: "svg" }}
+                showLoading={currentLoading}
+              />
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无服务商消耗分布"
+                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
+              />
+            )}
+          </div>
+        </Col>
       </Row>
-
-      {/* 服务商 (Provider) 与模型 (Model ID) 细粒度审计统计条 (Data Dense 紧凑设计) */}
-      {(providers.length > 0 || models.length > 0) && (
-        <div
-          style={{
-            marginTop: 10,
-            paddingTop: 8,
-            borderTop: `1px solid ${isDark ? "#21262d" : "#f1f5f9"}`,
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 10,
-          }}
-        >
-          {/* 服务商分布 */}
-          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#8b949e" : "#64748b", display: "inline-flex", alignItems: "center" }}>
-              <ApartmentOutlined style={{ marginRight: 4 }} />
-              服务商:
-            </span>
-            {providers.map((p) => (
-              <Tooltip key={p.name} title={`请求次数: ${p.request_count} 次`}>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "1px 6px",
-                    fontSize: 11,
-                    fontFamily: "monospace",
-                    borderRadius: 3,
-                    border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
-                    background: isDark ? "#161b22" : "#ffffff",
-                    color: isDark ? "#c9d1d9" : "#1e293b",
-                  }}
-                >
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#0284c7", marginRight: 4 }} />
-                  {p.name}: <b style={{ marginLeft: 3 }}>{formatSmartTokens(p.total_tokens)}</b>
-                </span>
-              </Tooltip>
-            ))}
-          </div>
-
-          {/* 模型分布 */}
-          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#8b949e" : "#64748b", display: "inline-flex", alignItems: "center" }}>
-              <AppstoreOutlined style={{ marginRight: 4 }} />
-              模型:
-            </span>
-            {models.map((m) => (
-              <span
-                key={m.name}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "1px 6px",
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  borderRadius: 3,
-                  border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
-                  background: isDark ? "#161b22" : "#ffffff",
-                  color: isDark ? "#c9d1d9" : "#1e293b",
-                }}
-              >
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9333ea", marginRight: 4 }} />
-                {m.name}: <b style={{ marginLeft: 3 }}>{formatSmartTokens(m.total_tokens)}</b>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </Card>
   );
 };
