@@ -135,6 +135,12 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get available LLM providers list",
             ),
+            (
+                f"/{PLUGIN_NAME}/personas",
+                self.api_get_personas,
+                ["GET"],
+                "Get available AstrBot personas list",
+            ),
             # 4. 历史产物
             (
                 f"/{PLUGIN_NAME}/reports/history",
@@ -746,6 +752,49 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": providers})
         except Exception as e:
             logger.error(f"获取 Provider 列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_personas(self) -> Any:
+        """获取当前 AstrBot 中配置的所有人格 (Persona) 列表"""
+        try:
+            personas: list[dict[str, Any]] = []
+            seen_ids = set()
+            pm = getattr(self.context, "persona_manager", None)
+            if pm:
+                # 1. 优先读取 v3 personas
+                for p in getattr(pm, "personas_v3", []) or []:
+                    p_name = (
+                        p.get("name")
+                        if isinstance(p, dict)
+                        else getattr(p, "name", None)
+                    )
+                    if p_name and p_name not in seen_ids:
+                        seen_ids.add(p_name)
+                        personas.append(
+                            {
+                                "id": str(p_name),
+                                "name": str(p_name),
+                                "label": str(p_name),
+                            }
+                        )
+                # 2. 读取持久化 DB personas
+                for p in getattr(pm, "personas", []) or []:
+                    p_id = getattr(p, "persona_id", None) or getattr(p, "name", None)
+                    p_name = getattr(p, "name", None) or p_id
+                    if p_id and p_id not in seen_ids:
+                        seen_ids.add(p_id)
+                        personas.append(
+                            {
+                                "id": str(p_id),
+                                "name": str(p_name),
+                                "label": f"{p_name} ({p_id})"
+                                if p_name != p_id
+                                else str(p_name),
+                            }
+                        )
+            return json_response({"status": "ok", "data": personas})
+        except Exception as e:
+            logger.error(f"获取 Persona 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_get_trace_detail(self, trace_id: str) -> Any:

@@ -185,7 +185,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 padding: 0,
                 fontSize: 11,
                 fontFamily:
-                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                 height: "auto",
               }}
             >

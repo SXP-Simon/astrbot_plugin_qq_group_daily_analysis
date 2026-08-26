@@ -113,7 +113,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({
           borderRadius: 6,
           padding: "10px 14px",
           fontFamily:
-            'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+            "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
           fontSize: 12,
           lineHeight: 1.6,
           height: "calc(100vh - 220px)",

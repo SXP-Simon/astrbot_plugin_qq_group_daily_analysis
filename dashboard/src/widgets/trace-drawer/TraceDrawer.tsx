@@ -294,7 +294,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                               style={{
                                 fontSize: 11,
                                 fontFamily:
-                                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                                 background: token.colorFillAlter,
                                 color: token.colorText,
                                 border: `1px solid ${token.colorBorderSecondary}`,

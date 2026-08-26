@@ -20,7 +20,10 @@ import {
   DownOutlined,
 } from "@ant-design/icons";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
-import { AvailableProvider } from "../../../entities/config/api/configApi";
+import {
+  AvailableProvider,
+  AvailablePersona,
+} from "../../../entities/config/api/configApi";
 import { FieldRenderer } from "./FieldRenderer";
 
 const { Text } = Typography;
@@ -30,6 +33,7 @@ interface TemplateListRendererProps {
   fieldSchema: SchemaFieldItem;
   value: unknown;
   providers?: AvailableProvider[];
+  personas?: AvailablePersona[];
   onChange: (val: unknown) => void;
 }
 
@@ -38,6 +42,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   fieldSchema,
   value,
   providers = [],
+  personas = [],
   onChange,
 }) => {
   const { token } = theme.useToken();
@@ -294,6 +299,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                           fieldSchema={subField}
                           value={item[subKey] !== undefined ? item[subKey] : subField.default}
                           providers={providers}
+                          personas={personas}
                           isSubField={true}
                           onChange={(newSubVal) =>
                             handleItemFieldChange(index, subKey, newSubVal)

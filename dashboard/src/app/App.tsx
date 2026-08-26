@@ -197,7 +197,7 @@ export const App: React.FC = () => {
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
           fontFamilyCode:
-            "SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace",
+            "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
         },
       }}
     >
