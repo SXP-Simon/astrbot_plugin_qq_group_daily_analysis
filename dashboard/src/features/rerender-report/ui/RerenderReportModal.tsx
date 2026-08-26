@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Modal, Form, Select, Radio, Alert, Space, Typography, message } from "antd";
 import { SkinOutlined } from "@ant-design/icons";
 import { ReportItem } from "../../../entities/report/model/types";
-import { rerenderReport } from "../../../entities/report/api/reportApi";
+import { fetchReportTemplates, rerenderReport } from "../../../entities/report/api/reportApi";
+import { formatTemplateOptions, ReportTemplateItem } from "../../../entities/report/model/templates";
 
 const { Text } = Typography;
 
@@ -21,8 +22,17 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   useEffect(() => {
+    if (open) {
+      setLoadingTemplates(true);
+      fetchReportTemplates()
+        .then((list) => setTemplates(list))
+        .catch(() => {})
+        .finally(() => setLoadingTemplates(false));
+    }
     if (open && report) {
       form.setFieldsValue({
         template_name: "scrapbook",
@@ -57,6 +67,8 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
     }
   };
 
+  const templateOptions = formatTemplateOptions(templates, false);
+
   return (
     <Modal
       title={
@@ -90,15 +102,8 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
           rules={[{ required: true, message: "请选择视觉主题模板" }]}
         >
           <Select
-            options={[
-              { label: "手账风格 (Scrapbook / 默认)", value: "scrapbook" },
-              { label: "亚托莉 (ATRI)", value: "ATRI" },
-              { label: "初音未来 (HatsuneMiku)", value: "HatsuneMiku" },
-              { label: "复古未来 (Retro Futurism)", value: "retro_futurism" },
-              { label: "黑客赛博 (Hack)", value: "hack" },
-              { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
-              { label: "极简黑白 (Simple)", value: "simple" },
-            ]}
+            loading={loadingTemplates}
+            options={templateOptions}
           />
         </Form.Item>
         <Form.Item

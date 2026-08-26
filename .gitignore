@@ -34,3 +34,4 @@ data/
 *.sqlite
 *.sqlite3
 traces.db
+tmp/reports/report_**_test_dispatch_span_**.jpg

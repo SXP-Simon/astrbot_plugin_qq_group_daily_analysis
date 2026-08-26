@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Modal, Alert, Form, Select, Space } from "antd";
 import { SyncOutlined, ApiOutlined, SkinOutlined } from "@ant-design/icons";
 import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
+import { fetchReportTemplates } from "../../../entities/report/api/reportApi";
+import { formatTemplateOptions, ReportTemplateItem } from "../../../entities/report/model/templates";
 
 interface ResumeTaskModalProps {
   open: boolean;
@@ -18,6 +20,8 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
 }) => {
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("auto");
   const [selectedTemplate, setSelectedTemplate] = useState("auto");
 
@@ -26,10 +30,15 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
       setSelectedProvider("auto");
       setSelectedTemplate("auto");
       setLoadingProviders(true);
+      setLoadingTemplates(true);
       fetchProviderList()
         .then((list) => setProviders(list))
         .catch(() => {})
         .finally(() => setLoadingProviders(false));
+      fetchReportTemplates()
+        .then((list) => setTemplates(list))
+        .catch(() => {})
+        .finally(() => setLoadingTemplates(false));
     }
   }, [open]);
 
@@ -39,6 +48,8 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
       selectedTemplate !== "auto" ? selectedTemplate : undefined
     );
   };
+
+  const templateOptions = formatTemplateOptions(templates, true);
 
   return (
     <Modal
@@ -102,16 +113,8 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
             <Select
               value={selectedTemplate}
               onChange={setSelectedTemplate}
-              options={[
-                { label: "跟随系统默认配置 (推荐)", value: "auto" },
-                { label: "手账风格 (Scrapbook)", value: "scrapbook" },
-                { label: "亚托莉 (ATRI)", value: "ATRI" },
-                { label: "初音未来 (HatsuneMiku)", value: "HatsuneMiku" },
-                { label: "复古未来 (Retro Futurism)", value: "retro_futurism" },
-                { label: "黑客赛博 (Hack)", value: "hack" },
-                { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
-                { label: "极简黑白 (Simple)", value: "simple" },
-              ]}
+              loading={loadingTemplates}
+              options={templateOptions}
             />
           </Form.Item>
         </Form>
