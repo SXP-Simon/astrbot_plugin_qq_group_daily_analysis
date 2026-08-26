@@ -244,6 +244,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                   {currentGroupFields.map((field) => {
                     const isLongField =
                       field.schema.type === "template_list" ||
+                      field.schema.type === "object" ||
                       field.schema.type === "list" ||
                       field.schema.type === "text" ||
                       field.key.includes("prompt") ||

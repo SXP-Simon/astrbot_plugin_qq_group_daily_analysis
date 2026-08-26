@@ -90,10 +90,61 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       );
     }
 
+    // 0.1 特殊结构：嵌套 object 对象（如 topic_analysis_prompts / user_title_analysis_prompts / golden_quote_analysis_prompts）
+    if (
+      type === "object" &&
+      fieldSchema.items &&
+      typeof fieldSchema.items === "object" &&
+      !Array.isArray(fieldSchema.items)
+    ) {
+      const subItems = fieldSchema.items as Record<string, SchemaFieldItem>;
+      const objVal =
+        typeof value === "object" && value !== null
+          ? (value as Record<string, unknown>)
+          : {};
+
+      return (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            width: "100%",
+          }}
+        >
+          {Object.entries(subItems).map(([subKey, subField]) => {
+            if (subField.invisible || subField.hidden) return null;
+            const subValue =
+              objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
+
+            return (
+              <FieldRenderer
+                key={subKey}
+                fieldKey={subKey}
+                fieldSchema={subField}
+                value={subValue}
+                providers={providers}
+                personas={personas}
+                isSubField={true}
+                onChange={(newSubVal) => {
+                  const nextObj = { ...objVal, [subKey]: newSubVal };
+                  onChange(nextObj);
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    }
+
     // 1. Provider 智能选择输入框 (支持选择已装配的 AstrBot Provider 或自由手输)
     if (isProviderField) {
       const currentVal =
-        value !== undefined ? String(value) : String(defaultValue ?? "");
+        typeof value === "string"
+          ? value
+          : typeof defaultValue === "string"
+          ? defaultValue
+          : "";
       const providerOptions = [
         {
           value: "",
@@ -135,7 +186,11 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     // 2. Persona 人设智能选择输入框 (支持选择 AstrBot 内部已定义人设或手输)
     if (isPersonaField) {
       const currentVal =
-        value !== undefined ? String(value) : String(defaultValue ?? "");
+        typeof value === "string"
+          ? value
+          : typeof defaultValue === "string"
+          ? defaultValue
+          : "";
       const personaOptions = [
         {
           value: "",
@@ -207,7 +262,11 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     // 4. 单选下拉框 (带有 options 的 string)
     if (type === "string" && Array.isArray(options) && options.length > 0) {
       const currentVal =
-        value !== undefined ? String(value) : String(defaultValue ?? "");
+        typeof value === "string"
+          ? value
+          : typeof defaultValue === "string"
+          ? defaultValue
+          : "";
       return (
         <Select
           value={currentVal}
@@ -222,18 +281,23 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     }
 
     // 5. 纯文本 / 提示词模板 (text 或 multiline)
-    if (type === "text" || fieldKey.includes("template") || fieldKey.includes("prompt")) {
+    if (type === "text" || (type === "string" && (fieldKey.includes("template") || fieldKey.includes("prompt")))) {
       const currentVal =
-        value !== undefined ? String(value) : String(defaultValue ?? "");
+        typeof value === "string"
+          ? value
+          : typeof defaultValue === "string"
+          ? defaultValue
+          : "";
       return (
         <TextArea
           value={currentVal}
           onChange={(e) => onChange(e.target.value)}
-          autoSize={{ minRows: 2, maxRows: 8 }}
+          autoSize={{ minRows: 4, maxRows: 16 }}
           placeholder={hint || "请输入文本内容"}
           style={{
             fontFamily: SANS_MONO_FONT,
             fontSize: 12,
+            lineHeight: 1.6,
           }}
         />
       );
