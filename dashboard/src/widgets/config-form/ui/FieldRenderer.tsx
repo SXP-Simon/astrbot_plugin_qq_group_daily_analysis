@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Form,
   Switch,
   InputNumber,
   Select,
@@ -17,19 +16,27 @@ import {
   PlusOutlined,
   UndoOutlined,
   ApartmentOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
-import { AvailableProvider } from "../../../entities/config/api/configApi";
+import {
+  AvailableProvider,
+  AvailablePersona,
+} from "../../../entities/config/api/configApi";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
+
+const SANS_MONO_FONT =
+  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace";
 
 interface FieldRendererProps {
   fieldKey: string;
   fieldSchema: SchemaFieldItem;
   value: unknown;
   providers?: AvailableProvider[];
+  personas?: AvailablePersona[];
   isSubField?: boolean;
   onChange: (val: unknown) => void;
 }
@@ -39,6 +46,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   fieldSchema,
   value,
   providers = [],
+  personas = [],
   isSubField = false,
   onChange,
 }) => {
@@ -59,6 +67,13 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       fieldKey.toLowerCase().includes("provider_id") ||
       fieldSchema._special === "select_provider");
 
+  // 2. 判断是否为 Persona 人设选择字段
+  const isPersonaField =
+    type === "string" &&
+    (fieldKey.toLowerCase().includes("persona") ||
+      fieldKey.toLowerCase().includes("persona_id") ||
+      fieldSchema._special === "select_persona");
+
   // 渲染不同的表单控件
   const renderControl = () => {
     // 0. 特殊结构：template_list (如 drawing_provider_overrides / comic_characters)
@@ -69,6 +84,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           fieldSchema={fieldSchema}
           value={value}
           providers={providers}
+          personas={personas}
           onChange={onChange}
         />
       );
@@ -76,7 +92,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
     // 1. Provider 智能选择输入框 (支持选择已装配的 AstrBot Provider 或自由手输)
     if (isProviderField) {
-      const currentVal = value !== undefined ? String(value) : String(defaultValue ?? "");
+      const currentVal =
+        value !== undefined ? String(value) : String(defaultValue ?? "");
       const providerOptions = [
         {
           value: "",
@@ -105,32 +122,92 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }
         >
           <Input
-            prefix={<ApartmentOutlined style={{ color: "#2563eb", marginRight: 4 }} />}
+            prefix={
+              <ApartmentOutlined style={{ color: "#2563eb", marginRight: 4 }} />
+            }
             allowClear
+            style={{ fontFamily: SANS_MONO_FONT }}
           />
         </AutoComplete>
       );
     }
 
-    // 2. 布尔类型开关 Switch
-    if (type === "bool") {
-      const boolVal = typeof value === "boolean" ? value : Boolean(defaultValue);
+    // 2. Persona 人设智能选择输入框 (支持选择 AstrBot 内部已定义人设或手输)
+    if (isPersonaField) {
+      const currentVal =
+        value !== undefined ? String(value) : String(defaultValue ?? "");
+      const personaOptions = [
+        {
+          value: "",
+          label: "（留空使用当前群聊会话/全局默认人设）",
+        },
+        ...personas.map((p) => ({
+          value: p.id,
+          label: `${p.name || p.id} [${p.id}]`,
+        })),
+      ];
+
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 32 }}>
+        <AutoComplete
+          value={currentVal}
+          options={personaOptions}
+          onChange={(v) => onChange(v)}
+          style={{ width: "100%" }}
+          placeholder="可从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
+          filterOption={(inputValue, option) =>
+            String(option?.label || "")
+              .toLowerCase()
+              .includes(inputValue.toLowerCase()) ||
+            String(option?.value || "")
+              .toLowerCase()
+              .includes(inputValue.toLowerCase())
+          }
+        >
+          <Input
+            prefix={
+              <UserOutlined style={{ color: "#7c3aed", marginRight: 4 }} />
+            }
+            allowClear
+            style={{ fontFamily: SANS_MONO_FONT }}
+          />
+        </AutoComplete>
+      );
+    }
+
+    // 3. 布尔类型开关 Switch
+    if (type === "bool") {
+      const boolVal =
+        typeof value === "boolean" ? value : Boolean(defaultValue);
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            minHeight: 32,
+          }}
+        >
           <Switch
             checked={boolVal}
             onChange={(checked) => onChange(checked)}
           />
-          <Text style={{ fontSize: 12, color: boolVal ? "#16a34a" : "#8c8c8c" }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: boolVal ? "#16a34a" : token.colorTextTertiary,
+            }}
+          >
             {boolVal ? "已启用" : "已关闭"}
           </Text>
         </div>
       );
     }
 
-    // 3. 单选下拉框 (带有 options 的 string)
+    // 4. 单选下拉框 (带有 options 的 string)
     if (type === "string" && Array.isArray(options) && options.length > 0) {
-      const currentVal = value !== undefined ? String(value) : String(defaultValue ?? "");
+      const currentVal =
+        value !== undefined ? String(value) : String(defaultValue ?? "");
       return (
         <Select
           value={currentVal}
@@ -144,156 +221,134 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       );
     }
 
-    // 4. 数字类型输入框 (int / float)
-    if (type === "int" || type === "float") {
-      const numVal =
-        typeof value === "number"
-          ? value
-          : typeof defaultValue === "number"
-            ? defaultValue
-            : 0;
-      return (
-        <InputNumber
-          value={numVal}
-          onChange={(v) => onChange(v ?? 0)}
-          step={type === "float" ? 0.1 : 1}
-          style={{ width: "100%" }}
-        />
-      );
-    }
-
-    // 5. 多选下拉框 (带有 options 的 list)
-    if (type === "list" && Array.isArray(options) && options.length > 0) {
-      const currentList: string[] = Array.isArray(value)
-        ? (value as string[])
-        : Array.isArray(defaultValue)
-          ? (defaultValue as string[])
-          : [];
-      return (
-        <Select
-          mode="multiple"
-          value={currentList}
-          onChange={(v) => onChange(v)}
-          style={{ width: "100%" }}
-          options={options.map((opt) => ({
-            label: String(opt),
-            value: String(opt),
-          }))}
-        />
-      );
-    }
-
-    // 6. 字符串列表标签编辑器 (无 options 的 list，如 白名单列表、bot_self_ids)
-    if (type === "list" && (!options || options.length === 0)) {
-      const currentList: string[] = Array.isArray(value)
-        ? (value as string[]).map(String)
-        : Array.isArray(defaultValue)
-          ? (defaultValue as string[]).map(String)
-          : [];
-
-      const handleRemoveTag = (removedIndex: number) => {
-        const next = currentList.filter((_, idx) => idx !== removedIndex);
-        onChange(next);
-      };
-
-      const handleAddTag = () => {
-        if (newTagInput.trim()) {
-          const next = [...currentList, newTagInput.trim()];
-          onChange(next);
-          setNewTagInput("");
-          setIsAddingTag(false);
-        }
-      };
-
-      return (
-        <div
-          style={{
-            padding: "6px 8px",
-            background: token.colorFillAlter,
-            border: `1px solid ${token.colorBorderSecondary}`,
-            borderRadius: 4,
-            minHeight: 36,
-          }}
-        >
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-            {currentList.map((tagStr, idx) => (
-              <Tag
-                key={`${tagStr}-${idx}`}
-                closable
-                onClose={(e) => {
-                  e.preventDefault();
-                  handleRemoveTag(idx);
-                }}
-                style={{ margin: 0 }}
-              >
-                {tagStr}
-              </Tag>
-            ))}
-
-            {isAddingTag ? (
-              <Input
-                size="small"
-                style={{ width: 140 }}
-                value={newTagInput}
-                onChange={(e) => setNewTagInput(e.target.value)}
-                onBlur={handleAddTag}
-                onPressEnter={handleAddTag}
-                placeholder="输入后回车"
-                autoFocus
-              />
-            ) : (
-              <Tag
-                onClick={() => setIsAddingTag(true)}
-                style={{
-                  background: token.colorBgContainer,
-                  borderStyle: "dashed",
-                  cursor: "pointer",
-                  margin: 0,
-                }}
-              >
-                <PlusOutlined /> 添加条目
-              </Tag>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // 7. 长文本 / 提示词 (Prompt / Multiline String / text)
-    const isMultiline =
-      type === "text" ||
-      fieldKey.includes("prompt") ||
-      fieldKey.includes("template") ||
-      (typeof value === "string" && (value.includes("\n") || value.length > 60));
-
-    if ((type === "string" || type === "text") && isMultiline) {
-      const strVal = typeof value === "string" ? value : String(defaultValue ?? "");
+    // 5. 纯文本 / 提示词模板 (text 或 multiline)
+    if (type === "text" || fieldKey.includes("template") || fieldKey.includes("prompt")) {
+      const currentVal =
+        value !== undefined ? String(value) : String(defaultValue ?? "");
       return (
         <TextArea
-          value={strVal}
+          value={currentVal}
           onChange={(e) => onChange(e.target.value)}
           autoSize={{ minRows: 2, maxRows: 8 }}
+          placeholder={hint || "请输入文本内容"}
           style={{
-            fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+            fontFamily: SANS_MONO_FONT,
             fontSize: 12,
           }}
         />
       );
     }
 
-    // 8. 普通短文本输入框
-    if (type === "string" || type === "text" || type === "file") {
-      const strVal = typeof value === "string" ? value : String(defaultValue ?? "");
+    // 6. 数值类型 InputNumber (int / float)
+    if (type === "int" || type === "float") {
+      const numVal =
+        typeof value === "number"
+          ? value
+          : typeof defaultValue === "number"
+          ? defaultValue
+          : 0;
       return (
-        <Input
-          value={strVal}
-          onChange={(e) => onChange(e.target.value)}
-          allowClear
+        <InputNumber
+          value={numVal}
+          step={type === "float" ? 0.1 : 1}
+          precision={type === "float" ? 2 : 0}
+          onChange={(v) => onChange(v ?? 0)}
+          style={{ width: "100%", maxWidth: 240 }}
         />
       );
     }
 
-    // 9. 复杂对象 / 数组 (Fallback JSON Editor)
+    // 7. 字符串列表 (list / tags)
+    if (type === "list") {
+      const listVal: string[] = Array.isArray(value)
+        ? (value as string[])
+        : Array.isArray(defaultValue)
+        ? (defaultValue as string[])
+        : [];
+
+      const handleRemoveTag = (removedTag: string) => {
+        const nextList = listVal.filter((tag) => tag !== removedTag);
+        onChange(nextList);
+      };
+
+      const handleAddTagConfirm = () => {
+        if (newTagInput && !listVal.includes(newTagInput.trim())) {
+          onChange([...listVal, newTagInput.trim()]);
+        }
+        setNewTagInput("");
+        setIsAddingTag(false);
+      };
+
+      return (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 8px", alignItems: "center" }}>
+          {listVal.map((tag) => (
+            <Tag
+              key={tag}
+              closable
+              onClose={() => handleRemoveTag(tag)}
+              style={{
+                margin: 0,
+                fontSize: 12,
+                padding: "2px 8px",
+                borderRadius: 4,
+                fontFamily: SANS_MONO_FONT,
+              }}
+            >
+              {tag}
+            </Tag>
+          ))}
+          {isAddingTag ? (
+            <Input
+              size="small"
+              style={{ width: 140, fontFamily: SANS_MONO_FONT }}
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              onBlur={handleAddTagConfirm}
+              onPressEnter={handleAddTagConfirm}
+              autoFocus
+            />
+          ) : (
+            <Tag
+              onClick={() => setIsAddingTag(true)}
+              style={{
+                borderStyle: "dashed",
+                cursor: "pointer",
+                margin: 0,
+                padding: "2px 8px",
+                borderRadius: 4,
+              }}
+            >
+              <PlusOutlined style={{ marginRight: 4 }} /> 添加条目
+            </Tag>
+          )}
+        </div>
+      );
+    }
+
+    // 8. 普通单行字符串输入 (string)
+    if (type === "string") {
+      const currentVal =
+        value !== undefined ? String(value) : String(defaultValue ?? "");
+      return (
+        <Input
+          value={currentVal}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={hint || `请输入 ${title}`}
+          allowClear
+          style={{
+            fontFamily:
+              fieldKey.includes("id") ||
+              fieldKey.includes("key") ||
+              fieldKey.includes("url") ||
+              fieldKey.includes("path")
+                ? SANS_MONO_FONT
+                : undefined,
+          }}
+        />
+      );
+    }
+
+    // 9. 复杂对象兜底 (JSON 格式化输入)
     const jsonStr =
       typeof value === "object"
         ? JSON.stringify(value, null, 2)
@@ -310,7 +365,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }
         }}
         autoSize={{ minRows: 2, maxRows: 6 }}
-        style={{ fontFamily: "monospace", fontSize: 11 }}
+        style={{ fontFamily: SANS_MONO_FONT, fontSize: 11 }}
       />
     );
   };
@@ -320,78 +375,96 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     JSON.stringify(value) !== JSON.stringify(defaultValue);
 
   return (
-    <Form.Item
-      label={
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            width: "100%",
-          }}
-        >
-          <Space size={6}>
-            <Text strong style={{ fontSize: isSubField ? 12 : 13, color: token.colorText }}>
-              {title}
-            </Text>
-            {!isSubField && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "monospace",
-                  color: token.colorTextTertiary,
-                }}
-              >
-                ({fieldKey})
-              </span>
-            )}
-          </Space>
-
-          {isDifferentFromDefault && (
-            <Tooltip title="重置为此项默认值">
-              <Button
-                type="link"
-                size="small"
-                icon={<UndoOutlined style={{ fontSize: 10 }} />}
-                style={{
-                  padding: "0 4px",
-                  height: "auto",
-                  fontSize: 11,
-                  color: token.colorTextTertiary,
-                }}
-                onClick={() => onChange(defaultValue)}
-              >
-                恢复默认
-              </Button>
-            </Tooltip>
-          )}
-        </div>
-      }
+    <div
       style={{
-        marginBottom: isSubField ? 10 : 16,
-        padding: isSubField
-          ? 0
-          : "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginBottom: isSubField ? 8 : 12,
+        padding: isSubField ? "8px 10px" : "12px 14px",
         background: isSubField ? "transparent" : token.colorBgContainer,
-        border: isSubField ? "none" : `1px solid ${token.colorBorderSecondary}`,
+        border: isSubField
+          ? `1px dashed ${token.colorBorderSecondary}`
+          : `1px solid ${token.colorBorderSecondary}`,
         borderRadius: 6,
+        boxShadow: isSubField ? "none" : "0 1px 2px rgba(0, 0, 0, 0.02)",
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
-      {renderControl()}
+      {/* 头部标题与恢复默认控制 */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+        }}
+      >
+        <Space size={6} wrap style={{ flex: 1 }}>
+          <Text
+            strong
+            style={{
+              fontSize: isSubField ? 12 : 13,
+              color: token.colorText,
+              letterSpacing: "-0.2px",
+            }}
+          >
+            {title}
+          </Text>
+          {!isSubField && (
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: SANS_MONO_FONT,
+                color: token.colorTextTertiary,
+              }}
+            >
+              ({fieldKey})
+            </span>
+          )}
+        </Space>
+
+        {isDifferentFromDefault && (
+          <Tooltip title="重置为此项默认值">
+            <Button
+              type="link"
+              size="small"
+              icon={<UndoOutlined style={{ fontSize: 10 }} />}
+              style={{
+                padding: "0 4px",
+                height: "auto",
+                fontSize: 11,
+                color: token.colorTextTertiary,
+              }}
+              onClick={() => onChange(defaultValue)}
+            >
+              恢复默认
+            </Button>
+          </Tooltip>
+        )}
+      </div>
+
+      {/* 核心控件区域 (Full Width) */}
+      <div style={{ width: "100%", marginTop: 2 }}>{renderControl()}</div>
+
+      {/* 底部详细说明文字：独立整行渲染，消除单字竖排与挤压变形 */}
       {hint && (
-        <Paragraph
-          type="secondary"
+        <div
           style={{
             fontSize: 11,
-            lineHeight: "1.4",
-            marginTop: 5,
-            marginBottom: 0,
+            lineHeight: "1.5",
             color: token.colorTextSecondary,
+            background: token.colorFillAlter,
+            padding: "5px 8px",
+            borderRadius: 4,
+            marginTop: 4,
+            wordBreak: "break-word",
           }}
         >
           {hint}
-        </Paragraph>
+        </div>
       )}
-    </Form.Item>
+    </div>
   );
 };

@@ -3,8 +3,10 @@ import { message } from "antd";
 import {
   fetchPluginConfig,
   fetchAvailableProviders,
+  fetchAvailablePersonas,
   savePluginConfig,
   AvailableProvider,
+  AvailablePersona,
 } from "../../../entities/config/api/configApi";
 import { PluginSchema } from "../../../entities/config/model/types";
 
@@ -15,19 +17,25 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, unknown>>>({});
   const [providers, setProviders] = useState<AvailableProvider[]>([]);
+  const [personas, setPersonas] = useState<AvailablePersona[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("basic");
   const [searchQuery, setSearchQuery] = useState("");
 
   const loadConfig = async (isManual = false) => {
     setLoading(true);
     try {
-      const [configData, providerList] = await Promise.allSettled([
+      const [configData, providerList, personaList] = await Promise.allSettled([
         fetchPluginConfig(),
         fetchAvailableProviders(),
+        fetchAvailablePersonas(),
       ]);
 
       if (providerList.status === "fulfilled") {
         setProviders(providerList.value || []);
+      }
+
+      if (personaList.status === "fulfilled") {
+        setPersonas(personaList.value || []);
       }
 
       if (configData.status === "fulfilled" && configData.value) {
@@ -155,6 +163,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     schema,
     formData,
     providers,
+    personas,
     categories,
     activeCategory,
     currentGroupFields,

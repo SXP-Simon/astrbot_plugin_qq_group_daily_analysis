@@ -1,4 +1,4 @@
-﻿import React, { useRef } from "react";
+import React, { useRef } from "react";
 import { Collapse, Button, Tooltip, Tag, message } from "antd";
 import { FileTextOutlined, CopyOutlined } from "@ant-design/icons";
 import { PluginLogItem, TAG_STYLE_MAP } from "../../../entities/log/model/types";
@@ -86,7 +86,7 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
                 borderRadius: 4,
                 padding: "8px 10px",
                 fontFamily:
-                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                  "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                 fontSize: 11,
                 maxHeight: 240,
                 overflowY: "auto",
