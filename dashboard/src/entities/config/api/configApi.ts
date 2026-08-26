@@ -47,28 +47,33 @@ export async function fetchAvailablePersonas(): Promise<AvailablePersona[]> {
 export async function savePluginConfig(
   config: Record<string, unknown>
 ): Promise<{ success: boolean; message?: string }> {
-  const res = await apiPost("config", { config });
-  if (res) {
-    const raw = res as Record<string, unknown>;
-    const nestedData = raw.data as Record<string, unknown> | undefined;
+  try {
+    const res = await apiPost("config", { config });
+    if (res !== null && res !== undefined) {
+      const raw = res as Record<string, unknown>;
+      // 只有在明确返回 error 状态时才判定为失败
+      if (
+        raw.status === "error" ||
+        raw.error ||
+        (typeof raw.code === "number" && raw.code !== 0 && raw.code !== 200)
+      ) {
+        const errMsg =
+          (raw.message as string) || (raw.error as string) || "保存配置失败";
+        return { success: false, message: errMsg };
+      }
 
-    const isOk =
-      raw.status === "ok" ||
-      raw.status === "success" ||
-      raw.status === 200 ||
-      raw.code === 0 ||
-      nestedData?.status === "ok" ||
-      nestedData?.status === "success";
+      const msg =
+        (raw.message as string) ||
+        (typeof raw.data === "object" &&
+          raw.data &&
+          ((raw.data as Record<string, unknown>).message as string)) ||
+        "配置已成功保存并持久化生效";
 
-    const msg =
-      (raw.message as string) ||
-      (nestedData?.message as string) ||
-      (isOk ? "配置已成功保存并生效" : "保存配置失败");
-
-    if (isOk) {
       return { success: true, message: msg };
     }
-    return { success: false, message: msg };
+    return { success: false, message: "保存配置失败，未收到响应" };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, message: msg || "保存配置请求失败" };
   }
-  return { success: false, message: "保存配置失败，未收到后端响应" };
 }

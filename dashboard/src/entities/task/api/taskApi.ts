@@ -16,17 +16,15 @@ export async function fetchActiveTasks(): Promise<ActiveTask[]> {
 }
 
 export async function cancelActiveTask(taskId: string): Promise<boolean> {
-  const res = await apiPost("tasks/cancel", { task_id: taskId });
-  if (!res) return false;
-  const raw = res as Record<string, unknown>;
-  const nestedData = raw.data as Record<string, unknown> | undefined;
-  return (
-    raw.status === "ok" ||
-    raw.status === "success" ||
-    raw.status === 200 ||
-    nestedData?.status === "ok" ||
-    nestedData?.status === "success"
-  );
+  try {
+    const res = await apiPost("tasks/cancel", { task_id: taskId });
+    if (!res) return false;
+    const raw = res as Record<string, unknown>;
+    if (raw.status === "error" || raw.error) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchConnectedPlatforms(): Promise<ConnectedPlatform[]> {
