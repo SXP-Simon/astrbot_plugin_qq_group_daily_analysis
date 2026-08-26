@@ -1,15 +1,33 @@
-import React from "react";
-import { Card, Table, Empty, Button, Tag, Typography, Space, Tooltip, Skeleton } from "antd";
+import React, { useState } from "react";
+import {
+  Card,
+  Table,
+  Empty,
+  Button,
+  Tag,
+  Typography,
+  Space,
+  Tooltip,
+  Skeleton,
+  Modal,
+  Form,
+  Select,
+  Radio,
+  Alert,
+  message,
+} from "antd";
 import {
   FileImageOutlined,
   FileTextOutlined,
   EyeOutlined,
   DownloadOutlined,
   TeamOutlined,
+  SkinOutlined,
 } from "@ant-design/icons";
 import { formatTimestamp } from "../../../shared/lib/formatters";
 import { useReportsViewModel } from "../model/useReportsViewModel";
 import { ReportItem } from "../../../entities/report/model/types";
+import { rerenderReport } from "../../../entities/report/api/reportApi";
 import { ReportPreviewModal } from "../../../widgets/report-preview-modal/ReportPreviewModal";
 import { ReportFilterBar } from "../../../features/filter-reports/ui/ReportFilterBar";
 
@@ -21,6 +39,10 @@ interface ReportsPageProps {
 }
 
 export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace }) => {
+  const [rerenderModalOpen, setRerenderModalOpen] = useState(false);
+  const [rerenderingReport, setRerenderingReport] = useState<ReportItem | null>(null);
+  const [rerenderLoading, setRerenderLoading] = useState(false);
+  const [form] = Form.useForm();
   const {
     reports,
     rawReports,
@@ -242,7 +264,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
     {
       title: "操作",
       key: "actions",
-      width: 160,
+      width: 240,
       fixed: "right" as const,
       render: (_: unknown, r: ReportItem) => {
         const isHtml = Boolean(
@@ -263,6 +285,20 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             </Button>
             <Button
               size="small"
+              icon={<SkinOutlined />}
+              onClick={() => {
+                setRerenderingReport(r);
+                form.setFieldsValue({
+                  template_name: "scrapbook",
+                  render_format: isHtml ? "html" : "image",
+                });
+                setRerenderModalOpen(true);
+              }}
+            >
+              换模板
+            </Button>
+            <Button
+              size="small"
               icon={<DownloadOutlined />}
               onClick={() => downloadReport(r)}
             >
@@ -273,6 +309,31 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       },
     },
   ];
+
+  const handleRerenderSubmit = async () => {
+    if (!rerenderingReport) return;
+    try {
+      const values = await form.validateFields();
+      setRerenderLoading(true);
+      const res = await rerenderReport({
+        group_id: rerenderingReport.group_id || "",
+        template_name: values.template_name,
+        render_format: values.render_format,
+        platform_id: rerenderingReport.platform,
+      });
+      if (res && res.success) {
+        message.success("✨ 免 Token 切换主题渲染成功！新报告已生成");
+        setRerenderModalOpen(false);
+        refresh();
+      } else {
+        message.error("重新渲染失败，可能未找到该群的分析快照");
+      }
+    } catch {
+      // 表单校验或网络异常
+    } finally {
+      setRerenderLoading(false);
+    }
+  };
 
   return (
     <Card size="small" style={{ minHeight: 520 }}>
@@ -324,6 +385,64 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
         onClose={closePreview}
         onDownload={downloadReport}
       />
+
+      {/* 免 Token 换主题重新生成报告 Modal */}
+      <Modal
+        title={
+          <Space>
+            <SkinOutlined style={{ color: "#722ed1" }} />
+            <span>免 Token 切换主题模板重新渲染</span>
+          </Space>
+        }
+        open={rerenderModalOpen}
+        onCancel={() => setRerenderModalOpen(false)}
+        onOk={handleRerenderSubmit}
+        confirmLoading={rerenderLoading}
+        okText="立即重新渲染"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Alert
+          type="info"
+          showIcon
+          message="基于已有分析快照（Checkpoint）重绘"
+          description="直接复用该群先前的聊天统计、话题总结与群友画像数据，无需再次调用大模型，消耗 0 Token。"
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={form} layout="vertical">
+          <Form.Item label="目标群聊">
+            <Text strong>{rerenderingReport?.group_name || rerenderingReport?.group_id || "-"}</Text>
+          </Form.Item>
+          <Form.Item
+            name="template_name"
+            label="视觉主题模板"
+            rules={[{ required: true, message: "请选择视觉主题模板" }]}
+          >
+            <Select
+              options={[
+                { label: "手账风格 (Scrapbook / 默认)", value: "scrapbook" },
+                { label: "亚托莉 (ATRI)", value: "ATRI" },
+                { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
+                { label: "初音未来 (HatsuneMiku)", value: "HatsuneMiku" },
+                { label: "黑客赛博 (Hack)", value: "hack" },
+                { label: "复古未来 (Retro Futurism)", value: "retro_futurism" },
+                { label: "极简黑白 (Simple)", value: "simple" },
+                { label: "新春特别版 (Spring Festival)", value: "spring_festival" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="render_format"
+            label="输出格式"
+            rules={[{ required: true, message: "请选择输出格式" }]}
+          >
+            <Radio.Group>
+              <Radio value="image">长图海报 (.jpg)</Radio>
+              <Radio value="html">交互式网页 (.html)</Radio>
+            </Radio.Group>
+          </Form.Item>
+        </Form>
+      </Modal>
     </Card>
   );
 };

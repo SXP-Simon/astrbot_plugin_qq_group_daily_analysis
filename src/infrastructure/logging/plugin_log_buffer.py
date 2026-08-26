@@ -71,6 +71,13 @@ class PluginLogBuffer(logging.Handler):
             re.compile(r"(resilience|retry|limiter|circuit|lock|reaper)", re.I),
         ),
         (
+            "Comic",
+            "群漫画",
+            re.compile(
+                r"(comic|漫画|分镜|drawing|storyboard|grok2api|big_banana)", re.I
+            ),
+        ),
+        (
             "Render",
             "报告与长图",
             re.compile(r"(render|template|html|image|report|playwright|canvas)", re.I),
@@ -90,6 +97,9 @@ class PluginLogBuffer(logging.Handler):
         "LLM_ANALYSIS": "大模型话题与画像分析",
         "SAVE_SUMMARY": "历史记录持久化",
         "RENDER_REPORT": "报告图片渲染与发送",
+        "COMIC_STORYBOARD": "漫画分镜提示词提取",
+        "COMIC_DRAWING": "漫画长图生成与投递",
+        "CRASH_RECOVERY": "异常终止恢复",
     }
 
     def __init__(self, max_capacity: int = 2000):

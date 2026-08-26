@@ -1,4 +1,5 @@
 import mimetypes
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
 )
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 
@@ -64,13 +66,35 @@ class ComicApplicationService:
             f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
         )
 
+        trace = TraceContext.current()
+
         # 1. 提取分镜和金句
-        storyboards, _ = await self.llm_analyzer.analyze_comic_storyboards(
-            topics,
-            umo,
-            persona_id=persona_id or None,
-            prompt_template=prompt_template or None,
-        )
+        sb_ctx = trace.span("COMIC_STORYBOARD") if trace else nullcontext()
+        with sb_ctx as sb_rec:
+            (
+                storyboards,
+                storyboard_usage,
+            ) = await self.llm_analyzer.analyze_comic_storyboards(
+                topics,
+                umo,
+                persona_id=persona_id or None,
+                prompt_template=prompt_template or None,
+            )
+            if sb_rec and isinstance(sb_rec, dict):
+                sb_rec.setdefault("payload", {}).update(
+                    {
+                        "character_name": character_name,
+                        "topics_count": len(topics),
+                        "storyboards_count": len(storyboards) if storyboards else 0,
+                        "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(
+                            storyboard_usage, "completion_tokens", 0
+                        ),
+                        "total_tokens": getattr(storyboard_usage, "total_tokens", 0),
+                    }
+                )
+                if not storyboards:
+                    sb_rec["payload"]["warning"] = "未能从群聊话题中提取出漫画分镜"
 
         if not storyboards:
             logger.warning(
@@ -101,98 +125,167 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
-        # 4. 若配置为外部绘图后端，优先走对应插件出图
-        backend = self.config_manager.get_drawing_backend()
-        if backend in {"general_plugin", "big_banana"}:
-            if backend == "general_plugin":
-                external_comic_bytes = await self._generate_via_general_plugin(
-                    scene_prompt, images_data
+        draw_ctx = trace.span("COMIC_DRAWING") if trace else nullcontext()
+        with draw_ctx as draw_rec:
+            # 4. 若配置为外部绘图后端，优先走对应插件出图
+            backend = self.config_manager.get_drawing_backend()
+            if backend in {"general_plugin", "big_banana"}:
+                if backend == "general_plugin":
+                    external_comic_bytes = await self._generate_via_general_plugin(
+                        scene_prompt, images_data
+                    )
+                else:
+                    external_comic_bytes = await self._generate_via_big_banana(
+                        scene_prompt, images_data
+                    )
+                if external_comic_bytes and not any(
+                    external_comic_bytes == reference[0] for reference in images_data
+                ):
+                    logger.info(
+                        f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
+                    )
+                    if draw_rec and isinstance(draw_rec, dict):
+                        draw_rec.setdefault("payload", {}).update(
+                            {
+                                "backend": backend,
+                                "scene_prompt_len": len(scene_prompt),
+                                "reference_images_count": len(images_data),
+                                "image_bytes": len(external_comic_bytes),
+                                "success": True,
+                            }
+                        )
+                    return external_comic_bytes, None
+                if external_comic_bytes:
+                    logger.warning(
+                        f"[Comic] {backend} 后端原样返回了参考图，拒绝发送并回退内置绘图后端。"
+                    )
+                if not self.config_manager.get_drawing_external_fallback():
+                    logger.warning(
+                        f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
+                    )
+                    if draw_rec and isinstance(draw_rec, dict):
+                        draw_rec.setdefault("payload", {}).update(
+                            {
+                                "backend": backend,
+                                "error": f"{backend} 后端未产出结果且禁用回退",
+                                "success": False,
+                            }
+                        )
+                    return None, None
+                logger.warning(f"[Comic] {backend} 后端未产出结果，回退内置绘图后端。")
+
+            # 5. 内置绘图后端未配置时直接取消，避免空跑
+            if not self.config_manager.get_drawing_provider_configs():
+                logger.warning(
+                    "[Comic] 未配置绘图供应商（drawing_provider_overrides），取消漫画生成。"
+                )
+                if draw_rec and isinstance(draw_rec, dict):
+                    draw_rec.setdefault("payload", {}).update(
+                        {
+                            "backend": "builtin",
+                            "error": "未配置绘图供应商",
+                            "success": False,
+                        }
+                    )
+                return None, None
+
+            # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
+            fallback_url: str | None = None
+            try:
+                (
+                    final_comic_bytes,
+                    last_error,
+                ) = await self.drawing_client.generate_image(
+                    scene_prompt, images_data=images_data or None
+                )
+            except ImageDownloadFailedError as exc:
+                logger.warning(
+                    f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
+                )
+                if draw_rec and isinstance(draw_rec, dict):
+                    draw_rec.setdefault("payload", {}).update(
+                        {
+                            "backend": "builtin",
+                            "fallback_url": exc.fallback_url,
+                            "error": "图片下载失败，使用 fallback URL 发送",
+                        }
+                    )
+                return None, exc.fallback_url
+
+            if final_comic_bytes and any(
+                final_comic_bytes == reference[0] for reference in images_data
+            ):
+                logger.warning("[Comic] 内建绘图原样返回了参考图，拒绝发送。")
+                final_comic_bytes = None
+                last_error = "绘图服务原样返回了参考图"
+
+            exception_keywords = (
+                self.config_manager.get_drawing_output_exception_retry_keywords()
+            )
+            should_rewrite_prompt = bool(
+                last_error
+                and any(
+                    keyword in last_error for keyword in exception_keywords if keyword
+                )
+            )
+            if not final_comic_bytes and last_error and should_rewrite_prompt:
+                logger.info(
+                    f"[Comic] 画图重试已用尽，请求 LLM 分析报错并重写 Prompt: {last_error}"
+                )
+                new_prompt = await self.llm_analyzer.analyze_retry_prompt(
+                    scene_prompt, last_error, umo
+                )
+                if new_prompt:
+                    logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
+                    try:
+                        final_comic_bytes, _ = await self.drawing_client.generate_image(
+                            new_prompt,
+                            images_data=images_data or None,
+                            disable_retry=True,
+                        )
+                    except ImageDownloadFailedError as exc:
+                        logger.warning(
+                            f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
+                        )
+                        if draw_rec and isinstance(draw_rec, dict):
+                            draw_rec.setdefault("payload", {}).update(
+                                {
+                                    "backend": "builtin",
+                                    "fallback_url": exc.fallback_url,
+                                    "error": "重写 Prompt 后下载仍失败",
+                                }
+                            )
+                        return None, exc.fallback_url
+                    if final_comic_bytes and any(
+                        final_comic_bytes == reference[0] for reference in images_data
+                    ):
+                        logger.warning(
+                            "[Comic] 重写 Prompt 后仍原样返回参考图，拒绝发送。"
+                        )
+                        final_comic_bytes = None
+
+            if draw_rec and isinstance(draw_rec, dict):
+                draw_rec.setdefault("payload", {}).update(
+                    {
+                        "backend": backend,
+                        "scene_prompt_len": len(scene_prompt),
+                        "reference_images_count": len(images_data),
+                        "image_bytes": len(final_comic_bytes)
+                        if final_comic_bytes
+                        else 0,
+                        "success": bool(final_comic_bytes),
+                        "last_error": last_error,
+                    }
+                )
+
+            if final_comic_bytes:
+                logger.info(
+                    f"[Comic] 漫画生成成功，大小: {len(final_comic_bytes)} bytes"
                 )
             else:
-                external_comic_bytes = await self._generate_via_big_banana(
-                    scene_prompt, images_data
-                )
-            if external_comic_bytes and not any(
-                external_comic_bytes == reference[0] for reference in images_data
-            ):
-                logger.info(
-                    f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
-                )
-                return external_comic_bytes, None
-            if external_comic_bytes:
-                logger.warning(
-                    f"[Comic] {backend} 后端原样返回了参考图，拒绝发送并回退内置绘图后端。"
-                )
-            if not self.config_manager.get_drawing_external_fallback():
-                logger.warning(
-                    f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
-                )
-                return None, None
-            logger.warning(f"[Comic] {backend} 后端未产出结果，回退内置绘图后端。")
+                logger.error("[Comic] 漫画生成最终失败。")
 
-        # 5. 内置绘图后端未配置时直接取消，避免空跑
-        if not self.config_manager.get_drawing_provider_configs():
-            logger.warning(
-                "[Comic] 未配置绘图供应商（drawing_provider_overrides），取消漫画生成。"
-            )
-            return None, None
-
-        # 6. 调用绘图 API，捕获"有 URL 但下载失败"的情况
-        fallback_url: str | None = None
-        try:
-            final_comic_bytes, last_error = await self.drawing_client.generate_image(
-                scene_prompt, images_data=images_data or None
-            )
-        except ImageDownloadFailedError as exc:
-            logger.warning(
-                f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
-            )
-            return None, exc.fallback_url
-
-        if final_comic_bytes and any(
-            final_comic_bytes == reference[0] for reference in images_data
-        ):
-            logger.warning("[Comic] 内建绘图原样返回了参考图，拒绝发送。")
-            final_comic_bytes = None
-            last_error = "绘图服务原样返回了参考图"
-
-        exception_keywords = (
-            self.config_manager.get_drawing_output_exception_retry_keywords()
-        )
-        should_rewrite_prompt = bool(
-            last_error
-            and any(keyword in last_error for keyword in exception_keywords if keyword)
-        )
-        if not final_comic_bytes and last_error and should_rewrite_prompt:
-            logger.info(
-                f"[Comic] 画图重试已用尽，请求 LLM 分析报错并重写 Prompt: {last_error}"
-            )
-            new_prompt = await self.llm_analyzer.analyze_retry_prompt(
-                scene_prompt, last_error, umo
-            )
-            if new_prompt:
-                logger.info("[Comic] 获取到重写后的 Prompt，进行最后一次尝试...")
-                try:
-                    final_comic_bytes, _ = await self.drawing_client.generate_image(
-                        new_prompt, images_data=images_data or None, disable_retry=True
-                    )
-                except ImageDownloadFailedError as exc:
-                    logger.warning(
-                        f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
-                    )
-                    return None, exc.fallback_url
-                if final_comic_bytes and any(
-                    final_comic_bytes == reference[0] for reference in images_data
-                ):
-                    logger.warning("[Comic] 重写 Prompt 后仍原样返回参考图，拒绝发送。")
-                    final_comic_bytes = None
-
-        if final_comic_bytes:
-            logger.info(f"[Comic] 漫画生成成功，大小: {len(final_comic_bytes)} bytes")
-        else:
-            logger.error("[Comic] 漫画生成最终失败。")
-
-        return final_comic_bytes, fallback_url
+            return final_comic_bytes, fallback_url
 
     async def _generate_via_general_plugin(
         self,
