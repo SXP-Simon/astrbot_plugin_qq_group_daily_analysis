@@ -895,12 +895,14 @@ class PluginPageWebUIBridge:
                                 trace_id = tid
                                 break
                     if not trace_id and group_id:
-                        # 检查同群同时间戳前缀的文件映射
-                        stem_prefix = "_".join(stem.split("_")[:3])
-                        for fn, tid in report_trace_map.items():
-                            if tid and fn.startswith(stem_prefix):
-                                trace_id = tid
-                                break
+                        # 检查同群同精确时间戳（年月日_时分秒）前缀的文件映射，避免同天不同任务误匹配
+                        stem_parts = stem.split("_")
+                        if len(stem_parts) >= 4 and re.match(r"^\d{6}$", stem_parts[3]):
+                            stem_prefix = "_".join(stem_parts[:4])
+                            for fn, tid in report_trace_map.items():
+                                if tid and fn.startswith(stem_prefix):
+                                    trace_id = tid
+                                    break
 
                     g_info = group_info_map.get(group_id, {})
                     group_name = g_info.get("group_name", "")
