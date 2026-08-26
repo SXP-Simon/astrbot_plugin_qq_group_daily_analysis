@@ -160,21 +160,30 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
     }
   }, [open, traceId, loadDetail]);
 
-  // 运行中轮询
+  // 运行中高频静默轮询（同时实时刷新 Spans 状态与执行日志流）
   useEffect(() => {
     if (open && trace?.status === "running" && traceId) {
       if (!pollRef.current) {
-        pollRef.current = setInterval(() => {
-          fetchTraceDetail(traceId)
-            .then((data) => {
-              if (data) setTrace(data);
-              if (data?.status !== "running" && pollRef.current) {
+        pollRef.current = setInterval(async () => {
+          try {
+            const [detailData, logsData] = await Promise.allSettled([
+              fetchTraceDetail(traceId, true),
+              fetchTraceLogs(traceId),
+            ]);
+            if (detailData.status === "fulfilled" && detailData.value) {
+              setTrace(detailData.value);
+              if (detailData.value.status !== "running" && pollRef.current) {
                 clearInterval(pollRef.current);
                 pollRef.current = null;
               }
-            })
-            .catch(() => {});
-        }, 3000);
+            }
+            if (logsData.status === "fulfilled" && logsData.value) {
+              setLogs(logsData.value);
+            }
+          } catch {
+            // 忽略轮询异常
+          }
+        }, 1500);
       }
     }
     return () => {
@@ -333,6 +342,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             <SpanTimeline
               spans={trace.spans || []}
               totalDurationMs={trace.duration_ms}
+              currentStage={trace.current_stage}
+              taskStatus={trace.status}
             />
           </div>
 
