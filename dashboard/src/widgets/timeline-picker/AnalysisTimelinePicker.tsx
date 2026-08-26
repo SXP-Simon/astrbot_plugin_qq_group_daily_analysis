@@ -38,21 +38,34 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
   const selectedTraceId = selectedTrace?.trace_id;
   const selectedIndex = traces.findIndex((t) => t.trace_id === selectedTraceId);
 
-  // 选中的节点平滑自动居中（精准控制局部容器 scrollLeft，杜绝祖先页面级滚动跳跃）
-  useEffect(() => {
-    if (activeNodeRef.current && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      const node = activeNodeRef.current;
-      const containerWidth = container.clientWidth;
-      const nodeLeft = node.offsetLeft;
-      const nodeWidth = node.offsetWidth;
-      const targetScrollLeft = nodeLeft + nodeWidth / 2 - containerWidth / 2;
+  // 核心居中算法：基于 getBoundingClientRect 视口真实坐标求差值，彻底免疫 offsetParent 嵌套偏差
+  const centerNode = useCallback((nodeElem?: HTMLElement | null) => {
+    const container = scrollContainerRef.current;
+    const targetNode = nodeElem || activeNodeRef.current;
+    if (!container || !targetNode) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = targetNode.getBoundingClientRect();
+
+    const nodeCenter = nodeRect.left + nodeRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const offsetDiff = nodeCenter - containerCenter;
+
+    if (Math.abs(offsetDiff) > 1) {
       container.scrollTo({
-        left: Math.max(0, targetScrollLeft),
+        left: container.scrollLeft + offsetDiff,
         behavior: "smooth",
       });
     }
-  }, [selectedTraceId]);
+  }, []);
+
+  // 当选中的 trace 变更时，自动平滑居中聚焦到选中的时间线节点
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      centerNode();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [selectedTraceId, centerNode]);
 
   // 鼠标滚轮横向滑动
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -112,6 +125,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
         background: isDark ? "#161b22" : "#ffffff",
         borderColor: isDark ? "#30363d" : "#e2e8f0",
       }}
+      styles={{ body: { padding: "12px 14px" } }}
     >
       {/* 顶部标题与前后切换控制 */}
       <div
@@ -270,9 +284,10 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               >
                 <div
                   ref={isSelected ? activeNodeRef : null}
-                  onClick={() => {
+                  onClick={(e) => {
                     if (!hasMoved) {
                       onSelectTrace(trace);
+                      centerNode(e.currentTarget);
                     }
                   }}
                   style={{
