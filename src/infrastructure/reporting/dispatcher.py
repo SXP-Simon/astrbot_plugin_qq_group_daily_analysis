@@ -325,6 +325,7 @@ class ReportDispatcher:
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
                         template_theme=template_theme,
+                        trace_id=trace_id,
                     )
             else:
                 html_path, json_path = await self.report_generator.generate_html_report(
@@ -334,6 +335,7 @@ class ReportDispatcher:
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
                     template_theme=template_theme,
+                    trace_id=trace_id,
                 )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")

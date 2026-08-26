@@ -995,6 +995,7 @@ class GroupDailyAnalysis(Star):
             return
 
         elif output_format == "html":
+            cur_trace_id = trace.trace_id if trace else None
             if trace:
                 with trace.span("RENDER_REPORT", {"format": "html"}):
                     (
@@ -1007,6 +1008,7 @@ class GroupDailyAnalysis(Star):
                         nickname_getter=nickname_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
+                        trace_id=cur_trace_id,
                     )
             else:
                 html_path, json_path = await self.report_generator.generate_html_report(
@@ -1016,6 +1018,7 @@ class GroupDailyAnalysis(Star):
                     nickname_getter=nickname_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=is_qq_official,
+                    trace_id=cur_trace_id,
                 )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
