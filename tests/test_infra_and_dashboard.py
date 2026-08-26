@@ -7,8 +7,20 @@ import sys
 import time
 from pathlib import Path
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
+from src.application.services.analysis_application_service import (
+    AnalysisApplicationService,
+)
+from src.domain.models.data_models import (
+    GoldenQuote,
+    GroupStatistics,
+    SummaryTopic,
+    TokenUsage,
+    UserTitle,
+)
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -258,12 +270,22 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     mock_report_gen.data_dir = tmp_path
     mock_report_gen.generate_image_report = AsyncMock(return_value=(str(tmp_path / "temp.jpg"), None))
     mock_report_gen.html_templates = MagicMock()
-    mock_report_gen.html_templates.render = MagicMock(return_value="<html>测试报告</html>")
+    mock_report_gen.html_templates.render_template = MagicMock(
+        return_value="<html>测试报告</html>"
+    )
+    mock_report_gen.generate_html_report = AsyncMock(
+        return_value=(str(tmp_path / "temp.html"), None)
+    )
+    (tmp_path / "temp.html").write_text("<html>测试报告</html>", encoding="utf-8")
     (tmp_path / "temp.jpg").write_bytes(b"image_content")
 
     mock_config = MagicMock()
     mock_config.get_data_dir = MagicMock(return_value=tmp_path)
     mock_config.get_llm_max_concurrent = MagicMock(return_value=1)
+    mock_config.get_topic_analysis_enabled = MagicMock(return_value=True)
+    mock_config.get_user_title_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_golden_quote_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_chat_quality_analysis_enabled = MagicMock(return_value=False)
 
     service = AnalysisApplicationService(
         config_manager=mock_config,
@@ -274,6 +296,7 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
         statistics_service=MagicMock(),
         analysis_domain_service=MagicMock(),
         checkpoint_store=chk_store,
+        html_render=AsyncMock(return_value=str(tmp_path / "temp.jpg")),
     )
 
     # 保存快照
@@ -306,5 +329,184 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     assert html_res["success"] is True
     assert html_res["is_html"] is True
     assert "BlueArchive" in html_res["filename"]
-    assert mock_report_gen.html_templates.render.called
+    assert mock_report_gen.generate_html_report.called
+
+
+@pytest.mark.asyncio
+async def test_resume_analysis_using_checkpoint(temp_db: Path, tmp_path: Path):
+    chk_store = CheckpointStore(temp_db)
+
+    # 1. 保存前置清洗产物快照
+    chk_store.save_checkpoint(
+        group_id="88888",
+        date_str="2026-08-26",
+        stage_name="CLEAN_MESSAGES",
+        data={
+            "group_id": "88888",
+            "date_str": "2026-08-26",
+            "statistics": {
+                "message_count": 100,
+                "total_characters": 500,
+                "participant_count": 10,
+                "most_active_period": "20:00-21:00",
+                "golden_quotes": [],
+                "emoji_count": 5,
+            },
+            "user_activity": {},
+            "top_users": [],
+            "unified_messages": [],
+        },
+    )
+
+    mock_llm = MagicMock()
+    mock_llm.analyze_all_concurrent = AsyncMock(
+        return_value=(
+            [SummaryTopic(topic="断点续跑话题", detail="续跑测试", contributors=["用户A"])],
+            [],
+            [],
+            TokenUsage(prompt_tokens=100, completion_tokens=20, total_tokens=120),
+            None,
+        )
+    )
+
+    mock_adapter = MagicMock()
+    mock_bot_mgr = MagicMock()
+    mock_bot_mgr.get_adapter = MagicMock(return_value=mock_adapter)
+
+    mock_config = MagicMock()
+    mock_config.get_llm_max_concurrent = MagicMock(return_value=1)
+    mock_config.get_topic_analysis_enabled = MagicMock(return_value=True)
+    mock_config.get_user_title_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_golden_quote_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_chat_quality_analysis_enabled = MagicMock(return_value=False)
+
+    mock_history = MagicMock()
+    mock_history.save_analysis = AsyncMock()
+
+    service = AnalysisApplicationService(
+        config_manager=mock_config,
+        bot_manager=mock_bot_mgr,
+        history_manager=mock_history,
+        report_generator=MagicMock(),
+        llm_analyzer=mock_llm,
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=chk_store,
+    )
+
+    # 2. 执行断点续跑
+    res = await service.resume_analysis(
+        trace_id="trace_resume_test_001",
+        group_id="88888",
+        date_str="2026-08-26",
+    )
+
+    assert res["success"] is True
+    assert res["resumed_from"] == "CLEAN_MESSAGES"
+    assert len(res["analysis_result"]["topics"]) == 1
+    assert res["analysis_result"]["topics"][0].topic == "断点续跑话题"
+    assert mock_llm.analyze_all_concurrent.called
+
+
+@pytest.mark.asyncio
+async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path, tmp_path: Path):
+    """验证当已有部分成功子任务时，续跑自动复用已有产物且不重复请求大模型。"""
+    chk_store = CheckpointStore(temp_db)
+
+    # 1. 保存前置清洗产物
+    chk_store.save_checkpoint(
+        group_id="99999",
+        date_str="2026-08-26",
+        stage_name="CLEAN_MESSAGES",
+        data={
+            "group_id": "99999",
+            "date_str": "2026-08-26",
+            "statistics": {
+                "message_count": 50,
+                "total_characters": 200,
+                "participant_count": 5,
+                "most_active_period": "18:00-19:00",
+                "golden_quotes": [],
+                "emoji_count": 2,
+            },
+            "user_activity": {},
+            "top_users": [],
+            "unified_messages": [],
+        },
+    )
+
+    # 2. 模拟话题已成功生成，但金句尚未生成的历史快照
+    chk_store.save_checkpoint(
+        group_id="99999",
+        date_str="2026-08-26",
+        stage_name="LLM_ANALYSIS",
+        data={
+            "topics": [
+                {
+                    "topic": "已复用的话题",
+                    "detail": "无需重新请求LLM",
+                    "contributors": ["用户B"],
+                }
+            ],
+            "user_titles": [],
+            "statistics": {
+                "golden_quotes": [],
+                "token_usage": {"total_tokens": 150},
+            },
+        },
+    )
+
+    mock_llm = MagicMock()
+    # 模拟金句补充生成
+    mock_llm.analyze_all_concurrent = AsyncMock(
+        return_value=(
+            [],
+            [],
+            [GoldenQuote(content="新增金句", sender="用户C", reason="语境")],
+            TokenUsage(prompt_tokens=50, completion_tokens=10, total_tokens=60),
+            None,
+        )
+    )
+
+    mock_bot_mgr = MagicMock()
+    mock_bot_mgr.get_adapter = MagicMock(return_value=MagicMock())
+
+    mock_config = MagicMock()
+    mock_config.get_llm_max_concurrent = MagicMock(return_value=1)
+    mock_config.get_topic_analysis_enabled = MagicMock(return_value=True)
+    mock_config.get_user_title_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_golden_quote_analysis_enabled = MagicMock(return_value=True)
+    mock_config.get_chat_quality_analysis_enabled = MagicMock(return_value=False)
+
+    service = AnalysisApplicationService(
+        config_manager=mock_config,
+        bot_manager=mock_bot_mgr,
+        history_manager=MagicMock(save_analysis=AsyncMock()),
+        report_generator=MagicMock(),
+        llm_analyzer=mock_llm,
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=chk_store,
+    )
+
+    res = await service.resume_analysis(
+        trace_id="trace_resume_partial_001",
+        group_id="99999",
+        date_str="2026-08-26",
+    )
+
+    assert res["success"] is True
+    # 验证话题直接复用了历史快照
+    assert len(res["analysis_result"]["topics"]) == 1
+    assert res["analysis_result"]["topics"][0].topic == "已复用的话题"
+    # 验证金句补充成功
+    assert len(res["analysis_result"]["statistics"].golden_quotes) == 1
+    assert res["analysis_result"]["statistics"].golden_quotes[0].content == "新增金句"
+
+    # 关键断言：analyze_all_concurrent 传入的 topic_enabled 必须为 False（话题无需重跑）
+    call_kwargs = mock_llm.analyze_all_concurrent.call_args.kwargs
+    assert call_kwargs["topic_enabled"] is False
+    assert call_kwargs["golden_quote_enabled"] is True
+
+
 

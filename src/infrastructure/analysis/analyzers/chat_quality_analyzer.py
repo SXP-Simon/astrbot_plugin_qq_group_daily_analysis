@@ -410,6 +410,8 @@ ${messages_text}
         messages: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """
         分析聊天质量
@@ -435,6 +437,17 @@ ${messages_text}
 
             # 应用人设强化注入
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
+
+            from ....shared.trace_context import TraceContext
+
+            trace = TraceContext.current()
+            if trace:
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                prompts_map[self.get_data_type()] = {
+                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "provider_id": "quality_provider_id",
+                }
 
             # 3. 调用 LLM
             response = await call_provider_with_retry(
@@ -528,6 +541,14 @@ ${messages_text}
         data: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[list[QualityReview], TokenUsage]:
-        review, usage = await self.analyze_quality(data, umo, session_id)
+        review, usage = await self.analyze_quality(
+            data,
+            umo,
+            session_id,
+            persona_id=persona_id,
+            prompt_override=prompt_override,
+        )
         return [review] if review else [], usage

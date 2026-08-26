@@ -271,6 +271,19 @@ async def get_provider_id_with_fallback(
         strategies = []
         strategy_names = []
 
+        # 0. 显式覆盖 Provider (续跑或手动调试时通过 TraceContext 传入)
+        trace = TraceContext.current()
+        override_provider_id = (
+            trace.metadata.get("override_provider_id") if trace else None
+        )
+        if override_provider_id:
+            strategies.append(
+                lambda pid=override_provider_id: _try_get_provider_id_by_id(
+                    context, pid, "续跑/手动指定的 Provider"
+                )
+            )
+            strategy_names.append(f"0. 指定的 Provider ({override_provider_id})")
+
         # 1. 特定任务的 provider_id
         if provider_id_key:
             getter_method = f"get_{provider_id_key}"
