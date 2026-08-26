@@ -9,6 +9,7 @@ import {
 } from "@ant-design/icons";
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ActiveTaskBoard } from "../../../widgets/active-task-board/ActiveTaskBoard";
+import { OverviewTrendCharts } from "../../../widgets/trend-charts/OverviewTrendCharts";
 import { formatDuration, formatSmartTokens } from "../../../shared/lib/formatters";
 import { useOverviewViewModel } from "../model/useOverviewViewModel";
 
@@ -91,6 +92,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
           />
         </Col>
       </Row>
+
+      {/* 可观测性趋势看板 (Observability Trends Grid) */}
+      <OverviewTrendCharts
+        initialTrends={metrics.trends}
+        totalTraces={metrics.total_traces}
+        totalTokens={metrics.total_tokens_spent}
+        loading={loading}
+      />
 
       {/* 正在运行中的任务看板 (Active Tasks Organism) */}
       <Card size="small">
