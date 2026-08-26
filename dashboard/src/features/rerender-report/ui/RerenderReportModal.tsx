@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Form, Select, Radio, Alert, Space, Typography, message } from "antd";
 import { SkinOutlined } from "@ant-design/icons";
 import { ReportItem } from "../../../entities/report/model/types";
@@ -41,6 +41,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         template_name: values.template_name,
         render_format: values.render_format,
         platform_id: report.platform,
+        trace_id: report.trace_id,
       });
       if (res && res.success) {
         message.success("✨ 免 Token 切换主题渲染成功！新报告已生成");

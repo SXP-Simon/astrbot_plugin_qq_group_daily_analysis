@@ -402,8 +402,13 @@ class PluginPageWebUIBridge:
             provider_id = (
                 payload.get("provider_id") if isinstance(payload, dict) else None
             )
+            template_name = (
+                payload.get("template_name") if isinstance(payload, dict) else None
+            )
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
+            if not template_name and hasattr(request, "query"):
+                template_name = request.query.get("template_name")
 
             # 启动后台异步任务
             asyncio_task = asyncio.create_task(
@@ -413,6 +418,7 @@ class PluginPageWebUIBridge:
                     group_name=group_name,
                     platform=platform,
                     provider_id=provider_id,
+                    template_name=template_name,
                 )
             )
 
@@ -433,6 +439,7 @@ class PluginPageWebUIBridge:
                         "trace_id": trace_id,
                         "group_id": group_id,
                         "provider_id": provider_id,
+                        "template_name": template_name,
                         "message": "Task resume queued successfully",
                     },
                 }
@@ -448,6 +455,7 @@ class PluginPageWebUIBridge:
         group_name: str,
         platform: str,
         provider_id: str | None = None,
+        template_name: str | None = None,
     ) -> None:
         """后台异步执行断点续跑"""
         trace_ctx = TraceContext.set(
@@ -459,6 +467,8 @@ class PluginPageWebUIBridge:
         )
         if provider_id:
             trace_ctx.metadata["override_provider_id"] = str(provider_id)
+        if template_name and template_name != "auto":
+            trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "resume_analysis"):
                 result = await self.analysis_service.resume_analysis(
@@ -467,6 +477,7 @@ class PluginPageWebUIBridge:
                     platform_id=platform
                     if platform and platform not in ("all", "auto", "default")
                     else None,
+                    template_name=template_name,
                 )
                 if result and result.get("success"):
                     analysis_result = result.get("analysis_result")
@@ -871,6 +882,19 @@ class PluginPageWebUIBridge:
                     # 3. 兜底获取 trace_id
                     if not trace_id:
                         trace_id = report_trace_map.get(file_path.name, "")
+                    if not trace_id:
+                        # 检查文件名中是否直接包含了已知 trace_id
+                        for tid in set(report_trace_map.values()):
+                            if tid and tid in stem:
+                                trace_id = tid
+                                break
+                    if not trace_id and group_id:
+                        # 检查同群同时间戳前缀的文件映射
+                        stem_prefix = "_".join(stem.split("_")[:3])
+                        for fn, tid in report_trace_map.items():
+                            if tid and fn.startswith(stem_prefix):
+                                trace_id = tid
+                                break
 
                     g_info = group_info_map.get(group_id, {})
                     group_name = g_info.get("group_name", "")
@@ -994,6 +1018,7 @@ class PluginPageWebUIBridge:
         template_name = str(body.get("template_name", "default")).strip()
         render_format = str(body.get("render_format", "image")).strip()
         platform_id = body.get("platform_id")
+        trace_id = str(body.get("trace_id", "")).strip()
 
         if not group_id:
             return error_response("缺少群号参数 group_id", status_code=400)
@@ -1002,6 +1027,14 @@ class PluginPageWebUIBridge:
 
             date_str = _dt.datetime.now().strftime("%Y-%m-%d")
 
+        if not trace_id and hasattr(self, "trace_store"):
+            try:
+                recent_traces = self.trace_store.get_traces(group_id=group_id, limit=5)
+                if recent_traces:
+                    trace_id = str(recent_traces[0].get("trace_id", ""))
+            except Exception:
+                pass
+
         try:
             result = await self.analysis_service.rerender_report(
                 group_id=group_id,
@@ -1009,6 +1042,7 @@ class PluginPageWebUIBridge:
                 template_name=template_name,
                 platform_id=platform_id,
                 render_format=render_format,
+                trace_id=trace_id if trace_id else None,
             )
             if not result.get("success"):
                 return error_response(

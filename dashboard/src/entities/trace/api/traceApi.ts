@@ -82,9 +82,12 @@ export async function fetchProviderList(): Promise<LLMProviderItem[]> {
 
 export async function resumeTraceTask(
   traceId: string,
-  providerId?: string
+  providerId?: string,
+  templateName?: string
 ): Promise<{ trace_id: string; message: string }> {
-  const payload = providerId ? { provider_id: providerId } : {};
+  const payload: Record<string, string> = {};
+  if (providerId) payload.provider_id = providerId;
+  if (templateName) payload.template_name = templateName;
   const res = await apiPost<{ trace_id: string; message: string }>(
     `tasks/${traceId}/resume`,
     payload

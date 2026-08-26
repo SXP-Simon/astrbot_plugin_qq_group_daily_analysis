@@ -688,6 +688,7 @@ class AnalysisApplicationService:
         template_name: str,
         platform_id: str | None = None,
         render_format: str = "image",
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """使用指定的模板对历史分析产物免 Token 重新渲染。"""
         if not self.checkpoint_store:
@@ -713,7 +714,11 @@ class AnalysisApplicationService:
 
         # 渲染长图或 HTML
         if render_format == "html":
-            filename = f"report_{group_id}_{ts_str}_{template_name}.html"
+            filename = (
+                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.html"
+                if trace_id
+                else f"report_{group_id}_{ts_str}_{template_name}.html"
+            )
             dest = reports_dir / filename
             html_path, _ = await self.report_generator.generate_html_report(
                 analysis_result=analysis_result,
@@ -745,12 +750,40 @@ class AnalysisApplicationService:
                     )
                     dest.write_text(html_content, encoding="utf-8")
 
+            if trace_id:
+                from ...shared.trace_context import _global_trace_store
+
+                if _global_trace_store is not None:
+                    try:
+                        trace_data = _global_trace_store.get_trace(trace_id)
+                        if trace_data:
+                            extra = trace_data.get("extra") or {}
+                            rfiles = extra.setdefault("report_files", [])
+                            if not any(rf.get("filename") == filename for rf in rfiles):
+                                rfiles.append(
+                                    {
+                                        "filename": filename,
+                                        "path": str(dest.resolve()),
+                                        "format": "html",
+                                        "template": template_name,
+                                        "size_bytes": dest.stat().st_size
+                                        if dest.exists()
+                                        else 0,
+                                        "created_at": time_mod.time(),
+                                    }
+                                )
+                            trace_data["extra"] = extra
+                            _global_trace_store.save_trace(trace_data)
+                    except Exception:
+                        pass
+
             return {
                 "success": True,
                 "filename": filename,
                 "report_path": str(dest),
                 "is_html": True,
                 "from_checkpoint": True,
+                "trace_id": trace_id,
             }
         else:
             image_res = await self.report_generator.generate_image_report(
@@ -760,7 +793,11 @@ class AnalysisApplicationService:
                 template_theme=template_name,
             )
             image_url = image_res[0] if isinstance(image_res, tuple) else image_res
-            filename = f"report_{group_id}_{ts_str}_{template_name}.jpg"
+            filename = (
+                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
+                if trace_id
+                else f"report_{group_id}_{ts_str}_{template_name}.jpg"
+            )
             dest = reports_dir / filename
             if image_url and Path(image_url).exists():
                 import shutil
@@ -772,6 +809,33 @@ class AnalysisApplicationService:
                 data = base64.b64decode(image_url[9:])
                 dest.write_bytes(data)
 
+            if trace_id:
+                from ...shared.trace_context import _global_trace_store
+
+                if _global_trace_store is not None:
+                    try:
+                        trace_data = _global_trace_store.get_trace(trace_id)
+                        if trace_data:
+                            extra = trace_data.get("extra") or {}
+                            rfiles = extra.setdefault("report_files", [])
+                            if not any(rf.get("filename") == filename for rf in rfiles):
+                                rfiles.append(
+                                    {
+                                        "filename": filename,
+                                        "path": str(dest.resolve()),
+                                        "format": "image",
+                                        "template": template_name,
+                                        "size_bytes": dest.stat().st_size
+                                        if dest.exists()
+                                        else 0,
+                                        "created_at": time_mod.time(),
+                                    }
+                                )
+                            trace_data["extra"] = extra
+                            _global_trace_store.save_trace(trace_data)
+                    except Exception:
+                        pass
+
             return {
                 "success": True,
                 "filename": filename,
@@ -779,6 +843,7 @@ class AnalysisApplicationService:
                 "image_url": image_url,
                 "is_html": False,
                 "from_checkpoint": True,
+                "trace_id": trace_id,
             }
 
     async def resume_analysis(
@@ -787,6 +852,7 @@ class AnalysisApplicationService:
         group_id: str,
         platform_id: str | None = None,
         date_str: str | None = None,
+        template_name: str | None = None,
     ) -> dict[str, Any]:
         """从上一次 Checkpoint 执行幂等断点续跑"""
         from ...domain.models.data_models import TokenUsage
@@ -804,6 +870,8 @@ class AnalysisApplicationService:
                 trigger_type="resume",
                 auto_bind=True,
             )
+        if template_name and template_name != "auto":
+            trace.metadata["override_template_name"] = str(template_name)
 
         # 检查是否有前置清洗 Checkpoint
         clean_checkpoint = (

@@ -20,6 +20,7 @@ export async function rerenderReport(params: {
   template_name?: string;
   render_format?: "image" | "html";
   platform_id?: string;
+  trace_id?: string;
 }): Promise<{ success: boolean; filename: string; report_path: string; is_html: boolean } | null> {
   const res = await apiPost<{ success: boolean; filename: string; report_path: string; is_html: boolean }>(
     "reports/rerender",
