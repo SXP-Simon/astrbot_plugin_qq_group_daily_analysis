@@ -163,12 +163,28 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               style={{
                 fontSize: 11,
                 color: isDark ? "#8b949e" : "#64748b",
-                marginLeft: 4,
+                marginLeft: 2,
               }}
             >
               ({selectedIndex + 1}/{traces.length})
             </span>
           )}
+          <span
+            style={{
+              fontSize: 11,
+              background: isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)",
+              color: isDark ? "#60a5fa" : "#2563eb",
+              borderRadius: 12,
+              padding: "1px 8px",
+              marginLeft: 4,
+              fontWeight: 500,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            ← 最新事件在左侧 (按时间倒序)
+          </span>
         </Space>
 
         <Space size={4}>
@@ -205,7 +221,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
           overflowY: "hidden",
           cursor: isDragging ? "grabbing" : "grab",
           userSelect: "none",
-          padding: "16px 12px 12px 12px",
+          padding: "24px 12px 12px 12px",
           scrollbarWidth: "none",
         }}
       >
@@ -344,6 +360,46 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                     position: "relative",
                   }}
                 >
+                  {/* 最左端（最新）或最右端（较早）轻量徽标指示 */}
+                  {idx === 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: -18,
+                        fontSize: 10,
+                        lineHeight: "14px",
+                        fontWeight: 600,
+                        color: isDark ? "#60a5fa" : "#2563eb",
+                        background: isDark ? "rgba(37,99,235,0.25)" : "#dbeafe",
+                        border: `1px solid ${isDark ? "rgba(37,99,235,0.4)" : "#bfdbfe"}`,
+                        padding: "0 4px",
+                        borderRadius: 3,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      最新
+                    </span>
+                  )}
+                  {idx === traces.length - 1 && traces.length > 1 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: -18,
+                        fontSize: 10,
+                        lineHeight: "14px",
+                        fontWeight: 500,
+                        color: isDark ? "#8b949e" : "#64748b",
+                        background: isDark ? "#21262d" : "#f1f5f9",
+                        border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                        padding: "0 4px",
+                        borderRadius: 3,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      较早
+                    </span>
+                  )}
+
                   {/* 圆形节点 (含光晕与选中环) */}
                   <div
                     style={{
