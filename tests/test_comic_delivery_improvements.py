@@ -10,6 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from test_comic_regressions import load_config_manager_class
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -174,7 +176,7 @@ def test_drawing_provider_presets_map_to_runtime_protocols(tmp_path):
         "google": "google",
         "openai": "chat",
         "zai": "chat",
-        "grok2api": "chat",
+        "grok2api": "grok",
         "agnes_ai": "agnes_ai",
         "agnes_ai_china": "agnes_ai",
         "xai": "xai",
@@ -792,3 +794,28 @@ def test_napcat_stream_upload_uses_current_onebot_connection(tmp_path):
     chunk = calls[0][1]
     assert base64.b64decode(chunk["chunk_data"]) == b"a" * 10
     assert chunk["expected_sha256"] == hashlib.sha256(b"a" * 10).hexdigest()
+
+
+def test_validate_image_url_allows_localhost_and_private_urls():
+    """本地自建或容器内的绘图服务（如 grok2api、SD 等）返回的 URL 应允许通过校验。"""
+    drawing_image_response = _load_module(
+        "src.infrastructure.drawing.drawing_image_response",
+        "src/infrastructure/drawing/drawing_image_response.py",
+    )
+    handler = drawing_image_response.DrawingImageResponseService(
+        hooks=SimpleNamespace(config_manager=SimpleNamespace(get_drawing_download_proxy=lambda: None)),
+        download_image=AsyncMock(),
+    )
+
+    # 应该正常通过校验，不抛出异常
+    asyncio.run(handler._validate_public_image_url("http://127.0.0.1:8000/v1/media/images/test.png"))
+    asyncio.run(handler._validate_public_image_url("http://localhost:8000/images/test.jpg"))
+    asyncio.run(handler._validate_public_image_url("http://192.168.1.100:7860/outputs/img.png"))
+    asyncio.run(handler._validate_public_image_url("https://images.example.com/generated.png"))
+
+    # 非法协议或包含凭据应被拒绝
+    with pytest.raises(ValueError, match="HTTP/HTTPS"):
+        asyncio.run(handler._validate_public_image_url("ftp://127.0.0.1/test.png"))
+    with pytest.raises(ValueError, match="用户凭据"):
+        asyncio.run(handler._validate_public_image_url("http://user:pass@127.0.0.1/test.png"))
+

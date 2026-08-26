@@ -4,7 +4,6 @@ import {
   FileImageOutlined,
   FileTextOutlined,
   DownloadOutlined,
-  ExportOutlined,
 } from "@ant-design/icons";
 import { ReportItem } from "../../entities/report/model/types";
 
@@ -31,17 +30,6 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
       report?.filename.toLowerCase().endsWith(".htm")
   );
 
-  const handleOpenInNewTab = () => {
-    if (!report) return;
-    if (isHtml && report.html_content) {
-      const blob = new Blob([report.html_content], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-    } else if (report.data_url) {
-      window.open(report.data_url, "_blank");
-    }
-  };
-
   return (
     <Modal
       open={open}
@@ -63,15 +51,6 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
         <Button key="close" onClick={onClose}>
           关闭
         </Button>,
-        report && (
-          <Button
-            key="open-tab"
-            icon={<ExportOutlined />}
-            onClick={handleOpenInNewTab}
-          >
-            新窗口打开
-          </Button>
-        ),
         report && (
           <Button
             key="download"
