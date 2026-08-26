@@ -86,6 +86,12 @@ export function formatTriggerType(triggerType?: string): { text: string; color: 
     case "web_ui":
     case "web_manual":
       return { text: "控制台触发", color: "geekblue" };
+    case "resume":
+    case "resume_analysis":
+      return { text: "断点续跑", color: "orange" };
+    case "rerender":
+    case "rerender_report":
+      return { text: "主题重绘", color: "volcano" };
     default:
       return { text: triggerType || "常规分析", color: "default" };
   }

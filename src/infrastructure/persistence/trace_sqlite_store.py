@@ -94,7 +94,30 @@ class TraceSQLiteStore:
             return
 
         with self._get_connection() as conn:
-            # 1. 写入主表
+            # 1. 写入主表前，合并既有的 extra_json（特别是 report_files 产物列表）
+            extra_payload = dict(trace_dict.get("extra", {}))
+            existing_row = conn.execute(
+                "SELECT extra_json FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+            ).fetchone()
+            if existing_row and existing_row[0]:
+                try:
+                    old_extra = json.loads(existing_row[0])
+                    merged_rfiles = list(old_extra.get("report_files", []))
+                    seen_filenames = {
+                        rf.get("filename")
+                        for rf in merged_rfiles
+                        if isinstance(rf, dict) and rf.get("filename")
+                    }
+                    for rf in extra_payload.get("report_files", []):
+                        if isinstance(rf, dict):
+                            fn = rf.get("filename")
+                            if fn and fn not in seen_filenames:
+                                seen_filenames.add(fn)
+                                merged_rfiles.append(rf)
+                    extra_payload["report_files"] = merged_rfiles
+                except Exception:
+                    pass
+
             conn.execute(
                 """
                 INSERT INTO analysis_traces (
@@ -127,7 +150,7 @@ class TraceSQLiteStore:
                     trace_dict.get("error_stage"),
                     trace_dict.get("error_message"),
                     trace_dict.get("stack_trace"),
-                    json.dumps(trace_dict.get("extra", {}), ensure_ascii=False),
+                    json.dumps(extra_payload, ensure_ascii=False),
                 ),
             )
 
@@ -269,6 +292,41 @@ class TraceSQLiteStore:
                 if fn and fn not in seen_rfiles:
                     seen_rfiles.add(fn)
                     deduped_rfiles.append(rf)
+
+            # 额外扫描磁盘 reports 目录，聚合文件名中明确带有 trace_id 的产物文件（如换模板重绘/续跑生成的文件）
+            try:
+                reports_dir = self.db_path.parent / "reports"
+                if reports_dir.is_dir():
+                    for p in reports_dir.iterdir():
+                        if (
+                            p.is_file()
+                            and trace_id in p.name
+                            and p.name not in seen_rfiles
+                        ):
+                            seen_rfiles.add(p.name)
+                            is_html = p.suffix.lower() in (".html", ".htm")
+                            is_comic = p.name.lower().startswith(
+                                "comic_"
+                            ) or p.name.startswith("漫画_")
+                            stat = p.stat()
+                            deduped_rfiles.append(
+                                {
+                                    "filename": p.name,
+                                    "path": str(p.resolve()),
+                                    "format": "html" if is_html else "image",
+                                    "report_type": "comic" if is_comic else "daily",
+                                    "size_bytes": stat.st_size,
+                                    "created_at": stat.st_mtime,
+                                }
+                            )
+            except Exception:
+                pass
+
+            # 按生成时间降序排序，最新生成的报告排在前面
+            deduped_rfiles.sort(
+                key=lambda x: x.get("created_at", 0) if isinstance(x, dict) else 0,
+                reverse=True,
+            )
             trace_data["report_files"] = deduped_rfiles
             return trace_data
 
