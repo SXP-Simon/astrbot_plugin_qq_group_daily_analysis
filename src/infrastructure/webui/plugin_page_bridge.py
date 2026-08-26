@@ -131,6 +131,12 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get generated report image base64 content",
             ),
+            (
+                f"/{PLUGIN_NAME}/reports/rerender",
+                self.api_rerender_report,
+                ["POST"],
+                "Re-render report with a new theme template using cached checkpoint without LLM tokens",
+            ),
             # 5. SSE 实时事件流
             (
                 f"/{PLUGIN_NAME}/events/stream",
@@ -749,6 +755,43 @@ class PluginPageWebUIBridge:
                 )
         except Exception as e:
             logger.error(f"读取历史报告内容异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_rerender_report(self) -> Any:
+        """免 Token 切换模板重新渲染历史分析报告"""
+        try:
+            body = await request.json() if hasattr(request, "json") else {}
+        except Exception:
+            body = {}
+
+        group_id = str(body.get("group_id", "")).strip()
+        date_str = str(body.get("date_str", "")).strip()
+        template_name = str(body.get("template_name", "default")).strip()
+        render_format = str(body.get("render_format", "image")).strip()
+        platform_id = body.get("platform_id")
+
+        if not group_id:
+            return error_response("缺少群号参数 group_id", status_code=400)
+        if not date_str:
+            import datetime as _dt
+
+            date_str = _dt.datetime.now().strftime("%Y-%m-%d")
+
+        try:
+            result = await self.analysis_service.rerender_report(
+                group_id=group_id,
+                date_str=date_str,
+                template_name=template_name,
+                platform_id=platform_id,
+                render_format=render_format,
+            )
+            if not result.get("success"):
+                return error_response(
+                    result.get("reason", "重新渲染失败"), status_code=400
+                )
+            return json_response({"status": "ok", "data": result})
+        except Exception as e:
+            logger.error(f"重新渲染报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_stream_events(self) -> Any:

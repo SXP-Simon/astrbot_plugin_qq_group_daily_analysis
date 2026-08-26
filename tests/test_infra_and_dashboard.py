@@ -224,3 +224,87 @@ async def test_active_task_manager_and_reaper(temp_db: Path):
     aborted_trace = store.get_trace("active_001")
     assert aborted_trace is not None
     assert aborted_trace["status"] == "aborted"
+
+
+@pytest.mark.asyncio
+async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
+    from unittest.mock import AsyncMock, MagicMock
+    from src.application.services.analysis_application_service import AnalysisApplicationService
+    from src.domain.models.data_models import GroupStatistics, SummaryTopic, UserTitle, TokenUsage
+
+    chk_store = CheckpointStore(temp_db)
+
+    # 1. 模拟一个分析结果并存入 checkpoint
+    stats = GroupStatistics(
+        message_count=100,
+        total_characters=500,
+        participant_count=10,
+        most_active_period="20:00",
+        golden_quotes=[],
+        emoji_count=5,
+        token_usage=TokenUsage(total_tokens=500),
+    )
+    topics = [SummaryTopic(topic="测试话题A", contributors=["测试用户"], detail="话题详情")]
+    user_titles = [UserTitle(name="测试用户", user_id="123", title="水群王", mbti="INTJ", reason="经常水群")]
+    analysis_result = {
+        "statistics": stats,
+        "topics": topics,
+        "user_titles": user_titles,
+        "user_analysis": {"123": {"message_count": 50}},
+        "chat_quality_review": None,
+    }
+
+    mock_report_gen = MagicMock()
+    mock_report_gen.data_dir = tmp_path
+    mock_report_gen.generate_image_report = AsyncMock(return_value=(str(tmp_path / "temp.jpg"), None))
+    mock_report_gen.html_templates = MagicMock()
+    mock_report_gen.html_templates.render = MagicMock(return_value="<html>测试报告</html>")
+    (tmp_path / "temp.jpg").write_bytes(b"image_content")
+
+    mock_config = MagicMock()
+    mock_config.get_data_dir = MagicMock(return_value=tmp_path)
+    mock_config.get_llm_max_concurrent = MagicMock(return_value=1)
+
+    service = AnalysisApplicationService(
+        config_manager=mock_config,
+        bot_manager=MagicMock(),
+        history_manager=MagicMock(),
+        report_generator=mock_report_gen,
+        llm_analyzer=MagicMock(),
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=chk_store,
+    )
+
+    # 保存快照
+    chk_store.save_checkpoint(
+        group_id="12345",
+        date_str="2026-08-26",
+        stage_name="LLM_ANALYSIS",
+        data=service._serialize_analysis_result(analysis_result),
+    )
+
+    # 2. 执行免 Token 重新渲染 (图片)
+    img_res = await service.rerender_report(
+        group_id="12345",
+        date_str="2026-08-26",
+        template_name="ATRI",
+        render_format="image",
+    )
+    assert img_res["success"] is True
+    assert img_res["from_checkpoint"] is True
+    assert "ATRI" in img_res["filename"]
+    assert mock_report_gen.generate_image_report.called
+
+    # 3. 执行免 Token 重新渲染 (HTML)
+    html_res = await service.rerender_report(
+        group_id="12345",
+        date_str="2026-08-26",
+        template_name="BlueArchive",
+        render_format="html",
+    )
+    assert html_res["success"] is True
+    assert html_res["is_html"] is True
+    assert "BlueArchive" in html_res["filename"]
+    assert mock_report_gen.html_templates.render.called
+

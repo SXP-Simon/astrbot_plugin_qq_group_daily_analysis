@@ -14,6 +14,7 @@ import weakref
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from ...domain.entities.incremental_state import IncrementalBatch
@@ -55,6 +56,7 @@ class AnalysisApplicationService:
         analysis_domain_service: AnalysisDomainService,
         incremental_store: IncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
+        checkpoint_store: Any | None = None,
     ):
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -65,6 +67,7 @@ class AnalysisApplicationService:
         self.analysis_domain_service = analysis_domain_service
         self.incremental_store = incremental_store
         self.incremental_merge_service = incremental_merge_service
+        self.checkpoint_store = checkpoint_store
         self._locks = weakref.WeakValueDictionary()
         # 全局 LLM 分析信号量，控制对外 API 的并发压力
         # 使用专用的 LLM 并发配置项
@@ -431,6 +434,17 @@ class AnalysisApplicationService:
             # 6. 持久化摘要 (Persistence)
             with trace.span("SAVE_SUMMARY"):
                 await self.history_manager.save_analysis(group_id, analysis_result)
+                if self.checkpoint_store:
+                    try:
+                        date_str = dt.datetime.now().strftime("%Y-%m-%d")
+                        self.checkpoint_store.save_checkpoint(
+                            group_id=group_id,
+                            date_str=date_str,
+                            stage_name="LLM_ANALYSIS",
+                            data=self._serialize_analysis_result(analysis_result),
+                        )
+                    except Exception as e:
+                        logger.warning(f"保存分析 Checkpoint 失败: {e}")
 
             # 7. 生成报告并发送 (应用层编排发送动作)
             # 这里由调用方处理发送，本服务只返回分析结果和可能的视觉产物
@@ -441,6 +455,194 @@ class AnalysisApplicationService:
                 "adapter": adapter,
                 "group_id": group_id,
                 "platform_id": getattr(adapter, "platform_id", platform_id),
+            }
+
+    def _serialize_analysis_result(
+        self, analysis_result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """将包含领域对象的 analysis_result 序列化为 JSON 友好的 dict 快照。"""
+        import dataclasses
+
+        def _to_dict(obj: Any) -> Any:
+            if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+                return dataclasses.asdict(obj)
+            if isinstance(obj, list):
+                return [_to_dict(item) for item in obj]
+            if isinstance(obj, dict):
+                return {k: _to_dict(v) for k, v in obj.items()}
+            return obj
+
+        return {
+            "statistics": _to_dict(analysis_result.get("statistics")),
+            "topics": _to_dict(analysis_result.get("topics", [])),
+            "user_titles": _to_dict(analysis_result.get("user_titles", [])),
+            "user_analysis": _to_dict(analysis_result.get("user_analysis", {})),
+            "chat_quality_review": _to_dict(analysis_result.get("chat_quality_review")),
+        }
+
+    def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
+        """将持久化的 JSON 快照还原为包含领域数据模型的 analysis_result。"""
+        from ...domain.models.data_models import (
+            ActivityVisualization,
+            EmojiStatistics,
+            GoldenQuote,
+            GroupStatistics,
+            QualityDimension,
+            QualityReview,
+            SummaryTopic,
+            TokenUsage,
+            UserTitle,
+        )
+
+        stats_raw = data.get("statistics", {})
+        golden_quotes = [
+            GoldenQuote(**g) if isinstance(g, dict) else g
+            for g in stats_raw.get("golden_quotes", [])
+        ]
+        emoji_stats_raw = stats_raw.get("emoji_statistics", {})
+        emoji_stats = (
+            EmojiStatistics(**emoji_stats_raw)
+            if isinstance(emoji_stats_raw, dict)
+            else EmojiStatistics()
+        )
+        act_viz_raw = stats_raw.get("activity_visualization", {})
+        act_viz = (
+            ActivityVisualization(**act_viz_raw)
+            if isinstance(act_viz_raw, dict)
+            else ActivityVisualization()
+        )
+        token_usage_raw = stats_raw.get("token_usage", {})
+        token_usage = (
+            TokenUsage(**token_usage_raw)
+            if isinstance(token_usage_raw, dict)
+            else TokenUsage()
+        )
+
+        quality_raw = data.get("chat_quality_review") or stats_raw.get(
+            "chat_quality_review"
+        )
+        quality_review = None
+        if isinstance(quality_raw, dict):
+            dims = [
+                QualityDimension(**d) if isinstance(d, dict) else d
+                for d in quality_raw.get("dimensions", [])
+            ]
+            quality_review = QualityReview(
+                title=str(quality_raw.get("title", "群聊质量锐评")),
+                subtitle=str(quality_raw.get("subtitle", "")),
+                dimensions=dims,
+                summary=str(quality_raw.get("summary", "")),
+            )
+
+        stats = GroupStatistics(
+            message_count=int(stats_raw.get("message_count", 0)),
+            total_characters=int(stats_raw.get("total_characters", 0)),
+            participant_count=int(stats_raw.get("participant_count", 0)),
+            most_active_period=str(stats_raw.get("most_active_period", "")),
+            golden_quotes=golden_quotes,
+            emoji_count=int(stats_raw.get("emoji_count", 0)),
+            emoji_statistics=emoji_stats,
+            activity_visualization=act_viz,
+            token_usage=token_usage,
+            chat_quality_review=quality_review,
+        )
+
+        topics = [
+            SummaryTopic(**t) if isinstance(t, dict) else t
+            for t in data.get("topics", [])
+        ]
+        user_titles = [
+            UserTitle(**t) if isinstance(t, dict) else t
+            for t in data.get("user_titles", [])
+        ]
+
+        return {
+            "statistics": stats,
+            "topics": topics,
+            "user_titles": user_titles,
+            "user_analysis": data.get("user_analysis", {}),
+            "chat_quality_review": quality_review,
+        }
+
+    async def rerender_report(
+        self,
+        group_id: str,
+        date_str: str,
+        template_name: str,
+        platform_id: str | None = None,
+        render_format: str = "image",
+    ) -> dict[str, Any]:
+        """使用指定的模板对历史分析产物免 Token 重新渲染。"""
+        if not self.checkpoint_store:
+            return {"success": False, "reason": "未配置 Checkpoint 存储器"}
+
+        cached_data = self.checkpoint_store.get_checkpoint(
+            group_id, date_str, "LLM_ANALYSIS"
+        )
+        if not cached_data:
+            return {
+                "success": False,
+                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物快照",
+            }
+
+        analysis_result = self._deserialize_analysis_result(cached_data)
+
+        # 构造 html 渲染函数
+        def html_render_func(
+            tpl_name: str, res: dict[str, Any], avatars: dict[str, str] | None = None
+        ) -> str:
+            if hasattr(self.report_generator, "html_templates"):
+                return self.report_generator.html_templates.render(
+                    template_name or tpl_name, res, avatars=avatars
+                )
+            return ""
+
+        reports_dir = (
+            getattr(self.report_generator, "data_dir", None)
+            or self.config_manager.get_data_dir()
+        ) / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 渲染长图或 HTML
+        if render_format == "html":
+            html_content = html_render_func(template_name, analysis_result)
+            filename = f"report_{group_id}_{ts_str}_{template_name}.html"
+            report_path = reports_dir / filename
+            report_path.write_text(html_content, encoding="utf-8")
+            return {
+                "success": True,
+                "filename": filename,
+                "report_path": str(report_path),
+                "is_html": True,
+                "from_checkpoint": True,
+            }
+        else:
+            image_res = await self.report_generator.generate_image_report(
+                analysis_result=analysis_result,
+                group_id=group_id,
+                html_render_func=html_render_func,
+            )
+            image_url = image_res[0] if isinstance(image_res, tuple) else image_res
+            filename = f"report_{group_id}_{ts_str}_{template_name}.jpg"
+            dest = reports_dir / filename
+            if image_url and Path(image_url).exists():
+                import shutil
+
+                shutil.copy2(image_url, dest)
+            elif image_url and image_url.startswith("base64://"):
+                import base64
+
+                data = base64.b64decode(image_url[9:])
+                dest.write_bytes(data)
+
+            return {
+                "success": True,
+                "filename": filename,
+                "report_path": str(dest),
+                "image_url": image_url,
+                "is_html": False,
+                "from_checkpoint": True,
             }
 
     async def execute_comic_topic_analysis(
