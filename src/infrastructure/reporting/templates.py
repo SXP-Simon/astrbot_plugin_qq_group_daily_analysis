@@ -6,6 +6,7 @@ HTML模板模块
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import threading
 from pathlib import Path
@@ -146,15 +147,40 @@ class HTMLTemplates:
                     has_html = (p / "html_template.html").exists()
                     if has_image or has_html:
                         builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
-                        custom_label = (
-                            f"{builtin_label} (自定义修改版)"
-                            if builtin_label
-                            else f"{entry} (自定义本地模板)"
-                        )
+                        builtin_dir = os.path.join(self.base_dir, entry)
+
+                        is_custom = True
+                        if builtin_label and os.path.isdir(builtin_dir):
+                            # 对比自定义目录与内置目录中的所有 HTML 文件哈希，避免未修改时误判
+                            is_truly_modified = False
+                            for ch_file in p.glob("*.html"):
+                                bh_file = Path(builtin_dir) / ch_file.name
+                                if not bh_file.exists():
+                                    is_truly_modified = True
+                                    break
+                                try:
+                                    if (
+                                        hashlib.sha256(ch_file.read_bytes()).digest()
+                                        != hashlib.sha256(bh_file.read_bytes()).digest()
+                                    ):
+                                        is_truly_modified = True
+                                        break
+                                except Exception:
+                                    is_truly_modified = True
+                                    break
+
+                            if not is_truly_modified:
+                                is_custom = False
+                                custom_label = builtin_label
+                            else:
+                                custom_label = f"{builtin_label} (自定义修改版)"
+                        else:
+                            custom_label = f"{entry} (自定义本地模板)"
+
                         found_themes[entry] = {
                             "id": entry,
                             "label": custom_label,
-                            "is_custom": True,
+                            "is_custom": is_custom,
                             "has_image": has_image,
                             "has_html": has_html,
                         }
