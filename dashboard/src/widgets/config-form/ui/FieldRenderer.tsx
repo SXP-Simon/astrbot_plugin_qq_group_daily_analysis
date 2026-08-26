@@ -17,6 +17,10 @@ import {
   UndoOutlined,
   ApartmentOutlined,
   UserOutlined,
+  PictureOutlined,
+  FileOutlined,
+  UploadOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
@@ -53,6 +57,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   const { token } = theme.useToken();
   const [newTagInput, setNewTagInput] = useState("");
   const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newFileInput, setNewFileInput] = useState("");
+  const [isAddingFile, setIsAddingFile] = useState(false);
 
   const title = fieldSchema.description || fieldKey;
   const hint = fieldSchema.hint || "";
@@ -385,6 +391,176 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
               <PlusOutlined style={{ marginRight: 4 }} /> 添加条目
             </Tag>
           )}
+        </div>
+      );
+    }
+
+    // 7.1 文件 / 图片上传与列表 (file)
+    if (type === "file") {
+      const fileList: string[] = Array.isArray(value)
+        ? (value as string[]).filter((x) => typeof x === "string" && x.trim().length > 0)
+        : typeof value === "string" && value.trim().length > 0
+        ? [value.trim()]
+        : [];
+
+      const handleRemoveFile = (indexToRemove: number) => {
+        const nextList = fileList.filter((_, idx) => idx !== indexToRemove);
+        onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
+      };
+
+      const handleAddFileUrl = () => {
+        if (!newFileInput.trim()) return;
+        const target = newFileInput.trim();
+        const nextList = [...fileList, target];
+        onChange(Array.isArray(defaultValue) ? nextList : target);
+        setNewFileInput("");
+        setIsAddingFile(false);
+      };
+
+      const handleUploadLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        Array.from(files).forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            if (dataUrl) {
+              const nextList = [...fileList, dataUrl];
+              onChange(Array.isArray(defaultValue) ? nextList : dataUrl);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+
+        e.target.value = "";
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+          {/* 文件/图片条目列表 */}
+          {fileList.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {fileList.map((filePath, idx) => {
+                const isImage =
+                  filePath.startsWith("data:image/") ||
+                  filePath.startsWith("http://") ||
+                  filePath.startsWith("https://") ||
+                  /\.(png|jpe?g|webp|gif)$/i.test(filePath);
+
+                return (
+                  <div
+                    key={`${filePath}-${idx}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: token.colorFillAlter,
+                      border: `1px solid ${token.colorBorderSecondary}`,
+                      borderRadius: 4,
+                      padding: "4px 8px",
+                      maxWidth: "100%",
+                    }}
+                  >
+                    {isImage ? (
+                      <PictureOutlined style={{ color: "#1677ff", fontSize: 13 }} />
+                    ) : (
+                      <FileOutlined style={{ color: token.colorTextSecondary, fontSize: 13 }} />
+                    )}
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontFamily: SANS_MONO_FONT,
+                        color: token.colorText,
+                        maxWidth: 240,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={filePath}
+                    >
+                      {filePath.length > 35 ? `${filePath.slice(0, 20)}...${filePath.slice(-10)}` : filePath}
+                    </span>
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined style={{ fontSize: 10 }} />}
+                      style={{ width: 20, height: 20, padding: 0 }}
+                      onClick={() => handleRemoveFile(idx)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: "8px 12px",
+                background: token.colorFillAlter,
+                border: `1px dashed ${token.colorBorderSecondary}`,
+                borderRadius: 4,
+                fontSize: 11,
+                color: token.colorTextTertiary,
+              }}
+            >
+              暂未添加参考图片或文件（支持上传本地图片、输入图片 URL 或相对路径）
+            </div>
+          )}
+
+          {/* 添加控制栏 */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input
+              type="file"
+              id={`file-upload-${fieldKey}`}
+              multiple
+              accept={
+                Array.isArray(fieldSchema.file_types)
+                  ? fieldSchema.file_types.map((ext) => `.${ext}`).join(",")
+                  : "image/*"
+              }
+              style={{ display: "none" }}
+              onChange={handleUploadLocal}
+            />
+            <Button
+              size="small"
+              icon={<UploadOutlined />}
+              onClick={() => {
+                document.getElementById(`file-upload-${fieldKey}`)?.click();
+              }}
+            >
+              上传本地图片
+            </Button>
+
+            {isAddingFile ? (
+              <Space.Compact style={{ maxWidth: 360 }}>
+                <Input
+                  size="small"
+                  placeholder="输入 http:// 链接或本地相对路径"
+                  value={newFileInput}
+                  onChange={(e) => setNewFileInput(e.target.value)}
+                  onPressEnter={handleAddFileUrl}
+                  style={{ fontFamily: SANS_MONO_FONT, fontSize: 11 }}
+                  autoFocus
+                />
+                <Button size="small" type="primary" onClick={handleAddFileUrl}>
+                  确认
+                </Button>
+                <Button size="small" onClick={() => setIsAddingFile(false)}>
+                  取消
+                </Button>
+              </Space.Compact>
+            ) : (
+              <Button
+                size="small"
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={() => setIsAddingFile(true)}
+              >
+                添加图片 URL / 路径
+              </Button>
+            )}
+          </div>
         </div>
       );
     }
