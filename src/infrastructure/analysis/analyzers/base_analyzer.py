@@ -441,10 +441,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             )
 
             if response is None:
-                logger.error(
-                    f"{self.get_data_type()}分析调用LLM失败: provider返回None（重试失败）"
-                )
-                return [], TokenUsage()
+                err_text = f"{self.get_data_type()}分析调用LLM失败: Provider 返回空响应或重试耗尽"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
 
             # 3. 提取token使用统计
             token_usage_dict = extract_token_usage(response)
@@ -513,14 +512,13 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 return data_objects, token_usage
 
             # 6. 全部尝试失败
-            logger.error(
-                f"{self.get_data_type()}分析失败: JSON解析与正则降级均未成功: {error_msg}"
-            )
-            return [], token_usage
+            err_text = f"{self.get_data_type()}分析失败: JSON解析与正则降级均未成功 ({error_msg or '未产出有效内容'})"
+            logger.error(err_text)
+            raise RuntimeError(err_text)
 
         except Exception as e:
             logger.error(f"{self.get_data_type()}分析失败: {e}", exc_info=True)
-            return [], TokenUsage()
+            raise
 
     async def _build_system_prompt(
         self, umo: str | None, persona_id: str | None = None

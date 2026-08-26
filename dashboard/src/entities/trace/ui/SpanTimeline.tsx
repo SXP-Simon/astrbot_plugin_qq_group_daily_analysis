@@ -230,6 +230,31 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                   </div>
                 )}
 
+              {span.stage_name === "LLM_ANALYSIS" &&
+                span.payload?.topics_count === 0 &&
+                (!span.payload?.prompt_tokens || span.payload?.prompt_tokens === 0) &&
+                (!Array.isArray(span.payload?.subtask_errors) ||
+                  span.payload?.subtask_errors.length === 0) && (
+                  <div
+                    style={{
+                      padding: "6px 8px",
+                      background: token.colorWarningBg,
+                      border: `1px solid ${token.colorWarningBorder}`,
+                      borderRadius: 4,
+                      color: token.colorWarningText,
+                      fontSize: 12,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Text style={{ color: "#d46b08" }} strong>
+                      ⚠️ 大模型分析未产出有效内容：
+                    </Text>
+                    <div style={{ marginTop: 2 }}>
+                      模型未消耗 Token 或未能解析出任何话题/画像/金句，请检查大模型 Provider 连接与配置。
+                    </div>
+                  </div>
+                )}
+
               {hasPayload ? (
                 <div>
                   <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>
