@@ -1,4 +1,4 @@
-import { apiGet, extractData } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { TraceRecord } from "../model/types";
 
 export interface ListTracesParams {
@@ -66,3 +66,31 @@ export async function fetchTraceDetail(
 
   return data;
 }
+
+export interface LLMProviderItem {
+  id: string;
+  name: string;
+  type?: string;
+  label?: string;
+}
+
+export async function fetchProviderList(): Promise<LLMProviderItem[]> {
+  const res = await apiGet<LLMProviderItem[]>("providers");
+  const data = extractData<LLMProviderItem[]>(res);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function resumeTraceTask(
+  traceId: string,
+  providerId?: string
+): Promise<{ trace_id: string; message: string }> {
+  const payload = providerId ? { provider_id: providerId } : {};
+  const res = await apiPost<{ trace_id: string; message: string }>(
+    `tasks/${traceId}/resume`,
+    payload
+  );
+  invalidateTraceCache(traceId);
+  const data = extractData<{ trace_id: string; message: string }>(res);
+  return data || { trace_id: traceId, message: "Task resume queued" };
+}
+

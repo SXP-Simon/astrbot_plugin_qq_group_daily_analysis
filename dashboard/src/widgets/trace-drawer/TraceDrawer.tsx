@@ -11,6 +11,9 @@ import {
   Button,
   message,
   Tooltip,
+  Modal,
+  Select,
+  Form,
   theme,
 } from "antd";
 import {
@@ -24,8 +27,14 @@ import {
   EyeOutlined,
   DownloadOutlined,
   CopyOutlined,
+  ApiOutlined,
 } from "@ant-design/icons";
-import { fetchTraceDetail } from "../../entities/trace/api/traceApi";
+import {
+  fetchTraceDetail,
+  resumeTraceTask,
+  fetchProviderList,
+  LLMProviderItem,
+} from "../../entities/trace/api/traceApi";
 import { fetchTraceLogs } from "../../entities/log/api/logApi";
 import { fetchReportContent } from "../../entities/report/api/reportApi";
 import { ReportItem } from "../../entities/report/model/types";
@@ -57,11 +66,48 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   const [trace, setTrace] = useState<TraceRecord | null>(null);
   const [logs, setLogs] = useState<PluginLogItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [previewReport, setPreviewReport] = useState<ReportItem | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [resumeModalOpen, setResumeModalOpen] = useState(false);
+  const [providers, setProviders] = useState<LLMProviderItem[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState("auto");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logBoxRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenResumeModal = async () => {
+    setResumeModalOpen(true);
+    setSelectedProvider("auto");
+    setLoadingProviders(true);
+    try {
+      const list = await fetchProviderList();
+      setProviders(list);
+    } catch {
+      // Ignore background fetch error
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  const handleConfirmResume = async () => {
+    if (!traceId) return;
+    setResuming(true);
+    try {
+      await resumeTraceTask(
+        traceId,
+        selectedProvider !== "auto" ? selectedProvider : undefined
+      );
+      message.success("已成功触发断点续跑任务，正在恢复分析...");
+      setResumeModalOpen(false);
+      loadDetail(true);
+    } catch (e) {
+      message.error(`触发续跑失败: ${e}`);
+    } finally {
+      setResuming(false);
+    }
+  };
 
   const handlePreviewFile = async (filename: string, isHtml: boolean) => {
     const baseItem: ReportItem = {
@@ -217,14 +263,28 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
         </Space>
       }
       extra={
-        <Button
-          size="small"
-          type="text"
-          icon={<ReloadOutlined spin={loading} />}
-          onClick={() => loadDetail(true)}
-        >
-          刷新
-        </Button>
+        <Space size="small">
+          {trace && trace.status !== "running" && (
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<SyncOutlined spin={resuming} />}
+              loading={resuming}
+              onClick={handleOpenResumeModal}
+            >
+              幂等续跑
+            </Button>
+          )}
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined spin={loading} />}
+            onClick={() => loadDetail(true)}
+          >
+            刷新
+          </Button>
+        </Space>
       }
       placement="right"
       width={600}
@@ -270,6 +330,19 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                   <Paragraph ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }} style={{ marginBottom: 4 }}>
                     {trace.error_message || "未知错误"}
                   </Paragraph>
+                  <div style={{ marginTop: 8, marginBottom: 8 }}>
+                    <Button
+                      type="primary"
+                      size="small"
+                      danger
+                      ghost
+                      icon={<SyncOutlined spin={resuming} />}
+                      loading={resuming}
+                      onClick={handleOpenResumeModal}
+                    >
+                      🔄 从 Checkpoint 幂等续跑此任务
+                    </Button>
+                  </div>
                   {trace.stack_trace && (
                     <Collapse
                       size="small"
@@ -642,6 +715,58 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
         }}
         onDownload={(r) => handleDownloadFile(r.filename, Boolean(r.is_html))}
       />
+
+      <Modal
+        title={
+          <Space>
+            <SyncOutlined />
+            <span>幂等断点续跑 / 重试分析</span>
+          </Space>
+        }
+        open={resumeModalOpen}
+        onCancel={() => setResumeModalOpen(false)}
+        onOk={handleConfirmResume}
+        confirmLoading={resuming}
+        okText="立即续跑"
+        cancelText="取消"
+        destroyOnClose
+        width={460}
+      >
+        <div style={{ marginTop: 12 }}>
+          <Alert
+            type="info"
+            showIcon
+            message="零浪费 Token 细粒度产物复用"
+            description="系统已自动跳过消息拉取与清洗，并直接复用本次任务中已有非空产物的子分析（如已生成的话题/画像），仅对失败或未完成的子任务向大模型发起补充请求。"
+            style={{ marginBottom: 16 }}
+          />
+
+          <Form layout="vertical">
+            <Form.Item
+              label={
+                <Space>
+                  <ApiOutlined />
+                  <span>指定大模型 Provider (选填)</span>
+                </Space>
+              }
+              extra="若上次分析因大模型崩溃、限流或 Provider 故障中断，可在此临时指定其他备用模型完成续跑"
+            >
+              <Select
+                value={selectedProvider}
+                onChange={setSelectedProvider}
+                loading={loadingProviders}
+                options={[
+                  { label: "跟随系统默认配置 (推荐)", value: "auto" },
+                  ...providers.map((p) => ({
+                    label: p.label || `${p.name} (${p.id})`,
+                    value: p.id,
+                  })),
+                ]}
+              />
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
     </Drawer>
   );
 };

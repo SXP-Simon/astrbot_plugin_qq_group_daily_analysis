@@ -37,13 +37,18 @@ export interface TriggerTaskResult {
 export async function triggerNewTask(
   groupId: string,
   groupName: string = "",
-  platform: string = "auto"
+  platform: string = "auto",
+  providerId?: string
 ): Promise<TriggerTaskResult> {
-  const res = await apiPost<{ trace_id?: string; message?: string }>("tasks/trigger", {
+  const payload: Record<string, unknown> = {
     group_id: groupId,
     group_name: groupName,
     platform: platform,
-  });
+  };
+  if (providerId && providerId !== "auto") {
+    payload.provider_id = providerId;
+  }
+  const res = await apiPost<{ trace_id?: string; message?: string }>("tasks/trigger", payload);
 
   const data = extractData<{ trace_id?: string; message?: string }>(res);
   const rawObj = (res && typeof res === "object" ? res : {}) as Record<string, unknown>;

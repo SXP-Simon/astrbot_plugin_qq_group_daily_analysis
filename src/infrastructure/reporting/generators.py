@@ -358,6 +358,7 @@ class ReportGenerator(IReportGenerator):
         hide_user_names: bool = False,
         # Also controls ID normalization and fallback display name ("群友").
         allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -368,6 +369,7 @@ class ReportGenerator(IReportGenerator):
             html_render_func: HTML渲染函数
             avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
             nickname_getter: 昵称获取函数
+            template_theme: 指定的主题模板名称 (如 scrapbook, ATRI 等)
 
         Returns:
             tuple[str | None, str | None]: (image_url, html_content)
@@ -387,7 +389,7 @@ class ReportGenerator(IReportGenerator):
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
             html_content = self.html_templates.render_template(
-                "image_template.html", **render_payload
+                "image_template.html", template_theme=template_theme, **render_payload
             )
             html_content = self._reuse_avatars_in_final_html(
                 html_content,
@@ -573,6 +575,7 @@ class ReportGenerator(IReportGenerator):
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -582,6 +585,7 @@ class ReportGenerator(IReportGenerator):
             group_id: 群组ID
             avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
             nickname_getter: 昵称获取函数
+            template_theme: 指定的主题模板名称 (如 scrapbook, ATRI 等)
 
         Returns:
             tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
@@ -626,7 +630,7 @@ class ReportGenerator(IReportGenerator):
             html_content = None
             try:
                 html_content = self.html_templates.render_template(
-                    "html_template.html", **render_data
+                    "html_template.html", template_theme=template_theme, **render_data
                 )
                 html_content = self._reuse_avatars_in_final_html(
                     html_content,
@@ -639,7 +643,7 @@ class ReportGenerator(IReportGenerator):
                     f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
                 )
                 html_content = self.html_templates.render_template(
-                    "image_template.html", **render_data
+                    "image_template.html", template_theme=template_theme, **render_data
                 )
                 html_content = self._reuse_avatars_in_final_html(
                     html_content,

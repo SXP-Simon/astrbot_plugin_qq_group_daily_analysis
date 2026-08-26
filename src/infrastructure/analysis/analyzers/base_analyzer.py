@@ -428,6 +428,17 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                     f"[Debug] debug_mode={debug_mode}, umo={umo}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
                 )
 
+            from ....shared.trace_context import TraceContext
+
+            trace = TraceContext.current()
+            if trace:
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                prompts_map[self.get_data_type()] = {
+                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "provider_id": resolved_provider_id or "default",
+                }
+
             response = await call_provider_with_retry(
                 self.context,
                 self.config_manager,

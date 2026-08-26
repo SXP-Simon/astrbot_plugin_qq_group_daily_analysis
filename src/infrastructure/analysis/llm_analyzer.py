@@ -420,6 +420,7 @@ class LLMAnalyzer(IAnalysisProvider):
                                     "golden_quotes": golden_quote_enabled,
                                     "chat_quality": chat_quality_enabled,
                                 },
+                                "prompts": trace.metadata.get("llm_prompts", {}),
                             }
                         )
                         if subtask_errors:

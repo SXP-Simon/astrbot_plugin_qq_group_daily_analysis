@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import hashlib
 import time as time_mod
@@ -57,6 +58,7 @@ class AnalysisApplicationService:
         incremental_store: IncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: Any | None = None,
+        html_render: Any | None = None,
     ):
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -68,6 +70,7 @@ class AnalysisApplicationService:
         self.incremental_store = incremental_store
         self.incremental_merge_service = incremental_merge_service
         self.checkpoint_store = checkpoint_store
+        self.html_render = html_render
         self._locks = weakref.WeakValueDictionary()
         # 全局 LLM 分析信号量，控制对外 API 的并发压力
         # 使用专用的 LLM 并发配置项
@@ -294,6 +297,17 @@ class AnalysisApplicationService:
                 raw_messages = await adapter.fetch_messages(
                     group_id=group_id, days=days, max_count=max_count
                 )
+                if trace:
+                    for s in reversed(trace._spans):
+                        if s.get("stage_name") == "FETCH_MESSAGES":
+                            s.setdefault("payload", {}).update(
+                                {
+                                    "days": days,
+                                    "max_count": max_count,
+                                    "fetched_count": len(raw_messages),
+                                }
+                            )
+                            break
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -329,6 +343,28 @@ class AnalysisApplicationService:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
+                if trace:
+                    for s in reversed(trace._spans):
+                        if s.get("stage_name") == "CLEAN_MESSAGES":
+                            s.setdefault("payload", {}).update(
+                                {
+                                    "raw_count": len(raw_messages),
+                                    "cleaned_count": len(unified_messages),
+                                    "dropped_count": max(
+                                        len(raw_messages) - len(unified_messages), 0
+                                    ),
+                                    "retention_rate": round(
+                                        len(unified_messages)
+                                        / max(len(raw_messages), 1)
+                                        * 100,
+                                        1,
+                                    ),
+                                    "bot_filter_enabled": bool(
+                                        self.config_manager.get_filter_bot_messages()
+                                    ),
+                                }
+                            )
+                            break
             trace.set_context_metrics(
                 raw_message_count=len(raw_messages),
                 cleaned_message_count=len(unified_messages),
@@ -359,11 +395,76 @@ class AnalysisApplicationService:
                     unified_messages,
                     bot_self_ids,
                 )
+                if trace:
+                    for s in reversed(trace._spans):
+                        if s.get("stage_name") == "STATS_ANALYSIS":
+                            s.setdefault("payload", {}).update(
+                                {
+                                    "message_count": getattr(
+                                        statistics,
+                                        "message_count",
+                                        len(unified_messages),
+                                    ),
+                                    "character_count": getattr(
+                                        statistics, "total_characters", 0
+                                    ),
+                                    "participant_count": getattr(
+                                        statistics, "participant_count", 0
+                                    ),
+                                    "most_active_period": getattr(
+                                        statistics, "most_active_period", ""
+                                    ),
+                                    "emoji_count": getattr(
+                                        statistics, "emoji_count", 0
+                                    ),
+                                    "active_users_analyzed": len(user_activity)
+                                    if user_activity
+                                    else 0,
+                                }
+                            )
+                            break
 
             max_user_titles = self.config_manager.get_max_user_titles()
             top_users = self.analysis_domain_service.get_top_users(
                 user_activity, limit=max_user_titles
             )
+
+            # 保存前置清洗与基础统计 Checkpoint，用于后续一键断点续跑 (Resume)
+            if self.checkpoint_store:
+                try:
+                    date_str = dt.datetime.now().strftime("%Y-%m-%d")
+                    self.checkpoint_store.save_checkpoint(
+                        group_id=group_id,
+                        date_str=date_str,
+                        stage_name="CLEAN_MESSAGES",
+                        data={
+                            "group_id": group_id,
+                            "platform_id": platform_id,
+                            "date_str": date_str,
+                            "statistics": self._serialize_analysis_result(
+                                {"statistics": statistics}
+                            )["statistics"],
+                            "user_activity": self._serialize_analysis_result(
+                                {"user_analysis": user_activity}
+                            )["user_analysis"],
+                            "top_users": self._serialize_analysis_result(
+                                {"user_titles": top_users}
+                            )["user_titles"],
+                            "unified_messages": [
+                                dataclasses.asdict(m)
+                                if dataclasses.is_dataclass(m)
+                                and not isinstance(m, type)
+                                else (
+                                    getattr(m, "to_dict")()
+                                    if callable(getattr(m, "to_dict", None))
+                                    else (m if isinstance(m, dict) else str(m))
+                                )
+                                for m in unified_messages
+                            ],
+                        },
+                    )
+                except Exception as e:
+                    logger.debug(f"保存前置 Checkpoint 失败: {e}")
 
             # 5. LLM 语义分析 (为了保持兼容，目前直接传 UnifiedMessage，后续如需传 raw dict 再加转换)
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
@@ -434,9 +535,9 @@ class AnalysisApplicationService:
             # 6. 持久化摘要 (Persistence)
             with trace.span("SAVE_SUMMARY"):
                 await self.history_manager.save_analysis(group_id, analysis_result)
+                date_str = dt.datetime.now().strftime("%Y-%m-%d")
                 if self.checkpoint_store:
                     try:
-                        date_str = dt.datetime.now().strftime("%Y-%m-%d")
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
@@ -445,6 +546,18 @@ class AnalysisApplicationService:
                         )
                     except Exception as e:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
+                if trace:
+                    for s in reversed(trace._spans):
+                        if s.get("stage_name") == "SAVE_SUMMARY":
+                            s.setdefault("payload", {}).update(
+                                {
+                                    "date": date_str,
+                                    "topics_persisted": len(topics),
+                                    "titles_persisted": len(user_titles),
+                                    "checkpoint_saved": bool(self.checkpoint_store),
+                                }
+                            )
+                            break
 
             # 7. 生成报告并发送 (应用层编排发送动作)
             # 这里由调用方处理发送，本服务只返回分析结果和可能的视觉产物
@@ -587,16 +700,6 @@ class AnalysisApplicationService:
 
         analysis_result = self._deserialize_analysis_result(cached_data)
 
-        # 构造 html 渲染函数
-        def html_render_func(
-            tpl_name: str, res: dict[str, Any], avatars: dict[str, str] | None = None
-        ) -> str:
-            if hasattr(self.report_generator, "html_templates"):
-                return self.report_generator.html_templates.render(
-                    template_name or tpl_name, res, avatars=avatars
-                )
-            return ""
-
         reports_dir = (
             getattr(self.report_generator, "data_dir", None)
             or self.config_manager.get_data_dir()
@@ -606,14 +709,42 @@ class AnalysisApplicationService:
 
         # 渲染长图或 HTML
         if render_format == "html":
-            html_content = html_render_func(template_name, analysis_result)
             filename = f"report_{group_id}_{ts_str}_{template_name}.html"
-            report_path = reports_dir / filename
-            report_path.write_text(html_content, encoding="utf-8")
+            dest = reports_dir / filename
+            html_path, _ = await self.report_generator.generate_html_report(
+                analysis_result=analysis_result,
+                group_id=group_id,
+                template_theme=template_name,
+            )
+            if html_path and Path(html_path).exists():
+                import shutil
+
+                shutil.copy2(html_path, dest)
+            else:
+                prep_func = getattr(self.report_generator, "_prepare_render_data", None)
+                if callable(prep_func):
+                    prep_res = prep_func(analysis_result)
+                    render_data = (
+                        await prep_res if asyncio.iscoroutine(prep_res) else prep_res
+                    )
+                else:
+                    render_data = analysis_result
+                html_tpls = getattr(self.report_generator, "html_templates", None)
+                if html_tpls and hasattr(html_tpls, "render_template"):
+                    render_kwargs: dict[str, Any] = (
+                        dict(render_data) if isinstance(render_data, Mapping) else {}
+                    )
+                    html_content = html_tpls.render_template(
+                        "html_template.html",
+                        template_theme=template_name,
+                        **render_kwargs,
+                    )
+                    dest.write_text(html_content, encoding="utf-8")
+
             return {
                 "success": True,
                 "filename": filename,
-                "report_path": str(report_path),
+                "report_path": str(dest),
                 "is_html": True,
                 "from_checkpoint": True,
             }
@@ -621,7 +752,8 @@ class AnalysisApplicationService:
             image_res = await self.report_generator.generate_image_report(
                 analysis_result=analysis_result,
                 group_id=group_id,
-                html_render_func=html_render_func,
+                html_render_func=self.html_render,
+                template_theme=template_name,
             )
             image_url = image_res[0] if isinstance(image_res, tuple) else image_res
             filename = f"report_{group_id}_{ts_str}_{template_name}.jpg"
@@ -643,6 +775,201 @@ class AnalysisApplicationService:
                 "image_url": image_url,
                 "is_html": False,
                 "from_checkpoint": True,
+            }
+
+    async def resume_analysis(
+        self,
+        trace_id: str,
+        group_id: str,
+        platform_id: str | None = None,
+        date_str: str | None = None,
+    ) -> dict[str, Any]:
+        """从上一次 Checkpoint 执行幂等断点续跑"""
+        from ...domain.models.data_models import TokenUsage
+        from ...shared.trace_context import TraceContext
+
+        if not date_str:
+            date_str = dt.datetime.now().strftime("%Y-%m-%d")
+
+        trace = TraceContext.current()
+        if not trace:
+            trace = TraceContext.get_or_create(
+                trace_id=trace_id,
+                group_id=str(group_id),
+                platform=platform_id or "",
+                trigger_type="resume",
+                auto_bind=True,
+            )
+
+        # 检查是否有前置清洗 Checkpoint
+        clean_checkpoint = (
+            self.checkpoint_store.get_checkpoint(group_id, date_str, "CLEAN_MESSAGES")
+            if self.checkpoint_store
+            else None
+        )
+
+        if not clean_checkpoint:
+            logger.info(f"未找到群 {group_id} 的前置清洗快照，回退到全量重新分析")
+            return await self.execute_daily_analysis(
+                group_id=group_id,
+                platform_id=platform_id,
+                manual=True,
+            )
+
+        logger.info(
+            f"群 {group_id} 命中 Checkpoint 快照，跳过消息拉取与清洗，直接进入 LLM 幂等续跑"
+        )
+        async with self.group_lock(group_id, "daily"):
+            adapter = self.bot_manager.get_adapter(platform_id)
+            if not adapter:
+                raise ValueError(f"未找到平台 {platform_id} 的适配器")
+
+            stats_data = clean_checkpoint.get("statistics", {})
+            deserialized = self._deserialize_analysis_result(
+                {
+                    "statistics": stats_data,
+                    "user_analysis": clean_checkpoint.get("user_activity", {}),
+                    "user_titles": clean_checkpoint.get("top_users", []),
+                }
+            )
+            statistics = deserialized["statistics"]
+            user_activity = deserialized.get("user_analysis", {})
+            top_users = deserialized.get("user_titles", [])
+            unified_messages = clean_checkpoint.get("unified_messages", [])
+
+            with trace.span(
+                "CHECKPOINT_RESTORE",
+                {"stage": "CLEAN_MESSAGES", "restored": True},
+            ):
+                pass
+
+            # 执行 LLM 语义分析
+            topic_enabled = self.config_manager.get_topic_analysis_enabled()
+            user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+            golden_quote_enabled = (
+                self.config_manager.get_golden_quote_analysis_enabled()
+            )
+            chat_quality_enabled = (
+                self.config_manager.get_chat_quality_analysis_enabled()
+            )
+
+            # 检查是否有部分或完整已完成的 LLM_ANALYSIS Checkpoint
+            cached_llm = (
+                self.checkpoint_store.get_checkpoint(group_id, date_str, "LLM_ANALYSIS")
+                if self.checkpoint_store
+                else None
+            )
+            cached_result = (
+                self._deserialize_analysis_result(cached_llm) if cached_llm else {}
+            )
+
+            topics = cached_result.get("topics", [])
+            user_titles = cached_result.get("user_titles", [])
+            cached_stats = cached_result.get("statistics")
+            golden_quotes = (
+                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
+            )
+            chat_quality_review = cached_result.get("chat_quality_review")
+            total_token_usage = (
+                getattr(cached_stats, "token_usage", TokenUsage())
+                if cached_stats
+                else TokenUsage()
+            )
+
+            # 决定哪些子任务需要重新调用 LLM：已有成功非空产物的子任务直接复用，避免消耗重复 Token
+            run_topic = topic_enabled and not bool(topics)
+            run_user_title = user_title_enabled and not bool(user_titles)
+            run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
+            run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
+
+            reused_tasks = []
+            if topic_enabled and topics:
+                reused_tasks.append(f"话题({len(topics)}个)")
+            if user_title_enabled and user_titles:
+                reused_tasks.append(f"称号({len(user_titles)}个)")
+            if golden_quote_enabled and golden_quotes:
+                reused_tasks.append(f"金句({len(golden_quotes)}条)")
+            if chat_quality_enabled and chat_quality_review:
+                reused_tasks.append("质量锐评")
+
+            if reused_tasks:
+                logger.info(
+                    f"群 {group_id} 续跑命中已有 LLM 产物: {', '.join(reused_tasks)}，直接复用，无需消耗 Token 重跑"
+                )
+
+            legacy_messages = self.statistics_service._convert_to_legacy_dict(
+                unified_messages
+            )
+            unified_msg_origin = (
+                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+            )
+
+            if run_topic or run_user_title or run_golden_quote or run_chat_quality:
+                with trace.span("LLM_ANALYSIS"):
+                    async with self._llm_slot(group_id, "resume"):
+                        (
+                            new_topics,
+                            new_user_titles,
+                            new_golden_quotes,
+                            new_tokens,
+                            new_chat_quality,
+                        ) = await self.llm_analyzer.analyze_all_concurrent(
+                            legacy_messages,
+                            user_activity,
+                            umo=unified_msg_origin,
+                            top_users=top_users,
+                            topic_enabled=run_topic,
+                            user_title_enabled=run_user_title,
+                            golden_quote_enabled=run_golden_quote,
+                            chat_quality_enabled=run_chat_quality,
+                        )
+                        if run_topic:
+                            topics = new_topics
+                        if run_user_title:
+                            user_titles = new_user_titles
+                        if run_golden_quote:
+                            golden_quotes = new_golden_quotes
+                        if run_chat_quality:
+                            chat_quality_review = new_chat_quality
+
+                        total_token_usage = TokenUsage(
+                            prompt_tokens=total_token_usage.prompt_tokens
+                            + new_tokens.prompt_tokens,
+                            completion_tokens=total_token_usage.completion_tokens
+                            + new_tokens.completion_tokens,
+                            total_tokens=total_token_usage.total_tokens
+                            + new_tokens.total_tokens,
+                        )
+
+            statistics.golden_quotes = golden_quotes
+            statistics.token_usage = total_token_usage
+
+            analysis_result = {
+                "statistics": statistics,
+                "topics": topics,
+                "user_titles": user_titles,
+                "user_analysis": user_activity,
+                "chat_quality_review": chat_quality_review,
+            }
+
+            with trace.span("SAVE_SUMMARY"):
+                await self.history_manager.save_analysis(group_id, analysis_result)
+                if self.checkpoint_store:
+                    try:
+                        self.checkpoint_store.save_checkpoint(
+                            group_id=group_id,
+                            date_str=date_str,
+                            stage_name="LLM_ANALYSIS",
+                            data=self._serialize_analysis_result(analysis_result),
+                        )
+                    except Exception as e:
+                        logger.warning(f"保存分析 Checkpoint 失败: {e}")
+
+            return {
+                "success": True,
+                "analysis_result": analysis_result,
+                "adapter": adapter,
+                "resumed_from": "CLEAN_MESSAGES",
             }
 
     async def execute_comic_topic_analysis(

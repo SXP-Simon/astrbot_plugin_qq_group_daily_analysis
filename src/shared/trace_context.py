@@ -284,6 +284,7 @@ class TraceContext:
     @classmethod
     def get_or_create(
         cls,
+        trace_id: str = "",
         group_id: str = "",
         group_name: str = "",
         platform: str = "",
@@ -296,6 +297,7 @@ class TraceContext:
             return current
 
         new_ctx = cls(
+            trace_id=trace_id or str(uuid.uuid4())[:8],
             group_id=group_id,
             group_name=group_name,
             platform=platform,
