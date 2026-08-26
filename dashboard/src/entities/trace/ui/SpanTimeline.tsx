@@ -28,16 +28,62 @@ const { Text } = Typography;
 interface SpanTimelineProps {
   spans: TraceSpan[];
   totalDurationMs?: number;
+  currentStage?: string;
+  taskStatus?: string;
 }
 
 export const SpanTimeline: React.FC<SpanTimelineProps> = ({
   spans,
   totalDurationMs = 1,
+  currentStage,
+  taskStatus,
 }) => {
   const { token } = theme.useToken();
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
+  const [, setTick] = useState(0);
 
-  if (!spans || spans.length === 0) {
+  // 运行中状态下每秒自动步进，驱动运行中阶段的实时计时器和动画
+  React.useEffect(() => {
+    if (taskStatus === "running") {
+      const timer = setInterval(() => setTick((t) => t + 1), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [taskStatus]);
+
+  const mergedSpans = React.useMemo(() => {
+    const list = [...(spans || [])];
+    if (taskStatus === "running" && currentStage) {
+      const hasActive = list.some(
+        (s) => s.status === "running" || s.stage_name === currentStage
+      );
+      if (!hasActive) {
+        list.push({
+          span_id: `active_${currentStage}`,
+          trace_id: "",
+          stage_name: currentStage,
+          status: "running",
+          started_at: Date.now() / 1000 - 1,
+          duration_ms: null,
+          payload: {
+            note: "当前阶段正在异步处理中...",
+          },
+        });
+      }
+    }
+    return list;
+  }, [spans, taskStatus, currentStage]);
+
+  if (!mergedSpans || mergedSpans.length === 0) {
+    if (taskStatus === "running") {
+      return (
+        <div style={{ padding: "8px 0" }}>
+          <Space>
+            <SyncOutlined spin style={{ color: "#1677ff" }} />
+            <Text type="secondary">正在初始化执行生命周期阶段...</Text>
+          </Space>
+        </div>
+      );
+    }
     return <Text type="secondary">无执行阶段记录</Text>;
   }
 
@@ -47,18 +93,28 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
     );
   };
 
-  const items = spans.map((span, idx) => {
+  const items = mergedSpans.map((span, idx) => {
     const spanKey = span.span_id || `span_${idx}_${span.stage_name}`;
-    const duration = span.duration_ms || 0;
-    const durationPct = Math.min(
-      100,
-      Math.max(2, Math.round((duration / Math.max(1, totalDurationMs)) * 100))
-    );
+    const isRunning = span.status === "running";
+    const duration =
+      span.duration_ms !== null && span.duration_ms !== undefined
+        ? span.duration_ms
+        : Math.max(
+            0,
+            Math.round(
+              (Date.now() / 1000 - (span.started_at || Date.now() / 1000)) * 1000
+            )
+          );
+    const durationPct = isRunning
+      ? 100
+      : Math.min(
+          100,
+          Math.max(2, Math.round((duration / Math.max(1, totalDurationMs)) * 100))
+        );
 
     const { thresholdMs, description: slaDesc } = getStageSlaThreshold(span.stage_name);
-    const isSlaExceeded = duration > thresholdMs;
+    const isSlaExceeded = !isRunning && duration > thresholdMs;
     const isFailed = span.status === "failed" || span.status === "error";
-    const isRunning = span.status === "running";
 
     let color = "#52c41a";
     let icon = <CheckCircleOutlined style={{ color: "#52c41a" }} />;
@@ -126,11 +182,14 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
             </Space>
 
             <Space size={6}>
-              <span style={{ fontSize: 11, color: token.colorTextSecondary }}>
-                占 {durationPct}%
-              </span>
+              {!isRunning && (
+                <span style={{ fontSize: 11, color: token.colorTextSecondary }}>
+                  占 {durationPct}%
+                </span>
+              )}
               <Tag
                 color={tagColor}
+                icon={isRunning ? <SyncOutlined spin /> : undefined}
                 style={{
                   fontSize: 11,
                   borderRadius: 4,
@@ -138,13 +197,14 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                   fontWeight: 600,
                 }}
               >
-                {formatDuration(span.duration_ms)}
+                {isRunning ? `执行中 (${formatDuration(duration)})` : formatDuration(span.duration_ms ?? 0)}
               </Tag>
             </Space>
           </div>
 
           <Progress
-            percent={durationPct}
+            percent={isRunning ? 100 : durationPct}
+            status={isRunning ? "active" : "normal"}
             size="small"
             showInfo={false}
             strokeColor={color}
