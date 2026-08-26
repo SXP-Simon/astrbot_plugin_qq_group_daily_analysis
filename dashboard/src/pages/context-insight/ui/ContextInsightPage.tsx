@@ -12,6 +12,7 @@ import { MetricCard } from "../../../shared/ui/MetricCard";
 import { ContextFunnelWidget } from "../../../widgets/context-funnel-widget/ContextFunnelWidget";
 import { TokenChartWidget } from "../../../widgets/token-chart-widget/TokenChartWidget";
 import { TraceFilterBar } from "../../../features/filter-traces/ui/TraceFilterBar";
+import { AnalysisTimelinePicker } from "../../../widgets/timeline-picker/AnalysisTimelinePicker";
 import {
   formatSmartTokens,
   formatPercent,
@@ -23,10 +24,12 @@ const { Text } = Typography;
 
 interface ContextInsightPageProps {
   viewModel: ReturnType<typeof useContextInsightViewModel>;
+  onViewTrace?: (traceId: string) => void;
 }
 
 export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({
   viewModel,
+  onViewTrace,
 }) => {
   const {
     traces,
@@ -139,6 +142,16 @@ export const ContextInsightPage: React.FC<ContextInsightPageProps> = ({
           )}
         </div>
       </Card>
+
+      {/* 时序事件样本轴 (Timeline Event Rail) */}
+      {traces.length > 0 && (
+        <AnalysisTimelinePicker
+          traces={traces}
+          selectedTrace={selectedTrace}
+          onSelectTrace={setSelectedTrace}
+          onViewTraceDetail={onViewTrace}
+        />
+      )}
 
       {traces.length === 0 && !loading ? (
         <Card size="small" style={{ minHeight: 360, display: "flex", alignItems: "center", justifyContent: "center" }}>

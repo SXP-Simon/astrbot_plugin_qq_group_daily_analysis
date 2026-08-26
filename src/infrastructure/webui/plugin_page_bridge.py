@@ -105,12 +105,17 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get full trace details with spans and metrics",
             ),
-            # 3. 统计指标 (dsh-context & KPI)
             (
                 f"/{PLUGIN_NAME}/metrics/summary",
                 self.api_get_metrics_summary,
                 ["GET"],
                 "Get KPI and token metrics summary",
+            ),
+            (
+                f"/{PLUGIN_NAME}/metrics/trends",
+                self.api_get_analytics_trends,
+                ["GET"],
+                "Get time-series trends with hour/day granularity and provider breakdowns",
             ),
             (
                 f"/{PLUGIN_NAME}/groups",
@@ -180,6 +185,19 @@ class PluginPageWebUIBridge:
                 self.api_clear_plugin_logs,
                 ["POST"],
                 "Clear in-memory plugin log buffer",
+            ),
+            # 7. 插件配置中心
+            (
+                f"/{PLUGIN_NAME}/config",
+                self.api_get_config,
+                ["GET"],
+                "Get current plugin configuration and schema definition",
+            ),
+            (
+                f"/{PLUGIN_NAME}/config",
+                self.api_save_config,
+                ["POST"],
+                "Save and persist updated plugin configuration",
             ),
         ]
 
@@ -785,6 +803,32 @@ class PluginPageWebUIBridge:
             logger.error(f"获取指标概览异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
+    async def api_get_analytics_trends(self) -> Any:
+        """获取时序趋势统计（支持按小时或按天细粒度切换，并包含服务商与模型统计）"""
+        try:
+            granularity = (
+                request.query.get("granularity", "day")
+                if request and hasattr(request, "query")
+                else "day"
+            )
+            range_count = (
+                int(
+                    request.query.get(
+                        "range_count", 48 if granularity == "hour" else 14
+                    )
+                )
+                if request and hasattr(request, "query")
+                else (48 if granularity == "hour" else 14)
+            )
+
+            trends_data = self.trace_store.get_analytics_trends(
+                granularity=granularity, range_count=range_count
+            )
+            return json_response({"status": "ok", "data": trends_data})
+        except Exception as e:
+            logger.error(f"获取趋势图表数据异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
     async def api_get_report_history(self) -> Any:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
@@ -1188,4 +1232,74 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "message": "Logs cleared"})
         except Exception as e:
             logger.error(f"清空插件日志异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_config(self) -> Any:
+        """获取插件当前配置数据与完整 Schema 结构定义"""
+        try:
+            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
+                self.report_dispatcher, "config_manager", None
+            )
+            config_dict = (
+                dict(cfg_mgr.config) if cfg_mgr and hasattr(cfg_mgr, "config") else {}
+            )
+
+            # 读取插件根目录下的 _conf_schema.json
+            plugin_root = Path(__file__).resolve().parents[3]
+            schema_file = plugin_root / "_conf_schema.json"
+            schema_dict = {}
+            if schema_file.exists():
+                try:
+                    schema_dict = json.loads(schema_file.read_text(encoding="utf-8"))
+                except Exception as e:
+                    logger.warning(f"读取 _conf_schema.json 失败: {e}")
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "config": config_dict,
+                        "schema": schema_dict,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取配置信息异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_save_config(self) -> Any:
+        """保存并更新插件配置"""
+        try:
+            body = await request.json() if hasattr(request, "json") else {}
+            new_config = body.get("config") if isinstance(body, dict) else None
+            if not isinstance(new_config, dict):
+                return error_response("缺少有效的 config 配置数据", status_code=400)
+
+            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
+                self.report_dispatcher, "config_manager", None
+            )
+            if not cfg_mgr or not hasattr(cfg_mgr, "config"):
+                return error_response("配置管理器未初始化", status_code=500)
+
+            # 更新 AstrBotConfig 字典
+            for k, v in new_config.items():
+                cfg_mgr.config[k] = v
+
+            # 持久化保存
+            if hasattr(cfg_mgr.config, "save_config"):
+                try:
+                    cfg_mgr.config.save_config()
+                except TypeError:
+                    cfg_mgr.config.save_config()
+
+            logger.info("WebUI 配置中心已更新并保存插件配置。")
+            return json_response(
+                {
+                    "status": "ok",
+                    "message": "配置已成功保存并持久化生效",
+                    "data": dict(cfg_mgr.config),
+                }
+            )
+        except Exception as e:
+            logger.error(f"保存配置异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
