@@ -264,10 +264,16 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
             const shortTime = dateParts[1] ? dateParts[1].slice(0, 5) : ""; // HH:mm
             const displayLabel = `${shortDate} ${shortTime}`;
 
-            const tokenTotal = trace.token_usage?.total_tokens ?? 0;
-            const compRatio = trace.context_metrics?.compression_ratio
-              ? Math.round(trace.context_metrics.compression_ratio * 100)
-              : 0;
+            const itemData = isSelected && selectedTrace ? { ...trace, ...selectedTrace } : trace;
+            const tokenTotal = itemData.total_tokens ?? itemData.token_usage?.total_tokens ?? 0;
+            const rawRatio = itemData.compression_ratio ?? itemData.context_metrics?.compression_ratio ?? 0;
+            const compRatio =
+              rawRatio > 0
+                ? rawRatio <= 1
+                  ? Math.round(rawRatio * 100)
+                  : Math.round(rawRatio)
+                : 0;
+            const durationMs = itemData.duration_ms;
 
             const tooltipContent = (
               <div style={{ fontSize: 12, lineHeight: 1.6, minWidth: 180, padding: "2px 0" }}>
@@ -304,9 +310,9 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                     消息留存比: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{compRatio}%</b>
                   </div>
                 )}
-                {trace.duration_ms && (
+                {Boolean(durationMs) && (
                   <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
-                    耗时: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatDuration(trace.duration_ms)}</b>
+                    耗时: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatDuration(durationMs as number)}</b>
                   </div>
                 )}
               </div>
