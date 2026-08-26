@@ -10,6 +10,7 @@ import {
   Typography,
   Tooltip,
   Button,
+  Image,
   theme,
 } from "antd";
 import {
@@ -17,16 +18,17 @@ import {
   UndoOutlined,
   ApartmentOutlined,
   UserOutlined,
-  PictureOutlined,
   FileOutlined,
   UploadOutlined,
   DeleteOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
   AvailablePersona,
 } from "../../../entities/config/api/configApi";
+import { useTheme } from "../../../shared/lib/useTheme";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 
 const { Text } = Typography;
@@ -55,6 +57,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   onChange,
 }) => {
   const { token } = theme.useToken();
+  const { isDark } = useTheme();
   const [newTagInput, setNewTagInput] = useState("");
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newFileInput, setNewFileInput] = useState("");
@@ -440,53 +443,116 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
           {/* 文件/图片条目列表 */}
           {fileList.length > 0 ? (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {fileList.map((filePath, idx) => {
                 const isImage =
                   filePath.startsWith("data:image/") ||
                   filePath.startsWith("http://") ||
                   filePath.startsWith("https://") ||
-                  /\.(png|jpe?g|webp|gif)$/i.test(filePath);
+                  /\.(png|jpe?g|webp|gif|svg)$/i.test(filePath);
+
+                let displayLabel = filePath;
+                if (filePath.startsWith("data:image/")) {
+                  const approxSize = Math.round((filePath.length * 3) / 4 / 1024);
+                  displayLabel = `已上传图片 (${approxSize} KB)`;
+                } else if (filePath.length > 35) {
+                  displayLabel = `${filePath.slice(0, 18)}...${filePath.slice(-12)}`;
+                }
 
                 return (
                   <div
                     key={`${filePath}-${idx}`}
                     style={{
-                      display: "flex",
+                      display: "inline-flex",
                       alignItems: "center",
-                      gap: 6,
+                      gap: 8,
                       background: token.colorFillAlter,
                       border: `1px solid ${token.colorBorderSecondary}`,
-                      borderRadius: 4,
-                      padding: "4px 8px",
+                      borderRadius: 6,
+                      padding: "4px 8px 4px 6px",
+                      boxShadow: "0 1px 2px rgba(0, 0, 0, 0.03)",
                       maxWidth: "100%",
                     }}
                   >
+                    {/* 图片缩略图预览 (支持点击放大预览) */}
                     {isImage ? (
-                      <PictureOutlined style={{ color: "#1677ff", fontSize: 13 }} />
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 4,
+                          overflow: "hidden",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: isDark ? "#1e293b" : "#f1f5f9",
+                          border: `1px solid ${token.colorBorderSecondary}`,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Image
+                          src={filePath}
+                          width={36}
+                          height={36}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            objectFit: "cover",
+                            borderRadius: 4,
+                            display: "block",
+                          }}
+                          fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>"
+                          preview={{
+                            mask: <EyeOutlined style={{ fontSize: 13 }} />,
+                          }}
+                        />
+                      </div>
                     ) : (
-                      <FileOutlined style={{ color: token.colorTextSecondary, fontSize: 13 }} />
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 4,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: token.colorFillSecondary,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <FileOutlined style={{ color: token.colorTextSecondary, fontSize: 16 }} />
+                      </div>
                     )}
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontFamily: SANS_MONO_FONT,
-                        color: token.colorText,
-                        maxWidth: 240,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={filePath}
-                    >
-                      {filePath.length > 35 ? `${filePath.slice(0, 20)}...${filePath.slice(-10)}` : filePath}
-                    </span>
+
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0, marginRight: 4 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          fontFamily: SANS_MONO_FONT,
+                          color: token.colorText,
+                          maxWidth: 220,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={filePath}
+                      >
+                        {displayLabel}
+                      </span>
+                      {isImage && (
+                        <span style={{ fontSize: 10, color: token.colorTextTertiary }}>
+                          点击缩略图可全屏预览
+                        </span>
+                      )}
+                    </div>
+
                     <Button
                       type="text"
                       size="small"
                       danger
-                      icon={<DeleteOutlined style={{ fontSize: 10 }} />}
-                      style={{ width: 20, height: 20, padding: 0 }}
+                      icon={<DeleteOutlined style={{ fontSize: 11 }} />}
+                      style={{ width: 22, height: 22, padding: 0 }}
                       onClick={() => handleRemoveFile(idx)}
                     />
                   </div>
