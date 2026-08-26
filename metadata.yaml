@@ -10,8 +10,4 @@ support_platforms:
   - telegram
   - qq_official
   - qq_official_webhook
-pages:
-  - name: daily-analysis
-    title: QQ群日常分析控制台
-    entry: pages/daily-analysis/index.html
 repo: https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis # 插件的仓库地址
