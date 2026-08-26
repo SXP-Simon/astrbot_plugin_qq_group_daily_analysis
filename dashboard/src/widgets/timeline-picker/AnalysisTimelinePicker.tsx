@@ -254,27 +254,43 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               : 0;
 
             const tooltipContent = (
-              <div style={{ fontSize: 12, lineHeight: 1.5, minWidth: 180 }}>
-                <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 4 }}>
+              <div style={{ fontSize: 12, lineHeight: 1.6, minWidth: 180, padding: "2px 0" }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color: isDark ? "#ffffff" : "#0f172a",
+                    marginBottom: 4,
+                    borderBottom: `1px solid ${isDark ? "#334155" : "#f1f5f9"}`,
+                    paddingBottom: 4,
+                  }}
+                >
                   {trace.group_name || "未知群聊"} ({trace.group_id})
                 </div>
-                <div style={{ color: "#cbd5e1", fontSize: 11, fontFamily: "monospace" }}>
+                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
                   时间: {rawTime}
                 </div>
-                <div style={{ color: "#cbd5e1", fontSize: 11, fontFamily: "monospace" }}>
-                  状态: {isSucceeded ? "分析成功" : isFailed ? "执行失败" : "分析中"}
+                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                  状态:{" "}
+                  <span
+                    style={{
+                      color: isSucceeded ? "#16a34a" : isFailed ? "#dc2626" : "#2563eb",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {isSucceeded ? "分析成功" : isFailed ? "执行失败" : "分析中"}
+                  </span>
                 </div>
-                <div style={{ color: "#cbd5e1", fontSize: 11, fontFamily: "monospace" }}>
-                  Token消耗: {formatTokens(tokenTotal)}
+                <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                  Token消耗: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatTokens(tokenTotal)}</b>
                 </div>
                 {compRatio > 0 && (
-                  <div style={{ color: "#cbd5e1", fontSize: 11, fontFamily: "monospace" }}>
-                    消息留存比: {compRatio}%
+                  <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                    消息留存比: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{compRatio}%</b>
                   </div>
                 )}
                 {trace.duration_ms && (
-                  <div style={{ color: "#cbd5e1", fontSize: 11, fontFamily: "monospace" }}>
-                    耗时: {formatDuration(trace.duration_ms)}
+                  <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
+                    耗时: <b style={{ color: isDark ? "#ffffff" : "#0f172a" }}>{formatDuration(trace.duration_ms)}</b>
                   </div>
                 )}
               </div>
@@ -297,6 +313,16 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                 title={tooltipContent}
                 placement="top"
                 mouseEnterDelay={0.15}
+                color={isDark ? "#1e293b" : "#ffffff"}
+                overlayInnerStyle={{
+                  color: isDark ? "#ffffff" : "#1e293b",
+                  border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                  boxShadow: isDark
+                    ? "0 4px 16px rgba(0, 0, 0, 0.45)"
+                    : "0 4px 16px rgba(0, 0, 0, 0.08)",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                }}
               >
                 <div
                   ref={(el) => {
