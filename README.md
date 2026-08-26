@@ -94,6 +94,40 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **数据统计与消耗追踪**: 按群、按时间、按状态多维筛选历史分析记录，查看消息清洗数量与各模块 Token 消耗分布
 - **异常任务自动清理**: AstrBot 重启时自动标记并清理未正常结束的中断任务，不留烂尾
 
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>分析记录</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务执行详情与断点续跑</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>历史报告列表</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <p><b>统计与消耗</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png" alt="统计与消耗" width="100%"></a>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <p><b>运行日志</b></p>
+      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png" alt="运行日志" width="100%"></a>
+    </td>
+  </tr>
+</table>
+
+
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
     - **精美图片**: 生成美观的可视化报告
