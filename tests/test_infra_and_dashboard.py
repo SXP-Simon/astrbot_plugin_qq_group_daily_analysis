@@ -619,15 +619,22 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     custom_root = tmp_path / "custom_t2i_templates" / "reporting_templates"
     custom_root.mkdir(parents=True, exist_ok=True)
 
-    # 自定义模板1：覆盖已有内置模板的修改版 (ATRI)
+    # 自定义模板1：覆盖已有内置模板的修改版 (ATRI) - 修改了内容
     theme1_dir = custom_root / "ATRI"
     theme1_dir.mkdir()
-    (theme1_dir / "image_template.html").write_text("<div>ATRI Custom</div>", encoding="utf-8")
+    (theme1_dir / "image_template.html").write_text("<div>ATRI Custom Modified</div>", encoding="utf-8")
 
     # 自定义模板2：全新的第三方未知本地模板 (third_party_cyber)
     theme2_dir = custom_root / "third_party_cyber"
     theme2_dir.mkdir()
     (theme2_dir / "html_template.html").write_text("<div>Cyber</div>", encoding="utf-8")
+
+    # 自定义模板3：用户拷贝了内置的 simple 模板但未做任何修改 (内容哈希完全相同)
+    theme3_dir = custom_root / "simple"
+    theme3_dir.mkdir()
+    builtin_simple_img = Path(templates_mgr_dummy := HTMLTemplates(MagicMock()).base_dir) / "simple" / "image_template.html"
+    if builtin_simple_img.exists():
+        (theme3_dir / "image_template.html").write_bytes(builtin_simple_img.read_bytes())
 
     mock_config = MagicMock()
     mock_config.get_report_template = MagicMock(return_value="scrapbook")
@@ -644,14 +651,22 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     assert "ATRI" in template_ids
     assert "HatsuneMiku" in template_ids
     assert "spring_festival" in template_ids
+    assert "simple" in template_ids
 
     # 验证自定义模板被正确识别并优雅处理名称
     assert "third_party_cyber" in template_ids
 
+    # 真正修改过的 ATRI 会被标记为自定义修改版
     atri_meta = next(t for t in templates if t["id"] == "ATRI")
     assert atri_meta["is_custom"] is True
     assert "自定义修改版" in atri_meta["label"]
 
+    # 未做修改的 simple 不会被误判为修改版
+    simple_meta = next(t for t in templates if t["id"] == "simple")
+    assert simple_meta["is_custom"] is False
+    assert "自定义修改版" not in simple_meta["label"]
+
+    # 全新第三方模板标记为自定义本地模板
     cyber_meta = next(t for t in templates if t["id"] == "third_party_cyber")
     assert cyber_meta["is_custom"] is True
     assert "third_party_cyber" in cyber_meta["label"]
