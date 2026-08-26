@@ -1,6 +1,13 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginConfigData } from "../model/types";
 
+export interface AvailableProvider {
+  id: string;
+  name: string;
+  type?: string;
+  label?: string;
+}
+
 export async function fetchPluginConfig(): Promise<PluginConfigData | null> {
   const res = await apiGet<PluginConfigData>("config");
   const data = extractData<PluginConfigData>(res);
@@ -15,6 +22,13 @@ export async function fetchPluginConfig(): Promise<PluginConfigData | null> {
     return data;
   }
   return null;
+}
+
+export async function fetchAvailableProviders(): Promise<AvailableProvider[]> {
+  const res = await apiGet<AvailableProvider[]>("providers");
+  const data = extractData<AvailableProvider[]>(res);
+  if (Array.isArray(data)) return data;
+  return [];
 }
 
 export async function savePluginConfig(
