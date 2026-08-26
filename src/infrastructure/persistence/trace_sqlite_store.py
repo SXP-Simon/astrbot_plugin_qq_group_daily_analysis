@@ -96,6 +96,16 @@ class TraceSQLiteStore:
         with self._get_connection() as conn:
             # 1. 写入主表前，合并既有的 extra_json（特别是 report_files 产物列表）
             extra_payload = dict(trace_dict.get("extra", {}))
+            meta = trace_dict.get("metadata", {})
+            if isinstance(meta, dict):
+                for k, v in meta.items():
+                    if k not in extra_payload:
+                        extra_payload[k] = v
+                    elif isinstance(v, dict) and isinstance(extra_payload.get(k), dict):
+                        extra_payload[k].update(v)
+                    elif isinstance(v, list) and isinstance(extra_payload.get(k), list):
+                        extra_payload[k] = v
+
             existing_row = conn.execute(
                 "SELECT extra_json FROM analysis_traces WHERE trace_id = ?", (trace_id,)
             ).fetchone()
@@ -115,6 +125,18 @@ class TraceSQLiteStore:
                                 seen_filenames.add(fn)
                                 merged_rfiles.append(rf)
                     extra_payload["report_files"] = merged_rfiles
+
+                    # 保留历史已记录的 prompts 与 attempts
+                    if (
+                        "llm_prompts" not in extra_payload
+                        and "llm_prompts" in old_extra
+                    ):
+                        extra_payload["llm_prompts"] = old_extra["llm_prompts"]
+                    if (
+                        "llm_attempts" not in extra_payload
+                        and "llm_attempts" in old_extra
+                    ):
+                        extra_payload["llm_attempts"] = old_extra["llm_attempts"]
                 except Exception:
                     pass
 
@@ -253,12 +275,19 @@ class TraceSQLiteStore:
                 (trace_id,),
             ).fetchall()
             spans = []
+            extra_prompts = trace_data.get("extra", {}).get("llm_prompts", {})
+            extra_attempts = trace_data.get("extra", {}).get("llm_attempts", [])
             for r in spans_rows:
                 s = dict(r)
                 try:
                     s["payload"] = json.loads(s.pop("stage_payload_json") or "{}")
                 except Exception:
                     s["payload"] = {}
+                if s.get("stage_name") == "LLM_ANALYSIS":
+                    if extra_prompts and not s["payload"].get("prompts"):
+                        s["payload"]["prompts"] = extra_prompts
+                    if extra_attempts and not s["payload"].get("llm_attempts"):
+                        s["payload"]["llm_attempts"] = extra_attempts
                 spans.append(s)
             trace_data["spans"] = spans
 

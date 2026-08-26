@@ -578,8 +578,47 @@ async def call_provider_with_retry(
                     f"available={limiter.available_slots}/{limiter.max_concurrency}"
                 )
             cb.record_success()
+            duration_ms = (time.monotonic() - request_started_at) * 1000
+            if trace:
+                attempts_list = trace.metadata.setdefault("llm_attempts", [])
+                attempt_item = {
+                    "area": observation_area,
+                    "attempt": attempt_num,
+                    "provider_id": pid,
+                    "model": actual_model or "default",
+                    "status": "success",
+                    "duration_ms": round(duration_ms, 1),
+                    "is_fallback": is_fallback_request,
+                }
+                attempts_list.append(attempt_item)
+                for s in reversed(trace._spans):
+                    if s.get("stage_name") == "LLM_ANALYSIS":
+                        s.setdefault("payload", {}).setdefault(
+                            "llm_attempts", []
+                        ).append(attempt_item)
+                        break
             return resp
         except Exception as err:
+            duration_ms = (time.monotonic() - request_started_at) * 1000
+            if trace:
+                attempts_list = trace.metadata.setdefault("llm_attempts", [])
+                attempt_item = {
+                    "area": observation_area,
+                    "attempt": attempt_num,
+                    "provider_id": pid,
+                    "model": actual_model or "default",
+                    "status": "failed",
+                    "duration_ms": round(duration_ms, 1),
+                    "is_fallback": is_fallback_request,
+                    "error": str(err),
+                }
+                attempts_list.append(attempt_item)
+                for s in reversed(trace._spans):
+                    if s.get("stage_name") == "LLM_ANALYSIS":
+                        s.setdefault("payload", {}).setdefault(
+                            "llm_attempts", []
+                        ).append(attempt_item)
+                        break
             if r_format is not None and _is_response_format_unsupported_error(err):
                 raise err
             cb.record_failure()

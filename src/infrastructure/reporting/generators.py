@@ -513,7 +513,8 @@ class ReportGenerator(IReportGenerator):
                                 if trace_ctx:
                                     for s in reversed(trace_ctx._spans):
                                         if s.get("stage_name") == "RENDER_REPORT":
-                                            s.setdefault("payload", {}).update(
+                                            payload = s.setdefault("payload", {})
+                                            payload.update(
                                                 {
                                                     "format": "image",
                                                     "template": template_theme
@@ -559,6 +560,20 @@ class ReportGenerator(IReportGenerator):
                                                     ),
                                                 }
                                             )
+                                            payload.setdefault(
+                                                "render_attempts", []
+                                            ).append(
+                                                {
+                                                    "attempt": attempt,
+                                                    "type": str(
+                                                        image_options.get(
+                                                            "type", "jpeg"
+                                                        )
+                                                    ),
+                                                    "viewport": viewport_description,
+                                                    "status": "success",
+                                                }
+                                            )
                                             break
 
                                 if isinstance(image_data, bytes):
@@ -581,10 +596,47 @@ class ReportGenerator(IReportGenerator):
                         logger.warning(
                             f"渲染轮次 {attempt} ({image_options['type']}) 返回了无效或空数据"
                         )
+                        trace_ctx = TraceContext.current()
+                        if trace_ctx:
+                            for s in reversed(trace_ctx._spans):
+                                if s.get("stage_name") == "RENDER_REPORT":
+                                    s.setdefault("payload", {}).setdefault(
+                                        "render_attempts", []
+                                    ).append(
+                                        {
+                                            "attempt": attempt,
+                                            "type": str(
+                                                image_options.get("type", "jpeg")
+                                            ),
+                                            "viewport": viewport_description,
+                                            "status": "failed",
+                                            "error": html_error
+                                            or "返回数据非合法图片头",
+                                        }
+                                    )
+                                    break
 
                     except Exception as e:
                         logger.warning(f"渲染轮次 {attempt} 失败: {e}")
                         last_exception = e
+                        trace_ctx = TraceContext.current()
+                        if trace_ctx:
+                            for s in reversed(trace_ctx._spans):
+                                if s.get("stage_name") == "RENDER_REPORT":
+                                    s.setdefault("payload", {}).setdefault(
+                                        "render_attempts", []
+                                    ).append(
+                                        {
+                                            "attempt": attempt,
+                                            "type": str(
+                                                image_options.get("type", "jpeg")
+                                            ),
+                                            "viewport": viewport_description,
+                                            "status": "failed",
+                                            "error": str(e),
+                                        }
+                                    )
+                                    break
                         if attempt < len(render_strategies):
                             logger.debug("准备尝试下一轮回退策略")
                         continue
