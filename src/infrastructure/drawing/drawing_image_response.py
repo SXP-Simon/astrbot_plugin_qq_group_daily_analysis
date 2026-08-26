@@ -8,9 +8,7 @@
 import asyncio
 import base64
 import binascii
-import ipaddress
 import re
-import socket
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -261,29 +259,12 @@ class DrawingImageResponseService:
         raise ValueError("图片下载失败")
 
     async def _validate_public_image_url(self, url: str) -> None:
-        """拒绝非 HTTP 协议及解析到本机或私网的图片地址。"""
+        """校验图片地址协议与基础合法性，兼容本地与私网自建绘图服务。"""
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("图片地址必须是有效的 HTTP/HTTPS URL")
         if parsed.username or parsed.password:
             raise ValueError("图片地址不允许包含用户凭据")
-        hostname = parsed.hostname.rstrip(".").lower()
-        if hostname == "localhost" or hostname.endswith(".localhost"):
-            raise ValueError("图片地址不允许访问本机或私网")
-        try:
-            addresses = await asyncio.to_thread(
-                socket.getaddrinfo,
-                hostname,
-                parsed.port or (443 if parsed.scheme == "https" else 80),
-                type=socket.SOCK_STREAM,
-            )
-        except socket.gaierror as exc:
-            request = httpx.Request("GET", url)
-            raise httpx.ConnectError("图片地址 DNS 解析失败", request=request) from exc
-        if not addresses or any(
-            not ipaddress.ip_address(item[4][0]).is_global for item in addresses
-        ):
-            raise ValueError("图片地址不允许访问本机或私网")
 
     @staticmethod
     def sanitize_url(url: str) -> str:
