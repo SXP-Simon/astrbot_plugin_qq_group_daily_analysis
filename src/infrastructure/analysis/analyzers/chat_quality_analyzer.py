@@ -449,7 +449,9 @@ ${messages_text}
             )
 
             if response is None:
-                return None, TokenUsage()
+                err_text = "聊天质量分析调用LLM失败: Provider 返回空响应或重试耗尽"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
 
             # 4. 提取 token 使用统计
             token_usage_dict = extract_token_usage(response)
@@ -462,7 +464,9 @@ ${messages_text}
             # 5. 提取响应文本
             result_text = extract_response_text(response)
             if not result_text:
-                return None, usage
+                err_text = "聊天质量分析失败: LLM 未返回任何文本内容"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
 
             # 6. JSON 解析（使用 parse_json_object_response）
             success, parsed_data, error_msg = parse_json_object_response(
@@ -510,12 +514,13 @@ ${messages_text}
                 return review, usage
 
             # 7. 全部失败
-            logger.error(f"聊天质量分析失败: JSON解析和正则提取均未成功: {error_msg}")
-            return None, usage
+            err_text = f"聊天质量分析失败: JSON解析和正则提取均未成功 ({error_msg or '未产出有效内容'})"
+            logger.error(err_text)
+            raise RuntimeError(err_text)
 
         except Exception as e:
             logger.error(f"聊天质量分析失败: {e}", exc_info=True)
-            return None, TokenUsage()
+            raise
 
     # Override analyze to bridge the base class interface
     async def analyze(

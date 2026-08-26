@@ -392,4 +392,4 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
         except Exception as e:
             logger.error(f"话题分析失败: {e}", exc_info=True)
-            return [], TokenUsage()
+            raise
