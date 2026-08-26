@@ -495,6 +495,72 @@ class ReportGenerator(IReportGenerator):
                                         )
 
                             if is_valid:
+                                image_size = (
+                                    len(image_data)
+                                    if isinstance(image_data, bytes)
+                                    else (
+                                        os.path.getsize(image_data)
+                                        if (
+                                            isinstance(image_data, str)
+                                            and os.path.exists(image_data)
+                                        )
+                                        else 0
+                                    )
+                                )
+
+                                # 上报渲染全量参数与产物指标至当前 Span
+                                trace_ctx = TraceContext.current()
+                                if trace_ctx:
+                                    for s in reversed(trace_ctx._spans):
+                                        if s.get("stage_name") == "RENDER_REPORT":
+                                            s.setdefault("payload", {}).update(
+                                                {
+                                                    "format": "image",
+                                                    "template": template_theme
+                                                    or "scrapbook (默认)",
+                                                    "viewport": viewport_description,
+                                                    "render_attempt": attempt,
+                                                    "image_format": str(
+                                                        image_options.get(
+                                                            "type", "jpeg"
+                                                        )
+                                                    ),
+                                                    "image_bytes": image_size,
+                                                    "topics_rendered": len(
+                                                        analysis_result.get(
+                                                            "topics", []
+                                                        )
+                                                    ),
+                                                    "titles_rendered": len(
+                                                        analysis_result.get(
+                                                            "user_titles", []
+                                                        )
+                                                    ),
+                                                    "quotes_rendered": len(
+                                                        getattr(
+                                                            analysis_result.get(
+                                                                "statistics"
+                                                            ),
+                                                            "golden_quotes",
+                                                            [],
+                                                        )
+                                                        or []
+                                                    ),
+                                                    "avatars_processed": len(
+                                                        render_payload.get(
+                                                            "avatar_reuse_registry", {}
+                                                        )
+                                                    ),
+                                                    "html_chars": len(html_content)
+                                                    if html_content
+                                                    else 0,
+                                                    "hide_user_names": bool(
+                                                        hide_user_names
+                                                    ),
+                                                }
+                                            )
+                                            break
+
                                 if isinstance(image_data, bytes):
                                     b64 = base64.b64encode(image_data).decode("utf-8")
                                     image_url = f"base64://{b64}"
@@ -705,6 +771,36 @@ class ReportGenerator(IReportGenerator):
             # 实时记录产物报告到当前 TraceContext 与数据库
             trace_ctx = TraceContext.current()
             if trace_ctx:
+                for s in reversed(trace_ctx._spans):
+                    if s.get("stage_name") == "RENDER_REPORT":
+                        s.setdefault("payload", {}).update(
+                            {
+                                "format": "html",
+                                "template": template_theme or "default",
+                                "html_chars": len(html_content) if html_content else 0,
+                                "html_file": html_path.name,
+                                "topics_rendered": len(
+                                    analysis_result.get("topics", [])
+                                ),
+                                "titles_rendered": len(
+                                    analysis_result.get("user_titles", [])
+                                ),
+                                "quotes_rendered": len(
+                                    getattr(
+                                        analysis_result.get("statistics"),
+                                        "golden_quotes",
+                                        [],
+                                    )
+                                    or []
+                                ),
+                                "avatars_processed": len(
+                                    render_data.get("avatar_reuse_registry", {})
+                                ),
+                                "hide_user_names": bool(hide_user_names),
+                            }
+                        )
+                        break
+
                 rfiles = trace_ctx.metadata.setdefault("report_files", [])
                 if not any(rf.get("filename") == html_path.name for rf in rfiles):
                     rfiles.append(

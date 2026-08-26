@@ -101,6 +101,29 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.template) && (
             <Tag color="magenta">主题模板: {String(payload.template)}</Tag>
           )}
+          {payload.image_bytes !== undefined && Number(payload.image_bytes) > 0 && (
+            <Tag color="cyan">
+              图片体积: {(Number(payload.image_bytes) / 1024).toFixed(1)} KB
+            </Tag>
+          )}
+          {payload.render_attempt !== undefined && (
+            <Tag color="geekblue">渲染轮次: 第 {Number(payload.render_attempt)} 轮</Tag>
+          )}
+          {Boolean(payload.viewport) && (
+            <Tag color="purple">视口: {String(payload.viewport)}</Tag>
+          )}
+          {payload.topics_rendered !== undefined && (
+            <Tag color="blue">渲染话题: {Number(payload.topics_rendered)} 个</Tag>
+          )}
+          {payload.titles_rendered !== undefined && (
+            <Tag color="purple">渲染称号: {Number(payload.titles_rendered)} 个</Tag>
+          )}
+          {payload.avatars_processed !== undefined && Number(payload.avatars_processed) > 0 && (
+            <Tag color="gold">解析头像: {Number(payload.avatars_processed)} 个</Tag>
+          )}
+          {Boolean(payload.hide_user_names) && (
+            <Tag color="orange">隐私保护: 匿名模式</Tag>
+          )}
         </div>
       );
 
