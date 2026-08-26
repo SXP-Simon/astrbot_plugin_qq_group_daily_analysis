@@ -145,25 +145,12 @@ class HTMLTemplates:
                     has_image = (p / "image_template.html").exists()
                     has_html = (p / "html_template.html").exists()
                     if has_image or has_html:
-                        custom_label = None
-                        theme_meta = p / "theme.json"
-                        if theme_meta.exists():
-                            try:
-                                import json
-
-                                meta = json.loads(
-                                    theme_meta.read_text(encoding="utf-8")
-                                )
-                                custom_label = meta.get("name") or meta.get("label")
-                            except Exception:
-                                pass
-                        if not custom_label:
-                            builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
-                            if builtin_label:
-                                custom_label = f"{builtin_label} (自定义修改版)"
-                            else:
-                                custom_label = f"{entry} (自定义本地模板)"
-
+                        builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
+                        custom_label = (
+                            f"{builtin_label} (自定义修改版)"
+                            if builtin_label
+                            else f"{entry} (自定义本地模板)"
+                        )
                         found_themes[entry] = {
                             "id": entry,
                             "label": custom_label,

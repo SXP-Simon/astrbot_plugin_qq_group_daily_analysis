@@ -619,13 +619,12 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     custom_root = tmp_path / "custom_t2i_templates" / "reporting_templates"
     custom_root.mkdir(parents=True, exist_ok=True)
 
-    # 自定义模板1：带 theme.json 元数据
-    theme1_dir = custom_root / "anime_pink"
+    # 自定义模板1：覆盖已有内置模板的修改版 (ATRI)
+    theme1_dir = custom_root / "ATRI"
     theme1_dir.mkdir()
-    (theme1_dir / "image_template.html").write_text("<div>Anime</div>", encoding="utf-8")
-    (theme1_dir / "theme.json").write_text('{"name": "动漫粉萌 (Anime Pink)"}', encoding="utf-8")
+    (theme1_dir / "image_template.html").write_text("<div>ATRI Custom</div>", encoding="utf-8")
 
-    # 自定义模板2：无元数据的第三方未知模板
+    # 自定义模板2：全新的第三方未知本地模板 (third_party_cyber)
     theme2_dir = custom_root / "third_party_cyber"
     theme2_dir.mkdir()
     (theme2_dir / "html_template.html").write_text("<div>Cyber</div>", encoding="utf-8")
@@ -647,17 +646,16 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     assert "spring_festival" in template_ids
 
     # 验证自定义模板被正确识别并优雅处理名称
-    assert "anime_pink" in template_ids
     assert "third_party_cyber" in template_ids
 
-    anime_meta = next(t for t in templates if t["id"] == "anime_pink")
-    assert anime_meta["is_custom"] is True
-    assert anime_meta["label"] == "动漫粉萌 (Anime Pink)"
+    atri_meta = next(t for t in templates if t["id"] == "ATRI")
+    assert atri_meta["is_custom"] is True
+    assert "自定义修改版" in atri_meta["label"]
 
     cyber_meta = next(t for t in templates if t["id"] == "third_party_cyber")
     assert cyber_meta["is_custom"] is True
     assert "third_party_cyber" in cyber_meta["label"]
-    assert "自定义" in cyber_meta["label"]
+    assert "自定义本地模板" in cyber_meta["label"]
 
 
 
