@@ -740,6 +740,15 @@ class TraceSQLiteStore:
                 (start_timestamp,),
             ).fetchall()
 
+            invalid_provider_names = {
+                "default",
+                "default_provider",
+                "quality_provider_id",
+                "none",
+                "",
+            }
+            invalid_model_names = {"default", "default_model", "none", ""}
+
             for tw in traces_with_usage:
                 try:
                     extra = json.loads(tw["extra_json"] or "{}")
@@ -750,18 +759,37 @@ class TraceSQLiteStore:
                     extra.get("llm_prompts", {}) if isinstance(extra, dict) else {}
                 )
 
-                # 收集 provider_id
+                # 收集有效 provider_id
                 providers_in_trace: set[str] = set()
+                models_in_trace: set[str] = set()
+
                 if isinstance(llm_prompts, dict):
                     for _, p_info in llm_prompts.items():
-                        if isinstance(p_info, dict) and p_info.get("provider_id"):
-                            providers_in_trace.add(str(p_info["provider_id"]))
+                        if isinstance(p_info, dict):
+                            p_id = str(p_info.get("provider_id", "")).strip()
+                            if p_id and p_id.lower() not in invalid_provider_names:
+                                providers_in_trace.add(p_id)
+                            m_id = str(p_info.get("model", "")).strip()
+                            if m_id and m_id.lower() not in invalid_model_names:
+                                models_in_trace.add(m_id)
 
                 if not providers_in_trace:
-                    fallback_p = extra.get("provider_id", "default_provider")
-                    providers_in_trace.add(str(fallback_p))
+                    fallback_p = str(extra.get("provider_id", "")).strip()
+                    if fallback_p and fallback_p.lower() not in invalid_provider_names:
+                        providers_in_trace.add(fallback_p)
+                    else:
+                        providers_in_trace.add("默认会话服务商")
 
-                tot_tok = tw["total_tokens"] or 0
+                if not models_in_trace:
+                    fallback_m = str(
+                        extra.get("model") or extra.get("model_id") or ""
+                    ).strip()
+                    if fallback_m and fallback_m.lower() not in invalid_model_names:
+                        models_in_trace.add(fallback_m)
+                    else:
+                        models_in_trace.add("默认会话模型")
+
+                tot_tok = int(tw["total_tokens"] or 0)
                 tokens_per_p = tot_tok // max(1, len(providers_in_trace))
                 for pid in providers_in_trace:
                     if pid not in provider_map:
@@ -773,27 +801,35 @@ class TraceSQLiteStore:
                     provider_map[pid]["total_tokens"] += tokens_per_p
                     provider_map[pid]["request_count"] += 1
 
-                # 收集 model 标识
-                model_name = extra.get("model") or extra.get("model_id", "default")
-                if model_name not in model_map:
-                    model_map[model_name] = {
-                        "name": model_name,
-                        "total_tokens": 0,
-                        "request_count": 0,
-                    }
-                model_map[model_name]["total_tokens"] += tot_tok
-                model_map[model_name]["request_count"] += 1
+                tokens_per_m = tot_tok // max(1, len(models_in_trace))
+                for mid in models_in_trace:
+                    if mid not in model_map:
+                        model_map[mid] = {
+                            "name": mid,
+                            "total_tokens": 0,
+                            "request_count": 0,
+                        }
+                    model_map[mid]["total_tokens"] += tokens_per_m
+                    model_map[mid]["request_count"] += 1
 
-        provider_breakdown = sorted(
-            provider_map.values(),
-            key=lambda x: x["total_tokens"],
-            reverse=True,
-        )
-        model_breakdown = sorted(
-            model_map.values(),
-            key=lambda x: x["total_tokens"],
-            reverse=True,
-        )
+        provider_breakdown = [
+            p
+            for p in sorted(
+                provider_map.values(),
+                key=lambda x: x["total_tokens"],
+                reverse=True,
+            )
+            if p["total_tokens"] > 0 or p["request_count"] > 0
+        ]
+        model_breakdown = [
+            m
+            for m in sorted(
+                model_map.values(),
+                key=lambda x: x["total_tokens"],
+                reverse=True,
+            )
+            if m["total_tokens"] > 0 or m["request_count"] > 0
+        ]
 
         return {
             "granularity": granularity,
