@@ -559,7 +559,249 @@ class TraceSQLiteStore:
                 "total_cost_spent": round(token_stats["total_cost_spent"] or 0.0, 4),
                 "today_tokens_spent": today_tokens["today_tokens_spent"] or 0,
                 "today_cost_spent": round(today_tokens["today_cost_spent"] or 0.0, 4),
+                "trends": self.get_analytics_trends(granularity="day", range_count=14),
             }
+
+    def get_analytics_trends(
+        self, granularity: str = "day", range_count: int = 14
+    ) -> dict[str, Any]:
+        """获取时序趋势数据（支持小时 / 天维度切换，并提取服务商与模型消耗细粒度拆分）"""
+        now = time.time()
+        local_tm = time.localtime(now)
+
+        points: list[dict[str, Any]] = []
+        provider_map: dict[str, dict[str, Any]] = {}
+        model_map: dict[str, dict[str, Any]] = {}
+
+        if granularity == "hour":
+            # 按小时划分（默认近 48 小时 / 2 天视野）
+            hours = max(1, min(range_count, 168))  # 上限7天
+            # 当前小时的整点时间戳
+            cur_hour_start = time.mktime(
+                (
+                    local_tm.tm_year,
+                    local_tm.tm_mon,
+                    local_tm.tm_mday,
+                    local_tm.tm_hour,
+                    0,
+                    0,
+                    0,
+                    0,
+                    -1,
+                )
+            )
+            start_timestamp = cur_hour_start - ((hours - 1) * 3600)
+
+            trend_map: dict[str, dict[str, Any]] = {}
+            for i in range(hours):
+                h_ts = start_timestamp + (i * 3600)
+                h_tm = time.localtime(h_ts)
+                h_key = f"{h_tm.tm_year:04d}-{h_tm.tm_mon:02d}-{h_tm.tm_mday:02d} {h_tm.tm_hour:02d}:00"
+                display_date = f"{h_tm.tm_mon}/{h_tm.tm_mday} {h_tm.tm_hour:02d}:00"
+                trend_map[h_key] = {
+                    "date": display_date,
+                    "date_full": h_key,
+                    "timestamp": h_ts,
+                    "request_count": 0,
+                    "succeeded_count": 0,
+                    "failed_count": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost": 0.0,
+                }
+
+            with self._get_connection() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        strftime('%Y-%m-%d %H:00', datetime(t.started_at, 'unixepoch', 'localtime')) as hour_str,
+                        COUNT(t.trace_id) as request_count,
+                        SUM(CASE WHEN t.status = 'succeeded' THEN 1 ELSE 0 END) as succeeded_count,
+                        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                        COALESCE(SUM(tu.prompt_tokens), 0) as prompt_tokens,
+                        COALESCE(SUM(tu.completion_tokens), 0) as completion_tokens,
+                        COALESCE(SUM(tu.total_tokens), 0) as total_tokens,
+                        COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost
+                    FROM analysis_traces t
+                    LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
+                    WHERE t.started_at >= ?
+                    GROUP BY hour_str;
+                    """,
+                    (start_timestamp,),
+                ).fetchall()
+
+                for r in rows:
+                    h_str = r["hour_str"]
+                    if h_str in trend_map:
+                        trend_map[h_str]["request_count"] = r["request_count"] or 0
+                        trend_map[h_str]["succeeded_count"] = r["succeeded_count"] or 0
+                        trend_map[h_str]["failed_count"] = r["failed_count"] or 0
+                        trend_map[h_str]["prompt_tokens"] = r["prompt_tokens"] or 0
+                        trend_map[h_str]["completion_tokens"] = (
+                            r["completion_tokens"] or 0
+                        )
+                        trend_map[h_str]["total_tokens"] = r["total_tokens"] or 0
+                        trend_map[h_str]["estimated_cost"] = round(
+                            r["estimated_cost"] or 0.0, 4
+                        )
+
+            points = list(trend_map.values())
+        else:
+            # 按天划分（支持 7 天、14 天、30 天等视野）
+            days = max(1, min(range_count, 90))
+            today_start = time.mktime(
+                (
+                    local_tm.tm_year,
+                    local_tm.tm_mon,
+                    local_tm.tm_mday,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    -1,
+                )
+            )
+            start_timestamp = today_start - ((days - 1) * 86400)
+
+            trend_map = {}
+            for i in range(days):
+                day_ts = start_timestamp + (i * 86400)
+                d_tm = time.localtime(day_ts)
+                day_key = f"{d_tm.tm_year:04d}-{d_tm.tm_mon:02d}-{d_tm.tm_mday:02d}"
+                display_date = f"{d_tm.tm_mon}/{d_tm.tm_mday}"
+                trend_map[day_key] = {
+                    "date": display_date,
+                    "date_full": day_key,
+                    "timestamp": day_ts,
+                    "request_count": 0,
+                    "succeeded_count": 0,
+                    "failed_count": 0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost": 0.0,
+                }
+
+            with self._get_connection() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        date(t.started_at, 'unixepoch', 'localtime') as day_str,
+                        COUNT(t.trace_id) as request_count,
+                        SUM(CASE WHEN t.status = 'succeeded' THEN 1 ELSE 0 END) as succeeded_count,
+                        SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                        COALESCE(SUM(tu.prompt_tokens), 0) as prompt_tokens,
+                        COALESCE(SUM(tu.completion_tokens), 0) as completion_tokens,
+                        COALESCE(SUM(tu.total_tokens), 0) as total_tokens,
+                        COALESCE(SUM(tu.estimated_cost), 0.0) as estimated_cost
+                    FROM analysis_traces t
+                    LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
+                    WHERE t.started_at >= ?
+                    GROUP BY day_str;
+                    """,
+                    (start_timestamp,),
+                ).fetchall()
+
+                for r in rows:
+                    day_str = r["day_str"]
+                    if day_str in trend_map:
+                        trend_map[day_str]["request_count"] = r["request_count"] or 0
+                        trend_map[day_str]["succeeded_count"] = (
+                            r["succeeded_count"] or 0
+                        )
+                        trend_map[day_str]["failed_count"] = r["failed_count"] or 0
+                        trend_map[day_str]["prompt_tokens"] = r["prompt_tokens"] or 0
+                        trend_map[day_str]["completion_tokens"] = (
+                            r["completion_tokens"] or 0
+                        )
+                        trend_map[day_str]["total_tokens"] = r["total_tokens"] or 0
+                        trend_map[day_str]["estimated_cost"] = round(
+                            r["estimated_cost"] or 0.0, 4
+                        )
+
+            points = list(trend_map.values())
+
+        # 提取该时间范围内的服务商 (Provider) 与模型 (Model) 维度消耗分布
+        with self._get_connection() as conn:
+            traces_with_usage = conn.execute(
+                """
+                SELECT
+                    t.extra_json,
+                    COALESCE(tu.total_tokens, 0) as total_tokens,
+                    COALESCE(tu.prompt_tokens, 0) as prompt_tokens,
+                    COALESCE(tu.completion_tokens, 0) as completion_tokens,
+                    COALESCE(tu.per_analyzer_tokens_json, '{}') as per_analyzer
+                FROM analysis_traces t
+                LEFT JOIN token_usage tu ON t.trace_id = tu.trace_id
+                WHERE t.started_at >= ?;
+                """,
+                (start_timestamp,),
+            ).fetchall()
+
+            for tw in traces_with_usage:
+                try:
+                    extra = json.loads(tw["extra_json"] or "{}")
+                except Exception:
+                    extra = {}
+
+                llm_prompts = (
+                    extra.get("llm_prompts", {}) if isinstance(extra, dict) else {}
+                )
+
+                # 收集 provider_id
+                providers_in_trace: set[str] = set()
+                if isinstance(llm_prompts, dict):
+                    for _, p_info in llm_prompts.items():
+                        if isinstance(p_info, dict) and p_info.get("provider_id"):
+                            providers_in_trace.add(str(p_info["provider_id"]))
+
+                if not providers_in_trace:
+                    fallback_p = extra.get("provider_id", "default_provider")
+                    providers_in_trace.add(str(fallback_p))
+
+                tot_tok = tw["total_tokens"] or 0
+                tokens_per_p = tot_tok // max(1, len(providers_in_trace))
+                for pid in providers_in_trace:
+                    if pid not in provider_map:
+                        provider_map[pid] = {
+                            "name": pid,
+                            "total_tokens": 0,
+                            "request_count": 0,
+                        }
+                    provider_map[pid]["total_tokens"] += tokens_per_p
+                    provider_map[pid]["request_count"] += 1
+
+                # 收集 model 标识
+                model_name = extra.get("model") or extra.get("model_id", "default")
+                if model_name not in model_map:
+                    model_map[model_name] = {
+                        "name": model_name,
+                        "total_tokens": 0,
+                        "request_count": 0,
+                    }
+                model_map[model_name]["total_tokens"] += tot_tok
+                model_map[model_name]["request_count"] += 1
+
+        provider_breakdown = sorted(
+            provider_map.values(),
+            key=lambda x: x["total_tokens"],
+            reverse=True,
+        )
+        model_breakdown = sorted(
+            model_map.values(),
+            key=lambda x: x["total_tokens"],
+            reverse=True,
+        )
+
+        return {
+            "granularity": granularity,
+            "range_count": range_count,
+            "points": points,
+            "provider_breakdown": provider_breakdown,
+            "model_breakdown": model_breakdown,
+        }
 
     def cleanup_old_traces(self, days: int = 30, max_count: int = 20000) -> int:
         """根据保留天数（默认30天）或最大条数上限清理旧的 Trace 数据，防止 SQLite 无限增长"""

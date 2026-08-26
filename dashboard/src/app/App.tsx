@@ -6,6 +6,7 @@ import {
   ExperimentOutlined,
   FolderOpenOutlined,
   FileTextOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -23,6 +24,8 @@ import { ReportsPage } from "../pages/reports/ui/ReportsPage";
 import { useReportsViewModel } from "../pages/reports/model/useReportsViewModel";
 import { LogsPage } from "../pages/logs/ui/LogsPage";
 import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
+import { ConfigPage } from "../pages/config/ui/ConfigPage";
+import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -38,6 +41,9 @@ export const App: React.FC = () => {
   const contextInsightVM = useContextInsightViewModel();
   const reportsVM = useReportsViewModel();
   const logsVM = useLogsViewModel();
+  const configVM = useConfigViewModel(() => {
+    handleRefreshAll();
+  });
 
   const handleRefreshAll = () => {
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
@@ -141,7 +147,12 @@ export const App: React.FC = () => {
           <ExperimentOutlined /> 统计与消耗
         </span>
       ),
-      children: <ContextInsightPage viewModel={contextInsightVM} />,
+      children: (
+        <ContextInsightPage
+          viewModel={contextInsightVM}
+          onViewTrace={handleViewTrace}
+        />
+      ),
     },
     {
       key: "reports",
@@ -164,6 +175,15 @@ export const App: React.FC = () => {
       children: (
         <LogsPage viewModel={logsVM} onViewTrace={handleViewTrace} />
       ),
+    },
+    {
+      key: "config",
+      label: (
+        <span>
+          <SettingOutlined /> 配置中心
+        </span>
+      ),
+      children: <ConfigPage viewModel={configVM} />,
     },
   ];
 

@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -24,6 +24,7 @@ from src.domain.models.data_models import (
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.active_task_manager import ActiveTaskManager
+from src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
 from src.shared.trace_context import TraceContext
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -671,6 +672,104 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     assert cyber_meta["is_custom"] is True
     assert "third_party_cyber" in cyber_meta["label"]
     assert "自定义本地模板" in cyber_meta["label"]
+
+
+@pytest.mark.asyncio
+async def test_analytics_trends_and_granularity(tmp_path: Path):
+    """测试近 N 天 / 小时维度的时序趋势数据聚合与 Provider / Model 分布提取"""
+    db_path = tmp_path / "test_trends.db"
+    store = TraceSQLiteStore(db_path)
+
+    now = time.time()
+    # 模拟一条成功的 Trace 记录与关联 Token 消耗
+    store.save_trace(
+        {
+            "trace_id": "test_trend_trace_1",
+            "group_id": "123456",
+            "group_name": "测试群",
+            "status": "succeeded",
+            "started_at": now - 3600,  # 1小时前
+            "completed_at": now - 3550,
+            "duration_ms": 50000,
+            "extra": {
+                "provider_id": "openai_main",
+                "model": "gpt-4o",
+                "llm_prompts": {
+                    "topics": {"provider_id": "openai_main"},
+                    "user_titles": {"provider_id": "openai_main"},
+                },
+            },
+            "token_usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 500,
+                "total_tokens": 1500,
+                "estimated_cost": 0.05,
+                "per_analyzer_tokens_json": "{}",
+            },
+        }
+    )
+
+    # 1. 验证按天维度趋势
+    day_trends = store.get_analytics_trends(granularity="day", range_count=7)
+    assert day_trends["granularity"] == "day"
+    assert len(day_trends["points"]) == 7
+    total_tokens_sum = sum(p["total_tokens"] for p in day_trends["points"])
+    assert total_tokens_sum == 1500
+
+    # 验证 Provider / Model 分布
+    providers = day_trends["provider_breakdown"]
+    assert len(providers) >= 1
+    assert providers[0]["name"] == "openai_main"
+    assert providers[0]["total_tokens"] == 1500
+
+    models = day_trends["model_breakdown"]
+    assert len(models) >= 1
+    assert models[0]["name"] == "gpt-4o"
+
+    # 2. 验证按小时维度趋势 (近 48 小时)
+    hour_trends = store.get_analytics_trends(granularity="hour", range_count=48)
+    assert hour_trends["granularity"] == "hour"
+    assert len(hour_trends["points"]) == 48
+    req_counts = sum(p["request_count"] for p in hour_trends["points"])
+    assert req_counts == 1
+
+
+@pytest.mark.asyncio
+async def test_plugin_config_api(tmp_path: Path):
+    """测试插件配置中心 GET / POST API 接口与持久化"""
+    mock_context = MagicMock()
+    mock_dispatcher = MagicMock()
+    mock_analysis_service = MagicMock()
+
+    mock_config = MagicMock()
+    mock_config.__iter__.return_value = ["basic", "analysis_features"]
+    mock_config.__getitem__.side_effect = lambda k: {"enabled": True} if k == "basic" else {}
+    mock_config_dict = {"basic": {"enabled": True}}
+    mock_config.__iter__ = lambda self: iter(mock_config_dict)
+    mock_config.items = lambda: mock_config_dict.items()
+    mock_config.save_config = MagicMock()
+
+    cfg_mgr = MagicMock()
+    cfg_mgr.config = mock_config_dict
+    mock_analysis_service.config_manager = cfg_mgr
+
+    bridge = PluginPageWebUIBridge(
+        context=mock_context,
+        active_task_manager=MagicMock(),
+        trace_store=TraceSQLiteStore(tmp_path / "test_bridge.db"),
+        analysis_service=mock_analysis_service,
+        report_dispatcher=mock_dispatcher,
+    )
+
+    # 1. 验证 api_get_config
+    get_res = await bridge.api_get_config()
+    assert get_res is not None
+    # 2. 验证 api_save_config
+    with patch("src.infrastructure.webui.plugin_page_bridge.request") as mock_req:
+        mock_req.json = AsyncMock(return_value={"config": {"basic": {"enabled": False}}})
+        save_res = await bridge.api_save_config()
+        assert save_res is not None
+
 
 
 
