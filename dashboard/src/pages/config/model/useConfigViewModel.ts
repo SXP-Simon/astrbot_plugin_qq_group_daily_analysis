@@ -108,12 +108,16 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       const groupDesc = group.description || key;
       const items = group.items || {};
 
+      const visibleItems = Object.entries(items).filter(
+        ([, item]) => !item.invisible && !item.hidden
+      );
+
       let matchCount = 0;
       if (q) {
         if (groupDesc.toLowerCase().includes(q) || (group.hint && group.hint.toLowerCase().includes(q))) {
-          matchCount += Object.keys(items).length;
+          matchCount += visibleItems.length;
         } else {
-          for (const [, item] of Object.entries(items)) {
+          for (const [, item] of visibleItems) {
             const desc = (item.description || "").toLowerCase();
             const hint = (item.hint || "").toLowerCase();
             if (desc.includes(q) || hint.includes(q)) {
@@ -127,13 +131,13 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         key,
         label: groupDesc,
         hint: group.hint || "",
-        totalFields: Object.keys(items).length,
+        totalFields: visibleItems.length,
         matchCount: q ? matchCount : undefined,
       };
     });
   }, [schema, searchQuery]);
 
-  // 当前激活分组的字段列表（应用搜索过滤）
+  // 当前激活分组的字段列表（应用搜索过滤，并过滤 invisible/hidden 隐藏兼容项）
   const currentGroupFields = useMemo(() => {
     if (!schema[activeCategory]) return [];
     const q = searchQuery.trim().toLowerCase();
@@ -141,6 +145,8 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
 
     return Object.entries(groupItems)
       .filter(([fieldKey, item]) => {
+        // 过滤 schema 中声明为不可见或废弃迁移项
+        if (item.invisible || item.hidden) return false;
         if (!q) return true;
         const desc = (item.description || "").toLowerCase();
         const hint = (item.hint || "").toLowerCase();
