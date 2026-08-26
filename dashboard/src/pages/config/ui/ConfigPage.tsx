@@ -109,7 +109,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
       </Card>
 
       {/* 主体配置工作区 (双栏布局：左侧分组导航 + 右侧动态表单) */}
-      <Card size="small" bodyStyle={{ padding: 0 }}>
+      <Card size="small" styles={{ body: { padding: 0 } }}>
         <Spin spinning={loading}>
           <Row style={{ minHeight: 600 }}>
             {/* 左侧：搜索与分组导航 */}

@@ -206,7 +206,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                   borderRadius: 6,
                   background: token.colorFillAlter,
                 }}
-                bodyStyle={{ padding: "12px 14px" }}
+                styles={{ body: { padding: "12px 14px" } }}
               >
                 {/* 头部标题与控制按钮 */}
                 <div
