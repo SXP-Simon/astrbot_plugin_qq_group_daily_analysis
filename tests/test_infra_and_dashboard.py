@@ -611,4 +611,54 @@ async def test_report_dispatcher_span_tracking():
     assert "image" in p.get("formats", [])
 
 
+def test_get_available_templates_dynamic_discovery(tmp_path: Path):
+    from unittest.mock import MagicMock
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    # 1. 模拟自定义模板目录
+    custom_root = tmp_path / "custom_t2i_templates" / "reporting_templates"
+    custom_root.mkdir(parents=True, exist_ok=True)
+
+    # 自定义模板1：带 theme.json 元数据
+    theme1_dir = custom_root / "anime_pink"
+    theme1_dir.mkdir()
+    (theme1_dir / "image_template.html").write_text("<div>Anime</div>", encoding="utf-8")
+    (theme1_dir / "theme.json").write_text('{"name": "动漫粉萌 (Anime Pink)"}', encoding="utf-8")
+
+    # 自定义模板2：无元数据的第三方未知模板
+    theme2_dir = custom_root / "third_party_cyber"
+    theme2_dir.mkdir()
+    (theme2_dir / "html_template.html").write_text("<div>Cyber</div>", encoding="utf-8")
+
+    mock_config = MagicMock()
+    mock_config.get_report_template = MagicMock(return_value="scrapbook")
+    mock_config.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda name: (custom_root / name) if name else custom_root
+    )
+
+    templates_mgr = HTMLTemplates(mock_config)
+    templates = templates_mgr.get_available_templates()
+
+    # 验证内置模板被正确识别
+    template_ids = [t["id"] for t in templates]
+    assert "scrapbook" in template_ids
+    assert "ATRI" in template_ids
+    assert "HatsuneMiku" in template_ids
+    assert "spring_festival" in template_ids
+
+    # 验证自定义模板被正确识别并优雅处理名称
+    assert "anime_pink" in template_ids
+    assert "third_party_cyber" in template_ids
+
+    anime_meta = next(t for t in templates if t["id"] == "anime_pink")
+    assert anime_meta["is_custom"] is True
+    assert anime_meta["label"] == "动漫粉萌 (Anime Pink)"
+
+    cyber_meta = next(t for t in templates if t["id"] == "third_party_cyber")
+    assert cyber_meta["is_custom"] is True
+    assert "third_party_cyber" in cyber_meta["label"]
+    assert "自定义" in cyber_meta["label"]
+
+
+
 
