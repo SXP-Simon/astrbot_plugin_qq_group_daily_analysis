@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Card, Empty, Typography, Space, Segmented, Tag, Tooltip } from "antd";
+import { Row, Col, Card, Empty, Typography, Space, Radio, Tooltip } from "antd";
 import ReactECharts from "echarts-for-react";
 import {
   AreaChartOutlined,
   BarChartOutlined,
-  ApiOutlined,
+  ApartmentOutlined,
   AppstoreOutlined,
 } from "@ant-design/icons";
 import {
@@ -94,25 +94,25 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     backgroundColor: "transparent",
     tooltip: {
       trigger: "axis",
-      backgroundColor: isDark ? "rgba(24, 24, 28, 0.96)" : "rgba(255, 255, 255, 0.96)",
-      borderColor: isDark ? "#383838" : "#f0f0f0",
+      backgroundColor: isDark ? "rgba(22, 27, 34, 0.96)" : "rgba(255, 255, 255, 0.98)",
+      borderColor: isDark ? "#30363d" : "#e2e8f0",
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: isDark ? "#e6edf3" : "#262626", fontSize: 12 },
+      textStyle: { color: isDark ? "#c9d1d9" : "#1e293b", fontSize: 12 },
       formatter: (params: Array<{ dataIndex: number; value: number }>) => {
         if (!params || params.length === 0) return "";
         const idx = params[0].dataIndex;
         const item = points[idx];
         if (!item) return "";
         return `
-          <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#262626"};">
-            📅 ${item.date_full || item.date}
+          <div style="font-weight: 600; font-family: monospace; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#0f172a"};">
+            ${item.date_full || item.date}
           </div>
-          <div style="font-size: 12px; color: #1677ff; margin-bottom: 3px;">
+          <div style="font-size: 12px; color: #2563eb; margin-bottom: 3px;">
             分析触发次数: <b>${item.request_count}</b> 次
           </div>
-          <div style="font-size: 11px; color: #52c41a;">
-            成功: ${item.succeeded_count} 次 / 失败: <span style="color: ${item.failed_count > 0 ? "#ff4d4f" : "#8c8c8c"}">${item.failed_count} 次</span>
+          <div style="font-size: 11px; color: #16a34a;">
+            成功: ${item.succeeded_count} 次 / 失败: <span style="color: ${item.failed_count > 0 ? "#dc2626" : "#64748b"}">${item.failed_count} 次</span>
           </div>
         `;
       },
@@ -127,11 +127,12 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     xAxis: {
       type: "category",
       data: dates,
-      axisLine: { lineStyle: { color: isDark ? "#303030" : "#e8e8e8" } },
+      axisLine: { lineStyle: { color: isDark ? "#30363d" : "#e2e8f0" } },
       axisTick: { show: false },
       axisLabel: {
-        color: isDark ? "#8c8c8c" : "#8c8c8c",
+        color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
+        fontFamily: "monospace",
       },
     },
     yAxis: {
@@ -139,13 +140,14 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       minInterval: 1,
       splitLine: {
         lineStyle: {
-          color: isDark ? "#262626" : "#f0f0f0",
+          color: isDark ? "#21262d" : "#f1f5f9",
           type: "dashed",
         },
       },
       axisLabel: {
-        color: isDark ? "#8c8c8c" : "#8c8c8c",
+        color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
+        fontFamily: "monospace",
       },
     },
     series: [
@@ -157,11 +159,11 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         symbolSize: 6,
         data: requestCounts,
         lineStyle: {
-          width: 2.5,
-          color: "#1677ff",
+          width: 2,
+          color: "#2563eb",
         },
         itemStyle: {
-          color: "#1677ff",
+          color: "#2563eb",
         },
         areaStyle: {
           color: {
@@ -171,9 +173,9 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: "rgba(22, 119, 255, 0.55)" },
-              { offset: 0.8, color: "rgba(22, 119, 255, 0.1)" },
-              { offset: 1, color: "rgba(22, 119, 255, 0.0)" },
+              { offset: 0, color: "rgba(37, 99, 235, 0.45)" },
+              { offset: 0.8, color: "rgba(37, 99, 235, 0.08)" },
+              { offset: 1, color: "rgba(37, 99, 235, 0.0)" },
             ],
           },
         },
@@ -186,27 +188,27 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     backgroundColor: "transparent",
     tooltip: {
       trigger: "axis",
-      backgroundColor: isDark ? "rgba(24, 24, 28, 0.96)" : "rgba(255, 255, 255, 0.96)",
-      borderColor: isDark ? "#383838" : "#f0f0f0",
+      backgroundColor: isDark ? "rgba(22, 27, 34, 0.96)" : "rgba(255, 255, 255, 0.98)",
+      borderColor: isDark ? "#30363d" : "#e2e8f0",
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: isDark ? "#e6edf3" : "#262626", fontSize: 12 },
+      textStyle: { color: isDark ? "#c9d1d9" : "#1e293b", fontSize: 12 },
       formatter: (params: Array<{ dataIndex: number }>) => {
         if (!params || params.length === 0) return "";
         const idx = params[0].dataIndex;
         const item = points[idx];
         if (!item) return "";
         return `
-          <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#262626"};">
-            📅 ${item.date_full || item.date}
+          <div style="font-weight: 600; font-family: monospace; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#0f172a"};">
+            ${item.date_full || item.date}
           </div>
-          <div style="font-size: 12px; color: #1677ff; margin-bottom: 3px;">
-            总消耗: <b>${formatTokens(item.total_tokens)}</b>
+          <div style="font-size: 12px; color: #7c3aed; margin-bottom: 3px;">
+            总消耗: <b style="font-family: monospace;">${formatTokens(item.total_tokens)}</b>
           </div>
-          <div style="font-size: 11px; color: ${isDark ? "#bfbfbf" : "#595959"};">
+          <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
             输入 (Prompt): ${formatTokens(item.prompt_tokens)}
           </div>
-          <div style="font-size: 11px; color: ${isDark ? "#bfbfbf" : "#595959"};">
+          <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
             输出 (Completion): ${formatTokens(item.completion_tokens)}
           </div>
         `;
@@ -222,24 +224,26 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     xAxis: {
       type: "category",
       data: dates,
-      axisLine: { lineStyle: { color: isDark ? "#303030" : "#e8e8e8" } },
+      axisLine: { lineStyle: { color: isDark ? "#30363d" : "#e2e8f0" } },
       axisTick: { show: false },
       axisLabel: {
-        color: isDark ? "#8c8c8c" : "#8c8c8c",
+        color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
+        fontFamily: "monospace",
       },
     },
     yAxis: {
       type: "value",
       splitLine: {
         lineStyle: {
-          color: isDark ? "#262626" : "#f0f0f0",
+          color: isDark ? "#21262d" : "#f1f5f9",
           type: "dashed",
         },
       },
       axisLabel: {
-        color: isDark ? "#8c8c8c" : "#8c8c8c",
+        color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
+        fontFamily: "monospace",
         formatter: (val: number) => (val >= 1000 ? `${Math.round(val / 1000)}k` : `${val}`),
       },
     },
@@ -248,9 +252,9 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         name: "输入 Tokens",
         type: "bar",
         stack: "tokens",
-        barMaxWidth: 20,
+        barMaxWidth: 16,
         itemStyle: {
-          color: "#1677ff",
+          color: "#7c3aed",
         },
         data: promptTokens,
       },
@@ -258,10 +262,10 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
         name: "输出 Tokens",
         type: "bar",
         stack: "tokens",
-        barMaxWidth: 20,
+        barMaxWidth: 16,
         itemStyle: {
-          color: "#69b1ff",
-          borderRadius: [3, 3, 0, 0],
+          color: "#a78bfa",
+          borderRadius: [2, 2, 0, 0],
         },
         data: completionTokens,
       },
@@ -275,25 +279,25 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       size="small"
       title={
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <Space size={8}>
-            <AreaChartOutlined style={{ color: "#1677ff" }} />
-            <Text strong style={{ fontSize: 13 }}>
+          <Space size={6}>
+            <AreaChartOutlined style={{ color: "#2563eb" }} />
+            <Text strong style={{ fontSize: 13, letterSpacing: "-0.2px" }}>
               分析行为与 Token 消耗可观测趋势
             </Text>
           </Space>
 
-          {/* 时间粒度与跨度视图切换控制器 */}
-          <Segmented
+          {/* 紧凑型时间跨度切换控制器 (符合 Data-Dense 设计规范) */}
+          <Radio.Group
             size="small"
             value={selectedRange}
-            onChange={(v) => handleRangeChange(v as RangeOption)}
-            options={[
-              { label: "近48小时 (按小时)", value: "48h" },
-              { label: "近7天 (一周)", value: "7d" },
-              { label: "近14天", value: "14d" },
-              { label: "近30天", value: "30d" },
-            ]}
-          />
+            onChange={(e) => handleRangeChange(e.target.value as RangeOption)}
+            buttonStyle="solid"
+          >
+            <Radio.Button value="48h" style={{ fontSize: 12 }}>近48小时</Radio.Button>
+            <Radio.Button value="7d" style={{ fontSize: 12 }}>近7天</Radio.Button>
+            <Radio.Button value="14d" style={{ fontSize: 12 }}>近14天</Radio.Button>
+            <Radio.Button value="30d" style={{ fontSize: 12 }}>近30天</Radio.Button>
+          </Radio.Group>
         </div>
       }
     >
@@ -303,16 +307,17 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           <div
             style={{
               padding: "8px 12px",
-              background: isDark ? "#141414" : "#fafafa",
-              borderRadius: 6,
-              border: `1px solid ${isDark ? "#262626" : "#f0f0f0"}`,
+              background: isDark ? "#161b22" : "#f8fafc",
+              borderRadius: 4,
+              border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <Text strong style={{ fontSize: 13 }}>
+              <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                <AreaChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
                 API 请求次数
               </Text>
-              <Text strong style={{ fontSize: 14, color: "#1677ff" }}>
+              <Text strong className="font-mono" style={{ fontSize: 13, color: "#2563eb" }}>
                 {rangeTotalRequests > 0 ? rangeTotalRequests.toLocaleString() : totalTraces.toLocaleString()} 次
               </Text>
             </div>
@@ -320,7 +325,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
             {hasData ? (
               <ReactECharts
                 option={requestChartOption}
-                style={{ height: 170, width: "100%" }}
+                style={{ height: 160, width: "100%" }}
                 opts={{ renderer: "svg" }}
                 showLoading={currentLoading}
               />
@@ -328,7 +333,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无请求趋势数据"
-                style={{ height: 170, display: "flex", flexDirection: "column", justifyContent: "center" }}
+                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
               />
             )}
           </div>
@@ -339,17 +344,17 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           <div
             style={{
               padding: "8px 12px",
-              background: isDark ? "#141414" : "#fafafa",
-              borderRadius: 6,
-              border: `1px solid ${isDark ? "#262626" : "#f0f0f0"}`,
+              background: isDark ? "#161b22" : "#f8fafc",
+              borderRadius: 4,
+              border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <Text strong style={{ fontSize: 13 }}>
-                <BarChartOutlined style={{ color: "#722ed1", marginRight: 6 }} />
+              <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                <BarChartOutlined style={{ color: "#7c3aed", marginRight: 6 }} />
                 Tokens 消耗趋势
               </Text>
-              <Text strong style={{ fontSize: 14, color: "#722ed1" }}>
+              <Text strong className="font-mono" style={{ fontSize: 13, color: "#7c3aed" }}>
                 {rangeTotalTokens > 0 ? formatSmartTokens(rangeTotalTokens) : formatSmartTokens(totalTokens)}
               </Text>
             </div>
@@ -357,7 +362,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
             {hasData ? (
               <ReactECharts
                 option={tokenChartOption}
-                style={{ height: 170, width: "100%" }}
+                style={{ height: 160, width: "100%" }}
                 opts={{ renderer: "svg" }}
                 showLoading={currentLoading}
               />
@@ -365,52 +370,79 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description="暂无 Token 消耗趋势数据"
-                style={{ height: 170, display: "flex", flexDirection: "column", justifyContent: "center" }}
+                style={{ height: 160, display: "flex", flexDirection: "column", justifyContent: "center" }}
               />
             )}
           </div>
         </Col>
       </Row>
 
-      {/* 服务商 (Provider) 与模型 (Model ID) 细粒度审计统计条 */}
+      {/* 服务商 (Provider) 与模型 (Model ID) 细粒度审计统计条 (Data Dense 紧凑设计) */}
       {(providers.length > 0 || models.length > 0) && (
         <div
           style={{
-            marginTop: 12,
-            paddingTop: 10,
-            borderTop: `1px dashed ${isDark ? "#282828" : "#f0f0f0"}`,
+            marginTop: 10,
+            paddingTop: 8,
+            borderTop: `1px solid ${isDark ? "#21262d" : "#f1f5f9"}`,
             display: "flex",
             flexWrap: "wrap",
             justifyContent: "space-between",
             alignItems: "center",
-            gap: 8,
+            gap: 10,
           }}
         >
           {/* 服务商分布 */}
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>
-              <ApiOutlined style={{ marginRight: 4 }} />
-              服务商分布:
-            </Text>
+            <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#8b949e" : "#64748b", display: "inline-flex", alignItems: "center" }}>
+              <ApartmentOutlined style={{ marginRight: 4 }} />
+              服务商:
+            </span>
             {providers.map((p) => (
               <Tooltip key={p.name} title={`请求次数: ${p.request_count} 次`}>
-                <Tag color="cyan" style={{ fontSize: 11, margin: 0 }}>
-                  {p.name}: <b>{formatSmartTokens(p.total_tokens)}</b>
-                </Tag>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "1px 6px",
+                    fontSize: 11,
+                    fontFamily: "monospace",
+                    borderRadius: 3,
+                    border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                    background: isDark ? "#161b22" : "#ffffff",
+                    color: isDark ? "#c9d1d9" : "#1e293b",
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#0284c7", marginRight: 4 }} />
+                  {p.name}: <b style={{ marginLeft: 3 }}>{formatSmartTokens(p.total_tokens)}</b>
+                </span>
               </Tooltip>
             ))}
           </div>
 
           {/* 模型分布 */}
           <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#8b949e" : "#64748b", display: "inline-flex", alignItems: "center" }}>
               <AppstoreOutlined style={{ marginRight: 4 }} />
-              模型分布:
-            </Text>
+              模型:
+            </span>
             {models.map((m) => (
-              <Tag key={m.name} color="purple" style={{ fontSize: 11, margin: 0 }}>
-                {m.name}: <b>{formatSmartTokens(m.total_tokens)}</b>
-              </Tag>
+              <span
+                key={m.name}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "1px 6px",
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  borderRadius: 3,
+                  border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                  background: isDark ? "#161b22" : "#ffffff",
+                  color: isDark ? "#c9d1d9" : "#1e293b",
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#9333ea", marginRight: 4 }} />
+                {m.name}: <b style={{ marginLeft: 3 }}>{formatSmartTokens(m.total_tokens)}</b>
+              </span>
             ))}
           </div>
         </div>
