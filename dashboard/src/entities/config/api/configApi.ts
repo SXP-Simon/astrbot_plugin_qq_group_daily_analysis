@@ -48,8 +48,27 @@ export async function savePluginConfig(
   config: Record<string, unknown>
 ): Promise<{ success: boolean; message?: string }> {
   const res = await apiPost("config", { config });
-  if (res && res.status === "ok") {
-    return { success: true, message: res.message || "配置已成功保存" };
+  if (res) {
+    const raw = res as Record<string, unknown>;
+    const nestedData = raw.data as Record<string, unknown> | undefined;
+
+    const isOk =
+      raw.status === "ok" ||
+      raw.status === "success" ||
+      raw.status === 200 ||
+      raw.code === 0 ||
+      nestedData?.status === "ok" ||
+      nestedData?.status === "success";
+
+    const msg =
+      (raw.message as string) ||
+      (nestedData?.message as string) ||
+      (isOk ? "配置已成功保存并生效" : "保存配置失败");
+
+    if (isOk) {
+      return { success: true, message: msg };
+    }
+    return { success: false, message: msg };
   }
-  return { success: false, message: res?.message || "保存配置失败" };
+  return { success: false, message: "保存配置失败，未收到后端响应" };
 }
