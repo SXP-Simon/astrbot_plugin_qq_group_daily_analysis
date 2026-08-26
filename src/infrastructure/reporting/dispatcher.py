@@ -3,12 +3,12 @@ import os
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -46,6 +46,7 @@ class ReportDispatcher:
     ) -> bool:
         """分发分析报告，并返回至少一种格式是否实际发送成功。"""
         trace_id = TraceContext.get()
+        trace_ctx = TraceContext.current()
         output_formats = self.config_manager.get_output_format()
         if isinstance(output_formats, str):
             output_formats = [output_formats]
@@ -54,27 +55,70 @@ class ReportDispatcher:
             f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {', '.join(output_formats)})"
         )
 
+        span_exists = bool(
+            trace_ctx
+            and any(
+                s.get("stage_name") == "DISPATCH_REPORT"
+                and s.get("status") == "running"
+                for s in trace_ctx._spans
+            )
+        )
+        span_ctx = (
+            nullcontext()
+            if span_exists
+            else (
+                trace_ctx.span(
+                    "DISPATCH_REPORT",
+                    {
+                        "platform": platform_id or "auto",
+                        "group_id": group_id,
+                        "formats": output_formats,
+                    },
+                )
+                if trace_ctx
+                else nullcontext()
+            )
+        )
+
         dispatch_map = {
             "image": self._dispatch_image,
             "html": self._dispatch_html,
             "text": self._dispatch_text,
         }
         sent_any = False
-        for fmt in output_formats:
-            handler = dispatch_map.get(fmt)
-            if not handler:
-                logger.warning(f"[{trace_id}] 不支持的报告格式: {fmt}")
-                continue
-            try:
-                sent_any = (
-                    bool(await handler(group_id, analysis_result, platform_id))
-                    or sent_any
-                )
-            except Exception as e:
-                logger.error(
-                    f"[{trace_id}] 群 {group_id} 的 {fmt} 报告发送异常: {e}",
-                    exc_info=True,
-                )
+        format_results: dict[str, bool] = {}
+
+        with span_ctx:
+            for fmt in output_formats:
+                handler = dispatch_map.get(fmt)
+                if not handler:
+                    logger.warning(f"[{trace_id}] 不支持的报告格式: {fmt}")
+                    continue
+                try:
+                    ok = bool(await handler(group_id, analysis_result, platform_id))
+                    format_results[fmt] = ok
+                    sent_any = ok or sent_any
+                except Exception as e:
+                    logger.error(
+                        f"[{trace_id}] 群 {group_id} 的 {fmt} 报告发送异常: {e}",
+                        exc_info=True,
+                    )
+                    format_results[fmt] = False
+
+            if trace_ctx:
+                for s in reversed(trace_ctx._spans):
+                    if s.get("stage_name") == "DISPATCH_REPORT":
+                        s.setdefault("payload", {}).update(
+                            {
+                                "platform": platform_id or "auto",
+                                "formats": output_formats,
+                                "format": ", ".join(output_formats),
+                                "success": sent_any,
+                                "group_id": group_id,
+                                "format_results": format_results,
+                            }
+                        )
+                        break
 
         if sent_any:
             logger.info(
@@ -88,6 +132,7 @@ class ReportDispatcher:
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
     ) -> bool:
         trace_id = TraceContext.get()
+        trace_ctx = TraceContext.current()
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
@@ -138,6 +183,7 @@ class ReportDispatcher:
 
         # 4. 发送图片
         sent = False
+        dest_filename: str | None = None
         if image_url:
             try:
                 reports_dir = self.report_generator.data_dir / "reports"
@@ -149,6 +195,7 @@ class ReportDispatcher:
                     else f"report_{group_id}_{ts_str}.jpg"
                 )
                 dest = reports_dir / filename
+                dest_filename = dest.name
                 if os.path.exists(image_url):
                     import shutil
 
@@ -158,7 +205,6 @@ class ReportDispatcher:
                     dest.write_bytes(data)
 
                 # 关联到 TraceContext 并在数据库中更新元数据
-                trace_ctx = TraceContext.current()
                 if trace_ctx:
                     rfiles = trace_ctx.metadata.setdefault("report_files", [])
                     if not any(rf.get("filename") == dest.name for rf in rfiles):
@@ -196,11 +242,21 @@ class ReportDispatcher:
                 logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
 
             # 5. 尝试上传到群文件/群相册（静默处理）
-            # 无论消息发送是否成功（如超时回退），只要图片生成了，就尝试备份到群文件
             try:
                 await self._try_upload_image(group_id, image_url, platform_id)
             except Exception as e:
                 logger.warning(f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}")
+
+        if trace_ctx:
+            for s in reversed(trace_ctx._spans):
+                if s.get("stage_name") == "DISPATCH_REPORT":
+                    s.setdefault("payload", {}).update(
+                        {
+                            "image_sent": bool(sent),
+                            "report_file": dest_filename,
+                        }
+                    )
+                    break
 
         if sent:
             return True
@@ -215,6 +271,7 @@ class ReportDispatcher:
         self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
     ) -> bool:
         trace_id = TraceContext.get()
+        trace_ctx = TraceContext.current()
 
         html_path = None
         try:
@@ -251,10 +308,11 @@ class ReportDispatcher:
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 
+        html_filename: str | None = None
         if html_path:
             try:
                 html_file = Path(html_path)
-                trace_ctx = TraceContext.current()
+                html_filename = html_file.name
                 if trace_ctx:
                     rfiles = trace_ctx.metadata.setdefault("report_files", [])
                     if not any(rf.get("filename") == html_file.name for rf in rfiles):
@@ -289,11 +347,8 @@ class ReportDispatcher:
 
                     # 若用户配置为空，使用默认目录
                     if not html_output_dir:
-                        from astrbot.api.star import StarTools
-
-                        html_output_dir = os.path.join(
-                            StarTools.get_data_dir(PLUGIN_NAME),
-                            "self_hosted_html_reports",
+                        html_output_dir = str(
+                            self.report_generator.data_dir / "self_hosted_html_reports"
                         )
 
                     # 计算相对路径并转换为URL
@@ -327,6 +382,16 @@ class ReportDispatcher:
                 caption=caption,
                 platform_id=platform_id,
             )
+            if trace_ctx:
+                for s in reversed(trace_ctx._spans):
+                    if s.get("stage_name") == "DISPATCH_REPORT":
+                        s.setdefault("payload", {}).update(
+                            {
+                                "html_sent": bool(sent),
+                                "html_file": html_filename,
+                            }
+                        )
+                        break
             if sent:
                 return True
 

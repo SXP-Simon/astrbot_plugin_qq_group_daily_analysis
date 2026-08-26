@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Tag } from "antd";
 
 interface StageMetricsBadgesProps {
@@ -107,11 +107,34 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
     case "DISPATCH_REPORT":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {Boolean(payload.format) && (
-            <Tag color="blue">分发格式: {String(payload.format)}</Tag>
-          )}
           {Boolean(payload.platform) && (
             <Tag color="cyan">目标平台: {String(payload.platform)}</Tag>
+          )}
+          {(Boolean(payload.format) || Boolean(payload.formats)) && (
+            <Tag color="blue">
+              分发格式:{" "}
+              {Array.isArray(payload.formats)
+                ? (payload.formats as string[]).join(", ")
+                : String(payload.format || payload.formats)}
+            </Tag>
+          )}
+          {payload.success !== undefined && (
+            <Tag color={payload.success ? "success" : "error"}>
+              {payload.success ? "分发完成" : "分发失败/回退"}
+            </Tag>
+          )}
+          {payload.image_sent !== undefined && (
+            <Tag color={payload.image_sent ? "green" : "volcano"}>
+              图片消息: {payload.image_sent ? "已发送" : "未发送"}
+            </Tag>
+          )}
+          {payload.html_sent !== undefined && (
+            <Tag color={payload.html_sent ? "green" : "volcano"}>
+              HTML消息: {payload.html_sent ? "已发送" : "未发送"}
+            </Tag>
+          )}
+          {Boolean(payload.report_file) && (
+            <Tag color="purple">产物文件: {String(payload.report_file)}</Tag>
           )}
         </div>
       );

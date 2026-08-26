@@ -87,21 +87,28 @@ class ActivityVisualizer(IActivityVisualizer):
     ) -> dict:
         """生成小时级热力图数据"""
         # 计算活跃度等级
-        max_hourly = max(hourly_activity.values()) if hourly_activity else 1
-        max_emoji = max(emoji_activity.values()) if emoji_activity else 1
+        norm_hourly = {
+            int(k) if str(k).isdigit() else k: v
+            for k, v in (hourly_activity or {}).items()
+        }
+        norm_emoji = {
+            int(k) if str(k).isdigit() else k: v
+            for k, v in (emoji_activity or {}).items()
+        }
+        max_hourly = max(norm_hourly.values()) if norm_hourly else 1
+        max_emoji = max(norm_emoji.values()) if norm_emoji else 1
 
         return {
             "hourly_max": max_hourly,
             "emoji_max": max_emoji,
             "hourly_normalized": {
-                hour: (count / max_hourly) * 100
-                for hour, count in hourly_activity.items()
-            },
-            "emoji_normalized": {
-                hour: (emoji_activity.get(hour, 0) / max_emoji) * 100
+                hour: (norm_hourly.get(hour, 0) / max_hourly) * 100
                 for hour in range(24)
             },
-            "activity_levels": self._calculate_activity_levels(hourly_activity),
+            "emoji_normalized": {
+                hour: (norm_emoji.get(hour, 0) / max_emoji) * 100 for hour in range(24)
+            },
+            "activity_levels": self._calculate_activity_levels(norm_hourly),
         }
 
     def _calculate_activity_levels(self, hourly_activity: dict) -> dict:
@@ -109,16 +116,20 @@ class ActivityVisualizer(IActivityVisualizer):
         if not hourly_activity:
             return {}
 
-        max_count = max(hourly_activity.values())
+        norm_hourly = {
+            int(k) if str(k).isdigit() else k: v
+            for k, v in (hourly_activity or {}).items()
+        }
+        max_count = max(norm_hourly.values()) if norm_hourly else 0
         levels = {}
 
         for hour in range(24):
-            count = hourly_activity.get(hour, 0)
+            count = norm_hourly.get(hour, 0)
             if count == 0:
                 level = "inactive"
-            elif count <= max_count * 0.3:
+            elif max_count > 0 and count <= max_count * 0.3:
                 level = "low"
-            elif count <= max_count * 0.7:
+            elif max_count > 0 and count <= max_count * 0.7:
                 level = "medium"
             else:
                 level = "high"
@@ -129,10 +140,14 @@ class ActivityVisualizer(IActivityVisualizer):
     def get_hourly_chart_data(self, hourly_activity: dict) -> list[dict]:
         """生成每小时活动分布的数据"""
         chart_data = []
-        max_activity = max(hourly_activity.values()) if hourly_activity else 1
+        norm_hourly = {
+            int(k) if str(k).isdigit() else k: v
+            for k, v in (hourly_activity or {}).items()
+        }
+        max_activity = max(norm_hourly.values()) if norm_hourly else 1
 
         for hour in range(24):
-            count = hourly_activity.get(hour, 0)
+            count = norm_hourly.get(hour, 0)
             percentage = (count / max_activity) * 100 if max_activity > 0 else 0
 
             chart_data.append(

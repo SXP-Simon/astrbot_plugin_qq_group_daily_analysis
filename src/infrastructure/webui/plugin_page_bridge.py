@@ -331,7 +331,13 @@ class PluginPageWebUIBridge:
                     # 调度生成报告长图并推送到目标群聊
                     if self.report_dispatcher and analysis_result:
                         try:
-                            with trace_ctx.span("DISPATCH_REPORT"):
+                            with trace_ctx.span(
+                                "DISPATCH_REPORT",
+                                {
+                                    "platform": dispatch_platform_id or "auto",
+                                    "group_id": group_id,
+                                },
+                            ):
                                 await self.report_dispatcher.dispatch(
                                     group_id,
                                     analysis_result,
@@ -482,7 +488,13 @@ class PluginPageWebUIBridge:
                     trace_ctx.platform = str(dispatch_platform_id)
                     if self.report_dispatcher and analysis_result:
                         try:
-                            with trace_ctx.span("DISPATCH_REPORT"):
+                            with trace_ctx.span(
+                                "DISPATCH_REPORT",
+                                {
+                                    "platform": dispatch_platform_id or "auto",
+                                    "group_id": group_id,
+                                },
+                            ):
                                 await self.report_dispatcher.dispatch(
                                     group_id,
                                     analysis_result,

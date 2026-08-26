@@ -509,4 +509,102 @@ async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path, tmp_path:
     assert call_kwargs["golden_quote_enabled"] is True
 
 
+def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(temp_db: Path):
+    """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
+    from src.infrastructure.visualization.activity_charts import ActivityVisualizer
+    from src.domain.models.data_models import ActivityVisualization, GroupStatistics
+
+    viz = ActivityVisualizer()
+
+    # 1. 模拟 JSON 序列化后的 string keys: {"0": 10, "1": 25, "12": 50}
+    raw_hourly_str = {"0": 10, "1": 25, "12": 50}
+    chart_data = viz.get_hourly_chart_data(raw_hourly_str)
+    assert len(chart_data) == 24
+    # 验证 0点，1点，12点 的活跃数据正确解析出非零数值
+    assert chart_data[0]["count"] == 10
+    assert chart_data[1]["count"] == 25
+    assert chart_data[12]["count"] == 50
+    assert chart_data[12]["percentage"] == 100.0
+    assert chart_data[2]["count"] == 0
+
+    # 2. 验证 ApplicationService 反序列化时自动将 hourly_activity key 还原为 int
+    service = AnalysisApplicationService(
+        config_manager=MagicMock(),
+        bot_manager=MagicMock(),
+        history_manager=MagicMock(),
+        report_generator=MagicMock(),
+        llm_analyzer=MagicMock(),
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=CheckpointStore(temp_db),
+    )
+
+    serialized_data = {
+        "statistics": {
+            "message_count": 85,
+            "total_characters": 500,
+            "participant_count": 5,
+            "activity_visualization": {
+                "hourly_activity": {"0": 10, "1": 25, "12": 50},
+                "daily_activity": {},
+            },
+        },
+        "topics": [],
+        "user_titles": [],
+    }
+
+    deserialized = service._deserialize_analysis_result(serialized_data)
+    stats: GroupStatistics = deserialized["statistics"]
+    assert isinstance(stats.activity_visualization, ActivityVisualization)
+    assert stats.activity_visualization.hourly_activity.get(12) == 50
+    assert stats.activity_visualization.hourly_activity.get(0) == 10
+
+
+@pytest.mark.asyncio
+async def test_report_dispatcher_span_tracking():
+    """验证 ReportDispatcher 分发时自动记录 DISPATCH_REPORT span 的丰富元数据。"""
+    from src.infrastructure.reporting.dispatcher import ReportDispatcher
+
+    trace = TraceContext.set(
+        trace_id="test_dispatch_span_001",
+        group_id="123456",
+        trigger_type="manual",
+    )
+
+    mock_config = MagicMock()
+    mock_config.get_output_format = MagicMock(return_value=["image"])
+    mock_config.get_show_report_caption = MagicMock(return_value=True)
+
+    mock_rep_gen = MagicMock()
+    mock_rep_gen.data_dir = Path("./tmp")
+    mock_rep_gen.generate_image_report = AsyncMock(return_value=("base64://dGVzdA==", "<html></html>"))
+
+    mock_msg_sender = MagicMock()
+    mock_msg_sender.bot_manager = MagicMock(get_adapter=MagicMock(return_value=None))
+    mock_msg_sender.send_image_smart = AsyncMock(return_value=True)
+
+    dispatcher = ReportDispatcher(
+        config_manager=mock_config,
+        report_generator=mock_rep_gen,
+        message_sender=mock_msg_sender,
+    )
+    dispatcher._html_render_func = MagicMock()
+
+    sent = await dispatcher.dispatch(
+        group_id="123456",
+        analysis_result={"statistics": MagicMock(), "topics": [], "user_titles": []},
+        platform_id="qq",
+    )
+
+    assert sent is True
+    # 验证 trace spans 中包含了 DISPATCH_REPORT 阶段且包含丰富 payload
+    dispatch_spans = [s for s in trace._spans if s["stage_name"] == "DISPATCH_REPORT"]
+    assert len(dispatch_spans) >= 1
+    p = dispatch_spans[0].get("payload", {})
+    assert p.get("platform") == "qq"
+    assert p.get("success") is True
+    assert p.get("image_sent") is True
+    assert "image" in p.get("formats", [])
+
+
 

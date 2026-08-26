@@ -619,11 +619,15 @@ class AnalysisApplicationService:
             else EmojiStatistics()
         )
         act_viz_raw = stats_raw.get("activity_visualization", {})
-        act_viz = (
-            ActivityVisualization(**act_viz_raw)
-            if isinstance(act_viz_raw, dict)
-            else ActivityVisualization()
-        )
+        if isinstance(act_viz_raw, dict):
+            hourly_act = act_viz_raw.get("hourly_activity")
+            if isinstance(hourly_act, dict):
+                act_viz_raw["hourly_activity"] = {
+                    int(k) if str(k).isdigit() else k: v for k, v in hourly_act.items()
+                }
+            act_viz = ActivityVisualization(**act_viz_raw)
+        else:
+            act_viz = ActivityVisualization()
         token_usage_raw = stats_raw.get("token_usage", {})
         token_usage = (
             TokenUsage(**token_usage_raw)
