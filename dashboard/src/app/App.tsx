@@ -93,10 +93,10 @@ export const App: React.FC = () => {
           invalidateTraceCache();
         }
         invalidateGroupsCache();
-        overviewVM.refresh();
-        tracesVM.refresh();
-        contextInsightVM.refresh();
-        reportsVM.refresh();
+        overviewVM.refresh(true);
+        tracesVM.refresh(true);
+        contextInsightVM.refresh(true);
+        reportsVM.refresh(true);
       },
     });
 
