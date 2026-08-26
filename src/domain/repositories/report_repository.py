@@ -39,6 +39,8 @@ class IReportGenerator(ABC):
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         template_theme: str | None = None,
+        custom_filename: str | None = None,
+        trace_id: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成 HTML 报告"""
         pass

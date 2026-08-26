@@ -724,12 +724,10 @@ class AnalysisApplicationService:
                 analysis_result=analysis_result,
                 group_id=group_id,
                 template_theme=template_name,
+                custom_filename=filename,
+                trace_id=trace_id,
             )
-            if html_path and Path(html_path).exists():
-                import shutil
-
-                shutil.copy2(html_path, dest)
-            else:
+            if not html_path or not Path(html_path).exists():
                 prep_func = getattr(self.report_generator, "_prepare_render_data", None)
                 if callable(prep_func):
                     prep_res = prep_func(analysis_result)

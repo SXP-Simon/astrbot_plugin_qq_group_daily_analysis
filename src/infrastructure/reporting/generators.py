@@ -642,6 +642,8 @@ class ReportGenerator(IReportGenerator):
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
         template_theme: str | None = None,
+        custom_filename: str | None = None,
+        trace_id: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -652,6 +654,8 @@ class ReportGenerator(IReportGenerator):
             avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
             nickname_getter: 昵称获取函数
             template_theme: 指定的主题模板名称 (如 scrapbook, ATRI 等)
+            custom_filename: 自定义输出文件名
+            trace_id: 关联的 Trace ID
 
         Returns:
             tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
@@ -664,17 +668,28 @@ class ReportGenerator(IReportGenerator):
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件路径
-            current_date = datetime.now().strftime("%Y%m%d")
-            base_html_path = self._build_safe_report_path(
-                output_dir,
-                self.config_manager.get_html_filename_format(),
-                group_id=group_id,
-                date=current_date,
-            )
-
-            html_path = base_html_path
-            if not html_path.suffix:
-                html_path = html_path.with_suffix(".html")
+            if custom_filename:
+                html_path = output_dir / custom_filename
+                if not html_path.suffix:
+                    html_path = html_path.with_suffix(".html")
+            elif trace_id:
+                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                theme_suffix = f"_{template_theme}" if template_theme else ""
+                html_path = (
+                    output_dir
+                    / f"report_{group_id}_{ts_str}_{trace_id}{theme_suffix}.html"
+                )
+            else:
+                current_date = datetime.now().strftime("%Y%m%d")
+                base_html_path = self._build_safe_report_path(
+                    output_dir,
+                    self.config_manager.get_html_filename_format(),
+                    group_id=group_id,
+                    date=current_date,
+                )
+                html_path = base_html_path
+                if not html_path.suffix:
+                    html_path = html_path.with_suffix(".html")
 
             json_path = html_path.with_suffix(".json")
 
