@@ -21,7 +21,6 @@ interface OverviewTrendChartsProps {
   initialTrends?: AnalyticsTrendsResponse;
   totalTraces: number;
   totalTokens: number;
-  loading?: boolean;
 }
 
 type RangeOption = "48h" | "7d" | "14d" | "30d";
@@ -30,7 +29,6 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
   initialTrends,
   totalTraces,
   totalTokens,
-  loading: parentLoading = false,
 }) => {
   const { isDark } = useTheme();
   const [selectedRange, setSelectedRange] = useState<RangeOption>("14d");
@@ -365,8 +363,6 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
     ],
   };
 
-  const currentLoading = parentLoading || fetching;
-
   return (
     <Card
       size="small"
@@ -435,7 +431,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
                 option={requestChartOption}
                 style={{ height: 160, width: "100%" }}
                 opts={{ renderer: "svg" }}
-                showLoading={currentLoading}
+                showLoading={fetching && !hasData}
               />
             ) : (
               <Empty
@@ -473,7 +469,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
                 option={tokenChartOption}
                 style={{ height: 160, width: "100%" }}
                 opts={{ renderer: "svg" }}
-                showLoading={currentLoading}
+                showLoading={fetching && !hasData}
               />
             ) : (
               <Empty
@@ -511,7 +507,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
                 option={pieChartOption}
                 style={{ height: 160, width: "100%" }}
                 opts={{ renderer: "svg" }}
-                showLoading={currentLoading}
+                showLoading={fetching && !hasData}
               />
             ) : (
               <Empty

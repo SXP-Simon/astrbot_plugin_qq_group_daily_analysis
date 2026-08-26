@@ -20,8 +20,8 @@ export function useReportsViewModel() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
 
-  const loadReports = async () => {
-    setLoading(true);
+  const loadReports = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [reportList, groupList] = await Promise.all([
         fetchReportHistory(),
@@ -32,7 +32,7 @@ export function useReportsViewModel() {
     } catch {
       // 忽略加载异常
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -176,7 +176,7 @@ export function useReportsViewModel() {
     setSelectedGroup,
     dateRange,
     setDateRange,
-    refresh: loadReports,
+    refresh: (silent = true) => loadReports(silent),
     previewOpen,
     previewLoading,
     selectedReport,

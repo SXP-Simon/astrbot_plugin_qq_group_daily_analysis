@@ -33,9 +33,10 @@ export function useTracesViewModel() {
     currentPage = page,
     currentSize = pageSize,
     currentSortField = sortField,
-    currentSortOrder = sortOrder
+    currentSortOrder = sortOrder,
+    silent = false
   ) => {
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const res = await fetchTraceList({
         limit: currentSize,
@@ -53,7 +54,7 @@ export function useTracesViewModel() {
     } catch {
       // 忽略加载异常
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -107,6 +108,6 @@ export function useTracesViewModel() {
     setDateRange,
     groups,
     handleTableChange,
-    refresh: () => loadData(page, pageSize, sortField, sortOrder),
+    refresh: (silent = true) => loadData(page, pageSize, sortField, sortOrder, silent),
   };
 }
