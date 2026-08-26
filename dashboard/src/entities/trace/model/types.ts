@@ -53,6 +53,7 @@ export interface TraceRecord {
     filename: string;
     path?: string;
     format?: string;
+    report_type?: string;
     size_bytes?: number;
     created_at?: number;
   }>;

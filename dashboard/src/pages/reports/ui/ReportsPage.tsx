@@ -19,6 +19,7 @@ import {
 import {
   FileImageOutlined,
   FileTextOutlined,
+  PictureOutlined,
   EyeOutlined,
   DownloadOutlined,
   TeamOutlined,
@@ -75,6 +76,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             fn.toLowerCase().endsWith(".html") ||
             fn.toLowerCase().endsWith(".htm")
         );
+        const isComic = Boolean(
+          r.is_comic ||
+            fn.toLowerCase().startsWith("comic_") ||
+            fn.startsWith("漫画_")
+        );
         return (
           <Tooltip title={fn} placement="topLeft">
             <span
@@ -89,7 +95,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 whiteSpace: "nowrap",
               }}
             >
-              {isHtml ? (
+              {isComic ? (
+                <PictureOutlined
+                  style={{ marginRight: 6, color: "#eb2f96", flexShrink: 0 }}
+                />
+              ) : isHtml ? (
                 <FileTextOutlined
                   style={{ marginRight: 6, color: "#fa8c16", flexShrink: 0 }}
                 />
@@ -98,6 +108,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                   style={{ marginRight: 6, color: "#1677ff", flexShrink: 0 }}
                 />
               )}
+              <Tag
+                color={isComic ? "magenta" : isHtml ? "orange" : "blue"}
+                style={{ margin: "0 6px 0 0", fontSize: 10, lineHeight: "16px", flexShrink: 0 }}
+              >
+                {isComic ? "群漫画" : isHtml ? "HTML" : "日报长图"}
+              </Tag>
               <span
                 style={{
                   overflow: "hidden",
@@ -272,6 +288,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             r.filename.toLowerCase().endsWith(".html") ||
             r.filename.toLowerCase().endsWith(".htm")
         );
+        const isComic = Boolean(
+          r.is_comic ||
+            r.filename.toLowerCase().startsWith("comic_") ||
+            r.filename.startsWith("漫画_")
+        );
         return (
           <Space size="small" style={{ whiteSpace: "nowrap" }}>
             <Button
@@ -281,22 +302,24 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
               icon={<EyeOutlined />}
               onClick={() => openPreview(r)}
             >
-              {isHtml ? "预览 HTML" : "预览大图"}
+              {isComic ? "预览漫画" : isHtml ? "预览 HTML" : "预览大图"}
             </Button>
-            <Button
-              size="small"
-              icon={<SkinOutlined />}
-              onClick={() => {
-                setRerenderingReport(r);
-                form.setFieldsValue({
-                  template_name: "scrapbook",
-                  render_format: isHtml ? "html" : "image",
-                });
-                setRerenderModalOpen(true);
-              }}
-            >
-              换模板
-            </Button>
+            {!isComic && (
+              <Button
+                size="small"
+                icon={<SkinOutlined />}
+                onClick={() => {
+                  setRerenderingReport(r);
+                  form.setFieldsValue({
+                    template_name: "scrapbook",
+                    render_format: isHtml ? "html" : "image",
+                  });
+                  setRerenderModalOpen(true);
+                }}
+              >
+                换模板
+              </Button>
+            )}
             <Button
               size="small"
               icon={<DownloadOutlined />}
@@ -422,12 +445,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
               options={[
                 { label: "手账风格 (Scrapbook / 默认)", value: "scrapbook" },
                 { label: "亚托莉 (ATRI)", value: "ATRI" },
-                { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
                 { label: "初音未来 (HatsuneMiku)", value: "HatsuneMiku" },
-                { label: "黑客赛博 (Hack)", value: "hack" },
                 { label: "复古未来 (Retro Futurism)", value: "retro_futurism" },
+                { label: "黑客赛博 (Hack)", value: "hack" },
+                { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
                 { label: "极简黑白 (Simple)", value: "simple" },
-                { label: "新春特别版 (Spring Festival)", value: "spring_festival" },
               ]}
             />
           </Form.Item>

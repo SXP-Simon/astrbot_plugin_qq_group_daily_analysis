@@ -1194,19 +1194,31 @@ class GroupDailyAnalysis(Star):
                     topics, group_id, umo
                 )
                 if comic_bytes:
-                    logger.info(f"群 {group_id} 漫画生成成功，准备发送和上传相册...")
-                    import time
-
+                    logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
                     ext = self._detect_image_ext(comic_bytes)
+                    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    trace = TraceContext.current()
+                    trace_suffix = f"_{trace.trace_id}" if trace else ""
+                    filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
 
-                    comic_dir = StarTools.get_data_dir(PLUGIN_NAME) / "comic_cache"
-                    comic_dir.mkdir(parents=True, exist_ok=True)
-                    comic_file_path = str(
-                        comic_dir / f"comic_{group_id}_{int(time.time())}{ext}"
-                    )
+                    reports_dir = (
+                        getattr(self, "plugin_data_dir", None)
+                        or StarTools.get_data_dir(PLUGIN_NAME)
+                    ) / "reports"
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    comic_file_path = reports_dir / filename
+                    comic_file_path.write_bytes(comic_bytes)
 
-                    with open(comic_file_path, "wb") as f:
-                        f.write(comic_bytes)
+                    if trace:
+                        rfiles = trace.metadata.setdefault("report_files", [])
+                        rfiles.append(
+                            {
+                                "filename": filename,
+                                "format": "image",
+                                "report_type": "comic",
+                                "path": str(comic_file_path.resolve()),
+                            }
+                        )
 
                     try:
                         if self._terminating:
@@ -1217,20 +1229,16 @@ class GroupDailyAnalysis(Star):
                         if adapter and hasattr(adapter, "send_image"):
                             await adapter.send_image(
                                 group_id,
-                                comic_file_path,
+                                str(comic_file_path),
                                 caption="✨ 今日群聊趣味漫画已生成！",
                             )
 
                         # 上传到相册/群文件
                         await self._try_upload_image(
-                            group_id, comic_file_path, platform_id, is_comic=True
+                            group_id, str(comic_file_path), platform_id, is_comic=True
                         )
-                    finally:
-                        # 发送和上传完成后清理本地缓存文件，防止长期积累占用磁盘
-                        try:
-                            os.remove(comic_file_path)
-                        except OSError:
-                            pass
+                    except Exception as e:
+                        logger.warning(f"投递群 {group_id} 漫画失败: {e}")
                 elif fallback_url:
                     # 图片 API 返回了 URL 但下载失败，把链接发到群里作为兜底
                     logger.warning(
