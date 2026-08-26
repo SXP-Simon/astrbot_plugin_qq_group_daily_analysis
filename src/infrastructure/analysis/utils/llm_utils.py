@@ -451,6 +451,42 @@ async def call_provider_with_retry(
             )
             request_started_at = time.monotonic()
             try:
+                # 提取真实 Provider 实例与模型名称以支撑可观测性
+                actual_model = None
+                actual_provider_type = None
+                try:
+                    provider_inst = context.get_provider_by_id(pid)
+                    if provider_inst:
+                        prov_cfg = (
+                            getattr(provider_inst, "provider_config", None)
+                            or getattr(provider_inst, "config", None)
+                            or {}
+                        )
+                        actual_model = (
+                            prov_cfg.get("model")
+                            or getattr(provider_inst, "model", None)
+                            or getattr(provider_inst, "model_id", None)
+                        )
+                        actual_provider_type = prov_cfg.get("type") or getattr(
+                            provider_inst, "provider_type", None
+                        )
+                except Exception:
+                    pass
+
+                if trace:
+                    if pid:
+                        trace.metadata["provider_id"] = pid
+                    if actual_model:
+                        trace.metadata["model"] = str(actual_model)
+                    prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                    if observation_label:
+                        slot = prompts_map.setdefault(observation_label, {})
+                        slot["provider_id"] = pid
+                        if actual_model:
+                            slot["model"] = str(actual_model)
+                        if actual_provider_type:
+                            slot["provider_type"] = str(actual_provider_type)
+
                 llm_kwargs: dict[str, JSONValue] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
