@@ -1240,13 +1240,27 @@ class PluginPageWebUIBridge:
             cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
                 self.report_dispatcher, "config_manager", None
             )
-            config_dict = (
-                dict(cfg_mgr.config) if cfg_mgr and hasattr(cfg_mgr, "config") else {}
-            )
+            config_dict = {}
+            if cfg_mgr and hasattr(cfg_mgr, "config"):
+                raw_cfg = cfg_mgr.config
+                if hasattr(raw_cfg, "items"):
+                    config_dict = {str(k): v for k, v in raw_cfg.items()}
+                elif isinstance(raw_cfg, dict):
+                    config_dict = dict(raw_cfg)
 
             # 读取插件根目录下的 _conf_schema.json
             plugin_root = Path(__file__).resolve().parents[3]
             schema_file = plugin_root / "_conf_schema.json"
+            if not schema_file.exists():
+                for candidate in [
+                    Path.cwd() / "_conf_schema.json",
+                    Path(__file__).resolve().parents[2] / "_conf_schema.json",
+                    Path(__file__).resolve().parents[1] / "_conf_schema.json",
+                ]:
+                    if candidate.exists():
+                        schema_file = candidate
+                        break
+
             schema_dict = {}
             if schema_file.exists():
                 try:

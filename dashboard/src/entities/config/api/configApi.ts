@@ -1,10 +1,18 @@
-import { apiGet, apiPost } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { PluginConfigData } from "../model/types";
 
 export async function fetchPluginConfig(): Promise<PluginConfigData | null> {
   const res = await apiGet<PluginConfigData>("config");
-  if (res && res.data) {
-    return res.data;
+  const data = extractData<PluginConfigData>(res);
+  if (data && typeof data === "object") {
+    if ("config" in data || "schema" in data) {
+      return data;
+    }
+    const raw = data as Record<string, unknown>;
+    if (raw.data && typeof raw.data === "object") {
+      return raw.data as PluginConfigData;
+    }
+    return data;
   }
   return null;
 }
