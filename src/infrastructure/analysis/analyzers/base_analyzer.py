@@ -468,6 +468,17 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             result_text = extract_response_text(response)
             logger.debug(f"{self.get_data_type()}分析原始响应: {result_text[:500]}...")
 
+            if trace:
+                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
+                    self.get_data_type(), {}
+                )
+                slot["prompt"] = prompt
+                slot["system_prompt"] = system_prompt
+                slot["tokens"] = token_usage_dict["total_tokens"]
+                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
+                slot["completion"] = result_text
+
             # 5. 尝试结构化解析 + 正则降级解析
             success, parsed_data, error_msg = self._try_parse_with_fallback(result_text)
 
