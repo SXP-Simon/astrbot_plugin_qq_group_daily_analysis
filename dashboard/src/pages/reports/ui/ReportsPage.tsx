@@ -9,12 +9,6 @@ import {
   Space,
   Tooltip,
   Skeleton,
-  Modal,
-  Form,
-  Select,
-  Radio,
-  Alert,
-  message,
 } from "antd";
 import {
   FileImageOutlined,
@@ -22,17 +16,16 @@ import {
   PictureOutlined,
   EyeOutlined,
   DownloadOutlined,
-  TeamOutlined,
   SkinOutlined,
 } from "@ant-design/icons";
 import { formatTimestamp } from "../../../shared/lib/formatters";
 import { useReportsViewModel } from "../model/useReportsViewModel";
 import { ReportItem } from "../../../entities/report/model/types";
-import { rerenderReport } from "../../../entities/report/api/reportApi";
 import { ReportPreviewModal } from "../../../widgets/report-preview-modal/ReportPreviewModal";
 import { ReportFilterBar } from "../../../features/filter-reports/ui/ReportFilterBar";
+import { RerenderReportModal } from "../../../features/rerender-report/ui/RerenderReportModal";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 interface ReportsPageProps {
   viewModel: ReturnType<typeof useReportsViewModel>;
@@ -42,8 +35,7 @@ interface ReportsPageProps {
 export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace }) => {
   const [rerenderModalOpen, setRerenderModalOpen] = useState(false);
   const [rerenderingReport, setRerenderingReport] = useState<ReportItem | null>(null);
-  const [rerenderLoading, setRerenderLoading] = useState(false);
-  const [form] = Form.useForm();
+
   const {
     reports,
     rawReports,
@@ -108,181 +100,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                   style={{ marginRight: 6, color: "#1677ff", flexShrink: 0 }}
                 />
               )}
-              <Tag
-                color={isComic ? "magenta" : isHtml ? "orange" : "blue"}
-                style={{ margin: "0 6px 0 0", fontSize: 10, lineHeight: "16px", flexShrink: 0 }}
-              >
-                {isComic ? "群漫画" : isHtml ? "HTML" : "日报长图"}
-              </Tag>
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {fn}
-              </span>
+              {fn}
             </span>
           </Tooltip>
         );
       },
     },
     {
-      title: "所属群聊",
-      key: "group",
-      width: 180,
-      ellipsis: true,
-      render: (_: unknown, r: ReportItem) => {
-        if (!r.group_id) {
-          return <Text type="secondary">-</Text>;
-        }
-        const p =
-          !r.platform || r.platform === "auto" || r.platform === "default"
-            ? ""
-            : r.platform;
-        const label = `${r.group_name || "未知群"} (${r.group_id})`;
-        return (
-          <Tooltip
-            title={`群号: ${r.group_id}${p ? ` | 平台: ${p}` : ""}${r.group_name ? ` | 群名: ${r.group_name}` : ""}`}
-            placement="topLeft"
-          >
-            <span
-              style={{
-                fontSize: 12,
-                display: "inline-flex",
-                alignItems: "center",
-                maxWidth: "100%",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <TeamOutlined
-                style={{ marginRight: 4, color: "#722ed1", flexShrink: 0 }}
-              />
-              <span
-                style={{
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {label}
-              </span>
-            </span>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: "平台",
-      dataIndex: "platform",
-      key: "platform",
-      width: 75,
-      align: "center" as const,
-      render: (p?: string) => {
-        const displayP = !p || p === "auto" || p === "default" ? "-" : p;
-        return <Tag style={{ margin: 0 }}>{displayP}</Tag>;
-      },
-    },
-    {
-      title: "关联任务",
-      dataIndex: "trace_id",
-      key: "trace_id",
-      width: 130,
-      align: "center" as const,
-      ellipsis: true,
-      render: (tId?: string) => {
-        if (!tId) return <Text type="secondary">-</Text>;
-        return (
-          <Tooltip title="点击在右侧抽屉查看任务详情与链路明细">
-            <Tag
-              color="blue"
-              style={{
-                cursor: "pointer",
-                fontFamily:
-                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
-                fontSize: 11,
-                margin: 0,
-                maxWidth: "100%",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-              onClick={() => onViewTrace?.(tId)}
-            >
-              {tId}
-            </Tag>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: "生成时间",
-      dataIndex: "modified_at",
-      key: "modified_at",
-      width: 150,
-      render: (ts: number) => (
-        <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-          {formatTimestamp(ts)}
-        </span>
-      ),
-    },
-    {
-      title: "文件大小",
-      dataIndex: "size_bytes",
-      key: "size_bytes",
-      width: 90,
-      align: "right" as const,
-      render: (sz: number) => (
-        <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-          {(sz / 1024).toFixed(1)} KB
-        </span>
-      ),
-    },
-    {
-      title: <span style={{ whiteSpace: "nowrap" }}>服务器/容器存储路径</span>,
-      dataIndex: "absolute_path",
-      key: "absolute_path",
-      width: 220,
-      ellipsis: true,
-      render: (path: string) =>
-        path ? (
-          <Paragraph
-            copyable={{ text: path, tooltips: ["点击复制完整路径", "已复制"] }}
-            ellipsis={{ rows: 1 }}
-            style={{
-              marginBottom: 0,
-              fontSize: 12,
-              maxWidth: "100%",
-              fontFamily:
-                'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
-              whiteSpace: "nowrap",
-            }}
-          >
-            {path}
-          </Paragraph>
-        ) : (
-          <Text type="secondary">-</Text>
-        ),
-    },
-    {
-      title: "状态",
-      key: "status",
-      width: 75,
-      align: "center" as const,
-      render: () => (
-        <Tag color="success" style={{ margin: 0 }}>
-          已生成
-        </Tag>
-      ),
-    },
-    {
-      title: "操作",
-      key: "actions",
-      width: 240,
-      fixed: "right" as const,
-      render: (_: unknown, r: ReportItem) => {
+      title: "类型",
+      dataIndex: "is_comic",
+      key: "type",
+      width: 100,
+      render: (_: boolean, r: ReportItem) => {
         const isHtml = Boolean(
           r.is_html ||
             r.filename.toLowerCase().endsWith(".html") ||
@@ -293,16 +122,120 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
             r.filename.toLowerCase().startsWith("comic_") ||
             r.filename.startsWith("漫画_")
         );
+        if (isComic) {
+          return <Tag color="magenta">群漫画</Tag>;
+        }
+        return isHtml ? (
+          <Tag color="orange">交互式 HTML</Tag>
+        ) : (
+          <Tag color="blue">长图海报</Tag>
+        );
+      },
+    },
+    {
+      title: "目标群聊",
+      dataIndex: "group_id",
+      key: "group",
+      width: 170,
+      render: (gid: string, r: ReportItem) => (
+        <span style={{ fontSize: 12 }}>
+          {r.group_name ? (
+            <span>
+              {r.group_name} <Text type="secondary">({gid || "-"})</Text>
+            </span>
+          ) : (
+            gid || "-"
+          )}
+        </span>
+      ),
+    },
+    {
+      title: "接入平台",
+      dataIndex: "platform",
+      key: "platform",
+      width: 110,
+      render: (platform: string) => (
+        <Tag style={{ margin: 0 }}>
+          {!platform || platform === "auto" || platform === "default"
+            ? "-"
+            : platform}
+        </Tag>
+      ),
+    },
+    {
+      title: "关联分析任务",
+      dataIndex: "trace_id",
+      key: "trace_id",
+      width: 150,
+      render: (tid: string) => {
+        if (!tid) {
+          return (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              历史遗留
+            </Text>
+          );
+        }
         return (
-          <Space size="small" style={{ whiteSpace: "nowrap" }}>
+          <Tooltip title="点击在右侧查看该报告完整的全阶段分析指标与时间线">
             <Button
+              type="link"
               size="small"
+              onClick={() => onViewTrace && onViewTrace(tid)}
+              style={{
+                padding: 0,
+                fontSize: 11,
+                fontFamily:
+                  'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                height: "auto",
+              }}
+            >
+              {tid}
+            </Button>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: "文件大小",
+      dataIndex: "size_bytes",
+      key: "size_bytes",
+      width: 90,
+      render: (bytes: number) => (
+        <span style={{ fontSize: 12 }}>
+          {bytes > 0 ? `${(bytes / 1024).toFixed(1)} KB` : "-"}
+        </span>
+      ),
+    },
+    {
+      title: "生成时间",
+      dataIndex: "modified_at",
+      key: "modified_at",
+      width: 160,
+      render: (ts: number) => (
+        <span style={{ fontSize: 12 }}>{formatTimestamp(ts)}</span>
+      ),
+    },
+    {
+      title: "操作",
+      key: "action",
+      width: 220,
+      fixed: "right" as const,
+      render: (_: unknown, r: ReportItem) => {
+        const isComic = Boolean(
+          r.is_comic ||
+            r.filename.toLowerCase().startsWith("comic_") ||
+            r.filename.startsWith("漫画_")
+        );
+        return (
+          <Space size="small">
+            <Button
               type="primary"
+              size="small"
               ghost
               icon={<EyeOutlined />}
               onClick={() => openPreview(r)}
             >
-              {isComic ? "预览漫画" : isHtml ? "预览 HTML" : "预览大图"}
+              预览
             </Button>
             {!isComic && (
               <Button
@@ -310,12 +243,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 icon={<SkinOutlined />}
                 onClick={() => {
                   setRerenderingReport(r);
-                  form.setFieldsValue({
-                    template_name: "scrapbook",
-                    render_format: isHtml ? "html" : "image",
-                  });
                   setRerenderModalOpen(true);
                 }}
+                style={{ color: "#722ed1", borderColor: "#d3adf7" }}
               >
                 换模板
               </Button>
@@ -332,31 +262,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       },
     },
   ];
-
-  const handleRerenderSubmit = async () => {
-    if (!rerenderingReport) return;
-    try {
-      const values = await form.validateFields();
-      setRerenderLoading(true);
-      const res = await rerenderReport({
-        group_id: rerenderingReport.group_id || "",
-        template_name: values.template_name,
-        render_format: values.render_format,
-        platform_id: rerenderingReport.platform,
-      });
-      if (res && res.success) {
-        message.success("✨ 免 Token 切换主题渲染成功！新报告已生成");
-        setRerenderModalOpen(false);
-        refresh();
-      } else {
-        message.error("重新渲染失败，可能未找到该群的分析快照");
-      }
-    } catch {
-      // 表单校验或网络异常
-    } finally {
-      setRerenderLoading(false);
-    }
-  };
 
   return (
     <Card size="small" style={{ minHeight: 520 }}>
@@ -409,63 +314,16 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
         onDownload={downloadReport}
       />
 
-      {/* 免 Token 换主题重新生成报告 Modal */}
-      <Modal
-        title={
-          <Space>
-            <SkinOutlined style={{ color: "#722ed1" }} />
-            <span>免 Token 切换主题模板重新渲染</span>
-          </Space>
-        }
+      {/* 免 Token 换主题重新生成报告 Modal (Feature) */}
+      <RerenderReportModal
         open={rerenderModalOpen}
-        onCancel={() => setRerenderModalOpen(false)}
-        onOk={handleRerenderSubmit}
-        confirmLoading={rerenderLoading}
-        okText="立即重新渲染"
-        cancelText="取消"
-        destroyOnClose
-      >
-        <Alert
-          type="info"
-          showIcon
-          message="基于已有分析快照（Checkpoint）重绘"
-          description="直接复用该群先前的聊天统计、话题总结与群友画像数据，无需再次调用大模型，消耗 0 Token。"
-          style={{ marginBottom: 16 }}
-        />
-        <Form form={form} layout="vertical">
-          <Form.Item label="目标群聊">
-            <Text strong>{rerenderingReport?.group_name || rerenderingReport?.group_id || "-"}</Text>
-          </Form.Item>
-          <Form.Item
-            name="template_name"
-            label="视觉主题模板"
-            rules={[{ required: true, message: "请选择视觉主题模板" }]}
-          >
-            <Select
-              options={[
-                { label: "手账风格 (Scrapbook / 默认)", value: "scrapbook" },
-                { label: "亚托莉 (ATRI)", value: "ATRI" },
-                { label: "初音未来 (HatsuneMiku)", value: "HatsuneMiku" },
-                { label: "复古未来 (Retro Futurism)", value: "retro_futurism" },
-                { label: "黑客赛博 (Hack)", value: "hack" },
-                { label: "蔚蓝档案 (BlueArchive)", value: "BlueArchive" },
-                { label: "极简黑白 (Simple)", value: "simple" },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item
-            name="render_format"
-            label="输出格式"
-            rules={[{ required: true, message: "请选择输出格式" }]}
-          >
-            <Radio.Group>
-              <Radio value="image">长图海报 (.jpg)</Radio>
-              <Radio value="html">交互式网页 (.html)</Radio>
-            </Radio.Group>
-          </Form.Item>
-        </Form>
-      </Modal>
+        report={rerenderingReport}
+        onClose={() => {
+          setRerenderModalOpen(false);
+          setRerenderingReport(null);
+        }}
+        onSuccess={refresh}
+      />
     </Card>
   );
 };
-
