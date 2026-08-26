@@ -89,15 +89,18 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                     const modelId = detail.model;
                     const tokens = detail.tokens || 0;
                     const displayName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
+                    const showSubLabel = displayName !== analyzerName && !analyzerName.match(/[\u4e00-\u9fa5]/);
 
                     return {
                       key: analyzerName,
                       label: (
                         <span>
                           {displayName}
-                          <span style={{ fontSize: 10, color: token.colorTextSecondary, marginLeft: 4 }}>
-                            ({analyzerName})
-                          </span>
+                          {showSubLabel && (
+                            <span style={{ fontSize: 10, color: token.colorTextSecondary, marginLeft: 4 }}>
+                              ({analyzerName})
+                            </span>
+                          )}
                         </span>
                       ),
                       children: (
