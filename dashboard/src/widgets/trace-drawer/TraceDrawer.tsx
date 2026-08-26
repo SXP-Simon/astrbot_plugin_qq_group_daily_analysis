@@ -20,6 +20,7 @@ import {
   SyncOutlined,
   FileTextOutlined,
   FileImageOutlined,
+  PictureOutlined,
   EyeOutlined,
   DownloadOutlined,
   CopyOutlined,
@@ -415,6 +416,11 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                         file.filename.toLowerCase().endsWith(".html") ||
                         file.filename.toLowerCase().endsWith(".htm")
                     );
+                    const isComic = Boolean(
+                      file.report_type === "comic" ||
+                        file.filename.toLowerCase().startsWith("comic_") ||
+                        file.filename.startsWith("漫画_")
+                    );
                     return (
                       <div
                         key={idx}
@@ -439,7 +445,11 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                             overflow: "hidden",
                           }}
                         >
-                          {isHtml ? (
+                          {isComic ? (
+                            <PictureOutlined
+                              style={{ color: "#eb2f96", flexShrink: 0 }}
+                            />
+                          ) : isHtml ? (
                             <FileTextOutlined
                               style={{ color: "#fa8c16", flexShrink: 0 }}
                             />
@@ -463,7 +473,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                             </span>
                           </Tooltip>
                           <Tag
-                            color={isHtml ? "orange" : "blue"}
+                            color={isComic ? "magenta" : isHtml ? "orange" : "blue"}
                             style={{
                               margin: 0,
                               fontSize: 10,
@@ -471,7 +481,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                               flexShrink: 0,
                             }}
                           >
-                            {isHtml ? "HTML" : "图片"}
+                            {isComic ? "群漫画" : isHtml ? "HTML" : "日报长图"}
                           </Tag>
                           {file.size_bytes ? (
                             <Text
@@ -495,7 +505,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                             onClick={() => handlePreviewFile(file.filename, isHtml)}
                             style={{ fontSize: 11, height: 24 }}
                           >
-                            {isHtml ? "预览 HTML" : "预览大图"}
+                            {isComic ? "预览漫画" : isHtml ? "预览 HTML" : "预览大图"}
                           </Button>
                           <Button
                             size="small"
