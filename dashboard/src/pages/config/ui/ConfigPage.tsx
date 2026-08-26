@@ -37,6 +37,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     saving,
     isDirty,
     categories,
+    providers,
     activeCategory,
     currentGroupFields,
     activeGroupMeta,
@@ -238,13 +239,16 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                   style={{ margin: "60px 0" }}
                 />
               ) : (
-                <Row gutter={[20, 0]}>
+                <Row gutter={[16, 0]}>
                   {currentGroupFields.map((field) => {
                     const isLongField =
+                      field.schema.type === "template_list" ||
                       field.schema.type === "list" ||
+                      field.schema.type === "text" ||
                       field.key.includes("prompt") ||
                       field.key.includes("template") ||
-                      (field.schema.hint && field.schema.hint.length > 80);
+                      field.key.toLowerCase().includes("provider") ||
+                      (field.schema.hint && field.schema.hint.length > 70);
 
                     return (
                       <Col
@@ -256,6 +260,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           fieldKey={field.key}
                           fieldSchema={field.schema}
                           value={field.value}
+                          providers={providers}
                           onChange={(newVal) =>
                             handleFieldChange(activeCategory, field.key, newVal)
                           }

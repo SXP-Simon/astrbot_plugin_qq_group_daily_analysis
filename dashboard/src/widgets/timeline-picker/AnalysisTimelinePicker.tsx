@@ -38,13 +38,18 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
   const selectedTraceId = selectedTrace?.trace_id;
   const selectedIndex = traces.findIndex((t) => t.trace_id === selectedTraceId);
 
-  // 选中的节点平滑自动居中
+  // 选中的节点平滑自动居中（精准控制局部容器 scrollLeft，杜绝祖先页面级滚动跳跃）
   useEffect(() => {
     if (activeNodeRef.current && scrollContainerRef.current) {
-      activeNodeRef.current.scrollIntoView({
+      const container = scrollContainerRef.current;
+      const node = activeNodeRef.current;
+      const containerWidth = container.clientWidth;
+      const nodeLeft = node.offsetLeft;
+      const nodeWidth = node.offsetWidth;
+      const targetScrollLeft = nodeLeft + nodeWidth / 2 - containerWidth / 2;
+      container.scrollTo({
+        left: Math.max(0, targetScrollLeft),
         behavior: "smooth",
-        block: "nearest",
-        inline: "center",
       });
     }
   }, [selectedTraceId]);
@@ -156,7 +161,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
         </Space>
       </div>
 
-      {/* 现代化时间线轨道容器 (支持手势拖拽、滚轮横向滚动与节点悬浮微交互) */}
+      {/* 现代化时间线轨道外层滚动容器 */}
       <div
         ref={scrollContainerRef}
         onWheel={handleWheel}
@@ -170,35 +175,37 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
           overflowY: "hidden",
           cursor: isDragging ? "grabbing" : "grab",
           userSelect: "none",
-          padding: "16px 20px 10px 20px",
+          padding: "16px 12px 12px 12px",
           scrollbarWidth: "none",
         }}
       >
-        {/* 时间线轴线 */}
+        {/* 内部完整宽度容器：确保主轴线自始至终贯穿全部节点 */}
         <div
           style={{
-            position: "absolute",
-            top: 23,
-            left: 20,
-            right: 20,
-            height: 2,
-            background: isDark ? "#30363d" : "#e2e8f0",
-            zIndex: 1,
-          }}
-        />
-
-        {/* 节点序列 */}
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
             position: "relative",
-            zIndex: 2,
+            display: "inline-flex",
             minWidth: "100%",
+            width: "max-content",
+            padding: "0 24px",
+            alignItems: "center",
             justifyContent: traces.length < 8 ? "space-around" : "flex-start",
             gap: traces.length < 8 ? 0 : 48,
           }}
         >
+          {/* 连续主轴线：宽度 100% 自动对齐内部 max-content 完整宽度 */}
+          <div
+            style={{
+              position: "absolute",
+              top: 7,
+              left: 24,
+              right: 24,
+              height: 2,
+              background: isDark ? "#30363d" : "#e2e8f0",
+              zIndex: 1,
+            }}
+          />
+
+          {/* 节点序列 */}
           {traces.map((trace) => {
             const isSelected = trace.trace_id === selectedTraceId;
             const isSucceeded = trace.status === "succeeded";
@@ -206,7 +213,6 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
             const isRunning = trace.status === "running";
 
             const rawTime = formatTimestamp(trace.started_at);
-            // 提取月-日 或 时:分 紧凑展示
             const dateParts = rawTime.split(" ");
             const shortDate = dateParts[0] ? dateParts[0].slice(5) : ""; // MM-DD
             const shortTime = dateParts[1] ? dateParts[1].slice(0, 5) : ""; // HH:mm
@@ -217,7 +223,6 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               ? Math.round(trace.context_metrics.compression_ratio * 100)
               : 0;
 
-            // 悬停提示内容 (严谨、紧凑、无任何 Emoji)
             const tooltipContent = (
               <div style={{ fontSize: 12, lineHeight: 1.5, minWidth: 180 }}>
                 <div style={{ fontWeight: 600, color: "#ffffff", marginBottom: 4 }}>
@@ -245,7 +250,6 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               </div>
             );
 
-            // 节点核心圆点样式
             let dotColor = isDark ? "#475569" : "#cbd5e1";
             if (isSelected) {
               dotColor = "#2563eb";
@@ -258,7 +262,12 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
             }
 
             return (
-              <Tooltip key={trace.trace_id} title={tooltipContent} placement="top">
+              <Tooltip
+                key={trace.trace_id}
+                title={tooltipContent}
+                placement="top"
+                mouseEnterDelay={0.15}
+              >
                 <div
                   ref={isSelected ? activeNodeRef : null}
                   onClick={() => {
@@ -271,38 +280,53 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                     flexDirection: "column",
                     alignItems: "center",
                     cursor: "pointer",
-                    padding: "4px 6px",
-                    transition: "all 0.15s ease",
+                    zIndex: 2,
+                    padding: "0 4px",
+                    position: "relative",
                   }}
                 >
-                  {/* 圆点节点 */}
+                  {/* 圆形节点 (含光晕与选中环) */}
                   <div
                     style={{
-                      width: isSelected ? 14 : 10,
-                      height: isSelected ? 14 : 10,
+                      width: 16,
+                      height: 16,
                       borderRadius: "50%",
-                      backgroundColor: dotColor,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: isSelected
+                        ? (isDark ? "#1e293b" : "#ffffff")
+                        : (isDark ? "#161b22" : "#ffffff"),
+                      border: isSelected
+                        ? `3px solid ${dotColor}`
+                        : `2px solid ${isDark ? "#30363d" : "#ffffff"}`,
                       boxShadow: isSelected
-                        ? isDark
-                          ? "0 0 0 4px rgba(37, 99, 235, 0.35)"
-                          : "0 0 0 4px rgba(37, 99, 235, 0.2)"
-                        : "0 0 0 2px " + (isDark ? "#161b22" : "#ffffff"),
-                      transition: "all 0.15s ease",
-                      marginBottom: 8,
+                        ? "0 0 0 3px rgba(37, 99, 235, 0.25)"
+                        : "0 1px 2px rgba(0, 0, 0, 0.1)",
+                      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                      transform: isSelected ? "scale(1.25)" : "scale(1)",
                     }}
-                  />
+                  >
+                    <div
+                      style={{
+                        width: isSelected ? 6 : 8,
+                        height: isSelected ? 6 : 8,
+                        borderRadius: "50%",
+                        background: dotColor,
+                      }}
+                    />
+                  </div>
 
                   {/* 节点下方时间标签 */}
                   <span
                     className="font-mono"
                     style={{
+                      marginTop: 8,
                       fontSize: 11,
-                      fontWeight: isSelected ? 600 : 400,
                       color: isSelected
-                        ? "#2563eb"
-                        : isDark
-                        ? "#8b949e"
-                        : "#64748b",
+                        ? (isDark ? "#58a6ff" : "#2563eb")
+                        : (isDark ? "#8b949e" : "#64748b"),
+                      fontWeight: isSelected ? 600 : 400,
                       whiteSpace: "nowrap",
                       letterSpacing: "-0.3px",
                       transition: "color 0.15s ease",
