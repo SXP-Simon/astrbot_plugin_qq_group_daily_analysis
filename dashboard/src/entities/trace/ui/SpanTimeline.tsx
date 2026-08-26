@@ -230,6 +230,93 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                   </div>
                 )}
 
+              {/* 功能开关与子模块启用状态展示 */}
+              {span.stage_name === "LLM_ANALYSIS" &&
+              span.payload?.enabled_features &&
+              typeof span.payload.enabled_features === "object" ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  <Tag
+                    color={
+                      (span.payload.enabled_features as Record<string, boolean>).topics !== false
+                        ? "blue"
+                        : "default"
+                    }
+                  >
+                    话题分析:{" "}
+                    {(span.payload.enabled_features as Record<string, boolean>).topics !== false
+                      ? "已开启"
+                      : "未启用"}
+                  </Tag>
+                  <Tag
+                    color={
+                      (span.payload.enabled_features as Record<string, boolean>).user_titles !== false
+                        ? "cyan"
+                        : "default"
+                    }
+                  >
+                    群友画像:{" "}
+                    {(span.payload.enabled_features as Record<string, boolean>).user_titles !== false
+                      ? "已开启"
+                      : "未启用"}
+                  </Tag>
+                  <Tag
+                    color={
+                      (span.payload.enabled_features as Record<string, boolean>).golden_quotes !== false
+                        ? "purple"
+                        : "default"
+                    }
+                  >
+                    精彩金句:{" "}
+                    {(span.payload.enabled_features as Record<string, boolean>).golden_quotes !== false
+                      ? "已开启"
+                      : "未启用"}
+                  </Tag>
+                  <Tag
+                    color={
+                      (span.payload.enabled_features as Record<string, boolean>).chat_quality !== false
+                        ? "geekblue"
+                        : "default"
+                    }
+                  >
+                    质量锐评:{" "}
+                    {(span.payload.enabled_features as Record<string, boolean>).chat_quality !== false
+                      ? "已开启"
+                      : "未启用"}
+                  </Tag>
+                </div>
+              ) : null}
+
+              {/* 漫画分镜与绘图阶段摘要 */}
+              {span.stage_name === "COMIC_STORYBOARD" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Boolean(span.payload.character_name) && (
+                    <Tag color="magenta">角色方案: {String(span.payload.character_name)}</Tag>
+                  )}
+                  {span.payload.storyboards_count !== undefined && (
+                    <Tag color="purple">分镜数: {Number(span.payload.storyboards_count)}</Tag>
+                  )}
+                  {span.payload.total_tokens !== undefined && Number(span.payload.total_tokens) > 0 && (
+                    <Tag color="volcano">Token: {Number(span.payload.total_tokens)}</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {span.stage_name === "COMIC_DRAWING" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Boolean(span.payload.backend) && (
+                    <Tag color="magenta">绘图后端: {String(span.payload.backend)}</Tag>
+                  )}
+                  {span.payload.reference_images_count !== undefined && (
+                    <Tag color="cyan">参考图: {Number(span.payload.reference_images_count)} 张</Tag>
+                  )}
+                  {span.payload.success !== undefined && (
+                    <Tag color={span.payload.success ? "success" : "error"}>
+                      {span.payload.success ? "出图成功" : "出图失败"}
+                    </Tag>
+                  )}
+                </div>
+              ) : null}
+
               {span.stage_name === "LLM_ANALYSIS" &&
                 span.payload?.topics_count === 0 &&
                 (!span.payload?.prompt_tokens || span.payload?.prompt_tokens === 0) &&
@@ -247,10 +334,16 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                     }}
                   >
                     <Text style={{ color: "#d46b08" }} strong>
-                      ⚠️ 大模型分析未产出有效内容：
+                      {span.payload?.enabled_features &&
+                      Object.values(span.payload.enabled_features).every((v) => !v)
+                        ? "ℹ️ 本次任务已在配置中关闭所有大模型文本分析模块"
+                        : "⚠️ 大模型分析未产出有效内容："}
                     </Text>
                     <div style={{ marginTop: 2 }}>
-                      模型未消耗 Token 或未能解析出任何话题/画像/金句，请检查大模型 Provider 连接与配置。
+                      {span.payload?.enabled_features &&
+                      Object.values(span.payload.enabled_features).every((v) => !v)
+                        ? "配置项中话题、群友画像、金句和质量锐评均未开启。"
+                        : "模型未消耗 Token 或未能解析出任何话题/画像/金句，请检查大模型 Provider 连接与配置。"}
                     </div>
                   </div>
                 )}

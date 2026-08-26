@@ -106,7 +106,17 @@ def load_comic_service_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
-    namespace = {"Path": Path, "mimetypes": mimetypes, "logger": Mock(), "Any": Any}
+    from contextlib import nullcontext
+    from src.shared.trace_context import TraceContext
+
+    namespace = {
+        "Path": Path,
+        "mimetypes": mimetypes,
+        "logger": Mock(),
+        "Any": Any,
+        "TraceContext": TraceContext,
+        "nullcontext": nullcontext,
+    }
     exec(compile(isolated_module, str(service_path), "exec"), namespace)
     return getattr(namespace["ComicServiceHarness"], name)
 

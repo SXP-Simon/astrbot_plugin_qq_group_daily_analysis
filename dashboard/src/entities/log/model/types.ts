@@ -24,6 +24,7 @@ export interface PluginLogResponse {
 
 export const TAG_STYLE_MAP: Record<string, { label: string; color: string }> = {
   LLM: { label: "大模型调用", color: "purple" },
+  Comic: { label: "群漫画", color: "magenta" },
   Album: { label: "群相册", color: "magenta" },
   OneBot: { label: "OneBot协议", color: "blue" },
   QQOfficial: { label: "QQ官方机器人", color: "cyan" },

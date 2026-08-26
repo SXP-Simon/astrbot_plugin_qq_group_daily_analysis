@@ -185,9 +185,20 @@ class LLMAnalyzer(IAnalysisProvider):
             session_id = self._make_session_id(session_id, umo)
 
             logger.info(f"开始漫画分镜分析, session_id: {session_id}")
-            return await self.comic_storyboard_analyzer.analyze_storyboards(
+            (
+                storyboards,
+                usage,
+            ) = await self.comic_storyboard_analyzer.analyze_storyboards(
                 topics, umo, session_id, persona_id, prompt_template
             )
+            trace = TraceContext.current()
+            if trace and usage and usage.total_tokens > 0:
+                trace.add_token_usage(
+                    usage.prompt_tokens,
+                    usage.completion_tokens,
+                    analyzer_name="comic_storyboard",
+                )
+            return storyboards, usage
         except Exception as e:
             logger.error(f"漫画分镜分析失败: {e}", exc_info=True)
             return [], TokenUsage()
@@ -330,14 +341,38 @@ class LLMAnalyzer(IAnalysisProvider):
             )
 
             # 校验并补全未成功产出内容的子任务说明
-            if topic_enabled and not topics and not any(e.startswith("topic") for e in subtask_errors):
-                subtask_errors.append("topic: 未能提取出有效话题（有效文本过少或模型未返回话题）")
-            if user_title_enabled and not user_titles and not any(e.startswith("user_title") for e in subtask_errors):
-                subtask_errors.append("user_title: 未能生成用户称号（活跃用户不足或模型未返回称号）")
-            if golden_quote_enabled and not golden_quotes and not any(e.startswith("golden_quote") for e in subtask_errors):
-                subtask_errors.append("golden_quote: 未能提取出精彩金句（符合条件的消息过少或模型未返回）")
-            if chat_quality_enabled and not chat_quality_review and not any(e.startswith("chat_quality") for e in subtask_errors):
-                subtask_errors.append("chat_quality: 未能生成质量锐评（模型未按预期格式输出）")
+            if (
+                topic_enabled
+                and not topics
+                and not any(e.startswith("topic") for e in subtask_errors)
+            ):
+                subtask_errors.append(
+                    "topic: 未能提取出有效话题（有效文本过少或模型未返回话题）"
+                )
+            if (
+                user_title_enabled
+                and not user_titles
+                and not any(e.startswith("user_title") for e in subtask_errors)
+            ):
+                subtask_errors.append(
+                    "user_title: 未能生成用户称号（活跃用户不足或模型未返回称号）"
+                )
+            if (
+                golden_quote_enabled
+                and not golden_quotes
+                and not any(e.startswith("golden_quote") for e in subtask_errors)
+            ):
+                subtask_errors.append(
+                    "golden_quote: 未能提取出精彩金句（符合条件的消息过少或模型未返回）"
+                )
+            if (
+                chat_quality_enabled
+                and not chat_quality_review
+                and not any(e.startswith("chat_quality") for e in subtask_errors)
+            ):
+                subtask_errors.append(
+                    "chat_quality: 未能生成质量锐评（模型未按预期格式输出）"
+                )
 
             # 记录 Token 消耗与丰富执行详情到 TraceContext
             trace = TraceContext.current()
@@ -379,6 +414,12 @@ class LLMAnalyzer(IAnalysisProvider):
                                 "prompt_tokens": total_usage.prompt_tokens,
                                 "completion_tokens": total_usage.completion_tokens,
                                 "total_tokens": total_usage.total_tokens,
+                                "enabled_features": {
+                                    "topics": topic_enabled,
+                                    "user_titles": user_title_enabled,
+                                    "golden_quotes": golden_quote_enabled,
+                                    "chat_quality": chat_quality_enabled,
+                                },
                             }
                         )
                         if subtask_errors:
@@ -402,10 +443,12 @@ class LLMAnalyzer(IAnalysisProvider):
             if trace:
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == "LLM_ANALYSIS":
-                        s.setdefault("payload", {}).update({
-                            "error": str(e),
-                            "subtask_errors": [f"全局并发分析异常: {e}"],
-                        })
+                        s.setdefault("payload", {}).update(
+                            {
+                                "error": str(e),
+                                "subtask_errors": [f"全局并发分析异常: {e}"],
+                            }
+                        )
                         break
             return [], [], [], TokenUsage(), None
 
@@ -507,12 +550,30 @@ class LLMAnalyzer(IAnalysisProvider):
                             quality_usage = TokenUsage()
 
                 # 校验并补全增量子任务未产出说明
-                if topic_enabled and not topics and not any(e.startswith("topic") for e in subtask_errors):
-                    subtask_errors.append("topic: 未能提取出增量话题（可能有效文本过少或模型未返回）")
-                if golden_quote_enabled and not golden_quotes and not any(e.startswith("golden_quote") for e in subtask_errors):
-                    subtask_errors.append("golden_quote: 未能提取出增量金句（可能符合条件的消息过少或模型未返回）")
-                if chat_quality_enabled and not chat_quality_review and not any(e.startswith("chat_quality") for e in subtask_errors):
-                    subtask_errors.append("chat_quality: 未能生成增量质量锐评（模型未按预期格式输出）")
+                if (
+                    topic_enabled
+                    and not topics
+                    and not any(e.startswith("topic") for e in subtask_errors)
+                ):
+                    subtask_errors.append(
+                        "topic: 未能提取出增量话题（可能有效文本过少或模型未返回）"
+                    )
+                if (
+                    golden_quote_enabled
+                    and not golden_quotes
+                    and not any(e.startswith("golden_quote") for e in subtask_errors)
+                ):
+                    subtask_errors.append(
+                        "golden_quote: 未能提取出增量金句（可能符合条件的消息过少或模型未返回）"
+                    )
+                if (
+                    chat_quality_enabled
+                    and not chat_quality_review
+                    and not any(e.startswith("chat_quality") for e in subtask_errors)
+                ):
+                    subtask_errors.append(
+                        "chat_quality: 未能生成增量质量锐评（模型未按预期格式输出）"
+                    )
 
                 # 合并Token使用统计
                 total_usage = TokenUsage(
@@ -562,6 +623,12 @@ class LLMAnalyzer(IAnalysisProvider):
                                     "prompt_tokens": total_usage.prompt_tokens,
                                     "completion_tokens": total_usage.completion_tokens,
                                     "total_tokens": total_usage.total_tokens,
+                                    "enabled_features": {
+                                        "topics": topic_enabled,
+                                        "user_titles": False,
+                                        "golden_quotes": golden_quote_enabled,
+                                        "chat_quality": chat_quality_enabled,
+                                    },
                                 }
                             )
                             if subtask_errors:
@@ -585,10 +652,12 @@ class LLMAnalyzer(IAnalysisProvider):
             if trace:
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == "LLM_ANALYSIS":
-                        s.setdefault("payload", {}).update({
-                            "error": str(e),
-                            "subtask_errors": [f"全局增量并发分析异常: {e}"],
-                        })
+                        s.setdefault("payload", {}).update(
+                            {
+                                "error": str(e),
+                                "subtask_errors": [f"全局增量并发分析异常: {e}"],
+                            }
+                        )
                         break
             return [], [], TokenUsage(), None
 

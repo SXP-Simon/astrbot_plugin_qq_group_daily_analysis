@@ -61,6 +61,8 @@ export function formatStageName(stage?: string): string {
     LLM_ANALYSIS: "大模型话题与画像分析",
     SAVE_SUMMARY: "历史记录持久化",
     RENDER_REPORT: "报告图片渲染与发送",
+    COMIC_STORYBOARD: "漫画分镜提示词提取",
+    COMIC_DRAWING: "漫画长图生成与投递",
     CRASH_RECOVERY: "异常终止恢复",
   };
   return stageMap[stage] || stage;
@@ -78,6 +80,9 @@ export function formatTriggerType(triggerType?: string): { text: string; color: 
     case "auto_report":
     case "incremental_report":
       return { text: "增量日报", color: "cyan" };
+    case "comic":
+    case "comic_manual":
+      return { text: "群漫画生成", color: "magenta" };
     case "web_ui":
     case "web_manual":
       return { text: "控制台触发", color: "geekblue" };
