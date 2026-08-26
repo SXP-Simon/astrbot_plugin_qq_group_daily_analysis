@@ -152,8 +152,21 @@ class ReportDispatcher:
                 return None
 
             trace = TraceContext.current()
+            override_theme = (
+                trace.metadata.get("override_template_name") if trace else None
+            )
+            template_theme = (
+                override_theme
+                or getattr(
+                    self.config_manager, "get_report_template", lambda: "scrapbook"
+                )()
+            )
+
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "image"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "image", "template": template_theme},
+                ):
                     (
                         image_url,
                         html_content,
@@ -164,6 +177,7 @@ class ReportDispatcher:
                         avatar_url_getter=avatar_url_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                        template_theme=template_theme,
                     )
             else:
                 (
@@ -176,6 +190,7 @@ class ReportDispatcher:
                     avatar_url_getter=avatar_url_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                    template_theme=template_theme,
                 )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate image report: {e}")
@@ -285,8 +300,21 @@ class ReportDispatcher:
                 return None
 
             trace = TraceContext.current()
+            override_theme = (
+                trace.metadata.get("override_template_name") if trace else None
+            )
+            template_theme = (
+                override_theme
+                or getattr(
+                    self.config_manager, "get_report_template", lambda: "scrapbook"
+                )()
+            )
+
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "html"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "html", "template": template_theme},
+                ):
                     (
                         html_path,
                         json_path,
@@ -296,6 +324,7 @@ class ReportDispatcher:
                         avatar_url_getter=avatar_url_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                        template_theme=template_theme,
                     )
             else:
                 html_path, json_path = await self.report_generator.generate_html_report(
@@ -304,6 +333,7 @@ class ReportDispatcher:
                     avatar_url_getter=avatar_url_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=self._is_qq_official(platform_id),
+                    template_theme=template_theme,
                 )
         except Exception as e:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")

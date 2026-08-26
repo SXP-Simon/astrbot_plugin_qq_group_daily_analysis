@@ -307,27 +307,31 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
         data=service._serialize_analysis_result(analysis_result),
     )
 
-    # 2. 执行免 Token 重新渲染 (图片)
+    # 2. 执行免 Token 重新渲染 (图片，传入 trace_id)
     img_res = await service.rerender_report(
         group_id="12345",
         date_str="2026-08-26",
         template_name="ATRI",
         render_format="image",
+        trace_id="test_trace_rerender_001",
     )
     assert img_res["success"] is True
     assert img_res["from_checkpoint"] is True
+    assert "test_trace_rerender_001" in img_res["filename"]
     assert "ATRI" in img_res["filename"]
     assert mock_report_gen.generate_image_report.called
 
-    # 3. 执行免 Token 重新渲染 (HTML)
+    # 3. 执行免 Token 重新渲染 (HTML，传入 trace_id)
     html_res = await service.rerender_report(
         group_id="12345",
         date_str="2026-08-26",
         template_name="BlueArchive",
         render_format="html",
+        trace_id="test_trace_rerender_001",
     )
     assert html_res["success"] is True
     assert html_res["is_html"] is True
+    assert "test_trace_rerender_001" in html_res["filename"]
     assert "BlueArchive" in html_res["filename"]
     assert mock_report_gen.generate_html_report.called
 

@@ -53,11 +53,11 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
   const [previewLoading, setPreviewLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const handleConfirmResume = async (selectedProvider?: string) => {
+  const handleConfirmResume = async (selectedProvider?: string, selectedTemplate?: string) => {
     if (!traceId) return;
     setResuming(true);
     try {
-      await resumeTraceTask(traceId, selectedProvider);
+      await resumeTraceTask(traceId, selectedProvider, selectedTemplate);
       message.success("已成功触发断点续跑任务，正在恢复分析...");
       setResumeModalOpen(false);
       loadDetail(true);
