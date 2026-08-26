@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import {
   Timeline,
   Tag,
@@ -237,8 +237,161 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                 payload={span.payload as Record<string, unknown> | undefined}
               />
 
+              {/* LLM 调用与重试降级链路观测 */}
+              {Array.isArray(span.payload?.llm_attempts) &&
+                span.payload.llm_attempts.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      marginBottom: 6,
+                      padding: "6px 8px",
+                      background: token.colorFillAlter,
+                      border: `1px solid ${token.colorBorderSecondary}`,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: token.colorText,
+                        marginBottom: 4,
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <span>LLM 调用与重试降级链路观测</span>
+                      <span style={{ fontSize: 10, color: token.colorTextSecondary }}>
+                        共 {span.payload.llm_attempts.length} 次请求尝试
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {span.payload.llm_attempts.map((att: Record<string, unknown>, i: number) => {
+                        const isSuccess = att.status === "success";
+                        const isFallback = Boolean(att.is_fallback);
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "3px 6px",
+                              background: isSuccess ? token.colorSuccessBg : token.colorErrorBg,
+                              border: `1px solid ${isSuccess ? token.colorSuccessBorder : token.colorErrorBorder}`,
+                              borderRadius: 4,
+                              fontSize: 11,
+                            }}
+                          >
+                            <Space size={6} wrap>
+                              <Tag
+                                color={isFallback ? "orange" : "blue"}
+                                style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}
+                              >
+                                {isFallback ? "降级重试" : "正常调用"} #{String(att.attempt || i + 1)}
+                              </Tag>
+                              <span style={{ fontFamily: "monospace", fontSize: 11 }}>
+                                {String(att.area || "analysis")}: <b>{String(att.provider_id || "default")}</b>
+                                {att.model ? ` (${String(att.model)})` : ""}
+                              </span>
+                            </Space>
+
+                            <Space size={6}>
+                              {att.duration_ms !== undefined && (
+                                <span style={{ fontSize: 10, color: token.colorTextSecondary }}>
+                                  {Number(att.duration_ms) < 1000
+                                    ? `${att.duration_ms}ms`
+                                    : `${(Number(att.duration_ms) / 1000).toFixed(1)}s`}
+                                </span>
+                              )}
+                              <Tag
+                                color={isSuccess ? "success" : "error"}
+                                style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}
+                              >
+                                {isSuccess ? "成功" : `失败: ${String(att.error || "异常")}`}
+                              </Tag>
+                            </Space>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              {/* 渲染轮次与降级策略观测 */}
+              {Array.isArray(span.payload?.render_attempts) &&
+                span.payload.render_attempts.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      marginBottom: 6,
+                      padding: "6px 8px",
+                      background: token.colorFillAlter,
+                      border: `1px solid ${token.colorBorderSecondary}`,
+                      borderRadius: 4,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: token.colorText,
+                        marginBottom: 4,
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <span>图片渲染策略与降级观测</span>
+                      <span style={{ fontSize: 10, color: token.colorTextSecondary }}>
+                        共 {span.payload.render_attempts.length} 轮渲染策略
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {span.payload.render_attempts.map((att: Record<string, unknown>, i: number) => {
+                        const isSuccess = att.status === "success";
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "3px 6px",
+                              background: isSuccess ? token.colorSuccessBg : token.colorErrorBg,
+                              border: `1px solid ${isSuccess ? token.colorSuccessBorder : token.colorErrorBorder}`,
+                              borderRadius: 4,
+                              fontSize: 11,
+                            }}
+                          >
+                            <Space size={6} wrap>
+                              <Tag
+                                color={i > 0 ? "warning" : "blue"}
+                                style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}
+                              >
+                                {i > 0 ? "降级策略" : "首选策略"} 第 {String(att.attempt || i + 1)} 轮
+                              </Tag>
+                              <span style={{ fontSize: 11 }}>
+                                格式: <b>{String(att.type || "jpeg")}</b>
+                                {att.viewport ? ` | 视口: ${String(att.viewport)}` : ""}
+                              </span>
+                            </Space>
+
+                            <Tag
+                              color={isSuccess ? "success" : "error"}
+                              style={{ margin: 0, fontSize: 10, lineHeight: "16px" }}
+                            >
+                              {isSuccess ? "渲染成功" : `渲染失败: ${String(att.error || "校验不通过")}`}
+                            </Tag>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
               {/* LLM 真实提示词 Prompt 检视器 */}
-              {span.stage_name === "LLM_ANALYSIS" && (
+              {(span.stage_name === "LLM_ANALYSIS" ||
+                Boolean(span.payload?.prompts)) && (
                 <PromptsInspector
                   prompts={
                     span.payload?.prompts as Record<string, PromptDetail | string> | undefined

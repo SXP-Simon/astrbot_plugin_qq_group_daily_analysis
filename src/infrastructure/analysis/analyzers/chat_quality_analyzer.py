@@ -6,6 +6,7 @@
 from datetime import datetime
 
 from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
+from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ...utils.template_utils import render_template
 from ..utils import InfoUtils
@@ -363,6 +364,18 @@ ${messages_text}
             )
 
             result_text = extract_response_text(response)
+            trace = TraceContext.current()
+            if trace:
+                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
+                    "chat_quality", {}
+                )
+                slot["prompt"] = prompt
+                slot["system_prompt"] = system_prompt
+                slot["tokens"] = token_usage_dict["total_tokens"]
+                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
+                slot["completion"] = result_text or ""
+
             if not result_text:
                 return None, usage
 
