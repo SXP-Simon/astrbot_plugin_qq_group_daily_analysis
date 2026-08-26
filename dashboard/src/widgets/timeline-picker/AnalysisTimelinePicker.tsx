@@ -27,7 +27,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
 }) => {
   const { isDark } = useTheme();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const activeNodeRef = useRef<HTMLDivElement>(null);
+  // 持久化保存每个节点元素的引用，杜绝单 ref 切换导致的竞态与归零回退
+  const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // 鼠标拖拽平移状态 (Drag to scroll)
   const [isDragging, setIsDragging] = useState(false);
@@ -38,34 +39,49 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
   const selectedTraceId = selectedTrace?.trace_id;
   const selectedIndex = traces.findIndex((t) => t.trace_id === selectedTraceId);
 
-  // 核心居中算法：基于 getBoundingClientRect 视口真实坐标求差值，彻底免疫 offsetParent 嵌套偏差
-  const centerNode = useCallback((nodeElem?: HTMLElement | null) => {
-    const container = scrollContainerRef.current;
-    const targetNode = nodeElem || activeNodeRef.current;
-    if (!container || !targetNode) return;
+  // 绝对坐标精准居中算法：基于 node.offsetLeft 绝对内层偏移量，100% 确定性居中
+  const scrollToTraceIndex = useCallback(
+    (index: number, behavior: ScrollBehavior = "smooth") => {
+      const container = scrollContainerRef.current;
+      const node = nodeRefs.current[index];
+      if (!container || !node) return;
 
-    const containerRect = container.getBoundingClientRect();
-    const nodeRect = targetNode.getBoundingClientRect();
+      const nodeLeft = node.offsetLeft;
+      const nodeWidth = node.offsetWidth;
+      const containerWidth = container.clientWidth;
 
-    const nodeCenter = nodeRect.left + nodeRect.width / 2;
-    const containerCenter = containerRect.left + containerRect.width / 2;
-    const offsetDiff = nodeCenter - containerCenter;
+      // 目标位置：使节点中心精确位于可视窗口中心
+      const targetScrollLeft = nodeLeft + nodeWidth / 2 - containerWidth / 2;
+      const maxScrollLeft = Math.max(0, container.scrollWidth - containerWidth);
+      const clampedLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
 
-    if (Math.abs(offsetDiff) > 1) {
       container.scrollTo({
-        left: container.scrollLeft + offsetDiff,
-        behavior: "smooth",
+        left: clampedLeft,
+        behavior,
       });
-    }
-  }, []);
+    },
+    []
+  );
 
-  // 当选中的 trace 变更时，自动平滑居中聚焦到选中的时间线节点
+  // 当选中项发生变更时，确保在 DOM 挂载稳定后平滑居中聚焦
   useEffect(() => {
-    const timer = setTimeout(() => {
-      centerNode();
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [selectedTraceId, centerNode]);
+    if (selectedIndex >= 0) {
+      const rafId = requestAnimationFrame(() => {
+        scrollToTraceIndex(selectedIndex, "smooth");
+      });
+      return () => cancelAnimationFrame(rafId);
+    }
+  }, [selectedIndex, scrollToTraceIndex]);
+
+  // 初次载入或数据源重置时，执行一次对齐
+  useEffect(() => {
+    if (traces.length > 0 && selectedIndex >= 0) {
+      const timer = setTimeout(() => {
+        scrollToTraceIndex(selectedIndex, "auto");
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [traces.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 鼠标滚轮横向滑动
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -220,7 +236,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
           />
 
           {/* 节点序列 */}
-          {traces.map((trace) => {
+          {traces.map((trace, idx) => {
             const isSelected = trace.trace_id === selectedTraceId;
             const isSucceeded = trace.status === "succeeded";
             const isFailed = trace.status === "failed";
@@ -283,11 +299,13 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                 mouseEnterDelay={0.15}
               >
                 <div
-                  ref={isSelected ? activeNodeRef : null}
-                  onClick={(e) => {
+                  ref={(el) => {
+                    nodeRefs.current[idx] = el;
+                  }}
+                  onClick={() => {
                     if (!hasMoved) {
                       onSelectTrace(trace);
-                      centerNode(e.currentTarget);
+                      scrollToTraceIndex(idx, "smooth");
                     }
                   }}
                   style={{
