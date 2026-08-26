@@ -206,10 +206,34 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                 </div>
               )}
 
+              {Array.isArray(span.payload?.subtask_errors) &&
+                span.payload.subtask_errors.length > 0 && (
+                  <div
+                    style={{
+                      padding: "6px 8px",
+                      background: token.colorWarningBg,
+                      border: `1px solid ${token.colorWarningBorder}`,
+                      borderRadius: 4,
+                      color: token.colorWarningText,
+                      fontSize: 12,
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Text style={{ color: "#d46b08" }} strong>
+                      部分子任务调用异常：
+                    </Text>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+                      {span.payload.subtask_errors.map((err: string, i: number) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
               {hasPayload ? (
                 <div>
                   <div style={{ fontSize: 11, color: token.colorTextSecondary, marginBottom: 4 }}>
-                    阶段调用参数与上下文指标：
+                    阶段调用参数与执行产物明细：
                   </div>
                   <pre
                     style={{

@@ -1409,7 +1409,7 @@ class ConfigManager:
             "google": "google",
             "openai": "chat",
             "zai": "chat",
-            "grok2api": "chat",
+            "grok2api": "grok",
             "agnes_ai": "agnes_ai",
             "agnes_ai_china": "agnes_ai",
             "xai": "xai",

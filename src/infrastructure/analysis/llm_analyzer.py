@@ -293,11 +293,13 @@ class LLMAnalyzer(IAnalysisProvider):
             golden_quotes, quote_usage = [], TokenUsage()
             chat_quality_review = None
             quality_usage = TokenUsage()  # Initialize here
+            subtask_errors: list[str] = []
 
             for i, result in enumerate(results):
                 name = task_names[i]
                 if isinstance(result, Exception):
                     logger.error(f"分析任务 {name} 失败: {result}")
+                    subtask_errors.append(f"{name}: {str(result)}")
                     continue
 
                 if name == "topic" and isinstance(result, tuple):
@@ -327,7 +329,7 @@ class LLMAnalyzer(IAnalysisProvider):
                 + quality_usage.total_tokens,
             )
 
-            # 记录 Token 消耗到 TraceContext
+            # 记录 Token 消耗与丰富执行详情到 TraceContext
             trace = TraceContext.current()
             if trace:
                 if topic_usage.total_tokens > 0:
@@ -354,6 +356,24 @@ class LLMAnalyzer(IAnalysisProvider):
                         quality_usage.completion_tokens,
                         analyzer_name="chat_quality",
                     )
+                # 丰富 LLM_ANALYSIS span payload 便于 WebUI 详情精准诊断
+                for s in reversed(trace._spans):
+                    if s.get("stage_name") == "LLM_ANALYSIS":
+                        s.setdefault("payload", {}).update(
+                            {
+                                "topics_count": len(topics),
+                                "topics": [t.topic for t in topics] if topics else [],
+                                "user_titles_count": len(user_titles),
+                                "golden_quotes_count": len(golden_quotes),
+                                "chat_quality_review": bool(chat_quality_review),
+                                "prompt_tokens": total_usage.prompt_tokens,
+                                "completion_tokens": total_usage.completion_tokens,
+                                "total_tokens": total_usage.total_tokens,
+                            }
+                        )
+                        if subtask_errors:
+                            s["payload"]["subtask_errors"] = subtask_errors
+                        break
 
             logger.info(
                 f"并发分析完成 - 话题: {len(topics)}, 称号: {len(user_titles)}, 金句: {len(golden_quotes)}, 质量锐评: {1 if chat_quality_review else 0}"
@@ -449,11 +469,13 @@ class LLMAnalyzer(IAnalysisProvider):
                 golden_quotes, quote_usage = [], TokenUsage()
                 chat_quality_review = None
                 quality_usage = TokenUsage()
+                subtask_errors: list[str] = []
 
                 for i, result in enumerate(results):
                     name = task_names[i]
                     if isinstance(result, Exception):
                         logger.error(f"增量{name}分析失败: {result}")
+                        subtask_errors.append(f"{name}: {str(result)}")
                         continue
 
                     if name == "topic" and isinstance(result, tuple):
@@ -499,6 +521,25 @@ class LLMAnalyzer(IAnalysisProvider):
                             quality_usage.completion_tokens,
                             analyzer_name="chat_quality",
                         )
+                    for s in reversed(trace._spans):
+                        if s.get("stage_name") == "LLM_ANALYSIS":
+                            s.setdefault("payload", {}).update(
+                                {
+                                    "incremental": True,
+                                    "topics_count": len(topics),
+                                    "topics": [t.topic for t in topics]
+                                    if topics
+                                    else [],
+                                    "golden_quotes_count": len(golden_quotes),
+                                    "chat_quality_review": bool(chat_quality_review),
+                                    "prompt_tokens": total_usage.prompt_tokens,
+                                    "completion_tokens": total_usage.completion_tokens,
+                                    "total_tokens": total_usage.total_tokens,
+                                }
+                            )
+                            if subtask_errors:
+                                s["payload"]["subtask_errors"] = subtask_errors
+                            break
 
                 logger.info(
                     f"增量并发分析完成 - 话题: {len(topics)}, 金句: {len(golden_quotes)}, 质量锐评: {1 if chat_quality_review else 0}, "

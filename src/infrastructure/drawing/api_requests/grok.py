@@ -37,7 +37,16 @@ async def call_grok_api(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    payload: dict[str, Any] = {"model": model, "prompt": prompt}
+    response_format = (
+        context.get_provider_value("response_format", provider) or "b64_json"
+    )
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "response_format": response_format,
+    }
+    if aspect_ratio:
+        payload["aspect_ratio"] = aspect_ratio
 
     reference_bytes = 0
     if images_data:
