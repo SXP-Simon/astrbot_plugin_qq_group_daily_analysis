@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.6-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
+[![Plugin Version](https://img.shields.io/badge/Latest_Version-v5.0.7-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot-qq-group-daily-analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-ff69b4?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
@@ -87,15 +87,12 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
 ### 🎛️ WebUI 控制台
-- **内嵌 WebUI 管理面板**: 原生集成在 AstrBot 插件管理页面，支持查看运行概览、分析记录与历史报告列表
-- **免 Token 切换主题重绘**: 历史报告支持一键切换视觉主题（如手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新渲染长图海报或 HTML 页面，直接复用保存的分析快照（Checkpoint），无需再次调用大模型，0 Token 成本
-- **任务详情与报告关联**: 在任务详情中直接查看并下载生成的图片和 HTML 报告，支持在线预览；点击历史报告上的任务编号可直接查看对应的任务执行明细
-- **HTML 与图片报告预览**: 历史报告支持在控制台内直接预览 HTML 页面与长图，支持一键下载
-- **任务执行追踪与可观测性**: 记录每次分析及群漫画各阶段的耗时与状态，支持展开查看大模型生成产物、Token 分布、子模块启用状态与异常诊断
-- **群漫画全流程审计与日志标签**: 支持群漫画分镜提取与绘图阶段追踪，日志过滤栏提供专属「群漫画」分类标签
-- **消息过滤与 Token 消耗统计**: 统一的搜索、群聊、状态和时间筛选栏，可按群查看清洗前后的消息数量及各模块消耗的 Token
-- **异常任务自动处理**: AstrBot 重启时自动标记并清理未正常结束的中断任务
-- **表格排版优化**: 超长文件名、群名和路径自动省略并支持悬浮查看完整内容，防止页面变形
+- **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，支持查看运行概览、分析记录与历史报告列表
+- **报告浏览与主题切换**: 历史报告可直接在控制台在线预览（长图与 HTML 均支持），支持一键下载；也可免费切换视觉主题（手账、亚托莉、蔚蓝档案、初音未来、黑客赛博、复古像素、极简等）重新生成报告，直接复用已保存的分析数据，无需再次调用 AI，0 Token 成本
+- **任务与报告双向关联**: 在任务详情中可直接查看对应产生的所有报告文件；从历史报告中点击任务编号，可快速跳转到该次任务的执行明细，并且可快速查看和检索任务日志
+- **全流程可观测**: 每次分析任务（含群漫画）的各阶段耗时、大模型产出内容、Token 分布、子模块启停状态与异常原因均可在控制台查看，出了问题知道问题在哪
+- **数据统计与消耗追踪**: 按群、按时间、按状态多维筛选历史分析记录，查看消息清洗数量与各模块 Token 消耗分布
+- **异常任务自动清理**: AstrBot 重启时自动标记并清理未正常结束的中断任务，不留烂尾
 
 ### 📊 可视化报告
 - **多种格式**: 支持图片和文本输出格式
