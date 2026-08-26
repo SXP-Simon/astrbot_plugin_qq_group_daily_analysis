@@ -149,6 +149,12 @@ class PluginPageWebUIBridge:
                 ["POST"],
                 "Re-render report with a new theme template using cached checkpoint without LLM tokens",
             ),
+            (
+                f"/{PLUGIN_NAME}/reports/templates",
+                self.api_get_report_templates,
+                ["GET"],
+                "Get available built-in and custom report visual templates",
+            ),
             # 5. SSE 实时事件流
             (
                 f"/{PLUGIN_NAME}/events/stream",
@@ -179,7 +185,7 @@ class PluginPageWebUIBridge:
 
         for path, handler, methods, desc in routes:
             try:
-                self.context.register_web_api(path, handler, methods, desc)
+                self.context.register_web_api(path, handler, methods, desc)  # type: ignore
             except Exception as e:
                 logger.error(f"注册 Web API 路由 {path} 失败: {e}")
 
@@ -1029,9 +1035,10 @@ class PluginPageWebUIBridge:
 
         if not trace_id and hasattr(self, "trace_store"):
             try:
-                recent_traces = self.trace_store.get_traces(group_id=group_id, limit=5)
-                if recent_traces:
-                    trace_id = str(recent_traces[0].get("trace_id", ""))
+                recent_res = self.trace_store.list_traces(group_id=group_id, limit=5)
+                items = recent_res.get("items") if isinstance(recent_res, dict) else []
+                if items:
+                    trace_id = str(items[0].get("trace_id", ""))
             except Exception:
                 pass
 
@@ -1051,6 +1058,28 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": result})
         except Exception as e:
             logger.error(f"重新渲染报告异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_report_templates(self) -> Any:
+        """获取系统内置及用户自定义的所有可用报告视觉模板"""
+        try:
+            generator = getattr(
+                self.analysis_service, "report_generator", None
+            ) or getattr(self.report_dispatcher, "report_generator", None)
+            html_tpls = getattr(generator, "html_templates", None)
+            if html_tpls and hasattr(html_tpls, "get_available_templates"):
+                templates = html_tpls.get_available_templates()
+            else:
+                from ..reporting.templates import HTMLTemplates
+
+                cfg_mgr = getattr(
+                    self.analysis_service, "config_manager", None
+                ) or getattr(self.report_dispatcher, "config_manager", None)
+                tpl_mgr = HTMLTemplates(cfg_mgr)
+                templates = tpl_mgr.get_available_templates()
+            return json_response({"status": "ok", "data": templates})
+        except Exception as e:
+            logger.error(f"获取模板列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_stream_events(self) -> Any:

@@ -3,9 +3,13 @@ HTML模板模块
 使用Jinja2加载外部HTML模板文件
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import threading
+from pathlib import Path
+from typing import Any
 
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, select_autoescape
 
@@ -27,6 +31,17 @@ class HTMLTemplates:
         self._envs = {}
         self._env_lock = threading.Lock()
 
+    KNOWN_TEMPLATE_NAMES: dict[str, str] = {
+        "scrapbook": "手账风格 (Scrapbook / 默认)",
+        "ATRI": "亚托莉 (ATRI)",
+        "HatsuneMiku": "初音未来 (HatsuneMiku)",
+        "spring_festival": "新春佳节 (Spring Festival)",
+        "retro_futurism": "复古未来 (Retro Futurism)",
+        "hack": "黑客赛博 (Hack)",
+        "BlueArchive": "蔚蓝档案 (BlueArchive)",
+        "simple": "极简黑白 (Simple)",
+    }
+
     def _get_env_sync(self, template_theme: str | None = None) -> Environment:
         """获取当前配置或指定主题的模板环境（同步版本，供 asyncio.to_thread 调用）"""
         template_name = template_theme or self.config_manager.get_report_template()
@@ -38,23 +53,38 @@ class HTMLTemplates:
                 return env
 
         template_dir = os.path.join(self.base_dir, template_name)
-        if not os.path.exists(template_dir):
-            logger.warning(f"模板目录不存在: {template_dir}，回退到 scrapbook")
-            template_name = "scrapbook"
-            template_dir = os.path.join(self.base_dir, template_name)
-
         get_custom_template_dir = getattr(
             self.config_manager, "get_custom_report_template_dir", None
         )
-        custom_template_dir = (
+        custom_template_res = (
             get_custom_template_dir(template_name)
             if callable(get_custom_template_dir)
             else None
         )
-        loaders = [FileSystemLoader(template_dir)]
-        if custom_template_dir:
-            # 用户副本排在前面，缺少的子模板仍从当前版本内置模板读取。
-            loaders.insert(0, FileSystemLoader(str(custom_template_dir)))
+        custom_template_dir = (
+            Path(str(custom_template_res)) if custom_template_res else None
+        )
+
+        loaders = []
+        if custom_template_dir and custom_template_dir.exists():
+            loaders.append(FileSystemLoader(str(custom_template_dir)))
+        if os.path.exists(template_dir):
+            loaders.append(FileSystemLoader(template_dir))
+
+        # 若目标模板既不在自定义目录也不在内置目录，回退到默认的 scrapbook
+        if not loaders:
+            logger.warning(f"模板目录不存在: {template_dir}，回退到 scrapbook")
+            template_name = "scrapbook"
+            template_dir = os.path.join(self.base_dir, template_name)
+            loaders.append(FileSystemLoader(template_dir))
+        else:
+            # 无论何种情况，将默认的 scrapbook 目录追加为最底层 Fallback，避免自定义模板缺少局部组件时渲染失败
+            default_dir = os.path.join(self.base_dir, "scrapbook")
+            if default_dir != template_dir and not any(
+                isinstance(ld, FileSystemLoader) and ld.searchpath == [default_dir]
+                for ld in loaders
+            ):
+                loaders.append(FileSystemLoader(default_dir))
 
         env = Environment(
             loader=ChoiceLoader(loaders),
@@ -71,6 +101,83 @@ class HTMLTemplates:
             self._envs[template_name] = env
 
         return env
+
+    def get_available_templates(self) -> list[dict[str, Any]]:
+        """动态扫描内置与自定义数据目录，返回所有可用的视觉主题模板列表"""
+        found_themes: dict[str, dict[str, Any]] = {}
+
+        # 1. 扫描内置模板目录
+        if os.path.isdir(self.base_dir):
+            for entry in sorted(os.listdir(self.base_dir)):
+                if entry.startswith(".") or entry == "format":
+                    continue
+                p = os.path.join(self.base_dir, entry)
+                if os.path.isdir(p):
+                    has_image = os.path.exists(os.path.join(p, "image_template.html"))
+                    has_html = os.path.exists(os.path.join(p, "html_template.html"))
+                    if has_image or has_html:
+                        label = self.KNOWN_TEMPLATE_NAMES.get(
+                            entry, f"{entry} (内置模板)"
+                        )
+                        found_themes[entry] = {
+                            "id": entry,
+                            "label": label,
+                            "is_custom": False,
+                            "has_image": has_image,
+                            "has_html": has_html,
+                        }
+
+        # 2. 扫描用户自定义模板目录
+        get_custom_dir = getattr(
+            self.config_manager, "get_custom_report_template_dir", None
+        )
+        custom_base: Path | None = None
+        if callable(get_custom_dir):
+            sample_res = get_custom_dir("")
+            if sample_res:
+                p_sample = Path(str(sample_res))
+                custom_base = p_sample if p_sample.is_dir() else p_sample.parent
+
+        if custom_base and custom_base.is_dir():
+            for p in sorted(custom_base.iterdir()):
+                if p.is_dir() and not p.name.startswith("."):
+                    entry = p.name
+                    has_image = (p / "image_template.html").exists()
+                    has_html = (p / "html_template.html").exists()
+                    if has_image or has_html:
+                        custom_label = None
+                        theme_meta = p / "theme.json"
+                        if theme_meta.exists():
+                            try:
+                                import json
+
+                                meta = json.loads(
+                                    theme_meta.read_text(encoding="utf-8")
+                                )
+                                custom_label = meta.get("name") or meta.get("label")
+                            except Exception:
+                                pass
+                        if not custom_label:
+                            builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
+                            if builtin_label:
+                                custom_label = f"{builtin_label} (自定义修改版)"
+                            else:
+                                custom_label = f"{entry} (自定义本地模板)"
+
+                        found_themes[entry] = {
+                            "id": entry,
+                            "label": custom_label,
+                            "is_custom": True,
+                            "has_image": has_image,
+                            "has_html": has_html,
+                        }
+
+        # 确保默认的 scrapbook 始终位于第一个
+        result = []
+        if "scrapbook" in found_themes:
+            result.append(found_themes.pop("scrapbook"))
+        result.extend(found_themes.values())
+        return result
 
     async def _get_env_async(self, template_theme: str | None = None) -> Environment:
         """获取当前配置或指定主题的模板环境（异步版本）"""

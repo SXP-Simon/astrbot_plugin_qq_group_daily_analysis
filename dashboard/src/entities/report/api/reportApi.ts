@@ -1,5 +1,6 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ReportItem } from "../model/types";
+import { ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../model/templates";
 
 export async function fetchReportHistory(): Promise<ReportItem[]> {
   const res = await apiGet<ReportItem[]>("reports/history");
@@ -12,6 +13,17 @@ export async function fetchReportContent(filename: string): Promise<ReportItem |
   const res = await apiGet<ReportItem>("reports/content", { filename });
   const data = extractData<ReportItem>(res);
   return data || null;
+}
+
+export async function fetchReportTemplates(): Promise<ReportTemplateItem[]> {
+  try {
+    const res = await apiGet<ReportTemplateItem[]>("reports/templates");
+    const data = extractData<ReportTemplateItem[]>(res);
+    if (Array.isArray(data) && data.length > 0) return data;
+  } catch {
+    // fallback to defaults on network/bridge error
+  }
+  return DEFAULT_REPORT_TEMPLATES;
 }
 
 export async function rerenderReport(params: {
