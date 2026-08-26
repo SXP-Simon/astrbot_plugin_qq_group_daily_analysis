@@ -23,6 +23,7 @@ class IReportGenerator(ABC):
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成图片报告"""
         pass
@@ -37,6 +38,7 @@ class IReportGenerator(ABC):
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成 HTML 报告"""
         pass

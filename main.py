@@ -137,6 +137,7 @@ class GroupDailyAnalysis(Star):
             incremental_store=self.incremental_store,
             incremental_merge_service=self.incremental_merge_service,
             checkpoint_store=self.checkpoint_store,
+            html_render=self.html_render,
         )
         self.drawing_client = DrawingClient(self.config_manager)
         self.comic_service = ComicApplicationService(

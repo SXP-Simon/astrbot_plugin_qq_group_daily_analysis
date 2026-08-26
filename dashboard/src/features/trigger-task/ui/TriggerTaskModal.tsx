@@ -1,18 +1,23 @@
 import React from "react";
 import { Modal, Form, Input, Select } from "antd";
 import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
+import { LLMProviderItem } from "../../../entities/trace/api/traceApi";
 
 interface TriggerTaskModalProps {
   open: boolean;
   groupId: string;
   groupName: string;
   platform: string;
+  providerId?: string;
   submitting: boolean;
   connectedPlatforms?: ConnectedPlatform[];
   loadingPlatforms?: boolean;
+  providers?: LLMProviderItem[];
+  loadingProviders?: boolean;
   onGroupIdChange: (val: string) => void;
   onGroupNameChange: (val: string) => void;
   onPlatformChange: (val: string) => void;
+  onProviderChange?: (val: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }
@@ -22,12 +27,16 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   groupId,
   groupName,
   platform,
+  providerId = "auto",
   submitting,
   connectedPlatforms = [],
   loadingPlatforms = false,
+  providers = [],
+  loadingProviders = false,
   onGroupIdChange,
   onGroupNameChange,
   onPlatformChange,
+  onProviderChange,
   onClose,
   onSubmit,
 }) => {
@@ -46,6 +55,14 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
         ]),
   ];
 
+  const providerOptions = [
+    { label: "跟随系统默认配置 (推荐)", value: "auto" },
+    ...providers.map((p) => ({
+      label: p.label || `${p.name} (${p.id})`,
+      value: p.id,
+    })),
+  ];
+
   return (
     <Modal
       title="手动触发群聊日报分析"
@@ -56,7 +73,7 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
       okText="立即触发"
       cancelText="取消"
       destroyOnClose
-      width={440}
+      width={460}
     >
       <Form layout="vertical" style={{ marginTop: 16 }}>
         <Form.Item label="群号 / 会话标识" required>
@@ -89,6 +106,18 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
             onChange={onPlatformChange}
             loading={loadingPlatforms}
             options={platformOptions}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="指定大模型 Provider (选填)"
+          extra="若希望本次分析使用特定 Provider 处理大模型语义分析，可在此选择"
+        >
+          <Select
+            value={providerId}
+            onChange={onProviderChange}
+            loading={loadingProviders}
+            options={providerOptions}
           />
         </Form.Item>
       </Form>

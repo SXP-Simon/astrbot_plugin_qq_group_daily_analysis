@@ -1,5 +1,17 @@
 import React, { useState } from "react";
-import { Timeline, Tag, Typography, Progress, Space, Tooltip, theme } from "antd";
+import {
+  Timeline,
+  Tag,
+  Typography,
+  Progress,
+  Space,
+  Tooltip,
+  Collapse,
+  Tabs,
+  Button,
+  message,
+  theme,
+} from "antd";
 import {
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -7,9 +19,12 @@ import {
   WarningOutlined,
   DownOutlined,
   RightOutlined,
+  FileTextOutlined,
+  CopyOutlined,
 } from "@ant-design/icons";
 import { TraceSpan } from "../model/types";
 import { formatDuration, formatStageName } from "../../../shared/lib/formatters";
+import { copyToClipboard } from "../../../shared/lib/clipboard";
 
 const { Text } = Typography;
 
@@ -230,6 +245,108 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                   </div>
                 )}
 
+              {/* 1. 消息拉取阶段摘要 */}
+              {span.stage_name === "FETCH_MESSAGES" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {span.payload.fetched_count !== undefined && (
+                    <Tag color="blue">拉取消息: {Number(span.payload.fetched_count)} 条</Tag>
+                  )}
+                  {span.payload.days !== undefined && (
+                    <Tag color="cyan">时间跨度: {Number(span.payload.days)} 天</Tag>
+                  )}
+                  {span.payload.max_count !== undefined && (
+                    <Tag color="default">最大限制: {Number(span.payload.max_count)} 条</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {/* 2. 消息清洗阶段摘要 */}
+              {span.stage_name === "CLEAN_MESSAGES" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {span.payload.raw_count !== undefined && (
+                    <Tag color="default">原始消息: {Number(span.payload.raw_count)} 条</Tag>
+                  )}
+                  {span.payload.cleaned_count !== undefined && (
+                    <Tag color="green">清洗留存: {Number(span.payload.cleaned_count)} 条</Tag>
+                  )}
+                  {span.payload.dropped_count !== undefined && (
+                    <Tag color="orange">过滤噪音: {Number(span.payload.dropped_count)} 条</Tag>
+                  )}
+                  {span.payload.retention_rate !== undefined && (
+                    <Tag color="geekblue">有效留存率: {Number(span.payload.retention_rate)}%</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {/* 3. 基础统计阶段摘要 */}
+              {span.stage_name === "STATS_ANALYSIS" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {span.payload.message_count !== undefined && (
+                    <Tag color="blue">总消息数: {Number(span.payload.message_count)} 条</Tag>
+                  )}
+                  {span.payload.character_count !== undefined && (
+                    <Tag color="cyan">总字符数: {Number(span.payload.character_count)} 字</Tag>
+                  )}
+                  {span.payload.participant_count !== undefined && (
+                    <Tag color="purple">发言人数: {Number(span.payload.participant_count)} 人</Tag>
+                  )}
+                  {Boolean(span.payload.most_active_period) && (
+                    <Tag color="magenta">最高峰时段: {String(span.payload.most_active_period)}</Tag>
+                  )}
+                  {span.payload.emoji_count !== undefined && (
+                    <Tag color="gold">表情总数: {Number(span.payload.emoji_count)} 个</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {/* 4. 断点恢复阶段 */}
+              {span.stage_name === "CHECKPOINT_RESTORE" && (
+                <div style={{ marginBottom: 6 }}>
+                  <Tag color="cyan">已从 Checkpoint 恢复前置清洗与基础统计快照，跳过重复拉取</Tag>
+                </div>
+              )}
+
+              {/* 5. 摘要持久化与快照 */}
+              {span.stage_name === "SAVE_SUMMARY" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Boolean(span.payload.date) && (
+                    <Tag color="green">归档日期: {String(span.payload.date)}</Tag>
+                  )}
+                  {span.payload.topics_persisted !== undefined && (
+                    <Tag color="blue">话题持久化: {Number(span.payload.topics_persisted)} 个</Tag>
+                  )}
+                  {span.payload.titles_persisted !== undefined && (
+                    <Tag color="purple">称号持久化: {Number(span.payload.titles_persisted)} 个</Tag>
+                  )}
+                  {Boolean(span.payload.checkpoint_saved) && (
+                    <Tag color="cyan">快照持久化: 成功 (可免 Token 重绘)</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {/* 6. 报告渲染与分发 */}
+              {span.stage_name === "RENDER_REPORT" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Boolean(span.payload.format) && (
+                    <Tag color="blue">格式: {String(span.payload.format)}</Tag>
+                  )}
+                  {Boolean(span.payload.template) && (
+                    <Tag color="magenta">主题模板: {String(span.payload.template)}</Tag>
+                  )}
+                </div>
+              ) : null}
+
+              {span.stage_name === "DISPATCH_REPORT" && span.payload ? (
+                <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {Boolean(span.payload.format) && (
+                    <Tag color="blue">分发格式: {String(span.payload.format)}</Tag>
+                  )}
+                  {Boolean(span.payload.platform) && (
+                    <Tag color="cyan">目标平台: {String(span.payload.platform)}</Tag>
+                  )}
+                </div>
+              ) : null}
+
               {/* 功能开关与子模块启用状态展示 */}
               {span.stage_name === "LLM_ANALYSIS" &&
               span.payload?.enabled_features &&
@@ -283,6 +400,112 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                       ? "已开启"
                       : "未启用"}
                   </Tag>
+                </div>
+              ) : null}
+
+              {/* LLM 真实提示词 Prompt 查看与复制 */}
+              {span.stage_name === "LLM_ANALYSIS" &&
+              span.payload?.prompts &&
+              typeof span.payload.prompts === "object" &&
+              Object.keys(span.payload.prompts).length > 0 ? (
+                <div style={{ marginBottom: 8, marginTop: 4 }}>
+                  <Collapse
+                    size="small"
+                    ghost
+                    items={[
+                      {
+                        key: "prompts",
+                        label: (
+                          <Space>
+                            <FileTextOutlined style={{ color: "#1677ff" }} />
+                            <span style={{ fontWeight: 600, fontSize: 12 }}>
+                              查看本次任务 LLM 实际提示词 (Prompts)
+                            </span>
+                            <Tag color="blue" style={{ fontSize: 10 }}>
+                              {Object.keys(span.payload.prompts).length} 个子任务
+                            </Tag>
+                          </Space>
+                        ),
+                        children: (
+                          <Tabs
+                            size="small"
+                            items={Object.entries(
+                              span.payload.prompts as Record<
+                                string,
+                                {
+                                  prompt?: string;
+                                  system_prompt?: string;
+                                  provider_id?: string;
+                                } | string
+                              >
+                            ).map(([analyzerName, pInfo]) => {
+                              const isStr = typeof pInfo === "string";
+                              const promptContent = isStr
+                                ? pInfo
+                                : pInfo?.prompt || JSON.stringify(pInfo);
+                              const providerId = !isStr
+                                ? pInfo?.provider_id
+                                : undefined;
+                              return {
+                                key: analyzerName,
+                                label: analyzerName,
+                                children: (
+                                  <div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        marginBottom: 4,
+                                      }}
+                                    >
+                                      <Text
+                                        type="secondary"
+                                        style={{ fontSize: 11 }}
+                                      >
+                                        Provider: {providerId || "默认"} | 长度:{" "}
+                                        {promptContent.length} 字符
+                                      </Text>
+                                      <Button
+                                        size="small"
+                                        type="text"
+                                        icon={<CopyOutlined />}
+                                        onClick={() => {
+                                          copyToClipboard(promptContent);
+                                          message.success(`已复制 ${analyzerName} 提示词`);
+                                        }}
+                                      >
+                                        复制 Prompt
+                                      </Button>
+                                    </div>
+                                    <pre
+                                      style={{
+                                        fontSize: 11,
+                                        fontFamily:
+                                          'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                        background: token.colorFillAlter,
+                                        color: token.colorText,
+                                        border: `1px solid ${token.colorBorderSecondary}`,
+                                        padding: "6px 8px",
+                                        borderRadius: 4,
+                                        margin: 0,
+                                        maxHeight: 180,
+                                        overflowY: "auto",
+                                        whiteSpace: "pre-wrap",
+                                        wordBreak: "break-all",
+                                      }}
+                                    >
+                                      {promptContent}
+                                    </pre>
+                                  </div>
+                                ),
+                              };
+                            })}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
                 </div>
               ) : null}
 

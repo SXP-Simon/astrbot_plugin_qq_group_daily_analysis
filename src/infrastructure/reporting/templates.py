@@ -27,9 +27,9 @@ class HTMLTemplates:
         self._envs = {}
         self._env_lock = threading.Lock()
 
-    def _get_env_sync(self) -> Environment:
-        """获取当前配置的模板环境（同步版本，供 asyncio.to_thread 调用）"""
-        template_name = self.config_manager.get_report_template()
+    def _get_env_sync(self, template_theme: str | None = None) -> Environment:
+        """获取当前配置或指定主题的模板环境（同步版本，供 asyncio.to_thread 调用）"""
+        template_name = template_theme or self.config_manager.get_report_template()
 
         # 如果环境已缓存且配置未变（使用锁保证多线程安全）
         with self._env_lock:
@@ -72,13 +72,13 @@ class HTMLTemplates:
 
         return env
 
-    async def _get_env_async(self) -> Environment:
-        """获取当前配置的模板环境（异步版本）"""
-        return await asyncio.to_thread(self._get_env_sync)
+    async def _get_env_async(self, template_theme: str | None = None) -> Environment:
+        """获取当前配置或指定主题的模板环境（异步版本）"""
+        return await asyncio.to_thread(self._get_env_sync, template_theme)
 
-    def _get_env(self) -> Environment:
-        """获取当前配置的模板环境（同步版本，向后兼容）"""
-        return self._get_env_sync()
+    def _get_env(self, template_theme: str | None = None) -> Environment:
+        """获取当前配置或指定主题的模板环境（同步版本，向后兼容）"""
+        return self._get_env_sync(template_theme=template_theme)
 
     def _read_template_file_sync(self, filename: str) -> str:
         """同步读取模板文件内容"""
@@ -114,22 +114,27 @@ class HTMLTemplates:
             logger.error(f"加载图片模板失败: {e}")
             return ""
 
-    def render_template(self, template_name: str, **kwargs) -> str:
+    def render_template(
+        self, template_name: str, template_theme: str | None = None, **kwargs
+    ) -> str:
         """渲染指定的模板文件
 
         Args:
             template_name: 模板文件名
+            template_theme: 可选指定的主题模板名称
             **kwargs: 传递给模板的变量
 
         Returns:
             渲染后的HTML字符串
         """
         try:
-            env = self._get_env()
+            env = self._get_env(template_theme=template_theme)
             template = env.get_template(template_name)
             return template.render(**kwargs)
         except Exception as e:
-            logger.error(f"渲染模板 {template_name} 失败: {e}")
+            logger.error(
+                f"渲染模板 {template_name} (theme: {template_theme}) 失败: {e}"
+            )
             return ""
 
     def render_platform_template(

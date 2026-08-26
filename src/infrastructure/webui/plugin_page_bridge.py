@@ -86,6 +86,12 @@ class PluginPageWebUIBridge:
                 ["POST"],
                 "Trigger an analysis task manually",
             ),
+            (
+                f"/{PLUGIN_NAME}/tasks/<trace_id>/resume",
+                self.api_resume_task,
+                ["POST"],
+                "Resume an analysis task from checkpoint",
+            ),
             # 2. 链路追溯与详情
             (
                 f"/{PLUGIN_NAME}/traces",
@@ -117,6 +123,12 @@ class PluginPageWebUIBridge:
                 self.api_get_platforms,
                 ["GET"],
                 "Get active connected bot platforms list",
+            ),
+            (
+                f"/{PLUGIN_NAME}/providers",
+                self.api_get_providers,
+                ["GET"],
+                "Get available LLM providers list",
             ),
             # 4. 历史产物
             (
@@ -229,6 +241,12 @@ class PluginPageWebUIBridge:
             # 生成语义化 TraceID
             trace_id = TraceContext.generate("web_manual", group_name)
 
+            provider_id = (
+                payload.get("provider_id") if isinstance(payload, dict) else None
+            )
+            if not provider_id and hasattr(request, "query"):
+                provider_id = request.query.get("provider_id")
+
             # 启动后台异步任务
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
@@ -236,6 +254,7 @@ class PluginPageWebUIBridge:
                     group_id=group_id,
                     group_name=group_name,
                     platform=platform,
+                    provider_id=provider_id,
                 )
             )
 
@@ -265,7 +284,12 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def _run_triggered_task(
-        self, trace_id: str, group_id: str, group_name: str, platform: str
+        self,
+        trace_id: str,
+        group_id: str,
+        group_name: str,
+        platform: str,
+        provider_id: str | None = None,
     ) -> None:
         """后台异步执行触发任务"""
         trace_ctx = TraceContext.set(
@@ -275,6 +299,8 @@ class PluginPageWebUIBridge:
             platform=platform,
             trigger_type="web_ui",
         )
+        if provider_id:
+            trace_ctx.metadata["override_provider_id"] = str(provider_id)
         try:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
                 result = await self.analysis_service.execute_daily_analysis(
@@ -347,6 +373,141 @@ class PluginPageWebUIBridge:
             if trace_ctx.status == "running":
                 trace_ctx.finish(status="failed", error_message=str(e))
             logger.error(f"任务 {trace_id} 执行出错: {e}", exc_info=True)
+        finally:
+            await self.active_task_manager.finish_task(trace_id)
+
+    async def api_resume_task(self, trace_id: str) -> Any:
+        """从 Checkpoint 幂等恢复并重试任务"""
+        try:
+            trace_record = self.trace_store.get_trace(trace_id)
+            if not trace_record:
+                return error_response(f"Trace {trace_id} not found", status_code=404)
+
+            group_id = str(trace_record.get("group_id", ""))
+            group_name = str(trace_record.get("group_name", ""))
+            platform = str(trace_record.get("platform", ""))
+
+            payload = {}
+            if hasattr(request, "json"):
+                try:
+                    payload = await request.json()
+                except Exception:
+                    payload = {}
+            provider_id = (
+                payload.get("provider_id") if isinstance(payload, dict) else None
+            )
+            if not provider_id and hasattr(request, "query"):
+                provider_id = request.query.get("provider_id")
+
+            # 启动后台异步任务
+            asyncio_task = asyncio.create_task(
+                self._run_resumed_task(
+                    trace_id=trace_id,
+                    group_id=group_id,
+                    group_name=group_name,
+                    platform=platform,
+                    provider_id=provider_id,
+                )
+            )
+
+            await self.active_task_manager.register_task(
+                task_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=platform,
+                trigger_type="resume",
+                current_stage="LLM_ANALYSIS",
+                asyncio_task=asyncio_task,
+            )
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "trace_id": trace_id,
+                        "group_id": group_id,
+                        "provider_id": provider_id,
+                        "message": "Task resume queued successfully",
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"恢复任务异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def _run_resumed_task(
+        self,
+        trace_id: str,
+        group_id: str,
+        group_name: str,
+        platform: str,
+        provider_id: str | None = None,
+    ) -> None:
+        """后台异步执行断点续跑"""
+        trace_ctx = TraceContext.set(
+            trace_id=trace_id,
+            group_id=group_id,
+            group_name=group_name,
+            platform=platform,
+            trigger_type="resume",
+        )
+        if provider_id:
+            trace_ctx.metadata["override_provider_id"] = str(provider_id)
+        try:
+            if hasattr(self.analysis_service, "resume_analysis"):
+                result = await self.analysis_service.resume_analysis(
+                    trace_id=trace_id,
+                    group_id=group_id,
+                    platform_id=platform
+                    if platform and platform not in ("all", "auto", "default")
+                    else None,
+                )
+                if result and result.get("success"):
+                    analysis_result = result.get("analysis_result")
+                    adapter = result.get("adapter")
+                    bot_mgr = getattr(self.analysis_service, "bot_manager", None)
+                    dispatch_platform_id = (
+                        (
+                            bot_mgr.get_adapter_platform_id(adapter)
+                            if bot_mgr and adapter
+                            else ""
+                        )
+                        or getattr(adapter, "platform_id", "")
+                        or (
+                            platform
+                            if platform and platform not in ("all", "auto", "default")
+                            else ""
+                        )
+                    )
+                    trace_ctx.platform = str(dispatch_platform_id)
+                    if self.report_dispatcher and analysis_result:
+                        try:
+                            with trace_ctx.span("DISPATCH_REPORT"):
+                                await self.report_dispatcher.dispatch(
+                                    group_id,
+                                    analysis_result,
+                                    dispatch_platform_id,
+                                )
+                        except Exception as dispatch_err:
+                            logger.error(
+                                f"WebUI 续跑报告发送异常 (群 {group_id}): {dispatch_err}",
+                                exc_info=True,
+                            )
+
+                    if trace_ctx.status == "running":
+                        trace_ctx.finish(status="succeeded")
+                else:
+                    if trace_ctx.status == "running":
+                        trace_ctx.finish(
+                            status="failed",
+                            error_message=str(result.get("reason", "unknown")),
+                        )
+            else:
+                await self._run_triggered_task(trace_id, group_id, group_name, platform)
+        except Exception as e:
+            if trace_ctx.status == "running":
+                trace_ctx.finish(status="failed", error_message=str(e))
+            logger.error(f"续跑任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)
 
@@ -493,6 +654,51 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": platforms})
         except Exception as e:
             logger.error(f"获取平台列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_providers(self) -> Any:
+        """获取当前 AstrBot 中已就绪的所有 LLM Provider 列表"""
+        try:
+            providers: list[dict[str, Any]] = []
+            seen_ids = set()
+            if hasattr(self.context, "get_all_providers"):
+                for p in self.context.get_all_providers() or []:
+                    try:
+                        meta = p.meta() if callable(getattr(p, "meta", None)) else None
+                        p_id = (
+                            getattr(meta, "id", None)
+                            or (
+                                getattr(p, "config", {}).get("id")
+                                if isinstance(getattr(p, "config", None), dict)
+                                else None
+                            )
+                            or getattr(p, "id", None)
+                            or str(p)
+                        )
+                        if not p_id or p_id in seen_ids:
+                            continue
+                        p_name = (
+                            getattr(meta, "name", None)
+                            or getattr(meta, "model", None)
+                            or p_id
+                        )
+                        p_type = getattr(meta, "provider_type", "")
+                        seen_ids.add(p_id)
+                        providers.append(
+                            {
+                                "id": str(p_id),
+                                "name": str(p_name),
+                                "type": str(p_type),
+                                "label": f"{p_name} ({p_id})"
+                                if p_name != p_id
+                                else str(p_name),
+                            }
+                        )
+                    except Exception:
+                        pass
+            return json_response({"status": "ok", "data": providers})
+        except Exception as e:
+            logger.error(f"获取 Provider 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_get_trace_detail(self, trace_id: str) -> Any:
