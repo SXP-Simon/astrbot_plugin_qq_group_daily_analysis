@@ -247,6 +247,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                       field.schema.type === "object" ||
                       field.schema.type === "list" ||
                       field.schema.type === "text" ||
+                      field.schema.type === "file" ||
                       field.key.includes("prompt") ||
                       field.key.includes("template") ||
                       field.key.toLowerCase().includes("provider") ||

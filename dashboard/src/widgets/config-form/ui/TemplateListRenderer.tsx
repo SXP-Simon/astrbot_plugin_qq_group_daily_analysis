@@ -283,7 +283,9 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                     const isFullWidth =
                       subField.type === "template_list" ||
                       subField.type === "text" ||
+                      subField.type === "file" ||
                       subKey.includes("prompt") ||
+                      subKey.includes("image") ||
                       subKey.includes("url") ||
                       subKey.includes("key");
 
