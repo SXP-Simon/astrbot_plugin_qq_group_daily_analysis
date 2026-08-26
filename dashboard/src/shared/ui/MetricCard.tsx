@@ -24,14 +24,16 @@ export const MetricCard: React.FC<MetricCardProps> = ({
     <Card
       size="small"
       style={{ minHeight: 90, height: "100%", display: "flex", flexDirection: "column" }}
-      bodyStyle={{
-        padding: "10px 14px",
-        height: "100%",
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        boxSizing: "border-box",
+      styles={{
+        body: {
+          padding: "10px 14px",
+          height: "100%",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          boxSizing: "border-box",
+        },
       }}
     >
       <div
