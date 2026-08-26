@@ -603,9 +603,12 @@ class PluginPageWebUIBridge:
             )[:150]:
                 try:
                     stat = file_path.stat()
-                    is_html = file_path.suffix.lower() in {".html", ".htm"}
-                    trace_id = report_trace_map.get(file_path.name, "")
                     stem = file_path.stem
+                    is_html = file_path.suffix.lower() in {".html", ".htm"}
+                    is_comic = stem.lower().startswith("comic_") or stem.startswith(
+                        "漫画_"
+                    )
+                    trace_id = report_trace_map.get(file_path.name, "")
                     group_id = ""
 
                     # 1. 优先通过数据库已登记群号精确匹配（最长匹配优先，避免前缀歧义）
@@ -621,7 +624,7 @@ class PluginPageWebUIBridge:
                     # 2. 若未匹配到已知群，按结构化模式解析群号
                     if not group_id:
                         m = re.match(
-                            r"^(?:report|群聊分析报告)_(.+?)_(?:\d{4}-?\d{2}-?\d{2}|\d{8})(?:_\d{6})?(?:_([a-zA-Z0-9_\-]+))?$",
+                            r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_(?:\d{4}-?\d{2}-?\d{2}|\d{8})(?:_\d{6})?(?:_([a-zA-Z0-9_\-]+))?$",
                             stem,
                             re.IGNORECASE,
                         )
@@ -633,7 +636,7 @@ class PluginPageWebUIBridge:
                                     trace_id = cand
                         else:
                             m = re.match(
-                                r"^(?:report|群聊分析报告)_(.+?)_\d+$",
+                                r"^(?:report|群聊分析报告|comic|漫画)_(.+?)_\d+$",
                                 stem,
                                 re.IGNORECASE,
                             )
@@ -641,7 +644,7 @@ class PluginPageWebUIBridge:
                                 group_id = m.group(1)
                             else:
                                 m = re.match(
-                                    r"^(?:report|群聊分析报告)_(.+?)$",
+                                    r"^(?:report|群聊分析报告|comic|漫画)_(.+?)$",
                                     stem,
                                     re.IGNORECASE,
                                 )
@@ -662,6 +665,10 @@ class PluginPageWebUIBridge:
                             "modified_at": stat.st_mtime,
                             "absolute_path": str(file_path.resolve()),
                             "is_html": is_html,
+                            "is_comic": is_comic,
+                            "report_type": "comic"
+                            if is_comic
+                            else ("html" if is_html else "image"),
                             "group_id": group_id,
                             "group_name": group_name,
                             "platform": platform,

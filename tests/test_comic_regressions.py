@@ -49,6 +49,7 @@ def load_main_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
+    from datetime import datetime
     from src.shared.trace_context import TraceContext
 
     namespace = {
@@ -56,8 +57,10 @@ def load_main_method(name: str):
         "AstrMessageEvent": object,
         "DuplicateGroupTaskError": RuntimeError,
         "asyncio": asyncio,
+        "datetime": datetime,
         "logger": Mock(),
         "os": os,
+        "Path": Path,
         "PLUGIN_NAME": "test_plugin",
         "StarTools": SimpleNamespace(get_data_dir=Mock()),
         "TraceContext": TraceContext,
@@ -1409,7 +1412,7 @@ def test_comic_delivery_sniffs_cached_file_extension_after_generation(tmp_path):
 
     sent_path = adapter.send_image.await_args.args[1]
     assert sent_path.endswith(".jpg")
-    assert not Path(sent_path).exists()
+    assert Path(sent_path).exists()
     plugin._try_upload_image.assert_awaited_once_with(
         "123456", sent_path, "onebot", is_comic=True
     )
