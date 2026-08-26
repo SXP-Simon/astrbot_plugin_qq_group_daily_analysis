@@ -1,10 +1,31 @@
+export type SchemaFieldType =
+  | "string"
+  | "int"
+  | "float"
+  | "bool"
+  | "list"
+  | "object"
+  | "template_list"
+  | "text"
+  | "file"
+  | string;
+
 export interface SchemaFieldItem {
-  type: "string" | "int" | "float" | "bool" | "list" | "object";
+  type: SchemaFieldType;
   description?: string;
   hint?: string;
   default?: unknown;
   options?: Array<string | number>;
-  items?: SchemaFieldItem;
+  items?: SchemaFieldItem | Record<string, SchemaFieldItem>;
+  templates?: Record<
+    string,
+    {
+      name?: string;
+      description?: string;
+      display_item?: string;
+      items?: Record<string, SchemaFieldItem>;
+    }
+  >;
   [key: string]: unknown;
 }
 

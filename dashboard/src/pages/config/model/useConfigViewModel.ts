@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { message } from "antd";
-import { fetchPluginConfig, savePluginConfig } from "../../../entities/config/api/configApi";
+import {
+  fetchPluginConfig,
+  fetchAvailableProviders,
+  savePluginConfig,
+  AvailableProvider,
+} from "../../../entities/config/api/configApi";
 import { PluginSchema } from "../../../entities/config/model/types";
 
 export function useConfigViewModel(onConfigSaved?: () => void) {
@@ -9,14 +14,24 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
   const [schema, setSchema] = useState<PluginSchema>({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, unknown>>>({});
+  const [providers, setProviders] = useState<AvailableProvider[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("basic");
   const [searchQuery, setSearchQuery] = useState("");
 
   const loadConfig = async (isManual = false) => {
     setLoading(true);
     try {
-      const data = await fetchPluginConfig();
-      if (data) {
+      const [configData, providerList] = await Promise.allSettled([
+        fetchPluginConfig(),
+        fetchAvailableProviders(),
+      ]);
+
+      if (providerList.status === "fulfilled") {
+        setProviders(providerList.value || []);
+      }
+
+      if (configData.status === "fulfilled" && configData.value) {
+        const data = configData.value;
         setSchema(data.schema || {});
         setOriginalConfig(data.config || {});
         // 深拷贝一份 formData
@@ -139,6 +154,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     isDirty,
     schema,
     formData,
+    providers,
     categories,
     activeCategory,
     currentGroupFields,
