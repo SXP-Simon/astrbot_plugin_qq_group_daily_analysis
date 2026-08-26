@@ -88,6 +88,22 @@ class ActiveTaskManager:
                 {"event": "task_progress", "data": info.to_dict()}
             )
 
+    def update_stage_sync(self, task_id: str, stage_name: str) -> None:
+        """同步更新活跃任务阶段（供 Span 上下文即时调用）"""
+        if task_id in self._tasks:
+            self._tasks[task_id].current_stage = stage_name
+            self._tasks[task_id].last_heartbeat = time.time()
+            info = self._tasks[task_id]
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    self._broadcast_event(
+                        {"event": "task_progress", "data": info.to_dict()}
+                    )
+                )
+            except RuntimeError:
+                pass
+
     async def finish_task(self, task_id: str) -> None:
         """标记任务结束并移出活跃列表"""
         async with self._lock:

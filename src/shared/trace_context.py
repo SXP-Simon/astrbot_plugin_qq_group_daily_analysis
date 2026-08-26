@@ -29,6 +29,8 @@ _current_trace: ContextVar[TraceContext | None] = ContextVar(
 
 # 全局持有的 Trace 仓储引用（用于链路自动持久化）
 _global_trace_store: Any | None = None
+_global_active_task_manager: Any | None = None
+_active_traces: dict[str, Any] = {}
 
 
 @dataclass
@@ -46,6 +48,7 @@ class TraceContext:
     operation: str = ""
     trigger_type: str = "manual"
     status: str = "running"
+    current_stage: str = ""
     started_at: float = field(default_factory=time.time)
     completed_at: float | None = None
     duration_ms: float | None = None
@@ -86,6 +89,17 @@ class TraceContext:
         global _global_trace_store
         _global_trace_store = store
 
+    @classmethod
+    def set_active_task_manager(cls, manager: Any) -> None:
+        """设置全局活跃任务管理器引用"""
+        global _global_active_task_manager
+        _global_active_task_manager = manager
+
+    @classmethod
+    def get_active_trace(cls, trace_id: str) -> Any | None:
+        """根据 trace_id 获取内存中活跃运行的 TraceContext 实例"""
+        return _active_traces.get(trace_id)
+
     @property
     def start_time(self) -> datetime:
         """兼容旧版 start_time 属性"""
@@ -113,6 +127,14 @@ class TraceContext:
             stage_name: 阶段名称，如 'FETCH_MESSAGES', 'LLM_TOPICS', 'RENDER_REPORT'
             payload: 随 Span 记录的参数或快照字典
         """
+        self.current_stage = stage_name
+        _active_traces[self.trace_id] = self
+        if _global_active_task_manager is not None:
+            try:
+                _global_active_task_manager.update_stage_sync(self.trace_id, stage_name)
+            except Exception:
+                pass
+
         start_ts = time.time()
         span_id = f"{self.trace_id}_{stage_name}_{len(self._spans) + 1}"
         span_record: dict[str, Any] = {
@@ -221,6 +243,8 @@ class TraceContext:
         if stack_trace:
             self.stack_trace = stack_trace
 
+        _active_traces.pop(self.trace_id, None)
+
         # 自动落盘
         if _global_trace_store is not None:
             try:
@@ -259,6 +283,7 @@ class TraceContext:
 
     def __enter__(self) -> TraceContext:
         self._token = _current_trace.set(self)
+        _active_traces[self.trace_id] = self
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -306,6 +331,7 @@ class TraceContext:
         )
         if auto_bind:
             new_ctx._token = _current_trace.set(new_ctx)
+            _active_traces[new_ctx.trace_id] = new_ctx
         return new_ctx
 
     @staticmethod
@@ -344,6 +370,7 @@ class TraceContext:
             trigger_type=trigger_type,
         )
         ctx._token = _current_trace.set(ctx)
+        _active_traces[ctx.trace_id] = ctx
         return ctx
 
     @classmethod

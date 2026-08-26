@@ -9,6 +9,7 @@ import asyncio
 import base64
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +64,7 @@ class PluginPageWebUIBridge:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
+        TraceContext.set_active_task_manager(self.active_task_manager)
 
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
@@ -801,42 +803,87 @@ class PluginPageWebUIBridge:
         """获取单个 Trace 的完整 Span 树与上下文指标
 
         优先查 SQLite 持久化记录；若未入库（任务尚在运行中），则回退到
-        ActiveTaskManager 的内存活跃快照，让前端可以展示运行中的实时状态。
+        TraceContext 内存活跃实例与 ActiveTaskManager 快照，实时展示运行中的 Spans 状态。
         """
         try:
             trace = self.trace_store.get_trace(trace_id)
             if trace:
                 return json_response({"status": "ok", "data": trace})
 
-            # 回退：从内存活跃任务列表中查找运行中的任务快照
-            for task_info in self.active_task_manager.get_active_tasks():
-                if task_info.get("task_id") == trace_id:
-                    return json_response(
-                        {
-                            "status": "ok",
-                            "data": {
-                                "trace_id": trace_id,
-                                "group_id": task_info.get("group_id", ""),
-                                "group_name": task_info.get("group_name", ""),
-                                "platform": task_info.get("platform", ""),
-                                "trigger_type": task_info.get("trigger_type", "manual"),
-                                "status": "running",
-                                "started_at": task_info.get("started_at"),
-                                "completed_at": None,
-                                "duration_ms": round(
-                                    task_info.get("duration_s", 0) * 1000
-                                ),
-                                "error_stage": None,
-                                "error_message": None,
-                                "stack_trace": None,
-                                "extra": {},
-                                "spans": [],
-                                "context_metrics": None,
-                                "token_usage": None,
-                                "current_stage": task_info.get("current_stage", ""),
-                            },
-                        }
+            # 回退：从活跃 TraceContext 实例获取实时未完成的 Spans 和当前阶段
+            active_trace = TraceContext.get_active_trace(trace_id)
+            task_info = None
+            for t in self.active_task_manager.get_active_tasks():
+                if t.get("task_id") == trace_id:
+                    task_info = t
+                    break
+
+            if active_trace or task_info:
+                started_at = (
+                    active_trace.started_at
+                    if active_trace
+                    else (
+                        task_info.get("started_at", time.time())
+                        if task_info
+                        else time.time()
                     )
+                )
+                current_stage = (
+                    active_trace.current_stage
+                    if (active_trace and active_trace.current_stage)
+                    else (
+                        task_info.get("current_stage", "")
+                        if task_info
+                        else "FETCH_MESSAGES"
+                    )
+                )
+                spans = list(active_trace._spans) if active_trace else []
+                context_metrics = (
+                    active_trace._context_metrics if active_trace else None
+                )
+                token_usage = active_trace._token_usage if active_trace else None
+
+                group_id_val = (active_trace.group_id if active_trace else "") or (
+                    task_info.get("group_id", "") if task_info else ""
+                )
+                group_name_val = (active_trace.group_name if active_trace else "") or (
+                    task_info.get("group_name", "") if task_info else ""
+                )
+                platform_val = (active_trace.platform if active_trace else "") or (
+                    task_info.get("platform", "") if task_info else ""
+                )
+                trigger_type_val = (
+                    active_trace.trigger_type if active_trace else ""
+                ) or (
+                    task_info.get("trigger_type", "manual") if task_info else "manual"
+                )
+
+                return json_response(
+                    {
+                        "status": "ok",
+                        "data": {
+                            "trace_id": trace_id,
+                            "group_id": group_id_val,
+                            "group_name": group_name_val,
+                            "platform": platform_val,
+                            "trigger_type": trigger_type_val,
+                            "status": "running",
+                            "started_at": started_at,
+                            "completed_at": None,
+                            "duration_ms": round((time.time() - started_at) * 1000),
+                            "error_stage": None,
+                            "error_message": None,
+                            "stack_trace": None,
+                            "extra": dict(active_trace.metadata)
+                            if active_trace
+                            else {},
+                            "spans": spans,
+                            "context_metrics": context_metrics,
+                            "token_usage": token_usage,
+                            "current_stage": current_stage,
+                        },
+                    }
+                )
 
             return error_response(f"Trace {trace_id} not found", status_code=404)
         except Exception as e:

@@ -101,7 +101,6 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         initialTrends={metrics.trends}
         totalTraces={metrics.total_traces}
         totalTokens={metrics.total_tokens_spent}
-        loading={loading}
       />
 
       {/* 正在运行中的任务看板 (Active Tasks Organism) */}

@@ -27,8 +27,8 @@ export function useContextInsightViewModel() {
     }
   };
 
-  const loadTraces = async () => {
-    setLoading(true);
+  const loadTraces = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetchTraceList({
         limit: 200,
@@ -51,10 +51,10 @@ export function useContextInsightViewModel() {
         setSelectedTraceId(null);
         setSelectedTraceDetail(null);
       }
-    } catch (e) {
+    } catch {
       // 忽略加载异常
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -117,8 +117,8 @@ export function useContextInsightViewModel() {
     setSelectedGroup,
     setStatusFilter,
     setDateRange,
-    refresh: () => {
-      loadTraces();
+    refresh: (silent = true) => {
+      loadTraces(silent);
       if (selectedTraceId) {
         fetchTraceDetail(selectedTraceId, true).then((detail) => {
           if (detail) setSelectedTraceDetail(detail);
