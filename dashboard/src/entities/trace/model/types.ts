@@ -4,7 +4,7 @@ export interface TraceSpan {
   stage_name: string;
   status: string;
   started_at: number;
-  duration_ms: number;
+  duration_ms?: number | null;
   payload: Record<string, unknown>;
 }
 
