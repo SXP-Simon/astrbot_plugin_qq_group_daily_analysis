@@ -87,7 +87,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
                 style={{
                   fontSize: 12,
                   fontFamily:
-                    'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                    "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                 }}
               >
                 {report.absolute_path}

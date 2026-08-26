@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { Descriptions, Tag, Typography, Tooltip, Space, Button } from "antd";
 import {
   DatabaseOutlined,
@@ -61,7 +61,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
             copyable
             style={{
               fontFamily:
-                'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
               fontSize: 12,
             }}
           >

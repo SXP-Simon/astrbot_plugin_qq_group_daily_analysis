@@ -175,7 +175,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                  fontFamily: '\'JetBrains Mono\', \'Fira Code\', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Liberation Mono\', monospace',
                                   background: token.colorFillAlter,
                                   color: token.colorText,
                                   padding: "6px 8px",
@@ -218,7 +218,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                  fontFamily: '\'JetBrains Mono\', \'Fira Code\', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Liberation Mono\', monospace',
                                   background: token.colorFillAlter,
                                   color: token.colorText,
                                   padding: "6px 8px",
@@ -258,7 +258,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                               <pre
                                 style={{
                                   fontSize: 11,
-                                  fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                                  fontFamily: '\'JetBrains Mono\', \'Fira Code\', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Liberation Mono\', monospace',
                                   background: token.colorFillAlter,
                                   color: token.colorText,
                                   padding: "6px 8px",

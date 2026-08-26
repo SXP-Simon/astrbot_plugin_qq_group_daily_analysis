@@ -8,6 +8,12 @@ export interface AvailableProvider {
   label?: string;
 }
 
+export interface AvailablePersona {
+  id: string;
+  name: string;
+  label?: string;
+}
+
 export async function fetchPluginConfig(): Promise<PluginConfigData | null> {
   const res = await apiGet<PluginConfigData>("config");
   const data = extractData<PluginConfigData>(res);
@@ -27,6 +33,13 @@ export async function fetchPluginConfig(): Promise<PluginConfigData | null> {
 export async function fetchAvailableProviders(): Promise<AvailableProvider[]> {
   const res = await apiGet<AvailableProvider[]>("providers");
   const data = extractData<AvailableProvider[]>(res);
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
+export async function fetchAvailablePersonas(): Promise<AvailablePersona[]> {
+  const res = await apiGet<AvailablePersona[]>("personas");
+  const data = extractData<AvailablePersona[]>(res);
   if (Array.isArray(data)) return data;
   return [];
 }

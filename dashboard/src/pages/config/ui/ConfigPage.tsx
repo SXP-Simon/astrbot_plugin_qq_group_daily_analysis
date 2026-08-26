@@ -38,6 +38,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     isDirty,
     categories,
     providers,
+    personas,
     activeCategory,
     currentGroupFields,
     activeGroupMeta,
@@ -248,7 +249,11 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                       field.key.includes("prompt") ||
                       field.key.includes("template") ||
                       field.key.toLowerCase().includes("provider") ||
-                      (field.schema.hint && field.schema.hint.length > 70);
+                      field.key.toLowerCase().includes("persona") ||
+                      field.schema._special === "select_persona" ||
+                      field.schema._special === "select_provider" ||
+                      (field.schema.description && field.schema.description.length > 25) ||
+                      (field.schema.hint && field.schema.hint.length > 38);
 
                     return (
                       <Col
@@ -261,6 +266,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           fieldSchema={field.schema}
                           value={field.value}
                           providers={providers}
+                          personas={personas}
                           onChange={(newVal) =>
                             handleFieldChange(activeCategory, field.key, newVal)
                           }

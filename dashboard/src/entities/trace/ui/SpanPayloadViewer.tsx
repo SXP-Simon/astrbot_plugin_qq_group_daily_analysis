@@ -42,7 +42,7 @@ export const SpanPayloadViewer: React.FC<SpanPayloadViewerProps> = ({ payload })
               <pre
                 style={{
                   fontSize: 11,
-                  fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, Courier, monospace',
+                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                   background: token.colorFillAlter,
                   color: token.colorText,
                   border: `1px solid ${token.colorBorderSecondary}`,
