@@ -267,7 +267,9 @@ ${messages_text}
                         )
                         if isinstance(slot, dict):
                             slot["completion"] = retry_text
+                            slot["corrected_completion"] = retry_text
                             slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
                             slot["retry_count"] = idx
                     return normalized
 
@@ -281,7 +283,9 @@ ${messages_text}
                         )
                         if isinstance(slot, dict):
                             slot["completion"] = retry_text
+                            slot["corrected_completion"] = retry_text
                             slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
                             slot["retry_count"] = idx
                     return normalized
 
@@ -388,14 +392,16 @@ ${messages_text}
             trace = TraceContext.current()
             if trace:
                 slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    "chat_quality", {}
+                    self.get_data_type(), {}
                 )
                 slot["prompt"] = prompt
+                slot["initial_prompt"] = prompt
                 slot["system_prompt"] = system_prompt
                 slot["tokens"] = token_usage_dict["total_tokens"]
                 slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
                 slot["completion_tokens"] = token_usage_dict["completion_tokens"]
                 slot["completion"] = result_text or ""
+                slot["initial_completion"] = result_text or ""
 
             if not result_text:
                 return None, usage
