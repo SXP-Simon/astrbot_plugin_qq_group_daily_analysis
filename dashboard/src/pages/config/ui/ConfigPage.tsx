@@ -52,7 +52,15 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
   } = viewModel;
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        width: "100%",
+        position: "relative",
+      }}
+    >
       {/* 顶部概览与全局操作栏 (Sticky 吸顶固定，确保在长表单滚动中常驻可视且可一键保存) */}
       <Card
         size="small"
@@ -60,9 +68,11 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
           position: "sticky",
           top: 0,
           zIndex: 20,
+          background: isDark ? "#141414" : "#ffffff",
+          borderRadius: 6,
           boxShadow: isDark
-            ? "0 2px 8px rgba(0, 0, 0, 0.45)"
-            : "0 2px 8px rgba(0, 0, 0, 0.05)",
+            ? "0 4px 12px rgba(0, 0, 0, 0.45)"
+            : "0 4px 12px rgba(0, 0, 0, 0.06)",
         }}
       >
         <div
@@ -303,6 +313,6 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
           </Row>
         </Spin>
       </Card>
-    </Space>
+    </div>
   );
 };
