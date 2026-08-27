@@ -53,8 +53,18 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      {/* 顶部概览与全局操作栏 (Header Bar) */}
-      <Card size="small">
+      {/* 顶部概览与全局操作栏 (Sticky 吸顶固定，确保在长表单滚动中常驻可视且可一键保存) */}
+      <Card
+        size="small"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          boxShadow: isDark
+            ? "0 2px 8px rgba(0, 0, 0, 0.45)"
+            : "0 2px 8px rgba(0, 0, 0, 0.05)",
+        }}
+      >
         <div
           style={{
             display: "flex",
@@ -114,7 +124,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Spin spinning={loading}>
           <Row style={{ minHeight: 600 }}>
-            {/* 左侧：搜索与分组导航 (Sticky 固定保持在左侧，支持独立纵向滚动) */}
+            {/* 左侧：搜索与分组导航 (Sticky 固定在 Header 下方，保持独立滚动与常驻可视) */}
             <Col
               xs={24}
               md={6}
@@ -123,8 +133,8 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                 padding: "16px 12px",
                 background: isDark ? "#141414" : "#fafafa",
                 position: "sticky",
-                top: 0,
-                maxHeight: "calc(100vh - 80px)",
+                top: 72,
+                maxHeight: "calc(100vh - 88px)",
                 overflowY: "auto",
                 alignSelf: "flex-start",
                 zIndex: 10,
