@@ -167,7 +167,13 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
 
     class FakeAnalyzer:
         async def analyze_all_concurrent(self, *args, **kwargs):
-            return [], [], [], TokenUsage(), None
+            return (
+                [SimpleNamespace(topic="测试话题", contributors=[], detail="", contributor_ids=[])],
+                [],
+                [],
+                TokenUsage(),
+                None,
+            )
 
     class FakeHistoryManager:
         async def save_analysis(self, group_id, analysis_result):
@@ -302,3 +308,326 @@ def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog):
     assert "area=话题" in messages
     assert "Provider 请求仍在运行超过" in messages
     assert "block_point=context.llm_generate" in messages
+
+
+def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
+    """当开启了 LLM 分析且所有子任务均失败时，任务必须立即中断并返回失败。"""
+
+    class FakeConfig:
+        def get_llm_max_concurrent(self):
+            return 1
+
+        def get_analysis_days(self):
+            return 1
+
+        def get_max_messages(self):
+            return 10
+
+        def get_filter_bot_messages(self):
+            return True
+
+        def get_bot_self_ids(self):
+            return []
+
+        def get_min_messages_threshold(self):
+            return 1
+
+        def get_max_user_titles(self):
+            return 3
+
+        def get_topic_analysis_enabled(self):
+            return True
+
+        def get_user_title_analysis_enabled(self):
+            return True
+
+        def get_golden_quote_analysis_enabled(self):
+            return False
+
+        def get_chat_quality_analysis_enabled(self):
+            return False
+
+    class FakeAdapter:
+        platform_id = "onebot-main"
+
+        async def fetch_messages(self, **kwargs):
+            return [
+                UnifiedMessage(
+                    message_id="1",
+                    sender_id="user-1",
+                    sender_name="用户甲",
+                    group_id="group-1",
+                    text_content="测试消息",
+                    contents=(
+                        MessageContent(
+                            type=MessageContentType.TEXT,
+                            text="测试消息",
+                        ),
+                    ),
+                    timestamp=1,
+                    platform="onebot",
+                )
+            ]
+
+    class FakeStatisticsService:
+        def calculate_group_statistics(self, messages):
+            return SimpleNamespace()
+
+        def _convert_to_legacy_dict(self, messages):
+            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
+
+    class FakeDomainService:
+        def analyze_user_activity(self, messages, bot_self_ids):
+            return {}
+
+        def get_top_users(self, user_activity, limit):
+            return []
+
+    class FakeAnalyzer:
+        async def analyze_all_concurrent(self, *args, **kwargs):
+            # 所有子任务均返回空（失败）
+            return [], [], [], TokenUsage(), None
+
+    class FakeHistoryManager:
+        async def save_analysis(self, group_id, analysis_result):
+            return None
+
+    service = AnalysisApplicationService(
+        config_manager=FakeConfig(),
+        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        history_manager=FakeHistoryManager(),
+        report_generator=None,
+        llm_analyzer=FakeAnalyzer(),
+        statistics_service=FakeStatisticsService(),
+        analysis_domain_service=FakeDomainService(),
+    )
+
+    async def scenario():
+        with TraceContext(trace_id="test-abort-trace") as trace:
+            result = await service.execute_daily_analysis(
+                "group-1", "onebot-main", manual=True
+            )
+            assert result["success"] is False
+            assert result["reason"] == "llm_analysis_failed"
+            # 验证 span 状态
+            llm_span = next(s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS")
+            assert llm_span["status"] == "failed"
+
+    asyncio.run(scenario())
+
+
+def test_daily_analysis_warns_when_partial_llm_tasks_fail():
+    """当开启了多个 LLM 任务且部分成功时，任务应继续执行并标记为 warning。"""
+
+    class FakeConfig:
+        def get_llm_max_concurrent(self):
+            return 1
+
+        def get_analysis_days(self):
+            return 1
+
+        def get_max_messages(self):
+            return 10
+
+        def get_filter_bot_messages(self):
+            return True
+
+        def get_bot_self_ids(self):
+            return []
+
+        def get_min_messages_threshold(self):
+            return 1
+
+        def get_max_user_titles(self):
+            return 3
+
+        def get_topic_analysis_enabled(self):
+            return True
+
+        def get_user_title_analysis_enabled(self):
+            return True
+
+        def get_golden_quote_analysis_enabled(self):
+            return False
+
+        def get_chat_quality_analysis_enabled(self):
+            return False
+
+    class FakeAdapter:
+        platform_id = "onebot-main"
+
+        async def fetch_messages(self, **kwargs):
+            return [
+                UnifiedMessage(
+                    message_id="1",
+                    sender_id="user-1",
+                    sender_name="用户甲",
+                    group_id="group-1",
+                    text_content="测试消息",
+                    contents=(
+                        MessageContent(
+                            type=MessageContentType.TEXT,
+                            text="测试消息",
+                        ),
+                    ),
+                    timestamp=1,
+                    platform="onebot",
+                )
+            ]
+
+    class FakeStatisticsService:
+        def calculate_group_statistics(self, messages):
+            return SimpleNamespace()
+
+        def _convert_to_legacy_dict(self, messages):
+            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
+
+    class FakeDomainService:
+        def analyze_user_activity(self, messages, bot_self_ids):
+            return {}
+
+        def get_top_users(self, user_activity, limit):
+            return []
+
+    class FakeAnalyzer:
+        async def analyze_all_concurrent(self, *args, **kwargs):
+            # 话题成功，画像失败
+            return (
+                [SimpleNamespace(topic="测试话题", contributors=[], detail="", contributor_ids=[])],
+                [],
+                [],
+                TokenUsage(),
+                None,
+            )
+
+    class FakeHistoryManager:
+        async def save_analysis(self, group_id, analysis_result):
+            return None
+
+    service = AnalysisApplicationService(
+        config_manager=FakeConfig(),
+        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        history_manager=FakeHistoryManager(),
+        report_generator=None,
+        llm_analyzer=FakeAnalyzer(),
+        statistics_service=FakeStatisticsService(),
+        analysis_domain_service=FakeDomainService(),
+    )
+
+    async def scenario():
+        with TraceContext(trace_id="test-warn-trace") as trace:
+            result = await service.execute_daily_analysis(
+                "group-1", "onebot-main", manual=True
+            )
+            assert result["success"] is True
+            assert trace.metadata.get("has_warnings") is True
+            llm_span = next(s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS")
+            assert llm_span["status"] == "warning"
+            trace.finish()
+            assert trace.status == "warning"
+
+    asyncio.run(scenario())
+
+
+def test_daily_analysis_succeeds_when_all_llm_disabled():
+    """当 4 个 LLM 分析全部未开启时，算正常运行，整体判定为 succeeded。"""
+
+    class FakeConfig:
+        def get_llm_max_concurrent(self):
+            return 1
+
+        def get_analysis_days(self):
+            return 1
+
+        def get_max_messages(self):
+            return 10
+
+        def get_filter_bot_messages(self):
+            return True
+
+        def get_bot_self_ids(self):
+            return []
+
+        def get_min_messages_threshold(self):
+            return 1
+
+        def get_max_user_titles(self):
+            return 3
+
+        def get_topic_analysis_enabled(self):
+            return False
+
+        def get_user_title_analysis_enabled(self):
+            return False
+
+        def get_golden_quote_analysis_enabled(self):
+            return False
+
+        def get_chat_quality_analysis_enabled(self):
+            return False
+
+    class FakeAdapter:
+        platform_id = "onebot-main"
+
+        async def fetch_messages(self, **kwargs):
+            return [
+                UnifiedMessage(
+                    message_id="1",
+                    sender_id="user-1",
+                    sender_name="用户甲",
+                    group_id="group-1",
+                    text_content="测试消息",
+                    contents=(
+                        MessageContent(
+                            type=MessageContentType.TEXT,
+                            text="测试消息",
+                        ),
+                    ),
+                    timestamp=1,
+                    platform="onebot",
+                )
+            ]
+
+    class FakeStatisticsService:
+        def calculate_group_statistics(self, messages):
+            return SimpleNamespace()
+
+        def _convert_to_legacy_dict(self, messages):
+            return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
+
+    class FakeDomainService:
+        def analyze_user_activity(self, messages, bot_self_ids):
+            return {}
+
+        def get_top_users(self, user_activity, limit):
+            return []
+
+    class FakeAnalyzer:
+        async def analyze_all_concurrent(self, *args, **kwargs):
+            return [], [], [], TokenUsage(), None
+
+    class FakeHistoryManager:
+        async def save_analysis(self, group_id, analysis_result):
+            return None
+
+    service = AnalysisApplicationService(
+        config_manager=FakeConfig(),
+        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        history_manager=FakeHistoryManager(),
+        report_generator=None,
+        llm_analyzer=FakeAnalyzer(),
+        statistics_service=FakeStatisticsService(),
+        analysis_domain_service=FakeDomainService(),
+    )
+
+    async def scenario():
+        with TraceContext(trace_id="test-no-llm-trace") as trace:
+            result = await service.execute_daily_analysis(
+                "group-1", "onebot-main", manual=True
+            )
+            assert result["success"] is True
+            trace.finish()
+            assert trace.status == "succeeded"
+
+    asyncio.run(scenario())
+

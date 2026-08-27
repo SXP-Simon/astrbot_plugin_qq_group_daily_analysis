@@ -497,7 +497,7 @@ class AnalysisApplicationService:
                 or golden_quote_enabled
                 or chat_quality_enabled
             ):
-                with trace.span("LLM_ANALYSIS"):
+                with trace.span("LLM_ANALYSIS") as span_rec:
                     async with self._llm_slot(group_id, analysis_stage):
                         logger.debug(
                             f"[LLM] 已进入普通全量分析队列 "
@@ -519,6 +519,47 @@ class AnalysisApplicationService:
                             golden_quote_enabled=golden_quote_enabled,
                             chat_quality_enabled=chat_quality_enabled,
                         )
+
+                    # 细粒度子任务状态判定：开启的子任务产出情况
+                    enabled_count = sum(
+                        [
+                            bool(topic_enabled),
+                            bool(user_title_enabled),
+                            bool(golden_quote_enabled),
+                            bool(chat_quality_enabled),
+                        ]
+                    )
+                    success_count = sum(
+                        [
+                            bool(topics) if topic_enabled else False,
+                            bool(user_titles) if user_title_enabled else False,
+                            bool(golden_quotes) if golden_quote_enabled else False,
+                            bool(chat_quality_review)
+                            if chat_quality_enabled
+                            else False,
+                        ]
+                    )
+
+                    if enabled_count > 0 and success_count == 0:
+                        span_rec["status"] = "failed"
+                        span_rec.setdefault("payload", {})["error"] = (
+                            "大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
+                        )
+                        if trace:
+                            trace.metadata["has_warnings"] = False
+                            trace.metadata["failure_stage"] = "LLM_ANALYSIS"
+                        return {
+                            "success": False,
+                            "reason": "llm_analysis_failed",
+                            "error": "大模型文本分析全部子任务失败，已中止后续报告生成与发送",
+                        }
+                    elif enabled_count > 0 and success_count < enabled_count:
+                        span_rec["status"] = "warning"
+                        span_rec.setdefault("payload", {})["warning"] = (
+                            f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                        )
+                        if trace:
+                            trace.metadata["has_warnings"] = True
 
             # 回填结果
             statistics.golden_quotes = golden_quotes
@@ -975,7 +1016,7 @@ class AnalysisApplicationService:
             )
 
             if run_topic or run_user_title or run_golden_quote or run_chat_quality:
-                with trace.span("LLM_ANALYSIS"):
+                with trace.span("LLM_ANALYSIS") as span_rec:
                     async with self._llm_slot(group_id, "resume"):
                         (
                             new_topics,
@@ -1010,6 +1051,44 @@ class AnalysisApplicationService:
                             total_tokens=total_token_usage.total_tokens
                             + new_tokens.total_tokens,
                         )
+
+                    enabled_count = sum(
+                        [
+                            bool(run_topic),
+                            bool(run_user_title),
+                            bool(run_golden_quote),
+                            bool(run_chat_quality),
+                        ]
+                    )
+                    success_count = sum(
+                        [
+                            bool(new_topics) if run_topic else False,
+                            bool(new_user_titles) if run_user_title else False,
+                            bool(new_golden_quotes) if run_golden_quote else False,
+                            bool(new_chat_quality) if run_chat_quality else False,
+                        ]
+                    )
+
+                    if enabled_count > 0 and success_count == 0:
+                        span_rec["status"] = "failed"
+                        span_rec.setdefault("payload", {})["error"] = (
+                            "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
+                        )
+                        if trace:
+                            trace.metadata["has_warnings"] = False
+                            trace.metadata["failure_stage"] = "LLM_ANALYSIS"
+                        return {
+                            "success": False,
+                            "reason": "llm_analysis_failed",
+                            "error": "大模型文本分析全部子任务失败，已中止续跑",
+                        }
+                    elif enabled_count > 0 and success_count < enabled_count:
+                        span_rec["status"] = "warning"
+                        span_rec.setdefault("payload", {})["warning"] = (
+                            f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                        )
+                        if trace:
+                            trace.metadata["has_warnings"] = True
 
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
