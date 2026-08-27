@@ -238,7 +238,11 @@ class TraceContext:
             if any(s.get("status") == "failed" for s in self._spans):
                 status = "failed"
             elif any(
-                s.get("status") == "warning" for s in self._spans
+                s.get("status") == "warning"
+                or s.get("payload", {}).get("success") is False
+                or bool(s.get("payload", {}).get("warning"))
+                or bool(s.get("payload", {}).get("subtask_errors"))
+                for s in self._spans
             ) or self.metadata.get("has_warnings"):
                 status = "warning"
 
