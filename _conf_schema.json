@@ -1581,7 +1581,7 @@
         "items": {
             "html_base_url": {
                 "type": "string",
-                "description": "外鏈 Base URL",
+                "description": "外链 Base URL",
                 "default": "",
                 "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。"
             },
