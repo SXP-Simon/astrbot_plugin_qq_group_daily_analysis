@@ -171,7 +171,6 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           options={providerOptions}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
-          placeholder="可从下拉列表选择已有 Provider，或直接输入 ID"
           filterOption={(inputValue, option) =>
             String(option?.label || "")
               .toLowerCase()
@@ -183,8 +182,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         >
           <Input
             prefix={
-              <ApartmentOutlined style={{ color: "#2563eb", marginRight: 4 }} />
+              <ApartmentOutlined style={{ color: "#2563eb", marginRight: 6 }} />
             }
+            placeholder="从下拉列表选择已有 Provider，或直接输入 ID"
             allowClear
             style={{ fontFamily: SANS_MONO_FONT }}
           />
@@ -217,7 +217,6 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           options={personaOptions}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
-          placeholder="可从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
           filterOption={(inputValue, option) =>
             String(option?.label || "")
               .toLowerCase()
@@ -229,8 +228,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         >
           <Input
             prefix={
-              <UserOutlined style={{ color: "#7c3aed", marginRight: 4 }} />
+              <UserOutlined style={{ color: "#7c3aed", marginRight: 6 }} />
             }
+            placeholder="从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
             allowClear
             style={{ fontFamily: SANS_MONO_FONT }}
           />
