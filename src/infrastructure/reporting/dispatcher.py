@@ -46,7 +46,6 @@ class ReportDispatcher:
     ) -> bool:
         """分发分析报告，并返回至少一种格式是否实际发送成功。"""
         trace_id = TraceContext.get()
-        trace_ctx = TraceContext.current()
         output_formats = self.config_manager.get_output_format()
         if isinstance(output_formats, str):
             output_formats = [output_formats]
@@ -232,7 +231,9 @@ class ReportDispatcher:
                 try:
                     await self._try_upload_image(group_id, image_url, platform_id)
                 except Exception as e:
-                    logger.warning(f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}")
+                    logger.warning(
+                        f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}"
+                    )
 
                 if dispatch_span and isinstance(dispatch_span, dict):
                     dispatch_span.setdefault("payload", {}).update(
@@ -247,7 +248,9 @@ class ReportDispatcher:
                     )
                     if not sent:
                         dispatch_span["status"] = "warning"
-                        dispatch_span["payload"]["warning"] = "图片报告发送失败，已自动降级回退至文本报告"
+                        dispatch_span["payload"]["warning"] = (
+                            "图片报告发送失败，已自动降级回退至文本报告"
+                        )
                         if trace_ctx:
                             trace_ctx.metadata["has_warnings"] = True
 
@@ -339,7 +342,9 @@ class ReportDispatcher:
                     html_filename = html_file.name
                     if trace_ctx:
                         rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                        if not any(rf.get("filename") == html_file.name for rf in rfiles):
+                        if not any(
+                            rf.get("filename") == html_file.name for rf in rfiles
+                        ):
                             rfiles.append(
                                 {
                                     "filename": html_file.name,
@@ -372,7 +377,8 @@ class ReportDispatcher:
                         # 若用户配置为空，使用默认目录
                         if not html_output_dir:
                             html_output_dir = str(
-                                self.report_generator.data_dir / "self_hosted_html_reports"
+                                self.report_generator.data_dir
+                                / "self_hosted_html_reports"
                             )
 
                         # 计算相对路径并转换为URL
@@ -417,7 +423,9 @@ class ReportDispatcher:
                     )
                     if not sent:
                         dispatch_span["status"] = "warning"
-                        dispatch_span["payload"]["warning"] = "HTML 报告发送失败，已自动降级回退至文本报告"
+                        dispatch_span["payload"]["warning"] = (
+                            "HTML 报告发送失败，已自动降级回退至文本报告"
+                        )
                         if trace_ctx:
                             trace_ctx.metadata["has_warnings"] = True
 
@@ -475,15 +483,21 @@ class ReportDispatcher:
                             )
                         )
                     else:
-                        sent = bool(await adapter.send_text_report(group_id, text_report))
+                        sent = bool(
+                            await adapter.send_text_report(group_id, text_report)
+                        )
                 if not sent:
                     sent = bool(
                         await self.message_sender.send_text(
-                            group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
+                            group_id,
+                            f"📊 每日群聊分析报告：\n\n{text_report}",
+                            platform_id,
                         )
                     )
             except Exception as e:
-                logger.error(f"[分发器] 发送文本报告最终失败。群: {group_id}, 错误: {e}")
+                logger.error(
+                    f"[分发器] 发送文本报告最终失败。群: {group_id}, 错误: {e}"
+                )
                 sent = False
 
             if dispatch_span and isinstance(dispatch_span, dict):
