@@ -37,7 +37,7 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
         </div>
       )}
 
-      {/* 告警/降级提示 */}
+      {/* 警告/降级提示 */}
       {!isFailed && Boolean(payload?.warning) && (
         <div
           style={{
@@ -51,7 +51,7 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
             lineHeight: 1.5,
           }}
         >
-          <span style={{ fontWeight: 600, marginRight: 6 }}>阶段告警：</span>
+          <span style={{ fontWeight: 600, marginRight: 6 }}>阶段警告：</span>
           <span className="font-mono">{String(payload?.warning)}</span>
         </div>
       )}

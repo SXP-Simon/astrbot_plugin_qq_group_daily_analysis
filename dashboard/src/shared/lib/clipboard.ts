@@ -25,7 +25,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     textArea.focus();
     textArea.select();
 
-    // 使用安全调用抹平 TypeScript ts(6387) 弃用告警
+    // 使用安全调用抹平 TypeScript ts(6387) 弃用警告
     const legacyDoc = document as unknown as {
       execCommand?: (commandId: string) => boolean;
     };

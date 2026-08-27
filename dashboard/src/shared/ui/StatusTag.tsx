@@ -16,7 +16,7 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
     case "warning":
       return (
         <Tag color="warning" className="text-xs font-semibold">
-          告警
+          警告
         </Tag>
       );
     case "partial_success":
