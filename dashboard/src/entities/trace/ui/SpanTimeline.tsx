@@ -407,7 +407,11 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                               </span>
                               <span className="font-mono" style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}>
                                 {String(att.provider_id || "default")}
-                                {att.model ? ` (${String(att.model)})` : ""}
+                                {att.model &&
+                                String(att.model) !== String(att.provider_id) &&
+                                !String(att.provider_id || "").includes(String(att.model))
+                                  ? ` / ${String(att.model)}`
+                                  : ""}
                               </span>
                             </div>
 
