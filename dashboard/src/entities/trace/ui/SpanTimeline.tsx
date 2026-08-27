@@ -13,6 +13,7 @@ import {
   CloseCircleOutlined,
   SyncOutlined,
   WarningOutlined,
+  ExclamationCircleOutlined,
   DownOutlined,
   RightOutlined,
 } from "@ant-design/icons";
@@ -116,6 +117,12 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
     const { thresholdMs, description: slaDesc } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;
     const isFailed = span.status === "failed" || span.status === "error";
+    const isWarning =
+      !isFailed &&
+      (span.status === "warning" ||
+        span.status === "partial_success" ||
+        Boolean(span.payload?.warning) ||
+        (Array.isArray(span.payload?.subtask_errors) && span.payload.subtask_errors.length > 0));
 
     let color = "#52c41a";
     let icon = <CheckCircleOutlined style={{ color: "#52c41a" }} />;
@@ -129,6 +136,10 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
       color = "#1677ff";
       icon = <SyncOutlined spin style={{ color: "#1677ff" }} />;
       tagColor = "processing";
+    } else if (isWarning) {
+      color = "#fa8c16";
+      icon = <ExclamationCircleOutlined style={{ color: "#fa8c16" }} />;
+      tagColor = "warning";
     } else if (isSlaExceeded) {
       color = "#fa8c16";
       icon = <CheckCircleOutlined style={{ color: "#fa8c16" }} />;
@@ -204,7 +215,13 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
                   fontWeight: 600,
                 }}
               >
-                {isRunning ? `执行中 (${formatDuration(duration)})` : formatDuration(span.duration_ms ?? 0)}
+                {isRunning
+                  ? `执行中 (${formatDuration(duration)})`
+                  : isWarning
+                  ? `告警 (${formatDuration(span.duration_ms ?? 0)})`
+                  : isFailed
+                  ? `失败 (${formatDuration(span.duration_ms ?? 0)})`
+                  : formatDuration(span.duration_ms ?? 0)}
               </Tag>
             </Space>
           </div>

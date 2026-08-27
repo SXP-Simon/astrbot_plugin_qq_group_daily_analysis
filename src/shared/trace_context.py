@@ -150,10 +150,11 @@ class TraceContext:
 
         try:
             yield span_record
-            span_record["status"] = "success"
+            if span_record.get("status") in ("running", None):
+                span_record["status"] = "success"
         except Exception as exc:
             span_record["status"] = "failed"
-            span_record["payload"]["error"] = str(exc)
+            span_record.setdefault("payload", {})["error"] = str(exc)
             raise
         finally:
             span_record["duration_ms"] = round((time.time() - start_ts) * 1000, 2)
@@ -233,6 +234,14 @@ class TraceContext:
         """
         标记任务完成，计算总耗时并自动持久化到 SQLite
         """
+        if status == "succeeded":
+            if any(s.get("status") == "failed" for s in self._spans):
+                status = "failed"
+            elif any(
+                s.get("status") == "warning" for s in self._spans
+            ) or self.metadata.get("has_warnings"):
+                status = "warning"
+
         self.status = status
         self.completed_at = time.time()
         self.duration_ms = round((self.completed_at - self.started_at) * 1000, 2)
