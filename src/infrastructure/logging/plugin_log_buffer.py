@@ -131,10 +131,21 @@ class PluginLogBuffer(logging.Handler):
         msecs = int((now - int(now)) * 1000)
         full_time_str = f"{time_str}.{msecs:03d}"
 
-        # 解析 TraceID
+        # 解析 TraceID：优先从参数取，其次从 TraceContext 上下文取，最后从日志文本中提取
+        if not trace_id:
+            try:
+                from ...shared.trace_context import TraceContext
+
+                ctx = TraceContext.current()
+                if ctx and ctx.trace_id:
+                    trace_id = ctx.trace_id
+            except Exception:
+                pass
+
         if not trace_id:
             trace_match = re.search(
-                r"\[(manual|incr|group|web_manual|report)_[a-zA-Z0-9_\-]+\]", msg
+                r"\[(manual|incr|group|web_manual|report|[a-zA-Z0-9_\-]+)_[a-zA-Z0-9_\-]+\]",
+                msg,
             )
             if trace_match:
                 trace_id = trace_match.group(0).strip("[]")
