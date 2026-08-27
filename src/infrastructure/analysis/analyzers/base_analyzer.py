@@ -507,12 +507,22 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         extra_generate_kwargs={"temperature": temperature},
                         observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
                     )
-                    if retry_response is None:
-                        continue
-
-                    retry_result_text = extract_response_text(retry_response)
-                    if not retry_result_text:
-                        continue
+                    if retry_response is not None and trace:
+                        trace.record_prompt(
+                            analyzer_name=f"{self.get_data_type()}#schema_retry_{idx}",
+                            prompt=retry_prompt,
+                            system_prompt=system_prompt,
+                            provider_id=self.get_resolved_provider_id(provider_id_key),
+                            model=self.get_resolved_model(provider_id_key),
+                            tokens=getattr(retry_response, "tokens", 0),
+                            prompt_tokens=getattr(retry_response, "prompt_tokens", 0),
+                            completion_tokens=getattr(retry_response, "completion_tokens", 0),
+                        )
+                        retry_slot = trace.metadata.get("llm_prompts", {}).get(
+                            f"{self.get_data_type()}#schema_retry_{idx}"
+                        )
+                        if retry_slot and retry_result_text:
+                            retry_slot["completion"] = retry_result_text
 
                     result_text = retry_result_text
                     retry_success, retry_parsed_data, retry_error_msg = (
@@ -522,6 +532,16 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         success = True
                         parsed_data = retry_parsed_data
                         error_msg = None
+                        if trace and slot:
+                            slot["completion"] = retry_result_text
+                            slot["prompt"] = retry_prompt
+                            if getattr(retry_response, "tokens", 0):
+                                slot["tokens"] = (slot.get("tokens", 0) or 0) + getattr(
+                                    retry_response, "tokens", 0
+                                )
+                                slot["completion_tokens"] = getattr(
+                                    retry_response, "completion_tokens", 0
+                                )
                         break
                     error_msg = retry_error_msg
 

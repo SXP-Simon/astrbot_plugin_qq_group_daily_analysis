@@ -37,6 +37,25 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
         </div>
       )}
 
+      {/* 告警/降级提示 */}
+      {!isFailed && Boolean(payload?.warning) && (
+        <div
+          style={{
+            padding: "6px 10px",
+            background: isDark ? "rgba(217, 119, 6, 0.1)" : "#fffbeb",
+            borderLeft: "3px solid #f59e0b",
+            borderRadius: "0 4px 4px 0",
+            color: isDark ? "#fbbf24" : "#92400e",
+            fontSize: 11,
+            marginBottom: 8,
+            lineHeight: 1.5,
+          }}
+        >
+          <span style={{ fontWeight: 600, marginRight: 6 }}>阶段告警：</span>
+          <span className="font-mono">{String(payload?.warning)}</span>
+        </div>
+      )}
+
       {/* 子任务错误提示 */}
       {Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length > 0 && (
         <div
