@@ -194,12 +194,26 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
     };
   }, [open, trace?.status, traceId]);
 
+  const hasWarningSpan = trace?.spans?.some(
+    (s) =>
+      s.status === "warning" ||
+      s.payload?.success === false ||
+      Boolean(s.payload?.warning) ||
+      (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0)
+  );
+  const effectiveStatus =
+    trace?.status === "warning" ||
+    Boolean(trace?.extra?.has_warnings) ||
+    (trace?.status === "succeeded" && hasWarningSpan)
+      ? "warning"
+      : trace?.status || "unknown";
+
   return (
     <Drawer
       title={
         <Space size="middle">
           <span style={{ fontSize: 16, fontWeight: 600 }}>任务执行详情</span>
-          {trace && <StatusTag status={trace.status} />}
+          {trace && <StatusTag status={effectiveStatus} />}
         </Space>
       }
       extra={
