@@ -423,6 +423,35 @@ class LLMAnalyzer(IAnalysisProvider):
                                 "prompts": trace.metadata.get("llm_prompts", {}),
                             }
                         )
+                        enabled_count = sum(
+                            [
+                                bool(topic_enabled),
+                                bool(user_title_enabled),
+                                bool(golden_quote_enabled),
+                                bool(chat_quality_enabled),
+                            ]
+                        )
+                        success_count = sum(
+                            [
+                                bool(topics) if topic_enabled else False,
+                                bool(user_titles) if user_title_enabled else False,
+                                bool(golden_quotes) if golden_quote_enabled else False,
+                                bool(chat_quality_review)
+                                if chat_quality_enabled
+                                else False,
+                            ]
+                        )
+                        if enabled_count > 0 and success_count == 0:
+                            s["status"] = "failed"
+                            s.setdefault("payload", {})["error"] = (
+                                "大模型文本分析所有启用的子任务均调用失败或重试耗尽"
+                            )
+                        elif enabled_count > 0 and success_count < enabled_count:
+                            s["status"] = "warning"
+                            s.setdefault("payload", {})["warning"] = (
+                                f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                            )
+
                         if subtask_errors:
                             s["payload"]["subtask_errors"] = subtask_errors
                         break
@@ -632,6 +661,33 @@ class LLMAnalyzer(IAnalysisProvider):
                                     },
                                 }
                             )
+                            enabled_count = sum(
+                                [
+                                    bool(topic_enabled),
+                                    bool(golden_quote_enabled),
+                                    bool(chat_quality_enabled),
+                                ]
+                            )
+                            success_count = sum(
+                                [
+                                    bool(topics) if topic_enabled else False,
+                                    bool(golden_quotes) if golden_quote_enabled else False,
+                                    bool(chat_quality_review)
+                                    if chat_quality_enabled
+                                    else False,
+                                ]
+                            )
+                            if enabled_count > 0 and success_count == 0:
+                                s["status"] = "failed"
+                                s.setdefault("payload", {})["error"] = (
+                                    "增量大模型文本分析所有启用的子任务均调用失败或重试耗尽"
+                                )
+                            elif enabled_count > 0 and success_count < enabled_count:
+                                s["status"] = "warning"
+                                s.setdefault("payload", {})["warning"] = (
+                                    f"增量大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                                )
+
                             if subtask_errors:
                                 s["payload"]["subtask_errors"] = subtask_errors
                             break

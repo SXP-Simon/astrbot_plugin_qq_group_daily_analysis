@@ -96,7 +96,30 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
     const { thresholdMs } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;
-    const isFailed = span.status === "failed" || span.status === "error";
+
+    const enabledFeatures = span.payload?.enabled_features as Record<string, boolean> | undefined;
+    const enabledCount = enabledFeatures
+      ? Object.values(enabledFeatures).filter(Boolean).length
+      : 0;
+    const hasLlmOutput =
+      Number(span.payload?.topics_count || 0) > 0 ||
+      Number(span.payload?.user_titles_count || 0) > 0 ||
+      Number(span.payload?.golden_quotes_count || 0) > 0 ||
+      Boolean(span.payload?.chat_quality_review);
+
+    // 当开启了 LLM 分析，但产出全为 0 且存在子任务报错/重试耗尽：判定为完全失败 (failed)
+    const isAllSubtasksFailed =
+      span.stage_name === "LLM_ANALYSIS" &&
+      enabledCount > 0 &&
+      !hasLlmOutput &&
+      (Array.isArray(span.payload?.subtask_errors) && span.payload.subtask_errors.length > 0);
+
+    const isFailed =
+      span.status === "failed" ||
+      span.status === "error" ||
+      Boolean(span.payload?.error) ||
+      isAllSubtasksFailed;
+
     const isWarning =
       !isFailed &&
       (span.status === "warning" ||
