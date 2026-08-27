@@ -468,16 +468,20 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             result_text = extract_response_text(response)
             logger.debug(f"{self.get_data_type()}分析原始响应: {result_text[:500]}...")
 
+            slot: dict | None = None
             if trace:
-                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    self.get_data_type(), {}
-                )
-                slot["prompt"] = prompt
-                slot["system_prompt"] = system_prompt
-                slot["tokens"] = token_usage_dict["total_tokens"]
-                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
-                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
-                slot["completion"] = result_text
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text
 
             # 5. 尝试结构化解析 + 正则降级解析
             success, parsed_data, error_msg = self._try_parse_with_fallback(result_text)
@@ -507,22 +511,12 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         extra_generate_kwargs={"temperature": temperature},
                         observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
                     )
-                    if retry_response is not None and trace:
-                        trace.record_prompt(
-                            analyzer_name=f"{self.get_data_type()}#schema_retry_{idx}",
-                            prompt=retry_prompt,
-                            system_prompt=system_prompt,
-                            provider_id=self.get_resolved_provider_id(provider_id_key),
-                            model=self.get_resolved_model(provider_id_key),
-                            tokens=getattr(retry_response, "tokens", 0),
-                            prompt_tokens=getattr(retry_response, "prompt_tokens", 0),
-                            completion_tokens=getattr(retry_response, "completion_tokens", 0),
-                        )
-                        retry_slot = trace.metadata.get("llm_prompts", {}).get(
-                            f"{self.get_data_type()}#schema_retry_{idx}"
-                        )
-                        if retry_slot and retry_result_text:
-                            retry_slot["completion"] = retry_result_text
+                    if retry_response is None:
+                        continue
+
+                    retry_result_text = extract_response_text(retry_response)
+                    if not retry_result_text:
+                        continue
 
                     result_text = retry_result_text
                     retry_success, retry_parsed_data, retry_error_msg = (
@@ -532,16 +526,17 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         success = True
                         parsed_data = retry_parsed_data
                         error_msg = None
-                        if trace and slot:
+                        if trace and isinstance(slot, dict):
                             slot["completion"] = retry_result_text
                             slot["prompt"] = retry_prompt
-                            if getattr(retry_response, "tokens", 0):
-                                slot["tokens"] = (slot.get("tokens", 0) or 0) + getattr(
-                                    retry_response, "tokens", 0
-                                )
-                                slot["completion_tokens"] = getattr(
-                                    retry_response, "completion_tokens", 0
-                                )
+                            slot["retry_count"] = idx
+                            retry_token_dict = extract_token_usage(retry_response)
+                            slot["tokens"] = (
+                                slot.get("tokens", 0) or 0
+                            ) + retry_token_dict["total_tokens"]
+                            slot["completion_tokens"] = retry_token_dict[
+                                "completion_tokens"
+                            ]
                         break
                     error_msg = retry_error_msg
 

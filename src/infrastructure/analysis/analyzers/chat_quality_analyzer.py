@@ -244,26 +244,16 @@ ${messages_text}
                 extra_generate_kwargs={"temperature": temperature},
                 observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
             )
+            if retry_response is None:
+                continue
+
+            retry_text = extract_response_text(retry_response)
+            if not retry_text:
+                continue
+
             from ....shared.trace_context import TraceContext
 
             trace = TraceContext.current()
-            if retry_response is not None and trace:
-                trace.record_prompt(
-                    analyzer_name=f"{self.get_data_type()}#schema_retry_{idx}",
-                    prompt=retry_prompt,
-                    system_prompt=system_prompt,
-                    provider_id=self.get_resolved_provider_id(self.get_provider_id_key())
-                    if hasattr(self, "get_resolved_provider_id")
-                    else "default",
-                    tokens=getattr(retry_response, "tokens", 0),
-                    prompt_tokens=getattr(retry_response, "prompt_tokens", 0),
-                    completion_tokens=getattr(retry_response, "completion_tokens", 0),
-                )
-                retry_slot = trace.metadata.get("llm_prompts", {}).get(
-                    f"{self.get_data_type()}#schema_retry_{idx}"
-                )
-                if retry_slot and retry_text:
-                    retry_slot["completion"] = retry_text
 
             retry_success, retry_parsed_data, _ = parse_json_object_response(
                 retry_text, self.get_data_type()
@@ -272,10 +262,13 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(self.get_data_type())
-                        if slot and retry_text:
+                        slot = trace.metadata.get("llm_prompts", {}).get(
+                            self.get_data_type()
+                        )
+                        if isinstance(slot, dict):
                             slot["completion"] = retry_text
                             slot["prompt"] = retry_prompt
+                            slot["retry_count"] = idx
                     return normalized
 
             retry_regex_data = extract_quality_with_regex(retry_text)
@@ -283,10 +276,13 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_regex_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(self.get_data_type())
-                        if slot and retry_text:
+                        slot = trace.metadata.get("llm_prompts", {}).get(
+                            self.get_data_type()
+                        )
+                        if isinstance(slot, dict):
                             slot["completion"] = retry_text
                             slot["prompt"] = retry_prompt
+                            slot["retry_count"] = idx
                     return normalized
 
         return None

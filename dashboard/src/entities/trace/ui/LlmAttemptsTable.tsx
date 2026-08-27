@@ -19,16 +19,6 @@ const AREA_NAME_MAP: Record<string, string> = {
   comic: "群漫画生成",
 };
 
-function formatLlmAreaName(area?: string): string {
-  if (!area) return "分析";
-  const schemaRetryMatch = area.match(/^(.*?)#schema_retry_(\d+)$/);
-  if (schemaRetryMatch) {
-    const baseName = AREA_NAME_MAP[schemaRetryMatch[1]] || schemaRetryMatch[1];
-    return `${baseName} (格式修复 #${schemaRetryMatch[2]})`;
-  }
-  return AREA_NAME_MAP[area] || area;
-}
-
 export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) => {
   const { isDark } = useTheme();
 
@@ -72,6 +62,18 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
           const isFallback = Boolean(att.is_fallback);
           const hasError = !isSuccess && Boolean(att.error);
 
+          const retryMatch = String(att.area || "").match(/^(.*?)#(?:schema_retry|retry)_(\d+)$/);
+          const rawArea = retryMatch ? retryMatch[1] : String(att.area || "analysis");
+          const areaName = AREA_NAME_MAP[rawArea] || rawArea;
+          const isRetry = Boolean(retryMatch);
+          const retryIdx = retryMatch ? retryMatch[2] : null;
+
+          const badgeText = isFallback
+            ? `降级 #${String(att.attempt || i + 1)}`
+            : isRetry
+            ? `重试 #${retryIdx}`
+            : `调用 #${String(att.attempt || i + 1)}`;
+
           return (
             <div
               key={i}
@@ -100,23 +102,23 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
                       fontSize: 10,
                       padding: "1px 5px",
                       borderRadius: 3,
-                      background: isFallback
-                        ? (isDark ? "rgba(217, 119, 6, 0.15)" : "#fef3c7")
+                      background: (isFallback || isRetry)
+                        ? (isDark ? "rgba(217, 119, 6, 0.15)" : "#fffbeb")
                         : (isDark ? "rgba(37, 99, 235, 0.12)" : "#eff6ff"),
-                      color: isFallback
+                      color: (isFallback || isRetry)
                         ? (isDark ? "#fbbf24" : "#b45309")
                         : (isDark ? "#60a5fa" : "#1d4ed8"),
                       border: `1px solid ${
-                        isFallback
+                        (isFallback || isRetry)
                           ? (isDark ? "rgba(217, 119, 6, 0.3)" : "#fde68a")
                           : (isDark ? "rgba(37, 99, 235, 0.25)" : "#bfdbfe")
                       }`,
                     }}
                   >
-                    {isFallback ? "降级" : "调用"} #{String(att.attempt || i + 1)}
+                    {badgeText}
                   </span>
                   <span style={{ fontWeight: 500, color: isDark ? "#c9d1d9" : "#1e293b" }}>
-                    {formatLlmAreaName(String(att.area || "analysis"))}
+                    {areaName}
                   </span>
                   <span className="font-mono" style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}>
                     {String(att.provider_id || "default")}
