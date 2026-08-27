@@ -83,7 +83,22 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       dataIndex: "status",
       key: "status",
       width: 105,
-      render: (st: string) => <StatusTag status={st} />,
+      render: (_: string, record: TraceRecord) => {
+        const hasWarningSpan = record.spans?.some(
+          (s) =>
+            s.status === "warning" ||
+            s.payload?.success === false ||
+            Boolean(s.payload?.warning) ||
+            (Array.isArray(s.payload?.subtask_errors) && s.payload.subtask_errors.length > 0)
+        );
+        const hasWarning =
+          record.status === "warning" ||
+          Boolean(record.extra?.has_warnings) ||
+          (record.status === "succeeded" && hasWarningSpan);
+
+        const effectiveStatus = hasWarning ? "warning" : record.status;
+        return <StatusTag status={effectiveStatus} />;
+      },
     },
     {
       title: "耗时",
