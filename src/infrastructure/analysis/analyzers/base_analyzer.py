@@ -475,6 +475,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                     slot = prompts_map.setdefault(self.get_data_type(), {})
                     if isinstance(slot, dict):
                         slot["prompt"] = prompt
+                        slot["initial_prompt"] = prompt
                         slot["system_prompt"] = system_prompt
                         slot["tokens"] = token_usage_dict["total_tokens"]
                         slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
@@ -482,6 +483,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                             "completion_tokens"
                         ]
                         slot["completion"] = result_text
+                        slot["initial_completion"] = result_text
 
             # 5. 尝试结构化解析 + 正则降级解析
             success, parsed_data, error_msg = self._try_parse_with_fallback(result_text)
@@ -528,7 +530,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         error_msg = None
                         if trace and isinstance(slot, dict):
                             slot["completion"] = retry_result_text
+                            slot["corrected_completion"] = retry_result_text
                             slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
                             slot["retry_count"] = idx
                             retry_token_dict = extract_token_usage(retry_response)
                             slot["tokens"] = (

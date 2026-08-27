@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { Collapse, Tabs, Space, Button, message } from "antd";
+import { Collapse, Tabs, Space, Button, Segmented, message } from "antd";
 import {
   FileTextOutlined,
   CopyOutlined,
   UserOutlined,
   CodeOutlined,
   CheckCircleOutlined,
+  WarningOutlined,
   ApartmentOutlined,
 } from "@ant-design/icons";
 import { copyToClipboard } from "../../../shared/lib/clipboard";
@@ -22,6 +23,10 @@ export interface PromptDetail {
   prompt_tokens?: number;
   completion_tokens?: number;
   completion?: string;
+  initial_prompt?: string;
+  initial_completion?: string;
+  corrected_prompt?: string;
+  corrected_completion?: string;
   retry_count?: number;
 }
 
@@ -46,6 +51,7 @@ const ANALYZER_NAME_MAP: Record<string, string> = {
 export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("");
+  const [viewModeMap, setViewModeMap] = useState<Record<string, "corrected" | "initial">>({});
 
   if (!prompts || typeof prompts !== "object" || Object.keys(prompts).length === 0) {
     return null;
@@ -115,9 +121,77 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                       ? { prompt: pInfo }
                       : pInfo || {};
 
-                    const promptText = detail.prompt || "";
+                    const mappedName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
+                    const retryKeys = Object.keys(prompts || {}).filter(
+                      (k) =>
+                        k.startsWith(`${analyzerName}#schema_retry_`) ||
+                        k.startsWith(`${analyzerName}#retry_`) ||
+                        k.startsWith(`${mappedName}#schema_retry_`) ||
+                        k.startsWith(`${mappedName}#retry_`)
+                    );
+
+                    let lastRetryDetail: PromptDetail | null = null;
+                    if (retryKeys.length > 0) {
+                      retryKeys.sort((a, b) => {
+                        const numA = parseInt(a.split("#")[1]?.replace(/\D/g, "") || "0", 10);
+                        const numB = parseInt(b.split("#")[1]?.replace(/\D/g, "") || "0", 10);
+                        return numA - numB;
+                      });
+                      const lastKey = retryKeys[retryKeys.length - 1];
+                      const lastVal = prompts[lastKey];
+                      if (lastVal && typeof lastVal === "object") {
+                        lastRetryDetail = lastVal as PromptDetail;
+                      }
+                    }
+
+                    const initialCompletion =
+                      detail.initial_completion ||
+                      (lastRetryDetail ? detail.completion : null);
+
+                    const correctedCompletion =
+                      detail.corrected_completion ||
+                      (lastRetryDetail?.completion && lastRetryDetail.completion !== detail.completion
+                        ? lastRetryDetail.completion
+                        : (detail.retry_count ? detail.completion : null));
+
+                    const initialPrompt =
+                      detail.initial_prompt ||
+                      (lastRetryDetail ? detail.prompt : null) ||
+                      detail.prompt ||
+                      "";
+
+                    const correctedPrompt =
+                      detail.corrected_prompt ||
+                      lastRetryDetail?.prompt ||
+                      (detail.retry_count ? detail.prompt : null) ||
+                      detail.prompt ||
+                      "";
+
+                    const effectiveRetryCount =
+                      detail.retry_count ||
+                      (retryKeys.length > 0 ? retryKeys.length : 0);
+
+                    const hasCorrection = Boolean(
+                      (correctedCompletion && initialCompletion && correctedCompletion !== initialCompletion) ||
+                      (effectiveRetryCount > 0 && lastRetryDetail?.completion) ||
+                      (detail.corrected_completion && detail.initial_completion)
+                    );
+
+                    const viewMode = viewModeMap[analyzerName] || "corrected";
+
+                    const promptText = hasCorrection
+                      ? viewMode === "initial"
+                        ? initialPrompt
+                        : correctedPrompt
+                      : detail.prompt || "";
+
+                    const completionText = hasCorrection
+                      ? viewMode === "initial"
+                        ? (initialCompletion || detail.completion || "")
+                        : (correctedCompletion || detail.completion || "")
+                      : detail.completion || "";
+
                     const systemPrompt = detail.system_prompt || "";
-                    const completionText = detail.completion || "";
                     const providerId = detail.provider_id;
                     const modelId = detail.model;
                     const tokens = detail.tokens || 0;
@@ -198,7 +272,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                   {formatTokens(tokens)} Tokens
                                 </span>
                               )}
-                              {Boolean(detail.retry_count) && (
+                              {effectiveRetryCount > 0 && (
                                 <span
                                   className="font-mono"
                                   style={{
@@ -211,24 +285,58 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                     fontWeight: 500,
                                   }}
                                 >
-                                  经 {detail.retry_count} 次输出解析校正后成功
+                                  经 {effectiveRetryCount} 次输出解析校正后成功
                                 </span>
                               )}
                             </Space>
 
-                            <Button
-                              size="small"
-                              type="text"
-                              icon={<CopyOutlined style={{ fontSize: 11 }} />}
-                              style={{ fontSize: 11, height: 24, padding: "0 6px", color: isDark ? "#cbd5e1" : "#475569" }}
-                              onClick={() => {
-                                const fullDump = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${promptText}\n\n=== Completion ===\n${completionText}`;
-                                copyToClipboard(fullDump);
-                                message.success(`已复制 ${displayName} 完整上下文`);
-                              }}
-                            >
-                              复制全部上下文
-                            </Button>
+                            <Space size={8}>
+                              {hasCorrection && (
+                                <Segmented
+                                  size="small"
+                                  value={viewMode}
+                                  onChange={(val) =>
+                                    setViewModeMap((prev) => ({
+                                      ...prev,
+                                      [analyzerName]: val as "corrected" | "initial",
+                                    }))
+                                  }
+                                  options={[
+                                    {
+                                      label: (
+                                        <span style={{ fontSize: 11, fontWeight: 500 }}>
+                                          <CheckCircleOutlined style={{ color: "#16a34a", marginRight: 3 }} />
+                                          校正结果
+                                        </span>
+                                      ),
+                                      value: "corrected",
+                                    },
+                                    {
+                                      label: (
+                                        <span style={{ fontSize: 11, fontWeight: 500 }}>
+                                          <WarningOutlined style={{ color: "#d97706", marginRight: 3 }} />
+                                          原始结果
+                                        </span>
+                                      ),
+                                      value: "initial",
+                                    },
+                                  ]}
+                                />
+                              )}
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<CopyOutlined style={{ fontSize: 11 }} />}
+                                style={{ fontSize: 11, height: 24, padding: "0 6px", color: isDark ? "#cbd5e1" : "#475569" }}
+                                onClick={() => {
+                                  const fullDump = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${promptText}\n\n=== Completion ===\n${completionText}`;
+                                  copyToClipboard(fullDump);
+                                  message.success(`已复制 ${displayName} 完整上下文`);
+                                }}
+                              >
+                                复制全部上下文
+                              </Button>
+                            </Space>
                           </div>
 
                           {/* 1. 系统/人格设定提示词 (System Prompt) */}
@@ -314,7 +422,9 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                 <Space size={6}>
                                   <CodeOutlined style={{ color: "#2563eb" }} />
                                   <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
-                                    任务分析输入 (User Prompt)
+                                    {hasCorrection && viewMode === "corrected"
+                                      ? "校正提示词 (Correction Prompt)"
+                                      : "任务分析输入 (User Prompt)"}
                                   </span>
                                   <span style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b", fontWeight: "normal" }}>
                                     ({promptText.length} 字符)
@@ -326,7 +436,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                   style={{ fontSize: 11, padding: 0, height: "auto" }}
                                   onClick={() => {
                                     copyToClipboard(promptText);
-                                    message.success("已复制 User Prompt");
+                                    message.success("已复制提示词");
                                   }}
                                 >
                                   复制
@@ -374,9 +484,17 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                 }}
                               >
                                 <Space size={6}>
-                                  <CheckCircleOutlined style={{ color: "#16a34a" }} />
+                                  {hasCorrection && viewMode === "initial" ? (
+                                    <WarningOutlined style={{ color: "#d97706" }} />
+                                  ) : (
+                                    <CheckCircleOutlined style={{ color: "#16a34a" }} />
+                                  )}
                                   <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
-                                    大模型返回结果 (Completion Response)
+                                    {hasCorrection
+                                      ? viewMode === "corrected"
+                                        ? "大模型校正产物 (Corrected Response - 有效产物)"
+                                        : "大模型初始返回 (Initial Response - 未通过校验)"
+                                      : "大模型返回结果 (Completion Response)"}
                                   </span>
                                 </Space>
                                 <Button
