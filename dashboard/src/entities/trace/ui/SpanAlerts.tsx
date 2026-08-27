@@ -1,5 +1,5 @@
 import React from "react";
-import { theme } from "antd";
+import { useTheme } from "../../../shared/lib/useTheme";
 
 interface SpanAlertsProps {
   stageName: string;
@@ -12,8 +12,7 @@ export const SpanAlerts: React.FC<SpanAlertsProps> = ({
   status,
   payload,
 }) => {
-  const { token } = theme.useToken();
-  const isDark = Boolean(token.colorBgBase && token.colorBgBase.toLowerCase().includes("#1"));
+  const { isDark } = useTheme();
 
   const isFailed = status === "failed" || status === "error";
 

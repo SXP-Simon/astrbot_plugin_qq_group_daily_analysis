@@ -1,13 +1,12 @@
 import React from "react";
-import { theme } from "antd";
+import { useTheme } from "../../../shared/lib/useTheme";
 
 interface RenderAttemptsTableProps {
   attempts: Array<Record<string, unknown>>;
 }
 
 export const RenderAttemptsTable: React.FC<RenderAttemptsTableProps> = ({ attempts }) => {
-  const { token } = theme.useToken();
-  const isDark = Boolean(token.colorBgBase && token.colorBgBase.toLowerCase().includes("#1"));
+  const { isDark } = useTheme();
 
   if (!attempts || attempts.length === 0) {
     return null;

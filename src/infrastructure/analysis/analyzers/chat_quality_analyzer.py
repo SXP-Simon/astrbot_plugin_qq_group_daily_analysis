@@ -15,6 +15,7 @@ from ..utils.llm_utils import (
     call_provider_with_retry,
     extract_response_text,
     extract_token_usage,
+    get_provider_id_with_fallback,
 )
 from ..utils.response_validation import validate_quality_review_item
 from ..utils.structured_output_schema import JSONObject, build_chat_quality_schema
@@ -437,10 +438,17 @@ ${messages_text}
         5. 正则降级（使用 extract_quality_with_regex）
         """
         try:
+            provider_id_key = self.get_provider_id_key()
+            resolved_provider_id = None
+            if provider_id_key:
+                resolved_provider_id = await get_provider_id_with_fallback(
+                    self.context, self.config_manager, provider_id_key, umo
+                )
+
             # 1. 获取人格设定
             system_prompt = await self._build_system_prompt(umo)
             base_temperature = await self._resolve_provider_temperature(
-                self.get_provider_id_key(), umo
+                self.get_provider_id_key(), umo, provider_id=resolved_provider_id
             )
 
             # 2. 构建 prompt
@@ -459,7 +467,7 @@ ${messages_text}
                 prompts_map[self.get_data_type()] = {
                     "prompt": prompt,
                     "system_prompt": system_prompt,
-                    "provider_id": "quality_provider_id",
+                    "provider_id": resolved_provider_id or "default",
                 }
 
             # 3. 调用 LLM
@@ -469,6 +477,7 @@ ${messages_text}
                 prompt=prompt,
                 umo=umo,
                 provider_id_key=self.get_provider_id_key(),
+                provider_id=resolved_provider_id,
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
                 observation_label=self.get_data_type(),
@@ -493,6 +502,18 @@ ${messages_text}
                 err_text = "聊天质量分析失败: LLM 未返回任何文本内容"
                 logger.error(err_text)
                 raise RuntimeError(err_text)
+
+            if trace:
+                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
+                    self.get_data_type(), {}
+                )
+                slot["prompt"] = prompt
+                slot["system_prompt"] = system_prompt
+                slot["provider_id"] = resolved_provider_id or "default"
+                slot["tokens"] = token_usage_dict["total_tokens"]
+                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
+                slot["completion"] = result_text
 
             # 6. JSON 解析（使用 parse_json_object_response）
             success, parsed_data, error_msg = parse_json_object_response(

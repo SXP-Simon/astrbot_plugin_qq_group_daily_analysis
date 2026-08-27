@@ -28,9 +28,39 @@
         touch-action: manipulation !important;
         cursor: pointer;
       }
-      /* 等宽字体类 */
+      /* 等宽字体类 (现代无衬线等宽) */
       .font-mono {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace !important;
+      }
+      /* 全局与代码块精致微型滚动条美化 (Light & Dark) */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.35);
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.6);
+      }
+      pre::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+      }
+      pre::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.3);
+        border-radius: 9999px;
+      }
+      pre::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.55);
       }
       /* 移动端 Tab 导航条支持平滑横向手势滑动，隐藏默认滚动条 */
       .ant-tabs-nav-wrap {
