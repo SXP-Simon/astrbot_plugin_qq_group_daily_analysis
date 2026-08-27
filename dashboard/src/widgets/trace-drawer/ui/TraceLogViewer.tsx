@@ -13,10 +13,11 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
   const { isDark } = useTheme();
   const logBoxRef = useRef<HTMLDivElement>(null);
 
-  if (!logs || logs.length === 0) return null;
+  const hasLogs = logs && logs.length > 0;
 
   const handleCopyLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!hasLogs) return;
     const text = logs
       .map(
         (l) =>
@@ -28,7 +29,7 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+    if ((e.ctrlKey || e.metaKey) && e.key === "a" && hasLogs) {
       e.preventDefault();
       const text = logs
         .map(
@@ -60,22 +61,24 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
             >
               <span style={{ fontSize: 12, fontWeight: 600 }}>
                 <FileTextOutlined style={{ marginRight: 6, color: "#1677ff" }} />
-                专属执行日志 ({logs.length} 条)
+                专属执行日志 ({logs?.length || 0} 条)
               </span>
-              <Tooltip title="一键复制当前任务专属日志 (支持 Ctrl+A 全选复制)">
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<CopyOutlined />}
-                  onClick={handleCopyLogs}
-                  style={{ fontSize: 11, height: 22, padding: "0 6px" }}
-                >
-                  复制日志
-                </Button>
-              </Tooltip>
+              {hasLogs && (
+                <Tooltip title="一键复制当前任务专属日志 (支持 Ctrl+A 全选复制)">
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CopyOutlined />}
+                    onClick={handleCopyLogs}
+                    style={{ fontSize: 11, height: 22, padding: "0 6px" }}
+                  >
+                    复制日志
+                  </Button>
+                </Tooltip>
+              )}
             </div>
           ),
-          children: (
+          children: hasLogs ? (
             <div
               ref={logBoxRef}
               tabIndex={0}
@@ -142,6 +145,17 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: "8px 12px",
+                color: isDark ? "#8b949e" : "#64748b",
+                fontSize: 12,
+                fontStyle: "italic",
+              }}
+            >
+              暂无该任务专属日志记录（或日志已随内存环形队列轮转）
             </div>
           ),
         },

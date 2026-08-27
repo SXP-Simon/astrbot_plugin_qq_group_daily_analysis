@@ -31,6 +31,7 @@ import {
 import { useTheme } from "../../../shared/lib/useTheme";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { TemplateListRenderer } from "./TemplateListRenderer";
+import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -266,6 +267,21 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             {boolVal ? "已启用" : "已关闭"}
           </Text>
         </div>
+      );
+    }
+
+    // 3.5 报告模板选择器 (带实时缩略图预览与 CDN 画廊选型弹窗)
+    if (
+      fieldKey === "report_template" ||
+      (type === "string" && fieldKey.includes("report_template"))
+    ) {
+      return (
+        <TemplateSelectorRenderer
+          value={value}
+          options={options}
+          defaultValue={defaultValue}
+          onChange={(newVal) => onChange(newVal)}
+        />
       );
     }
 

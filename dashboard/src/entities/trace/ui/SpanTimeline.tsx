@@ -88,11 +88,13 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
 
   const items = mergedSpans.map((span, idx) => {
     const spanKey = span.span_id || `span_${idx}_${span.stage_name}`;
-    const isRunning = span.status === "running";
+    const isRunning = span.status === "running" && taskStatus === "running";
     const duration =
       span.duration_ms !== null && span.duration_ms !== undefined
         ? span.duration_ms
-        : Math.max(0, Math.round((Date.now() / 1000 - (span.started_at || Date.now() / 1000)) * 1000));
+        : isRunning
+        ? Math.max(0, Math.round((Date.now() / 1000 - (span.started_at || Date.now() / 1000)) * 1000))
+        : 0;
 
     const { thresholdMs } = getStageSlaThreshold(span.stage_name);
     const isSlaExceeded = !isRunning && duration > thresholdMs;

@@ -158,6 +158,11 @@ class TraceContext:
             raise
         finally:
             span_record["duration_ms"] = round((time.time() - start_ts) * 1000, 2)
+            if self.status != "running" and _global_trace_store is not None:
+                try:
+                    _global_trace_store.save_trace(self.to_dict())
+                except Exception:
+                    pass
 
     def set_context_metrics(
         self,
@@ -255,6 +260,15 @@ class TraceContext:
             self.error_message = error_message
         if stack_trace:
             self.stack_trace = stack_trace
+
+        # 确保所有未完成的 Span 在 Trace 结束时被正确收尾，避免前端面板出现永久运行状态
+        for s in self._spans:
+            if s.get("status") == "running":
+                s["status"] = "success"
+                if s.get("started_at") and s.get("duration_ms") is None:
+                    s["duration_ms"] = round(
+                        (self.completed_at - s["started_at"]) * 1000, 2
+                    )
 
         _active_traces.pop(self.trace_id, None)
 
