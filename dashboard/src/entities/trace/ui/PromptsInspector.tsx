@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import { copyToClipboard } from "../../../shared/lib/clipboard";
 import { formatTokens } from "../../../shared/lib/formatters";
+import { useTheme } from "../../../shared/lib/useTheme";
 
 export interface PromptDetail {
   prompt?: string;
@@ -28,10 +29,14 @@ interface PromptsInspectorProps {
 }
 
 const ANALYZER_NAME_MAP: Record<string, string> = {
-  topics: "话题分析",
-  user_titles: "群友画像",
-  golden_quotes: "群聊金句",
-  chat_quality: "质量锐评",
+  topics: "话题",
+  user_titles: "用户称号",
+  golden_quotes: "金句",
+  chat_quality: "聊天质量",
+  "话题分析": "话题",
+  "群友画像": "用户称号",
+  "群聊金句": "金句",
+  "聊天质量": "聊天质量",
   group_sentiment: "情感分析",
   activity_prediction: "活跃预测",
   comic: "群漫画生成",
@@ -39,8 +44,8 @@ const ANALYZER_NAME_MAP: Record<string, string> = {
 
 export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) => {
   const { token } = theme.useToken();
+  const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("");
-  const isDark = token.colorBgBase === "#000000" || token.colorBgContainer?.startsWith("#1");
 
   if (!prompts || typeof prompts !== "object" || Object.keys(prompts).length === 0) {
     return null;

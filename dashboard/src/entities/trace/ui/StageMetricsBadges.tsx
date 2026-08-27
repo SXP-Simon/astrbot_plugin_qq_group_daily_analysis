@@ -1,5 +1,5 @@
 import React from "react";
-import { theme } from "antd";
+import { useTheme } from "../../../shared/lib/useTheme";
 
 interface StageMetricsBadgesProps {
   stageName: string;
@@ -74,8 +74,7 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
   stageName,
   payload,
 }) => {
-  const { token } = theme.useToken();
-  const isDark = Boolean(token.colorBgBase && token.colorBgBase.toLowerCase().includes("#1"));
+  const { isDark } = useTheme();
 
   if (!payload) return null;
 
