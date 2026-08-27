@@ -44,7 +44,30 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
 
   const { thresholdMs, description: slaDesc } = getStageSlaThreshold(stageName);
   const isSlaExceeded = !isRunning && duration > thresholdMs;
-  const isFailed = status === "failed" || status === "error";
+
+  const enabledFeatures = payload?.enabled_features as Record<string, boolean> | undefined;
+  const enabledCount = enabledFeatures
+    ? Object.values(enabledFeatures).filter(Boolean).length
+    : 0;
+  const hasLlmOutput =
+    Number(payload?.topics_count || 0) > 0 ||
+    Number(payload?.user_titles_count || 0) > 0 ||
+    Number(payload?.golden_quotes_count || 0) > 0 ||
+    Boolean(payload?.chat_quality_review);
+
+  // 当开启了 LLM 分析，但产出全为 0 且存在子任务报错/重试耗尽：判定为完全失败 (failed)
+  const isAllSubtasksFailed =
+    stageName === "LLM_ANALYSIS" &&
+    enabledCount > 0 &&
+    !hasLlmOutput &&
+    (Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length > 0);
+
+  const isFailed =
+    status === "failed" ||
+    status === "error" ||
+    Boolean(payload?.error) ||
+    isAllSubtasksFailed;
+
   const isWarning =
     !isFailed &&
     (status === "warning" ||
