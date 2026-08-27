@@ -211,7 +211,7 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                                     fontWeight: 500,
                                   }}
                                 >
-                                  经 {detail.retry_count} 次格式纠错后成功
+                                  经 {detail.retry_count} 次输出解析校正后成功
                                 </span>
                               )}
                             </Space>
