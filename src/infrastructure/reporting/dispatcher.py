@@ -55,31 +55,6 @@ class ReportDispatcher:
             f"[{trace_id}] 正在分发群 {group_id} 的报告 (格式: {', '.join(output_formats)})"
         )
 
-        span_exists = bool(
-            trace_ctx
-            and any(
-                s.get("stage_name") == "DISPATCH_REPORT"
-                and s.get("status") == "running"
-                for s in trace_ctx._spans
-            )
-        )
-        span_ctx = (
-            nullcontext()
-            if span_exists
-            else (
-                trace_ctx.span(
-                    "DISPATCH_REPORT",
-                    {
-                        "platform": platform_id or "auto",
-                        "group_id": group_id,
-                        "formats": output_formats,
-                    },
-                )
-                if trace_ctx
-                else nullcontext()
-            )
-        )
-
         dispatch_map = {
             "image": self._dispatch_image,
             "html": self._dispatch_html,
@@ -88,37 +63,21 @@ class ReportDispatcher:
         sent_any = False
         format_results: dict[str, bool] = {}
 
-        with span_ctx:
-            for fmt in output_formats:
-                handler = dispatch_map.get(fmt)
-                if not handler:
-                    logger.warning(f"[{trace_id}] 不支持的报告格式: {fmt}")
-                    continue
-                try:
-                    ok = bool(await handler(group_id, analysis_result, platform_id))
-                    format_results[fmt] = ok
-                    sent_any = ok or sent_any
-                except Exception as e:
-                    logger.error(
-                        f"[{trace_id}] 群 {group_id} 的 {fmt} 报告发送异常: {e}",
-                        exc_info=True,
-                    )
-                    format_results[fmt] = False
-
-            if trace_ctx:
-                for s in reversed(trace_ctx._spans):
-                    if s.get("stage_name") == "DISPATCH_REPORT":
-                        s.setdefault("payload", {}).update(
-                            {
-                                "platform": platform_id or "auto",
-                                "formats": output_formats,
-                                "format": ", ".join(output_formats),
-                                "success": sent_any,
-                                "group_id": group_id,
-                                "format_results": format_results,
-                            }
-                        )
-                        break
+        for fmt in output_formats:
+            handler = dispatch_map.get(fmt)
+            if not handler:
+                logger.warning(f"[{trace_id}] 不支持的报告格式: {fmt}")
+                continue
+            try:
+                ok = bool(await handler(group_id, analysis_result, platform_id))
+                format_results[fmt] = ok
+                sent_any = ok or sent_any
+            except Exception as e:
+                logger.error(
+                    f"[{trace_id}] 群 {group_id} 的 {fmt} 报告发送异常: {e}",
+                    exc_info=True,
+                )
+                format_results[fmt] = False
 
         if sent_any:
             logger.info(
@@ -200,78 +159,92 @@ class ReportDispatcher:
         sent = False
         dest_filename: str | None = None
         if image_url:
-            try:
-                reports_dir = self.report_generator.data_dir / "reports"
-                reports_dir.mkdir(parents=True, exist_ok=True)
-                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = (
-                    f"report_{group_id}_{ts_str}_{trace_id}.jpg"
-                    if trace_id
-                    else f"report_{group_id}_{ts_str}.jpg"
+            with (
+                trace_ctx.span(
+                    "DISPATCH_REPORT",
+                    {
+                        "platform": platform_id or "auto",
+                        "group_id": group_id,
+                        "formats": ["image"],
+                        "format": "image",
+                    },
                 )
-                dest = reports_dir / filename
-                dest_filename = dest.name
-                if os.path.exists(image_url):
-                    import shutil
+                if trace_ctx
+                else nullcontext()
+            ) as dispatch_span:
+                try:
+                    reports_dir = self.report_generator.data_dir / "reports"
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = (
+                        f"report_{group_id}_{ts_str}_{trace_id}.jpg"
+                        if trace_id
+                        else f"report_{group_id}_{ts_str}.jpg"
+                    )
+                    dest = reports_dir / filename
+                    dest_filename = dest.name
+                    if os.path.exists(image_url):
+                        import shutil
 
-                    shutil.copy2(image_url, dest)
-                elif image_url.startswith("base64://"):
-                    data = base64.b64decode(image_url[9:])
-                    dest.write_bytes(data)
+                        shutil.copy2(image_url, dest)
+                    elif image_url.startswith("base64://"):
+                        data = base64.b64decode(image_url[9:])
+                        dest.write_bytes(data)
 
-                # 关联到 TraceContext 并在数据库中更新元数据
-                if trace_ctx:
-                    rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                    if not any(rf.get("filename") == dest.name for rf in rfiles):
-                        rfiles.append(
-                            {
-                                "filename": dest.name,
-                                "path": str(dest.resolve()),
-                                "format": "image",
-                                "size_bytes": dest.stat().st_size
-                                if dest.exists()
-                                else 0,
-                                "created_at": time.time(),
-                            }
-                        )
-                    from ...shared.trace_context import _global_trace_store
+                    # 关联到 TraceContext 并在数据库中更新元数据
+                    if trace_ctx:
+                        rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                        if not any(rf.get("filename") == dest.name for rf in rfiles):
+                            rfiles.append(
+                                {
+                                    "filename": dest.name,
+                                    "path": str(dest.resolve()),
+                                    "format": "image",
+                                    "size_bytes": dest.stat().st_size
+                                    if dest.exists()
+                                    else 0,
+                                    "created_at": time.time(),
+                                }
+                            )
+                        from ...shared.trace_context import _global_trace_store
 
-                    if _global_trace_store is not None:
-                        try:
-                            _global_trace_store.save_trace(trace_ctx.to_dict())
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning(f"[{trace_id}] 保存历史报告副本失败: {e}")
+                        if _global_trace_store is not None:
+                            try:
+                                _global_trace_store.save_trace(trace_ctx.to_dict())
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.warning(f"[{trace_id}] 保存历史报告副本失败: {e}")
 
-            caption = (
-                TraceContext.make_report_caption()
-                if self.config_manager.get_show_report_caption()
-                else ""
-            )
-            try:
-                sent = await self.message_sender.send_image_smart(
-                    group_id, image_url, caption, platform_id
+                caption = (
+                    TraceContext.make_report_caption()
+                    if self.config_manager.get_show_report_caption()
+                    else ""
                 )
-            except Exception as e:
-                logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
+                try:
+                    sent = await self.message_sender.send_image_smart(
+                        group_id, image_url, caption, platform_id
+                    )
+                except Exception as e:
+                    logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
 
-            # 5. 尝试上传到群文件/群相册（静默处理）
-            try:
-                await self._try_upload_image(group_id, image_url, platform_id)
-            except Exception as e:
-                logger.warning(f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}")
+                # 5. 尝试上传到群文件/群相册（静默处理）
+                try:
+                    await self._try_upload_image(group_id, image_url, platform_id)
+                except Exception as e:
+                    logger.warning(f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}")
 
-        if trace_ctx:
-            for s in reversed(trace_ctx._spans):
-                if s.get("stage_name") == "DISPATCH_REPORT":
-                    s.setdefault("payload", {}).update(
+                if dispatch_span and isinstance(dispatch_span, dict):
+                    dispatch_span.setdefault("payload", {}).update(
                         {
+                            "platform": platform_id or "auto",
+                            "formats": ["image"],
+                            "format": "image",
+                            "success": bool(sent),
                             "image_sent": bool(sent),
                             "report_file": dest_filename,
                         }
                     )
-                    break
 
         if sent:
             return True
@@ -341,91 +314,105 @@ class ReportDispatcher:
             logger.error(f"[{trace_id}] Failed to generate HTML report: {e}")
 
         html_filename: str | None = None
+        sent = False
         if html_path:
-            try:
-                html_file = Path(html_path)
-                html_filename = html_file.name
-                if trace_ctx:
-                    rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                    if not any(rf.get("filename") == html_file.name for rf in rfiles):
-                        rfiles.append(
-                            {
-                                "filename": html_file.name,
-                                "path": str(html_file.resolve()),
-                                "format": "html",
-                                "size_bytes": html_file.stat().st_size
-                                if html_file.exists()
-                                else 0,
-                                "created_at": time.time(),
-                            }
+            with (
+                trace_ctx.span(
+                    "DISPATCH_REPORT",
+                    {
+                        "platform": platform_id or "auto",
+                        "group_id": group_id,
+                        "formats": ["html"],
+                        "format": "html",
+                    },
+                )
+                if trace_ctx
+                else nullcontext()
+            ) as dispatch_span:
+                try:
+                    html_file = Path(html_path)
+                    html_filename = html_file.name
+                    if trace_ctx:
+                        rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                        if not any(rf.get("filename") == html_file.name for rf in rfiles):
+                            rfiles.append(
+                                {
+                                    "filename": html_file.name,
+                                    "path": str(html_file.resolve()),
+                                    "format": "html",
+                                    "size_bytes": html_file.stat().st_size
+                                    if html_file.exists()
+                                    else 0,
+                                    "created_at": time.time(),
+                                }
+                            )
+                        from ...shared.trace_context import _global_trace_store
+
+                        if _global_trace_store is not None:
+                            try:
+                                _global_trace_store.save_trace(trace_ctx.to_dict())
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.warning(f"[{trace_id}] 关联 HTML 报告元数据失败: {e}")
+
+                is_only_url = self.config_manager.get_html_only_url()
+                base_url = self.config_manager.get_html_base_url()
+
+                if is_only_url:
+                    if base_url and base_url.strip():
+                        # 获取配置的目录
+                        html_output_dir = self.config_manager.get_html_output_dir()
+
+                        # 若用户配置为空，使用默认目录
+                        if not html_output_dir:
+                            html_output_dir = str(
+                                self.report_generator.data_dir / "self_hosted_html_reports"
+                            )
+
+                        # 计算相对路径并转换为URL
+                        rel_path = os.path.relpath(html_path, html_output_dir)
+                        url_path = rel_path.replace(os.sep, "/")
+                        encoded_url_path = quote(url_path.lstrip("/"), safe="/")
+                        report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
+
+                        sent = await self.message_sender.send_text(
+                            group_id,
+                            f"📊 今日群聊分析报告已生成：\n{report_url}",
+                            platform_id,
                         )
-                    from ...shared.trace_context import _global_trace_store
-
-                    if _global_trace_store is not None:
-                        try:
-                            _global_trace_store.save_trace(trace_ctx.to_dict())
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning(f"[{trace_id}] 关联 HTML 报告元数据失败: {e}")
-
-            is_only_url = self.config_manager.get_html_only_url()
-            base_url = self.config_manager.get_html_base_url()
-
-            if is_only_url:
-                if base_url and base_url.strip():
-                    # 获取配置的目录
-                    html_output_dir = self.config_manager.get_html_output_dir()
-
-                    # 若用户配置为空，使用默认目录
-                    if not html_output_dir:
-                        html_output_dir = str(
-                            self.report_generator.data_dir / "self_hosted_html_reports"
+                    else:
+                        logger.warning(
+                            f"[{trace_id}] 群 {group_id} 开启了仅发送外链，但未配置 html_base_url，已进行降级，回退至发送 HTML 文件。"
                         )
 
-                    # 计算相对路径并转换为URL
-                    rel_path = os.path.relpath(html_path, html_output_dir)
-                    url_path = rel_path.replace(os.sep, "/")
-                    encoded_url_path = quote(url_path.lstrip("/"), safe="/")
-                    report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
-
-                    sent = await self.message_sender.send_text(
+                if not sent:
+                    caption = (
+                        self.report_generator.build_html_caption(html_path)
+                        if self.config_manager.get_show_report_caption()
+                        else ""
+                    )
+                    sent = await self.message_sender.send_file(
                         group_id,
-                        f"📊 今日群聊分析报告已生成：\n{report_url}",
-                        platform_id,
+                        html_path,
+                        caption=caption,
+                        platform_id=platform_id,
                     )
 
-                    if sent:
-                        return True
-                else:
-                    logger.warning(
-                        f"[{trace_id}] 群 {group_id} 开启了仅发送外链，但未配置 html_base_url，已进行降级，回退至发送 HTML 文件。"
+                if dispatch_span and isinstance(dispatch_span, dict):
+                    dispatch_span.setdefault("payload", {}).update(
+                        {
+                            "platform": platform_id or "auto",
+                            "formats": ["html"],
+                            "format": "html",
+                            "success": bool(sent),
+                            "html_sent": bool(sent),
+                            "html_file": html_filename,
+                        }
                     )
 
-            caption = (
-                self.report_generator.build_html_caption(html_path)
-                if self.config_manager.get_show_report_caption()
-                else ""
-            )
-
-            sent = await self.message_sender.send_file(
-                group_id,
-                html_path,
-                caption=caption,
-                platform_id=platform_id,
-            )
-            if trace_ctx:
-                for s in reversed(trace_ctx._spans):
-                    if s.get("stage_name") == "DISPATCH_REPORT":
-                        s.setdefault("payload", {}).update(
-                            {
-                                "html_sent": bool(sent),
-                                "html_file": html_filename,
-                            }
-                        )
-                        break
-            if sent:
-                return True
+                if sent:
+                    return True
 
         logger.warning(
             f"[{trace_id}] HTML dispatch failed, falling back to text report."
@@ -437,6 +424,7 @@ class ReportDispatcher:
     ) -> bool:
         """分发文本报告"""
         logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
+        trace_ctx = TraceContext.current()
         is_qq_official = self._is_qq_official(platform_id)
         fallback_report = None
         if is_qq_official:
@@ -451,23 +439,54 @@ class ReportDispatcher:
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         # 尝试通过适配器发送文本报告
         logger.info(f"[分发器] 正在尝试通过适配器发送文本报告。群: {group_id}")
-        try:
-            if adapter:
-                if is_qq_official:
-                    if await adapter.send_text_report(
-                        group_id,
-                        text_report,
-                        fallback_content=fallback_report,
-                    ):
-                        return True
-                elif await adapter.send_text_report(group_id, text_report):
-                    return True
-            return await self.message_sender.send_text(
-                group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
+
+        with (
+            trace_ctx.span(
+                "DISPATCH_REPORT",
+                {
+                    "platform": platform_id or "auto",
+                    "group_id": group_id,
+                    "formats": ["text"],
+                    "format": "text",
+                },
             )
-        except Exception as e:
-            logger.error(f"[分发器] 发送文本报告最终失败。群: {group_id}, 错误: {e}")
-            return False
+            if trace_ctx
+            else nullcontext()
+        ) as dispatch_span:
+            sent = False
+            try:
+                if adapter:
+                    if is_qq_official:
+                        sent = bool(
+                            await adapter.send_text_report(
+                                group_id,
+                                text_report,
+                                fallback_content=fallback_report,
+                            )
+                        )
+                    else:
+                        sent = bool(await adapter.send_text_report(group_id, text_report))
+                if not sent:
+                    sent = bool(
+                        await self.message_sender.send_text(
+                            group_id, f"📊 每日群聊分析报告：\n\n{text_report}", platform_id
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"[分发器] 发送文本报告最终失败。群: {group_id}, 错误: {e}")
+                sent = False
+
+            if dispatch_span and isinstance(dispatch_span, dict):
+                dispatch_span.setdefault("payload", {}).update(
+                    {
+                        "platform": platform_id or "auto",
+                        "formats": ["text"],
+                        "format": "text",
+                        "success": bool(sent),
+                        "text_sent": bool(sent),
+                    }
+                )
+            return sent
 
     # ================================================================
     # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）
