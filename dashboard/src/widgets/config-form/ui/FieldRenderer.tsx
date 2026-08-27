@@ -29,6 +29,7 @@ import {
   AvailablePersona,
 } from "../../../entities/config/api/configApi";
 import { useTheme } from "../../../shared/lib/useTheme";
+import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 
 const { Text } = Typography;
@@ -331,7 +332,62 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       );
     }
 
-    // 7. 字符串列表 (list / tags)
+    // 7. 带有预设选项的多选列表 (list with options / enum，如 output_format)
+    const listOptions: string[] | null =
+      Array.isArray(options) && options.length > 0
+        ? options.map(String)
+        : fieldSchema.items &&
+          typeof fieldSchema.items === "object" &&
+          Array.isArray(
+            (fieldSchema.items as Record<string, unknown>).options
+          )
+        ? (
+            (fieldSchema.items as Record<string, unknown>)
+              .options as unknown[]
+          ).map(String)
+        : fieldSchema.items &&
+          typeof fieldSchema.items === "object" &&
+          Array.isArray((fieldSchema.items as Record<string, unknown>).enum)
+        ? (
+            (fieldSchema.items as Record<string, unknown>)
+              .enum as unknown[]
+          ).map(String)
+        : null;
+
+    if (type === "list" && listOptions && listOptions.length > 0) {
+      const selectedVals: string[] = Array.isArray(value)
+        ? (value as unknown[]).map(String)
+        : Array.isArray(defaultValue)
+        ? (defaultValue as unknown[]).map(String)
+        : typeof value === "string" && value
+        ? [value]
+        : [];
+
+      return (
+        <Select
+          mode="multiple"
+          allowClear
+          style={{ width: "100%" }}
+          placeholder="请选择配置项（支持多选）"
+          value={selectedVals}
+          onChange={(vals) => onChange(vals)}
+          options={listOptions.map((opt: string) => {
+            let optLabel = opt;
+            if (fieldKey === "output_format") {
+              if (opt === "image") optLabel = "图片报告 (image)";
+              else if (opt === "text") optLabel = "纯文本摘要 (text)";
+              else if (opt === "html") optLabel = "HTML网页报告 (html)";
+            }
+            return {
+              label: optLabel,
+              value: opt,
+            };
+          })}
+        />
+      );
+    }
+
+    // 7.1 自由输入的字符串列表 (list / tags)
     if (type === "list") {
       const listVal: string[] = Array.isArray(value)
         ? (value as string[])
@@ -754,21 +810,21 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       {/* 核心控件区域 (Full Width) */}
       <div style={{ width: "100%", marginTop: 2 }}>{renderControl()}</div>
 
-      {/* 底部详细说明文字：独立整行渲染，消除单字竖排与挤压变形 */}
+      {/* 底部详细说明文字：支持 Markdown 语法高亮与超链接渲染 */}
       {hint && (
         <div
           style={{
             fontSize: 11,
-            lineHeight: "1.5",
+            lineHeight: "1.6",
             color: token.colorTextSecondary,
             background: token.colorFillAlter,
-            padding: "5px 8px",
+            padding: "6px 10px",
             borderRadius: 4,
             marginTop: 4,
             wordBreak: "break-word",
           }}
         >
-          {hint}
+          <MarkdownHint content={hint} />
         </div>
       )}
     </div>
