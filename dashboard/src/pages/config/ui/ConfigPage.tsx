@@ -23,6 +23,7 @@ import {
 import { useConfigViewModel } from "../model/useConfigViewModel";
 import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
 import { useTheme } from "../../../shared/lib/useTheme";
+import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -113,7 +114,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Spin spinning={loading}>
           <Row style={{ minHeight: 600 }}>
-            {/* 左侧：搜索与分组导航 */}
+            {/* 左侧：搜索与分组导航 (Sticky 固定保持在左侧，支持独立纵向滚动) */}
             <Col
               xs={24}
               md={6}
@@ -121,6 +122,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                 borderRight: `1px solid ${isDark ? "#303030" : "#f0f0f0"}`,
                 padding: "16px 12px",
                 background: isDark ? "#141414" : "#fafafa",
+                position: "sticky",
+                top: 0,
+                maxHeight: "calc(100vh - 80px)",
+                overflowY: "auto",
+                alignSelf: "flex-start",
+                zIndex: 10,
               }}
             >
               <div style={{ marginBottom: 12 }}>
@@ -210,17 +217,21 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                     gap: 8,
                   }}
                 >
-                  <div>
+                  <div style={{ flex: 1, marginRight: 12 }}>
                     <Title level={4} style={{ margin: 0, fontSize: 16 }}>
                       {activeGroupMeta.description || activeCategory}
                     </Title>
                     {activeGroupMeta.hint && (
-                      <Text
-                        type="secondary"
-                        style={{ fontSize: 12, display: "block", marginTop: 4 }}
-                      >
-                        {activeGroupMeta.hint}
-                      </Text>
+                      <MarkdownHint
+                        content={activeGroupMeta.hint}
+                        style={{
+                          fontSize: 12,
+                          display: "block",
+                          marginTop: 4,
+                          color: isDark ? "#8c8c8c" : "#595959",
+                          lineHeight: 1.6,
+                        }}
+                      />
                     )}
                   </div>
                   <Tag color="default" style={{ margin: 0 }}>
