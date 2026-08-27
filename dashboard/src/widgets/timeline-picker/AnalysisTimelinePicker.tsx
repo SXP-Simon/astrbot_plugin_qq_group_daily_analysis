@@ -309,7 +309,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                     {isSucceeded
                       ? "分析成功"
                       : isWarning
-                      ? "部分成功 (告警)"
+                      ? "部分成功 (警告)"
                       : isFailed
                       ? "执行失败"
                       : "分析中"}

@@ -273,7 +273,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             />
           )}
 
-          {/* 错误告警与快速重试 */}
+          {/* 错误警告与快速重试 */}
           {trace.status === "failed" && (
             <Alert
               type="error"

@@ -123,7 +123,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
             {isRunning
               ? `执行中 (${formatDuration(duration)})`
               : isWarning
-              ? `告警 (${formatDuration(durationMs ?? 0)})`
+              ? `警告 (${formatDuration(durationMs ?? 0)})`
               : isFailed
               ? `失败 (${formatDuration(durationMs ?? 0)})`
               : formatDuration(durationMs ?? 0)}
