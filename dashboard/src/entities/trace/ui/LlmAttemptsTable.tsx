@@ -5,6 +5,30 @@ interface LlmAttemptsTableProps {
   attempts: Array<Record<string, unknown>>;
 }
 
+const AREA_NAME_MAP: Record<string, string> = {
+  topics: "话题",
+  user_titles: "用户称号",
+  golden_quotes: "金句",
+  chat_quality: "聊天质量",
+  "话题分析": "话题",
+  "群友画像": "用户称号",
+  "群聊金句": "金句",
+  "聊天质量": "聊天质量",
+  group_sentiment: "情感分析",
+  activity_prediction: "活跃预测",
+  comic: "群漫画生成",
+};
+
+function formatLlmAreaName(area?: string): string {
+  if (!area) return "分析";
+  const schemaRetryMatch = area.match(/^(.*?)#schema_retry_(\d+)$/);
+  if (schemaRetryMatch) {
+    const baseName = AREA_NAME_MAP[schemaRetryMatch[1]] || schemaRetryMatch[1];
+    return `${baseName} (格式修复 #${schemaRetryMatch[2]})`;
+  }
+  return AREA_NAME_MAP[area] || area;
+}
+
 export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) => {
   const { isDark } = useTheme();
 
@@ -92,7 +116,7 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
                     {isFallback ? "降级" : "调用"} #{String(att.attempt || i + 1)}
                   </span>
                   <span style={{ fontWeight: 500, color: isDark ? "#c9d1d9" : "#1e293b" }}>
-                    {String(att.area || "analysis")}
+                    {formatLlmAreaName(String(att.area || "analysis"))}
                   </span>
                   <span className="font-mono" style={{ color: isDark ? "#8b949e" : "#64748b", fontSize: 11 }}>
                     {String(att.provider_id || "default")}

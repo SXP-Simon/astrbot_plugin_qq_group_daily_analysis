@@ -118,8 +118,16 @@ export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) =
                     const providerId = detail.provider_id;
                     const modelId = detail.model;
                     const tokens = detail.tokens || 0;
-                    const displayName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
-                    const showSubLabel = displayName !== analyzerName && !analyzerName.match(/[\u4e00-\u9fa5]/);
+                    let displayName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
+                    const schemaRetryMatch = analyzerName.match(/^(.*?)#schema_retry_(\d+)$/);
+                    if (schemaRetryMatch) {
+                      const baseName = ANALYZER_NAME_MAP[schemaRetryMatch[1]] || schemaRetryMatch[1];
+                      displayName = `${baseName} (格式修复 #${schemaRetryMatch[2]})`;
+                    }
+                    const showSubLabel =
+                      displayName !== analyzerName &&
+                      !schemaRetryMatch &&
+                      !analyzerName.match(/[\u4e00-\u9fa5]/);
 
                     const showModel = Boolean(
                       modelId &&

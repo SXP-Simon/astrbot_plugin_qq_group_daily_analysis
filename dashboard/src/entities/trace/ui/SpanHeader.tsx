@@ -49,6 +49,7 @@ export const SpanHeader: React.FC<SpanHeaderProps> = ({
     !isFailed &&
     (status === "warning" ||
       status === "partial_success" ||
+      payload?.success === false ||
       Boolean(payload?.warning) ||
       (Array.isArray(payload?.subtask_errors) && payload.subtask_errors.length > 0));
 

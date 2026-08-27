@@ -245,6 +245,11 @@ class ReportDispatcher:
                             "report_file": dest_filename,
                         }
                     )
+                    if not sent:
+                        dispatch_span["status"] = "warning"
+                        dispatch_span["payload"]["warning"] = "图片报告发送失败，已自动降级回退至文本报告"
+                        if trace_ctx:
+                            trace_ctx.metadata["has_warnings"] = True
 
         if sent:
             return True
@@ -410,6 +415,11 @@ class ReportDispatcher:
                             "html_file": html_filename,
                         }
                     )
+                    if not sent:
+                        dispatch_span["status"] = "warning"
+                        dispatch_span["payload"]["warning"] = "HTML 报告发送失败，已自动降级回退至文本报告"
+                        if trace_ctx:
+                            trace_ctx.metadata["has_warnings"] = True
 
                 if sent:
                     return True

@@ -105,6 +105,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
       !isFailed &&
       (span.status === "warning" ||
         span.status === "partial_success" ||
+        span.payload?.success === false ||
         Boolean(span.payload?.warning) ||
         (Array.isArray(span.payload?.subtask_errors) && span.payload.subtask_errors.length > 0));
 
