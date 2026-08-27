@@ -748,16 +748,23 @@ class GroupDailyAnalysis(Star):
                 if trace and trace.status == "running":
                     trace.finish(
                         status="failed",
-                        error_message=f"Analysis skipped/failed: {reason}",
+                        error_message=result.get("error")
+                        or f"Analysis skipped/failed: {reason}",
                     )
                 if reason == "no_messages":
                     yield event.plain_result("❌ 未找到足够的群聊记录")
+                elif reason == "llm_analysis_failed":
+                    yield event.plain_result(
+                        "❌ 大模型文本分析失败：所有已开启的分析模块均调用失败或重试耗尽（请检查大模型 API Key 及服务商连通性）"
+                    )
                 elif reason == "muted":
                     logger.warning(
                         f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过回复以防抛出发送异常"
                     )
                 else:
-                    yield event.plain_result("❌ 分析失败，原因未知")
+                    yield event.plain_result(
+                        f"❌ 分析失败: {result.get('error', '原因未知')}"
+                    )
                 return
 
             if not use_text_reply and adapter and orig_msg_id:

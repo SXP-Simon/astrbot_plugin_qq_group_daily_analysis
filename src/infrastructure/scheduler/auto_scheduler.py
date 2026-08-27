@@ -557,9 +557,12 @@ class AutoScheduler:
                 if trace and trace.status == "running":
                     trace.finish(
                         status="failed",
-                        error_message=f"Auto analysis skipped: {reason}",
+                        error_message=result.get("error")
+                        or f"Auto analysis skipped: {reason}",
                     )
-                logger.info(f"群 {group_id} 自动分析跳过: {reason}")
+                logger.info(
+                    f"群 {group_id} 自动分析未完成: {reason} - {result.get('error', '')}"
+                )
                 result["analysis_success"] = False
                 result["report_sent"] = False
                 return result

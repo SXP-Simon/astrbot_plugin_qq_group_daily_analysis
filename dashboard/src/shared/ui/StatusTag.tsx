@@ -13,6 +13,13 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
           成功
         </Tag>
       );
+    case "warning":
+    case "partial_success":
+      return (
+        <Tag color="warning" className="text-xs font-semibold">
+          部分成功
+        </Tag>
+      );
     case "failed":
       return (
         <Tag color="error" className="text-xs font-semibold">

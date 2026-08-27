@@ -255,6 +255,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
           {traces.map((trace, idx) => {
             const isSelected = trace.trace_id === selectedTraceId;
             const isSucceeded = trace.status === "succeeded";
+            const isWarning = trace.status === "warning";
             const isFailed = trace.status === "failed";
             const isRunning = trace.status === "running";
 
@@ -295,11 +296,23 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                   状态:{" "}
                   <span
                     style={{
-                      color: isSucceeded ? "#16a34a" : isFailed ? "#dc2626" : "#2563eb",
+                      color: isSucceeded
+                        ? "#16a34a"
+                        : isWarning
+                        ? "#d97706"
+                        : isFailed
+                        ? "#dc2626"
+                        : "#2563eb",
                       fontWeight: 600,
                     }}
                   >
-                    {isSucceeded ? "分析成功" : isFailed ? "执行失败" : "分析中"}
+                    {isSucceeded
+                      ? "分析成功"
+                      : isWarning
+                      ? "部分成功 (告警)"
+                      : isFailed
+                      ? "执行失败"
+                      : "分析中"}
                   </span>
                 </div>
                 <div style={{ color: isDark ? "#cbd5e1" : "#475569", fontSize: 11, fontFamily: "monospace" }}>
@@ -323,6 +336,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               dotColor = "#2563eb";
             } else if (isSucceeded) {
               dotColor = "#16a34a";
+            } else if (isWarning) {
+              dotColor = "#fa8c16";
             } else if (isFailed) {
               dotColor = "#dc2626";
             } else if (isRunning) {
