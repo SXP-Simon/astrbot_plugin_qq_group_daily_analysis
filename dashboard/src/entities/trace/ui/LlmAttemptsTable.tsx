@@ -71,7 +71,7 @@ export const LlmAttemptsTable: React.FC<LlmAttemptsTableProps> = ({ attempts }) 
           const badgeText = isFallback
             ? `降级 #${String(att.attempt || i + 1)}`
             : isRetry
-            ? `重试 #${retryIdx}`
+            ? `格式纠错 #${retryIdx}`
             : `调用 #${String(att.attempt || i + 1)}`;
 
           return (
