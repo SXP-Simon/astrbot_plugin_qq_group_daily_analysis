@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Collapse, Tabs, Space, Button, message, theme } from "antd";
+import { Collapse, Tabs, Space, Button, message } from "antd";
 import {
   FileTextOutlined,
   CopyOutlined,
@@ -43,7 +43,6 @@ const ANALYZER_NAME_MAP: Record<string, string> = {
 };
 
 export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) => {
-  const { token } = theme.useToken();
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("");
 
