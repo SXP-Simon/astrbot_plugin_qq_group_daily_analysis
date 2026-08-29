@@ -1,5 +1,11 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.0.11] - 修复初音未来模板装饰图 404
+
+*   **🛡️ 【修复】HatsuneMiku 模板装饰图 404 破图**：
+    *   模板内 7 张装饰图原指向第三方图床 img.heliar.top（域名 DNS 已失效），现改为仓库 assets + jsDelivr CDN 托管，与 README 其它资源一致，修复破图。
+    *   已部署旧版、初音模板仍破图的用户（含网页日报），可使用一键替换脚本自行修复，无需等待更新：https://github.com/shiitin/miku-template-image-fix
+
 ## [v5.0.10] - 模板画廊预览、任务生命周期闭环与任务日志绑定
 
 *   **🎨 【全新】报告模板视觉画廊与即时预览**：
