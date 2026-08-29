@@ -4,7 +4,7 @@
 
 *   **🛡️ 【修复】HatsuneMiku 模板装饰图 404 破图**：
     *   模板内 7 张装饰图原指向第三方图床 img.heliar.top（域名 DNS 已失效），现改为仓库 assets + jsDelivr CDN 托管，与 README 其它资源一致，修复破图。
-    *   已部署旧版、初音模板仍破图的用户（含网页日报），可使用一键替换脚本自行修复，无需等待更新：https://github.com/shiitin/miku-template-image-fix
+    *   历史生成的日报 HTML（含网页日报）仍破图的用户，可使用一键替换脚本批量修复历史日报文件，无需重新生成：https://github.com/shiitin/miku-template-image-fix
 
 ## [v5.0.10] - 模板画廊预览、任务生命周期闭环与任务日志绑定
 
