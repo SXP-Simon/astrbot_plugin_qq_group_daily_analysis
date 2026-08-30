@@ -1425,9 +1425,41 @@ class ConfigManager:
         for index, provider in enumerate(providers):
             if not isinstance(provider, dict) or not provider.get("enable", True):
                 continue
-            template_key = str(provider.get("__template_key", "")).strip()
+            template_key = str(provider.get("__template_key", "")).strip().lower()
+            name_val = str(provider.get("name", "")).strip().lower()
+            endpoint_mode = str(provider.get("endpoint_mode", "")).strip().lower()
+            api_url_val = str(provider.get("api_url", "")).strip().lower()
+            model_val = str(provider.get("model", "")).strip().lower()
+
+            inferred_key = template_key or name_val or endpoint_mode
+            if inferred_key not in template_protocols:
+                if (
+                    "dashscope" in api_url_val
+                    or "aliyuncs.com" in api_url_val
+                    or "qwen" in model_val
+                    or "wan" in model_val
+                ):
+                    inferred_key = "dashscope"
+                elif (
+                    "generativelanguage.googleapis.com" in api_url_val
+                    or "gemini" in model_val
+                ):
+                    inferred_key = "google"
+                elif "sensenova" in api_url_val or "sensechat" in model_val:
+                    inferred_key = "sensenova"
+                elif "x.ai" in api_url_val or "grok" in model_val:
+                    inferred_key = "xai"
+                elif "minimax" in api_url_val or "image-01" in model_val:
+                    inferred_key = "minimax"
+                elif "stepfun" in api_url_val or "step-" in model_val:
+                    inferred_key = "stepfun"
+                elif "doubao" in api_url_val or "volces.com" in api_url_val:
+                    inferred_key = "doubao"
+                elif "api_protocol" in provider:
+                    inferred_key = str(provider["api_protocol"]).strip().lower()
+
             protocol = template_protocols.get(
-                template_key, str(provider.get("api_protocol", "images")).strip()
+                inferred_key, str(provider.get("api_protocol", "images")).strip()
             )
             api_key = str(provider.get("api_key", "")).strip()
             if protocol not in valid_protocols or not api_key:
@@ -1435,6 +1467,7 @@ class ConfigManager:
                 continue
             candidate = provider.copy()
             candidate["api_protocol"] = protocol
+            candidate["__template_key"] = inferred_key or template_key or "images"
             candidate["api_key"] = api_key
             candidate["_index"] = index
             try:

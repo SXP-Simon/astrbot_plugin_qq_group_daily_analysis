@@ -66,22 +66,26 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
 
   const templateKeys = Object.keys(templates);
 
-  // 根据条目数据匹配模板定义
-  const findTemplateForItem = (item: Record<string, unknown>) => {
-    if (item.name && templates[String(item.name)]) {
-      return templates[String(item.name)];
+  // 根据条目数据匹配模板 Key
+  const findTemplateKey = (item: Record<string, unknown>): string | null => {
+    if (item.__template_key && templates[String(item.__template_key)]) {
+      return String(item.__template_key);
     }
-    // 尝试匹配模板名字
+    if (item.name && templates[String(item.name)]) {
+      return String(item.name);
+    }
     for (const [key, tpl] of Object.entries(templates)) {
       if (tpl.name === item.name || key === item.name) {
-        return tpl;
+        return key;
       }
     }
-    // 默认回退到第一个模板
-    if (templateKeys.length > 0) {
-      return templates[templateKeys[0]];
-    }
-    return null;
+    return templateKeys.length > 0 ? templateKeys[0] : null;
+  };
+
+  // 根据条目数据匹配模板定义
+  const findTemplateForItem = (item: Record<string, unknown>) => {
+    const key = findTemplateKey(item);
+    return key ? templates[key] || null : null;
   };
 
   // 添加新条目
@@ -90,6 +94,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
     if (!tpl) return;
 
     const newItem: Record<string, unknown> = {
+      __template_key: templateKey,
       name: tpl.name || templateKey,
     };
 
@@ -114,8 +119,10 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   ) => {
     const nextList = rawList.map((item, idx) => {
       if (idx !== index) return item;
+      const tplKey = findTemplateKey(item);
       return {
         ...item,
+        ...(tplKey ? { __template_key: tplKey } : {}),
         [subFieldKey]: subVal,
       };
     });
