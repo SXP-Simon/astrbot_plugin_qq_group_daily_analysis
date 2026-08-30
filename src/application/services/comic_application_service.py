@@ -81,6 +81,25 @@ class ComicApplicationService:
                 prompt_template=prompt_template or None,
             )
             if sb_rec and isinstance(sb_rec, dict):
+                sb_prompts: dict[str, Any] = {}
+                if trace and trace.metadata.get("llm_prompts"):
+                    for k, p in trace.metadata["llm_prompts"].items():
+                        if "comic" in k or k == "comic_storyboards":
+                            sb_prompts[k] = p
+                if not sb_prompts and storyboards:
+                    sb_prompts["comic_storyboards"] = {
+                        "prompt": prompt_template
+                        or "自动从群聊话题中提取漫画多格分镜与生图提示词",
+                        "system_prompt": f"漫画分镜师 | 人格: {persona_id or character_name}",
+                        "completion": storyboards[0].get("scene", "")
+                        if storyboards
+                        else "",
+                        "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
+                        "completion_tokens": getattr(
+                            storyboard_usage, "completion_tokens", 0
+                        ),
+                        "tokens": getattr(storyboard_usage, "total_tokens", 0),
+                    }
                 sb_rec.setdefault("payload", {}).update(
                     {
                         "character_name": character_name,
@@ -91,6 +110,7 @@ class ComicApplicationService:
                             storyboard_usage, "completion_tokens", 0
                         ),
                         "total_tokens": getattr(storyboard_usage, "total_tokens", 0),
+                        "prompts": sb_prompts,
                     }
                 )
                 if not storyboards:
@@ -152,6 +172,14 @@ class ComicApplicationService:
                                 "reference_images_count": len(images_data),
                                 "image_bytes": len(external_comic_bytes),
                                 "success": True,
+                                "prompts": {
+                                    "comic_drawing": {
+                                        "prompt": scene_prompt,
+                                        "system_prompt": f"绘图后端: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                                        "completion": f"出图完成（体积: {round(len(external_comic_bytes) / 1024, 1)} KB）",
+                                        "provider_type": backend,
+                                    }
+                                },
                             }
                         )
                     return external_comic_bytes, None
@@ -265,6 +293,18 @@ class ComicApplicationService:
                         final_comic_bytes = None
 
             if draw_rec and isinstance(draw_rec, dict):
+                draw_prompts = {
+                    "comic_drawing": {
+                        "prompt": scene_prompt,
+                        "system_prompt": f"绘图引擎: {backend} | 角色方案: {character_name} | 参考图数: {len(images_data)}",
+                        "completion": f"出图完成（体积: {round(len(final_comic_bytes) / 1024, 1)} KB）"
+                        if final_comic_bytes
+                        else (
+                            f"出图未产出: {last_error}" if last_error else "未产出图像"
+                        ),
+                        "provider_type": backend,
+                    }
+                }
                 draw_rec.setdefault("payload", {}).update(
                     {
                         "backend": backend,
@@ -275,6 +315,7 @@ class ComicApplicationService:
                         else 0,
                         "success": bool(final_comic_bytes),
                         "last_error": last_error,
+                        "prompts": draw_prompts,
                     }
                 )
 

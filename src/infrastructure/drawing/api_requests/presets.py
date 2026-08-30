@@ -228,7 +228,14 @@ async def call_preset_api(
             if endpoint_mode == "token_plan"
             else "https://dashscope.aliyuncs.com"
         )
-        target_url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
+        clean_base = base.rstrip("/")
+        if clean_base.endswith("/api/v1"):
+            clean_base = clean_base[:-7].rstrip("/")
+        elif clean_base.endswith("/v1"):
+            clean_base = clean_base[:-3].rstrip("/")
+        target_url = (
+            f"{clean_base}/api/v1/services/aigc/multimodal-generation/generation"
+        )
         content: list[dict[str, str]] = [{"text": prompt}]
         try:
             dashscope_max_references = min(
