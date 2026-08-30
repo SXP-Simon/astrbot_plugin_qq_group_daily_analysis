@@ -45,7 +45,10 @@ const ANALYZER_NAME_MAP: Record<string, string> = {
   "聊天质量": "聊天质量",
   group_sentiment: "情感分析",
   activity_prediction: "活跃预测",
-  comic: "群漫画生成",
+  comic: "群漫画",
+  comic_storyboards: "漫画分镜",
+  comic_storyboard: "漫画分镜",
+  comic_drawing: "生图提示词",
 };
 
 export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) => {
