@@ -65,17 +65,9 @@ jobs:
       - name: Package Plugin ZIP
         run: |
           ZIP_NAME="astrbot_plugin_qq_group_daily_analysis_${{ steps.vars.outputs.tag }}.zip"
-          zip -r "$ZIP_NAME" . \
-            -x "*.git*" \
-            -x "dashboard/node_modules/*" \
-            -x "dashboard/.pnpm-store/*" \
-            -x "*/__pycache__/*" \
-            -x "*.pytest_cache/*" \
-            -x "*.ruff_cache/*" \
-            -x "data/*" \
-            -x "*.db" \
-            -x "*.sqlite*"
+          git archive --format=zip -o "$ZIP_NAME" HEAD
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          ls -lh "$ZIP_NAME"
         id: pkg
 
       - name: Create GitHub Release
