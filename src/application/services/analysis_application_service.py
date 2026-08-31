@@ -1234,9 +1234,21 @@ class AnalysisApplicationService:
                 days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
 
-            raw_messages = await adapter.fetch_messages(
-                group_id=group_id, days=days, max_count=max_count
-            )
+            trace = TraceContext.current()
+
+            with trace.span("FETCH_MESSAGES") if trace else nullcontext() as fetch_span:
+                raw_messages = await adapter.fetch_messages(
+                    group_id=group_id, days=days, max_count=max_count
+                )
+                if fetch_span and isinstance(fetch_span, dict):
+                    fetch_span.setdefault("payload", {}).update(
+                        {
+                            "raw_count": len(raw_messages),
+                            "days": days,
+                            "max_count": max_count,
+                            "platform": platform_id or "default",
+                        }
+                    )
             logger.info(
                 "手动漫画消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -1254,9 +1266,21 @@ class AnalysisApplicationService:
             bot_self_ids = self.config_manager.get_bot_self_ids()
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
-            unified_messages = cleaner.clean_messages(
-                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
-            )
+            with trace.span("CLEAN_MESSAGES") if trace else nullcontext() as clean_span:
+                unified_messages = cleaner.clean_messages(
+                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+                )
+                dropped_count = max(len(raw_messages) - len(unified_messages), 0)
+                if clean_span and isinstance(clean_span, dict):
+                    clean_span.setdefault("payload", {}).update(
+                        {
+                            "cleaned_count": len(unified_messages),
+                            "dropped_count": dropped_count,
+                            "filter_bot_messages": bool(
+                                self.config_manager.get_filter_bot_messages()
+                            ),
+                        }
+                    )
             logger.info(
                 "手动漫画消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
                 group_id,
@@ -1274,10 +1298,22 @@ class AnalysisApplicationService:
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
-            async with self._llm_slot(group_id, "comic_manual"):
-                topics, token_usage = await self.llm_analyzer.analyze_topics(
-                    legacy_messages, unified_msg_origin
-                )
+            with trace.span("LLM_ANALYSIS") if trace else nullcontext() as llm_span:
+                async with self._llm_slot(group_id, "comic_manual"):
+                    topics, token_usage = await self.llm_analyzer.analyze_topics(
+                        legacy_messages, unified_msg_origin
+                    )
+                if llm_span and isinstance(llm_span, dict):
+                    llm_span.setdefault("payload", {}).update(
+                        {
+                            "topics_count": len(topics) if topics else 0,
+                            "prompt_tokens": getattr(token_usage, "prompt_tokens", 0),
+                            "completion_tokens": getattr(
+                                token_usage, "completion_tokens", 0
+                            ),
+                            "total_tokens": getattr(token_usage, "total_tokens", 0),
+                        }
+                    )
 
             if not topics:
                 return {"success": False, "reason": "no_topics"}
