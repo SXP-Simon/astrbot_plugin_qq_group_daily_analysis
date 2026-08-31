@@ -207,6 +207,12 @@ class PluginPageWebUIBridge:
                 ["POST"],
                 "Save and persist updated plugin configuration",
             ),
+            (
+                f"/{PLUGIN_NAME}/config/upload_file",
+                self.api_upload_config_file,
+                ["POST"],
+                "Upload a config reference image/file and store to files/ folder",
+            ),
         ]
 
         for path, handler, methods, desc in routes:
@@ -1405,4 +1411,68 @@ class PluginPageWebUIBridge:
             )
         except Exception as e:
             logger.error(f"保存配置异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_upload_config_file(self) -> Any:
+        """上传插件配置所需的文件/参考图，并存入合规的 files/{folder}/ 物理路径"""
+        try:
+            folder = "daily_comic_comic_characters_templates_character_reference_images"
+            if hasattr(request, "query") and request.query.get("config_key"):
+                folder = request.query.get("config_key").replace(".", "_")
+
+            plugin_root = Path(__file__).resolve().parents[3]
+            target_dir = plugin_root / "files" / folder
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            saved_paths: list[str] = []
+
+            # 1. 尝试从 multipart 上传中读取
+            if hasattr(request, "files"):
+                uploaded_files = await request.files()
+                for key in uploaded_files.keys():
+                    for f in uploaded_files.getlist(key):
+                        orig_name = getattr(f, "filename", "") or "uploaded_image.png"
+                        clean_name = re.sub(r"[^\w\.\-]", "_", orig_name)
+                        ts = int(time.time() * 1000)
+                        final_name = f"{ts}_{clean_name}"
+                        file_bytes = await f.read()
+                        if file_bytes:
+                            (target_dir / final_name).write_bytes(file_bytes)
+                            saved_paths.append(f"files/{folder}/{final_name}")
+
+            # 2. 尝试从 JSON (包含 Base64 或 Data URL) 中解析
+            if not saved_paths and hasattr(request, "json"):
+                data = await request.json(default={})
+                if isinstance(data, dict):
+                    raw_data = (
+                        data.get("file_data") or data.get("data") or data.get("base64")
+                    )
+                    file_name = data.get("filename") or "upload.png"
+                    clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
+                    if raw_data and isinstance(raw_data, str):
+                        if raw_data.startswith("data:"):
+                            _, b64 = raw_data.split(",", 1)
+                        else:
+                            b64 = raw_data
+                        file_bytes = base64.b64decode(b64)
+                        ts = int(time.time() * 1000)
+                        final_name = f"{ts}_{clean_name}"
+                        (target_dir / final_name).write_bytes(file_bytes)
+                        saved_paths.append(f"files/{folder}/{final_name}")
+
+            if not saved_paths:
+                return error_response("未检测到有效的文件数据", status_code=400)
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "path": saved_paths[0],
+                        "paths": saved_paths,
+                        "folder": folder,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"上传配置文件异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
