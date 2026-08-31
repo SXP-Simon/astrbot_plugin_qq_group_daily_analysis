@@ -88,6 +88,8 @@ class ActiveTaskManager:
                 {"event": "task_progress", "data": info.to_dict()}
             )
 
+    update_task_stage = update_stage
+
     def update_stage_sync(self, task_id: str, stage_name: str) -> None:
         """同步更新活跃任务阶段（供 Span 上下文即时调用）"""
         if task_id in self._tasks:

@@ -816,6 +816,8 @@ class GroupDailyAnalysis(Star):
         if self._terminating:
             return
 
+        trace = None
+        trace_id = None
         current_task = asyncio.current_task()
         if current_task:
             self._background_tasks.add(current_task)
@@ -1285,7 +1287,7 @@ class GroupDailyAnalysis(Star):
                 return
             try:
                 if cur_trace and self.active_task_manager:
-                    await self.active_task_manager.update_task_stage(
+                    await self.active_task_manager.update_stage(
                         cur_trace.trace_id, "COMIC_STORYBOARD"
                     )
 

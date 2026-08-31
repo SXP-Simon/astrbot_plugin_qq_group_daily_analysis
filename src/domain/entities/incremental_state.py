@@ -11,6 +11,8 @@
 - 支持同一天多次发送报告，每次都基于当前时间窗口内的所有批次
 """
 
+from __future__ import annotations
+
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -99,7 +101,7 @@ class IncrementalBatch:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "IncrementalBatch":
+    def from_dict(cls, data: dict) -> IncrementalBatch:
         """从字典反序列化"""
         return cls(
             group_id=data.get("group_id", ""),
