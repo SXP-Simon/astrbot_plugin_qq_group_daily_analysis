@@ -513,9 +513,7 @@ class ComicApplicationService:
                 return image_resource
         return None
 
-    async def _fetch_reference_image(
-        self, image_ref: str
-    ) -> tuple[bytes, str] | None:
+    async def _fetch_reference_image(self, image_ref: str) -> tuple[bytes, str] | None:
         """从插件目录、AstrBot files、本地路径、HTTP URL 或 Base64 Data URL 获取已选参考图。
 
         Args:
@@ -525,7 +523,6 @@ class ComicApplicationService:
             图片字节和 MIME 类型；加载失败时返回 None。
         """
         import base64
-        import mimetypes
 
         if not image_ref or not isinstance(image_ref, str):
             return None
@@ -558,9 +555,9 @@ class ComicApplicationService:
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.get(image_ref)
                     if resp.status_code == 200:
-                        mime_type = resp.headers.get(
-                            "content-type", "image/png"
-                        ).split(";")[0]
+                        mime_type = resp.headers.get("content-type", "image/png").split(
+                            ";"
+                        )[0]
                         return resp.content, mime_type
             except Exception as e:
                 logger.error(f"[Comic] 下载远程参考图失败 {image_ref}: {e}")

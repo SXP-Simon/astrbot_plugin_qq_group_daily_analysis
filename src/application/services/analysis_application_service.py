@@ -14,7 +14,7 @@ import time as time_mod
 import weakref
 from collections import defaultdict
 from collections.abc import Mapping
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 from typing import Any
 
