@@ -300,6 +300,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           value={field.value}
                           providers={providers}
                           personas={personas}
+                          fullKeyPath={`${activeCategory}.${field.key}`}
                           onChange={(newVal) =>
                             handleFieldChange(activeCategory, field.key, newVal)
                           }
