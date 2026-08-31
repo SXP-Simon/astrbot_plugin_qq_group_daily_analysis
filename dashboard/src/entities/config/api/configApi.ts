@@ -92,3 +92,16 @@ export async function uploadConfigFile(
   }
   return null;
 }
+
+export async function fetchConfigFileContent(
+  path: string
+): Promise<{ data_url: string; filename?: string } | null> {
+  const res = await apiGet<{ data_url?: string; filename?: string }>(
+    `config/file/content?path=${encodeURIComponent(path)}`
+  );
+  const data = extractData<{ data_url?: string; filename?: string }>(res);
+  if (data && typeof data === "object" && data.data_url) {
+    return { data_url: data.data_url, filename: data.filename };
+  }
+  return null;
+}

@@ -563,17 +563,52 @@ class ComicApplicationService:
                 logger.error(f"[Comic] 下载远程参考图失败 {image_ref}: {e}")
                 return None
 
-        # 4. 支持本地文件路径（插件目录、AstrBot 根目录、或绝对路径）
+        # 4. 支持本地文件路径（插件数据目录、插件代码目录、AstrBot 根目录、或绝对路径）
         try:
-            candidate_paths = [
-                self.plugin_data_dir / image_ref,
-                Path(image_ref),
-                self.plugin_data_dir / "reference_images" / image_ref,
-            ]
+            clean_rel = image_ref.lstrip("/\\")
+            candidate_paths: list[Path] = []
+            if hasattr(self, "plugin_data_dir") and self.plugin_data_dir:
+                p_data = Path(self.plugin_data_dir)
+                candidate_paths.extend(
+                    [
+                        p_data / clean_rel,
+                        p_data / "reference_images" / clean_rel,
+                    ]
+                )
+
+            candidate_paths.append(
+                Path.cwd()
+                / "data"
+                / "plugin_data"
+                / "astrbot_plugin_qq_group_daily_analysis"
+                / clean_rel
+            )
+            candidate_paths.append(Path(clean_rel))
+
             for p in candidate_paths:
                 if p.is_file():
                     guessed_type, _ = mimetypes.guess_type(p.name)
                     return p.read_bytes(), guessed_type or "image/png"
+
+            # 模糊查找纯文件名
+            filename = Path(clean_rel).name
+            search_roots: list[Path] = []
+            if hasattr(self, "plugin_data_dir") and self.plugin_data_dir:
+                search_roots.append(Path(self.plugin_data_dir))
+            search_roots.append(
+                Path.cwd()
+                / "data"
+                / "plugin_data"
+                / "astrbot_plugin_qq_group_daily_analysis"
+            )
+
+            for root in search_roots:
+                files_dir = root / "files"
+                if files_dir.exists():
+                    for match in files_dir.rglob(filename):
+                        if match.is_file():
+                            guessed_type, _ = mimetypes.guess_type(match.name)
+                            return match.read_bytes(), guessed_type or "image/png"
 
             logger.warning(f"[Comic] 找不到已选参考图: {image_ref}")
             return None
