@@ -549,10 +549,14 @@
                             },
                             "reference_images": {
                                 "description": "角色参考图",
-                                "type": "file",
+                                "type": "list",
+                                "_special": "image_list",
+                                "items": {
+                                    "type": "string"
+                                },
                                 "default": [],
                                 "file_types": ["jpg", "jpeg", "png", "webp"],
-                                "hint": "上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
+                                "hint": "参考图文件路径、URL 或 Base64 图片数据。上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
                             },
                             "storyboard_prompt": {
                                 "description": "漫画场景分析提示词",
@@ -568,9 +572,8 @@
             },
             "drawing_reference_image": {
                 "description": "旧版漫画参考图（兼容迁移）",
-                "type": "file",
+                "type": "list",
                 "default": [],
-                "file_types": ["jpg", "jpeg", "png", "webp"],
                 "invisible": true,
                 "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
             },

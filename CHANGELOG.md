@@ -1,7 +1,11 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v5.0.13] - 修复手动群漫画任务记录、Checkpoint 序列化与防止重复投递
+## [v5.0.13] - 修复原生配置格式校验、群漫画任务记录、Checkpoint 序列化与防止重复投递
+
+*   **🛡️ 【修复】AstrBot 原生配置中心角色参考图格式校验失败报错**：
+    *   **架构解耦与 Schema 适配**：将 `reference_images` 的 Schema 属性定义为通用 `list` 结构并增加 `_special: image_list` 声明，彻底解决 AstrBot 原生配置校验器对 `type: file` 强制要求 `files/` 路径前缀而报错 `Invalid file path` 的问题。
+    *   **全源参考图智能解析**：漫画后台增强多格式加载能力，同时无缝兼容 Data URL (Base64)、`base64://`、远程 HTTP/HTTPS URL、AstrBot 根目录与插件数据目录文件路径。
 
 *   **📊 【修复】手动触发群漫画 (`/群漫画`) 任务记录与全流程可观测性**：
     *   **完整链路与群信息绑定**：修复手动执行群漫画时因 `TraceContext.set` 参数缺失导致群号、群名、触发方式丢失而未在 WebUI「分析记录」正常归档的问题。

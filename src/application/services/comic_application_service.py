@@ -514,29 +514,72 @@ class ComicApplicationService:
         return None
 
     async def _fetch_reference_image(
-        self, relative_path: str
+        self, image_ref: str
     ) -> tuple[bytes, str] | None:
-        """从插件上传目录获取已选参考图。
+        """从插件目录、AstrBot files、本地路径、HTTP URL 或 Base64 Data URL 获取已选参考图。
 
         Args:
-            relative_path: WebUI 保存的插件数据目录相对路径。
+            image_ref: 包含文件路径、URL 或 Base64 Data URL 的字符串。
 
         Returns:
             图片字节和 MIME 类型；加载失败时返回 None。
         """
-        try:
-            plugin_data_dir = self.plugin_data_dir.resolve()
-            image_path = (plugin_data_dir / relative_path).resolve()
-            image_path.relative_to(plugin_data_dir)
-            if not image_path.is_file():
-                logger.warning(f"[Comic] 找不到已选参考图: {relative_path}")
+        import base64
+        import mimetypes
+
+        if not image_ref or not isinstance(image_ref, str):
+            return None
+
+        image_ref = image_ref.strip()
+
+        # 1. 支持 Data URL 格式 (data:image/png;base64,xxxx)
+        if image_ref.startswith("data:image/"):
+            try:
+                header, b64_data = image_ref.split(",", 1)
+                mime_type = header.split(";")[0].replace("data:", "").strip()
+                return base64.b64decode(b64_data), mime_type or "image/png"
+            except Exception as e:
+                logger.error(f"[Comic] 解析 Data URL 参考图失败: {e}")
                 return None
 
-            guessed_type, _ = mimetypes.guess_type(image_path.name)
-            if not guessed_type or not guessed_type.startswith("image/"):
-                logger.warning(f"[Comic] 已选参考图不是支持的图片文件: {relative_path}")
+        # 2. 支持 base64:// 格式
+        if image_ref.startswith("base64://"):
+            try:
+                return base64.b64decode(image_ref[9:]), "image/png"
+            except Exception as e:
+                logger.error(f"[Comic] 解析 Base64 参考图失败: {e}")
                 return None
-            return image_path.read_bytes(), guessed_type
-        except (OSError, ValueError) as exc:
-            logger.error(f"[Comic] 获取已选参考图失败 {relative_path}: {exc}")
+
+        # 3. 支持 HTTP / HTTPS 远程 URL
+        if image_ref.startswith(("http://", "https://")):
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(image_ref)
+                    if resp.status_code == 200:
+                        mime_type = resp.headers.get(
+                            "content-type", "image/png"
+                        ).split(";")[0]
+                        return resp.content, mime_type
+            except Exception as e:
+                logger.error(f"[Comic] 下载远程参考图失败 {image_ref}: {e}")
+                return None
+
+        # 4. 支持本地文件路径（插件目录、AstrBot 根目录、或绝对路径）
+        try:
+            candidate_paths = [
+                self.plugin_data_dir / image_ref,
+                Path(image_ref),
+                self.plugin_data_dir / "reference_images" / image_ref,
+            ]
+            for p in candidate_paths:
+                if p.is_file():
+                    guessed_type, _ = mimetypes.guess_type(p.name)
+                    return p.read_bytes(), guessed_type or "image/png"
+
+            logger.warning(f"[Comic] 找不到已选参考图: {image_ref}")
+            return None
+        except Exception as exc:
+            logger.error(f"[Comic] 获取已选参考图失败 {image_ref}: {exc}")
             return None
