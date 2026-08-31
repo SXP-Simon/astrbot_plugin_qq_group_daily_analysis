@@ -1,12 +1,16 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v5.0.14] - 统一原生与独立 WebUI 配置文件上传、群漫画任务记录与防止重复投递
+## [v5.0.14] - 统一原生与独立 WebUI 配置协同、修复角色方案同步与参考图校验、Release 产物和流程优化、群漫画任务链路可观测性增强
 
-*   **🛡️ 【全新】AstrBot 原生与独立 WebUI 角色参考图双端文件上传协同**：
-    *   **原生文件组件完整支持**：将 `_conf_schema.json` 中的 `reference_images` 标准化为 `"type": "file"`，用户在 AstrBot 原生配置面板中可直接点击「上传文件」调用原生文件选择弹窗上传本地图片。
-    *   **独立 WebUI 文件落盘持久化**：重构独立 WebUI 中的图片上传机制，上传时自动通过后端 API 保存到规范的 `files/{folder}/` 物理目录并写入合法相对路径，彻底解决以前写入 Base64 导致原生校验器报错 `Invalid file path` 的核心冲突。
-    *   **全源参考图智能解析**：漫画后台增强多格式加载能力，同时无缝兼容规范文件路径、Data URL (Base64)、`base64://`、远程 HTTP/HTTPS URL 以及插件数据目录文件。
+*   **🛡️ 【核心修复】AstrBot 原生与插件 WebUI 角色方案及参考图双向协同与校验对齐**：
+    *   **严格对齐官方文件目录规则**：将 WebUI 上传与保存的角色参考图目录统一为与 AstrBot 官方核心完全一致的全斜杠规范路径（`files/daily_comic/comic_characters/templates/character/reference_images/{filename}`），彻底解决原生保存时报 `Invalid file path` 格式校验失败以及原生配置面板显示「文件缺失」的核心问题。
+    *   **修复漫画角色方案保存丢失**：修复保存配置时清洗函数误将包含字典的列表（`comic_characters`）识别为纯字符串列表导致方案条目被清空的严重缺陷，实现递归清洗与保留；同时在前端与后端严格确保每个方案条目均绑定 `__template_key: "character"`，解决双端保存后条目消失、原生面板显示「暂无条目」的问题。
+    *   **历史旧数据自动迁移自愈**：保存配置时自动扫描并清洗历史残存的 Data URL (Base64) 图片及旧版下划线路径，自动转存为合规物理文件并修正路径，无需用户手动重配。
+
+*   **📦 【优化】Release 深度瘦身与打包规则统一**：
+    *   **规范 `.gitattributes` 导出排除规则**：完善 `.gitattributes` 中的 `export-ignore` 配置，精确排除未压缩的 `assets/HatsuneMiku/` 资源、文档效果截图、前端开发源码 `dashboard/`、测试套件与调试脚本。
+    *   **单一数据源驱动打包**：简化 GitHub Actions Release 工作流，完全由标准 `.gitattributes` 规则驱动 `git archive` 生成发布压缩包，使 Release 产物体积从 **7.92 MB 骤降至 1.73 MB**（体积缩减 **78%**），包体更轻量、分发更迅速。
 
 *   **📊 【修复】手动触发群漫画 (`/群漫画`) 任务记录与全流程可观测性**：
     *   **完整链路与群信息绑定**：修复手动执行群漫画时因 `TraceContext.set` 参数缺失导致群号、群名、触发方式丢失而未在 WebUI「分析记录」正常归档的问题。
