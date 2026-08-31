@@ -1,7 +1,7 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v5.0.13] - 修复原生配置格式校验、群漫画任务记录、Checkpoint 序列化与防止重复投递
+## [v5.0.14] - 修复原生配置格式校验、群漫画任务记录、Checkpoint 序列化与防止重复投递
 
 *   **🛡️ 【修复】AstrBot 原生配置中心角色参考图格式校验失败报错**：
     *   **架构解耦与 Schema 适配**：将 `reference_images` 的 Schema 属性定义为通用 `list` 结构并增加 `_special: image_list` 声明，彻底解决 AstrBot 原生配置校验器对 `type: file` 强制要求 `files/` 路径前缀而报错 `Invalid file path` 的问题。
@@ -10,6 +10,8 @@
 *   **📊 【修复】手动触发群漫画 (`/群漫画`) 任务记录与全流程可观测性**：
     *   **完整链路与群信息绑定**：修复手动执行群漫画时因 `TraceContext.set` 参数缺失导致群号、群名、触发方式丢失而未在 WebUI「分析记录」正常归档的问题。
     *   **补全执行阶段打点**：为漫画消息拉取 (`FETCH_MESSAGES`)、消息清洗 (`CLEAN_MESSAGES`)、话题提炼 (`LLM_ANALYSIS`)、分镜生成 (`COMIC_STORYBOARD`) 与生图投递 (`COMIC_DRAWING` / `DISPATCH_REPORT`) 补齐完整 Span 与 Token 审计，任务状态实时同步到「运行总览」看板。
+
+## [v5.0.13] - 修复 Checkpoint 序列化、支持仅生图失败直接重绘与防止重复投递
 
 *   **🛡️ 【修复】Checkpoint 序列化失败与幂等续跑 0 Token 直接重绘**：
     *   **修复 MessageContentType 枚举序列化异常**：修复前置清洗消息保存 Checkpoint 时因 `MessageContentType` 枚举无法 JSON 序列化导致保存失败报错、进而使「幂等续跑」无法命中快照而不得不全量从头拉取消息和调用 LLM 的核心缺陷。
