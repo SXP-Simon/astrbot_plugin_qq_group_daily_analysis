@@ -849,7 +849,37 @@ class GroupDailyAnalysis(Star):
                 yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
                 return
 
-            TraceContext.set(TraceContext.generate(prefix="comic", group_name=group_id))
+            group_name = None
+            adapter = self.bot_manager.get_adapter(platform_id)
+            if adapter and hasattr(adapter, "get_group_info"):
+                try:
+                    info = await adapter.get_group_info(group_id)
+                    if info and hasattr(info, "group_name") and info.group_name:
+                        group_name = info.group_name
+                except Exception:
+                    pass
+
+            trace_id = TraceContext.generate(
+                prefix="comic", group_name=group_name or group_id
+            )
+            trace = TraceContext.set(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name or group_id,
+                platform=platform_id or "",
+                trigger_type="comic_manual",
+            )
+            if self.active_task_manager:
+                await self.active_task_manager.register_task(
+                    task_id=trace_id,
+                    group_id=group_id,
+                    group_name=group_name or group_id,
+                    platform=platform_id or "",
+                    trigger_type="comic_manual",
+                    current_stage="FETCH_MESSAGES",
+                    asyncio_task=current_task,
+                )
+
             yield event.plain_result("🎨 正在提取群聊话题并生成漫画...")
 
             result = await self.analysis_service.execute_comic_topic_analysis(
@@ -857,6 +887,12 @@ class GroupDailyAnalysis(Star):
             )
             if not result.get("success"):
                 reason = result.get("reason")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed", error_message=f"提取漫画话题失败: {reason}"
+                    )
+                if trace_id and self.active_task_manager:
+                    await self.active_task_manager.finish_task(trace_id)
                 if reason == "no_messages":
                     yield event.plain_result("❌ 未找到可用于生成漫画的群聊记录")
                 elif reason == "no_topics":
@@ -875,23 +911,60 @@ class GroupDailyAnalysis(Star):
                 platform_id,
                 {"topics": result.get("topics", [])},
                 require_auto_enabled=False,
+                trace=trace,
             )
             if status == "started":
                 yield event.plain_result("✅ 漫画生成任务已启动，完成后会发送到群里")
             elif status == "duplicate":
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="warning", error_message="该群已有漫画任务正在执行"
+                    )
+                if trace_id and self.active_task_manager:
+                    await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
             elif status == "blocked":
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="warning", error_message="此群未启用漫画生成功能"
+                    )
+                if trace_id and self.active_task_manager:
+                    await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("❌ 此群未启用漫画生成功能")
             elif status == "no_topics":
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="warning", error_message="未提取到可用于生成漫画的话题"
+                    )
+                if trace_id and self.active_task_manager:
+                    await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
             else:
+                if trace and trace.status == "running":
+                    trace.finish(status="failed", error_message="漫画生成任务未启动")
+                if trace_id and self.active_task_manager:
+                    await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("⚠️ 漫画生成任务未启动，请查看插件日志")
 
         except DuplicateGroupTaskError:
+            if trace and trace.status == "running":
+                trace.finish(
+                    status="failed", error_message="该群的漫画话题提取任务正在执行"
+                )
+            if trace_id and self.active_task_manager:
+                await self.active_task_manager.finish_task(trace_id)
             yield event.plain_result("🎨 该群的漫画话题提取任务正在执行，请稍后再试哦~")
         except asyncio.CancelledError:
+            if trace and trace.status == "running":
+                trace.finish(status="aborted", error_message="Task cancelled by system")
+            if trace_id and self.active_task_manager:
+                await self.active_task_manager.finish_task(trace_id)
             logger.info("手动漫画任务被取消（插件正在关闭或重载）")
         except Exception as e:
+            if trace and trace.status == "running":
+                trace.finish(status="failed", error_message=str(e))
+            if trace_id and self.active_task_manager:
+                await self.active_task_manager.finish_task(trace_id)
             logger.error("手动漫画生成失败: %s", e, exc_info=True)
             yield event.plain_result(
                 f"❌ 漫画生成失败: {str(e)}。请检查消息获取、LLM 和绘图配置"
@@ -1098,6 +1171,7 @@ class GroupDailyAnalysis(Star):
         analysis_result: dict,
         *,
         require_auto_enabled: bool = True,
+        trace: TraceContext | None = None,
     ) -> str:
         if self._terminating:
             return "terminating"
@@ -1156,7 +1230,9 @@ class GroupDailyAnalysis(Star):
             return "duplicate"
 
         task = asyncio.create_task(
-            self._trigger_comic_generation(comic_topics, group_id, platform_id, umo)
+            self._trigger_comic_generation(
+                comic_topics, group_id, platform_id, umo, trace=trace
+            )
         )
         self._comic_group_tasks[task_key] = task
         self._background_tasks.add(task)
@@ -1195,12 +1271,24 @@ class GroupDailyAnalysis(Star):
         group_id: str,
         platform_id: str | None,
         umo: str,
+        trace: TraceContext | None = None,
     ):
         """后台生成并上传漫画，通过信号量控制并发"""
+        cur_trace = trace or TraceContext.current()
+        if cur_trace:
+            from .src.shared.trace_context import _current_trace
+
+            _current_trace.set(cur_trace)
+
         async with self._comic_semaphore:
             if self._terminating:
                 return
             try:
+                if cur_trace and self.active_task_manager:
+                    await self.active_task_manager.update_task_stage(
+                        cur_trace.trace_id, "COMIC_STORYBOARD"
+                    )
+
                 comic_bytes, fallback_url = await self.comic_service.generate_comic(
                     topics, group_id, umo
                 )
@@ -1208,8 +1296,7 @@ class GroupDailyAnalysis(Star):
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
                     ext = self._detect_image_ext(comic_bytes)
                     ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    trace = TraceContext.current()
-                    trace_suffix = f"_{trace.trace_id}" if trace else ""
+                    trace_suffix = f"_{cur_trace.trace_id}" if cur_trace else ""
                     filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
 
                     reports_dir = (
@@ -1220,8 +1307,8 @@ class GroupDailyAnalysis(Star):
                     comic_file_path = reports_dir / filename
                     comic_file_path.write_bytes(comic_bytes)
 
-                    if trace:
-                        rfiles = trace.metadata.setdefault("report_files", [])
+                    if cur_trace:
+                        rfiles = cur_trace.metadata.setdefault("report_files", [])
                         rfiles.append(
                             {
                                 "filename": filename,
@@ -1235,21 +1322,50 @@ class GroupDailyAnalysis(Star):
                         if self._terminating:
                             return
 
-                        # 发送图片到群聊
-                        adapter = self.bot_manager.get_adapter(platform_id)
-                        if adapter and hasattr(adapter, "send_image"):
-                            await adapter.send_image(
+                        if cur_trace:
+                            with cur_trace.span(
+                                "DISPATCH_REPORT", {"format": "image", "type": "comic"}
+                            ):
+                                # 发送图片到群聊
+                                adapter = self.bot_manager.get_adapter(platform_id)
+                                if adapter and hasattr(adapter, "send_image"):
+                                    await adapter.send_image(
+                                        group_id,
+                                        str(comic_file_path),
+                                        caption="✨ 今日群聊趣味漫画已生成！",
+                                    )
+
+                                # 上传到相册/群文件
+                                await self._try_upload_image(
+                                    group_id,
+                                    str(comic_file_path),
+                                    platform_id,
+                                    is_comic=True,
+                                )
+                        else:
+                            adapter = self.bot_manager.get_adapter(platform_id)
+                            if adapter and hasattr(adapter, "send_image"):
+                                await adapter.send_image(
+                                    group_id,
+                                    str(comic_file_path),
+                                    caption="✨ 今日群聊趣味漫画已生成！",
+                                )
+                            await self._try_upload_image(
                                 group_id,
                                 str(comic_file_path),
-                                caption="✨ 今日群聊趣味漫画已生成！",
+                                platform_id,
+                                is_comic=True,
                             )
-
-                        # 上传到相册/群文件
-                        await self._try_upload_image(
-                            group_id, str(comic_file_path), platform_id, is_comic=True
-                        )
                     except Exception as e:
                         logger.warning(f"投递群 {group_id} 漫画失败: {e}")
+
+                    if cur_trace and cur_trace.trigger_type == "comic_manual":
+                        cur_trace.finish(status="success")
+                        if self.active_task_manager:
+                            await self.active_task_manager.finish_task(
+                                cur_trace.trace_id
+                            )
+
                 elif fallback_url:
                     # 图片 API 返回了 URL 但下载失败，把链接发到群里作为兜底
                     logger.warning(
@@ -1261,10 +1377,30 @@ class GroupDailyAnalysis(Star):
                             group_id,
                             f"✨ 今日群聊趣味漫画已生成，但图片下载失败，请点击链接查看：\n{fallback_url}",
                         )
+                    if cur_trace and cur_trace.trigger_type == "comic_manual":
+                        cur_trace.finish(
+                            status="warning",
+                            error_message="Comic download failed, fallback url sent",
+                        )
+                        if self.active_task_manager:
+                            await self.active_task_manager.finish_task(
+                                cur_trace.trace_id
+                            )
+                else:
+                    if cur_trace and cur_trace.trigger_type == "comic_manual":
+                        cur_trace.finish(status="failed", error_message="未能生成漫画")
+                        if self.active_task_manager:
+                            await self.active_task_manager.finish_task(
+                                cur_trace.trace_id
+                            )
             except Exception as e:
                 logger.error(
                     f"群 {group_id} 生成/上传漫画时发生错误: {e}", exc_info=True
                 )
+                if cur_trace and cur_trace.trigger_type == "comic_manual":
+                    cur_trace.finish(status="failed", error_message=str(e))
+                    if self.active_task_manager:
+                        await self.active_task_manager.finish_task(cur_trace.trace_id)
 
     async def _generate_text_reports(
         self, analysis_result: dict, use_qq_official_markdown: bool
