@@ -47,6 +47,23 @@ from ..platform.factory import PlatformAdapterFactory
 from .active_task_manager import ActiveTaskManager
 
 
+def _sanitize_path_segment(segment: str) -> str:
+    cleaned = []
+    for ch in segment:
+        if ("a" <= ch <= "z") or ("A" <= ch <= "Z") or ch.isdigit() or ch in {"-", "_"}:
+            cleaned.append(ch)
+        else:
+            cleaned.append("_")
+    result = "".join(cleaned).strip("_")
+    return result or "_"
+
+
+def _config_key_to_folder(key_path: str) -> str:
+    """与 AstrBot 官方核心完全一致的 config_key 到存储目录转换规则（以 / 分隔）"""
+    parts = [_sanitize_path_segment(part) for part in key_path.split(".") if part]
+    return "/".join(parts) if parts else "_"
+
+
 class PluginPageWebUIBridge:
     """WebUI 面板 API 桥接适配器"""
 
@@ -1424,31 +1441,36 @@ class PluginPageWebUIBridge:
                                     cleaned_item["__template_key"] = "character"
                             cleaned.append(cleaned_item)
                         elif isinstance(item, str):
+                            folder = _config_key_to_folder(
+                                "daily_comic.comic_characters.templates.character.reference_images"
+                            )
                             if item.startswith("data:image/"):
                                 try:
                                     _, b64 = item.split(",", 1)
                                     file_bytes = base64.b64decode(b64)
                                     ts = int(time.time() * 1000)
                                     filename = f"{ts}_migrated_image.png"
-                                    folder = "daily_comic_comic_characters_templates_character_reference_images"
                                     for d in [
                                         Path.cwd()
                                         / "data"
                                         / "plugin_data"
                                         / PLUGIN_NAME
                                         / "files"
-                                        / folder,
-                                        plugin_root / "files" / folder,
+                                        / Path(folder),
+                                        plugin_root / "files" / Path(folder),
                                     ]:
                                         d.mkdir(parents=True, exist_ok=True)
                                         (d / filename).write_bytes(file_bytes)
                                     cleaned.append(f"files/{folder}/{filename}")
                                 except Exception:
                                     pass
-                            elif item.startswith("files/reference_images/"):
-                                clean_name = Path(item).name
-                                folder = "daily_comic_comic_characters_templates_character_reference_images"
-                                cleaned.append(f"files/{folder}/{clean_name}")
+                            elif item.startswith("files/"):
+                                expected_prefix = f"files/{folder}/"
+                                if item.startswith(expected_prefix):
+                                    cleaned.append(item.strip())
+                                else:
+                                    clean_name = Path(item).name
+                                    cleaned.append(f"files/{folder}/{clean_name}")
                             elif item.strip():
                                 cleaned.append(item.strip())
                         else:
@@ -1510,7 +1532,7 @@ class PluginPageWebUIBridge:
                     "daily_comic.comic_characters.templates.character.reference_images"
                 )
 
-            folder = config_key.replace(".", "_")
+            folder = _config_key_to_folder(config_key)
 
             # 优先使用 AstrBot 官方的标准 plugin_data 目录，与 AstrBot 原生保持 100% 一致
             target_dirs: list[Path] = []
@@ -1519,15 +1541,20 @@ class PluginPageWebUIBridge:
 
                 data_dir = StarTools.get_data_dir(PLUGIN_NAME)
                 if data_dir:
-                    target_dirs.append(data_dir / "files" / folder)
+                    target_dirs.append(data_dir / "files" / Path(folder))
             except Exception:
                 pass
 
             target_dirs.append(
-                Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME / "files" / folder
+                Path.cwd()
+                / "data"
+                / "plugin_data"
+                / PLUGIN_NAME
+                / "files"
+                / Path(folder)
             )
             plugin_root = Path(__file__).resolve().parents[3]
-            target_dirs.append(plugin_root / "files" / folder)
+            target_dirs.append(plugin_root / "files" / Path(folder))
 
             for d in target_dirs:
                 d.mkdir(parents=True, exist_ok=True)
