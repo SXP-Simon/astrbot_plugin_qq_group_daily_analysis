@@ -1422,9 +1422,28 @@ class PluginPageWebUIBridge:
     async def api_upload_config_file(self) -> Any:
         """上传插件配置所需的文件/参考图，并存入合规的 files/{folder}/ 物理路径"""
         try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            config_key = ""
+            if (
+                hasattr(request, "query")
+                and request.query
+                and request.query.get("config_key")
+            ):
+                config_key = request.query.get("config_key")
+            elif body.get("config_key"):
+                config_key = str(body.get("config_key"))
+
             folder = "daily_comic_comic_characters_templates_character_reference_images"
-            if hasattr(request, "query") and request.query.get("config_key"):
-                folder = request.query.get("config_key").replace(".", "_")
+            if config_key:
+                folder = config_key.replace(".", "_")
 
             # 优先使用 AstrBot 官方的标准 plugin_data 目录，与 AstrBot 原生保持 100% 一致
             target_dirs: list[Path] = []
@@ -1450,39 +1469,42 @@ class PluginPageWebUIBridge:
 
             # 1. 尝试从 multipart 上传中读取
             if hasattr(request, "files"):
-                uploaded_files = await request.files()
-                for key in uploaded_files.keys():
-                    for f in uploaded_files.getlist(key):
-                        orig_name = getattr(f, "filename", "") or "uploaded_image.png"
-                        clean_name = re.sub(r"[^\w\.\-]", "_", orig_name)
-                        ts = int(time.time() * 1000)
-                        final_name = f"{ts}_{clean_name}"
-                        file_bytes = await f.read()
-                        if file_bytes:
-                            for d in target_dirs:
-                                (d / final_name).write_bytes(file_bytes)
-                            saved_paths.append(f"files/{folder}/{final_name}")
+                try:
+                    uploaded_files = await request.files()
+                    for key in uploaded_files.keys():
+                        for f in uploaded_files.getlist(key):
+                            orig_name = (
+                                getattr(f, "filename", "") or "uploaded_image.png"
+                            )
+                            clean_name = re.sub(r"[^\w\.\-]", "_", orig_name)
+                            ts = int(time.time() * 1000)
+                            final_name = f"{ts}_{clean_name}"
+                            file_bytes = await f.read()
+                            if file_bytes:
+                                for d in target_dirs:
+                                    (d / final_name).write_bytes(file_bytes)
+                                saved_paths.append(f"files/{folder}/{final_name}")
+                except Exception:
+                    pass
 
             # 2. 尝试从 JSON (包含 Base64 或 Data URL) 中解析
-            if not saved_paths and hasattr(request, "json"):
-                data = await request.json(default={})
-                if isinstance(data, dict):
-                    raw_data = (
-                        data.get("file_data") or data.get("data") or data.get("base64")
-                    )
-                    file_name = data.get("filename") or "upload.png"
-                    clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
-                    if raw_data and isinstance(raw_data, str):
-                        if raw_data.startswith("data:"):
-                            _, b64 = raw_data.split(",", 1)
-                        else:
-                            b64 = raw_data
-                        file_bytes = base64.b64decode(b64)
-                        ts = int(time.time() * 1000)
-                        final_name = f"{ts}_{clean_name}"
-                        for d in target_dirs:
-                            (d / final_name).write_bytes(file_bytes)
-                        saved_paths.append(f"files/{folder}/{final_name}")
+            if not saved_paths and body:
+                raw_data = (
+                    body.get("file_data") or body.get("data") or body.get("base64")
+                )
+                file_name = body.get("filename") or "upload.png"
+                clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
+                if raw_data and isinstance(raw_data, str):
+                    if raw_data.startswith("data:"):
+                        _, b64 = raw_data.split(",", 1)
+                    else:
+                        b64 = raw_data
+                    file_bytes = base64.b64decode(b64)
+                    ts = int(time.time() * 1000)
+                    final_name = f"{ts}_{clean_name}"
+                    for d in target_dirs:
+                        (d / final_name).write_bytes(file_bytes)
+                    saved_paths.append(f"files/{folder}/{final_name}")
 
             if not saved_paths:
                 return error_response("未检测到有效的文件数据", status_code=400)
@@ -1504,11 +1526,18 @@ class PluginPageWebUIBridge:
     async def api_get_config_file_content(self) -> Any:
         """获取配置中的文件（如角色参考图）内容用于 WebUI 在线缩略图展示"""
         try:
-            rel_path = (
-                request.query.get("path", "").strip()
-                if request and hasattr(request, "query")
-                else ""
-            )
+            rel_path = ""
+            if hasattr(request, "query") and request.query:
+                rel_path = request.query.get("path", "").strip()
+
+            if not rel_path and hasattr(request, "json"):
+                try:
+                    body = await request.json(default={})
+                    if isinstance(body, dict):
+                        rel_path = str(body.get("path") or "").strip()
+                except Exception:
+                    pass
+
             if not rel_path:
                 return error_response("Missing path parameter", status_code=400)
 

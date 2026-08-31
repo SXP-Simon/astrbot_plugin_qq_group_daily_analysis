@@ -82,13 +82,25 @@ export async function uploadConfigFile(
   file: File,
   configKey?: string
 ): Promise<{ path: string } | null> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const query = configKey ? `?config_key=${encodeURIComponent(configKey)}` : "";
-  const res = await apiPost<{ path?: string }>(`config/upload_file${query}`, formData);
-  const data = extractData<{ path?: string }>(res);
-  if (data && typeof data === "object" && data.path) {
-    return { path: data.path };
+  try {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(file);
+    });
+
+    const res = await apiPost<{ path?: string }>("config/upload_file", {
+      filename: file.name,
+      file_data: base64Data,
+      config_key: configKey,
+    });
+    const data = extractData<{ path?: string }>(res);
+    if (data && typeof data === "object" && data.path) {
+      return { path: data.path };
+    }
+  } catch (e) {
+    console.error("uploadConfigFile error:", e);
   }
   return null;
 }
@@ -97,7 +109,8 @@ export async function fetchConfigFileContent(
   path: string
 ): Promise<{ data_url: string; filename?: string } | null> {
   const res = await apiGet<{ data_url?: string; filename?: string }>(
-    `config/file/content?path=${encodeURIComponent(path)}`
+    "config/file/content",
+    { path }
   );
   const data = extractData<{ data_url?: string; filename?: string }>(res);
   if (data && typeof data === "object" && data.data_url) {
