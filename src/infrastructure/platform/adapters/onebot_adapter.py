@@ -563,6 +563,25 @@ class OneBotAdapter(PlatformAdapter):
             logger.error(f"OneBot 文本发送失败: {e}")
             return False
 
+    def _is_send_timeout(self, e: Exception) -> bool:
+        """判断是否为 NapCat/NTQQ 客户端发送超时。
+
+        当 NapCat 上传大图到 QQ 服务器耗时超过动作等待时间时，
+        NT 消息服务实际上已经将消息接收并入队发送。此时若盲目重试会直接导致群内重复发送多张。
+        """
+        if not e:
+            return False
+        err_str = str(e).lower()
+        if "timeout" in err_str or "timed out" in err_str:
+            return True
+        if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+            return True
+        for attr in ("message", "wording"):
+            val = str(getattr(e, attr, "") or "").lower()
+            if "timeout" in val or "nodeikernelmsgservice/sendmsg" in val:
+                return True
+        return False
+
     async def _execute_transmission_strategy(
         self,
         path: str,
@@ -573,6 +592,7 @@ class OneBotAdapter(PlatformAdapter):
         """
         通用传输策略执行器。
         处理 Base64 优先（开启时）、物理路径尝试、以及 Base64 兜底。
+        严格限制同一模式最多尝试 1 次，并在捕获 NT 发送超时时避免触发重发刷屏。
 
         Args:
             path: 文件路径或 URL
@@ -591,8 +611,13 @@ class OneBotAdapter(PlatformAdapter):
                     try:
                         await worker(b64, "Base64 优先")
                         return True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        if self._is_send_timeout(e):
+                            logger.warning(
+                                f"[{label}] Base64 优先发送请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                            )
+                            return True
+                        logger.warning(f"[{label}] Base64 优先发送失败 ({e})，准备尝试路径模式...")
 
             # 2. 尝试物理路径/远程 URL
             if exists:
@@ -607,21 +632,36 @@ class OneBotAdapter(PlatformAdapter):
                     await worker(file_val, "路径模式")
                     return True
                 except Exception as e:
-                    if not use_base64:
+                    if self._is_send_timeout(e):
+                        logger.warning(
+                            f"[{label}] 路径模式发送请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                        )
+                        return True
+                    if not use_base64 and not is_remote:
+                        logger.warning(f"[{label}] 路径发送失败 ({e})，准备 Base64 补救...")
+                    else:
                         logger.error(f"[{label}] 发送失败: {e}")
                         return False
-                    logger.warning(f"[{label}] 路径发送失败 ({e})，准备 Base64 补救...")
             else:
                 if not use_base64:
                     logger.error(f"[{label}] 文件不存在且未开启 Base64: {abs_path}")
                     return False
 
-            # 3. 兜底回退
-            if not is_remote:
+            # 3. 兜底回退：仅当第一步未尝试过 Base64 时才执行
+            if not use_base64 and not is_remote:
                 b64 = await self._get_base64_from_file(abs_path)
                 if b64:
-                    await worker(b64, "Base64 补发")
-                    return True
+                    try:
+                        await worker(b64, "Base64 补发")
+                        return True
+                    except Exception as e:
+                        if self._is_send_timeout(e):
+                            logger.warning(
+                                f"[{label}] Base64 补发请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                            )
+                            return True
+                        logger.error(f"[{label}] Base64 补发失败: {e}")
+                        return False
 
             return False
         except Exception as e:
