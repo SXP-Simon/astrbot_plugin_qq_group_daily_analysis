@@ -29,6 +29,7 @@ import {
   AvailableProvider,
   AvailablePersona,
   uploadConfigFile,
+  fetchConfigFileContent,
 } from "../../../entities/config/api/configApi";
 import { useTheme } from "../../../shared/lib/useTheme";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
@@ -40,6 +41,72 @@ const { TextArea } = Input;
 
 const SANS_MONO_FONT =
   "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace";
+
+const ConfigImageThumbnail: React.FC<{
+  filePath: string;
+  isDark: boolean;
+  borderColor: string;
+}> = ({ filePath, isDark, borderColor }) => {
+  const [src, setSrc] = useState<string>(filePath);
+
+  React.useEffect(() => {
+    if (
+      filePath.startsWith("data:image/") ||
+      filePath.startsWith("http://") ||
+      filePath.startsWith("https://")
+    ) {
+      setSrc(filePath);
+      return;
+    }
+
+    let active = true;
+    fetchConfigFileContent(filePath)
+      .then((res) => {
+        if (active && res && res.data_url) {
+          setSrc(res.data_url);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [filePath]);
+
+  return (
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 4,
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: isDark ? "#1e293b" : "#f1f5f9",
+        border: `1px solid ${borderColor}`,
+        flexShrink: 0,
+      }}
+    >
+      <Image
+        src={src}
+        width={36}
+        height={36}
+        style={{
+          width: 36,
+          height: 36,
+          objectFit: "cover",
+          borderRadius: 4,
+          display: "block",
+        }}
+        fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>"
+        preview={{
+          mask: <EyeOutlined style={{ fontSize: 13 }} />,
+        }}
+      />
+    </div>
+  );
+};
 
 interface FieldRendererProps {
   fieldKey: string;
@@ -552,11 +619,6 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                   displayLabel = `${filePath.slice(0, 18)}...${filePath.slice(-12)}`;
                 }
 
-                let imageSrc = filePath;
-                if (filePath.startsWith("files/")) {
-                  imageSrc = `/api/plugins/astrbot_plugin_qq_group_daily_analysis/${filePath}`;
-                }
-
                 return (
                   <div
                     key={`${filePath}-${idx}`}
@@ -574,37 +636,11 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                   >
                     {/* 图片缩略图预览 (支持点击放大预览) */}
                     {isImage ? (
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: 4,
-                          overflow: "hidden",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          background: isDark ? "#1e293b" : "#f1f5f9",
-                          border: `1px solid ${token.colorBorderSecondary}`,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Image
-                          src={imageSrc}
-                          width={36}
-                          height={36}
-                          style={{
-                            width: 36,
-                            height: 36,
-                            objectFit: "cover",
-                            borderRadius: 4,
-                            display: "block",
-                          }}
-                          fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><polyline points='21 15 16 10 5 21'/></svg>"
-                          preview={{
-                            mask: <EyeOutlined style={{ fontSize: 13 }} />,
-                          }}
-                        />
-                      </div>
+                      <ConfigImageThumbnail
+                        filePath={filePath}
+                        isDark={isDark}
+                        borderColor={token.colorBorderSecondary}
+                      />
                     ) : (
                       <div
                         style={{
