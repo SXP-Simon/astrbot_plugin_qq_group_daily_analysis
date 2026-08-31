@@ -1414,35 +1414,45 @@ class PluginPageWebUIBridge:
                 if isinstance(val, list):
                     cleaned = []
                     for item in val:
-                        if isinstance(item, str) and item.startswith("data:image/"):
-                            try:
-                                _, b64 = item.split(",", 1)
-                                file_bytes = base64.b64decode(b64)
-                                ts = int(time.time() * 1000)
-                                filename = f"{ts}_migrated_image.png"
+                        if isinstance(item, dict):
+                            cleaned_item = _cleanse_reference_images(item)
+                            if isinstance(cleaned_item, dict):
+                                if (
+                                    "__template_key" not in cleaned_item
+                                    or not cleaned_item["__template_key"]
+                                ):
+                                    cleaned_item["__template_key"] = "character"
+                            cleaned.append(cleaned_item)
+                        elif isinstance(item, str):
+                            if item.startswith("data:image/"):
+                                try:
+                                    _, b64 = item.split(",", 1)
+                                    file_bytes = base64.b64decode(b64)
+                                    ts = int(time.time() * 1000)
+                                    filename = f"{ts}_migrated_image.png"
+                                    folder = "daily_comic_comic_characters_templates_character_reference_images"
+                                    for d in [
+                                        Path.cwd()
+                                        / "data"
+                                        / "plugin_data"
+                                        / PLUGIN_NAME
+                                        / "files"
+                                        / folder,
+                                        plugin_root / "files" / folder,
+                                    ]:
+                                        d.mkdir(parents=True, exist_ok=True)
+                                        (d / filename).write_bytes(file_bytes)
+                                    cleaned.append(f"files/{folder}/{filename}")
+                                except Exception:
+                                    pass
+                            elif item.startswith("files/reference_images/"):
+                                clean_name = Path(item).name
                                 folder = "daily_comic_comic_characters_templates_character_reference_images"
-                                for d in [
-                                    Path.cwd()
-                                    / "data"
-                                    / "plugin_data"
-                                    / PLUGIN_NAME
-                                    / "files"
-                                    / folder,
-                                    plugin_root / "files" / folder,
-                                ]:
-                                    d.mkdir(parents=True, exist_ok=True)
-                                    (d / filename).write_bytes(file_bytes)
-                                cleaned.append(f"files/{folder}/{filename}")
-                            except Exception:
-                                pass
-                        elif isinstance(item, str) and item.startswith(
-                            "files/reference_images/"
-                        ):
-                            clean_name = Path(item).name
-                            folder = "daily_comic_comic_characters_templates_character_reference_images"
-                            cleaned.append(f"files/{folder}/{clean_name}")
-                        elif isinstance(item, str) and item.strip():
-                            cleaned.append(item.strip())
+                                cleaned.append(f"files/{folder}/{clean_name}")
+                            elif item.strip():
+                                cleaned.append(item.strip())
+                        else:
+                            cleaned.append(item)
                     return cleaned
                 elif isinstance(val, dict):
                     return {k: _cleanse_reference_images(v) for k, v in val.items()}
