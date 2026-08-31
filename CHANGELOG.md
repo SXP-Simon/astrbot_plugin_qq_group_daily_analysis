@@ -1,11 +1,12 @@
 # 更新日志 (CHANGELOG)
 
 
-## [v5.0.14] - 修复原生配置格式校验、群漫画任务记录、Checkpoint 序列化与防止重复投递
+## [v5.0.14] - 统一原生与独立 WebUI 配置文件上传、群漫画任务记录与防止重复投递
 
-*   **🛡️ 【修复】AstrBot 原生配置中心角色参考图格式校验失败报错**：
-    *   **架构解耦与 Schema 适配**：将 `reference_images` 的 Schema 属性定义为通用 `list` 结构并增加 `_special: image_list` 声明，彻底解决 AstrBot 原生配置校验器对 `type: file` 强制要求 `files/` 路径前缀而报错 `Invalid file path` 的问题。
-    *   **全源参考图智能解析**：漫画后台增强多格式加载能力，同时无缝兼容 Data URL (Base64)、`base64://`、远程 HTTP/HTTPS URL、AstrBot 根目录与插件数据目录文件路径。
+*   **🛡️ 【全新】AstrBot 原生与独立 WebUI 角色参考图双端文件上传协同**：
+    *   **原生文件组件完整支持**：将 `_conf_schema.json` 中的 `reference_images` 标准化为 `"type": "file"`，用户在 AstrBot 原生配置面板中可直接点击「上传文件」调用原生文件选择弹窗上传本地图片。
+    *   **独立 WebUI 文件落盘持久化**：重构独立 WebUI 中的图片上传机制，上传时自动通过后端 API 保存到规范的 `files/{folder}/` 物理目录并写入合法相对路径，彻底解决以前写入 Base64 导致原生校验器报错 `Invalid file path` 的核心冲突。
+    *   **全源参考图智能解析**：漫画后台增强多格式加载能力，同时无缝兼容规范文件路径、Data URL (Base64)、`base64://`、远程 HTTP/HTTPS URL 以及插件数据目录文件。
 
 *   **📊 【修复】手动触发群漫画 (`/群漫画`) 任务记录与全流程可观测性**：
     *   **完整链路与群信息绑定**：修复手动执行群漫画时因 `TraceContext.set` 参数缺失导致群号、群名、触发方式丢失而未在 WebUI「分析记录」正常归档的问题。

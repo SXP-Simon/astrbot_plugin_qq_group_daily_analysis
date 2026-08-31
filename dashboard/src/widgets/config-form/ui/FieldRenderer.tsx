@@ -12,6 +12,7 @@ import {
   Button,
   Image,
   theme,
+  message,
 } from "antd";
 import {
   PlusOutlined,
@@ -27,6 +28,7 @@ import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
   AvailablePersona,
+  uploadConfigFile,
 } from "../../../entities/config/api/configApi";
 import { useTheme } from "../../../shared/lib/useTheme";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
@@ -497,21 +499,32 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         setIsAddingFile(false);
       };
 
-      const handleUploadLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const handleUploadLocal = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
-        Array.from(files).forEach((file) => {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const dataUrl = event.target?.result as string;
-            if (dataUrl) {
-              const nextList = [...fileList, dataUrl];
-              onChange(Array.isArray(defaultValue) ? nextList : dataUrl);
+        const uploadPromises = Array.from(files).map(async (file) => {
+          try {
+            const res = await uploadConfigFile(file, fieldKey);
+            if (res && res.path) {
+              return res.path;
             }
-          };
-          reader.readAsDataURL(file);
+          } catch (err) {
+            console.error("Upload error:", err);
+          }
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (event) => resolve(event.target?.result as string);
+            reader.readAsDataURL(file);
+          });
         });
+
+        const uploadedPaths = (await Promise.all(uploadPromises)).filter(Boolean);
+        if (uploadedPaths.length > 0) {
+          const nextList = [...fileList, ...uploadedPaths];
+          onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
+          message.success(`成功添加 ${uploadedPaths.length} 个参考文件`);
+        }
 
         e.target.value = "";
       };
@@ -526,14 +539,22 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                   filePath.startsWith("data:image/") ||
                   filePath.startsWith("http://") ||
                   filePath.startsWith("https://") ||
+                  filePath.startsWith("files/") ||
                   /\.(png|jpe?g|webp|gif|svg)$/i.test(filePath);
 
                 let displayLabel = filePath;
                 if (filePath.startsWith("data:image/")) {
                   const approxSize = Math.round((filePath.length * 3) / 4 / 1024);
                   displayLabel = `已上传图片 (${approxSize} KB)`;
+                } else if (filePath.startsWith("files/")) {
+                  displayLabel = filePath.split("/").pop() || filePath;
                 } else if (filePath.length > 35) {
                   displayLabel = `${filePath.slice(0, 18)}...${filePath.slice(-12)}`;
+                }
+
+                let imageSrc = filePath;
+                if (filePath.startsWith("files/")) {
+                  imageSrc = `/api/plugins/astrbot_plugin_qq_group_daily_analysis/${filePath}`;
                 }
 
                 return (
@@ -568,7 +589,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                         }}
                       >
                         <Image
-                          src={filePath}
+                          src={imageSrc}
                           width={36}
                           height={36}
                           style={{
