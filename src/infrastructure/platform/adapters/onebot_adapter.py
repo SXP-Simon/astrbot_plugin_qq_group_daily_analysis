@@ -617,7 +617,9 @@ class OneBotAdapter(PlatformAdapter):
                                 f"[{label}] Base64 优先发送请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
                             )
                             return True
-                        logger.warning(f"[{label}] Base64 优先发送失败 ({e})，准备尝试路径模式...")
+                        logger.warning(
+                            f"[{label}] Base64 优先发送失败 ({e})，准备尝试路径模式..."
+                        )
 
             # 2. 尝试物理路径/远程 URL
             if exists:
@@ -638,7 +640,9 @@ class OneBotAdapter(PlatformAdapter):
                         )
                         return True
                     if not use_base64 and not is_remote:
-                        logger.warning(f"[{label}] 路径发送失败 ({e})，准备 Base64 补救...")
+                        logger.warning(
+                            f"[{label}] 路径发送失败 ({e})，准备 Base64 补救..."
+                        )
                     else:
                         logger.error(f"[{label}] 发送失败: {e}")
                         return False

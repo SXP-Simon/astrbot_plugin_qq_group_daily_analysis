@@ -441,30 +441,16 @@ class AnalysisApplicationService:
                             "group_id": group_id,
                             "platform_id": platform_id,
                             "date_str": date_str,
-                            "statistics": self._serialize_analysis_result(
-                                {"statistics": statistics}
-                            )["statistics"],
-                            "user_activity": self._serialize_analysis_result(
-                                {"user_analysis": user_activity}
-                            )["user_analysis"],
-                            "top_users": self._serialize_analysis_result(
-                                {"user_titles": top_users}
-                            )["user_titles"],
+                            "statistics": self._to_json_friendly(statistics),
+                            "user_activity": self._to_json_friendly(user_activity),
+                            "top_users": self._to_json_friendly(top_users),
                             "unified_messages": [
-                                dataclasses.asdict(m)
-                                if dataclasses.is_dataclass(m)
-                                and not isinstance(m, type)
-                                else (
-                                    getattr(m, "to_dict")()
-                                    if callable(getattr(m, "to_dict", None))
-                                    else (m if isinstance(m, dict) else str(m))
-                                )
-                                for m in unified_messages
+                                self._to_json_friendly(m) for m in unified_messages
                             ],
                         },
                     )
                 except Exception as e:
-                    logger.debug(f"保存前置 Checkpoint 失败: {e}")
+                    logger.warning(f"保存前置 Checkpoint 失败: {e}")
 
             # 5. LLM 语义分析 (为了保持兼容，目前直接传 UnifiedMessage，后续如需传 raw dict 再加转换)
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
@@ -611,27 +597,49 @@ class AnalysisApplicationService:
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
+    def _to_json_friendly(self, obj: Any) -> Any:
+        """递归将领域模型、dataclass、Enum、datetime 等转换为标准 JSON 原生数据结构。"""
+        import enum
+        from datetime import date, datetime, time
+
+        if obj is None:
+            return None
+        if isinstance(obj, enum.Enum):
+            return obj.value
+        if isinstance(obj, (datetime, date, time)):
+            return obj.isoformat()
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return self._to_json_friendly(dataclasses.asdict(obj))
+        if isinstance(obj, (set, tuple)):
+            return [self._to_json_friendly(item) for item in obj]
+        if isinstance(obj, list):
+            return [self._to_json_friendly(item) for item in obj]
+        if isinstance(obj, dict):
+            return {str(k): self._to_json_friendly(v) for k, v in obj.items()}
+        to_dict_fn = getattr(obj, "to_dict", None)
+        if callable(to_dict_fn):
+            try:
+                return self._to_json_friendly(to_dict_fn())
+            except Exception:
+                pass
+        return obj
+
     def _serialize_analysis_result(
         self, analysis_result: dict[str, Any]
     ) -> dict[str, Any]:
         """将包含领域对象的 analysis_result 序列化为 JSON 友好的 dict 快照。"""
-        import dataclasses
-
-        def _to_dict(obj: Any) -> Any:
-            if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-                return dataclasses.asdict(obj)
-            if isinstance(obj, list):
-                return [_to_dict(item) for item in obj]
-            if isinstance(obj, dict):
-                return {k: _to_dict(v) for k, v in obj.items()}
-            return obj
-
         return {
-            "statistics": _to_dict(analysis_result.get("statistics")),
-            "topics": _to_dict(analysis_result.get("topics", [])),
-            "user_titles": _to_dict(analysis_result.get("user_titles", [])),
-            "user_analysis": _to_dict(analysis_result.get("user_analysis", {})),
-            "chat_quality_review": _to_dict(analysis_result.get("chat_quality_review")),
+            "statistics": self._to_json_friendly(analysis_result.get("statistics")),
+            "topics": self._to_json_friendly(analysis_result.get("topics", [])),
+            "user_titles": self._to_json_friendly(
+                analysis_result.get("user_titles", [])
+            ),
+            "user_analysis": self._to_json_friendly(
+                analysis_result.get("user_analysis", {})
+            ),
+            "chat_quality_review": self._to_json_friendly(
+                analysis_result.get("chat_quality_review")
+            ),
         }
 
     def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -912,7 +920,77 @@ class AnalysisApplicationService:
         if template_name and template_name != "auto":
             trace.metadata["override_template_name"] = str(template_name)
 
-        # 检查是否有前置清洗 Checkpoint
+        topic_enabled = self.config_manager.get_topic_analysis_enabled()
+        user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
+        chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
+
+        # 1. 优先检查是否有已完成的 LLM_ANALYSIS Checkpoint 或历史分析记录
+        cached_llm = (
+            self.checkpoint_store.get_checkpoint(group_id, date_str, "LLM_ANALYSIS")
+            if self.checkpoint_store
+            else None
+        )
+        if not cached_llm:
+            try:
+                hist_data = await self.history_manager.get_analysis(group_id, date_str)
+                if hist_data and isinstance(hist_data, dict):
+                    cached_llm = self._serialize_analysis_result(hist_data)
+            except Exception:
+                cached_llm = None
+
+        if cached_llm:
+            cached_result = self._deserialize_analysis_result(cached_llm)
+            cached_topics = cached_result.get("topics", [])
+            cached_titles = cached_result.get("user_titles", [])
+            cached_stats = cached_result.get("statistics")
+            cached_quotes = (
+                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
+            )
+            cached_quality = cached_result.get("chat_quality_review")
+
+            has_required_topics = not topic_enabled or bool(cached_topics)
+            has_required_titles = not user_title_enabled or bool(cached_titles)
+            has_required_quotes = not golden_quote_enabled or bool(cached_quotes)
+            has_required_quality = not chat_quality_enabled or bool(cached_quality)
+
+            # 若全部启用的分析结果均已具备（例如仅排版制图或发送失败），直接跳过 LLM 和拉取消息，0 Token 成本直接出图与分发
+            if (
+                has_required_topics
+                and has_required_titles
+                and has_required_quotes
+                and has_required_quality
+            ):
+                logger.info(
+                    f"群 {group_id} 命中完整的 LLM 分析产物快照，跳过消息拉取与 LLM 分析，直接进入报告排版与分发"
+                )
+                async with self.group_lock(group_id, "daily"):
+                    adapter = self.bot_manager.get_adapter(platform_id)
+                    with trace.span(
+                        "CHECKPOINT_RESTORE",
+                        {
+                            "stage": "LLM_ANALYSIS",
+                            "restored": True,
+                            "direct_render": True,
+                        },
+                    ):
+                        pass
+                    return {
+                        "success": True,
+                        "analysis_result": cached_result,
+                        "messages_count": (
+                            getattr(cached_stats, "message_count", 0)
+                            if cached_stats
+                            else 0
+                        ),
+                        "adapter": adapter,
+                        "group_id": group_id,
+                        "platform_id": getattr(adapter, "platform_id", platform_id),
+                        "resumed_from": "LLM_ANALYSIS",
+                        "trace_id": trace_id,
+                    }
+
+        # 2. 检查是否有前置清洗 Checkpoint
         clean_checkpoint = (
             self.checkpoint_store.get_checkpoint(group_id, date_str, "CLEAN_MESSAGES")
             if self.checkpoint_store
@@ -954,22 +1032,6 @@ class AnalysisApplicationService:
             ):
                 pass
 
-            # 执行 LLM 语义分析
-            topic_enabled = self.config_manager.get_topic_analysis_enabled()
-            user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
-            golden_quote_enabled = (
-                self.config_manager.get_golden_quote_analysis_enabled()
-            )
-            chat_quality_enabled = (
-                self.config_manager.get_chat_quality_analysis_enabled()
-            )
-
-            # 检查是否有部分或完整已完成的 LLM_ANALYSIS Checkpoint
-            cached_llm = (
-                self.checkpoint_store.get_checkpoint(group_id, date_str, "LLM_ANALYSIS")
-                if self.checkpoint_store
-                else None
-            )
             cached_result = (
                 self._deserialize_analysis_result(cached_llm) if cached_llm else {}
             )
