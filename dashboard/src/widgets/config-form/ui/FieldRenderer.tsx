@@ -470,8 +470,13 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
       );
     }
 
-    // 7.1 文件 / 图片上传与列表 (file)
-    if (type === "file") {
+    // 7.1 文件 / 图片上传与列表 (file / image_list)
+    if (
+      type === "file" ||
+      fieldSchema._special === "image_list" ||
+      fieldKey === "reference_images" ||
+      fieldKey === "drawing_reference_image"
+    ) {
       const fileList: string[] = Array.isArray(value)
         ? (value as string[]).filter((x) => typeof x === "string" && x.trim().length > 0)
         : typeof value === "string" && value.trim().length > 0
