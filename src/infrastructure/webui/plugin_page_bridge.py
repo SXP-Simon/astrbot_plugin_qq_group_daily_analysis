@@ -10,6 +10,7 @@ import base64
 import json
 import re
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -721,8 +722,17 @@ class PluginPageWebUIBridge:
         try:
             providers: list[dict[str, Any]] = []
             seen_ids = set()
-            if hasattr(self.context, "get_all_providers"):
-                for p in self.context.get_all_providers() or []:
+            provider_getter = getattr(self.context, "get_all_providers", None)
+            if not callable(provider_getter):
+                provider_mgr = getattr(self.context, "provider_manager", None)
+                provider_getter = getattr(provider_mgr, "get_all_providers", None)
+
+            if callable(provider_getter):
+                raw_list = provider_getter()
+                provider_list: list[Any] = (
+                    list(raw_list) if isinstance(raw_list, Iterable) else []
+                )
+                for p in provider_list:
                     try:
                         meta = p.meta() if callable(getattr(p, "meta", None)) else None
                         p_id = (
@@ -1393,26 +1403,70 @@ class PluginPageWebUIBridge:
             cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
                 self.report_dispatcher, "config_manager", None
             )
-            if not cfg_mgr or not hasattr(cfg_mgr, "config"):
+            config_obj = getattr(cfg_mgr, "config", None) if cfg_mgr else None
+            if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
+
+            plugin_root = Path(__file__).resolve().parents[3]
+
+            # 自动清洗并迁移历史中残存的 Base64 图片或不合规路径为合规的 files/... 物理文件
+            def _cleanse_reference_images(val: Any) -> Any:
+                if isinstance(val, list):
+                    cleaned = []
+                    for item in val:
+                        if isinstance(item, str) and item.startswith("data:image/"):
+                            try:
+                                _, b64 = item.split(",", 1)
+                                file_bytes = base64.b64decode(b64)
+                                ts = int(time.time() * 1000)
+                                filename = f"{ts}_migrated_image.png"
+                                folder = "daily_comic_comic_characters_templates_character_reference_images"
+                                for d in [
+                                    Path.cwd()
+                                    / "data"
+                                    / "plugin_data"
+                                    / PLUGIN_NAME
+                                    / "files"
+                                    / folder,
+                                    plugin_root / "files" / folder,
+                                ]:
+                                    d.mkdir(parents=True, exist_ok=True)
+                                    (d / filename).write_bytes(file_bytes)
+                                cleaned.append(f"files/{folder}/{filename}")
+                            except Exception:
+                                pass
+                        elif isinstance(item, str) and item.startswith(
+                            "files/reference_images/"
+                        ):
+                            clean_name = Path(item).name
+                            folder = "daily_comic_comic_characters_templates_character_reference_images"
+                            cleaned.append(f"files/{folder}/{clean_name}")
+                        elif isinstance(item, str) and item.strip():
+                            cleaned.append(item.strip())
+                    return cleaned
+                elif isinstance(val, dict):
+                    return {k: _cleanse_reference_images(v) for k, v in val.items()}
+                return val
+
+            new_config = _cleanse_reference_images(new_config)
 
             # 更新 AstrBotConfig 字典
             for k, v in new_config.items():
-                cfg_mgr.config[k] = v
+                config_obj[k] = v
 
             # 持久化保存
-            if hasattr(cfg_mgr.config, "save_config"):
+            if hasattr(config_obj, "save_config"):
                 try:
-                    cfg_mgr.config.save_config()
+                    config_obj.save_config()
                 except TypeError:
-                    cfg_mgr.config.save_config()
+                    config_obj.save_config()
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
             return json_response(
                 {
                     "status": "ok",
                     "message": "配置已成功保存并持久化生效",
-                    "data": dict(cfg_mgr.config),
+                    "data": dict(config_obj),
                 }
             )
         except Exception as e:
@@ -1441,9 +1495,12 @@ class PluginPageWebUIBridge:
             elif body.get("config_key"):
                 config_key = str(body.get("config_key"))
 
-            folder = "daily_comic_comic_characters_templates_character_reference_images"
-            if config_key:
-                folder = config_key.replace(".", "_")
+            if not config_key or config_key == "reference_images":
+                config_key = (
+                    "daily_comic.comic_characters.templates.character.reference_images"
+                )
+
+            folder = config_key.replace(".", "_")
 
             # 优先使用 AstrBot 官方的标准 plugin_data 目录，与 AstrBot 原生保持 100% 一致
             target_dirs: list[Path] = []

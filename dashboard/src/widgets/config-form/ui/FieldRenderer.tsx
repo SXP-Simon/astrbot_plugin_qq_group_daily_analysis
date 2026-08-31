@@ -115,6 +115,7 @@ interface FieldRendererProps {
   providers?: AvailableProvider[];
   personas?: AvailablePersona[];
   isSubField?: boolean;
+  fullKeyPath?: string;
   onChange: (val: unknown) => void;
 }
 
@@ -125,6 +126,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   providers = [],
   personas = [],
   isSubField = false,
+  fullKeyPath,
   onChange,
 }) => {
   const { token } = theme.useToken();
@@ -165,6 +167,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           value={value}
           providers={providers}
           personas={personas}
+          fullKeyPath={fullKeyPath || fieldKey}
           onChange={onChange}
         />
       );
@@ -206,6 +209,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 providers={providers}
                 personas={personas}
                 isSubField={true}
+                fullKeyPath={`${fullKeyPath || fieldKey}.${subKey}`}
                 onChange={(newSubVal) => {
                   const nextObj = { ...objVal, [subKey]: newSubVal };
                   onChange(nextObj);
@@ -570,27 +574,35 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
+        const targetKeyPath =
+          fullKeyPath ||
+          (fieldKey === "reference_images"
+            ? "daily_comic.comic_characters.templates.character.reference_images"
+            : fieldKey);
+
         const uploadPromises = Array.from(files).map(async (file) => {
           try {
-            const res = await uploadConfigFile(file, fieldKey);
+            const res = await uploadConfigFile(file, targetKeyPath);
             if (res && res.path) {
               return res.path;
             }
           } catch (err) {
             console.error("Upload error:", err);
           }
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (event) => resolve(event.target?.result as string);
-            reader.readAsDataURL(file);
-          });
+          return null;
         });
 
-        const uploadedPaths = (await Promise.all(uploadPromises)).filter(Boolean);
+        const uploadedPaths = (await Promise.all(uploadPromises)).filter(Boolean) as string[];
         if (uploadedPaths.length > 0) {
-          const nextList = [...fileList, ...uploadedPaths];
+          // 清理历史中残存的旧 Base64 Data URL，防止原生格式校验失败
+          const cleanExisting = fileList.filter(
+            (item) => !item.startsWith("data:image/")
+          );
+          const nextList = [...cleanExisting, ...uploadedPaths];
           onChange(Array.isArray(defaultValue) ? nextList : nextList[0] || "");
           message.success(`成功添加 ${uploadedPaths.length} 个参考文件`);
+        } else {
+          message.error("上传参考文件失败，请确保 AstrBot 处于运行状态");
         }
 
         e.target.value = "";

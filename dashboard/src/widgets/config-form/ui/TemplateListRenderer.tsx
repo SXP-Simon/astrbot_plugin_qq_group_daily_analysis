@@ -34,6 +34,7 @@ interface TemplateListRendererProps {
   value: unknown;
   providers?: AvailableProvider[];
   personas?: AvailablePersona[];
+  fullKeyPath?: string;
   onChange: (val: unknown) => void;
 }
 
@@ -43,6 +44,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
   value,
   providers = [],
   personas = [],
+  fullKeyPath,
   onChange,
 }) => {
   const { token } = theme.useToken();
@@ -200,6 +202,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
           {rawList.map((item, index) => {
+            const itemTemplateKey = findTemplateKey(item) || templateKeys[0] || "character";
             const tpl = findTemplateForItem(item);
             const subItems = tpl?.items || {};
 
@@ -310,6 +313,7 @@ export const TemplateListRenderer: React.FC<TemplateListRendererProps> = ({
                           providers={providers}
                           personas={personas}
                           isSubField={true}
+                          fullKeyPath={`${fullKeyPath || fieldKey}.templates.${itemTemplateKey}.${subKey}`}
                           onChange={(newSubVal) =>
                             handleItemFieldChange(index, subKey, newSubVal)
                           }
