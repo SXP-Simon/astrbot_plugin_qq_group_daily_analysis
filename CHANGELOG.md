@@ -1,6 +1,17 @@
 # 更新日志 (CHANGELOG)
 
 
+## [v5.0.15] - 移除飞书废弃接入、平台 SDK 按需懒加载瘦身、建立严格静态类型检查与 Zero Any 架构规范
+
+*   **🚀 【重构】移除飞书废弃接入与平台 SDK 按需懒加载瘦身**：
+    *   **彻底清理 Lark (飞书) 废弃接入**：完全删除未正式上线的飞书平台适配器、依赖引用、导出列表及相关文档，消除未启用平台无意义的内存常驻与额外开销。
+    *   **平台 SDK 按需懒加载 (Lazy-Loading)**：重构平台适配器初始化与注册链路，未启用或未配置的平台（如 Telegram、Discord）不再在 AstrBot 启动时强行拉入庞大的底层 SDK，大幅降低插件启动内存开销，避免潜在的三方依赖冲突。
+
+*   **🛡️ 【类型安全】全工程静态类型推导与 Zero `Any` 架构升级**：
+    *   **协议接口化 (`Protocol`) 与消除 `Any` 滥用**：使用 `@runtime_checkable class TemplatePreviewHandler(Protocol)` 彻底重构模板预览路由分发体系，淘汰 `list[Any]` 与动态 `getattr` 强转；使用 `TypedDict`（如 `UserActivityData`）强类型结构化重构统计与可视化数据模型。
+    *   **修复全量 Pyright/Pylance 潜在类型缺陷**：修复潜在未绑定变量、Awaitable 同步/异步混淆、可选属性空指针风险、默认参数类型注解与消息组件安全访问等全部 55 处类型缺陷，达成 Pyright `standard` 模式下 **0 错误、0 警告**。
+    *   **编译期与 CI 门禁自动化**：新增 `pyrightconfig.json` 严格对齐 Python 3.12 与 AstrBot 运行环境；在 GitHub Actions CI 中接入 `npx pyright` 静态类型门禁，并在贡献指南中沉淀 `uv run ruff format . ; uv run ruff check . --fix` 一键化代码质量流水线。
+
 ## [v5.0.14] - 统一原生与独立 WebUI 配置协同、修复角色方案同步与参考图校验、Release 产物和流程优化、群漫画任务链路可观测性增强
 
 *   **🛡️ 【核心修复】AstrBot 原生与插件 WebUI 角色方案及参考图双向协同与校验对齐**：
