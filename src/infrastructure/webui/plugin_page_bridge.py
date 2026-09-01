@@ -70,6 +70,12 @@ from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..persistence.trace_sqlite_store import TraceSQLiteStore
 from ..platform.factory import PlatformAdapterFactory
+from ..reporting.template_installer import (
+    MAX_ZIP_B64_SIZE,
+    TemplateInstallError,
+    install_template_from_github_url,
+    install_template_from_zip,
+)
 from .active_task_manager import ActiveTaskManager
 
 
@@ -211,6 +217,18 @@ class PluginPageWebUIBridge:
                 self.api_get_report_templates,
                 ["GET"],
                 "Get available built-in and custom report visual templates",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/install_from_url",
+                self.api_install_template_from_url,
+                ["POST"],
+                "Install a custom report template from a GitHub repository URL",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/install_from_file",
+                self.api_install_template_from_file,
+                ["POST"],
+                "Install a custom report template from an uploaded zip archive",
             ),
             # 5. SSE 实时事件流
             (
@@ -1287,6 +1305,70 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": templates})
         except Exception as e:
             logger.error(f"获取模板列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_install_template_from_url(self) -> Any:
+        """从 GitHub 仓库链接安装自定义报告视觉模板"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            repo_url = str(body.get("repo_url") or "")
+            name = str(body.get("name") or "").strip() or None
+            if not repo_url:
+                return error_response("缺少 GitHub 仓库链接 (repo_url)", status_code=400)
+
+            result = await install_template_from_github_url(repo_url, name=name)
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"从 URL 安装模板异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_install_template_from_file(self) -> Any:
+        """从上传的 zip 压缩包安装自定义报告视觉模板（JSON Base64 编码）"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            file_data = body.get("file_data") or body.get("base64")
+            name = str(body.get("name") or "").strip() or None
+            if not file_data or not isinstance(file_data, str):
+                return error_response("未检测到压缩包数据 (file_data)", status_code=400)
+
+            if file_data.startswith("data:"):
+                _, b64_payload = file_data.split(",", 1)
+            else:
+                b64_payload = file_data
+
+            if len(b64_payload) > MAX_ZIP_B64_SIZE:
+                return error_response("压缩包数据超出大小限制", status_code=400)
+            try:
+                zip_bytes = base64.b64decode(b64_payload)
+            except Exception:
+                return error_response("压缩包数据不是有效的 Base64", status_code=400)
+
+            result = await asyncio.to_thread(
+                install_template_from_zip, zip_bytes, None, name
+            )
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"从压缩包安装模板异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_stream_events(self) -> Any:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import threading
 from pathlib import Path
@@ -126,6 +127,7 @@ class HTMLTemplates:
                             "is_custom": False,
                             "has_image": has_image,
                             "has_html": has_html,
+                            "display_name": entry,
                         }
 
         # 2. 扫描用户自定义模板目录
@@ -148,6 +150,7 @@ class HTMLTemplates:
                     if has_image or has_html:
                         builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
                         builtin_dir = os.path.join(self.base_dir, entry)
+                        meta_name = self._read_template_meta_name(p)
 
                         is_custom = True
                         if builtin_label and os.path.isdir(builtin_dir):
@@ -174,6 +177,8 @@ class HTMLTemplates:
                                 custom_label = builtin_label
                             else:
                                 custom_label = f"{builtin_label} (自定义修改版)"
+                        elif meta_name:
+                            custom_label = f"{meta_name} ({entry})"
                         else:
                             custom_label = f"{entry} (自定义本地模板)"
 
@@ -183,6 +188,7 @@ class HTMLTemplates:
                             "is_custom": is_custom,
                             "has_image": has_image,
                             "has_html": has_html,
+                            "display_name": meta_name or entry,
                         }
 
         # 确保默认的 scrapbook 始终位于第一个
@@ -191,6 +197,22 @@ class HTMLTemplates:
             result.append(found_themes.pop("scrapbook"))
         result.extend(found_themes.values())
         return result
+
+    @staticmethod
+    def _read_template_meta_name(template_dir: str) -> str:
+        """读取自定义模板目录中可选 template.json 的 name 显示名。"""
+        meta_path = os.path.join(template_dir, "template.json")
+        if not os.path.isfile(meta_path):
+            return ""
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                meta = json.load(f)
+            name = meta.get("name") if isinstance(meta, dict) else None
+            if isinstance(name, str) and name.strip():
+                return name.strip()[:100]
+        except Exception:
+            pass
+        return ""
 
     async def _get_env_async(self, template_theme: str | None = None) -> Environment:
         """获取当前配置或指定主题的模板环境（异步版本）"""

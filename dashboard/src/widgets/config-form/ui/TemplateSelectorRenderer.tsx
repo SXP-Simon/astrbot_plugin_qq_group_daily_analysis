@@ -15,12 +15,14 @@ import {
   AppstoreOutlined,
   CheckCircleOutlined,
   PictureOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
   getTemplateCdnUrl,
 } from "../../../entities/report/model/templates";
+import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
 
 const { Text, Paragraph } = Typography;
 
@@ -40,6 +42,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const { isDark } = useTheme();
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
 
   const currentTemplate =
     typeof value === "string" && value
@@ -93,7 +96,17 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
         >
           浏览全部模板画廊
         </Button>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={() => setInstallOpen(true)}
+        >
+          安装模板
+        </Button>
       </div>
+      <TemplateInstallModal
+        open={installOpen}
+        onClose={() => setInstallOpen(false)}
+      />
 
       {/* 选定模板的实时缩略图与简介卡片 */}
       <div
