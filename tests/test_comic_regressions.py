@@ -196,6 +196,8 @@ def load_config_manager_class(plugin_data_dir: Path):
         "_get_comic_character_state_path",
         "_read_comic_character_state",
         "_save_comic_character_state",
+        "_is_legacy_default_comic_prompt",
+        "_migrate_legacy_comic_storyboard_prompts",
     }
     methods = [
         node
@@ -213,6 +215,8 @@ def load_config_manager_class(plugin_data_dir: Path):
         ast.Module(body=[isolated_class], type_ignores=[])
     )
     namespace = {
+        "__name__": "src.infrastructure.config.config_manager",
+        "__package__": "src.infrastructure.config",
         "AstrBotConfig": object,
         "StarTools": SimpleNamespace(get_data_dir=Mock(return_value=plugin_data_dir)),
         "PLUGIN_NAME": "test_plugin",
@@ -1551,6 +1555,61 @@ def test_comic_storyboard_fuzzy_json_consolidation():
     scene = result[0]["scene"]
     assert "Panel 1: Anime girl drinking coffee." in scene
     assert "Panel 2: Cat jumping onto the table." in scene
+
+
+def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
+    """测试 ConfigManager 在初始化时自动将旧版默认提示词迁移为新版 GOOD/BAD 正反例模板。"""
+    from src.infrastructure.analysis.analyzers.comic_analyzer import (
+        DEFAULT_COMIC_STORYBOARD_PROMPT,
+    )
+
+    config_manager_class = load_config_manager_class(tmp_path)
+
+    raw_config = {
+        "prompts": {
+            "comic_analysis_prompts": {
+                "comic_storyboard_prompt": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 \"scene\" 字段的 JSON 对象。"
+            }
+        },
+        "daily_comic": {
+            "comic_characters": [
+                {
+                    "name": "旧人设",
+                    "storyboard_prompt": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 \"scene\" 字段的 JSON 对象。",
+                },
+                {
+                    "name": "自定义人设",
+                    "storyboard_prompt": "我的完全自定义专属提示词，不应被覆盖",
+                },
+            ]
+        },
+    }
+
+    class MockConfig(dict):
+        save_config = Mock()
+
+    config_instance = MockConfig(raw_config)
+    _ = config_manager_class(config_instance)
+
+    # 1. 全局旧版默认应被迁移为新版
+    assert (
+        raw_config["prompts"]["comic_analysis_prompts"]["comic_storyboard_prompt"]
+        == DEFAULT_COMIC_STORYBOARD_PROMPT
+    )
+
+    # 2. 角色列表中的旧版默认应被迁移为新版
+    assert (
+        raw_config["daily_comic"]["comic_characters"][0]["storyboard_prompt"]
+        == DEFAULT_COMIC_STORYBOARD_PROMPT
+    )
+
+    # 3. 用户的自定义专属提示词必须完好保留
+    assert (
+        raw_config["daily_comic"]["comic_characters"][1]["storyboard_prompt"]
+        == "我的完全自定义专属提示词，不应被覆盖"
+    )
+    config_instance.save_config.assert_called()
+
 
 
 
