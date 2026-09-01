@@ -9,7 +9,7 @@ on:
 
 jobs:
   python-lint:
-    name: Python Lint & Format
+    name: Python Lint & Type Check
     runs-on: ubuntu-latest
 
     steps:
@@ -22,10 +22,18 @@ jobs:
           version: "latest"
           enable-cache: true
 
+      - name: Set up Python
+        run: uv python install 3.12
+
       - name: Ruff Check & Format
         run: |
           uvx ruff check .
           uvx ruff format --check .
+
+      - name: Install Dependencies for Pyright
+        run: |
+          uv venv .venv
+          uv pip install astrbot httpx aiohttp diskcache ulid-py python-telegram-bot qq-botpy
 
       - name: Set up Node.js for Pyright
         uses: actions/setup-node@v4
