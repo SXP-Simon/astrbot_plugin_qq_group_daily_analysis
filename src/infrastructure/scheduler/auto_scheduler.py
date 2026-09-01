@@ -362,7 +362,7 @@ class AutoScheduler:
                             sem.acquire(), timeout=_SCHEDULED_DISPATCH_WARN_SECONDS
                         )
                         break
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.warning(
                             "定时报告等待调度槽位超过 %.0fs: platform=%s, group=%s, "
                             "mode=%s, available=%s/%s",
@@ -490,7 +490,7 @@ class AutoScheduler:
                     "reason": "invalid_result",
                 }
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
             return {
                 "success": False,
@@ -784,7 +784,7 @@ class AutoScheduler:
                 timeout=600,
             )
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 增量分析超时（10分钟），跳过")
             return {"success": False, "reason": "timeout"}
         except Exception as e:
@@ -910,7 +910,7 @@ class AutoScheduler:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 最终报告超时（30分钟）")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")

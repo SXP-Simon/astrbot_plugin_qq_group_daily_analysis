@@ -1035,7 +1035,7 @@ class OneBotAdapter(PlatformAdapter):
                         else:
                             # 否则认为是相对禁言剩余时间（秒）
                             is_individually_muted = True
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # 超时降级：优先使用缓存的角色（角色几乎不会变）
                 cached_role = self._group_role_cache.get(group_id_str)
                 if cached_role:
@@ -1091,7 +1091,7 @@ class OneBotAdapter(PlatformAdapter):
                             f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
                         )
                         return True
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
             except Exception as e:
                 if self._is_mute_exception(e):

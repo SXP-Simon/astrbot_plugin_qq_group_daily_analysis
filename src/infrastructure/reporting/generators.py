@@ -414,6 +414,8 @@ class ReportGenerator(IReportGenerator):
                 last_exception = None
 
                 for attempt, image_options in enumerate(render_strategies, 1):
+                    viewport_description = "default"
+                    html_error = None
                     try:
                         image_options, viewport_description = (
                             self._resolve_t2i_viewport_options(
@@ -1889,7 +1891,7 @@ class ReportGenerator(IReportGenerator):
                                     f"下载头像失败 {safe_avatar_url}: {failure_reason}"
                                 )
                                 return None
-                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                except (TimeoutError, aiohttp.ClientError) as e:
                     # 部分 aiohttp 断连异常的字符串为空，保留异常类型便于定位。
                     failure_reason = f"{type(e).__name__}: {e!r}"
                 except Exception as e:

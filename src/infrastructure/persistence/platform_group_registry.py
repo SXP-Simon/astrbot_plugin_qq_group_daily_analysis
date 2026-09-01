@@ -1,7 +1,7 @@
 """Persistent registry of groups observed by event-driven platforms."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -53,7 +53,7 @@ class PlatformGroupRegistry:
                 self._known_groups.add(identity)
                 return
 
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(UTC).isoformat()
             platform_map[group_key] = {
                 "first_seen": now_iso,
                 "last_seen": now_iso,

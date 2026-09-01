@@ -7,6 +7,7 @@ import asyncio
 import inspect
 import random
 import time
+from typing import Any
 
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context
@@ -120,18 +121,21 @@ def _is_response_format_unsupported_error(error: Exception) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
-def _get_circuit_breaker(provider_id: str) -> CircuitBreaker:
+def get_provider_circuit_breaker(provider_id: str) -> CircuitBreaker:
     if provider_id not in _circuit_breakers:
         _circuit_breakers[provider_id] = CircuitBreaker(name=f"provider_{provider_id}")
     return _circuit_breakers[provider_id]
 
 
+_get_circuit_breaker = get_provider_circuit_breaker
+
+
 async def _call_provider_stream(
-    context: Context, provider_id: str, llm_kwargs: dict[str, JSONValue]
+    context: Context, provider_id: str, llm_kwargs: dict[str, Any]
 ) -> LLMResponse:
-    provider = context.get_provider_by_id(provider_id=provider_id)
-    if provider is None:
-        raise RuntimeError(f"Provider 不存在: {provider_id}")
+    provider: Any = context.get_provider_by_id(provider_id=provider_id)
+    if provider is None or not hasattr(provider, "text_chat_stream"):
+        raise RuntimeError(f"Provider 不存在或不支持流式聊天: {provider_id}")
 
     stream_kwargs = dict(llm_kwargs)
     stream_kwargs.pop("chat_provider_id", None)
@@ -402,6 +406,8 @@ async def call_provider_with_retry(
         attempt_num: int,
         is_fallback_request: bool,
     ) -> LLMResponse:
+        request_started_at = time.monotonic()
+        actual_model = None
         cb = _get_circuit_breaker(pid)
         if not cb.allow_request():
             logger.warning(f"Provider {pid} 熔断器已打开，跳过本次请求")
@@ -450,10 +456,10 @@ async def call_provider_with_retry(
                 f"{limiter.max_concurrency}"
             )
             request_started_at = time.monotonic()
+            actual_model = None
+            actual_provider_type = None
             try:
                 # 提取真实 Provider 实例与模型名称以支撑可观测性
-                actual_model = None
-                actual_provider_type = None
                 try:
                     provider_inst = context.get_provider_by_id(pid)
                     if provider_inst:
@@ -487,7 +493,7 @@ async def call_provider_with_retry(
                         if actual_provider_type:
                             slot["provider_type"] = str(actual_provider_type)
 
-                llm_kwargs: dict[str, JSONValue] = {
+                llm_kwargs: dict[str, Any] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
                 }

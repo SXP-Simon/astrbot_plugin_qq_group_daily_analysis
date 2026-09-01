@@ -12,9 +12,9 @@ import re
 import time
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-try:
+if TYPE_CHECKING:
     from astrbot.api.star import Context
     from astrbot.api.web import (
         error_response,
@@ -22,21 +22,47 @@ try:
         request,
         stream_response,
     )
-except (ImportError, AttributeError):
+else:
+    try:
+        from astrbot.api.star import Context
+        from astrbot.api.web import (
+            error_response,
+            json_response,
+            request,
+            stream_response,
+        )
+    except (ImportError, AttributeError):
 
-    class Context:  # type: ignore
-        pass
+        class Context:
+            pass
 
-    def json_response(data: Any, status_code: int = 200) -> Any:  # type: ignore
-        return {"status_code": status_code, "data": data}
+        def json_response(
+            data: Any = None,
+            *,
+            status_code: int = 200,
+            headers: dict[str, str] | None = None,
+        ) -> Any:
+            return {"status_code": status_code, "data": data}
 
-    def error_response(msg: str, status_code: int = 400) -> Any:  # type: ignore
-        return {"status_code": status_code, "message": msg}
+        def error_response(
+            message: str = "",
+            *,
+            status_code: int = 400,
+            data: Any = None,
+            headers: dict[str, str] | None = None,
+        ) -> Any:
+            return {"status_code": status_code, "message": message, "data": data}
 
-    request: Any = None  # type: ignore
+        request: Any = None
 
-    def stream_response(gen: Any) -> Any:  # type: ignore
-        return gen
+        def stream_response(
+            content: Any = None,
+            *,
+            content_type: str = "text/event-stream",
+            status_code: int = 200,
+            headers: dict[str, str] | None = None,
+        ) -> Any:
+            return content
 
 
 from ...shared.constants import PLUGIN_NAME
@@ -272,7 +298,10 @@ class PluginPageWebUIBridge:
     async def api_cancel_task(self) -> Any:
         """手动取消正在执行的任务"""
         try:
-            payload = await request.json(default={})
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
             task_id = payload.get("task_id", "").strip()
             if not task_id:
                 return error_response("Missing task_id in request", status_code=400)
@@ -292,7 +321,10 @@ class PluginPageWebUIBridge:
     async def api_trigger_task(self) -> Any:
         """从 Web 界面手动触发群分析任务"""
         try:
-            payload = await request.json(default={})
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
             group_id = str(payload.get("group_id", "")).strip()
             if not group_id:
                 return error_response("group_id is required", status_code=400)
@@ -1189,7 +1221,8 @@ class PluginPageWebUIBridge:
     async def api_rerender_report(self) -> Any:
         """免 Token 切换模板重新渲染历史分析报告"""
         try:
-            body = await request.json() if hasattr(request, "json") else {}
+            body_raw = await request.json() if hasattr(request, "json") else {}
+            body: dict[str, Any] = body_raw if isinstance(body_raw, dict) else {}
         except Exception:
             body = {}
 
