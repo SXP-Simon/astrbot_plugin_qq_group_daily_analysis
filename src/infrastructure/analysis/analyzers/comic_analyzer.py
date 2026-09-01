@@ -41,7 +41,16 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
                 "5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n"
                 "6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n"
                 "【待创作的群聊核心话题列表】：\n${chat_content}\n\n"
-                '请输出包含 "scene" 字段的 JSON 对象。\n'
+                "【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n"
+                '⚠️ 核心要求：AI 绘图引擎会直接读取 "scene" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 "scene" 字符串中！\n\n'
+                "✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n"
+                "{\n"
+                '  "scene": "A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\"[人设吐槽台词 15字内]\\" and a cute pastel caption strip at bottom with exact Chinese text \\"[精炼短标题]\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\"[人设吐槽台词 15字内]\\" and a cute pastel caption strip at bottom with exact Chinese text \\"[精炼短标题]\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})"\n'
+                "}\n\n"
+                "❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n"
+                "1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n"
+                "2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n"
+                "3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n"
             )
 
         valid_topics = [m for m in data if m.get("topic", "")]
@@ -78,42 +87,118 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         """使用角色专属模板构建漫画分镜提示词。"""
         return self.build_prompt(data, prompt_override)
 
+    @classmethod
+    def _extract_text_chunks(cls, obj: object, depth: int = 0) -> list[str]:
+        """递归提取任意多层级 JSON 结构中的所有文本叶子节点，零硬编码字段名。"""
+        if depth > 8 or obj is None:
+            return []
+
+        if isinstance(obj, str):
+            text = obj.strip()
+            return [text] if text else []
+
+        chunks: list[str] = []
+        if isinstance(obj, list):
+            for item in obj:
+                chunks.extend(cls._extract_text_chunks(item, depth + 1))
+        elif isinstance(obj, dict):
+            for val in obj.values():
+                chunks.extend(cls._extract_text_chunks(val, depth + 1))
+
+        return chunks
+
+    @classmethod
+    def _consolidate_scene_text(cls, data: object) -> str | None:
+        """将任意多层级 JSON 结构模糊解析并整理为统一的单段 scene 提示词。"""
+        if not data:
+            return None
+
+        raw_chunks = cls._extract_text_chunks(data)
+        if not raw_chunks:
+            return None
+
+        # 智能去重与包含消除（避免子串重复出现）
+        unique_chunks: list[str] = []
+        for chunk in raw_chunks:
+            if len(chunk) < 3:
+                continue
+            if any(
+                chunk == existing or (len(chunk) < len(existing) and chunk in existing)
+                for existing in unique_chunks
+            ):
+                continue
+            superseded = [
+                existing
+                for existing in unique_chunks
+                if existing != chunk and existing in chunk
+            ]
+            if superseded:
+                for s in superseded:
+                    unique_chunks.remove(s)
+            unique_chunks.append(chunk)
+
+        return "\n\n".join(unique_chunks) if unique_chunks else None
+
     def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         del max_count
-        storyboards = []
         scene_match = re.search(r'"scene"\s*:\s*"((?:[^"\\]|\\.)*)"', result_text)
         if scene_match:
-            storyboards.append({"scene": scene_match.group(1).replace('\\"', '"')})
-        return storyboards
+            return [{"scene": scene_match.group(1).replace('\\"', '"')}]
+        return []
 
     def parse_structured_response(
         self, result_text: str
     ) -> tuple[bool, list[dict] | None, str | None]:
-        from ..utils.json_utils import parse_json_object_response
+        from ..utils.json_utils import (
+            parse_json_object_response,
+            parse_json_response,
+        )
 
+        # 1. 尝试解析为 JSON 对象
         success, data, error = parse_json_object_response(
             result_text, self.get_data_type()
         )
         if success and isinstance(data, dict):
-            if "storyboards" in data and isinstance(data["storyboards"], list):
-                scenes = [
-                    item["scene"].strip()
-                    for item in data["storyboards"]
-                    if isinstance(item, dict)
-                    and isinstance(item.get("scene"), str)
-                    and item["scene"].strip()
-                ]
-                if scenes:
-                    return True, [{"scene": "\n\n".join(scenes)}], None
-                return False, None, "'storyboards'中没有有效的非空'scene'字段"
-            elif "scene" in data:
-                scene = data["scene"]
-                if isinstance(scene, str) and scene.strip():
-                    return True, [{"scene": scene.strip()}], None
-                return False, None, "'scene'字段必须是非空字符串"
-            else:
-                return False, None, "无法在JSON对象中找到'scene'或'storyboards'字段"
-        return False, None, error
+            # 主线：优先提取官方约定的 scene 字段
+            scene_val = data.get("scene")
+            scene_str = scene_val.strip() if isinstance(scene_val, str) else ""
+
+            # 兼容性检查：提取字典中除 scene 以外其他字段的内容（防止模型把具体分格拆在其他字段中）
+            other_data = {k: v for k, v in data.items() if k != "scene"}
+            other_text = (
+                self._consolidate_scene_text(other_data) if other_data else None
+            )
+
+            # 情况 A：仅有 scene，直接使用
+            if scene_str and not other_text:
+                return True, [{"scene": scene_str}], None
+
+            # 情况 B：同时存在 scene 与其他字段内容
+            if scene_str and other_text:
+                # 若其他字段内容已被包含在 scene 中（如已全内联），直接使用 scene
+                if other_text in scene_str or (
+                    "panel 1" in scene_str.lower() and "panel 2" in scene_str.lower()
+                ):
+                    return True, [{"scene": scene_str}], None
+                # 若未包含，将 scene 总设与其他字段细节健壮合并
+                return True, [{"scene": f"{scene_str}\n\n{other_text}"}], None
+
+            # 情况 C：缺失 scene 字段，使用其他字段提取整合的内容兜底
+            if other_text:
+                return True, [{"scene": other_text}], None
+
+            return False, None, "无法在 JSON 对象中找到有效的 'scene' 字段或分镜描述"
+
+        # 2. 容错兼容：若模型直接输出为顶层 JSON 数组
+        list_success, list_data, _ = parse_json_response(
+            result_text, self.get_data_type()
+        )
+        if list_success and list_data:
+            consolidated = self._consolidate_scene_text(list_data)
+            if consolidated:
+                return True, [{"scene": consolidated}], None
+
+        return False, None, error or "无法从 JSON 响应中提取有效的漫画分镜描述"
 
     def create_data_objects(self, data_list: list[dict]) -> list[dict]:
         # 我们直接返回 dict，因为不需要特别的类型验证
@@ -129,7 +214,7 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
                 }
             },
             "required": ["scene"],
-            "additionalProperties": False,
+            "additionalProperties": True,
         }
 
     async def analyze_storyboards(
@@ -155,13 +240,6 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         storyboards, usage = await self.analyze(
             topics, umo, session_id, persona_id, prompt_template
         )
-
-        if storyboards:
-            if isinstance(storyboards, list):
-                if len(storyboards) > 0 and isinstance(storyboards[0], dict):
-                    if "storyboards" in storyboards[0]:
-                        storyboards = storyboards[0]["storyboards"]
-                    # else: storyboards[0] 已含 "scene"，直接使用
 
         if isinstance(storyboards, list):
             return [item for item in storyboards if isinstance(item, dict)], usage
