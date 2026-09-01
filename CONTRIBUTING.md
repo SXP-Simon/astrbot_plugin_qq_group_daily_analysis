@@ -64,7 +64,7 @@ pnpm dev
    * 必须使用 `pathlib.Path` 处理路径，禁止硬编码 Windows `\` 反斜杠或绝对路径；
    * 确保兼容 Linux、macOS、Windows 及 Arm64/x86 架构。
 4. **日志与注释语言**：
-   * 代码内部所有注释、Log 输出与异常提示必须使用清晰的 **英文**。
+   * 代码内部所有注释、Log 输出与异常提示必须使用清晰的 **中文**。
 5. **静态类型检查与类型体操准则 (Static Type & Type Gymnastics Standards)**：
    * 本项目统一使用 **Pyright / Pylance** 进行静态类型分析与语法校验，规则配置文件为项目根目录的 [`pyrightconfig.json`](pyrightconfig.json)；
    * **类型检查模式与环境对齐**：采用严格生产标准的 `"typeCheckingMode": "standard"`，统一设置 `"pythonVersion": "3.12"`，严格对齐 AstrBot 依赖环境；
