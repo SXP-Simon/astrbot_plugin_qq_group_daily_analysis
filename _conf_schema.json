@@ -19,7 +19,7 @@
                 "type": "list",
                 "description": "群组白/黑名单列表",
                 "default": [],
-                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号（如 123456）。新手建议优先填完整会话ID，更不容易填错。可用 /sid 获取当前会话ID。",
+                "hint": "要填的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号。QQ 官方机器人使用 group_openid，不是群号，务必优先通过 /sid 获取并填写完整 UMO。",
                 "items": {
                     "type": "string"
                 }
@@ -28,7 +28,7 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 无历史拉取接口，只能分析插件启用后实时缓存到 AstrBot 本地库的消息。"
             },
             "max_messages": {
                 "type": "int",
@@ -51,6 +51,12 @@
                     "type": "string"
                 }
             },
+            "filter_bot_messages": {
+                "type": "bool",
+                "description": "分析时是否过滤机器人自己的消息",
+                "default": true,
+                "hint": "默认开启，bot 自身的发言不会出现在分析报告中。关闭后 bot 的发言也会被纳入话题分析、金句提取等。"
+            },
             "enable_user_card": {
                 "type": "bool",
                 "description": "使用用户群名片",
@@ -58,21 +64,22 @@
                 "hint": "在分析中优先使用用户的群名片作为昵称显示"
             },
             "output_format": {
-                "type": "string",
-                "description": "输出格式",
+                "type": "list",
+                "description": "输出格式（可多选）",
                 "options": [
                     "image",
                     "text",
                     "html"
                 ],
-                "default": "image",
-                "hint": "选择分析报告的输出方式：image(图片)、text(纯文本摘要)、html(可交互式网页文件)"
+                "default": ["image"],
+                "hint": "选择分析报告的输出方式（可多选）。image=图片、text=纯文本摘要、html=可交互式网页文件。多选仅在定时分析发送时时报告按顺序依次发送，手动触发时只发送第一个选中的格式，例如 image+html 会发送图片并通过外链提供 HTML 报告。QQ 官方图片/HTML 报告优先显示事件昵称，昵称缺失时使用群内稳定匿名名；文本报告由独立 Markdown 模块使用成员艾特展示身份。其他平台保持原有昵称文本格式。"
             },
             "report_template": {
                 "type": "string",
                 "description": "报告模板",
                 "options": [
                     "ATRI",
+                    "BlueArchive",
                     "scrapbook",
                     "retro_futurism",
                     "HatsuneMiku",
@@ -84,6 +91,41 @@
                 "default": "scrapbook",
                 "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
             },
+            "profile_display_mode": {
+                "type": "string",
+                "description": "人格标签展示模式",
+                "options": [
+                    "mbti",
+                    "sbti",
+                    "acgti"
+                ],
+                "default": "mbti",
+                "hint": "只影响群友画像卡片的角色主题展示，不影响实际 MBTI 分析结果。mbti=原始 MBTI，sbti=映射为 SBTI 人格，acgti=映射为 ACGTI 角色。"
+            },
+            "profile_image_opacity": {
+                "type": "float",
+                "description": "人格背景图透明度",
+                "default": 0.12,
+                "hint": "建议 0.08~0.18，仅作为卡片底层装饰，避免遮挡正文。"
+            },
+            "profile_image_size_mode": {
+                "type": "string",
+                "description": "人格背景图尺寸模式",
+                "options": [
+                    "contain",
+                    "cover"
+                ],
+                "default": "contain",
+                "hint": "建议默认 contain，减少角色图被裁切过多的问题。"
+            },
+            "profile_mapping_config": {
+                "type": "text",
+                "description": "人格映射配置(JSON)",
+                "editor_mode": true,
+                "editor_language": "json",
+                "default": "{\n    \"mbti\": {\n        \"INTJ\": {\n            \"code\": \"INTJ\",\n            \"name_zh\": \"建筑师\"\n        },\n        \"INTP\": {\n            \"code\": \"INTP\",\n            \"name_zh\": \"逻辑学家\"\n        },\n        \"ENTJ\": {\n            \"code\": \"ENTJ\",\n            \"name_zh\": \"指挥官\"\n        },\n        \"ENTP\": {\n            \"code\": \"ENTP\",\n            \"name_zh\": \"辩论家\"\n        },\n        \"INFJ\": {\n            \"code\": \"INFJ\",\n            \"name_zh\": \"提倡者\"\n        },\n        \"INFP\": {\n            \"code\": \"INFP\",\n            \"name_zh\": \"调停者\"\n        },\n        \"ENFJ\": {\n            \"code\": \"ENFJ\",\n            \"name_zh\": \"主人公\"\n        },\n        \"ENFP\": {\n            \"code\": \"ENFP\",\n            \"name_zh\": \"竞选者\"\n        },\n        \"ISTJ\": {\n            \"code\": \"ISTJ\",\n            \"name_zh\": \"物流师\"\n        },\n        \"ISFJ\": {\n            \"code\": \"ISFJ\",\n            \"name_zh\": \"守卫者\"\n        },\n        \"ESTJ\": {\n            \"code\": \"ESTJ\",\n            \"name_zh\": \"总经理\"\n        },\n        \"ESTP\": {\n            \"code\": \"ESTP\",\n            \"name_zh\": \"企业家\"\n        },\n        \"ISTP\": {\n            \"code\": \"ISTP\",\n            \"name_zh\": \"鉴赏家\"\n        },\n        \"ISFP\": {\n            \"code\": \"ISFP\",\n            \"name_zh\": \"探险家\"\n        },\n        \"ESFJ\": {\n            \"code\": \"ESFJ\",\n            \"name_zh\": \"执政官\"\n        },\n        \"ESFP\": {\n            \"code\": \"ESFP\",\n            \"name_zh\": \"表演者\"\n        }\n    },\n    \"sbti\": {\n        \"INTJ\": {\n            \"code\": \"CTRL\",\n            \"name_zh\": \"拿捏者\",\n            \"asset_code\": \"CTRL\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/CTRL.png\"\n        },\n        \"INTP\": {\n            \"code\": \"THIN-K\",\n            \"name_zh\": \"思考者\",\n            \"asset_code\": \"THIN-K\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/THIN-K.png\"\n        },\n        \"ENTJ\": {\n            \"code\": \"BOSS\",\n            \"name_zh\": \"领导者\",\n            \"asset_code\": \"BOSS\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/BOSS.png\"\n        },\n        \"ENTP\": {\n            \"code\": \"JOKE-R\",\n            \"name_zh\": \"小丑\",\n            \"asset_code\": \"JOKE-R\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/JOKE-R.jpg\"\n        },\n        \"INFJ\": {\n            \"code\": \"LOVE-R\",\n            \"name_zh\": \"多情者\",\n            \"asset_code\": \"LOVE-R\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/LOVE-R.png\"\n        },\n        \"INFP\": {\n            \"code\": \"SOLO\",\n            \"name_zh\": \"孤儿\",\n            \"asset_code\": \"SOLO\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SOLO.png\"\n        },\n        \"ENFJ\": {\n            \"code\": \"THAN-K\",\n            \"name_zh\": \"感恩者\",\n            \"asset_code\": \"THAN-K\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/THAN-K.png\"\n        },\n        \"ENFP\": {\n            \"code\": \"GOGO\",\n            \"name_zh\": \"行者\",\n            \"asset_code\": \"GOGO\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/GOGO.png\"\n        },\n        \"ISTJ\": {\n            \"code\": \"OH-NO\",\n            \"name_zh\": \"哦不人\",\n            \"asset_code\": \"OH-NO\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/OH-NO.png\"\n        },\n        \"ISTP\": {\n            \"code\": \"POOR\",\n            \"name_zh\": \"贫困者\",\n            \"asset_code\": \"POOR\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/POOR.png\"\n        },\n        \"ESTJ\": {\n            \"code\": \"SHIT\",\n            \"name_zh\": \"愤世者\",\n            \"asset_code\": \"SHIT\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SHIT.png\"\n        },\n        \"ESTP\": {\n            \"code\": \"WOC!\",\n            \"name_zh\": \"握草人\",\n            \"asset_code\": \"WOC\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/WOC.png\"\n        },\n        \"ISFJ\": {\n            \"code\": \"MUM\",\n            \"name_zh\": \"妈妈\",\n            \"asset_code\": \"MUM\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/MUM.png\"\n        },\n        \"ISFP\": {\n            \"code\": \"MALO\",\n            \"name_zh\": \"吗喽\",\n            \"asset_code\": \"MALO\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/MALO.png\"\n        },\n        \"ESFJ\": {\n            \"code\": \"ATM-er\",\n            \"name_zh\": \"送钱者\",\n            \"asset_code\": \"ATM-er\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/ATM-er.png\"\n        },\n        \"ESFP\": {\n            \"code\": \"SEXY\",\n            \"name_zh\": \"尤物\",\n            \"asset_code\": \"SEXY\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/sbti/SEXY.png\"\n        }\n    },\n    \"acgti\": {\n        \"INTJ\": {\n            \"code\": \"MRTS-X\",\n            \"name_zh\": \"Mortis\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MRTS-X.png\"\n        },\n        \"INTP\": {\n            \"code\": \"KNAN\",\n            \"name_zh\": \"江户川柯南\"\n        },\n        \"ENTJ\": {\n            \"code\": \"SAKI\",\n            \"name_zh\": \"丰川祥子\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/SAKI.png\"\n        },\n        \"ENTP\": {\n            \"code\": \"CHKA\",\n            \"name_zh\": \"藤原千花\"\n        },\n        \"INFJ\": {\n            \"code\": \"DLRS\",\n            \"name_zh\": \"三角初华\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/DLRS.png\"\n        },\n        \"INFP\": {\n            \"code\": \"BCHI\",\n            \"name_zh\": \"后藤一里\"\n        },\n        \"ENFJ\": {\n            \"code\": \"YCYO\",\n            \"name_zh\": \"月见八千代\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/YCYO.png\"\n        },\n        \"ENFP\": {\n            \"code\": \"HTMK\",\n            \"name_zh\": \"初音未来\"\n        },\n        \"ISTJ\": {\n            \"code\": \"MRTS\",\n            \"name_zh\": \"若叶睦\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MRTS.png\"\n        },\n        \"ISTP\": {\n            \"code\": \"AYRE\",\n            \"name_zh\": \"绫波丽\"\n        },\n        \"ESTJ\": {\n            \"code\": \"MIKT\",\n            \"name_zh\": \"御坂美琴\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/MIKT.png\"\n        },\n        \"ESTP\": {\n            \"code\": \"ASKA\",\n            \"name_zh\": \"明日香\"\n        },\n        \"ISFJ\": {\n            \"code\": \"SOYO\",\n            \"name_zh\": \"长崎爽世\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/SOYO.png\"\n        },\n        \"ISFP\": {\n            \"code\": \"LTYI\",\n            \"name_zh\": \"洛天依\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/LTYI.png\"\n        },\n        \"ESFJ\": {\n            \"code\": \"ANON\",\n            \"name_zh\": \"千早爱音\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/ANON.png\"\n        },\n        \"ESFP\": {\n            \"code\": \"FRNA\",\n            \"name_zh\": \"芙宁娜\",\n            \"image\": \"https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/acgti/characters/FRNA.png\"\n        }\n    }\n}",
+                "hint": "按 MBTI 覆盖当前展示模式的人格名称与图片地址。留空时自动使用插件内置默认映射和 manifest。插件不负责校验图片链接可访问性。"
+            },
             "debug_mode": {
                 "type": "bool",
                 "description": "调试模式（建议关闭）",
@@ -94,13 +136,170 @@
                 "type": "bool",
                 "description": "图片传输使用 Base64 编码",
                 "default": true,
-                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 go-cqhttp、Lagrange 等支持本地路径的实现，可降低内存占用。"
+                "hint": "启用后图片会被转为 Base64 编码传输。关闭后将直接传递文件路径或 URL 给 OneBot 实现端，适用于 Napcat/LLbot/SnowLuma 等支持本地路径的实现，可降低内存占用。"
+            },
+            "napcat_stream_threshold_mb": {
+                "type": "float",
+                "description": "NapCat/Snowluma 流式上传阈值（MB）",
+                "default": 2.0,
+                "hint": "先按现有图片发送策略发送本地图片；发送失败且文件大小达到阈值时，复用当前 NapCat/Snowluma 连接调用 upload_file_stream 并重试一次。填 0 禁用。Docker / docker compose 环境建议保持默认或按图片大小调大。"
             },
             "enable_analysis_reply": {
                 "type": "bool",
                 "description": "发送文本/表情回复",
                 "default": false,
                 "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。"
+            },
+            "show_report_caption": {
+                "type": "bool",
+                "description": "发送报告时附带 \"📊 每日群聊分析报告已生成\" 前缀",
+                "default": true,
+                "hint": "关闭后，发送图片/HTML 报告时将只发送文件本身，不附带 \"📊 每日群聊分析报告已生成\" 等文字前缀。"
+            }
+        }
+    },
+    "qq_official": {
+        "description": "QQ 官方机器人",
+        "type": "object",
+        "hint": "仅作用于 QQ 官方机器人及 QQ 官方 Webhook 的报告展示。",
+        "items": {
+            "enable_t2i_activity_histogram": {
+                "type": "bool",
+                "description": "启用 T2I 群聊概览图",
+                "default": true,
+                "hint": "在 QQ 官方 Markdown 报告中嵌入透明背景的日期、基础统计与 24 小时直方图。渲染失败时自动回退为完整文字报告。"
+            }
+        }
+    },
+    "t2i_rendering": {
+        "description": "图片渲染策略",
+        "type": "object",
+        "hint": "配置 HTML 转图片的渲染参数。支持两轮尝试：第一轮优先保证质量，第二轮作为回退方案，建议使用更低的分辨率和质量以提高成功率。",
+        "items": {
+            "t2i_r1_type": {
+                "type": "string",
+                "description": "第一轮：图片格式",
+                "options": ["jpeg", "png"],
+                "default": "png",
+                "hint": "建议：PNG 格式无损但体积较大；JPEG 格式体积较小。"
+            },
+            "t2i_r1_quality": {
+                "type": "int",
+                "description": "第一轮：图片质量 (若为 JPEG)",
+                "default": 100,
+                "slider": {
+                    "min": 1,
+                    "max": 100,
+                    "step": 1
+                },
+                "hint": "仅对 JPEG 格式生效。建议 80-100。"
+            },
+            "t2i_r1_device_scale": {
+                "type": "string",
+                "description": "第一轮：分辨率等级",
+                "options": ["normal", "high", "ultra"],
+                "default": "ultra",
+                "hint": "影响图片清晰度。normal=1.0x, high=1.3x, ultra=1.8x。高质量日报建议 ultra。"
+            },
+            "t2i_r1_timeout": {
+                "type": "int",
+                "description": "第一轮：渲染超时 (ms)",
+                "default": 50000,
+                "slider": {
+                    "min": 30000,
+                    "max": 180000,
+                    "step": 5000
+                },
+                "hint": "单次渲染的最长等待时间。复杂页面建议调大。"
+            },
+            "t2i_viewport_width": {
+                "type": "int",
+                "description": "报告渲染视口兜底宽度 (px)",
+                "default": 1080,
+                "slider": {
+                    "min": 800,
+                    "max": 1440,
+                    "step": 10
+                },
+                "hint": "仅在模板未提供 T2I 可识别的数字 width 时传给 AstrBot T2I，避免服务升级后回退到 800px 默认宽度而挤压宽版报告模板。内置主题建议保持 1440；自定义模板可用 meta viewport 的数字 width 指定自身宽度。"
+            },
+            "t2i_viewport_height": {
+                "type": "int",
+                "description": "报告渲染视口兜底高度 (px)",
+                "default": 900,
+                "slider": {
+                    "min": 400,
+                    "max": 1440,
+                    "step": 10
+                },
+                "hint": "仅在模板未提供 T2I 可识别的数字 height 时传给 AstrBot T2I。图片报告始终使用 full_page，不会按此高度截断整张报告。"
+            },
+            "t2i_r2_type": {
+                "type": "string",
+                "description": "第二轮 (回退)：图片格式",
+                "options": ["jpeg", "png"],
+                "default": "jpeg",
+                "hint": "回退策略建议使用 jpeg 以减少渲染压力。"
+            },
+            "t2i_r2_quality": {
+                "type": "int",
+                "description": "第二轮 (回退)：图片质量 (若为 JPEG)",
+                "default": 80,
+                "slider": {
+                    "min": 1,
+                    "max": 100,
+                    "step": 1
+                },
+                "hint": "仅对 JPEG 格式生效。可以设置较低值以确保生成成功。"
+            },
+            "t2i_r2_device_scale": {
+                "type": "string",
+                "description": "第二轮 (回退)：分辨率等级",
+                "options": ["normal", "high", "ultra"],
+                "default": "high",
+                "hint": "回退建议使用 high/normal 以降低复杂页面的内存消耗和超时概率。"
+            },
+            "t2i_r2_timeout": {
+                "type": "int",
+                "description": "第二轮 (回退)：渲染超时 (ms)",
+                "default": 100000,
+                "slider": {
+                    "min": 30000,
+                    "max": 180000,
+                    "step": 5000
+                },
+                "hint": "回退尝试通常针对复杂页面，建议设置更长的超时时间（如 100000ms+）。"
+            },
+            "t2i_font_source": {
+                "type": "string",
+                "description": "t2i 渲染环境切换",
+                "options": ["Mainland", "Overseas"],
+                "default": "Overseas",
+                "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文，没有特殊的情况都建议使用 Overseas，Mainland 配置下建议检查镜像站可用性，或者配置可靠的站点）"
+            },
+            "t2i_mainland_google_fonts": {
+                "type": "string",
+                "description": "[内地] Google Fonts 镜像",
+                "default": "https://fonts.loli.net",
+                "hint": "内地环境下推荐使用 loli.net 或其他可访问镜像。"
+            },
+            "t2i_mainland_gstatic": {
+                "type": "string",
+                "description": "[内地] Gstatic 镜像",
+                "default": "https://gstatic.loli.net",
+                "hint": "内地环境下推荐使用 loli.net 或其他可访问镜像。"
+            },
+            "t2i_overseas_google_fonts": {
+                "type": "string",
+                "description": "[海外] Google Fonts 官方",
+                "default": "https://fonts.googleapis.com",
+                "hint": "海外环境通常直接使用官方地址即可。"
+            },
+            "t2i_overseas_gstatic": {
+                "type": "string",
+                "description": "[海外] Gstatic 官方",
+                "default": "https://fonts.gstatic.com",
+                "hint": "海外环境通常直接使用官方地址即可。"
             }
         }
     },
@@ -124,17 +323,18 @@
                 "type": "string",
                 "description": "定时分析名单模式",
                 "options": [
+                    "inherit",
                     "whitelist",
                     "blacklist"
                 ],
                 "default": "whitelist",
-                "hint": "定时任务要作用到哪些群。whitelist=只跑下面列表里的群；blacklist=除了下面列表，其他都跑。注意：这里只对“已通过基础群权限”的群生效。"
+                "hint": "定时任务要作用到哪些群。inherit=直接继承基础群权限，不需要重复填写；whitelist=只跑下面列表里的群；blacklist=除了下面列表，其他都跑。定时名单始终不会绕过基础群权限。"
             },
             "scheduled_group_list": {
                 "type": "list",
                 "description": "定时分析群列表",
                 "default": [],
-                "hint": "定时任务群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。注意：whitelist + 空列表 = 不会开启定时任务。即使某群在增量名单里，只要不在定时白名单里，也不会自动触发。",
+                "hint": "仅在 whitelist 或 blacklist 模式下使用。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只跑这个群。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不跑，其他群跑。inherit 模式会忽略此列表并复用基础名单。whitelist + 空列表 = 不会开启定时任务。",
                 "items": {
                     "type": "string"
                 }
@@ -181,6 +381,13 @@
                 "default": "",
                 "hint": "专门用于聊天质量锐评的 Provider。留空则使用主 LLM Provider"
             },
+            "drawing_prompt_provider_id": {
+                "type": "string",
+                "description": "用于每日群漫画区域的功能，画图提示词专用 Provider ID",
+                "_special": "select_provider",
+                "default": "",
+                "hint": "专门用于生成漫画分镜、画图提示词及失败后的提示词重写。推荐最低使用 DeepSeek V4 Flash，避免使用角色扮演能力较弱的模型。留空则使用主 LLM Provider"
+            },
             "llm_retries": {
                 "type": "int",
                 "description": "LLM 请求重试次数",
@@ -191,7 +398,13 @@
                 "type": "int",
                 "description": "LLM 请求重试退避基值（秒）",
                 "default": 2,
-                "hint": "重试之间的基准等待时间（秒），实际等待时间为基值乘以尝试次数。"
+                "hint": "重试之间的基准等待时间（秒）。实际等待时间会随尝试次数指数增长，并加入少量随机抖动；当专用 Provider 失败后，会继续按队列尝试默认 Provider。"
+            },
+            "enable_streaming_llm_call": {
+                "type": "bool",
+                "description": "启用流式 LLM 调用",
+                "default": false,
+                "hint": "默认关闭，使用原有非流式调用方式。开启后，插件将使用 AstrBot Provider 的流式接口并聚合结果，适用于仅支持 stream=true 的服务。"
             }
         }
     },
@@ -259,30 +472,1072 @@
                 "type": "string",
                 "_special": "select_persona",
                 "default": "",
-                "hint": "当“强制使用插件指定人格”开启时，在此处选择系统中已定义的人设。若此处未选择，则仍会尝试识别全局默认人格。"
+                "hint": "当“强制使用插件指定人格”开启时，在此处选择系统中已定义的人设。该人格会同时作用于画图提示词生成模型。若此处未选择，则仍会尝试识别全局默认人格。"
+            }
+        }
+    },
+    "daily_comic": {
+        "description": "每日群漫画",
+        "type": "object",
+        "hint": "群聊分析结果完成后，后台并行生成并发送趣味漫画，不等待报告渲染或发送结束。可选上传至群相册，支持配置独立绘图接口和图生图参考图。",
+        "items": {
+            "enable_daily_comic": {
+                "description": "启用漫画功能",
+                "type": "bool",
+                "default": false,
+                "hint": "漫画总开关。关闭时，/群漫画 和所有自动联动漫画都会停止。开启后可继续通过下方“分析后自动生成漫画”单独控制自动联动。"
+            },
+            "enable_auto_daily_comic": {
+                "description": "分析后自动生成漫画",
+                "type": "bool",
+                "default": true,
+                "hint": "控制手动群分析、定时分析和增量最终报告完成后是否自动生成漫画。关闭后仍可手动使用 /群漫画，且不会重复执行话题分析链路。"
+            },
+            "comic_group_list_mode": {
+                "description": "漫画群名单模式",
+                "type": "string",
+                "options": [
+                    "inherit",
+                    "whitelist",
+                    "blacklist"
+                ],
+                "default": "inherit",
+                "hint": "只控制漫画生成，不影响报告名单。inherit=继承基础群权限，适合漫画和分析使用同一批群且无需重复填写；blacklist=除列表外都允许生成漫画，适合只开放漫画不开放分析；whitelist=只允许列表里的群生成漫画。白名单为空时不会为任何群生成漫画。"
+            },
+            "comic_group_list": {
+                "type": "list",
+                "description": "漫画群白/黑名单列表",
+                "default": [],
+                "hint": "用于漫画生成的群列表。可以填完整会话ID（如 onebot:GroupMessage:123456）或只填群号。自动漫画和 /群漫画 手动命令都会检查这里。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "random_daily_comic_character": {
+                "description": "每天随机切换漫画角色",
+                "type": "bool",
+                "default": false,
+                "hint": "开启后每天首次生成漫画时，会从下方已启用的角色方案随机选择一个，并按运行环境时区在当天持续使用；重启不会改变当天选择。关闭时固定使用第一个已启用方案。"
+            },
+            "comic_characters": {
+                "description": "漫画角色方案",
+                "type": "template_list",
+                "default": [],
+                "hint": "每个方案可绑定漫画专用人格、参考图和场景分析提示词。方案条目可展开编辑；请使用不同的方案名称，方便识别当天随机选中的角色。未配置方案时仍可正常文生图。",
+                "templates": {
+                    "character": {
+                        "name": "漫画角色方案",
+                        "display_item": "name",
+                        "items": {
+                            "name": {
+                                "description": "方案名称",
+                                "type": "string",
+                                "default": "",
+                                "hint": "仅用于在配置面板和运行日志中识别此方案。"
+                            },
+                            "enable": {
+                                "description": "启用此方案",
+                                "type": "bool",
+                                "default": true
+                            },
+                            "persona_id": {
+                                "description": "漫画专用人格",
+                                "type": "string",
+                                "_special": "select_persona",
+                                "default": "",
+                                "hint": "仅影响漫画分镜提示词，不会改变群分析报告、话题或金句使用的人格。"
+                            },
+                            "reference_images": {
+                                "description": "角色参考图",
+                                "type": "file",
+                                "default": [],
+                                "file_types": ["jpg", "jpeg", "png", "webp"],
+                                "hint": "上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
+                            },
+                            "storyboard_prompt": {
+                                "description": "漫画场景分析提示词",
+                                "type": "text",
+                                "editor_mode": true,
+                                "editor_language": "markdown",
+                                "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
+                                "hint": "此角色专属的分镜、画风和台词规则。留空时回退到下方全局默认模板。"
+                            }
+                        }
+                    }
+                }
+            },
+            "drawing_reference_image": {
+                "description": "旧版漫画参考图（兼容迁移）",
+                "type": "file",
+                "default": [],
+                "file_types": ["jpg", "jpeg", "png", "webp"],
+                "invisible": true,
+                "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
+            },
+            "drawing_backend": {
+                "description": "绘图后端",
+                "type": "string",
+                "options": ["builtin", "general_plugin", "big_banana"],
+                "default": "builtin",
+                "hint": "builtin=使用本插件内置绘图客户端；general_plugin=调用已安装的「通用生图」插件（https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation）的公共 API；big_banana=调用已安装的「大香蕉」插件（https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana）的绘图管线（支持 Gemini、SiliconFlow 等多家服务）。使用外部后端时，需先在对应插件中配置其自身的 API/提供商；未安装、未激活或调用失败时自动回退内置后端。"
+            },
+            "drawing_external_fallback": {
+                "description": "外部后端失败时回退内置后端",
+                "type": "bool",
+                "default": true,
+                "hint": "使用通用生图/大香蕉外部绘图后端时，若其未安装、未激活或生成失败，是否自动回退到本插件内置绘图客户端；关闭后失败将直接取消本次漫画生成。"
+            },
+            "drawing_provider_overrides": {
+                "description": "绘图供应商配置表",
+                "type": "template_list",
+                "default": [],
+                "hint": "可添加多个绘图供应商。按 priority 从高到低尝试，同优先级按表中顺序尝试；所有候选失败后才判定漫画生成失败。至少添加一个包含 API Key 的启用条目。",
+                "templates": {
+                    "google": {
+                        "name": "google",
+                        "description": "配置 Google Gemini 官方 API 的密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://generativelanguage.googleapis.com/v1beta"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gemini-3-pro-image-preview"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "openai": {
+                        "name": "openai",
+                        "description": "配置 OpenAI 兼容格式的 Chat API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-4o"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "zai": {
+                        "name": "zai",
+                        "description": "配置 Z.ai 的 API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.z.ai/api/paas/v4"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "glm-4.6v"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "grok2api": {
+                        "name": "grok2api",
+                        "description": "配置 grok2api 的 API 密钥和端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "grok-2-image"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "agnes_ai": {
+                        "name": "agnes_ai",
+                        "description": "Agnes AI 国际站（apihub.agnes-ai.com），支持文生图和参考图",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://apihub.agnes-ai.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "agnes-image-2.1-flash"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "agnes_ai_china": {
+                        "name": "agnes_ai_china",
+                        "description": "Agnes AI 中国站（api.agnes-ai.cn），API Key 仅可在所属站点使用",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.agnes-ai.cn"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "agnes-image-2.1-flash"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "xai": {
+                        "name": "xai",
+                        "description": "配置 xAI /v1/images/generations 和 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.x.ai"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "grok-imagine-image"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "output_format": {
+                                "description": "响应格式",
+                                "type": "string",
+                                "options": ["url", "b64_json"],
+                                "default": "url"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "minimax": {
+                        "name": "minimax",
+                        "description": "配置 MiniMax /v1/image_generation 端点，支持 subject_reference 参考图",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.minimaxi.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "image-01"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "stepfun": {
+                        "name": "stepfun",
+                        "description": "配置阶跃星辰 /v1/images/generations 或 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.stepfun.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "step-image-edit-2"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "openai_images": {
+                        "name": "openai_images",
+                        "description": "配置 OpenAI /v1/images/generations 和 /v1/images/edits 端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://api.openai.com/v1"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-image-1"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "auto"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "quality": {
+                                "description": "图像质量",
+                                "type": "string",
+                                "hint": "OpenAI Images 的 quality 参数。GPT Image 模型通常支持 auto、low、medium、high；不兼容的中转服务可改为 auto。",
+                                "options": ["auto", "low", "medium", "high"],
+                                "default": "high"
+                            },
+                            "background": {
+                                "description": "背景模式",
+                                "type": "string",
+                                "hint": "仅 GPT Image 模型支持。auto 不发送该参数；transparent 适合透明背景素材，opaque 使用不透明背景。",
+                                "options": ["auto", "transparent", "opaque"],
+                                "default": "auto"
+                            },
+                            "output_format": {
+                                "description": "输出格式",
+                                "type": "string",
+                                "options": ["png", "jpeg", "webp"],
+                                "default": "png"
+                            },
+                            "response_format": {
+                                "description": "响应图片格式",
+                                "type": "string",
+                                "hint": "留空由服务端决定；url 返回图片链接，b64_json 返回 Base64。部分 OpenAI 兼容服务只支持其中一种。",
+                                "options": ["", "url", "b64_json"],
+                                "default": ""
+                            },
+                            "output_compression": {
+                                "description": "输出压缩率",
+                                "type": "int",
+                                "hint": "仅 GPT Image 的 JPEG/WebP 输出生效。0 表示不传并使用服务端默认值，1-100 为压缩率。",
+                                "default": 0
+                            },
+                            "moderation": {
+                                "description": "审核模式",
+                                "type": "string",
+                                "hint": "仅 GPT Image 模型支持。留空不传；选择 low 时使用较低的审核强度。",
+                                "options": ["", "low"],
+                                "default": ""
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "图生图时最多发送的角色参考图数量。填 0 表示不发送参考图，适合只支持单纯文生图的中转服务。",
+                                "default": 6
+                            },
+                            "generations_only": {
+                                "description": "仅使用文生图",
+                                "type": "bool",
+                                "hint": "开启后忽略本次漫画角色参考图，始终调用 /images/generations。",
+                                "default": false
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "doubao": {
+                        "name": "doubao",
+                        "description": "配置豆包专用图像生成端点、模型和图片参数",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "endpoint_mode": {
+                                "description": "端点模式",
+                                "type": "string",
+                                "options": ["official", "agent_plan"],
+                                "default": "official"
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://ark.cn-beijing.volces.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型或 Endpoint ID",
+                                "type": "string",
+                                "default": "doubao-seedream-5-0-260128"
+                            },
+                            "endpoint_id": {
+                                "description": "Endpoint ID 覆盖",
+                                "type": "string",
+                                "hint": "留空使用模型名称；使用推理接入点时填写 Endpoint ID，其优先级高于模型名称。",
+                                "default": ""
+                            },
+                            "model_capability": {
+                                "description": "模型能力标记",
+                                "type": "string",
+                                "hint": "使用无法从 Endpoint ID 判断能力的自建接入点时，标记为 Seedream 5.0 Pro 可正确限制参考图并禁用组图。",
+                                "options": ["auto", "seedream_5_pro"],
+                                "default": "auto"
+                            },
+                            "size_mode": {
+                                "description": "尺寸模式",
+                                "type": "string",
+                                "hint": "preset 使用图像分辨率；custom 直接发送自定义尺寸。",
+                                "options": ["preset", "custom"],
+                                "default": "preset"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "size": {
+                                "description": "预设尺寸",
+                                "type": "string",
+                                "hint": "仅 preset 模式生效，支持 1K、2K、3K、4K；具体模型支持范围以火山方舟文档为准。",
+                                "options": ["1K", "2K", "3K", "4K"],
+                                "default": "2K",
+                                "condition": {"size_mode": "preset"}
+                            },
+                            "custom_size": {
+                                "description": "自定义尺寸",
+                                "type": "string",
+                                "hint": "仅 custom 模式生效，格式 WxH，例如 2048x2048 或 2304x1728。",
+                                "default": "2048x2048",
+                                "condition": {"size_mode": "custom"}
+                            },
+                            "output_format": {
+                                "description": "输出格式",
+                                "type": "string",
+                                "options": ["png", "jpeg", "webp"],
+                                "default": "png"
+                            },
+                            "watermark": {
+                                "description": "添加水印",
+                                "type": "bool",
+                                "hint": "启用后要求服务端在图片中添加水印。",
+                                "default": false
+                            },
+                            "optimize_prompt_mode": {
+                                "description": "提示词优化模式",
+                                "type": "string",
+                                "hint": "standard 偏向生成质量，fast 偏向更快的请求速度；留空不传。",
+                                "options": ["", "standard", "fast"],
+                                "default": "standard"
+                            },
+                            "sequential_image_generation": {
+                                "description": "组图生成模式",
+                                "type": "string",
+                                "hint": "auto 允许模型自主生成连续组图；Seedream 5.0 Pro 不支持该能力，会自动忽略。",
+                                "options": ["disabled", "auto"],
+                                "default": "disabled"
+                            },
+                            "sequential_max_images": {
+                                "description": "组图最大张数",
+                                "type": "int",
+                                "hint": "仅 auto 组图模式生效，合法范围为 1-12。",
+                                "default": 1
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "普通 Seedream 最多 14 张，Seedream 5.0 Pro 最多 10 张；超过后按顺序截取。",
+                                "default": 14
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "sensenova": {
+                        "name": "sensenova",
+                        "description": "配置 SenseNova U1 Fast 文生图 API 的密钥与端点",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "Bearer Token",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://token.sensenova.cn"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "sensenova-u1-fast"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "default_size": {
+                                "description": "默认图像尺寸",
+                                "type": "string",
+                                "hint": "宽高比无法映射时使用。必须为 SenseNova U1 Fast 官方支持的尺寸。",
+                                "options": ["2048x2048", "2752x1536", "1536x2752", "2368x1760", "1760x2368", "2496x1664", "1664x2496", "2272x1824", "1824x2272", "3072x1376", "1344x3136"],
+                                "default": "2752x1536"
+                            },
+                            "n": {
+                                "description": "单次生成数量",
+                                "type": "int",
+                                "hint": "SenseNova 单次支持 1-4 张，超出范围会自动限制。",
+                                "default": 1
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "dashscope": {
+                        "name": "dashscope",
+                        "description": "配置通义万相 wan2.7 / 千问图像 qwen-image-2.0 等 DashScope 原生图像模型",
+                        "items": {
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "endpoint_mode": {
+                                "description": "端点模式",
+                                "type": "string",
+                                "options": ["dashscope", "token_plan"],
+                                "default": "dashscope"
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": "https://dashscope.aliyuncs.com"
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "wan2.7-image-pro"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "max_reference_images": {
+                                "description": "最大参考图片数量",
+                                "type": "int",
+                                "hint": "DashScope 单次最多使用 9 张角色参考图，超过后按顺序截取。填 0 表示不发送参考图。",
+                                "default": 9
+                            },
+                            "size_mode": {
+                                "description": "尺寸模式",
+                                "type": "string",
+                                "hint": "preset 根据分辨率和宽高比换算官方建议尺寸；custom 直接发送自定义尺寸。",
+                                "options": ["preset", "custom"],
+                                "default": "preset"
+                            },
+                            "custom_size": {
+                                "description": "自定义尺寸",
+                                "type": "string",
+                                "hint": "仅 custom 模式生效。支持 WxH、W*H、W×H，或 wan2.7 的 1K、2K、4K 简写。",
+                                "default": "2048*2048",
+                                "condition": {"size_mode": "custom"}
+                            },
+                            "n": {
+                                "description": "单次生成数量",
+                                "type": "int",
+                                "hint": "wan2.7 通常支持 1-4 张，顺序组图最多 12 张；qwen-image-2.0 最多 6 张，其他模型最多 1 张。",
+                                "default": 1
+                            },
+                            "watermark": {
+                                "description": "添加水印",
+                                "type": "bool",
+                                "hint": "启用后请求服务端在输出图片中添加水印。",
+                                "default": false
+                            },
+                            "negative_prompt": {
+                                "description": "负面提示词",
+                                "type": "string",
+                                "hint": "仅非 wan2.7 模型支持；wan2.7 会自动忽略该字段。",
+                                "default": ""
+                            },
+                            "prompt_extend": {
+                                "description": "提示词智能改写",
+                                "type": "bool",
+                                "hint": "仅非 wan2.7 模型生效。开启会让服务端改写提示词，通常会增加请求延迟。",
+                                "default": false
+                            },
+                            "thinking_mode": {
+                                "description": "增强推理",
+                                "type": "bool",
+                                "hint": "仅 wan2.7 生效。顺序组图模式开启时与 enable_sequential 互斥并自动不发送。",
+                                "default": true
+                            },
+                            "enable_sequential": {
+                                "description": "顺序组图生成",
+                                "type": "bool",
+                                "hint": "仅 wan2.7 生效。开启后关闭增强推理，并允许最多 12 张连续图片。",
+                                "default": false
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    },
+                    "custom": {
+                        "name": "自定义协议",
+                        "description": "为未列出的兼容服务手动选择协议和参数",
+                        "items": {
+                            "name": {
+                                "description": "供应商名称",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "priority": {
+                                "description": "优先级",
+                                "type": "int",
+                                "default": 0
+                            },
+                            "api_protocol": {
+                                "description": "API 协议类型",
+                                "type": "string",
+                                "options": ["images", "chat", "grok", "gemini"],
+                                "default": "images"
+                            },
+                            "api_key": {
+                                "description": "API Key",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "api_url": {
+                                "description": "API 端点",
+                                "type": "string",
+                                "default": ""
+                            },
+                            "proxy": {
+                                "description": "代理地址",
+                                "type": "string",
+                                "default": "",
+                                "hint": "填写即启用代理，留空使用全局生图代理。支持 http://host:port、https://host:port、socks5://host:port；优先级高于全局设置。"
+                            },
+                            "model": {
+                                "description": "模型名称",
+                                "type": "string",
+                                "default": "gpt-image-2"
+                            },
+                            "image_size": {
+                                "description": "图像分辨率",
+                                "type": "string",
+                                "default": "2K"
+                            },
+                            "aspect_ratio": {
+                                "description": "宽高比",
+                                "type": "string",
+                                "default": "16:9"
+                            },
+                            "timeout": {
+                                "description": "请求超时（秒）",
+                                "type": "int",
+                                "default": 600
+                            }
+                        }
+                    }
+                }
+            },
+            "drawing_proxy": {
+                "description": "全局生图代理地址",
+                "type": "string",
+                "default": "",
+                "hint": "填写即代理漫画生图 API 及其返回图片下载，留空不使用。支持 http://host:port、https://host:port、socks5://host:port；供应商配置表中的代理优先于此设置。"
+            },
+            "drawing_output_exception_retries": {
+                "description": "输出异常重试次数",
+                "type": "int",
+                "default": 3,
+                "hint": "当触发屏蔽词/审核等异常时的自动重试次数。次数耗尽后会交给LLM进行改写救场。"
+            },
+            "drawing_output_exception_retry_keywords": {
+                "description": "输出异常触发关键词",
+                "type": "list",
+                "items": { "type": "string" },
+                "default": [],
+                "hint": "当绘图错误信息包含任一关键词时，将其视为内容生成或安全审核异常，并使用同一接口配置重试；重试耗尽后可由 LLM 改写 Prompt。留空则不执行此类内容重试和 Prompt 改写。"
+            },
+            "drawing_retry_delay": {
+                "description": "画图重试等待时间 (秒)",
+                "type": "int",
+                "default": 2,
+                "hint": "遇到异常或网络报错时，等待多长时间后重试。针对容易超载的接口建议调高，如 5 或 10。"
+            },
+            "drawing_network_retries": {
+                "description": "网络错误重试次数",
+                "type": "int",
+                "default": 2,
+                "hint": "请求超时、限流或服务端错误时的重试次数；内容审核重试次数请单独配置。"
+            },
+            "drawing_download_proxy": {
+                "description": "图片下载代理",
+                "type": "string",
+                "default": "",
+                "hint": "下载绘图 API 返回的图片 URL 时使用的代理，格式为 http://host:port 或 socks5://host:port。留空则不使用代理。"
             }
         }
     },
     "incremental": {
         "description": "增量分析设置",
         "type": "object",
-        "hint": "增量分析通过在活跃时段分步提取摘要，能显著提高分析深度和覆盖率。这里仅决定“已通过前两关的群”是走增量还是普通模式。",
+        "hint": "增量分析按目标群新增消息数量分批提取摘要，不受时间段或执行间隔限制。这里仅决定“已通过前两关的群”是走增量还是普通模式。",
         "items": {
             "incremental_group_list_mode": {
                 "type": "string",
                 "description": "增量分析名单模式",
                 "options": [
+                    "inherit",
                     "whitelist",
                     "blacklist"
                 ],
                 "default": "whitelist",
-                "hint": "哪些群用“增量分析”。whitelist=只有列表里的群用增量；blacklist=除了列表外都用增量。没命中的群会走普通模式。注意：增量名单不负责放行群，只负责选模式。"
+                "hint": "哪些群用“增量分析”。inherit=直接继承定时分析的最终名单；whitelist=只有列表里的群用增量；blacklist=除了列表外都用增量。没命中的群会走普通模式。增量名单不负责绕过基础或定时名单，只负责选模式。"
             },
             "incremental_group_list": {
                 "type": "list",
                 "description": "增量分析群列表",
                 "default": [],
-                "hint": "增量分析群列表。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只有这个群增量。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不用增量，其他群用增量。注意：whitelist + 空列表 = 不启用增量。只有先通过基础群权限 + 定时名单的群，才会在这里判断。",
+                "hint": "仅在 whitelist 或 blacklist 模式下使用。示例1：mode=whitelist + [\"onebot:GroupMessage:123456\"] => 只有这个群增量。示例2：mode=blacklist + [\"onebot:GroupMessage:123456\"] => 这个群不用增量，其他群用增量。inherit 模式会忽略此列表并复用定时分析名单。whitelist + 空列表 = 不启用增量。",
                 "items": {
                     "type": "string"
                 }
@@ -293,29 +1548,11 @@
                 "default": false,
                 "hint": "【调试功能】启用后，每次增量分析完成后都会立即生成并发送一份最终报告。仅建议在调试时开启，生产环境请保持关闭，否则会频繁打扰群友。"
             },
-            "incremental_interval_minutes": {
-                "type": "int",
-                "description": "增量分析间隔（分钟）",
-                "default": 120,
-                "hint": "每隔多少分钟执行一次增量分析。建议根据群聊实际情况处理，间隔越短分析越精细但消耗更多 Token。"
-            },
-            "incremental_max_daily_analyses": {
-                "type": "int",
-                "description": "每日最大增量分析次数",
-                "default": 8,
-                "hint": "一天内最多执行多少次增量分析。达到上限后当天不再触发新的增量分析，但仍会在报告时间生成最终报告。建议4-12次。"
-            },
-            "incremental_safe_limit": {
-                "type": "int",
-                "description": "增量分析单次安全上限 (Safe Count)",
-                "default": 2000,
-                "hint": "增量分析模式下，当群聊极其活跃导致大量消息堆积时，插件单次回溯历史的最大消息条数。这同时也是为了防止特殊情况下无限回溯。即使没追到上次分析的断点，拉满此数值也会强制停止。建议 1000-5000。"
-            },
             "incremental_min_messages": {
                 "type": "int",
-                "description": "增量分析最小消息数阈值",
+                "description": "增量分析每批消息数",
                 "default": 300,
-                "hint": "当自上次分析以来的新消息数低于此阈值时，跳过本次增量分析以节省 Token。建议设置较大值，因为当获取到的消息不够时，最晚消息的游标不会更新，等消息累计足够后的增量分析会进行分析。"
+                "hint": "目标群每累计到此消息数就触发一个固定规模的增量分析批次；不足时持续等待，待处理消息达到多个批次时会连续处理。建议根据模型上下文和群活跃度设置。"
             },
             "incremental_topics_per_batch": {
                 "type": "int",
@@ -328,24 +1565,6 @@
                 "description": "单次增量提取金句数",
                 "default": 2,
                 "hint": "每次增量分析最多提取的金句数量。最终报告会汇总所有批次的金句。建议1-2。"
-            },
-            "incremental_active_start_hour": {
-                "type": "int",
-                "description": "增量分析活跃起始时段",
-                "default": 8,
-                "hint": "增量分析的活跃时段起始小时（24小时制）。如果目标群聊凌晨也活跃，建议设定的很早；在活跃时段之外不会触发增量分析，避免凌晨等低活跃时段浪费分析配额."
-            },
-            "incremental_active_end_hour": {
-                "type": "int",
-                "description": "增量分析活跃结束时段",
-                "default": 23,
-                "hint": "增量分析的活跃时段结束小时（24小时制）。超过此时段后不再触发增量分析。"
-            },
-            "incremental_stagger_seconds": {
-                "type": "int",
-                "description": "多群增量分析交错间隔（秒）",
-                "default": 2,
-                "hint": "当同时对多个群进行增量分析时，每个群之间的延迟间隔（秒），用于均匀分散 API 请求压力。"
             },
             "incremental_fallback_enabled": {
                 "type": "bool",
@@ -362,7 +1581,7 @@
         "items": {
             "html_base_url": {
                 "type": "string",
-                "description": "外鏈 Base URL",
+                "description": "外链 Base URL",
                 "default": "",
                 "hint": "用于生成外链的 Base URL（可留空）。如果设置了此项，发送报告时会在消息中提供超连結 (${BASE_URL}/${FILENAME})。留空则不提供外链。"
             },
@@ -372,18 +1591,24 @@
                 "default": "",
                 "hint": "HTML报告文件的保存目录，用于存储生成的 HTML 文件和原始 JSON 数据。留空则自动使用插件数据目录（astrbot_path/data/plugin_data/astrbot_plugin_qq_group_daily_analysis/）下的 self_hosted_html_reports 目录。"
             },
+            "html_only_url": {
+                "type": "bool",
+                "description": "仅发送外链",
+                "default": false,
+                "hint": "勾选后，若配置了外链 Base URL，则发送 HTML 报告时将只发送外链链接，不再发送HTML文件，若未勾选，将保持发送HTML文件。"
+            },
             "html_filename_format": {
                 "type": "string",
                 "description": "HTML文件名格式",
                 "default": "群聊分析报告_${group_id}_${date}_${ulid}.html",
-                "hint": "HTML文件名格式，支持变量：${group_id}(群号)、${date}(日期)、${ulid}(时间排序ID)，支持子目录/层级。"
+                "hint": "HTML文件名格式，支持变量：${group_id}(群号)、${date}(日期)、${trace_id}(链路追踪ID)、${ulid}(时间排序ID)，支持子目录/层级。"
             }
         }
     },
     "qq_group_upload": {
         "description": "群文件/群相册上传设置",
         "type": "object",
-        "hint": "图片报告生成后自动上传到群文件目录或群相册。群文件上传基于 OneBot upload_group_file API，群相册上传为 NapCat 扩展 API。仅对 QQ（OneBot）平台的图片格式报告生效",
+        "hint": "图片报告生成后自动上传到群文件目录或群相册。群文件上传基于 OneBot upload_group_file API。仅对 QQ（OneBot）平台的图片格式报告生效",
         "items": {
             "enable_group_file_upload": {
                 "type": "bool",
@@ -399,7 +1624,7 @@
             },
             "enable_group_album_upload": {
                 "type": "bool",
-                "description": "启用群相册上传（NapCat 通过测试）",
+                "description": "启用群相册上传",
                 "default": false,
                 "hint": "图片报告生成后，自动上传到群相册（确保 Bot 有权限上传群相册）。此功能为 NapCat 扩展 API，其他 OneBot 实现可能不支持"
             },
@@ -414,6 +1639,18 @@
                 "description": "群相册上传严格模式",
                 "default": true,
                 "hint": "当启用该开关且设置了目标群相册名称时：如果插件在目标群组中找不到同名的相册，将放弃上传。关闭该开关时，找不到目标相册将回退到群组默认的第一个相册。"
+            },
+            "enable_comic_album_upload": {
+                "type": "bool",
+                "description": "启用漫画相册上传",
+                "default": false,
+                "hint": "生成的每日群漫画除了发送到群聊外，是否还需要额外静默上传到群相册"
+            },
+            "comic_album_name": {
+                "description": "漫画相册名称",
+                "type": "string",
+                "default": "",
+                "hint": "指定每日群漫画上传到的群相册名称。群相册严格模式开启时，名称为空或找不到同名相册将放弃上传；关闭严格模式时可回退到默认相册。"
             }
         }
     },
@@ -432,7 +1669,7 @@
                         "type": "text",
                         "editor_mode": true,
                         "editor_language": "markdown",
-                        "default": "请分析接下来提供的群聊记录，提取出最多 **${max_topics}** 个主要话题。根据实际聊天内容提取所有最有意义的话题。\n\n## 对于每个话题，请提供：\n\n1. **话题名称**（突出主题内容，尽量简明扼要，控制在 10 字以内）\n2. **主要参与者的用户ID**（最多 5 人，按参与度排序）\n3. **话题详细描述**（包含关键信息和结论）\n\n## 注意事项：\n\n- 在生成描述内容时，请务必从你当前人格设定的视角和口吻出发。\n- 对于比较有价值的点，稍微用一两句话详细讲讲，让读者能了解讨论的深度\n- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，即明确指出\"谁做了什么\"\n- **用户引用**：在话题详情描述中，如果提到了具体用户，请使用 `[用户ID]` 的格式来指代（例如 `[123456]`）。不要只写昵称。我们会自动渲染头像。\n- 对于每一条总结，尽量讲清楚前因后果，不要只列出结论\n- 如果某个话题有明确的结论或共识，请在描述中体现\n- 忽略无意义的闲聊、灌水、单纯的表情回复等\n- 优先选择讨论深度较深、参与人数较多的话题\n- 如果消息太少或没有明确话题，可以返回空数组 []\n\n群聊记录格式: [HH:MM] [用户ID]: 消息内容\n\n群聊记录：\n${messages_text}\n\n---\n\n## 重要：必须返回标准 JSON 格式\n\n严格遵守以下规则：\n\n1. 只使用英文双引号 `\"` ，不要使用中文引号 `“` `”`\n2. 字符串内容中的引号必须转义为 `\\\"`\n3. 多个对象之间用逗号分隔\n4. 数组元素之间用逗号分隔\n5. 不要在 JSON 外添加任何文字说明\n6. 描述内容避免使用特殊符号，用普通文字表达\n\n### 返回格式示例：\n\n```json\n[\n  {{\n    \"topic\": \"话题名称\",\n    \"contributors\": [\"123456789\", \"987654321\"],\n    \"detail\": \"话题的详细描述，包含讨论内容、关键信息和结论。注意：在描述中提及用户时，使用 [用户ID] 格式，例如 [123456789]。\"\n  }},\n  {{\n    \"topic\": \"另一个话题\",\n    \"contributors\": [\"111222333\", \"444555666\"],\n    \"detail\": \"另一个话题的详细描述...\"\n  }}\n]\n```\n\n**注意**：返回的内容必须是纯 JSON，不要包含 markdown 代码块标记或其他格式。"
+                        "default": "请分析接下来提供的群聊记录，提取出 1 到 **${max_topics}** 个主要话题。**如果聊天记录较多，请务必仔细分析，尽可能多地提取出不同层面的话题，争取达到 ${max_topics} 个上限**。\n\n## 对于每个话题，请提供：\n\n1. **话题名称**（突出主题内容，尽量简明扼要，控制在 10 字以内）\n2. **主要参与者的用户ID**（最多 5 人，按参与度排序）\n3. **话题详细描述**（包含关键信息和结论）\n\n## 注意事项：\n\n- 在生成描述内容时，请务必从你当前人格设定的视角和口吻出发。\n- 对于比较有价值的点，稍微用一两句话详细讲讲，让读者能了解讨论的深度\n- 对于其中的部分信息，你需要特意提到主题施加的主体是谁，即明确指出\"谁做了什么\"\n- **用户引用**：在话题详情描述中，如果提到了具体用户，请使用 `[用户ID]` 的格式来指代（例如 `[123456]`）。不要只写昵称。我们会自动渲染头像。\n- 对于每一条总结，尽量讲清楚前因后果，不要只列出结论\n- 如果某个话题有明确的结论或共识，请在描述中体现\n- 忽略无意义的闲聊、灌水、单纯的表情回复等\n- 优先选择讨论深度较深、参与人数较多的话题\n- 如果消息太少或没有明确话题，可以返回空数组 []\n\n群聊记录格式: [HH:MM] [用户ID]: 消息内容\n\n群聊记录：\n${messages_text}\n\n---\n\n## 重要：必须返回标准 JSON 格式\n\n严格遵守以下规则：\n\n1. 只使用英文双引号 `\"` ，不要使用中文引号 `“` `”`\n2. 字符串内容中的引号必须转义为 `\\\"`\n3. 多个对象之间用逗号分隔\n4. 数组元素之间用逗号分隔\n5. 不要在 JSON 外添加任何文字说明\n6. 描述内容避免使用特殊符号，用普通文字表达\n\n### 返回格式示例：\n\n```json\n[\n  {{\n    \"topic\": \"话题名称\",\n    \"contributors\": [\"123456789\", \"987654321\"],\n    \"detail\": \"话题的详细描述，包含讨论内容、关键信息和结论。注意：在描述中提及用户时，使用 [用户ID] 格式，例如 [123456789]。\"\n  }},\n  {{\n    \"topic\": \"另一个话题\",\n    \"contributors\": [\"111222333\", \"444555666\"],\n    \"detail\": \"另一个话题的详细描述...\"\n  }}\n]\n```\n\n**注意**：返回的内容必须是纯 JSON，不要包含 markdown 代码块标记或其他格式。"
                     }
                 }
             },
@@ -484,6 +1721,21 @@
                         "default": "你现在有一份今天全天分散时间段的多个“增量批次点评笔记”。\n你的任务是将这些分散的笔记汇总成一份最终的“全天聊天质量终极锐评”。\n\n## 任务目标：\n1. **全局抽象维度**：根据各批次的维度表现，平衡权重，提取出 3-6 个覆盖全天的【核心、上层抽象】课题维度（如：职场/行业风向、技术架构演进、社畜心理博弈等）。\n2. **严禁在维度名称（name）中出现具体的批次细节。标题必须代表全天的某种趋势。**\n3. **百分比融合**：根据全天笔记的频率和强度，给出一个代表全天整体分布的比例（总和不超过100%）。\n4. **终极点评**：为每个汇总维度写出一句符合你当前人设且升华后的全天总结性点评。可以融合具体批次中的有趣槽点。\n5. **终极总结**：拟定全天的大型主题标题、副标题，并给出一句霸气的全天表现总结。\n\n## 风格要求：\n- 只有维度名称（name）需要高度概括抽象。\n- 点评（comment）和总结（summary）请尽量生动、具体，要把一整天的梗串联起来。\n\n## 返回格式要求：\n必须以纯 JSON 格式返回，不得包含任何 Markdown 格式。\n\n```json\n{{\n  \"title\": \"今日群聊主题\",\n  \"subtitle\": \"副标题\",\n  \"dimensions\": [\n    {{\n      \"name\": \"抽象大类标题\",\n      \"percentage\": 比例,\n      \"comment\": \"全天的锐评总结，请务必保持你的人设口吻\"\n    }}\n  ],\n  \"summary\": \"全天总结金句\"\n}}\n```\n\n增量汇总数据：\n${reviews_text}"
                     }
                 }
+            },
+            "comic_analysis_prompts": {
+                "description": "默认漫画场景分析提示词",
+                "type": "object",
+                "hint": "仅供未配置角色方案，或角色方案未填写专属提示词时回退使用。角色专属提示词请在“漫画角色方案”中配置。",
+                "items": {
+                    "comic_storyboard_prompt": {
+                        "description": "默认漫画场景分析提示词",
+                        "type": "text",
+                        "editor_mode": true,
+                        "editor_language": "markdown",
+                        "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
+                        "hint": "让大模型根据核心话题生成丰富生动的多格连环漫画画图提示词"
+                    }
+                }
             }
         }
     },
@@ -501,7 +1753,7 @@
             "max_concurrent_llm": {
                 "type": "int",
                 "description": "最大 LLM 请求并发数（API 闸口）",
-                "default": 3,
+                "default": 4,
                 "hint": "限制同时发起的 AI 分析请求数量。主要用于【遵守 API 频率限制（RPM）】，避免因为请求过快导致 API 被封号或报错。"
             },
             "max_concurrent_t2i": {

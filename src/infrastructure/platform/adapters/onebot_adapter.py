@@ -7,7 +7,9 @@ OneBot v11 平台适配器
 import asyncio
 import base64
 import os
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -24,6 +26,7 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from ..napcat_stream import upload_file_stream
 
 
 class OneBotAdapter(PlatformAdapter):
@@ -61,10 +64,62 @@ class OneBotAdapter(PlatformAdapter):
         )
         if not self.bot_self_ids and config:
             self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
+        self.filter_bot_messages = (
+            config.get("filter_bot_messages", True) if config else True
+        )
+
+        # LLBot 探测标志
+        self._is_llbot = False
+        self._llbot_checked = False
+
+        # SnowLuma 探测标志
+        self._is_snowluma = False
+        self._snowluma_checked = False
+
+        # 禁言状态缓存 (group_id -> timestamp)
+        self._muted_groups_cache = {}
+        # 群角色缓存 (group_id -> (role, timestamp))，用于 get_group_member_info 超时降级
+        self._group_role_cache: dict[str, tuple[str, float]] = {}
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
+
+    async def _detect_llbot(self):
+        """探测是否为 LLBot"""
+        if self._llbot_checked:
+            return
+        try:
+            # 避免在一些不支持 get_version_info 的老版本上卡死
+            result = await self.bot.call_action("get_version_info")
+            if isinstance(result, dict):
+                app_name = result.get("app_name", "")
+                self._is_llbot = app_name == "LLOneBot"
+                if self._is_llbot:
+                    logger.info("[OneBot] 探测到当前协议端为 LLBot")
+        except Exception:
+            self._is_llbot = False
+        self._llbot_checked = True
+
+    async def _detect_snowluma(self):
+        """探测是否为 SnowLuma"""
+        if self._snowluma_checked:
+            return
+        try:
+            result = await self.bot.call_action("get_version_info")
+            if isinstance(result, dict):
+                app_name = result.get("app_name", "")
+                self._is_snowluma = app_name.lower() == "snowluma"
+                if self._is_snowluma:
+                    logger.info("[OneBot] 探测到当前协议端为 SnowLuma")
+        except Exception as exc:
+            logger.debug(
+                "[OneBot] 探测 SnowLuma 失败，将按非 SnowLuma 处理: %s",
+                exc,
+                exc_info=True,
+            )
+            self._is_snowluma = False
+        self._snowluma_checked = True
 
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
@@ -97,9 +152,12 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return []
 
+        await self._detect_snowluma()
+
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
             all_raw_messages = []
+            seen_raw_ids: set[str] = set()
 
             # 确定回溯的起始时间点
             if since_ts and since_ts > 0:
@@ -121,16 +179,51 @@ class OneBotAdapter(PlatformAdapter):
             while len(all_raw_messages) < max_count:
                 fetch_count = min(chunk_size, max_count - len(all_raw_messages))
 
-                params = {
+                params: dict[str, int | str | bool | None] = {
                     "group_id": int(group_id),
                     "count": fetch_count,
-                    "reverseOrder": True,  # 关键：协助分页向上回退拉取历史
                 }
+                if self._is_snowluma:
+                    if current_anchor_id:
+                        params["message_id"] = current_anchor_id
+                else:
+                    params["reverseOrder"] = True
+                    if current_anchor_id:
+                        params["message_seq"] = current_anchor_id
 
-                if current_anchor_id:
-                    params["message_seq"] = current_anchor_id
+                result = None
+                fetch_error = None
+                # 单页请求最多尝试三次，避免 NapCat 偶发 WebSocket 超时导致整次分析失败。
+                for attempt in range(1, 4):
+                    try:
+                        result = await self.bot.call_action(
+                            "get_group_msg_history", **params
+                        )
+                        fetch_error = None
+                        break
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        fetch_error = exc
+                        if attempt < 3:
+                            logger.warning(
+                                f"OneBot 分页拉取失败，将进行第 {attempt + 1} 次尝试："
+                                f"群 {group_id}，错误：{exc}"
+                            )
+                            await asyncio.sleep(attempt)
 
-                result = await self.bot.call_action("get_group_msg_history", **params)
+                if fetch_error is not None:
+                    if all_raw_messages:
+                        logger.warning(
+                            f"OneBot 分页拉取重试耗尽，停止继续回溯并处理已获取的 "
+                            f"{len(all_raw_messages)} 条消息：群 {group_id}，错误：{fetch_error}"
+                        )
+                    else:
+                        logger.warning(
+                            f"OneBot 分页拉取重试耗尽，且尚未获取到消息："
+                            f"群 {group_id}，错误：{fetch_error}"
+                        )
+                    break
 
                 if not result or "messages" not in result:
                     logger.debug(
@@ -163,38 +256,31 @@ class OneBotAdapter(PlatformAdapter):
                     msg_time = raw_msg.get("time", 0)
                     msg_id = str(raw_msg.get("message_id", ""))
 
-                    # 基础过滤：去重
-                    if any(
-                        str(m.get("message_id", "")) == msg_id for m in all_raw_messages
-                    ):
+                    # 使用集合去重分页重叠消息，避免消息量较大时反复线性扫描。
+                    if not msg_id or msg_id in seen_raw_ids:
                         continue
 
-                    # 身份过滤（排除机器人自己）
-                    sender_id = str(raw_msg.get("sender", {}).get("user_id", ""))
-                    if sender_id in self.bot_self_ids:
-                        continue
-
-                    # 时间范围判定
+                    # 时间范围判定与集合去重
                     if start_timestamp <= msg_time <= int(datetime.now().timestamp()):
                         all_raw_messages.append(raw_msg)
+                        seen_raw_ids.add(msg_id)
 
                 # 提取锚点。
-                # 优先级: message_seq > real_id > seq > message_id
+                # SnowLuma 仅支持 message_id 作为分页锚点。
+                # 其他 OneBot 实现优先级: message_seq > real_id > seq > message_id
                 # 注意：为了兼容 NapCat (NTQQ) 这种 Message ID 非连续的情况，
                 # 以及 LLBot 这种 Sequence 模式，我们统一不进行 -1 偏移。
                 # 分页产生的重叠消息将由上方的去重逻辑 (all_raw_messages 循环对比) 自动处理。
-                seq_val = (
-                    chunk_earliest_msg.get("message_seq")
-                    or chunk_earliest_msg.get("real_id")
-                    or chunk_earliest_msg.get("seq")
-                )
-                mid_val = chunk_earliest_msg.get("message_id")
-
-                # 重要修复：取消对 ID 的 -1 位移手动操作。
-                # 在 NapCat/NTQQ 中，ID 虽为数字但并不连续。-1 位移会导致“消息不存在”错误。
-                # 即使 API 返回的消息包含锚点本身，上方的 deduplication 逻辑也会将其排除，
-                # 保证翻页能正常向前推进。
-                new_anchor_id = seq_val if seq_val is not None else mid_val
+                if self._is_snowluma:
+                    new_anchor_id = chunk_earliest_msg.get("message_id")
+                else:
+                    seq_val = (
+                        chunk_earliest_msg.get("message_seq")
+                        or chunk_earliest_msg.get("real_id")
+                        or chunk_earliest_msg.get("seq")
+                    )
+                    mid_val = chunk_earliest_msg.get("message_id")
+                    new_anchor_id = seq_val if seq_val is not None else mid_val
 
                 # 如果消息时间已到达起始点，或者锚点无法继续往前位移，则停止
                 if chunk_earliest_time <= start_timestamp:
@@ -469,9 +555,121 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
                 message=message,
             )
+            self._record_mute_status(group_id, False)  # 成功发送，清除禁言缓存
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.error(f"OneBot 文本发送失败: {e}")
+            return False
+
+    def _is_send_timeout(self, e: Exception) -> bool:
+        """判断是否为 NapCat/NTQQ 客户端发送超时。
+
+        当 NapCat 上传大图到 QQ 服务器耗时超过动作等待时间时，
+        NT 消息服务实际上已经将消息接收并入队发送。此时若盲目重试会直接导致群内重复发送多张。
+        """
+        if not e:
+            return False
+        err_str = str(e).lower()
+        if "timeout" in err_str or "timed out" in err_str:
+            return True
+        if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+            return True
+        for attr in ("message", "wording"):
+            val = str(getattr(e, attr, "") or "").lower()
+            if "timeout" in val or "nodeikernelmsgservice/sendmsg" in val:
+                return True
+        return False
+
+    async def _execute_transmission_strategy(
+        self,
+        path: str,
+        worker: Any,
+        label: str,
+        format_path_as_url: bool = False,
+    ) -> bool:
+        """
+        通用传输策略执行器。
+        处理 Base64 优先（开启时）、物理路径尝试、以及 Base64 兜底。
+        严格限制同一模式最多尝试 1 次，并在捕获 NT 发送超时时避免触发重发刷屏。
+
+        Args:
+            path: 文件路径或 URL
+            worker: 执行具体 API 调用的异步函数，接收 (file_val, mode_label) -> Awaitable[None]
+            label: 业务标签，用于日志
+            format_path_as_url: 是否将本地路径格式化为 file:/// 形式
+        """
+        try:
+            use_base64 = self._get_use_base64()
+            abs_path, is_remote, exists = self._prepare_path(path)
+
+            # 1. 优先尝试 Base64 (如果开启)
+            if use_base64 and not is_remote:
+                b64 = await self._get_base64_from_file(abs_path)
+                if b64:
+                    try:
+                        await worker(b64, "Base64 优先")
+                        return True
+                    except Exception as e:
+                        if self._is_send_timeout(e):
+                            logger.warning(
+                                f"[{label}] Base64 优先发送请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                            )
+                            return True
+                        logger.warning(
+                            f"[{label}] Base64 优先发送失败 ({e})，准备尝试路径模式..."
+                        )
+
+            # 2. 尝试物理路径/远程 URL
+            if exists:
+                try:
+                    file_val = abs_path
+                    if not is_remote and format_path_as_url:
+                        file_val = (
+                            f"file://{abs_path}"
+                            if abs_path.startswith("/")
+                            else f"file:///{abs_path}"
+                        )
+                    await worker(file_val, "路径模式")
+                    return True
+                except Exception as e:
+                    if self._is_send_timeout(e):
+                        logger.warning(
+                            f"[{label}] 路径模式发送请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                        )
+                        return True
+                    if not use_base64 and not is_remote:
+                        logger.warning(
+                            f"[{label}] 路径发送失败 ({e})，准备 Base64 补救..."
+                        )
+                    else:
+                        logger.error(f"[{label}] 发送失败: {e}")
+                        return False
+            else:
+                if not use_base64:
+                    logger.error(f"[{label}] 文件不存在且未开启 Base64: {abs_path}")
+                    return False
+
+            # 3. 兜底回退：仅当第一步未尝试过 Base64 时才执行
+            if not use_base64 and not is_remote:
+                b64 = await self._get_base64_from_file(abs_path)
+                if b64:
+                    try:
+                        await worker(b64, "Base64 补发")
+                        return True
+                    except Exception as e:
+                        if self._is_send_timeout(e):
+                            logger.warning(
+                                f"[{label}] Base64 补发请求超时（NT 消息服务已接收，为避免重复投递不再重发）: {e}"
+                            )
+                            return True
+                        logger.error(f"[{label}] Base64 补发失败: {e}")
+                        return False
+
+            return False
+        except Exception as e:
+            logger.error(f"[{label}] 发送异常: {e}")
             return False
 
     async def send_image(
@@ -480,109 +678,51 @@ class OneBotAdapter(PlatformAdapter):
         image_path: str,
         caption: str = "",
     ) -> bool:
-        """
-        向群组发送图片消息。
+        """向群组发送图片消息。"""
 
-        Args:
-            group_id (str): 目标群号
-            image_path (str): 图片路径或URL
-            caption (str): 图片消息的描述文字
-
-        Returns:
-            bool: 是否发送成功
-        """
-        try:
-            use_base64 = False
-            plugin: Any = self.config.get("plugin_instance") if self.config else None
-            if plugin and hasattr(plugin, "config_manager"):
-                use_base64 = plugin.config_manager.get_enable_base64_image()
-
-            base_message = []
+        async def do_send(file_val: str, label: str):
+            msg = []
             if caption:
-                base_message.append({"type": "text", "data": {"text": caption}})
-
-            # 可选策略：开启时，本地文件优先直接转 Base64 发送
-            if use_base64 and not image_path.startswith(
-                ("http://", "https://", "base64://")
-            ):
-                b64_str = await self._get_base64_from_file(image_path)
-                if b64_str:
-                    message = list(base_message)
-                    message.append({"type": "image", "data": {"file": b64_str}})
-                    await self.bot.call_action(
-                        "send_group_msg",
-                        group_id=int(group_id),
-                        message=message,
-                    )
-                    logger.info(f"OneBot Base64 直传图片成功: 群 {group_id}")
-                    return True
-                logger.warning("OneBot Base64 直传失败，将回退到默认路径优先策略")
-
-            # 默认策略（上游现有行为）：
-            # 1) 优先尝试物理路径；2) 路径失败则回退 Base64
-            file_str = image_path
-            if not image_path.startswith(("http://", "https://", "base64://")):
-                if os.path.isabs(image_path):
-                    # 如果是绝对路径且以 / 开头，只需加 file:// 即可构成 file:///
-                    if image_path.startswith("/"):
-                        file_str = f"file://{image_path}"
-                    else:
-                        file_str = f"file:///{image_path}"
-                else:
-                    # 如果是相对路径，转为绝对路径
-                    file_str = f"file:///{os.path.abspath(image_path)}"
-
+                msg.append({"type": "text", "data": {"text": caption}})
+            msg.append({"type": "image", "data": {"file": file_val}})
             try:
-                message = list(base_message)
-                message.append({"type": "image", "data": {"file": file_str}})
                 await self.bot.call_action(
-                    "send_group_msg",
-                    group_id=int(group_id),
-                    message=message,
+                    "send_group_msg", group_id=int(group_id), message=msg
                 )
-                return True
+                self._record_mute_status(group_id, False)
             except Exception as e:
-                # 如果是网络图片或 Base64 输入，路径回退无意义，直接失败
-                if image_path.startswith(("http://", "https://", "base64://")):
-                    raise e
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                raise
+            logger.debug(f"[OneBot] 图片发送成功 ({label}): 群 {group_id}")
 
-                error_str = str(e).lower()
-                is_potential_success = (
-                    "timeout" in error_str
-                    or "1200" in error_str
-                    or "网络错误" in error_str
-                )
-                # 关键修复：对疑似成功的超时错误，不做“立即 Base64 补发”。
-                # 直接抛到外层统一进入多轮观察，避免同一份报告短时间内连发。
-                if is_potential_success:
-                    raise e
-
-                logger.warning(f"路径发送图片失败 ({e})，尝试 Base64 回退模式...")
-                b64_str = await self._get_base64_from_file(image_path)
-                if not b64_str:
-                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
-                    raise e
-
-                message = list(base_message)
-                message.append({"type": "image", "data": {"file": b64_str}})
-                await self.bot.call_action(
-                    "send_group_msg",
-                    group_id=int(group_id),
-                    message=message,
-                )
-                logger.info(f"Base64 回退模式发送图片成功: 群 {group_id}")
-                return True
-
-            await self.bot.call_action(
-                "send_group_msg",
-                group_id=int(group_id),
-                message=message,
-            )
-            logger.info(f"Base64 回退模式发送图片成功: 群 {group_id}")
+        sent = await self._execute_transmission_strategy(
+            image_path, do_send, "OneBot 图片", format_path_as_url=True
+        )
+        if sent:
             return True
 
-        except Exception as e:
-            logger.error(f"OneBot 图片发送最终失败: {e}")
+        stream_threshold = self._get_napcat_stream_threshold_bytes()
+        path = Path(image_path)
+        if (
+            stream_threshold <= 0
+            or not path.is_file()
+            or path.stat().st_size < stream_threshold
+        ):
+            return False
+
+        logger.warning(
+            "[OneBot] 常规图片发送失败: %s，准备通过 NapCat Stream API 重试",
+            path.name,
+        )
+        uploaded_path = await upload_file_stream(self.bot, path)
+        if not uploaded_path:
+            return False
+        try:
+            await do_send(uploaded_path, "NapCat 流式上传重试")
+            return True
+        except Exception as exc:
+            logger.warning(f"[OneBot] NapCat 流式上传图片重试失败: {exc}")
             return False
 
     async def send_file(
@@ -591,49 +731,26 @@ class OneBotAdapter(PlatformAdapter):
         file_path: str,
         filename: str | None = None,
     ) -> bool:
-        """
-        通过群文件功能上传并发送文件。
+        """通过群文件功能上传并发送文件。"""
 
-        Args:
-            group_id (str): 目标群号
-            file_path (str): 本地文件绝对路径
-            filename (str, optional): 显示的文件名，默认为路径尾部
-
-        Returns:
-            bool: 上传任务启动是否成功
-        """
-        try:
-            # 策略 1: 优先尝试物理路径
+        async def do_upload(content: str, label: str):
             try:
                 await self.bot.call_action(
                     "upload_group_file",
                     group_id=int(group_id),
-                    file=file_path,
+                    file=content,
                     name=filename or os.path.basename(file_path),
                 )
-                return True
+                self._record_mute_status(group_id, False)
             except Exception as e:
-                # 策略 2: 路径报错，回退到 Base64
-                logger.warning(f"路径发送文件失败 ({e})，尝试 Base64 回退模式...")
-                file_b64 = await self._get_base64_from_file(file_path)
-                if not file_b64:
-                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
-                    raise e
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                raise
+            logger.debug(f"[OneBot] 文件发送成功 ({label}): {filename or file_path}")
 
-                await self.bot.call_action(
-                    "upload_group_file",
-                    group_id=int(group_id),
-                    file=file_b64,
-                    name=filename or os.path.basename(file_path),
-                )
-            # ... 实现省略 ...
-            logger.info(
-                f"[OneBot] 文件发送成功（Base64 模式）: {filename or file_path}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"[OneBot] 文件发送最终失败: {e}")
-            return False
+        return await self._execute_transmission_strategy(
+            file_path, do_upload, "OneBot 文件"
+        )
 
     async def send_forward_msg(
         self,
@@ -658,8 +775,11 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
                 messages=nodes,
             )
+            self._record_mute_status(group_id, False)
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.warning(f"[OneBot] 发送合并转发消息失败: {e}")
             return False
 
@@ -838,6 +958,217 @@ class OneBotAdapter(PlatformAdapter):
             for user_id in user_ids
         }
 
+    async def is_group_muted(self, group_id: str) -> bool:
+        """
+        检查 OneBot 平台下的群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
+        """
+        group_id_str = str(group_id)
+
+        # 1. 检查最近缓存的禁言状态（5分钟内有效）
+        last_mute_time = self._muted_groups_cache.get(group_id_str)
+        if last_mute_time and (time.time() - last_mute_time) < 300:
+            logger.info(
+                f"[OneBot] 从缓存中检测到群 {group_id_str} 最近处于禁言状态，跳过分析"
+            )
+            return True
+
+        if not hasattr(self.bot, "call_action"):
+            return False
+
+        # 2. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
+        bot_user_id = None
+        if self.bot_self_ids:
+            valid_ids = [
+                str(uid)
+                for uid in self.bot_self_ids
+                if uid
+                and isinstance(uid, (str, int))
+                and not callable(uid)
+                and "partial" not in str(uid)
+                and str(uid).isdigit()
+            ]
+            if valid_ids:
+                bot_user_id = valid_ids[0]
+
+        if not bot_user_id:
+            try:
+                # 设定 5.0 秒超时，防止接口请求无限挂起
+                login_info = await asyncio.wait_for(
+                    self.bot.call_action("get_login_info"), timeout=5.0
+                )
+                if login_info and "user_id" in login_info:
+                    bot_user_id = str(login_info["user_id"])
+                    self.bot_self_ids = [bot_user_id]
+            except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_login_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
+                logger.warning(f"[OneBot] 获取 Bot 自身登录信息失败: {e}")
+
+        # 3. 检查 Bot 是否被个人禁言，并获取 Bot 在群内的角色
+        is_individually_muted = False
+        role = "member"  # 默认为 member 以防万一
+        if bot_user_id:
+            try:
+                # 设定 5.0 秒超时，且不传递 no_cache=True 以免强制向腾讯服务器同步导致高延时超时
+                member_info = await asyncio.wait_for(
+                    self.bot.call_action(
+                        "get_group_member_info",
+                        group_id=int(group_id),
+                        user_id=int(bot_user_id),
+                    ),
+                    timeout=5.0,
+                )
+                if member_info:
+                    role = member_info.get("role", "member")
+                    # 缓存角色信息，用于 get_group_member_info 超时时降级使用
+                    self._group_role_cache[group_id_str] = (role, time.time())
+                    shut_up_time = member_info.get("shut_up_time", 0)
+                    if shut_up_time > 0:
+                        # 如果 shut_up_time 是 Unix 时间戳
+                        if shut_up_time > 1000000000:
+                            if shut_up_time > time.time():
+                                is_individually_muted = True
+                        else:
+                            # 否则认为是相对禁言剩余时间（秒）
+                            is_individually_muted = True
+            except TimeoutError:
+                # 超时降级：优先使用缓存的角色（角色几乎不会变）
+                cached_role = self._group_role_cache.get(group_id_str)
+                if cached_role:
+                    role = cached_role[0]
+                    logger.warning(
+                        f"[OneBot] 获取群成员信息超时，使用缓存角色: {role} (group_id={group_id}, user_id={bot_user_id})"
+                    )
+                else:
+                    logger.warning(
+                        f"[OneBot] 获取群成员信息超时且无角色缓存，将按 member 处理 (group_id={group_id}, user_id={bot_user_id})"
+                    )
+            except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_group_member_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
+                logger.warning(
+                    f"[OneBot] 获取群成员信息失败 (group_id={group_id}, user_id={bot_user_id}): {e}"
+                )
+
+        if is_individually_muted:
+            self._record_mute_status(group_id, True)
+            logger.info(f"[OneBot] 检测到 Bot 在群 {group_id} 中已被单独禁言")
+            return True
+
+        # 4. 如果 Bot 不是管理员或群主，则需要检查群聊是否开启了全群禁言
+        # 管理员 (admin) 和群主 (owner) 在全群禁言下依然可以发言
+        if role not in ("admin", "owner"):
+            try:
+                # 设定 5.0 秒超时，不传 no_cache=True
+                group_info = await asyncio.wait_for(
+                    self.bot.call_action(
+                        "get_group_info",
+                        group_id=int(group_id),
+                    ),
+                    timeout=5.0,
+                )
+                if group_info:
+                    # 兼容 LLOneBot, Lagrange, NapCat/SnowLuma 以及标准 OneBot 各种全群禁言状态字段
+                    is_whole_ban = (
+                        group_info.get("group_all_shut")
+                        or group_info.get("shutup_all")
+                        or group_info.get("is_whole_ban")
+                        or group_info.get("whole_ban")
+                        or group_info.get("shutup")
+                        or group_info.get("shut_up")
+                    )
+                    if is_whole_ban:
+                        self._record_mute_status(group_id, True)
+                        logger.info(
+                            f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
+                        )
+                        return True
+            except TimeoutError:
+                logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
+            except Exception as e:
+                if self._is_mute_exception(e):
+                    self._record_mute_status(group_id, True)
+                    logger.info(
+                        f"[OneBot] 从 get_group_info 异常中检测到 Bot 在群 {group_id} 中已被禁言"
+                    )
+                    return True
+                logger.warning(f"[OneBot] 获取群信息失败 (group_id={group_id}): {e}")
+
+        # 如果所有检测均未发现禁言，则暂时视为未禁言
+        return False
+
+    def _is_mute_exception(self, e: Exception) -> bool:
+        if not e:
+            return False
+        err_str = str(e)
+
+        mute_keywords = ("禁言", "操作失败", "下游群鉴权")
+
+        # --- 方法一：根据 retcode 检测 ---
+        # NapCat/LLOneBot 被禁言时返回 retcode=1200（INTERNAL_ERROR）
+        # SnowLuma/OIDB 操作被拒时返回 retcode=100（ACTION_FAILED）+ wording 含错误描述
+        # SnowLuma 发送消息被拒时返回 result=120
+        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
+            if any(kw in err_str for kw in mute_keywords):
+                return True
+
+        # --- 方法二：检查 exception 的 message/wording 属性 ---
+        # 适配不同协议端对错误信息的字段命名差异
+        for attr in ("message", "wording"):
+            val = getattr(e, attr, "") or ""
+            if any(kw in val for kw in mute_keywords):
+                return True
+            if "shut up" in val.lower():
+                return True
+
+        # --- 方法三：检测 SnowLuma 发消息被拒的特定模式 ---
+        # SnowLuma 在群内发消息失败时返回：
+        #   retcode=100, wording="send group message rejected: result=120 err="
+        err_lower = err_str.lower()
+        if "rejected" in err_lower and (
+            "result=120" in err_lower or "muted" in err_lower
+        ):
+            return True
+
+        # --- 方法四：兜底 --- 直接从 err_str 匹配禁言关键词 ---
+        # 即使 getattr 获取不到 wording 属性，str(e) 本身仍包含关键词文本
+        if any(kw in err_str for kw in mute_keywords):
+            return True
+
+        return False
+
+    def _record_mute_status(self, group_id: Any, is_muted: bool):
+        group_id_str = str(group_id)
+        if is_muted:
+            # Prune expired cache entries if cache size grows too large (threshold of 1000)
+            if len(self._muted_groups_cache) >= 1000:
+                now = time.time()
+                expired_keys = [
+                    k for k, t in self._muted_groups_cache.items() if now - t >= 300
+                ]
+                for k in expired_keys:
+                    self._muted_groups_cache.pop(k, None)
+
+                # If still over threshold, evict the oldest entry to prevent unbounded growth
+                if len(self._muted_groups_cache) >= 1000:
+                    oldest_key = min(
+                        self._muted_groups_cache,
+                        key=lambda k: self._muted_groups_cache[k],
+                    )
+                    self._muted_groups_cache.pop(oldest_key, None)
+
+            self._muted_groups_cache[group_id_str] = time.time()
+        else:
+            self._muted_groups_cache.pop(group_id_str, None)
+
     # ================================================================
     # 群文件 / 群相册上传
     # ================================================================
@@ -849,52 +1180,22 @@ class OneBotAdapter(PlatformAdapter):
         filename: str | None = None,
         folder_id: str | None = None,
     ) -> bool:
-        """
-        上传文件到群文件目录的指定子文件夹。
+        """上传文件到群文件目录的指定子文件夹。"""
 
-        Args:
-            group_id: 目标群号
-            file_path: 本地文件绝对路径
-            filename: 显示的文件名，默认为路径尾部
-            folder_id: 目标文件夹 ID（由 get_group_file_root_folders 获取）。
-                       为 None 或空字符串时上传到根目录。
-
-        Returns:
-            bool: 上传任务是否成功启动
-        """
-        try:
-            # 策略 1: 优先使用物理路径
+        async def do_upload(content: str, label: str):
             params = {
                 "group_id": int(group_id),
-                "file": file_path,
+                "file": content,
                 "name": filename or os.path.basename(file_path),
             }
             if folder_id:
                 params["folder"] = folder_id
+            await self.bot.call_action("upload_group_file", **params)
+            logger.debug(f"[OneBot] 群文件发送成功 ({label}): {params['name']}")
 
-            try:
-                await self.bot.call_action("upload_group_file", **params)
-                logger.info(
-                    f"OneBot 群文件上传成功: {params['name']} -> 群 {group_id}"
-                    + (f" (目录: {folder_id})" if folder_id else " (根目录)")
-                )
-                return True
-            except Exception as e:
-                # 策略 2: 路径报错，回退到 Base64
-                logger.warning(f"路径上传群文件失败 ({e})，尝试 Base64 回退模式...")
-                b64_str = await self._get_base64_from_file(file_path)
-                if not b64_str:
-                    logger.error(f"Base64 回退失败：无法读取文件 {file_path}")
-                    raise e
-
-                params["file"] = b64_str
-                await self.bot.call_action("upload_group_file", **params)
-                logger.info(f"Base64 回退模式上传群文件成功: {params['name']}")
-                return True
-
-        except Exception as e:
-            logger.error(f"OneBot 群文件上传最终失败: {e}")
-            return False
+        return await self._execute_transmission_strategy(
+            file_path, do_upload, "OneBot 群文件"
+        )
 
     async def create_group_file_folder(
         self,
@@ -977,8 +1278,6 @@ class OneBotAdapter(PlatformAdapter):
             group_id: 目标群号
             folder_name: 文件夹名称
 
-        Returns:
-            str | None: folder_id（成功时）或 None（失败时）
         """
         if not folder_name:
             return None
@@ -1019,123 +1318,84 @@ class OneBotAdapter(PlatformAdapter):
         album_name: str | None = None,
         strict_mode: bool = False,
     ) -> bool:
-        """
-        上传图片到群相册（NapCat 扩展 API）。
-
-        注意：此功能主要由 NapCat 等 OneBot 增强版实现提供。
-        调用失败时会静默降级，不影响正常发送。
-
-        Args:
-            group_id: 目标群号
-            image_path: 本地图片文件的绝对路径
-            album_id: 目标相册 ID
-            album_name: 目标相册名称（部分 API 需要）
-            strict_mode: 严格模式。开启后，当指定了 album_name 但找不到对应相册时将直接终止上传
-
-        Returns:
-            bool: 上传是否成功
-        """
-        try:
+        """上传图片到群相册（NapCat 扩展 API）。"""
+        # 严格模式：指定了相册名但未解析到 album_id 时，禁止上传
+        if strict_mode and album_name and not album_id:
             logger.info(
-                f"[群分析相册] 开始上传流程: 群={group_id}, 图片={image_path}, 目标={album_name or '默认'}"
+                f"[群分析相册] 严格模式开启：未找到相册 '{album_name}' (群 {group_id})，停止上传。"
             )
-            # 严格模式：指定了相册名但未解析到 album_id 时，禁止回退默认相册
-            if strict_mode and album_name and not album_id:
-                logger.info(
-                    f"群分析相册严格模式开启：未找到目标相册 '{album_name}' (群 {group_id})，停止上传。"
-                )
-                return False
-
-            # 如果没有 album_id，尝试获取该群的第一个相册作为默认目标
-            if not album_id:
-                logger.debug("[群分析相册] 未指定 album_id，正在尝试拉取相册列表...")
-                albums = await self.get_group_album_list(group_id)
-                if albums:
-                    album_id = str(
-                        albums[0].get("album_id") or albums[0].get("id") or ""
-                    )
-                    if album_id:
-                        logger.debug(f"[群分析相册] 自动选择默认相册 ID: {album_id}")
-
-            if not album_id:
-                logger.info(
-                    f"群 {group_id} 未找到任何有效相册，且未指定相册名，跳过相册上传以防止后端错误。"
-                )
-                return False
-
-            # 策略 1: 优先尝试物理路径
-            try:
-                # 尝试 upload_image_to_qun_album
-                params = {
-                    "group_id": int(group_id),
-                    "file": image_path,
-                    "album_id": str(album_id or ""),
-                }
-                if album_name:
-                    params["album_name"] = album_name
-
-                logger.debug(
-                    f"[群分析相册] 正在调用 upload_image_to_qun_album (路径模式), 参数: {params}"
-                )
-                await self.bot.call_action("upload_image_to_qun_album", **params)
-                logger.info(f"[群分析相册] 路径模式上传成功: 群 {group_id}")
-                return True
-            except Exception as e1:
-                # 策略 2: 路径失败，尝试 Base64 模式
-                logger.warning(
-                    f"[群分析相册] 路径模式上传失败 ({e1})，尝试 Base64 回退模式..."
-                )
-                b64_file = await self._get_base64_from_file(image_path)
-                if not b64_file:
-                    logger.error(f"Base64 回退失败：无法读取图片文件 {image_path}")
-                    raise e1
-
-                # 重新尝试多个可能的 API 名
-                params = {
-                    "group_id": int(group_id),
-                    "file": b64_file,
-                    "album_id": str(album_id or ""),
-                }
-                if album_name:
-                    params["album_name"] = album_name
-
-                try:
-                    await self.bot.call_action("upload_image_to_qun_album", **params)
-                    logger.info(
-                        "[群分析相册] Base64 模式 (upload_image_to_qun_album) 上传成功"
-                    )
-                    return True
-                except Exception as e2:
-                    logger.debug(
-                        f"[群分析相册] Base64 接口 1 (upload_image_to_qun_album) 失败: {e2}"
-                    )
-                    try:
-                        await self.bot.call_action("upload_group_album", **params)
-                        logger.info(
-                            "[群分析相册] Base64 模式 (upload_group_album) 上传成功"
-                        )
-                        return True
-                    except Exception as e3:
-                        logger.debug(
-                            f"[群分析相册] Base64 接口 2 (upload_group_album) 失败: {e3}"
-                        )
-                        await self.bot.call_action("upload_qun_album", **params)
-                        logger.info(
-                            "[群分析相册] Base64 模式 (upload_qun_album) 上传成功"
-                        )
-                        return True
-
-        except Exception as e:
-            error_msg = str(e).lower()
-            if (
-                "not found" in error_msg
-                or "not support" in error_msg
-                or "不支持" in error_msg
-            ):
-                logger.debug(f"当前 OneBot 实现不支持群分析相册上传 API: {e}")
-            else:
-                logger.warning(f"[群分析相册] 上传流程发生异常: {e}")
             return False
+
+        # 兜底查询
+        if not album_id:
+            albums = await self.get_group_album_list(group_id)
+            album_id = self._find_item_in_list(
+                albums, album_name, ["album_id"], ["name", "album_name"]
+            )
+            # 如果仍没确定相册：
+            # - 没有指定相册名（纯兜底）→ 取第一个
+            # - 指定了名字但找不到且非严格模式 → 也取第一个（回退到默认相册）
+            if not album_id and albums and (not album_name or not strict_mode):
+                album_id = albums[0].get("album_id") or albums[0].get("id")
+                if album_name:
+                    logger.info(
+                        f"[群分析相册] 未找到相册 '{album_name}'，回退到默认相册 (群 {group_id})"
+                    )
+
+        if not album_id:
+            logger.info(
+                f"[群分析相册] 未能确定目标相册 (群 {group_id})，跳过相册上传。"
+            )
+            return False
+
+        async def do_upload(content: str, label: str):
+            await self._detect_llbot()
+
+            if self._is_llbot:
+                # LLBot 模式：使用 files 参数 (列表)
+                # LLBot 的 upload_group_album 接收 files 作为数组
+                llbot_params = {
+                    "group_id": int(group_id),
+                    "album_id": str(album_id),
+                    "files": [content],
+                }
+                try:
+                    await self.bot.call_action("upload_group_album", **llbot_params)
+                    logger.debug(
+                        f"[群分析相册] 上传成功 (LLBot, {label}): 群 {group_id}"
+                    )
+                    return
+                except Exception as e:
+                    logger.warning(
+                        f"[群分析相册] LLBot 上传接口调用失败: {e}，尝试 NapCat 模式..."
+                    )
+
+            params = {
+                "group_id": int(group_id),
+                "file": content,
+                "album_id": str(album_id),
+            }
+            if album_name:
+                params["album_name"] = album_name
+
+            for action in [
+                "upload_image_to_qun_album",
+                "upload_group_album",
+                "upload_qun_album",
+            ]:
+                try:
+                    await self.bot.call_action(action, **params)
+                    logger.debug(
+                        f"[群分析相册] 上传成功 ({label}, {action}): 群 {group_id}"
+                    )
+                    return
+                except Exception:
+                    continue
+            raise RuntimeError("所有相册上传 API 均调用失败")
+
+        return await self._execute_transmission_strategy(
+            image_path, do_upload, "OneBot 相册"
+        )
 
     async def get_group_album_list(
         self,
@@ -1145,28 +1405,29 @@ class OneBotAdapter(PlatformAdapter):
         获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
 
-        def extract_list(data: Any) -> list[dict]:
-            if not data:
-                return []
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict):
-                # 探测常见键名
-                lst = (
-                    data.get("albums")
-                    or data.get("album_list")
-                    or data.get("albumList")
-                    or data.get("list")
-                    or []
+        def extract_list(payload: Any) -> list[dict]:
+            """从不同结构的响应中提取相册列表：直接列表、嵌套在 data 中、或直接在根字段中。"""
+            if isinstance(payload, list):
+                return [item for item in payload if isinstance(item, dict)]
+            if not isinstance(payload, dict):
+                logger.debug(
+                    f"[群分析相册] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
                 )
-                if isinstance(lst, list):
-                    return lst
-                # 如果 'data' 键本身存在且为列表
-                inner_data = data.get("data")
-                if isinstance(inner_data, list):
-                    return inner_data
-                if isinstance(inner_data, dict):
-                    return extract_list(inner_data)
+                return []
+
+            data = payload.get("data")
+            if isinstance(data, dict):
+                album_list = data.get("album_list") or data.get("list")
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
+                else:
+                    logger.debug(f"[群分析相册] 在 data 字段中未找到列表: data={data}")
+
+            album_list = payload.get("album_list") or payload.get("list")
+            if isinstance(album_list, list):
+                return [item for item in album_list if isinstance(item, dict)]
+
+            logger.debug(f"[群分析相册] 无法从响应中提取相册列表: payload={payload}")
             return []
 
         # 候选 API 名称
@@ -1184,13 +1445,14 @@ class OneBotAdapter(PlatformAdapter):
                 )
                 result = await self.bot.call_action(
                     action,
-                    group_id=int(group_id),  # 确保传整型，对齐 NapCat 等实现
+                    group_id=int(group_id),
                 )
+                logger.debug(f"[群分析相册] 接口 {action} 原始响应内容: {result}")
                 if result:
                     albums = extract_list(result)
                     if albums:
                         logger.debug(
-                            f"[群分析相册] {action} 成功获取到 {len(albums)} 个相册"
+                            f"[群分析相册] {action} 成功获取并提取到 {len(albums)} 个相册对象"
                         )
                         return albums
             except Exception as e:
@@ -1221,11 +1483,21 @@ class OneBotAdapter(PlatformAdapter):
         )
         albums = await self.get_group_album_list(group_id)
         for album in albums:
-            name = album.get("name") or album.get("album_name", "")
-            aid = album.get("album_id") or album.get("id", "")
-            if name == album_name and aid:
-                logger.info(f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}")
-                return str(aid)
+            name = album.get("name") or album.get("album_name")
+            logger.debug(
+                f"[群分析相册] 正在匹配相册: 目标='{album_name}', 当前相册名称='{name}', 原始数据={album}"
+            )
+            if name == album_name:
+                aid = album.get("album_id")
+                if aid:
+                    logger.info(
+                        f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}"
+                    )
+                    return str(aid)
+                else:
+                    logger.debug(
+                        f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
+                    )
 
         logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
         return None
@@ -1253,7 +1525,62 @@ class OneBotAdapter(PlatformAdapter):
                 emoji_type="1",  # 还原为最稳定的系统表情类型
                 set=is_add,
             )
+            self._record_mute_status(group_id, False)
             return True
         except Exception as e:
+            if self._is_mute_exception(e):
+                self._record_mute_status(group_id, True)
             logger.debug(f"OneBot set_reaction 失败 (API 可能不支持): {e}")
             return False
+
+    def _get_use_base64(self) -> bool:
+        """从插件配置中获取是否启用 Base64"""
+        plugin: Any = self.config.get("plugin_instance") if self.config else None
+        if plugin and hasattr(plugin, "config_manager"):
+            return plugin.config_manager.get_enable_base64_image()
+        return False
+
+    def _get_napcat_stream_threshold_bytes(self) -> int:
+        """获取配置的 NapCat 流式上传兜底阈值（字节）。"""
+        plugin: Any = self.config.get("plugin_instance") if self.config else None
+        if not plugin or not hasattr(plugin, "config_manager"):
+            return 0
+        try:
+            threshold_mb = plugin.config_manager.get_napcat_stream_threshold_mb()
+            return max(0, int(float(threshold_mb) * 1024 * 1024))
+        except (TypeError, ValueError):
+            return 0
+
+    def _prepare_path(self, path: str) -> tuple[str, bool, bool]:
+        """统一路径预处理。返回: (标准化后的绝对路径, 是否为远程/编码路径, 本地文件是否存在)"""
+        is_remote = path.startswith(("http://", "https://", "base64://"))
+        if is_remote:
+            return path, True, True
+
+        abs_path = os.path.abspath(path)
+        exists = os.path.exists(abs_path)
+        return abs_path, False, exists
+
+    def _find_item_in_list(
+        self,
+        items: list[dict],
+        target_name: str | None,
+        id_keys: list[str],
+        name_keys: list[str],
+    ) -> str | None:
+        """从对象列表中根据名称查找 ID (通用辅助函数)"""
+        if not target_name:
+            return None
+
+        for item in items:
+            name = ""
+            for nk in name_keys:
+                if item.get(nk):
+                    name = item[nk]
+                    break
+
+            if name == target_name:
+                for ik in id_keys:
+                    if item.get(ik):
+                        return str(item[ik])
+        return None

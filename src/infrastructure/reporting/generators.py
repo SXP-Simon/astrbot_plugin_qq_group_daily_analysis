@@ -5,28 +5,102 @@
 
 import asyncio
 import base64
+import copy
+import hashlib
 import html
+import json
 import os
 import re
+import time
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
+from io import BytesIO
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 import aiohttp
 import ulid
 from diskcache import Cache
 from markupsafe import Markup
+from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
+from .qq_official_markdown import QQOfficialMarkdownReportGenerator
 from .templates import HTMLTemplates
 
-MAX_CONCURRENT_DOWNLOADS = 10
+# qlogo 在短时间内承受大量并发请求时可能主动断开连接，保留并发预取但限制并发度。
+MAX_CONCURRENT_DOWNLOADS = 4
+AVATAR_DOWNLOAD_RETRY_TIMES = 3
 AVATAR_CACHE_EXPIRE_TIME = 259200
+AVATAR_FAILURE_CACHE_EXPIRE_TIME = 60
+AVATAR_MAX_EDGE_LENGTH = 96
+TRANSPARENT_IMAGE_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg=="
+)
+
+DEFAULT_PROFILE_MAPPING = {
+    "mbti": {
+        "INTJ": {"code": "INTJ", "name_zh": "建筑师"},
+        "INTP": {"code": "INTP", "name_zh": "逻辑学家"},
+        "ENTJ": {"code": "ENTJ", "name_zh": "指挥官"},
+        "ENTP": {"code": "ENTP", "name_zh": "辩论家"},
+        "INFJ": {"code": "INFJ", "name_zh": "提倡者"},
+        "INFP": {"code": "INFP", "name_zh": "调停者"},
+        "ENFJ": {"code": "ENFJ", "name_zh": "主人公"},
+        "ENFP": {"code": "ENFP", "name_zh": "竞选者"},
+        "ISTJ": {"code": "ISTJ", "name_zh": "物流师"},
+        "ISFJ": {"code": "ISFJ", "name_zh": "守卫者"},
+        "ESTJ": {"code": "ESTJ", "name_zh": "总经理"},
+        "ESTP": {"code": "ESTP", "name_zh": "企业家"},
+        "ISTP": {"code": "ISTP", "name_zh": "鉴赏家"},
+        "ISFP": {"code": "ISFP", "name_zh": "探险家"},
+        "ESFJ": {"code": "ESFJ", "name_zh": "执政官"},
+        "ESFP": {"code": "ESFP", "name_zh": "表演者"},
+    },
+    "sbti": {
+        "INTJ": {"code": "CTRL", "name_zh": "拿捏者", "asset_code": "CTRL"},
+        "INTP": {"code": "THIN-K", "name_zh": "思考者", "asset_code": "THIN-K"},
+        "ENTJ": {"code": "BOSS", "name_zh": "领导者", "asset_code": "BOSS"},
+        "ENTP": {"code": "JOKE-R", "name_zh": "小丑", "asset_code": "JOKE-R"},
+        "INFJ": {"code": "LOVE-R", "name_zh": "多情者", "asset_code": "LOVE-R"},
+        "INFP": {"code": "SOLO", "name_zh": "孤儿", "asset_code": "SOLO"},
+        "ENFJ": {"code": "THAN-K", "name_zh": "感恩者", "asset_code": "THAN-K"},
+        "ENFP": {"code": "GOGO", "name_zh": "行者", "asset_code": "GOGO"},
+        "ISTJ": {"code": "OH-NO", "name_zh": "哦不人", "asset_code": "OH-NO"},
+        "ISTP": {"code": "POOR", "name_zh": "贫困者", "asset_code": "POOR"},
+        "ESTJ": {"code": "SHIT", "name_zh": "愤世者", "asset_code": "SHIT"},
+        "ESTP": {"code": "WOC!", "name_zh": "握草人", "asset_code": "WOC"},
+        "ISFJ": {"code": "MUM", "name_zh": "妈妈", "asset_code": "MUM"},
+        "ISFP": {"code": "MALO", "name_zh": "吗喽", "asset_code": "MALO"},
+        "ESFJ": {"code": "ATM-er", "name_zh": "送钱者", "asset_code": "ATM-er"},
+        "ESFP": {"code": "SEXY", "name_zh": "尤物", "asset_code": "SEXY"},
+    },
+    "acgti": {
+        "INTJ": {"code": "MRTS-X", "name_zh": "Mortis"},
+        "INTP": {"code": "KNAN", "name_zh": "江户川柯南"},
+        "ENTJ": {"code": "SAKI", "name_zh": "丰川祥子"},
+        "ENTP": {"code": "CHKA", "name_zh": "藤原千花"},
+        "INFJ": {"code": "DLRS", "name_zh": "三角初华"},
+        "INFP": {"code": "BCHI", "name_zh": "后藤一里"},
+        "ENFJ": {"code": "YCYO", "name_zh": "月见八千代"},
+        "ENFP": {"code": "HTMK", "name_zh": "初音未来"},
+        "ISTJ": {"code": "MRTS", "name_zh": "若叶睦"},
+        "ISTP": {"code": "AYRE", "name_zh": "绫波丽"},
+        "ESTJ": {"code": "MIKT", "name_zh": "御坂美琴"},
+        "ESTP": {"code": "ASKA", "name_zh": "明日香"},
+        "ISFJ": {"code": "SOYO", "name_zh": "长崎爽世"},
+        "ISFP": {"code": "LTYI", "name_zh": "洛天依"},
+        "ESFJ": {"code": "ANON", "name_zh": "千早爱音"},
+        "ESFP": {"code": "FRNA", "name_zh": "芙宁娜"},
+    },
+}
 
 
 class ReportGenerator(IReportGenerator):
@@ -42,6 +116,11 @@ class ReportGenerator(IReportGenerator):
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
+        self._qq_official_markdown_generator = QQOfficialMarkdownReportGenerator(
+            config_manager,
+            self.html_templates,
+            self._render_semaphore,
+        )
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
         self._avatar_cache = Cache(
@@ -51,6 +130,150 @@ class ReportGenerator(IReportGenerator):
             MAX_CONCURRENT_DOWNLOADS
         )
         self._avatar_session = None
+        self._avatar_session_lock = asyncio.Lock()
+        self._avatar_failure_cache: dict[str, float] = {}
+        self._profile_asset_manifest = self._load_profile_asset_manifest()
+
+    def _load_profile_asset_manifest(self) -> dict[str, dict]:
+        """加载人格资源清单。"""
+        manifest_path = (
+            Path(__file__).resolve().parents[3]
+            / "assets"
+            / "profile_assets"
+            / "manifest.json"
+        )
+        if not manifest_path.exists():
+            logger.warning(f"人格资源清单不存在: {manifest_path}")
+            return {"sbti": {}, "acgti": {}}
+
+        try:
+            raw = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+        except Exception as e:
+            logger.warning(f"加载人格资源清单失败: {e}")
+            return {"sbti": {}, "acgti": {}}
+
+        manifest: dict[str, dict] = {"sbti": {}, "acgti": {}}
+        for item in raw.get("sbti", []):
+            code = str(item.get("code", "")).strip()
+            if code:
+                manifest["sbti"][code] = item
+        for item in raw.get("acgti", []):
+            code = str(item.get("code", "")).strip()
+            if code:
+                manifest["acgti"][code] = item
+        return manifest
+
+    def _get_profile_mapping_overrides(self) -> dict[str, dict]:
+        """解析用户配置的人格映射覆盖项。"""
+        raw = self.config_manager.get_profile_mapping_config()
+        if not raw:
+            return {}
+
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            logger.warning(f"人格映射配置 JSON 解析失败，已回退到默认映射: {e}")
+        return {}
+
+    def _build_profile_image_from_manifest_pattern(
+        self, profile_mode: str, asset_code: str
+    ) -> str:
+        """当 manifest 缺少具体 code 时，根据已有资源路径模式推导图片地址。"""
+        system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+        for item in system_manifest.values():
+            if not isinstance(item, dict):
+                continue
+            sample_code = str(item.get("code", "")).strip()
+            sample_file = str(item.get("file", "")).strip()
+            if not sample_code or not sample_file:
+                continue
+            code_token = f"/{sample_code}."
+            if code_token not in sample_file:
+                continue
+            return sample_file.replace(code_token, f"/{asset_code}.", 1)
+        return ""
+
+    def _get_manifest_profile_item_by_mbti(
+        self, profile_mode: str, mbti: str
+    ) -> dict | None:
+        """按 MBTI 从 manifest 中寻找可用资源。"""
+        normalized_mbti = str(mbti or "").strip().upper()
+        system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+        for item in system_manifest.values():
+            if not isinstance(item, dict):
+                continue
+            item_mbti = str(item.get("mbti", "")).strip().upper()
+            if item_mbti == normalized_mbti:
+                return item
+        return None
+
+    def _resolve_profile_info(
+        self,
+        mbti: str,
+        profile_mode: str,
+        overrides: dict[str, dict],
+    ) -> dict[str, str | float]:
+        """根据当前展示模式解析人格标签展示信息。"""
+        normalized_mbti = str(mbti or "").strip().upper()
+
+        # 1. 基础信息获取：从默认映射或用户覆盖中获取核心属性
+        profile_defaults = DEFAULT_PROFILE_MAPPING.get(profile_mode, {})
+        base_info = dict(profile_defaults.get(normalized_mbti, {}))
+
+        # 用户覆盖优先级最高
+        user_override = overrides.get(profile_mode, {}).get(normalized_mbti, {})
+        if isinstance(user_override, dict):
+            base_info.update(user_override)
+
+        code = str(base_info.get("code", normalized_mbti)).strip() or normalized_mbti
+        name_zh = str(base_info.get("name_zh", "")).strip()
+        asset_code = str(base_info.get("asset_code", code)).strip() or code
+        image = str(base_info.get("image", "")).strip()
+
+        # 2. 图片与属性补全 (基于 manifest.json 可信源)
+        if not image:
+            system_manifest = self._profile_asset_manifest.get(profile_mode, {})
+            # A. 优先按 asset_code 索引
+            asset_item = system_manifest.get(asset_code)
+            if isinstance(asset_item, dict):
+                image = str(asset_item.get("file", "")).strip()
+                if not name_zh:
+                    name_zh = str(asset_item.get("name", "")).strip()
+
+            # B. 按照 asset_code 的资源规律推导图片地址 (尝试根据同目录下其他资源的规律猜测当前角色的 CDN 地址)
+            if not image:
+                image = self._build_profile_image_from_manifest_pattern(
+                    profile_mode, asset_code
+                )
+
+            # C. 对于 acgti 模式，如果没找到明确映射也没能推导出图片，尝试通过 MBTI 反查该类型下的第一个可用资源作为兜底
+            if not image and profile_mode == "acgti":
+                fallback_item = self._get_manifest_profile_item_by_mbti(
+                    profile_mode, normalized_mbti
+                )
+                if isinstance(fallback_item, dict):
+                    image = str(fallback_item.get("file", "")).strip()
+                    if not name_zh:
+                        name_zh = str(fallback_item.get("name", "")).strip()
+                    if not code or code == normalized_mbti:
+                        code = str(fallback_item.get("code", code)).strip()
+
+        # 3. 构造显示文本 (Code + 中文名)
+        display = str(base_info.get("display", "")).strip()
+        if not display:
+            display = f"{code}（{name_zh}）" if name_zh else code
+
+        return {
+            "profile_mode": profile_mode,
+            "profile_code": code,
+            "profile_name_zh": name_zh,
+            "profile_display": display,
+            "profile_image": image,
+            "profile_image_opacity": self.config_manager.get_profile_image_opacity(),
+            "profile_image_size_mode": self.config_manager.get_profile_image_size_mode(),
+        }
 
     @staticmethod
     def _sanitize_path_component(name: str) -> str:
@@ -86,6 +309,7 @@ class ReportGenerator(IReportGenerator):
             "group_id": group_id,
             "date": date,
             "ulid": generated_ulid,
+            "trace_id": str(TraceContext.get() or ""),
         }
 
         try:
@@ -130,6 +354,11 @@ class ReportGenerator(IReportGenerator):
         html_render_func,
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        # Also controls ID normalization and fallback display name ("群友").
+        allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成图片格式的分析报告
@@ -140,6 +369,7 @@ class ReportGenerator(IReportGenerator):
             html_render_func: HTML渲染函数
             avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
             nickname_getter: 昵称获取函数
+            template_theme: 指定的主题模板名称 (如 scrapbook, ATRI 等)
 
         Returns:
             tuple[str | None, str | None]: (image_url, html_content)
@@ -152,11 +382,19 @@ class ReportGenerator(IReportGenerator):
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=avatar_cache_namespace,
+                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
             html_content = self.html_templates.render_template(
-                "image_template.html", **render_payload
+                "image_template.html", template_theme=template_theme, **render_payload
+            )
+            html_content = self._reuse_avatars_in_final_html(
+                html_content,
+                render_payload.get("avatar_reuse_registry", {}),
+                render_payload.get("avatar_reuse_aliases", {}),
             )
 
             # 检查HTML内容是否有效
@@ -164,56 +402,40 @@ class ReportGenerator(IReportGenerator):
                 logger.error("图片报告HTML渲染失败：返回空内容")
                 return None, None
 
-            logger.info(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+            logger.debug(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+
+            # 从配置中获取两轮渲染策略
+            render_strategies = self.config_manager.get_t2i_rendering_strategies()
 
             # 使用信号量控制并发进入渲染引擎
             async with self._render_semaphore:
                 logger.debug(f"[T2I] 已进入渲染队列 (群: {group_id})")
 
-                # 定义渲染策略
-                render_strategies = [
-                    # 1. 第一策略: PNG, Ultra quality, Device scale
-                    {
-                        "full_page": True,
-                        "type": "png",
-                        "scale": "device",
-                        "device_scale_factor_level": "ultra",
-                    },
-                    # 2. 第二策略: JPEG, ultra, quality 100%, Device scale
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 100,
-                        "scale": "device",
-                        "device_scale_factor_level": "ultra",
-                    },
-                    # 3. 第三策略: JPEG, high, quality 80%, Device scale
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 95,
-                        "scale": "device",
-                        "device_scale_factor_level": "high",  # 尝试高分辨率
-                    },
-                    # 4. 第四策略: JPEG, normal quality, Device scale (后备)
-                    {
-                        "full_page": True,
-                        "type": "jpeg",
-                        "quality": 80,
-                        "scale": "device",
-                        # normal quality
-                    },
-                ]
-
                 last_exception = None
 
-                for image_options in render_strategies:
+                for attempt, image_options in enumerate(render_strategies, 1):
+                    viewport_description = "default"
+                    html_error = None
                     try:
+                        image_options, viewport_description = (
+                            self._resolve_t2i_viewport_options(
+                                html_content, image_options
+                            )
+                        )
+
                         # Cleanse options
                         if image_options.get("type") == "png":
-                            image_options["quality"] = None
+                            image_options.pop("quality", None)
 
-                        logger.info(f"正在尝试渲染策略: {image_options}")
+                        logger.debug(
+                            "正在尝试第 "
+                            f"{attempt} 轮渲染策略: type={image_options['type']}, "
+                            f"full_page={image_options['full_page']}, "
+                            f"viewport={viewport_description}, "
+                            f"scale={image_options.get('device_scale_factor_level')}, "
+                            f"timeout={image_options.get('timeout')}"
+                        )
+
                         # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
                         image_data = await html_render_func(
                             html_content,  # 渲染后的HTML内容
@@ -245,42 +467,224 @@ class ReportGenerator(IReportGenerator):
                                 ) or actual_data_head.startswith(b"\x89PNG"):
                                     is_valid = True
                                 else:
-                                    logger.warning(
-                                        f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
-                                    )
+                                    # 尝试解析 HTML 错误（如 502 Bad Gateway）
+                                    html_error = None
+                                    if isinstance(image_data, bytes):
+                                        html_error = self._extract_html_error_summary(
+                                            image_data
+                                        )
+                                    elif isinstance(image_data, str) and os.path.exists(
+                                        image_data
+                                    ):
+                                        try:
+                                            with open(image_data, "rb") as f:
+                                                # 读取前 4KB 即可识别 HTML 错误
+                                                html_error = (
+                                                    self._extract_html_error_summary(
+                                                        f.read(4096)
+                                                    )
+                                                )
+                                        except Exception:
+                                            pass
+
+                                    if html_error:
+                                        logger.warning(
+                                            f"[T2I] 渲染引擎返回了错误页面而非图片: {html_error}"
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
+                                        )
 
                             if is_valid:
+                                image_size = (
+                                    len(image_data)
+                                    if isinstance(image_data, bytes)
+                                    else (
+                                        os.path.getsize(image_data)
+                                        if (
+                                            isinstance(image_data, str)
+                                            and os.path.exists(image_data)
+                                        )
+                                        else 0
+                                    )
+                                )
+
+                                # 上报渲染全量参数与产物指标至当前 Span
+                                trace_ctx = TraceContext.current()
+                                if trace_ctx:
+                                    for s in reversed(trace_ctx._spans):
+                                        if s.get("stage_name") == "RENDER_REPORT":
+                                            payload = s.setdefault("payload", {})
+                                            payload.update(
+                                                {
+                                                    "format": "image",
+                                                    "template": template_theme
+                                                    or "scrapbook (默认)",
+                                                    "viewport": viewport_description,
+                                                    "render_attempt": attempt,
+                                                    "image_format": str(
+                                                        image_options.get(
+                                                            "type", "jpeg"
+                                                        )
+                                                    ),
+                                                    "image_bytes": image_size,
+                                                    "topics_rendered": len(
+                                                        analysis_result.get(
+                                                            "topics", []
+                                                        )
+                                                    ),
+                                                    "titles_rendered": len(
+                                                        analysis_result.get(
+                                                            "user_titles", []
+                                                        )
+                                                    ),
+                                                    "quotes_rendered": len(
+                                                        getattr(
+                                                            analysis_result.get(
+                                                                "statistics"
+                                                            ),
+                                                            "golden_quotes",
+                                                            [],
+                                                        )
+                                                        or []
+                                                    ),
+                                                    "avatars_processed": len(
+                                                        render_payload.get(
+                                                            "avatar_reuse_registry", {}
+                                                        )
+                                                    ),
+                                                    "html_chars": len(html_content)
+                                                    if html_content
+                                                    else 0,
+                                                    "hide_user_names": bool(
+                                                        hide_user_names
+                                                    ),
+                                                }
+                                            )
+                                            payload.setdefault(
+                                                "render_attempts", []
+                                            ).append(
+                                                {
+                                                    "attempt": attempt,
+                                                    "type": str(
+                                                        image_options.get(
+                                                            "type", "jpeg"
+                                                        )
+                                                    ),
+                                                    "viewport": viewport_description,
+                                                    "status": "success",
+                                                }
+                                            )
+                                            break
+
                                 if isinstance(image_data, bytes):
                                     b64 = base64.b64encode(image_data).decode("utf-8")
                                     image_url = f"base64://{b64}"
                                     logger.info(
-                                        f"图片生成成功 ({image_options}): [Base64 Data {len(image_data)} bytes]"
+                                        "图片生成成功 "
+                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
+                                        f"[Base64 数据 {len(image_data)} 字节]"
                                     )
                                     return image_url, html_content
                                 elif isinstance(image_data, str):
-                                    logger.info(f"图片生成成功 (String): {image_data}")
+                                    logger.info(
+                                        "图片生成成功 "
+                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
+                                        f"{image_data}"
+                                    )
                                     return image_data, html_content
 
-                        logger.warning(f"渲染策略 {image_options} 返回了无效或空数据")
+                        logger.warning(
+                            f"渲染轮次 {attempt} ({image_options['type']}) 返回了无效或空数据"
+                        )
+                        trace_ctx = TraceContext.current()
+                        if trace_ctx:
+                            for s in reversed(trace_ctx._spans):
+                                if s.get("stage_name") == "RENDER_REPORT":
+                                    s.setdefault("payload", {}).setdefault(
+                                        "render_attempts", []
+                                    ).append(
+                                        {
+                                            "attempt": attempt,
+                                            "type": str(
+                                                image_options.get("type", "jpeg")
+                                            ),
+                                            "viewport": viewport_description,
+                                            "status": "failed",
+                                            "error": html_error
+                                            or "返回数据非合法图片头",
+                                        }
+                                    )
+                                    break
 
                     except Exception as e:
-                        logger.warning(f"渲染策略 {image_options} 失败: {e}")
+                        logger.warning(f"渲染轮次 {attempt} 失败: {e}")
                         last_exception = e
-                        logger.warning("尝试下一个策略")
+                        trace_ctx = TraceContext.current()
+                        if trace_ctx:
+                            for s in reversed(trace_ctx._spans):
+                                if s.get("stage_name") == "RENDER_REPORT":
+                                    s.setdefault("payload", {}).setdefault(
+                                        "render_attempts", []
+                                    ).append(
+                                        {
+                                            "attempt": attempt,
+                                            "type": str(
+                                                image_options.get("type", "jpeg")
+                                            ),
+                                            "viewport": viewport_description,
+                                            "status": "failed",
+                                            "error": str(e),
+                                        }
+                                    )
+                                    break
+                        if attempt < len(render_strategies):
+                            logger.debug("准备尝试下一轮回退策略")
                         continue
 
                 # 如果所有策略都失败
-                logger.error(f"所有渲染策略都失败。最后一个错误: {last_exception}")
+                logger.error(f"所有渲染尝试都失败。最后一个错误: {last_exception}")
                 return None, html_content
 
         except Exception as e:
             logger.error(f"生成图片报告过程发生严重错误: {e}", exc_info=True)
             return None, html_content
-        finally:
-            # 清理本次运行的 session 和缓存
-            if self._avatar_session:
-                await self._avatar_session.close()
-                self._avatar_session = None
+
+    @staticmethod
+    def _resolve_t2i_viewport_options(
+        html_content: str, image_options: dict
+    ) -> tuple[dict, str]:
+        """优先使用 T2I 可识别的模板视口，缺失维度使用插件兜底值。
+
+        Args:
+            html_content: 已渲染完成的报告 HTML。
+            image_options: 当前轮次的 T2I 渲染参数，包含兜底视口。
+
+        Returns:
+            实际传给 T2I 的参数，以及用于日志的视口来源说明。
+        """
+        resolved_options = image_options.copy()
+        head_snippet = html_content[:4096]
+        descriptions = []
+        for dimension, option_key in (
+            ("width", "viewport_width"),
+            ("height", "viewport_height"),
+        ):
+            # 与新版 T2I 的 meta 解析规则保持一致，避免误删兜底参数。
+            pattern = (
+                r'<meta\s+[^>]*name=["\']viewport["\'][^>]*'
+                rf'content=["\'][^"\']*{dimension}\s*=\s*(\d+)[^"\']*["\'][^>]*>'
+            )
+            match = re.search(pattern, head_snippet, re.IGNORECASE)
+            if match:
+                resolved_options.pop(option_key, None)
+                descriptions.append(f"模板{dimension}={match.group(1)}")
+            else:
+                descriptions.append(
+                    f"兜底{dimension}={resolved_options.get(option_key)}"
+                )
+        return resolved_options, "，".join(descriptions)
 
     async def generate_html_report(
         self,
@@ -288,6 +692,12 @@ class ReportGenerator(IReportGenerator):
         group_id: str,
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
+        custom_filename: str | None = None,
+        trace_id: str | None = None,
     ) -> tuple[str | None, str | None]:
         """
         生成HTML格式的分析报告，保存到指定目录
@@ -297,6 +707,9 @@ class ReportGenerator(IReportGenerator):
             group_id: 群组ID
             avatar_url_getter: 异步回调函数，接收 user_id 返回 avatar_url/data
             nickname_getter: 昵称获取函数
+            template_theme: 指定的主题模板名称 (如 scrapbook, ATRI 等)
+            custom_filename: 自定义输出文件名
+            trace_id: 关联的 Trace ID
 
         Returns:
             tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
@@ -309,17 +722,28 @@ class ReportGenerator(IReportGenerator):
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
             # 生成文件路径
-            current_date = datetime.now().strftime("%Y%m%d")
-            base_html_path = self._build_safe_report_path(
-                output_dir,
-                self.config_manager.get_html_filename_format(),
-                group_id=group_id,
-                date=current_date,
-            )
-
-            html_path = base_html_path
-            if not html_path.suffix:
-                html_path = html_path.with_suffix(".html")
+            if custom_filename:
+                html_path = output_dir / custom_filename
+                if not html_path.suffix:
+                    html_path = html_path.with_suffix(".html")
+            elif trace_id:
+                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                theme_suffix = f"_{template_theme}" if template_theme else ""
+                html_path = (
+                    output_dir
+                    / f"report_{group_id}_{ts_str}_{trace_id}{theme_suffix}.html"
+                )
+            else:
+                current_date = datetime.now().strftime("%Y%m%d")
+                base_html_path = self._build_safe_report_path(
+                    output_dir,
+                    self.config_manager.get_html_filename_format(),
+                    group_id=group_id,
+                    date=current_date,
+                )
+                html_path = base_html_path
+                if not html_path.suffix:
+                    html_path = html_path.with_suffix(".html")
 
             json_path = html_path.with_suffix(".json")
 
@@ -331,31 +755,44 @@ class ReportGenerator(IReportGenerator):
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
+                avatar_cache_namespace=avatar_cache_namespace,
+                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
-            logger.info(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
+            logger.debug(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
             # 生成 HTML 内容（使用 Jinja2 渲染器，尝试 html_template.html，失败则回退到 image_template.html）
             html_content = None
             try:
                 html_content = self.html_templates.render_template(
-                    "html_template.html", **render_data
+                    "html_template.html", template_theme=template_theme, **render_data
                 )
-                logger.info("使用 html_template.html 渲染成功")
+                html_content = self._reuse_avatars_in_final_html(
+                    html_content,
+                    render_data.get("avatar_reuse_registry", {}),
+                    render_data.get("avatar_reuse_aliases", {}),
+                )
+                logger.debug("使用 html_template.html 渲染成功")
             except Exception as e:
                 logger.warning(
                     f"html_template.html 不存在或渲染失败，回退到 image_template.html: {e}"
                 )
                 html_content = self.html_templates.render_template(
-                    "image_template.html", **render_data
+                    "image_template.html", template_theme=template_theme, **render_data
                 )
-                logger.info("使用 image_template.html 渲染成功")
+                html_content = self._reuse_avatars_in_final_html(
+                    html_content,
+                    render_data.get("avatar_reuse_registry", {}),
+                    render_data.get("avatar_reuse_aliases", {}),
+                )
+                logger.debug("使用 image_template.html 渲染成功")
 
             # 检查HTML内容是否有效
             if not html_content:
                 logger.error("HTML报告渲染失败：返回空内容")
                 return None, None
 
-            logger.info(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
+            logger.debug(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
             # 保存 HTML 文件
             await asyncio.to_thread(
@@ -380,7 +817,11 @@ class ReportGenerator(IReportGenerator):
 
             # 保存原始 JSON 数据
             json_data = {
-                "analysis_result": analysis_result,
+                "analysis_result": (
+                    self._sanitize_analysis_result_for_export(analysis_result)
+                    if hide_user_names or allow_alphanumeric_user_ids
+                    else analysis_result
+                ),
                 "group_id": group_id,
                 "generated_at": datetime.now().isoformat(),
             }
@@ -396,6 +837,60 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"JSON 数据已保存: {json_path}")
 
+            # 实时记录产物报告到当前 TraceContext 与数据库
+            trace_ctx = TraceContext.current()
+            if trace_ctx:
+                for s in reversed(trace_ctx._spans):
+                    if s.get("stage_name") == "RENDER_REPORT":
+                        s.setdefault("payload", {}).update(
+                            {
+                                "format": "html",
+                                "template": template_theme or "default",
+                                "html_chars": len(html_content) if html_content else 0,
+                                "html_file": html_path.name,
+                                "topics_rendered": len(
+                                    analysis_result.get("topics", [])
+                                ),
+                                "titles_rendered": len(
+                                    analysis_result.get("user_titles", [])
+                                ),
+                                "quotes_rendered": len(
+                                    getattr(
+                                        analysis_result.get("statistics"),
+                                        "golden_quotes",
+                                        [],
+                                    )
+                                    or []
+                                ),
+                                "avatars_processed": len(
+                                    render_data.get("avatar_reuse_registry", {})
+                                ),
+                                "hide_user_names": bool(hide_user_names),
+                            }
+                        )
+                        break
+
+                rfiles = trace_ctx.metadata.setdefault("report_files", [])
+                if not any(rf.get("filename") == html_path.name for rf in rfiles):
+                    rfiles.append(
+                        {
+                            "filename": html_path.name,
+                            "path": str(html_path.resolve()),
+                            "format": "html",
+                            "size_bytes": html_path.stat().st_size
+                            if html_path.exists()
+                            else 0,
+                            "created_at": time.time(),
+                        }
+                    )
+                from ...shared.trace_context import _global_trace_store
+
+                if _global_trace_store is not None:
+                    try:
+                        _global_trace_store.save_trace(trace_ctx.to_dict())
+                    except Exception:
+                        pass
+
             return str(html_path.absolute()), str(json_path.absolute())
 
         except Exception as e:
@@ -403,7 +898,7 @@ class ReportGenerator(IReportGenerator):
             return None, None
 
     def build_html_caption(self, html_path: str) -> str:
-        """根据 html_base_url 生成 HTML 报告链接 caption"""
+        """根据 html_base_url 生成 HTML 报告链接 caption。由调用方决定是否发送。"""
 
         caption = "📊 每日群聊分析报告已生成"
         base_url = self.config_manager.get_html_base_url()
@@ -466,12 +961,97 @@ class ReportGenerator(IReportGenerator):
 
         return report
 
+    async def generate_qq_official_markdown_report(
+        self, analysis_result: dict, html_render_func=None
+    ) -> tuple[str, str]:
+        """Delegate QQ-only text generation to the platform-specific module."""
+        generator = getattr(self, "_qq_official_markdown_generator", None)
+        if generator is None:
+            generator = QQOfficialMarkdownReportGenerator(
+                self.config_manager,
+                getattr(self, "html_templates", None),
+                getattr(self, "_render_semaphore", None),
+            )
+            self._qq_official_markdown_generator = generator
+        return await generator.generate(
+            analysis_result,
+            html_render_func,
+        )
+
+    def _sanitize_analysis_result_for_export(
+        self, analysis_result: dict
+    ) -> dict[str, Any]:
+        """Remove platform identities from the HTML sidecar JSON export."""
+        sanitized = self._to_plain_export_data(copy.deepcopy(analysis_result))
+        sanitized["user_analysis"] = {}
+        for topic in sanitized.get("topics", []):
+            if not isinstance(topic, dict):
+                continue
+            topic["contributors"] = []
+            topic["contributor_ids"] = []
+        for title in sanitized.get("user_titles", []):
+            if not isinstance(title, dict):
+                continue
+            title["name"] = ""
+            title["user_id"] = ""
+        stats = sanitized.get("statistics")
+        if isinstance(stats, dict):
+            for golden_quote in stats.get("golden_quotes", []) or []:
+                if not isinstance(golden_quote, dict):
+                    continue
+                golden_quote["sender"] = ""
+                golden_quote["user_id"] = ""
+
+            activity_visualization = stats.get("activity_visualization")
+            if isinstance(activity_visualization, dict):
+                activity_visualization["user_activity_ranking"] = []
+
+        for golden_quote in sanitized.get("golden_quotes", []) or []:
+            if not isinstance(golden_quote, dict):
+                continue
+            golden_quote["sender"] = ""
+            golden_quote["user_id"] = ""
+
+        return self._sanitize_export_identity_text(sanitized, analysis_result)  # type: ignore[return-type]
+
+    @classmethod
+    def _to_plain_export_data(cls, value):
+        """Convert report models into plain containers before privacy filtering."""
+        if hasattr(value, "to_dict") and callable(value.to_dict):
+            return cls._to_plain_export_data(value.to_dict())
+        if is_dataclass(value) and not isinstance(value, type):
+            return cls._to_plain_export_data(asdict(value))
+        if isinstance(value, dict):
+            return {key: cls._to_plain_export_data(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [cls._to_plain_export_data(item) for item in value]
+        return value
+
+    def _sanitize_export_identity_text(self, value, analysis_result: dict):
+        """Remove known IDs and display names from every exported text field."""
+        if isinstance(value, str):
+            return self._sanitize_identity_text(value, analysis_result, True)
+        if isinstance(value, dict):
+            return {
+                key: self._sanitize_export_identity_text(item, analysis_result)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._sanitize_export_identity_text(item, analysis_result)
+                for item in value
+            ]
+        return value
+
     async def _prepare_render_data(
         self,
         analysis_result: dict,
         chart_template: str = "activity_chart.html",
         avatar_url_getter=None,
         nickname_getter=None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> dict:
         """准备渲染数据"""
         stats = analysis_result["statistics"]
@@ -483,85 +1063,215 @@ class ReportGenerator(IReportGenerator):
         max_topics = self.config_manager.get_max_topics()
         topics_list = []
         user_analysis = analysis_result.get("user_analysis")
+        avatar_reuse_registry: dict[str, str] = {}
+        avatar_reuse_aliases: dict[str, str] = {}
+
+        # 仅预取本次报告可见区域实际引用的头像。
+        avatar_user_ids: set[str] = set()
+        known_user_ids = {
+            str(user_id).strip()
+            for user_id in (user_analysis or {})
+            if str(user_id).strip()
+        }
+        max_user_titles = self.config_manager.get_max_user_titles()
+        max_golden_quotes = self.config_manager.get_max_golden_quotes()
+        for title in user_titles[:max_user_titles]:
+            user_id = str(getattr(title, "user_id", "") or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        for golden_quote in stats.golden_quotes[:max_golden_quotes]:
+            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
+            if user_id:
+                avatar_user_ids.add(user_id)
+        mention_sources = []
+        for topic in topics[:max_topics]:
+            if hide_user_names:
+                avatar_user_ids.update(
+                    str(user_id).strip()
+                    for user_id in (getattr(topic, "contributor_ids", []) or [])
+                    if str(user_id).strip()
+                )
+            mention_sources.append(str(getattr(topic, "detail", "") or ""))
+        mention_sources.extend(
+            str(getattr(golden_quote, "reason", "") or "")
+            for golden_quote in stats.golden_quotes[:max_golden_quotes]
+        )
+        if hide_user_names:
+            mention_sources.extend(
+                str(getattr(title, "reason", "") or "")
+                for title in user_titles[:max_user_titles]
+            )
+        for source in mention_sources:
+            avatar_user_ids.update(
+                matched_user_id
+                for matched_user_id in re.findall(r"\[([A-Za-z0-9_-]{1,128})\]", source)
+                if matched_user_id in known_user_ids
+            )
+        if avatar_user_ids:
+            await asyncio.gather(
+                *(
+                    self._get_user_avatar(
+                        user_id, avatar_url_getter, avatar_cache_namespace
+                    )
+                    for user_id in avatar_user_ids
+                )
+            )
 
         for i, topic in enumerate(topics[:max_topics], 1):
             # 处理话题详情中的用户引用头像
             processed_detail = await self._render_mentions(
-                topic.detail, avatar_url_getter, nickname_getter, user_analysis
+                topic.detail,
+                avatar_url_getter,
+                nickname_getter,
+                user_analysis,
+                avatar_cache_namespace,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
+            if hide_user_names:
+                contributors = await self._render_avatar_only_ids(
+                    getattr(topic, "contributor_ids", []) or [],
+                    avatar_url_getter,
+                    avatar_cache_namespace,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                )
+            else:
+                contributors = "、".join(topic.contributors)
             topics_list.append(
                 {
                     "index": i,
-                    "topic": topic,
-                    "contributors": "、".join(topic.contributors),
+                    "topic": {
+                        "topic": self._sanitize_identity_text(
+                            topic.topic, analysis_result, hide_user_names
+                        )
+                    },
+                    "contributors": contributors,
                     "detail": processed_detail,
                 }
             )
 
+        # 通用模板上下文，包含可能被子模板引用的全局配置
+        common_context = {
+            "hide_user_names": hide_user_names,
+            "t2i_font_source": self.config_manager.get_t2i_font_source(),
+            "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
+            "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
+            "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
+        }
+
         topics_html = self.html_templates.render_template(
-            "topic_item.html", topics=topics_list
+            "topic_item.html", topics=topics_list, **common_context
         )
-        logger.info(f"话题HTML生成完成，长度: {len(topics_html)}")
+        logger.debug(f"话题HTML生成完成，长度: {len(topics_html)}")
 
         # 使用Jinja2模板构建用户称号HTML（批量渲染，包含头像）
-        max_user_titles = self.config_manager.get_max_user_titles()
         titles_list = []
+        profile_mode = self.config_manager.get_profile_display_mode()
+        profile_mapping_overrides = self._get_profile_mapping_overrides()
         for title in user_titles[:max_user_titles]:
+            user_id = str(title.user_id)
             # 获取用户头像
             avatar_data = await self._get_user_avatar(
-                str(title.user_id), avatar_url_getter
+                user_id, avatar_url_getter, avatar_cache_namespace
             )
+            self._register_reusable_avatar(
+                avatar_data,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(user_id, avatar_cache_namespace),
+            )
+            profile_info = self._resolve_profile_info(
+                title.mbti, profile_mode, profile_mapping_overrides
+            )
+            title_reason = title.reason
+            if hide_user_names:
+                title_reason = await self._render_mentions(
+                    title.reason,
+                    avatar_url_getter,
+                    nickname_getter,
+                    user_analysis,
+                    avatar_cache_namespace,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    hide_user_names=True,
+                    allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
+                )
             title_data = {
-                "name": title.name,
+                "name": "" if hide_user_names else title.name,
                 "title": title.title,
                 "mbti": title.mbti,
-                "reason": title.reason,
+                "reason": title_reason,
                 "avatar_data": avatar_data,
             }
+            title_data.update(profile_info)
             titles_list.append(title_data)
 
         titles_html = self.html_templates.render_template(
-            "user_title_item.html", titles=titles_list
+            "user_title_item.html", titles=titles_list, **common_context
         )
-        logger.info(f"用户称号HTML生成完成，长度: {len(titles_html)}")
+        logger.debug(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
         # 使用Jinja2模板构建金句HTML（批量渲染）
-        max_golden_quotes = self.config_manager.get_max_golden_quotes()
         quotes_list = []
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
+            quote_user_id = str(golden_quote.user_id) if golden_quote.user_id else None
             avatar_url = (
                 await self._get_user_avatar(
-                    str(golden_quote.user_id), avatar_url_getter
+                    quote_user_id,
+                    avatar_url_getter,
+                    avatar_cache_namespace,
                 )
-                if golden_quote.user_id
+                if quote_user_id
                 else None
             )
+            if quote_user_id:
+                self._register_reusable_avatar(
+                    avatar_url,
+                    avatar_reuse_registry,
+                    avatar_reuse_aliases,
+                    avatar_key=self._get_avatar_cache_key(
+                        quote_user_id, avatar_cache_namespace
+                    ),
+                )
             # 处理解析锐评中的用户引用头像
             processed_reason = await self._render_mentions(
-                golden_quote.reason, avatar_url_getter, nickname_getter, user_analysis
+                golden_quote.reason,
+                avatar_url_getter,
+                nickname_getter,
+                user_analysis,
+                avatar_cache_namespace,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                hide_user_names=hide_user_names,
+                allow_alphanumeric_user_ids=allow_alphanumeric_user_ids,
             )
             quotes_list.append(
                 {
-                    "content": golden_quote.content,
-                    "sender": golden_quote.sender,
+                    "content": self._sanitize_identity_text(
+                        golden_quote.content, analysis_result, hide_user_names
+                    ),
+                    "sender": "" if hide_user_names else golden_quote.sender,
                     "reason": processed_reason,
                     "avatar_url": avatar_url,
                 }
             )
 
         quotes_html = self.html_templates.render_template(
-            "quote_item.html", quotes=quotes_list
+            "quote_item.html", quotes=quotes_list, **common_context
         )
-        logger.info(f"金句HTML生成完成，长度: {len(quotes_html)}")
+        logger.debug(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
         # 生成活跃度可视化HTML
         chart_data = self.activity_visualizer.get_hourly_chart_data(
             activity_viz.hourly_activity
         )
         hourly_chart_html = self.html_templates.render_template(
-            chart_template, chart_data=chart_data
+            chart_template, chart_data=chart_data, **common_context
         )
-        logger.info(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
+        logger.debug(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
         # 生成聊天质量锐评HTML
         chat_quality_html = ""
@@ -589,13 +1299,44 @@ class ReportGenerator(IReportGenerator):
             else:
                 review_data = chat_quality_review
 
+            if hide_user_names and isinstance(review_data, dict):
+                review_data = {
+                    **review_data,
+                    "title": self._sanitize_identity_text(
+                        review_data.get("title", ""), analysis_result, True
+                    ),
+                    "subtitle": self._sanitize_identity_text(
+                        review_data.get("subtitle", ""), analysis_result, True
+                    ),
+                    "summary": self._sanitize_identity_text(
+                        review_data.get("summary", ""), analysis_result, True
+                    ),
+                    "dimensions": [
+                        {
+                            **dimension,
+                            "name": self._sanitize_identity_text(
+                                dimension.get("name", ""), analysis_result, True
+                            ),
+                            "comment": self._sanitize_identity_text(
+                                dimension.get("comment", ""), analysis_result, True
+                            ),
+                        }
+                        for dimension in review_data.get("dimensions", [])
+                        if isinstance(dimension, dict)
+                    ],
+                }
+
             chat_quality_html = self.html_templates.render_template(
-                "chat_quality_item.html", **review_data
+                "chat_quality_item.html", **review_data, **common_context
             )
-            logger.info(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
+            logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
         # 准备最终渲染数据
         render_data = {
+            "t2i_font_source": self.config_manager.get_t2i_font_source(),
+            "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
+            "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
+            "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,
@@ -617,10 +1358,56 @@ class ReportGenerator(IReportGenerator):
             "completion_tokens": stats.token_usage.completion_tokens
             if stats.token_usage.completion_tokens
             else 0,
+            "avatar_reuse_registry": avatar_reuse_registry,
+            "avatar_reuse_aliases": avatar_reuse_aliases,
         }
 
-        logger.info(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
+        logger.debug(f"渲染数据准备完成，包含 {len(render_data)} 个字段")
         return render_data
+
+    async def _render_avatar_only_ids(
+        self,
+        user_ids: list[str],
+        avatar_url_getter,
+        avatar_cache_namespace: str | None,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None,
+    ) -> Markup:
+        avatars: list[Markup] = []
+        for raw_user_id in user_ids:
+            user_id = str(raw_user_id or "").strip()
+            if not user_id:
+                continue
+            avatar_url = await self._get_user_avatar(
+                user_id, avatar_url_getter, avatar_cache_namespace
+            )
+            avatar_ref = self._register_reusable_avatar(
+                avatar_url,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(user_id, avatar_cache_namespace),
+            )
+            style = (
+                "width:24px;height:24px;border-radius:50%;display:inline-block;"
+                "vertical-align:middle;margin:0 2px;background-size:cover;"
+                "background-position:center;background-repeat:no-repeat;"
+            )
+            if avatar_ref:
+                avatars.append(
+                    Markup(
+                        f'<span class="user-capsule-avatar" '
+                        f'data-avatar-ref="{html.escape(avatar_ref, quote=True)}" '
+                        f'style="{style}"></span>'
+                    )
+                )
+            else:
+                avatars.append(
+                    Markup(
+                        f'<img src="{html.escape(avatar_url, quote=True)}" '
+                        f'style="{style}">'
+                    )
+                )
+        return Markup("").join(avatars)
 
     async def _render_mentions(
         self,
@@ -628,22 +1415,49 @@ class ReportGenerator(IReportGenerator):
         avatar_url_getter,
         nickname_getter=None,
         user_analysis: dict | None = None,
+        avatar_cache_namespace: str | None = None,
+        avatar_reuse_registry: dict[str, str] | None = None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
     ) -> Markup:
         """
-        处理文本，将 [123456] 格式的用户引用替换为头像+名称的胶囊样式
+        处理文本，将 [用户ID] 格式的引用替换为头像胶囊。
         """
-        pattern = r"\[(\d+)\]"
         if not text:
             return Markup("")
 
-        matches = list(re.finditer(pattern, text))
+        known_ids = {
+            str(user_id).strip()
+            for user_id in (user_analysis or {})
+            if str(user_id).strip()
+        }
+        source_text = str(text)
+        supports_extended_ids = hide_user_names or allow_alphanumeric_user_ids
+        if supports_extended_ids:
+            # LLM 偶尔会直接输出 ID；先标准化为引用，避免 OpenID 以明文形式显示。
+            for user_id in sorted(known_ids, key=len, reverse=True):
+                source_text = re.sub(
+                    rf"(?<!\[)(?<![A-Za-z0-9_-]){re.escape(user_id)}"
+                    rf"(?![A-Za-z0-9_-])(?!\])",
+                    f"[{user_id}]",
+                    source_text,
+                )
+
+        pattern = (
+            r"\[([A-Za-z0-9_-]{1,128})\]" if supports_extended_ids else r"\[(\d+)\]"
+        )
+
+        matches = list(re.finditer(pattern, source_text))
         if not matches:
-            return self._escape_text_segment(text)
+            return self._escape_text_segment(source_text)
 
         async def render_capsule(match: re.Match[str]) -> Markup:
             uid = match.group(1)
+            if supports_extended_ids and uid not in known_ids:
+                return Markup(html.escape(f"[{uid}]", quote=True))
             url = await self._get_user_avatar(
-                uid, avatar_url_getter
+                uid, avatar_url_getter, avatar_cache_namespace
             )  # 内部已有缓存，无需顶层并发获取
 
             name = None
@@ -669,7 +1483,10 @@ class ReportGenerator(IReportGenerator):
                 "padding:2px 6px 2px 2px;border-radius:12px;margin:0 2px;"
                 "vertical-align:middle;border:1px solid rgba(0,0,0,0.1);text-decoration:none;"
             )
-            img_style = "width:18px;height:18px;border-radius:50%;margin-right:4px;display:block;"
+            img_style = (
+                "width:18px;height:18px;border-radius:50%;"
+                f"margin-right:{'0' if hide_user_names else '4px'};display:block;"
+            )
             name_style = "font-size:0.85em;color:inherit;font-weight:500;line-height:1;"
 
             # 3. 最终后备: 确保有头像和名称
@@ -677,25 +1494,72 @@ class ReportGenerator(IReportGenerator):
             final_name = (
                 name
                 if (name and not self._is_placeholder_display_name(name, uid))
-                else str(uid)
+                else ("群友" if allow_alphanumeric_user_ids else str(uid))
             )
 
+            avatar_ref = self._register_reusable_avatar(
+                final_url,
+                avatar_reuse_registry,
+                avatar_reuse_aliases,
+                avatar_key=self._get_avatar_cache_key(uid, avatar_cache_namespace),
+            )
+            if avatar_ref:
+                avatar_html = (
+                    f'<span class="user-capsule-avatar" '
+                    f'data-avatar-ref="{html.escape(avatar_ref, quote=True)}" '
+                    f'style="{img_style}background-size:cover;background-position:center;'
+                    'background-repeat:no-repeat;flex-shrink:0;"></span>'
+                )
+            else:
+                avatar_html = (
+                    f'<img src="{html.escape(final_url, quote=True)}" '
+                    f'style="{img_style}">'
+                )
+
+            name_html = (
+                ""
+                if hide_user_names
+                else f'<span style="{name_style}">{html.escape(final_name)}</span>'
+            )
             return Markup(
                 f'<span class="user-capsule" style="{capsule_style}">'
-                f'<img src="{html.escape(final_url, quote=True)}" style="{img_style}">'
-                f'<span style="{name_style}">{html.escape(final_name)}</span>'
-                "</span>"
+                f"{avatar_html}{name_html}</span>"
             )
 
         result: list[Markup | str] = []
         last_end = 0
         for match in matches:
-            result.append(self._escape_text_segment(text[last_end : match.start()]))
+            result.append(
+                self._escape_text_segment(source_text[last_end : match.start()])
+            )
             result.append(await render_capsule(match))
             last_end = match.end()
 
-        result.append(self._escape_text_segment(text[last_end:]))
+        result.append(self._escape_text_segment(source_text[last_end:]))
         return Markup("").join(result)
+
+    @staticmethod
+    def _sanitize_identity_text(
+        text: str, analysis_result: dict, hide_user_names: bool
+    ) -> str:
+        if not hide_user_names:
+            return str(text)
+        sanitized = str(text)
+        user_analysis = analysis_result.get("user_analysis") or {}
+        known_ids = {
+            str(user_id).strip() for user_id in user_analysis if str(user_id).strip()
+        }
+        known_names = set()
+        for stats in user_analysis.values():
+            if not isinstance(stats, dict):
+                continue
+            for key in ("nickname", "name"):
+                value = str(stats.get(key, "") or "").strip()
+                if value:
+                    known_names.add(value)
+        for identity in sorted(known_ids | known_names, key=len, reverse=True):
+            sanitized = sanitized.replace(identity, "")
+        return re.sub(r"\[\s*\]", "", sanitized)
 
     @staticmethod
     def _escape_text_segment(text: str) -> Markup:
@@ -721,34 +1585,210 @@ class ReportGenerator(IReportGenerator):
         # Telegram file URL: .../file/bot<token>/<file_path>
         return re.sub(r"/bot[^/]+/", "/bot<redacted>/", url)
 
-    async def _get_user_avatar(self, avatar_id: str, avatar_url_getter=None) -> str:
+    @staticmethod
+    def _build_avatar_ref(avatar_key: str | None, avatar_url: str) -> str:
+        """根据稳定输入生成不暴露平台或用户 ID 的头像引用。"""
+        if avatar_key:
+            digest = hashlib.sha256(avatar_key.encode("utf-8")).hexdigest()[:24]
+            return f"avatar-{digest}"
+
+        digest = hashlib.sha256(avatar_url.encode("utf-8")).hexdigest()[:24]
+        return f"avatar-{digest}"
+
+    @staticmethod
+    def _register_reusable_avatar(
+        avatar_url: str | None,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
+        avatar_key: str | None = None,
+    ) -> str | None:
+        """将 Data URI 头像登记为可复用资源，并返回短引用 ID。"""
+        if not avatar_url or avatar_reuse_registry is None:
+            return None
+        if not avatar_url.startswith("data:image/"):
+            return None
+
+        if avatar_reuse_aliases and avatar_url in avatar_reuse_aliases:
+            return avatar_reuse_aliases[avatar_url]
+
+        ref = ReportGenerator._build_avatar_ref(avatar_key, avatar_url)
+        avatar_reuse_registry.setdefault(ref, avatar_url)
+        if avatar_reuse_aliases is not None:
+            avatar_reuse_aliases[avatar_url] = ref
+        return ref
+
+    @staticmethod
+    def _build_avatar_reuse_styles(avatar_reuse_registry: dict[str, str]) -> str:
+        """为头像生成一次性复用样式。"""
+        if not avatar_reuse_registry:
+            return ""
+
+        rules = [
+            '<style id="avatar-reuse-styles">',
+            ".user-capsule-avatar,img[data-avatar-ref]{background-color:#ddd;background-size:cover;background-position:center;background-repeat:no-repeat;}",
+        ]
+        for ref, data_uri in avatar_reuse_registry.items():
+            escaped_ref = html.escape(ref, quote=True)
+            escaped_uri = data_uri.replace("\\", "\\\\").replace('"', '\\"')
+            rules.append(
+                f'[data-avatar-ref="{escaped_ref}"]'
+                f'{{background-image:url("{escaped_uri}");}}'
+            )
+        rules.append("</style>")
+        return "\n".join(rules)
+
+    @staticmethod
+    def _reuse_inline_avatar_img_sources(
+        html_content: str,
+        avatar_reuse_registry: dict[str, str],
+        avatar_reuse_aliases: dict[str, str] | None = None,
+    ) -> str:
+        """将最终 HTML 中的内联 Data URI 头像 img 改为短引用。"""
+        if not html_content:
+            return html_content
+
+        img_src_pattern = re.compile(
+            r'(<img\b[^>]*?\bsrc\s*=\s*)(["\'])(data:image/[^"\']+)(\2)([^>]*>)',
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        def replace(match: re.Match[str]) -> str:
+            prefix, quote_char, data_uri, _, suffix = match.groups()
+            if data_uri == TRANSPARENT_IMAGE_DATA_URI:
+                return match.group(0)
+
+            avatar_ref = (
+                avatar_reuse_aliases.get(data_uri) if avatar_reuse_aliases else None
+            )
+            if not avatar_ref:
+                return match.group(0)
+
+            escaped_ref = html.escape(avatar_ref, quote=True)
+            return (
+                f"{prefix}{quote_char}{TRANSPARENT_IMAGE_DATA_URI}{quote_char}"
+                f' data-avatar-ref="{escaped_ref}"{suffix}'
+            )
+
+        return img_src_pattern.sub(replace, html_content)
+
+    @staticmethod
+    def _reuse_avatars_in_final_html(
+        html_content: str,
+        avatar_reuse_registry: dict[str, str] | None,
+        avatar_reuse_aliases: dict[str, str] | None = None,
+    ) -> str:
+        """复用最终 HTML 中所有内联头像资源，并注入复用样式。"""
+        if not html_content:
+            return html_content
+
+        registry = avatar_reuse_registry if avatar_reuse_registry is not None else {}
+        aliases = avatar_reuse_aliases if avatar_reuse_aliases is not None else {}
+        html_content = ReportGenerator._reuse_inline_avatar_img_sources(
+            html_content, registry, aliases
+        )
+        return ReportGenerator._inject_avatar_reuse_styles(
+            html_content, ReportGenerator._build_avatar_reuse_styles(registry)
+        )
+
+    @staticmethod
+    def _inject_avatar_reuse_styles(html_content: str, avatar_reuse_styles: str) -> str:
+        """将头像复用样式注入最终 HTML。"""
+        if not html_content or not avatar_reuse_styles:
+            return html_content
+
+        head_close = re.search(r"</head\s*>", html_content, re.IGNORECASE)
+        if head_close:
+            return (
+                html_content[: head_close.start()]
+                + avatar_reuse_styles
+                + "\n"
+                + html_content[head_close.start() :]
+            )
+        return avatar_reuse_styles + "\n" + html_content
+
+    def _get_avatar_cache_key(
+        self, avatar_id: str, avatar_cache_namespace: str | None = None
+    ) -> str:
+        """生成头像缓存键，避免不同平台的同一数字 ID 互相污染。"""
+        namespace = str(avatar_cache_namespace or "legacy").strip() or "legacy"
+        return f"{namespace}:{avatar_id}"
+
+    async def _get_user_avatar(
+        self,
+        avatar_id: str,
+        avatar_url_getter=None,
+        avatar_cache_namespace: str | None = None,
+    ) -> str:
         """
         获取用户头像的 Base64 Data URI。
-        使用磁盘缓存，支持跨任务复用。获取失败时不缓存结果，以便后续请求重试。
+        使用磁盘缓存，支持跨任务复用。失败结果短时缓存，避免同一报告重复请求。
         """
+        cache_key = self._get_avatar_cache_key(avatar_id, avatar_cache_namespace)
         # 1. 检查缓存 (仅包含成功的头像数据)
-        if avatar_id in self._avatar_cache:
-            data = self._avatar_cache[avatar_id]
+        if cache_key in self._avatar_cache:
+            data = self._avatar_cache[cache_key]
             if isinstance(data, str):
                 return data
             return str(data)
+
+        failure_cache = getattr(self, "_avatar_failure_cache", {})
+        failed_until = failure_cache.get(cache_key, 0)
+        if failed_until > time.monotonic():
+            return self._get_default_avatar_base64()
+        failure_cache.pop(cache_key, None)
 
         # 2. 尝试获取头像字节流
         avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
 
         if not avatar_bytes:
-            # 获取失败时返回默认头像，但不存入缓存，以便下次重试
-            logger.warning(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
+            failure_cache[cache_key] = (
+                time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
+            )
+            self._avatar_failure_cache = failure_cache
+            logger.debug(f"获取用户头像失败 {avatar_id}，本次将使用回退头像")
             return self._get_default_avatar_base64()
 
         # 3. 获取成功：转换并缓存
-        avatar = self._b64_with_mime(avatar_bytes)
+        avatar = self._b64_with_mime(self._resize_avatar_bytes(avatar_bytes))
         if avatar:
-            self._avatar_cache.set(avatar_id, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            self._avatar_cache.set(cache_key, avatar, expire=AVATAR_CACHE_EXPIRE_TIME)
+            failure_cache.pop(cache_key, None)
             return avatar
 
-        # 最终兜底
+        failure_cache[cache_key] = time.monotonic() + AVATAR_FAILURE_CACHE_EXPIRE_TIME
+        self._avatar_failure_cache = failure_cache
         return self._get_default_avatar_base64()
+
+    @staticmethod
+    def _resize_avatar_bytes(payload: bytes) -> bytes:
+        """缩放头像后再嵌入 HTML，降低渲染请求体积。
+
+        Args:
+            payload: 下载得到的头像二进制数据。
+
+        Returns:
+            压缩后的头像；解码失败时返回原始数据。
+        """
+        try:
+            with Image.open(BytesIO(payload)) as image:
+                image.load()
+                image.thumbnail(
+                    (AVATAR_MAX_EDGE_LENGTH, AVATAR_MAX_EDGE_LENGTH),
+                    Image.Resampling.LANCZOS,
+                )
+                output = BytesIO()
+                if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
+                    image.convert("RGBA").save(output, format="PNG", optimize=True)
+                else:
+                    image.convert("RGB").save(
+                        output,
+                        format="JPEG",
+                        quality=85,
+                        optimize=True,
+                    )
+                return output.getvalue()
+        except (OSError, UnidentifiedImageError):
+            return payload
 
     def _b64_with_mime(self, _bytes: bytes) -> str | None:
         """将字节数据转换为 Base64 Data URI，并自动识别 MIME 类型。"""
@@ -774,11 +1814,15 @@ class ReportGenerator(IReportGenerator):
         self, user_id: str, avatar_url_getter=None
     ) -> bytes | None:
         """核心头像获取逻辑"""
-        file_content = None
-        if not self._avatar_session:
-            self._avatar_session = aiohttp.ClientSession(
-                trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
-            )
+        avatar_session_lock = getattr(self, "_avatar_session_lock", None)
+        if avatar_session_lock is None:
+            avatar_session_lock = asyncio.Lock()
+            self._avatar_session_lock = avatar_session_lock
+        async with avatar_session_lock:
+            if not self._avatar_session or self._avatar_session.closed:
+                self._avatar_session = aiohttp.ClientSession(
+                    trust_env=True, timeout=aiohttp.ClientTimeout(total=15)
+                )
         async with self._avatar_session_concurrent_semaphore:
             avatar_url = None
             if avatar_url_getter:
@@ -796,13 +1840,18 @@ class ReportGenerator(IReportGenerator):
                                 return base64.b64decode(parts[1])
                         else:
                             logger.warning(
-                                f"custom avatar_url_getter 返回了非 HTTP URL: {result[:50]}..."
+                                "自定义头像地址获取器返回了非 HTTP 地址: "
+                                f"{result[:50]}..."
                             )
                 except Exception as e:
-                    logger.warning(f"使用 custom avatar_url_getter 获取头像失败: {e}")
+                    logger.warning(f"使用自定义头像地址获取器失败: {e}")
 
             if not avatar_url:
-                if user_id.isdigit() and 5 <= len(user_id) <= 12:
+                if (
+                    avatar_url_getter is None
+                    and user_id.isdigit()
+                    and 5 <= len(user_id) <= 12
+                ):
                     # 强制使用 spec=40
                     avatar_url = (
                         f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=40"
@@ -813,38 +1862,58 @@ class ReportGenerator(IReportGenerator):
 
             # 5. 下载并保存
             safe_avatar_url = self._safe_url_for_log(avatar_url)
-            try:
-                async with self._avatar_session.get(avatar_url) as response:
-                    if response.status == 200:
-                        content = await response.read()
-                        if content:
-                            # 校验文件头
-                            is_valid_image = False
-                            if content.startswith(b"\xff\xd8"):  # JPEG
-                                is_valid_image = True
-                            elif content.startswith(b"\x89PNG\r\n\x1a\n"):  # PNG
-                                is_valid_image = True
-                            elif content.startswith(b"GIF8"):  # GIF
-                                is_valid_image = True
-                            elif (
+            failure_reason = ""
+            for attempt in range(1, AVATAR_DOWNLOAD_RETRY_TIMES + 1):
+                try:
+                    async with self._avatar_session.get(avatar_url) as response:
+                        if response.status == 200:
+                            content = await response.read()
+                            if not content:
+                                failure_reason = "响应内容为空"
+                            elif content.startswith(
+                                (b"\xff\xd8", b"\x89PNG\r\n\x1a\n", b"GIF8")
+                            ) or (
                                 content.startswith(b"RIFF") and b"WEBP" in content[:16]
-                            ):  # WebP
-                                is_valid_image = True
-
-                            if is_valid_image:
-                                file_content = content
+                            ):
+                                return content
                             else:
                                 logger.warning(
                                     f"下载的头像数据格式无效 ({safe_avatar_url})"
                                 )
-                    else:
-                        logger.warning(
-                            f"下载头像失败 {safe_avatar_url}: {response.status}"
-                        )
-            except Exception as e:
-                logger.warning(f"下载头像网络错误 {safe_avatar_url}: {e}")
+                                return None
+                        else:
+                            failure_reason = f"HTTP {response.status}"
+                            if (
+                                response.status not in {408, 429}
+                                and response.status < 500
+                            ):
+                                logger.warning(
+                                    f"下载头像失败 {safe_avatar_url}: {failure_reason}"
+                                )
+                                return None
+                except (TimeoutError, aiohttp.ClientError) as e:
+                    # 部分 aiohttp 断连异常的字符串为空，保留异常类型便于定位。
+                    failure_reason = f"{type(e).__name__}: {e!r}"
+                except Exception as e:
+                    logger.warning(
+                        f"下载头像发生未知错误 {safe_avatar_url}: "
+                        f"{type(e).__name__}: {e!r}"
+                    )
+                    return None
 
-            return file_content
+                if attempt < AVATAR_DOWNLOAD_RETRY_TIMES:
+                    logger.debug(
+                        f"下载头像失败，将在短暂等待后重试 "
+                        f"({attempt}/{AVATAR_DOWNLOAD_RETRY_TIMES}): "
+                        f"{safe_avatar_url}，原因: {failure_reason}"
+                    )
+                    await asyncio.sleep(0.5 * attempt)
+
+            logger.warning(
+                f"下载头像网络错误，已重试 {AVATAR_DOWNLOAD_RETRY_TIMES} 次 "
+                f"{safe_avatar_url}: {failure_reason}"
+            )
+            return None
 
     def _get_default_avatar_base64(self) -> str:
         """返回默认头像 (灰色圆形占位符)"""
@@ -865,3 +1934,28 @@ class ReportGenerator(IReportGenerator):
                 logger.debug("头像缓存已关闭")
         except Exception as e:
             logger.warning(f"关闭头像缓存失败: {e}")
+
+    def _extract_html_error_summary(self, data: bytes) -> str | None:
+        """从返回的字节流中尝试提取 HTML 错误信息（如 <title>）"""
+        try:
+            content = data.decode("utf-8", errors="ignore")
+            content_lower = content.lower()
+            if "<html" in content_lower or "<!doctype html" in content_lower:
+                # 尝试提取标题
+                title_match = re.search(
+                    r"<title>(.*?)</title>", content, re.IGNORECASE | re.DOTALL
+                )
+                if title_match:
+                    return f"HTML 错误页: {title_match.group(1).strip()}"
+
+                # 尝试提取 h1
+                h1_match = re.search(
+                    r"<h1>(.*?)</h1>", content, re.IGNORECASE | re.DOTALL
+                )
+                if h1_match:
+                    return f"HTML 错误页: {h1_match.group(1).strip()}"
+
+                return f"HTML 响应 (前100字): {content[:100].strip()}..."
+        except Exception:
+            pass
+        return None

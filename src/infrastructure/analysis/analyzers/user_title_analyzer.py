@@ -272,4 +272,4 @@ class UserTitleAnalyzer(BaseAnalyzer[UserTitle, dict]):
 
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
-            return [], TokenUsage()
+            raise

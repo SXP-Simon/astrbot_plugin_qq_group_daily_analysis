@@ -46,8 +46,14 @@ class PlatformAdapter(
         """
         self.bot = bot_instance
         self.config: dict[str, object] = dict(config) if config is not None else {}
+        self._platform_id: str = str(self.config.get("platform_id", "")).strip()
         self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
+
+    @property
+    def platform_id(self) -> str:
+        """获取当前适配器的平台实例 ID（如 nuits）"""
+        return self._platform_id
 
     def set_context(self, context: Any):
         """
@@ -209,3 +215,10 @@ class PlatformAdapter(
         except Exception:
             # 兜底：直接发送
             return await self.send_text(group_id, str(content))
+
+    async def is_group_muted(self, group_id: str) -> bool:
+        """
+        检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）。
+        默认返回 False。各平台适配器可以根据需要重写此方法。
+        """
+        return False

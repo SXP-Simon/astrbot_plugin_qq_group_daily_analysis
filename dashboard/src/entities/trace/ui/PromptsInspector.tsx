@@ -1,0 +1,546 @@
+import React, { useState } from "react";
+import { Collapse, Tabs, Space, Button, Segmented, message } from "antd";
+import {
+  FileTextOutlined,
+  CopyOutlined,
+  UserOutlined,
+  CodeOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
+  ApartmentOutlined,
+} from "@ant-design/icons";
+import { copyToClipboard } from "../../../shared/lib/clipboard";
+import { formatTokens } from "../../../shared/lib/formatters";
+import { useTheme } from "../../../shared/lib/useTheme";
+
+export interface PromptDetail {
+  prompt?: string;
+  system_prompt?: string;
+  provider_id?: string;
+  model?: string;
+  provider_type?: string;
+  tokens?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  completion?: string;
+  initial_prompt?: string;
+  initial_completion?: string;
+  corrected_prompt?: string;
+  corrected_completion?: string;
+  retry_count?: number;
+}
+
+interface PromptsInspectorProps {
+  prompts?: Record<string, PromptDetail | string>;
+}
+
+const ANALYZER_NAME_MAP: Record<string, string> = {
+  topics: "话题",
+  user_titles: "用户称号",
+  golden_quotes: "金句",
+  chat_quality: "聊天质量",
+  "话题分析": "话题",
+  "群友画像": "用户称号",
+  "群聊金句": "金句",
+  "聊天质量": "聊天质量",
+  group_sentiment: "情感分析",
+  activity_prediction: "活跃预测",
+  comic: "群漫画",
+  comic_storyboards: "漫画分镜",
+  comic_storyboard: "漫画分镜",
+  comic_drawing: "生图提示词",
+};
+
+export const PromptsInspector: React.FC<PromptsInspectorProps> = ({ prompts }) => {
+  const { isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState<string>("");
+  const [viewModeMap, setViewModeMap] = useState<Record<string, "corrected" | "initial">>({});
+
+  if (!prompts || typeof prompts !== "object" || Object.keys(prompts).length === 0) {
+    return null;
+  }
+
+  const promptEntries = Object.entries(prompts).filter(
+    ([key]) => !key.includes("#") && !key.toLowerCase().includes("retry")
+  );
+  const currentKey = activeTab || promptEntries[0]?.[0] || "";
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        marginBottom: 8,
+        border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+        borderRadius: 6,
+        overflow: "hidden",
+        background: isDark ? "#161b22" : "#ffffff",
+      }}
+    >
+      <Collapse
+        size="small"
+        ghost
+        items={[
+          {
+            key: "prompts",
+            label: (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", paddingRight: 4 }}>
+                <Space size={6}>
+                  <FileTextOutlined style={{ color: "#2563eb" }} />
+                  <span style={{ fontWeight: 600, fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                    各分析模块运行提示词与大模型产物 (Prompts & Output)
+                  </span>
+                </Space>
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: 10,
+                    padding: "1px 6px",
+                    borderRadius: 3,
+                    background: isDark ? "rgba(37, 99, 235, 0.12)" : "#eff6ff",
+                    color: isDark ? "#60a5fa" : "#1d4ed8",
+                    border: `1px solid ${isDark ? "rgba(37, 99, 235, 0.25)" : "#bfdbfe"}`,
+                  }}
+                >
+                  {promptEntries.length} 个分析模块
+                </span>
+              </div>
+            ),
+            children: (
+              <div
+                style={{
+                  background: isDark ? "#0d1117" : "#f8fafc",
+                  borderTop: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                  padding: "10px 12px",
+                  borderRadius: "0 0 6px 6px",
+                }}
+              >
+                <Tabs
+                  size="small"
+                  activeKey={currentKey}
+                  onChange={setActiveTab}
+                  items={promptEntries.map(([analyzerName, pInfo]) => {
+                    const isStr = typeof pInfo === "string";
+                    const detail: PromptDetail = isStr
+                      ? { prompt: pInfo }
+                      : pInfo || {};
+
+                    const mappedName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
+                    const retryKeys = Object.keys(prompts || {}).filter(
+                      (k) =>
+                        k.startsWith(`${analyzerName}#schema_retry_`) ||
+                        k.startsWith(`${analyzerName}#retry_`) ||
+                        k.startsWith(`${mappedName}#schema_retry_`) ||
+                        k.startsWith(`${mappedName}#retry_`)
+                    );
+
+                    let lastRetryDetail: PromptDetail | null = null;
+                    if (retryKeys.length > 0) {
+                      retryKeys.sort((a, b) => {
+                        const numA = parseInt(a.split("#")[1]?.replace(/\D/g, "") || "0", 10);
+                        const numB = parseInt(b.split("#")[1]?.replace(/\D/g, "") || "0", 10);
+                        return numA - numB;
+                      });
+                      const lastKey = retryKeys[retryKeys.length - 1];
+                      const lastVal = prompts[lastKey];
+                      if (lastVal && typeof lastVal === "object") {
+                        lastRetryDetail = lastVal as PromptDetail;
+                      }
+                    }
+
+                    const initialCompletion =
+                      detail.initial_completion ||
+                      (lastRetryDetail ? detail.completion : null);
+
+                    const correctedCompletion =
+                      detail.corrected_completion ||
+                      (lastRetryDetail?.completion && lastRetryDetail.completion !== detail.completion
+                        ? lastRetryDetail.completion
+                        : (detail.retry_count ? detail.completion : null));
+
+                    const initialPrompt =
+                      detail.initial_prompt ||
+                      (lastRetryDetail ? detail.prompt : null) ||
+                      detail.prompt ||
+                      "";
+
+                    const correctedPrompt =
+                      detail.corrected_prompt ||
+                      lastRetryDetail?.prompt ||
+                      (detail.retry_count ? detail.prompt : null) ||
+                      detail.prompt ||
+                      "";
+
+                    const effectiveRetryCount =
+                      detail.retry_count ||
+                      (retryKeys.length > 0 ? retryKeys.length : 0);
+
+                    const hasCorrection = Boolean(
+                      (correctedCompletion && initialCompletion && correctedCompletion !== initialCompletion) ||
+                      (effectiveRetryCount > 0 && lastRetryDetail?.completion) ||
+                      (detail.corrected_completion && detail.initial_completion)
+                    );
+
+                    const viewMode = viewModeMap[analyzerName] || "corrected";
+
+                    const promptText = hasCorrection
+                      ? viewMode === "initial"
+                        ? initialPrompt
+                        : correctedPrompt
+                      : detail.prompt || "";
+
+                    const completionText = hasCorrection
+                      ? viewMode === "initial"
+                        ? (initialCompletion || detail.completion || "")
+                        : (correctedCompletion || detail.completion || "")
+                      : detail.completion || "";
+
+                    const systemPrompt = detail.system_prompt || "";
+                    const providerId = detail.provider_id;
+                    const modelId = detail.model;
+                    const tokens = detail.tokens || 0;
+                    const displayName = ANALYZER_NAME_MAP[analyzerName] || analyzerName;
+                    const showSubLabel =
+                      displayName !== analyzerName && !analyzerName.match(/[\u4e00-\u9fa5]/);
+
+                    const showModel = Boolean(
+                      modelId &&
+                      modelId !== providerId &&
+                      !providerId?.includes(modelId)
+                    );
+                    const providerDisplay = providerId
+                      ? showModel
+                        ? `${providerId} / ${modelId}`
+                        : providerId
+                      : modelId;
+
+                    return {
+                      key: analyzerName,
+                      label: (
+                        <span style={{ fontSize: 12 }}>
+                          {displayName}
+                          {showSubLabel && (
+                            <span style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b", marginLeft: 4 }}>
+                              ({analyzerName})
+                            </span>
+                          )}
+                        </span>
+                      ),
+                      children: (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+                          {/* 元数据状态栏 */}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              padding: "6px 10px",
+                              background: isDark ? "#161b22" : "#ffffff",
+                              border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                              borderRadius: 4,
+                              fontSize: 11,
+                              gap: 8,
+                            }}
+                          >
+                            <Space size={10} wrap>
+                              {providerDisplay && (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  <ApartmentOutlined style={{ color: "#2563eb", fontSize: 12 }} />
+                                  <span style={{ color: isDark ? "#8b949e" : "#64748b" }}>Provider:</span>
+                                  <span
+                                    className="font-mono"
+                                    style={{
+                                      fontWeight: 600,
+                                      color: isDark ? "#e2e8f0" : "#1e293b",
+                                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                    }}
+                                  >
+                                    {providerDisplay}
+                                  </span>
+                                </span>
+                              )}
+                              {tokens > 0 && (
+                                <span
+                                  className="font-mono"
+                                  style={{
+                                    fontSize: 10,
+                                    padding: "1px 6px",
+                                    borderRadius: 3,
+                                    background: isDark ? "rgba(147, 51, 234, 0.15)" : "#faf5ff",
+                                    color: isDark ? "#c084fc" : "#7e22ce",
+                                    border: `1px solid ${isDark ? "rgba(147, 51, 234, 0.3)" : "#e9d5ff"}`,
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {formatTokens(tokens)} Tokens
+                                </span>
+                              )}
+                              {effectiveRetryCount > 0 && (
+                                <span
+                                  className="font-mono"
+                                  style={{
+                                    fontSize: 10,
+                                    padding: "1px 6px",
+                                    borderRadius: 3,
+                                    background: isDark ? "rgba(217, 119, 6, 0.15)" : "#fffbeb",
+                                    color: isDark ? "#fbbf24" : "#b45309",
+                                    border: `1px solid ${isDark ? "rgba(217, 119, 6, 0.3)" : "#fde68a"}`,
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  经 {effectiveRetryCount} 次输出解析校正后成功
+                                </span>
+                              )}
+                            </Space>
+
+                            <Space size={8}>
+                              {hasCorrection && (
+                                <Segmented
+                                  size="small"
+                                  value={viewMode}
+                                  onChange={(val) =>
+                                    setViewModeMap((prev) => ({
+                                      ...prev,
+                                      [analyzerName]: val as "corrected" | "initial",
+                                    }))
+                                  }
+                                  options={[
+                                    {
+                                      label: (
+                                        <span style={{ fontSize: 11, fontWeight: 500 }}>
+                                          <CheckCircleOutlined style={{ color: "#16a34a", marginRight: 3 }} />
+                                          校正结果
+                                        </span>
+                                      ),
+                                      value: "corrected",
+                                    },
+                                    {
+                                      label: (
+                                        <span style={{ fontSize: 11, fontWeight: 500 }}>
+                                          <WarningOutlined style={{ color: "#d97706", marginRight: 3 }} />
+                                          原始结果
+                                        </span>
+                                      ),
+                                      value: "initial",
+                                    },
+                                  ]}
+                                />
+                              )}
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<CopyOutlined style={{ fontSize: 11 }} />}
+                                style={{ fontSize: 11, height: 24, padding: "0 6px", color: isDark ? "#cbd5e1" : "#475569" }}
+                                onClick={() => {
+                                  const fullDump = `=== System Prompt ===\n${systemPrompt}\n\n=== User Prompt ===\n${promptText}\n\n=== Completion ===\n${completionText}`;
+                                  copyToClipboard(fullDump);
+                                  message.success(`已复制 ${displayName} 完整上下文`);
+                                }}
+                              >
+                                复制全部上下文
+                              </Button>
+                            </Space>
+                          </div>
+
+                          {/* 1. 系统/人格设定提示词 (System Prompt) */}
+                          {systemPrompt && (
+                            <div
+                              style={{
+                                border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                borderRadius: 4,
+                                overflow: "hidden",
+                                background: isDark ? "#161b22" : "#ffffff",
+                                boxShadow: "0 1px 2px rgba(0, 0, 0, 0.03)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "5px 10px",
+                                  background: isDark ? "#21262d" : "#f1f5f9",
+                                  borderBottom: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                }}
+                              >
+                                <Space size={6}>
+                                  <UserOutlined style={{ color: "#7c3aed" }} />
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                    系统人设提示词 (System Prompt)
+                                  </span>
+                                </Space>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  style={{ fontSize: 11, padding: 0, height: "auto" }}
+                                  onClick={() => {
+                                    copyToClipboard(systemPrompt);
+                                    message.success("已复制 System Prompt");
+                                  }}
+                                >
+                                  复制
+                                </Button>
+                              </div>
+                              <pre
+                                style={{
+                                  fontSize: 11,
+                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  background: isDark ? "#0d1117" : "#fafafa",
+                                  color: isDark ? "#e2e8f0" : "#1e293b",
+                                  padding: "8px 10px",
+                                  margin: 0,
+                                  maxHeight: 130,
+                                  overflowY: "auto",
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                {systemPrompt}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* 2. 任务输入提示词 (User Prompt) */}
+                          {promptText && (
+                            <div
+                              style={{
+                                border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                borderRadius: 4,
+                                overflow: "hidden",
+                                background: isDark ? "#161b22" : "#ffffff",
+                                boxShadow: "0 1px 2px rgba(0, 0, 0, 0.03)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "5px 10px",
+                                  background: isDark ? "#21262d" : "#f1f5f9",
+                                  borderBottom: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                }}
+                              >
+                                <Space size={6}>
+                                  <CodeOutlined style={{ color: "#2563eb" }} />
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                    {hasCorrection && viewMode === "corrected"
+                                      ? "校正提示词 (Correction Prompt)"
+                                      : "任务分析输入 (User Prompt)"}
+                                  </span>
+                                  <span style={{ fontSize: 10, color: isDark ? "#8b949e" : "#64748b", fontWeight: "normal" }}>
+                                    ({promptText.length} 字符)
+                                  </span>
+                                </Space>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  style={{ fontSize: 11, padding: 0, height: "auto" }}
+                                  onClick={() => {
+                                    copyToClipboard(promptText);
+                                    message.success("已复制提示词");
+                                  }}
+                                >
+                                  复制
+                                </Button>
+                              </div>
+                              <pre
+                                style={{
+                                  fontSize: 11,
+                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  background: isDark ? "#0d1117" : "#fafafa",
+                                  color: isDark ? "#e2e8f0" : "#1e293b",
+                                  padding: "8px 10px",
+                                  margin: 0,
+                                  maxHeight: 160,
+                                  overflowY: "auto",
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                {promptText}
+                              </pre>
+                            </div>
+                          )}
+
+                          {/* 3. 模型产物响应文本 (Model Response) */}
+                          {completionText && (
+                            <div
+                              style={{
+                                border: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                borderRadius: 4,
+                                overflow: "hidden",
+                                background: isDark ? "#161b22" : "#ffffff",
+                                boxShadow: "0 1px 2px rgba(0, 0, 0, 0.03)",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "5px 10px",
+                                  background: isDark ? "#21262d" : "#f1f5f9",
+                                  borderBottom: `1px solid ${isDark ? "#30363d" : "#e2e8f0"}`,
+                                }}
+                              >
+                                <Space size={6}>
+                                  {hasCorrection && viewMode === "initial" ? (
+                                    <WarningOutlined style={{ color: "#d97706" }} />
+                                  ) : (
+                                    <CheckCircleOutlined style={{ color: "#16a34a" }} />
+                                  )}
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: isDark ? "#e2e8f0" : "#334155" }}>
+                                    {hasCorrection
+                                      ? viewMode === "corrected"
+                                        ? "大模型校正产物 (Corrected Response - 有效产物)"
+                                        : "大模型初始返回 (Initial Response - 未通过校验)"
+                                      : "大模型返回结果 (Completion Response)"}
+                                  </span>
+                                </Space>
+                                <Button
+                                  size="small"
+                                  type="link"
+                                  style={{ fontSize: 11, padding: 0, height: "auto" }}
+                                  onClick={() => {
+                                    copyToClipboard(completionText);
+                                    message.success("已复制大模型返回结果");
+                                  }}
+                                >
+                                  复制
+                                </Button>
+                              </div>
+                              <pre
+                                style={{
+                                  fontSize: 11,
+                                  fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+                                  background: isDark ? "#0d1117" : "#fafafa",
+                                  color: isDark ? "#e2e8f0" : "#1e293b",
+                                  padding: "8px 10px",
+                                  margin: 0,
+                                  maxHeight: 150,
+                                  overflowY: "auto",
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                {completionText}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      ),
+                    };
+                  })}
+                />
+              </div>
+            ),
+          },
+        ]}
+      />
+    </div>
+  );
+};

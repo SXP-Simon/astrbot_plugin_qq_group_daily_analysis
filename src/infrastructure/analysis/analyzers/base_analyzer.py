@@ -8,6 +8,7 @@ from collections.abc import Sized
 from typing import Generic, TypeVar
 
 from ....domain.models.data_models import TokenUsage
+from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
@@ -84,6 +85,21 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         """
         pass
 
+    def build_prompt_with_override(
+        self, data: TInputData, prompt_override: str | None
+    ) -> str:
+        """构建提示词，默认忽略调用方覆盖模板。
+
+        Args:
+            data: 分析器输入数据。
+            prompt_override: 调用方指定的提示词模板。
+
+        Returns:
+            可提交给 LLM 的提示词。
+        """
+        del prompt_override
+        return self.build_prompt(data)
+
     @abstractmethod
     def extract_with_regex(self, result_text: str, max_count: int) -> list[dict]:
         """
@@ -157,20 +173,23 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         self,
         provider_id_key: str | None,
         umo: str | None,
+        provider_id: str | None = None,
     ) -> float | None:
         """
         尝试从当前将要调用的 Provider 配置中解析基础 temperature。
         """
-        provider_id = await get_provider_id_with_fallback(
-            self.context,
-            self.config_manager,
-            provider_id_key,
-            umo,
-        )
-        if not provider_id:
+        pid = provider_id
+        if not pid:
+            pid = await get_provider_id_with_fallback(
+                self.context,
+                self.config_manager,
+                provider_id_key,
+                umo,
+            )
+        if not pid:
             return None
 
-        provider = self.context.get_provider_by_id(provider_id=provider_id)
+        provider = self.context.get_provider_by_id(provider_id=pid)
         if provider is None:
             return None
 
@@ -280,20 +299,9 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             session_id: 会话ID
         """
         try:
-            from pathlib import Path
-
             from astrbot.api.star import StarTools
-            from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-            try:
-                data_path = StarTools.get_data_dir() / "debug_data"
-            except Exception:
-                data_path = (
-                    Path(get_astrbot_data_path())
-                    / "plugin_data"
-                    / "astrbot_plugin_qq_group_daily_analysis"
-                    / "debug_data"
-                )
+            data_path = StarTools.get_data_dir(PLUGIN_NAME) / "debug_data"
 
             data_path.mkdir(parents=True, exist_ok=True)
 
@@ -341,7 +349,12 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         )
 
     async def analyze(
-        self, data: TInputData, umo: str | None = None, session_id: str | None = None
+        self,
+        data: TInputData,
+        umo: str | None = None,
+        session_id: str | None = None,
+        persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[list[TDataObject], TokenUsage]:
         """
         统一的分析流程
@@ -350,6 +363,8 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             data: 输入数据
             umo: 模型唯一标识符
             session_id: 会话ID (用于调试模式)
+            persona_id: 显式指定的人格 ID，传入时优先于常规人格选择逻辑
+            prompt_override: 调用方指定的提示词模板，供支持专属模板的分析器使用
 
         Returns:
             (分析结果列表, Token使用统计)
@@ -362,7 +377,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             data_length = len(data) if isinstance(data, Sized) else "N/A"
             logger.debug(f"{self.get_data_type()}分析输入数据长度: {data_length}")
 
-            prompt = self.build_prompt(data)
+            prompt = self.build_prompt_with_override(data, prompt_override)
             logger.info(f"开始{self.get_data_type()}分析，构建提示词完成")
             logger.debug(
                 f"{self.get_data_type()}分析prompt长度: {len(prompt) if prompt else 0}"
@@ -387,12 +402,20 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
             # 2. 调用LLM（使用配置的 provider）
             provider_id_key = self.get_provider_id_key()
+
+            # 只 resolve 一次 provider ID，同时传递给温度解析和 LLM 调用，避免重复日志
+            resolved_provider_id = None
+            if provider_id_key:
+                resolved_provider_id = await get_provider_id_with_fallback(
+                    self.context, self.config_manager, provider_id_key, umo
+                )
+
             base_temperature = await self._resolve_provider_temperature(
-                provider_id_key, umo
+                provider_id_key, umo, provider_id=resolved_provider_id
             )
 
             # 获取人格设定
-            system_prompt = await self._build_system_prompt(umo)
+            system_prompt = await self._build_system_prompt(umo, persona_id)
 
             # 应用人格强化注入
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
@@ -405,21 +428,33 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                     f"[Debug] debug_mode={debug_mode}, umo={umo}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
                 )
 
+            from ....shared.trace_context import TraceContext
+
+            trace = TraceContext.current()
+            if trace:
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                prompts_map[self.get_data_type()] = {
+                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "provider_id": resolved_provider_id or "default",
+                }
+
             response = await call_provider_with_retry(
                 self.context,
                 self.config_manager,
                 prompt=prompt,
                 umo=umo,
                 provider_id_key=provider_id_key,
+                provider_id=resolved_provider_id,
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=self.get_data_type(),
             )
 
             if response is None:
-                logger.error(
-                    f"{self.get_data_type()}分析调用LLM失败: provider返回None（重试失败）"
-                )
-                return [], TokenUsage()
+                err_text = f"{self.get_data_type()}分析调用LLM失败: Provider 返回空响应或重试耗尽"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
 
             # 3. 提取token使用统计
             token_usage_dict = extract_token_usage(response)
@@ -432,6 +467,23 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             # 4. 提取响应文本
             result_text = extract_response_text(response)
             logger.debug(f"{self.get_data_type()}分析原始响应: {result_text[:500]}...")
+
+            slot: dict | None = None
+            if trace:
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["initial_prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text
+                        slot["initial_completion"] = result_text
 
             # 5. 尝试结构化解析 + 正则降级解析
             success, parsed_data, error_msg = self._try_parse_with_fallback(result_text)
@@ -459,6 +511,7 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         system_prompt=system_prompt,
                         response_format=self.get_response_format(),
                         extra_generate_kwargs={"temperature": temperature},
+                        observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
                     )
                     if retry_response is None:
                         continue
@@ -475,6 +528,19 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                         success = True
                         parsed_data = retry_parsed_data
                         error_msg = None
+                        if trace and isinstance(slot, dict):
+                            slot["completion"] = retry_result_text
+                            slot["corrected_completion"] = retry_result_text
+                            slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
+                            slot["retry_count"] = idx
+                            retry_token_dict = extract_token_usage(retry_response)
+                            slot["tokens"] = (
+                                slot.get("tokens", 0) or 0
+                            ) + retry_token_dict["total_tokens"]
+                            slot["completion_tokens"] = retry_token_dict[
+                                "completion_tokens"
+                            ]
                         break
                     error_msg = retry_error_msg
 
@@ -487,24 +553,27 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
                 return data_objects, token_usage
 
             # 6. 全部尝试失败
-            logger.error(
-                f"{self.get_data_type()}分析失败: JSON解析与正则降级均未成功: {error_msg}"
-            )
-            return [], token_usage
+            err_text = f"{self.get_data_type()}分析失败: JSON解析与正则降级均未成功 ({error_msg or '未产出有效内容'})"
+            logger.error(err_text)
+            raise RuntimeError(err_text)
 
         except Exception as e:
             logger.error(f"{self.get_data_type()}分析失败: {e}", exc_info=True)
-            return [], TokenUsage()
+            raise
 
-    async def _build_system_prompt(self, umo: str | None) -> str | None:
+    async def _build_system_prompt(
+        self, umo: str | None, persona_id: str | None = None
+    ) -> str | None:
         """
         构建带有会话人格的系统提示词，优先级如下：
-        1. 插件指定的全局人格 (若核心开关开启)
-        2. 会话/对话选定的人格 (若开启了继承开关)
-        3. 当前 UMO 的默认人格 (若开启了继承开关)
+        1. 调用方显式指定的人格
+        2. 插件指定的全局人格 (若核心开关开启)
+        3. 会话/对话选定的人格 (若开启了继承开关)
+        4. 当前 UMO 的默认人格 (若开启了继承开关)
 
         Args:
             umo: 用户模型对象标识，用于定位会话上下文
+            persona_id: 调用方显式指定的人格 ID
 
         Returns:
             最终生成的 System Prompt 字符串，若无则返回 None
@@ -521,9 +590,23 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
 
         persona_prompt = None
 
+        # 漫画角色等局部调用可显式指定人格，不修改插件全局人格配置。
+        if persona_id:
+            try:
+                persona_obj = await persona_mgr.get_persona(persona_id)
+                persona_prompt = (
+                    persona_obj.system_prompt
+                    if hasattr(persona_obj, "system_prompt")
+                    else None
+                )
+                if persona_prompt:
+                    logger.debug(f"已应用调用方指定人格: {persona_id}")
+            except Exception as e:
+                logger.warning(f"获取调用方指定人格失败 (ID: {persona_id}): {e}")
+
         # --- 优先级 1: 插件指定的全局固定人格 ---
         # 适用于希望所有分析报告都呈现同一种风格的情况
-        if use_specific and specific_id:
+        if not persona_prompt and use_specific and specific_id:
             try:
                 persona_obj = await persona_mgr.get_persona(specific_id)
                 persona_prompt = (

@@ -6,6 +6,7 @@
 from datetime import datetime
 
 from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
+from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ...utils.template_utils import render_template
 from ..utils import InfoUtils
@@ -14,6 +15,7 @@ from ..utils.llm_utils import (
     call_provider_with_retry,
     extract_response_text,
     extract_token_usage,
+    get_provider_id_with_fallback,
 )
 from ..utils.response_validation import validate_quality_review_item
 from ..utils.structured_output_schema import JSONObject, build_chat_quality_schema
@@ -240,6 +242,7 @@ ${messages_text}
                 system_prompt=system_prompt,
                 response_format=response_format,
                 extra_generate_kwargs={"temperature": temperature},
+                observation_label=f"{self.get_data_type()}#schema_retry_{idx}",
             )
             if retry_response is None:
                 continue
@@ -248,18 +251,42 @@ ${messages_text}
             if not retry_text:
                 continue
 
+            from ....shared.trace_context import TraceContext
+
+            trace = TraceContext.current()
+
             retry_success, retry_parsed_data, _ = parse_json_object_response(
                 retry_text, self.get_data_type()
             )
             if retry_success and retry_parsed_data:
                 valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
                 if valid and normalized:
+                    if trace:
+                        slot = trace.metadata.get("llm_prompts", {}).get(
+                            self.get_data_type()
+                        )
+                        if isinstance(slot, dict):
+                            slot["completion"] = retry_text
+                            slot["corrected_completion"] = retry_text
+                            slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
+                            slot["retry_count"] = idx
                     return normalized
 
             retry_regex_data = extract_quality_with_regex(retry_text)
             if retry_regex_data:
                 valid, normalized, _ = self._validate_review_payload(retry_regex_data)
                 if valid and normalized:
+                    if trace:
+                        slot = trace.metadata.get("llm_prompts", {}).get(
+                            self.get_data_type()
+                        )
+                        if isinstance(slot, dict):
+                            slot["completion"] = retry_text
+                            slot["corrected_completion"] = retry_text
+                            slot["prompt"] = retry_prompt
+                            slot["corrected_prompt"] = retry_prompt
+                            slot["retry_count"] = idx
                     return normalized
 
         return None
@@ -348,6 +375,7 @@ ${messages_text}
                 provider_id_key=self.get_provider_id_key(),
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=f"{self.get_data_type()}#batch_summary",
             )
 
             if response is None:
@@ -361,6 +389,20 @@ ${messages_text}
             )
 
             result_text = extract_response_text(response)
+            trace = TraceContext.current()
+            if trace:
+                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
+                    self.get_data_type(), {}
+                )
+                slot["prompt"] = prompt
+                slot["initial_prompt"] = prompt
+                slot["system_prompt"] = system_prompt
+                slot["tokens"] = token_usage_dict["total_tokens"]
+                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
+                slot["completion"] = result_text or ""
+                slot["initial_completion"] = result_text or ""
+
             if not result_text:
                 return None, usage
 
@@ -408,6 +450,8 @@ ${messages_text}
         messages: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """
         分析聊天质量
@@ -420,10 +464,17 @@ ${messages_text}
         5. 正则降级（使用 extract_quality_with_regex）
         """
         try:
+            provider_id_key = self.get_provider_id_key()
+            resolved_provider_id = None
+            if provider_id_key:
+                resolved_provider_id = await get_provider_id_with_fallback(
+                    self.context, self.config_manager, provider_id_key, umo
+                )
+
             # 1. 获取人格设定
             system_prompt = await self._build_system_prompt(umo)
             base_temperature = await self._resolve_provider_temperature(
-                self.get_provider_id_key(), umo
+                self.get_provider_id_key(), umo, provider_id=resolved_provider_id
             )
 
             # 2. 构建 prompt
@@ -434,6 +485,17 @@ ${messages_text}
             # 应用人设强化注入
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
+            from ....shared.trace_context import TraceContext
+
+            trace = TraceContext.current()
+            if trace:
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                prompts_map[self.get_data_type()] = {
+                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "provider_id": resolved_provider_id or "default",
+                }
+
             # 3. 调用 LLM
             response = await call_provider_with_retry(
                 self.context,
@@ -441,12 +503,16 @@ ${messages_text}
                 prompt=prompt,
                 umo=umo,
                 provider_id_key=self.get_provider_id_key(),
+                provider_id=resolved_provider_id,
                 system_prompt=system_prompt,
                 response_format=self.get_response_format(),
+                observation_label=self.get_data_type(),
             )
 
             if response is None:
-                return None, TokenUsage()
+                err_text = "聊天质量分析调用LLM失败: Provider 返回空响应或重试耗尽"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
 
             # 4. 提取 token 使用统计
             token_usage_dict = extract_token_usage(response)
@@ -459,7 +525,21 @@ ${messages_text}
             # 5. 提取响应文本
             result_text = extract_response_text(response)
             if not result_text:
-                return None, usage
+                err_text = "聊天质量分析失败: LLM 未返回任何文本内容"
+                logger.error(err_text)
+                raise RuntimeError(err_text)
+
+            if trace:
+                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
+                    self.get_data_type(), {}
+                )
+                slot["prompt"] = prompt
+                slot["system_prompt"] = system_prompt
+                slot["provider_id"] = resolved_provider_id or "default"
+                slot["tokens"] = token_usage_dict["total_tokens"]
+                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
+                slot["completion"] = result_text
 
             # 6. JSON 解析（使用 parse_json_object_response）
             success, parsed_data, error_msg = parse_json_object_response(
@@ -507,12 +587,13 @@ ${messages_text}
                 return review, usage
 
             # 7. 全部失败
-            logger.error(f"聊天质量分析失败: JSON解析和正则提取均未成功: {error_msg}")
-            return None, usage
+            err_text = f"聊天质量分析失败: JSON解析和正则提取均未成功 ({error_msg or '未产出有效内容'})"
+            logger.error(err_text)
+            raise RuntimeError(err_text)
 
         except Exception as e:
             logger.error(f"聊天质量分析失败: {e}", exc_info=True)
-            return None, TokenUsage()
+            raise
 
     # Override analyze to bridge the base class interface
     async def analyze(
@@ -520,6 +601,14 @@ ${messages_text}
         data: list[dict],
         umo: str | None = None,
         session_id: str | None = None,
+        persona_id: str | None = None,
+        prompt_override: str | None = None,
     ) -> tuple[list[QualityReview], TokenUsage]:
-        review, usage = await self.analyze_quality(data, umo, session_id)
+        review, usage = await self.analyze_quality(
+            data,
+            umo,
+            session_id,
+            persona_id=persona_id,
+            prompt_override=prompt_override,
+        )
         return [review] if review else [], usage

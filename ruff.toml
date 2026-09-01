@@ -1,0 +1,30 @@
+# 独立配置，避免插件被单独检出时与嵌套在 AstrBot 内时使用不同规则。
+exclude = [
+  "tests",
+  "_conf_schema.json",
+  "docs",
+  "dashboard",
+  "pages",
+  "*.md",
+]
+line-length = 88
+target-version = "py310"
+
+[lint]
+select = [
+  "F",     # Pyflakes
+  "W",     # pycodestyle 警告
+  "E",     # pycodestyle 错误
+  "ASYNC", # flake8-async
+  "C4",    # flake8-comprehensions
+  "Q",     # flake8-quotes
+  "I",     # 导入顺序
+  "UP",    # pyupgrade
+]
+ignore = [
+  "F403",
+  "F405",
+  "E501",
+  "ASYNC230", # 待后续统一处理
+  "ASYNC240", # 待后续统一处理
+]

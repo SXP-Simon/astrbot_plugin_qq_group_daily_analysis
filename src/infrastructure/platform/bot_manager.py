@@ -6,6 +6,7 @@ Bot实例管理模块 - 基础设施层
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
@@ -55,6 +56,14 @@ class BotManager:
             platform_id = self._get_platform_id_from_instance(bot_instance)
 
         if bot_instance and platform_id:
+            # 如果 bot_instance 没变，且已经有适配器，跳过重新创建，防止丢失内部状态（如缓存等）
+            old_instance = self._bot_instances.get(platform_id)
+            if bot_instance is old_instance and platform_id in self._adapters:
+                bot_self_id = self._extract_bot_self_id(bot_instance)
+                if bot_self_id and bot_self_id not in self._bot_self_ids:
+                    self._bot_self_ids.append(str(bot_self_id))
+                return
+
             self._bot_instances[platform_id] = bot_instance
 
             # 为 DDD 集成创建 PlatformAdapter
@@ -65,8 +74,13 @@ class BotManager:
                 adapter_config = {
                     "bot_self_ids": self._bot_self_ids.copy(),
                     "platform_id": str(platform_id),
+                    "filter_bot_messages": self.config_manager.get_filter_bot_messages(),
                     "plugin_instance": self._plugin_instance,
                 }
+                platform_instance = self._platforms.get(str(platform_id))
+                platform_config = getattr(platform_instance, "config", None)
+                if isinstance(platform_config, Mapping):
+                    adapter_config["appid"] = platform_config.get("appid", "")
                 adapter = PlatformAdapterFactory.create(
                     platform_name, bot_instance, adapter_config
                 )
@@ -130,11 +144,9 @@ class BotManager:
         """尝试从已存储的平台对象中刷新 bot 实例 (Lazy Load)"""
         for platform_id, platform in self._platforms.items():
             bot_client = None
-            # Lark 平台优先使用 API client，避免拿到仅支持长连接的 ws client
-            bot_client = getattr(platform, "lark_api", None)
             # 优先尝试 get_client()
             get_client = getattr(platform, "get_client", None)
-            if not bot_client and callable(get_client):
+            if callable(get_client):
                 bot_client = get_client()
 
             # 如果 get_client() 返回 None，尝试直接访问属性
@@ -269,33 +281,82 @@ class BotManager:
         """
         获取指定平台的 PlatformAdapter。
 
-        这是 DDD 架构操作的主要方法。
+        支持平台实例 ID 精确匹配、大小写不敏感匹配、协议别名匹配 (如 qq -> aiocqhttp) 与单实例兜底。
         """
-        if platform_id:
-            # 无论是否存在适配器，都尝试检测一次 client 是否有变（如重启后 session 变化）
-            if platform_id in self._platforms:
-                self._refresh_from_stored_platforms()
+        # 如果没有任何适配器，尝试全局刷新一次
+        if not self._adapters:
+            self._refresh_from_stored_platforms()
 
-            return self._adapters.get(platform_id)
-
-        if self._adapters:
-            if len(self._adapters) == 1:
-                return list(self._adapters.values())[0]
-
-            logger.warning(
-                f"存在多个适配器 {list(self._adapters.keys())}，但未指定 platform_id。"
-            )
+        if not platform_id or str(platform_id).lower().strip() in (
+            "auto",
+            "default",
+            "all",
+            "none",
+            "",
+        ):
+            if self._adapters:
+                if len(self._adapters) == 1:
+                    return list(self._adapters.values())[0]
+                # 多个适配器且未指定，优先返回第一个就绪的适配器
+                for adp in self._adapters.values():
+                    if adp:
+                        return adp
             return None
 
-        # 如果没有任何适配器，尝试全局刷新一次
-        self._refresh_from_stored_platforms()
-        if self._adapters:
-            if platform_id:
-                return self._adapters.get(platform_id)
-            if len(self._adapters) == 1:
-                return list(self._adapters.values())[0]
+        # 检查存储的平台实例是否有最新变动
+        if platform_id in self._platforms:
+            self._refresh_from_stored_platforms()
 
+        # 1. 精确匹配平台 ID
+        if platform_id in self._adapters:
+            return self._adapters[platform_id]
+
+        # 2. 大小写不敏感匹配
+        p_id_lower = str(platform_id).lower().strip()
+        for k, adp in self._adapters.items():
+            if k.lower().strip() == p_id_lower:
+                return adp
+
+        # 3. 通过 PlatformAdapterFactory 注册类型匹配
+        if PlatformAdapterFactory.is_supported(p_id_lower):
+            expected_adapter_cls = PlatformAdapterFactory.get_adapter_class(p_id_lower)
+            if expected_adapter_cls:
+                for k, adp in self._adapters.items():
+                    if isinstance(adp, expected_adapter_cls):
+                        logger.info(
+                            f"[BotManager] 平台类型 '{platform_id}' 匹配到已注册适配器 '{k}'"
+                        )
+                        return adp
+
+        # 4. 单实例容错兜底：若系统仅有 1 个活跃适配器，自动作为兜底并记录日志
+        if len(self._adapters) == 1:
+            fallback_k, fallback_adp = list(self._adapters.items())[0]
+            logger.info(
+                f"[BotManager] 未找到指定平台 '{platform_id}'，系统当前仅有 1 个活跃适配器 '{fallback_k}'，已自动作为容错兜底使用"
+            )
+            return fallback_adp
+
+        logger.warning(
+            f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
+        )
         return None
+
+    def get_adapter_platform_id(self, adapter: Any) -> str:
+        """获取适配器对应的真实平台实例 ID（如 'nuits'）"""
+        if not adapter:
+            return ""
+        # 1. 优先从 _adapters 映射表反查实例 ID
+        for p_id, adp in self._adapters.items():
+            if adp is adapter:
+                return str(p_id)
+        # 2. 从 adapter 属性读取
+        p_id = getattr(adapter, "platform_id", None)
+        if callable(p_id):
+            p_id = p_id()
+        if p_id:
+            return str(p_id)
+        # 3. 兜底读取 platform_name
+        return str(getattr(adapter, "platform_name", "") or "")
 
     def get_all_adapters(self) -> dict:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
@@ -304,7 +365,7 @@ class BotManager:
     def has_adapter(self, platform_id: str | None = None) -> bool:
         """检查指定平台是否有适配器"""
         if platform_id:
-            return platform_id in self._adapters
+            return self.get_adapter(platform_id) is not None
         return bool(self._adapters)
 
     def can_analyze(self, platform_id: str | None = None) -> bool:
@@ -345,9 +406,8 @@ class BotManager:
         for platform in platforms:
             # 获取bot实例
             bot_client = None
-            bot_client = getattr(platform, "lark_api", None)
             platform_get_client = getattr(platform, "get_client", None)
-            if not bot_client and callable(platform_get_client):
+            if callable(platform_get_client):
                 bot_client = platform_get_client()
 
             if not bot_client:
@@ -486,8 +546,22 @@ class BotManager:
                 platform_id = event.platform
 
             self.set_bot_instance(bot_instance, platform_id)
-            # 每次都尝试从bot实例提取ID
-            bot_self_id = self._extract_bot_self_id(bot_instance)
+
+            # 优先从事件中提取机器人自身 ID，避免获取到 functools.partial 等异常对象
+            bot_self_id = None
+            if hasattr(event, "get_self_id"):
+                val = event.get_self_id()
+                if (
+                    val
+                    and isinstance(val, (str, int))
+                    and not callable(val)
+                    and "partial" not in str(val)
+                ):
+                    bot_self_id = str(val)
+
+            if not bot_self_id:
+                bot_self_id = self._extract_bot_self_id(bot_instance)
+
             if bot_self_id:
                 # 将单个ID转换为列表，保持统一处理
                 self.set_bot_self_ids([bot_self_id])
@@ -505,17 +579,25 @@ class BotManager:
 
     def _extract_bot_self_id_impl(self, bot_instance):
         """从bot实例中提取ID（通用实现）"""
-        # 尝试多种方式获取bot ID
+        # 尝试多种方式获取bot ID，并严格限制类型为 str/int 且不可调用，防止 OneBot (aiocqhttp) 动态代理返回 functools.partial
         if hasattr(bot_instance, "self_id") and bot_instance.self_id:
-            return str(bot_instance.self_id)
-        elif hasattr(bot_instance, "user_id") and bot_instance.user_id:
-            return str(bot_instance.user_id)
+            val = bot_instance.self_id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
+        if hasattr(bot_instance, "user_id") and bot_instance.user_id:
+            val = bot_instance.user_id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         # Discord.py style: client.user.id
-        elif hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
-            return str(bot_instance.user.id)
+        if hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
+            val = bot_instance.user.id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         # python-telegram-bot style: bot.id
-        elif hasattr(bot_instance, "id") and bot_instance.id:
-            return str(bot_instance.id)
+        if hasattr(bot_instance, "id") and bot_instance.id:
+            val = bot_instance.id
+            if isinstance(val, (str, int)) and not callable(val):
+                return str(val)
         return None
 
     def validate_for_message_fetching(self, group_id: str) -> bool:

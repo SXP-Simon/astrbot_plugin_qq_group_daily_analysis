@@ -20,6 +20,10 @@ class IReportGenerator(ABC):
         html_render_func: Any,
         avatar_url_getter: Any = None,
         nickname_getter: Any = None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成图片报告"""
         pass
@@ -31,6 +35,12 @@ class IReportGenerator(ABC):
         group_id: str,
         avatar_url_getter: Any = None,
         nickname_getter: Any = None,
+        avatar_cache_namespace: str | None = None,
+        hide_user_names: bool = False,
+        allow_alphanumeric_user_ids: bool = False,
+        template_theme: str | None = None,
+        custom_filename: str | None = None,
+        trace_id: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成 HTML 报告"""
         pass

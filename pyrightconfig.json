@@ -1,0 +1,33 @@
+{
+  "include": [
+    "src",
+    "main.py"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "tests",
+    "scripts",
+    "dashboard"
+  ],
+  "extraPaths": [
+    "../../..",
+    "../../../.venv/Lib/site-packages",
+    "../../../.venv/lib/python3.12/site-packages",
+    ".venv/Lib/site-packages",
+    ".venv/lib/python3.12/site-packages",
+    "."
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false,
+  "reportMissingImports": "error",
+  "reportIncompatibleMethodOverride": "error",
+  "reportIncompatibleVariableOverride": "error",
+  "reportOverlappingOverload": "error",
+  "reportFunctionMemberAccess": "error",
+  "reportUntypedFunctionDecorator": "error",
+  "reportUntypedClassDecorator": "error",
+  "reportUntypedBaseClass": "error"
+}

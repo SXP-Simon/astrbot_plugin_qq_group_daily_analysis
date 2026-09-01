@@ -15,6 +15,10 @@ from ...utils.logger import logger
 from ..messaging.message_sender import MessageSender
 from ..platform.factory import PlatformAdapterFactory
 from ..reporting.dispatcher import ReportDispatcher
+from .incremental_trigger import IncrementalTriggerCoordinator
+
+_SCHEDULED_DISPATCH_INFO_SECONDS = 1.0
+_SCHEDULED_DISPATCH_WARN_SECONDS = 15.0
 
 
 class AutoScheduler:
@@ -50,6 +54,18 @@ class AutoScheduler:
         # Cache: group_id -> group_name (populated lazily)
         self._group_name_cache: dict[str, str] = {}
         self._terminating = False  # 终止标志位
+        self._immediate_report_tasks: dict[str, asyncio.Task] = {}
+        self._immediate_report_versions: dict[str, int] = {}
+        self.incremental_trigger = (
+            IncrementalTriggerCoordinator(
+                config_manager,
+                plugin_instance,
+                self._trigger_incremental_analysis,
+                self._request_immediate_incremental_report,
+            )
+            if plugin_instance is not None
+            else None
+        )
 
     def set_bot_instance(self, bot_instance):
         """设置bot实例（保持向后兼容）"""
@@ -162,10 +178,9 @@ class AutoScheduler:
         logger.info("注册定时分析报告任务...")
         self._schedule_report_time_jobs(scheduler)
 
-        # 2. 只有在增量功能总开关开启时，才注册全天候的增量提取任务
+        # 2. 增量提取由群消息事件计数触发，此处不注册提取定时任务。
         if self.config_manager.get_incremental_enabled():
-            logger.info("增量分析功能已开启，正在注册全天增量提取任务...")
-            self._schedule_incremental_cron_jobs(scheduler)
+            logger.info("增量分析功能已开启，将按目标群新增消息数量触发。")
         else:
             logger.info("增量分析总开关未启用，仅执行传统定时全量分析。")
 
@@ -199,50 +214,6 @@ class AutoScheduler:
             except Exception as e:
                 logger.error(f"注册定时任务失败 ({t_str}): {e}")
 
-    def _schedule_incremental_cron_jobs(self, scheduler):
-        """
-        在活跃时段注册增量分析定时任务。
-
-        这类任务仅执行增量数据的提取；而报告生成阶段在配置的每日分析时间点进行。
-        """
-        active_start_hour = self.config_manager.get_incremental_active_start_hour()
-        active_end_hour = self.config_manager.get_incremental_active_end_hour()
-        interval_minutes = self.config_manager.get_incremental_interval_minutes()
-        max_daily = self.config_manager.get_incremental_max_daily_analyses()
-
-        # 计算活跃时段内的触发时间点
-        trigger_times = []
-        current_minutes = active_start_hour * 60
-        end_minutes = active_end_hour * 60
-
-        while current_minutes < end_minutes and len(trigger_times) < max_daily:
-            hour = current_minutes // 60
-            minute = current_minutes % 60
-            trigger_times.append((hour, minute))
-            current_minutes += interval_minutes
-
-        # 注册增量分析任务
-        for hour, minute in trigger_times:
-            try:
-                trigger = CronTrigger(hour=hour, minute=minute)
-                job_id = f"incremental_analysis_{hour:02d}{minute:02d}"
-
-                scheduler.add_job(
-                    self._run_incremental_analysis,
-                    trigger=trigger,
-                    id=job_id,
-                    replace_existing=True,
-                    misfire_grace_time=60,
-                )
-                self.scheduler_job_ids.append(job_id)
-                logger.info(
-                    f"已注册增量分析任务: {hour:02d}:{minute:02d} (Job ID: {job_id})"
-                )
-            except Exception as e:
-                logger.error(f"注册增量分析任务失败 ({hour:02d}:{minute:02d}): {e}")
-
-        logger.info(f"增量调度注册完成: {len(trigger_times)} 个增量分析任务")
-
     def unschedule_jobs(self, context):
         """取消定时任务"""
         self._terminating = True
@@ -266,6 +237,32 @@ class AutoScheduler:
                 logger.warning(f"移除定时任务失败 ({job_id}): {e}")
         self.scheduler_job_ids.clear()
 
+    async def shutdown(self, context) -> None:
+        """停止调度器并持久化增量消息计数。
+
+        Args:
+            context: AstrBot 插件上下文。
+        """
+        self._terminating = True
+        immediate_report_tasks = list(self._immediate_report_tasks.values())
+        for task in immediate_report_tasks:
+            task.cancel()
+        if immediate_report_tasks:
+            await asyncio.gather(*immediate_report_tasks, return_exceptions=True)
+        self._immediate_report_tasks.clear()
+        self._immediate_report_versions.clear()
+
+        if self.incremental_trigger:
+            await self.incremental_trigger.close()
+        self.unschedule_jobs(context)
+
+    async def start_incremental_trigger(self) -> None:
+        """恢复达到消息阈值但尚未完成的增量任务。"""
+        if self.incremental_trigger and self.config_manager.get_incremental_enabled():
+            recovered = await self.incremental_trigger.start()
+            if recovered:
+                logger.info(f"已恢复 {recovered} 个达到消息阈值的增量分析任务")
+
     # ================================================================
     # 共享辅助方法：解析定时分析目标
     # ================================================================
@@ -287,13 +284,6 @@ class AutoScheduler:
         # 获取基础信息
         all_groups = await self._get_all_groups()
 
-        # 预加载所有配置名单和模式
-        sched_list = self.config_manager.get_scheduled_group_list()
-        sched_list_mode = self.config_manager.get_scheduled_group_list_mode()
-
-        incr_list = self.config_manager.get_incremental_group_list()
-        incr_list_mode = self.config_manager.get_incremental_group_list_mode()
-
         result = []
 
         # 遍历所有平台上的群组
@@ -301,21 +291,12 @@ class AutoScheduler:
             group_id = str(group_id_orig)
             umo = f"{platform_id}:GroupMessage:{group_id}"
 
-            # 1. 准入层判定 (基础黑白名单)
-            if not self.config_manager.is_group_allowed(umo):
+            # 配置管理器统一处理基础名单与定时 inherit/白黑名单。
+            if not self.config_manager.is_scheduled_group_allowed(umo):
                 continue
 
-            # 2. 定时层判定 (定时分析黑白名单)
-            if not self.config_manager.is_group_in_filtered_list(
-                umo, sched_list_mode, sched_list
-            ):
-                continue
-
-            # 3. 模式层判定 (增量黑白名单)
-            # 3. 模式层判定 (增量黑白名单)
-            if self.config_manager.is_group_in_filtered_list(
-                umo, incr_list_mode, incr_list
-            ):
+            # 配置管理器统一处理增量 inherit/白黑名单。
+            if self.config_manager.is_incremental_group_allowed(umo):
                 # 如果在增量名单内，则执行增量模式
                 effective_mode = "incremental"
             else:
@@ -350,6 +331,9 @@ class AutoScheduler:
         try:
             logger.info("定时报告触发 — 开始解析调度目标")
 
+            if self.incremental_trigger:
+                await self.incremental_trigger.refresh_target_states()
+
             all_targets = await self._get_scheduled_targets()
 
             if not all_targets:
@@ -363,7 +347,51 @@ class AutoScheduler:
             )
 
             async def dispatch_group(gid, pid, mode):
-                async with sem:
+                wait_started_at = time_mod.monotonic()
+                logger.debug(
+                    "定时报告等待调度槽位: platform=%s, group=%s, mode=%s, available=%s/%s",
+                    pid or "default",
+                    gid,
+                    mode,
+                    getattr(sem, "_value", None),
+                    max_concurrent,
+                )
+                while True:
+                    try:
+                        await asyncio.wait_for(
+                            sem.acquire(), timeout=_SCHEDULED_DISPATCH_WARN_SECONDS
+                        )
+                        break
+                    except TimeoutError:
+                        logger.warning(
+                            "定时报告等待调度槽位超过 %.0fs: platform=%s, group=%s, "
+                            "mode=%s, available=%s/%s",
+                            time_mod.monotonic() - wait_started_at,
+                            pid or "default",
+                            gid,
+                            mode,
+                            getattr(sem, "_value", None),
+                            max_concurrent,
+                        )
+
+                waited_seconds = time_mod.monotonic() - wait_started_at
+                log_method = (
+                    logger.info
+                    if waited_seconds >= _SCHEDULED_DISPATCH_INFO_SECONDS
+                    else logger.debug
+                )
+                log_method(
+                    "定时报告已取得调度槽位: platform=%s, group=%s, mode=%s, "
+                    "wait=%.2fs, available=%s/%s",
+                    pid or "default",
+                    gid,
+                    mode,
+                    waited_seconds,
+                    getattr(sem, "_value", None),
+                    max_concurrent,
+                )
+                run_started_at = time_mod.monotonic()
+                try:
                     if mode == "incremental":
                         return await self._perform_incremental_final_report_for_group_with_timeout(
                             gid, pid
@@ -372,6 +400,18 @@ class AutoScheduler:
                         return await self._perform_auto_analysis_for_group_with_timeout(
                             gid, pid
                         )
+                finally:
+                    sem.release()
+                    logger.debug(
+                        "定时报告已释放调度槽位: platform=%s, group=%s, mode=%s, "
+                        "duration=%.2fs, available=%s/%s",
+                        pid or "default",
+                        gid,
+                        mode,
+                        time_mod.monotonic() - run_started_at,
+                        getattr(sem, "_value", None),
+                        max_concurrent,
+                    )
 
             tasks = []
             stagger = self.config_manager.get_stagger_seconds() or 2
@@ -405,10 +445,25 @@ class AutoScheduler:
                 elif isinstance(result, Exception):
                     logger.error(f"群 {gid} 定时报告任务异常: {result}")
                     error_count += 1
-                elif isinstance(result, dict) and not result.get("success", True):
-                    skip_count += 1
-                else:
+                elif isinstance(result, dict) and result.get("success"):
                     success_count += 1
+                elif isinstance(result, dict):
+                    reason = result.get("reason", "unknown")
+                    if reason in {
+                        "below_threshold",
+                        "no_incremental_data",
+                        "already_running",
+                        "muted",
+                        "bot_not_ready",
+                        "target_removed",
+                    }:
+                        skip_count += 1
+                    else:
+                        logger.error(f"群 {gid} 定时报告失败: {reason}")
+                        error_count += 1
+                else:
+                    logger.error(f"群 {gid} 定时报告返回了无效状态: {result!r}")
+                    error_count += 1
 
             logger.info(
                 f"定时报告完成 — 成功: {success_count}, 跳过: {skip_count}, "
@@ -421,30 +476,61 @@ class AutoScheduler:
     async def _perform_auto_analysis_for_group_with_timeout(
         self, group_id: str, target_platform_id: str | None = None
     ):
-        """为指定群执行自动分析（带超时控制）"""
+        """为指定群执行自动分析并返回真实的分析与发送状态。"""
         try:
-            # 为每个群聊设置独立的超时时间，适当放宽到 30 分钟以支持大型批次
-            await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 self._perform_auto_analysis_for_group(group_id, target_platform_id),
                 timeout=1800,
             )
-        except asyncio.TimeoutError:
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "invalid_result",
+                }
+            return result
+        except TimeoutError:
             logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "timeout",
+            }
         except Exception as e:
             logger.error(f"群 {group_id} 分析任务执行失败: {e}")
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
 
     async def _perform_auto_analysis_for_group(
         self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
+        trace = None
         try:
             # 解析可读群名以生成语义化的 TraceID
             group_name = await self._get_group_name_safe(group_id, target_platform_id)
             trace_id = TraceContext.generate(prefix="group", group_name=group_name)
-            TraceContext.set(trace_id)
+            trace = TraceContext.set(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=target_platform_id or "",
+                trigger_type="auto",
+            )
 
             if self._terminating:
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "terminating",
+                }
 
             logger.info(
                 f"开始为群 {group_id} 执行自动分析 (Platform: {target_platform_id or 'Auto'})"
@@ -453,7 +539,12 @@ class AutoScheduler:
             # 检查平台状态 (BotManager 为基础设施层，用于获取平台就绪状态)
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "bot_not_ready",
+                }
 
             # 委派给应用层服务执行核心用例
             # AnalysisApplicationService 内部已处理群锁 (group_lock)
@@ -463,30 +554,82 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = result.get("reason")
-                logger.info(f"群 {group_id} 自动分析跳过: {reason}")
-                return
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed",
+                        error_message=result.get("error")
+                        or f"Auto analysis skipped: {reason}",
+                    )
+                logger.info(
+                    f"群 {group_id} 自动分析未完成: {reason} - {result.get('error', '')}"
+                )
+                result["analysis_success"] = False
+                result["report_sent"] = False
+                return result
 
             # 获取分析结果及适配器
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
-
-            # 调度导出并发送报告
-            await self.report_dispatcher.dispatch(
-                group_id,
-                analysis_result,
+            dispatch_platform_id = (
                 adapter.platform_id
                 if hasattr(adapter, "platform_id")
-                else target_platform_id,
+                else target_platform_id
             )
 
-            logger.info(f"群 {group_id} 自动分析任务执行成功")
+            # 调度导出并发送报告
+            comic_trigger = getattr(
+                getattr(self, "plugin_instance", None),
+                "_try_trigger_comic_generation",
+                None,
+            )
+            if callable(comic_trigger):
+                try:
+                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                except Exception as exc:
+                    logger.error(
+                        f"群 {group_id} 触发定时报告漫画失败: {exc}", exc_info=True
+                    )
+
+            report_sent = await self.report_dispatcher.dispatch(
+                group_id,
+                analysis_result,
+                dispatch_platform_id,
+            )
+
+            result["analysis_success"] = True
+            result["report_sent"] = bool(report_sent)
+            if not report_sent:
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed", error_message="Report delivery failed"
+                    )
+                result["success"] = False
+                result["reason"] = "report_delivery_failed"
+                logger.error(f"群 {group_id} 自动分析完成，但报告发送失败")
+                return result
+
+            if trace and trace.status == "running":
+                trace.finish(status="succeeded")
+            logger.info(f"群 {group_id} 自动分析及报告发送成功")
+            return result
 
         except DuplicateGroupTaskError:
-            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
+            if trace and trace.status == "running":
+                trace.finish(
+                    status="aborted", error_message="Task already running in group"
+                )
             logger.debug(f"群 {group_id} 任务因并发锁冲突而跳过（已在运行）")
-            raise  # 重新抛出，让上层知道任务并没真正执行而是跳过了
+            raise
         except Exception as e:
+            if trace and trace.status == "running":
+                trace.finish(status="failed", error_message=str(e))
             logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
         finally:
             logger.debug(f"群 {group_id} 自动分析流程结束")
 
@@ -494,95 +637,145 @@ class AutoScheduler:
     # 增量模式：增量分析
     # ================================================================
 
-    async def _run_incremental_analysis(self):
-        """为所有目标模式设定为 incremental 的群执行增量分析任务。"""
-        if self._terminating:
+    async def record_incremental_message(self, event) -> bool:
+        """记录一条群消息，用于按消息量触发增量分析。
+
+        Args:
+            event: AstrBot 群消息事件。
+
+        Returns:
+            消息是否属于启用增量分析的目标群。
+        """
+        if self._terminating or not self.incremental_trigger:
+            return False
+        if str(event.get_sender_id()) == str(event.get_self_id()):
+            return False
+        message_obj = getattr(event, "message_obj", None)
+        return await self.incremental_trigger.record_message(
+            platform_id=event.get_platform_id(),
+            group_id=event.get_group_id(),
+            unified_msg_origin=event.unified_msg_origin,
+            message_id=str(getattr(message_obj, "message_id", "") or ""),
+        )
+
+    async def _trigger_incremental_analysis(
+        self, group_id: str, platform_id: str
+    ) -> dict | None:
+        """执行消息量触发的单群增量分析。
+
+        Args:
+            group_id: 群组 ID。
+            platform_id: 平台实例 ID。
+
+        Returns:
+            增量分析结果。
+        """
+        result = await self._perform_incremental_analysis_for_group_with_timeout(
+            group_id, platform_id
+        )
+        return result
+
+    def _request_immediate_incremental_report(
+        self, group_id: str, platform_id: str
+    ) -> None:
+        """合并同群即时报告请求，并在后台发送报告。"""
+        if (
+            self._terminating
+            or not self.config_manager.get_incremental_report_immediately()
+        ):
             return
+
+        state_key = f"{platform_id}:GroupMessage:{group_id}"
+        version = self._immediate_report_versions.get(state_key, 0) + 1
+        self._immediate_report_versions[state_key] = version
+        task = self._immediate_report_tasks.get(state_key)
+        if task and not task.done():
+            logger.debug(
+                "即时增量报告已合并到运行中任务：platform=%s，group=%s，版本=%s",
+                platform_id,
+                group_id,
+                version,
+            )
+            return
+
+        task = asyncio.create_task(
+            self._run_immediate_incremental_report(state_key, group_id, platform_id),
+            name=f"incremental_immediate_report_{state_key}",
+        )
+        self._immediate_report_tasks[state_key] = task
+        logger.debug(
+            "即时增量报告已安排：platform=%s，group=%s，版本=%s，当前即时报告任务=%s",
+            platform_id,
+            group_id,
+            version,
+            len(self._immediate_report_tasks),
+        )
+
+    async def _run_immediate_incremental_report(
+        self, state_key: str, group_id: str, platform_id: str
+    ) -> None:
+        """串行发送同群即时报告，并合并执行期间新增的批次。"""
+        current_task = asyncio.current_task()
         try:
-            logger.info("开始执行自动增量分析（并发模式）")
-
-            # 仅选取模式为 incremental 的目标群
-            incr_targets = await self._get_scheduled_targets(mode_filter="incremental")
-
-            if not incr_targets:
-                logger.info("没有配置为增量模式的群聊需要增量分析")
-                return
-
-            target_list = incr_targets
-            stagger = self.config_manager.get_incremental_stagger_seconds()
-            max_concurrent = self.config_manager.get_max_concurrent_tasks()
-
-            logger.info(
-                f"将为 {len(target_list)} 个群聊执行增量分析 "
-                f"(并发限制: {max_concurrent}, 交错间隔: {stagger}秒)"
-            )
-
-            sem = asyncio.Semaphore(max_concurrent)
-
-            async def staggered_incremental(idx, gid, pid):
-                if idx > 0 and stagger > 0:
-                    await asyncio.sleep(stagger * idx)
-
-                async with sem:
-                    result = (
-                        await self._perform_incremental_analysis_for_group_with_timeout(
-                            gid, pid
-                        )
-                    )
-
-                    # 为调试提供的立即上报选项
-                    if self.config_manager.get_incremental_report_immediately():
-                        if isinstance(result, dict) and result.get("success"):
-                            logger.info(
-                                f"增量分析立即报告模式生效，正在为群 {gid} 生成报告..."
-                            )
-                            await self._perform_incremental_final_report_for_group_with_timeout(
-                                gid, pid
-                            )
-
-                    return result
-
-            analysis_tasks = []
-            for idx, (gid, pid, _mode) in enumerate(target_list):
-                if self._terminating:
-                    logger.info("检测到插件正在停止，取消后续增量分析任务创建")
-                    break
-                task = asyncio.create_task(
-                    staggered_incremental(idx, gid, pid),
-                    name=f"incremental_group_{gid}",
+            while not self._terminating:
+                requested_version = self._immediate_report_versions.get(state_key, 0)
+                logger.debug(
+                    "即时增量报告开始：platform=%s，group=%s，版本=%s",
+                    platform_id,
+                    group_id,
+                    requested_version,
                 )
-                analysis_tasks.append(task)
-
-            results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
-
-            success_count = 0
-            skip_count = 0
-            error_count = 0
-
-            for i, result in enumerate(results):
-                gid, _, _ = target_list[i]
-                if isinstance(result, DuplicateGroupTaskError):
-                    skip_count += 1
-                elif isinstance(result, Exception):
-                    logger.error(f"群 {gid} 增量分析任务异常: {result}")
-                    error_count += 1
-                elif isinstance(result, dict) and not result.get("success", True):
-                    skip_count += 1
-                else:
-                    success_count += 1
-
-            logger.info(
-                f"增量分析完成 - 成功: {success_count}, 跳过: {skip_count}, "
-                f"失败: {error_count}, 总计: {len(target_list)}"
+                result = (
+                    await self._perform_incremental_final_report_for_group_with_timeout(
+                        group_id, platform_id
+                    )
+                )
+                result = result if isinstance(result, dict) else {}
+                has_new_batch = (
+                    self._immediate_report_versions.get(state_key, 0)
+                    != requested_version
+                )
+                logger.debug(
+                    "即时增量报告结束：platform=%s，group=%s，版本=%s，success=%s，"
+                    "reason=%s，执行期间有新批次=%s",
+                    platform_id,
+                    group_id,
+                    requested_version,
+                    bool(result.get("success")),
+                    result.get("reason", "none"),
+                    has_new_batch,
+                )
+                if not has_new_batch:
+                    break
+                logger.debug(
+                    "即时增量报告检测到新批次，合并后继续发送：platform=%s，group=%s",
+                    platform_id,
+                    group_id,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error(
+                f"即时增量报告后台任务异常：群 {group_id}，平台 {platform_id}，错误：{exc}",
+                exc_info=True,
             )
-
-        except Exception as e:
-            logger.error(f"增量分析执行失败: {e}", exc_info=True)
+        finally:
+            if self._immediate_report_tasks.get(state_key) is current_task:
+                self._immediate_report_tasks.pop(state_key, None)
+                self._immediate_report_versions.pop(state_key, None)
+            logger.debug(
+                "即时增量报告任务已结束：platform=%s，group=%s，当前即时报告任务=%s",
+                platform_id,
+                group_id,
+                len(self._immediate_report_tasks),
+            )
 
     async def _perform_incremental_analysis_for_group_with_timeout(
-        self, group_id: str, target_platform_id: str | None = None
+        self,
+        group_id: str,
+        target_platform_id: str | None = None,
     ):
-        """为指定群执行增量分析（带超时控制，10分钟）"""
+        """为指定群执行增量分析（带超时控制，10分钟）。"""
         try:
             result = await asyncio.wait_for(
                 self._perform_incremental_analysis_for_group(
@@ -591,7 +784,7 @@ class AutoScheduler:
                 timeout=600,
             )
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 增量分析超时（10分钟），跳过")
             return {"success": False, "reason": "timeout"}
         except Exception as e:
@@ -599,19 +792,28 @@ class AutoScheduler:
             return {"success": False, "reason": str(e)}
 
     async def _perform_incremental_analysis_for_group(
-        self, group_id: str, target_platform_id: str | None = None
+        self,
+        group_id: str,
+        target_platform_id: str | None = None,
     ):
         """为指定群执行增量分析（业务逻辑委派给 AnalysisApplicationService）"""
+        trace = None
         try:
             # 解析可读群名以生成语义化的 TraceID
             group_name = await self._get_group_name_safe(group_id, target_platform_id)
             trace_id = TraceContext.generate(prefix="incr", group_name=group_name)
-            TraceContext.set(trace_id)
+            trace = TraceContext.set(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=target_platform_id or "",
+                trigger_type="incremental",
+            )
 
             if self._terminating:
                 return
 
-            logger.info(
+            logger.debug(
                 f"开始为群 {group_id} 执行增量分析 "
                 f"(Platform: {target_platform_id or 'Auto'})"
             )
@@ -624,29 +826,41 @@ class AutoScheduler:
             # 委派给应用层服务执行增量分析用例
             # AnalysisApplicationService 内部已处理群锁 (group_lock)
             result = await self.analysis_service.execute_incremental_analysis(
-                group_id=group_id, platform_id=target_platform_id
+                group_id=group_id,
+                platform_id=target_platform_id,
             )
 
             if not result.get("success"):
                 reason = result.get("reason", "unknown")
-                logger.info(f"群 {group_id} 增量分析跳过: {reason}")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed", error_message=f"Incremental skipped: {reason}"
+                    )
+                logger.debug(f"群 {group_id} 增量分析未完成: reason={reason}")
                 return result
 
             # 增量分析只累积数据，不发送报告
             batch_summary = result.get("batch_summary", {})
-            logger.info(
-                f"群 {group_id} 增量分析完成: "
+            logger.debug(
+                f"群 {group_id} 增量分析调度回调完成: "
                 f"消息数={result.get('messages_count', 0)}, "
                 f"话题={batch_summary.get('topics_count', 0)}, "
                 f"金句={batch_summary.get('quotes_count', 0)}"
             )
+            if trace and trace.status == "running":
+                trace.finish(status="succeeded")
             return result
 
         except DuplicateGroupTaskError:
-            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
+            if trace and trace.status == "running":
+                trace.finish(
+                    status="aborted", error_message="Task already running in group"
+                )
             logger.debug(f"群 {group_id} 增量分析因并发锁冲突而跳过（已在运行）")
             return {"success": False, "reason": "already_running"}
         except Exception as e:
+            if trace and trace.status == "running":
+                trace.finish(status="failed", error_message=str(e))
             logger.error(f"群 {group_id} 增量分析执行失败: {e}", exc_info=True)
             return {"success": False, "reason": str(e)}
         finally:
@@ -672,10 +886,18 @@ class AutoScheduler:
                 timeout=1800,
             )
 
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "invalid_result",
+                }
+
             # 判定是否需要触发回退 (例如：无增量数据等)
-            if isinstance(result, dict) and not result.get("success"):
+            if not result.get("success"):
                 reason = result.get("reason", "")
-                if reason in ("below_threshold", "already_running"):
+                if reason in ("below_threshold", "already_running", "target_removed"):
                     return result  # 正常跳过，无需回退
                 if self.config_manager.get_incremental_fallback_enabled():
                     logger.warning(
@@ -688,19 +910,29 @@ class AutoScheduler:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"群 {group_id} 最终报告超时（30分钟）")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
-            return {"success": False, "reason": "timeout"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "timeout",
+            }
 
         except Exception as e:
             logger.error(f"群 {group_id} 最终报告任务执行失败: {e}")
             if self.config_manager.get_incremental_fallback_enabled():
                 logger.warning(f"群 {group_id} 增量报告异常，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
-            return {"success": False, "reason": str(e)}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
 
     async def _fallback_to_traditional(
         self, group_id: str, target_platform_id: str | None = None
@@ -711,29 +943,72 @@ class AutoScheduler:
                 f"⬆️ 群 {group_id} 回退到传统全量分析 "
                 f"(Platform: {target_platform_id or 'Auto'})"
             )
-            await self._perform_auto_analysis_for_group_with_timeout(
+            result = await self._perform_auto_analysis_for_group_with_timeout(
                 group_id, target_platform_id
             )
-            return {"success": True, "fallback": True}
+            if not isinstance(result, dict):
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "fallback": True,
+                    "reason": "fallback_invalid_result",
+                }
+            result["fallback"] = True
+            return result
         except Exception as fallback_err:
             logger.error(
                 f"群 {group_id} 回退传统分析也失败: {fallback_err}",
                 exc_info=True,
             )
-            return {"success": False, "reason": f"fallback_failed: {fallback_err}"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "fallback": True,
+                "reason": f"fallback_failed: {fallback_err}",
+            }
 
     async def _perform_incremental_final_report_for_group(
         self, group_id: str, target_platform_id: str | None = None
     ):
         """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
+        trace = None
         try:
             # 解析可读群名以生成语义化的 TraceID
             group_name = await self._get_group_name_safe(group_id, target_platform_id)
             trace_id = TraceContext.generate(prefix="report", group_name=group_name)
-            TraceContext.set(trace_id)
+            trace = TraceContext.set(
+                trace_id=trace_id,
+                group_id=group_id,
+                group_name=group_name,
+                platform=target_platform_id or "",
+                trigger_type="incremental_report",
+            )
 
             if self._terminating:
-                return
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "terminating",
+                }
+
+            incremental_trigger = getattr(self, "incremental_trigger", None)
+            if (
+                incremental_trigger
+                and target_platform_id
+                and not incremental_trigger.is_target_group(
+                    f"{target_platform_id}:GroupMessage:{group_id}"
+                )
+            ):
+                logger.info(f"群 {group_id} 已移出增量名单，跳过最终报告")
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "target_removed",
+                }
 
             logger.info(
                 f"开始为群 {group_id} 生成增量最终报告 "
@@ -743,7 +1018,12 @@ class AutoScheduler:
             # 检查平台状态
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
-                return {"success": False, "reason": "bot_not_ready"}
+                return {
+                    "success": False,
+                    "analysis_success": False,
+                    "report_sent": False,
+                    "reason": "bot_not_ready",
+                }
 
             # 委派给应用层服务执行最终报告用例
             # AnalysisApplicationService 内部已处理群锁 (group_lock)
@@ -753,20 +1033,68 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = result.get("reason", "unknown")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed", error_message=f"Final report skipped: {reason}"
+                    )
                 logger.info(f"群 {group_id} 最终报告跳过: {reason}")
+                result["analysis_success"] = False
+                result["report_sent"] = False
                 return result
 
             # 获取分析结果及适配器，分发报告
             analysis_result = result["analysis_result"]
             adapter = result["adapter"]
-
-            await self.report_dispatcher.dispatch(
-                group_id,
-                analysis_result,
+            dispatch_platform_id = (
                 adapter.platform_id
                 if hasattr(adapter, "platform_id")
-                else target_platform_id,
+                else target_platform_id
             )
+
+            if (
+                incremental_trigger
+                and dispatch_platform_id
+                and not incremental_trigger.is_target_group(
+                    f"{dispatch_platform_id}:GroupMessage:{group_id}"
+                )
+            ):
+                result["success"] = False
+                result["analysis_success"] = True
+                result["report_sent"] = False
+                result["reason"] = "target_removed"
+                logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
+                return result
+
+            comic_trigger = getattr(
+                getattr(self, "plugin_instance", None),
+                "_try_trigger_comic_generation",
+                None,
+            )
+            if callable(comic_trigger):
+                try:
+                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                except Exception as exc:
+                    logger.error(
+                        f"群 {group_id} 触发增量报告漫画失败: {exc}", exc_info=True
+                    )
+
+            report_sent = await self.report_dispatcher.dispatch(
+                group_id,
+                analysis_result,
+                dispatch_platform_id,
+            )
+
+            result["analysis_success"] = True
+            result["report_sent"] = bool(report_sent)
+            if not report_sent:
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="failed", error_message="Report delivery failed"
+                    )
+                result["success"] = False
+                result["reason"] = "report_delivery_failed"
+                logger.error(f"群 {group_id} 最终报告生成完成，但报告发送失败")
+                return result
 
             # 清理过期批次（保留 2 倍窗口范围的数据作为缓冲）
             try:
@@ -778,7 +1106,7 @@ class AutoScheduler:
                         group_id, before_ts
                     )
                     if cleaned > 0:
-                        logger.info(
+                        logger.debug(
                             f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"
                         )
             except Exception as cleanup_err:
@@ -786,16 +1114,33 @@ class AutoScheduler:
                     f"群 {group_id} 过期批次清理失败（不影响报告）: {cleanup_err}"
                 )
 
+            if trace and trace.status == "running":
+                trace.finish(status="succeeded")
             logger.info(f"群 {group_id} 增量最终报告发送成功")
             return result
 
         except DuplicateGroupTaskError:
-            # group_lock 抛出的 DuplicateGroupTaskError 表示任务正在运行，优雅跳过
+            if trace and trace.status == "running":
+                trace.finish(
+                    status="aborted", error_message="Task already running in group"
+                )
             logger.debug(f"群 {group_id} 最终报告因并发锁冲突而跳过（已在运行）")
-            return {"success": False, "reason": "already_running"}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": "already_running",
+            }
         except Exception as e:
+            if trace and trace.status == "running":
+                trace.finish(status="failed", error_message=str(e))
             logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
-            return {"success": False, "reason": str(e)}
+            return {
+                "success": False,
+                "analysis_success": False,
+                "report_sent": False,
+                "reason": str(e),
+            }
         finally:
             logger.debug(f"群 {group_id} 最终报告流程结束")
 

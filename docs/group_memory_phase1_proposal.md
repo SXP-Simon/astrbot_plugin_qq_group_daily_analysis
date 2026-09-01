@@ -154,8 +154,8 @@ group_scope_id = "{platform_id}:GroupMessage:{group_id}"
     "start_ts": 1710000000,
     "end_ts": 1710001200
   },
-  "summary": "群里围绕飞书成员权限预热方案持续讨论，最终收敛到先执行缓存预检查的做法。",
-  "keywords": ["飞书", "权限", "缓存预热"],
+  "summary": "群里围绕 QQ 官方成员权限预热方案持续讨论，最终收敛到先执行缓存预检查的做法。",
+  "keywords": ["QQ官方", "权限", "缓存预热"],
   "participants": ["u1", "u2", "u3"],
   "importance": 0.81,
   "source_batch_ids": ["batch_a", "batch_b"],

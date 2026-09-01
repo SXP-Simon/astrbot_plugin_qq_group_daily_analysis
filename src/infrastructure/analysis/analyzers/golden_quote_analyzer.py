@@ -185,7 +185,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
 
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
-            return [], TokenUsage()
+            raise
 
     def extract_interesting_messages(self, messages: list[dict]) -> list[dict]:
         """

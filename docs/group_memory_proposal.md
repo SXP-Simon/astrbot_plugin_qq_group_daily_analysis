@@ -194,8 +194,8 @@ member_profile_key = "{group_scope_id}:{sender_id}"
   "scope_id": "qq:GroupMessage:123456",
   "type": "episode",
   "timestamp": 1710000000,
-  "summary": "群里围绕 AstrBot 插件的飞书适配展开了长时间讨论，最终确认了权限预热方案。",
-  "entities": ["飞书", "适配", "权限预热"],
+  "summary": "群里围绕 AstrBot 插件的 QQ 官方适配展开了长时间讨论，最终确认了权限预热方案。",
+  "entities": ["QQ官方", "适配", "权限预热"],
   "participants": ["user_a", "user_b", "user_c"],
   "importance": 0.83,
   "source_batch_ids": ["batch_1", "batch_2"]

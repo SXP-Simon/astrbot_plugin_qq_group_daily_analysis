@@ -1,0 +1,23 @@
+### 模板预览图与设计资源 — 仅用于文档/仓库展示/CDN，插件运行时不需要
+assets/*.jpg              export-ignore
+assets/*.png              export-ignore
+assets/HatsuneMiku/       export-ignore
+
+### 前端开发源码 — 运行时只需要已编译的 pages/ 单 Bundle 产物
+dashboard/                export-ignore
+
+### CI/CD 工作流 — 插件打包时不需要
+.github/                  export-ignore
+
+### 调试文件与测试输出
+debug_*.html              export-ignore
+test_*.html               export-ignore
+
+### 设计文档 — 运行时不需要
+docs/                     export-ignore
+
+### 发布/调试脚本 — 终端用户不需要
+scripts/                  export-ignore
+
+### 测试文件 — 生产包不需要
+tests/                    export-ignore
