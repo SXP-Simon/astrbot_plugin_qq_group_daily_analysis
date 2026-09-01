@@ -144,11 +144,9 @@ class BotManager:
         """尝试从已存储的平台对象中刷新 bot 实例 (Lazy Load)"""
         for platform_id, platform in self._platforms.items():
             bot_client = None
-            # Lark 平台优先使用 API client，避免拿到仅支持长连接的 ws client
-            bot_client = getattr(platform, "lark_api", None)
             # 优先尝试 get_client()
             get_client = getattr(platform, "get_client", None)
-            if not bot_client and callable(get_client):
+            if callable(get_client):
                 bot_client = get_client()
 
             # 如果 get_client() 返回 None，尝试直接访问属性
@@ -321,7 +319,7 @@ class BotManager:
 
         # 3. 通过 PlatformAdapterFactory 注册类型匹配
         if PlatformAdapterFactory.is_supported(p_id_lower):
-            expected_adapter_cls = PlatformAdapterFactory._adapters.get(p_id_lower)
+            expected_adapter_cls = PlatformAdapterFactory.get_adapter_class(p_id_lower)
             if expected_adapter_cls:
                 for k, adp in self._adapters.items():
                     if isinstance(adp, expected_adapter_cls):
@@ -408,9 +406,8 @@ class BotManager:
         for platform in platforms:
             # 获取bot实例
             bot_client = None
-            bot_client = getattr(platform, "lark_api", None)
             platform_get_client = getattr(platform, "get_client", None)
-            if not bot_client and callable(platform_get_client):
+            if callable(platform_get_client):
                 bot_client = platform_get_client()
 
             if not bot_client:
