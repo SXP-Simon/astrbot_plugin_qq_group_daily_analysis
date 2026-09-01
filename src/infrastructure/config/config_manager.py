@@ -38,6 +38,7 @@ class ConfigManager:
         self.config = config
         self._migrate_daily_comic_characters()
         self._migrate_daily_comic_character_prompts()
+        self._migrate_legacy_comic_storyboard_prompts()
         self._protect_upgrade_data()
 
     def _protect_upgrade_data(self) -> None:
@@ -377,6 +378,67 @@ class ConfigManager:
             state_path.write_text(json.dumps({"completed": True}), encoding="utf-8")
         except OSError as exc:
             logger.warning(f"迁移漫画角色场景提示词失败，将在下次重载时重试: {exc}")
+
+    def _is_legacy_default_comic_prompt(self, prompt: object) -> bool:
+        """判断是否为旧版默认漫画分镜提示词（尚未包含 GOOD/BAD 正反例规范）。"""
+        if not isinstance(prompt, str) or not prompt.strip():
+            return False
+        text = prompt.strip()
+        if "GOOD EXAMPLE" in text:
+            return False
+        return (
+            '请输出包含 "scene" 字段的 JSON 对象。' in text
+            or '请输出包含 \\"scene\\" 字段的 JSON 对象。' in text
+            or (
+                "你是一个资深的漫画分镜师与 AI 绘画提示词专家。" in text
+                and "【核心视觉、台词与双层排版规则】" in text
+            )
+        )
+
+    def _migrate_legacy_comic_storyboard_prompts(self) -> None:
+        """自动将旧版默认漫画分镜提示词升级迁移至包含 GOOD/BAD 正反例的新版模板。"""
+        try:
+            from ..analysis.analyzers.comic_analyzer import (
+                DEFAULT_COMIC_STORYBOARD_PROMPT,
+            )
+        except Exception:
+            from src.infrastructure.analysis.analyzers.comic_analyzer import (
+                DEFAULT_COMIC_STORYBOARD_PROMPT,
+            )
+
+        modified = False
+
+        # 1. 检查并迁移全局默认提示词
+        prompts = self._get_group("prompts")
+        comic_prompts = prompts.get("comic_analysis_prompts")
+        if isinstance(comic_prompts, dict):
+            current_global = comic_prompts.get("comic_storyboard_prompt")
+            if self._is_legacy_default_comic_prompt(current_global):
+                comic_prompts["comic_storyboard_prompt"] = (
+                    DEFAULT_COMIC_STORYBOARD_PROMPT
+                )
+                modified = True
+
+        # 2. 检查并迁移各角色方案中的默认提示词
+        daily_comic = self._get_group("daily_comic")
+        characters = daily_comic.get("comic_characters", [])
+        if isinstance(characters, list):
+            for char in characters:
+                if not isinstance(char, dict):
+                    continue
+                char_prompt = char.get("storyboard_prompt")
+                if self._is_legacy_default_comic_prompt(char_prompt):
+                    char["storyboard_prompt"] = DEFAULT_COMIC_STORYBOARD_PROMPT
+                    modified = True
+
+        if modified:
+            try:
+                self.config.save_config()
+                logger.info(
+                    "已自动将历史旧版漫画分镜提示词升级迁移为包含 GOOD/BAD 正反例的新版规范模板。"
+                )
+            except Exception as exc:
+                logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
 
     def _write_comic_config_backup(self, data: dict) -> bool:
         """写入漫画配置迁移备份。
