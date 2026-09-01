@@ -267,27 +267,6 @@ class AnalysisApplicationService:
                 except Exception as e:
                     logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
-            # 飞书平台在分析前进行一次性权限与成员头像预热，避免报告阶段出现大面积默认头像。
-            if hasattr(adapter, "prepare_group_member_cache"):
-                try:
-                    logger.info(
-                        "执行平台成员预检查: group=%s, platform=%s",
-                        group_id,
-                        platform_id or "default",
-                    )
-                    ok, err = await adapter.prepare_group_member_cache(group_id)  # type: ignore[attr-defined]
-                    if not ok and err:
-                        raise ValueError(err)
-                    logger.info(
-                        "平台成员预检查通过: group=%s, platform=%s",
-                        group_id,
-                        platform_id or "default",
-                    )
-                except Exception as e:
-                    raise ValueError(
-                        f"飞书成员信息预检查失败，请先完成应用权限授权：{e}"
-                    ) from e
-
             # 2. 拉取消息
             if days is None:
                 days = self.config_manager.get_analysis_days()

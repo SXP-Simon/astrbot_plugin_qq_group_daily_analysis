@@ -1,35 +1,35 @@
-"""Optional platform adapter exports.
+"""可选平台适配器模块
 
-Each platform is imported independently so an unavailable optional SDK does not
-prevent the QQ Official adapter from being registered.
+采用按需懒加载机制，避免在插件初始化时加载未启用的第三方平台 SDK。
 """
 
-__all__: list[str] = []
+import importlib
+from typing import TYPE_CHECKING
 
-try:
-    from .discord_adapter import DiscordAdapter  # noqa: F401
+if TYPE_CHECKING:
+    from .discord_adapter import DiscordAdapter
+    from .onebot_adapter import OneBotAdapter
+    from .qq_official_adapter import QQOfficialAdapter
+    from .telegram_adapter import TelegramAdapter
 
-    __all__.append("DiscordAdapter")
-except ImportError:
-    pass
+__all__ = [
+    "DiscordAdapter",
+    "OneBotAdapter",
+    "QQOfficialAdapter",
+    "TelegramAdapter",
+]
 
-try:
-    from .lark_adapter import LarkAdapter  # noqa: F401
+_ADAPTER_MODULES = {
+    "DiscordAdapter": ".discord_adapter",
+    "OneBotAdapter": ".onebot_adapter",
+    "QQOfficialAdapter": ".qq_official_adapter",
+    "TelegramAdapter": ".telegram_adapter",
+}
 
-    __all__.append("LarkAdapter")
-except ImportError:
-    pass
 
-try:
-    from .onebot_adapter import OneBotAdapter  # noqa: F401
-
-    __all__.append("OneBotAdapter")
-except ImportError:
-    pass
-
-try:
-    from .qq_official_adapter import QQOfficialAdapter  # noqa: F401
-
-    __all__.append("QQOfficialAdapter")
-except ImportError:
-    pass
+def __getattr__(name: str):
+    """按需动态导入适配器类。"""
+    if name in _ADAPTER_MODULES:
+        module = importlib.import_module(_ADAPTER_MODULES[name], package=__package__)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

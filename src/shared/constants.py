@@ -17,7 +17,6 @@ class Platform(str, Enum):
     TELEGRAM = "telegram"
     DISCORD = "discord"
     SLACK = "slack"
-    LARK = "lark"
 
 
 class TaskStatus(str, Enum):
