@@ -1448,3 +1448,110 @@ def test_comic_album_upload_sniffs_local_cached_image_extension(tmp_path):
         album_name="comic",
         strict_mode=False,
     )
+
+
+def test_comic_storyboard_assembler_combines_scene_and_panels():
+    """测试分镜分析器在 LLM 输出 scene 头部和 panels 列表时能够完整拼接所有分格提示词。"""
+    from src.infrastructure.analysis.analyzers.comic_analyzer import (
+        ComicStoryboardAnalyzer,
+    )
+
+    analyzer = ComicStoryboardAnalyzer(context=Mock(), config_manager=Mock())
+    llm_output = json.dumps(
+        {
+            "scene": "A 6-panel comic strip featuring an anthropologist observing chat.",
+            "panels": [
+                {
+                    "panel": 1,
+                    "topic": "宽带与搬家记",
+                    "speech_bubble_text": "断网如断魂！",
+                    "caption_strip_text": "宽带受难记",
+                    "prompt": "Panel 1: The anthropologist sits on floor with router. Bubble: 断网如断魂！ Caption: 宽带受难记",
+                },
+                {
+                    "panel": 2,
+                    "topic": "应届生出路",
+                    "prompt": "Panel 2: Multiple screens glowing. Bubble: 迷路之人！ Caption: 毕业迷茫",
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    success, result, error = analyzer.parse_structured_response(llm_output)
+    assert success is True
+    assert result is not None
+    assert len(result) == 1
+    scene = result[0]["scene"]
+    assert "A 6-panel comic strip" in scene
+    assert "Panel 1: The anthropologist" in scene
+    assert "Panel 2: Multiple screens" in scene
+    assert "断网如断魂！" in scene
+
+
+def test_comic_storyboard_prompt_contains_good_and_bad_examples():
+    """测试默认分镜 Prompt 模板包含明确的 GOOD / BAD 正反例与全景约束。"""
+    from src.infrastructure.analysis.analyzers.comic_analyzer import (
+        ComicStoryboardAnalyzer,
+    )
+
+    config_mock = Mock()
+    config_mock.get_comic_storyboard_prompt.return_value = ""
+    config_mock.get_max_topics.return_value = 6
+    analyzer = ComicStoryboardAnalyzer(context=Mock(), config_manager=config_mock)
+
+    prompt = analyzer.build_prompt([{"topic": "宽带", "detail": "装宽带"}])
+    assert "GOOD EXAMPLE" in prompt
+    assert "BAD EXAMPLE" in prompt
+    assert "Panel 1" in prompt
+    assert "exact Chinese text" in prompt
+
+
+def test_comic_storyboard_fuzzy_json_consolidation():
+    """测试分镜分析器对任意多层级、自定义键名的未知 JSON 进行递归提取与合并。"""
+    from src.infrastructure.analysis.analyzers.comic_analyzer import (
+        ComicStoryboardAnalyzer,
+    )
+
+    analyzer = ComicStoryboardAnalyzer(context=Mock(), config_manager=Mock())
+
+    # 1. 任意多层嵌套与自定义键名 (如 shots, custom_key)
+    nested_output = json.dumps(
+        {
+            "status": "success",
+            "data": {
+                "header": "A 4-panel comic strip in cyberpunk style.",
+                "story": {
+                    "shots": [
+                        {"description": "Shot 1: Neon city alley with rain."},
+                        {"description": "Shot 2: Terminal glowing with error code."},
+                    ]
+                },
+            },
+        }
+    )
+    success, result, _ = analyzer.parse_structured_response(nested_output)
+    assert success is True
+    assert result is not None
+    scene = result[0]["scene"]
+    assert "A 4-panel comic strip in cyberpunk style." in scene
+    assert "Shot 1: Neon city alley" in scene
+    assert "Shot 2: Terminal glowing" in scene
+
+    # 2. 顶层为数组格式
+    array_output = json.dumps(
+        [
+            {"custom_prompt": "Panel 1: Anime girl drinking coffee."},
+            {"custom_prompt": "Panel 2: Cat jumping onto the table."},
+        ]
+    )
+    success, result, _ = analyzer.parse_structured_response(array_output)
+    assert success is True
+    assert result is not None
+    scene = result[0]["scene"]
+    assert "Panel 1: Anime girl drinking coffee." in scene
+    assert "Panel 2: Cat jumping onto the table." in scene
+
+
+
+
