@@ -10,7 +10,7 @@ import base64
 import os
 import time
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -203,9 +203,9 @@ class TelegramAdapter(PlatformAdapter):
 
             if since_ts and since_ts > 0:
                 # 统一使用 UTC 以兼容数据库记录的时间存储
-                cutoff_time = datetime.fromtimestamp(since_ts, timezone.utc)
+                cutoff_time = datetime.fromtimestamp(since_ts, UTC)
             else:
-                cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+                cutoff_time = datetime.now(UTC) - timedelta(days=days)
             target_count = max(1, int(max_count))
             page_size = target_count
             current_page = 1
@@ -255,7 +255,7 @@ class TelegramAdapter(PlatformAdapter):
                     if not record_time:
                         continue
                     if record_time.tzinfo is None:
-                        record_time = record_time.replace(tzinfo=timezone.utc)
+                        record_time = record_time.replace(tzinfo=UTC)
                     if oldest_record_time is None or record_time < oldest_record_time:
                         oldest_record_time = record_time
                     if record_time < cutoff_time:

@@ -204,7 +204,7 @@ class DrawingImageResponseService:
                 self._download_image_inner(url, proxy),
                 timeout=self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise httpx.TimeoutException(
                 f"图片下载超过 {self.IMAGE_DOWNLOAD_TOTAL_TIMEOUT}s 总超时限制: {self.sanitize_url(url)}"
             ) from exc

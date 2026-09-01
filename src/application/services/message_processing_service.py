@@ -259,8 +259,9 @@ class MessageProcessingService:
                     continue
 
                 target = getattr(seg, "target", None) or getattr(seg, "qq", None)
-                if target is None and hasattr(seg, "data"):
-                    target = seg.data.get("qq") or seg.data.get("target")
+                seg_data = getattr(seg, "data", None)
+                if target is None and isinstance(seg_data, dict):
+                    target = seg_data.get("qq") or seg_data.get("target")
 
                 target_str = str(target or "").strip()
                 if target_str:
@@ -276,10 +277,11 @@ class MessageProcessingService:
                     continue
 
                 seg_type = seg.type
+                seg_data = getattr(seg, "data", None)
                 if seg_type in ("Plain", "text"):
                     text = getattr(seg, "text", None)
-                    if text is None and hasattr(seg, "data"):
-                        text = seg.data.get("text")
+                    if text is None and isinstance(seg_data, dict):
+                        text = seg_data.get("text")
                     if text:
                         text = self._strip_known_mentions(text, pending_mentions)
                         if qq_mention_replacements is not None:
@@ -290,15 +292,15 @@ class MessageProcessingService:
 
                 elif seg_type in ("Image", "image"):
                     url = getattr(seg, "url", None) or (
-                        seg.data.get("url") if hasattr(seg, "data") else None
+                        seg_data.get("url") if isinstance(seg_data, dict) else None
                     )
                     if url:
                         message_parts.append({"type": "image", "url": url})
 
                 elif seg_type in ("At", "at"):
                     target = getattr(seg, "target", None) or getattr(seg, "qq", None)
-                    if target is None and hasattr(seg, "data"):
-                        target = seg.data.get("qq") or seg.data.get("target")
+                    if target is None and isinstance(seg_data, dict):
+                        target = seg_data.get("qq") or seg_data.get("target")
                     if target:
                         message_parts.append(
                             {

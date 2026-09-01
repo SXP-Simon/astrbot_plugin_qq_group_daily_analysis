@@ -1510,9 +1510,7 @@ class GroupDailyAnalysis(Star):
         # 命令由插件处理，禁用默认 LLM 回退。
         event.should_call_llm(True)
 
-        available_templates = (
-            await self.template_command_service.list_available_templates()
-        )
+        available_templates = self.template_command_service.list_available_templates()
 
         if not template_input:
             current_template = self.config_manager.get_report_template()
@@ -1556,9 +1554,7 @@ class GroupDailyAnalysis(Star):
         # 命令由插件处理，禁用默认 LLM 回退。
         event.should_call_llm(True)
 
-        available_templates = (
-            await self.template_command_service.list_available_templates()
-        )
+        available_templates = self.template_command_service.list_available_templates()
 
         if not available_templates:
             yield event.plain_result("❌ 未找到任何可用的报告模板")

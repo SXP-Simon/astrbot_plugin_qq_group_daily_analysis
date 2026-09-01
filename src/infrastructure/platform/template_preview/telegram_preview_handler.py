@@ -12,6 +12,15 @@ from ....utils.logger import logger
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
+    from telegram import (
+        CallbackQuery,
+        InlineKeyboardButton,
+        InlineKeyboardMarkup,
+        InputMediaDocument,
+        InputMediaPhoto,
+    )
+    from telegram.error import BadRequest
+    from telegram.ext import CallbackQueryHandler, ContextTypes
 
     from ....application.commands.template_command_service import TemplateCommandService
     from ...config.config_manager import ConfigManager
@@ -22,7 +31,6 @@ try:
         InlineKeyboardMarkup,
         InputMediaDocument,
         InputMediaPhoto,
-        Update,
     )
     from telegram.error import BadRequest
     from telegram.ext import CallbackQueryHandler, ContextTypes
@@ -30,14 +38,13 @@ try:
     TELEGRAM_RUNTIME_AVAILABLE = True
 except Exception:
     TELEGRAM_RUNTIME_AVAILABLE = False
-    InlineKeyboardButton = None
-    InlineKeyboardMarkup = None
-    InputMediaPhoto = None
-    InputMediaDocument = None
-    Update = None
-    BadRequest = Exception
-    CallbackQueryHandler = None
-    ContextTypes = None
+    InlineKeyboardButton = None  # type: ignore[assignment]
+    InlineKeyboardMarkup = None  # type: ignore[assignment]
+    InputMediaPhoto = None  # type: ignore[assignment]
+    InputMediaDocument = None  # type: ignore[assignment]
+    BadRequest = Exception  # type: ignore[assignment,misc]
+    CallbackQueryHandler = None  # type: ignore[assignment]
+    ContextTypes = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -135,6 +142,9 @@ class TelegramTemplatePreviewHandler:
                     )
                 self._handlers.pop(platform_id, None)
                 self._registered_platform_ids.discard(platform_id)
+
+            if not TELEGRAM_RUNTIME_AVAILABLE or CallbackQueryHandler is None:
+                return
 
             try:
                 handler = CallbackQueryHandler(
@@ -396,9 +406,7 @@ class TelegramTemplatePreviewHandler:
             await _append_fallback_results()
             return True, results
 
-    async def _on_callback_query(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def _on_callback_query(self, update: Any, context: Any) -> None:
         if not TELEGRAM_RUNTIME_AVAILABLE:
             return
         if not update.callback_query or not update.callback_query.data:
@@ -466,7 +474,7 @@ class TelegramTemplatePreviewHandler:
         await query.answer("未知操作", show_alert=False)
 
     async def _edit_preview_message(
-        self, query: Any, session: _PreviewSession, applied: bool = False
+        self, query: CallbackQuery, session: _PreviewSession, applied: bool = False
     ) -> None:
         template_name = session.current_template
         caption = self._build_caption(
@@ -485,6 +493,13 @@ class TelegramTemplatePreviewHandler:
             return
 
         try:
+            if (
+                not TELEGRAM_RUNTIME_AVAILABLE
+                or InputMediaPhoto is None
+                or InputMediaDocument is None
+            ):
+                return
+
             with open(image_path, "rb") as image_file:
                 media = InputMediaPhoto(media=image_file, caption=caption)
                 await query.edit_message_media(
@@ -500,6 +515,8 @@ class TelegramTemplatePreviewHandler:
                 return
             if self._is_photo_dimension_error(e):
                 try:
+                    if InputMediaDocument is None:
+                        return
                     with open(image_path, "rb") as image_file:
                         media = InputMediaDocument(media=image_file, caption=caption)
                         await query.edit_message_media(
@@ -518,6 +535,12 @@ class TelegramTemplatePreviewHandler:
             raise
 
     def _build_keyboard(self, token: str) -> Any:
+        if (
+            not TELEGRAM_RUNTIME_AVAILABLE
+            or InlineKeyboardMarkup is None
+            or InlineKeyboardButton is None
+        ):
+            return None
         return InlineKeyboardMarkup(
             [
                 [
