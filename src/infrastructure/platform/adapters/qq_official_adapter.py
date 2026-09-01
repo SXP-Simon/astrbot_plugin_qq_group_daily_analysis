@@ -8,7 +8,7 @@ import hashlib
 import os
 import random
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
@@ -131,7 +131,7 @@ class QQOfficialAdapter(PlatformAdapter):
         cutoff_ts = (
             int(since_ts)
             if since_ts and since_ts > 0
-            else int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+            else int((datetime.now(UTC) - timedelta(days=days)).timestamp())
         )
         before_record_id: int | None = None
         if before_id:

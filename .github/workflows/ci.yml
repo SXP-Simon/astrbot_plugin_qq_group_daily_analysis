@@ -27,6 +27,14 @@ jobs:
           uvx ruff check .
           uvx ruff format --check .
 
+      - name: Set up Node.js for Pyright
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Pyright Type Check
+        run: npx pyright
+
   frontend-check:
     name: Frontend Lint & Build
     runs-on: ubuntu-latest

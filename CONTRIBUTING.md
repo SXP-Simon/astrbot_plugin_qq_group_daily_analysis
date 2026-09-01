@@ -65,11 +65,23 @@ pnpm dev
    * 确保兼容 Linux、macOS、Windows 及 Arm64/x86 架构。
 4. **日志与注释语言**：
    * 代码内部所有注释、Log 输出与异常提示必须使用清晰的 **英文**。
-5. **代码格式化与单元测试**：
-   * 提交前必须运行 Ruff 检查并通过全部测试：
+5. **静态类型检查与类型体操准则 (Static Type & Type Gymnastics Standards)**：
+   * 本项目统一使用 **Pyright / Pylance** 进行静态类型分析与语法校验，规则配置文件为项目根目录的 [`pyrightconfig.json`](pyrightconfig.json)；
+   * **类型检查模式与环境对齐**：采用严格生产标准的 `"typeCheckingMode": "standard"`，统一设置 `"pythonVersion": "3.12"`，严格对齐 AstrBot 依赖环境；
+   * **严格模块导入与重写门禁**：开启 `"reportMissingImports": "error"`, `"reportIncompatibleMethodOverride": "error"`, `"reportFunctionMemberAccess": "error"`, `"reportUntypedFunctionDecorator": "error"`, `"reportUntypedBaseClass": "error"`；
+   * **严禁滥用 `Any` (Zero `Any` Abuse Policy)**：
+     - **接口协议化 (`Protocol`)**：跨模块、跨平台的动态处理器一律使用 `typing.Protocol` 与 `@runtime_checkable` 声明契约方法（如 `TemplatePreviewHandler`），严禁使用 `list[Any]`；
+     - **结构化字典 (`TypedDict`)**：包含固定键值的数据结构（如统计指标、活跃度、请求荷载）一律使用 `TypedDict` 进行强类型建模，替代 `dict[str, Any]`；
+     - **可选依赖与动态调度**：Telegram、Discord 等按需加载的可选依赖，统一使用 `if TYPE_CHECKING:` 导入静态类型；动态调用必须使用 `inspect.isawaitable` 或安全收窄守卫；
+   * 提交前必须在插件根目录下运行 Pyright 检查，确保 **0 错误、0 警告**：
      ```bash
-     uv run ruff format .
-     uv run ruff check .
+     npx pyright
+     ```
+6. **一键格式化、自动修复 Lint 与单元测试**：
+   * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），提交前保证静态类型检查与测试全部通过：
+     ```bash
+     uv run ruff format . ; uv run ruff check . --fix
+     npx pyright
      uv run pytest tests/
      ```
 
@@ -191,10 +203,18 @@ uv run scripts/debug_render.py -h
 
 1. **Fork 本仓库** 到个人 GitHub 账号；
 2. 从 `main` 分支切出特性分支（如 `feat/my-new-template` 或 `fix/onebot-retry`）；
-3. 本地编写代码，并运行测试与代码质量检查：
+3. 本地编写代码，并运行全套质量检查流水线（需保证 0 错误、0 警告）：
    ```bash
-   uv run ruff check .
+   # 1. 自动格式化并修复 Lint 问题
+   uv run ruff format . ; uv run ruff check . --fix
+
+   # 2. 静态类型检查
+   npx pyright
+
+   # 3. 运行全量单元测试
    uv run pytest tests/
+
+   # 4. WebUI 前端静态检查与打包（若改动了 dashboard/ 源码）
    cd dashboard && pnpm lint && pnpm typecheck && pnpm build
    ```
 4. 提交清晰规范的 Commit 并推送到你的 Remote 分支；

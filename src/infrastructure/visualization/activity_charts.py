@@ -5,9 +5,17 @@
 
 from collections import defaultdict
 from datetime import datetime
+from typing import TypedDict
 
 from ...domain.models.data_models import ActivityVisualization
 from ...domain.repositories.visualization_repository import IActivityVisualizer
+
+
+class UserActivityData(TypedDict):
+    """用户发言统计结构。"""
+
+    nickname: str
+    count: int
 
 
 class ActivityVisualizer(IActivityVisualizer):
@@ -20,9 +28,9 @@ class ActivityVisualizer(IActivityVisualizer):
         self, messages: list[dict]
     ) -> ActivityVisualization:
         """生成活跃度可视化数据 - 专注于小时级别分析"""
-        hourly_activity = defaultdict(int)
-        user_activity = defaultdict(int)
-        emoji_activity = defaultdict(int)  # 每小时表情统计
+        hourly_activity: dict[int, int] = defaultdict(int)
+        user_activity: dict[str, UserActivityData] = {}
+        emoji_activity: dict[int, int] = defaultdict(int)  # 每小时表情统计
 
         # 分析消息数据
         for msg in messages:
@@ -30,10 +38,14 @@ class ActivityVisualizer(IActivityVisualizer):
             msg_time = datetime.fromtimestamp(msg.get("time", 0))
             hour = msg_time.hour
 
-            # # 用户分析
-            # sender = msg.get("sender", {})
-            # user_id = str(sender.get("user_id", ""))
-            # nickname = InfoUtils.get_user_nickname(self.config_manager, sender)
+            # 用户分析
+            sender = msg.get("sender", {})
+            user_id = str(sender.get("user_id", ""))
+            if user_id:
+                nickname = sender.get("card") or sender.get("nickname") or user_id
+                if user_id not in user_activity:
+                    user_activity[user_id] = {"nickname": nickname, "count": 0}
+                user_activity[user_id]["count"] += 1
 
             # 统计每小时消息数
             hourly_activity[hour] += 1
