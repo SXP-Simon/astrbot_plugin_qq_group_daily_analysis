@@ -58,7 +58,6 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
     if (open) {
       loadTemplates();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleUninstall = async (name: string) => {
