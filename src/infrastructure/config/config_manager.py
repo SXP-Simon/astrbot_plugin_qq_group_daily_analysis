@@ -1220,7 +1220,10 @@ class ConfigManager:
 
     def get_report_template(self) -> str:
         """获取报告模板名称"""
-        return self._get_group("basic").get("report_template", "scrapbook")
+        val = self._get_group("basic").get("report_template")
+        if not val and isinstance(self.config, dict):
+            val = self.config.get("report_template")
+        return str(val).strip() if val else "scrapbook"
 
     def set_report_template(self, template_name: str):
         """设置报告模板名称"""

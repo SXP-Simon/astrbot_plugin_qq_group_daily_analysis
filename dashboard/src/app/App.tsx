@@ -7,6 +7,7 @@ import {
   FolderOpenOutlined,
   FileTextOutlined,
   SettingOutlined,
+  HddOutlined,
 } from "@ant-design/icons";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -26,9 +27,11 @@ import { LogsPage } from "../pages/logs/ui/LogsPage";
 import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
 import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
+import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
+
 
 export const App: React.FC = () => {
   const { isDark } = useTheme();
@@ -185,6 +188,15 @@ export const App: React.FC = () => {
       ),
       children: <ConfigPage viewModel={configVM} />,
     },
+    {
+      key: "plugin-data",
+      label: (
+        <span>
+          <HddOutlined /> 数据管理
+        </span>
+      ),
+      children: <PluginDataPage />,
+    },
   ];
 
   return (
@@ -242,15 +254,19 @@ export const App: React.FC = () => {
           groupName={triggerVM.groupName}
           platform={triggerVM.platform}
           providerId={triggerVM.providerId}
+          templateName={triggerVM.templateName}
           submitting={triggerVM.submitting}
           connectedPlatforms={triggerVM.connectedPlatforms}
           loadingPlatforms={triggerVM.loadingPlatforms}
           providers={triggerVM.providers}
           loadingProviders={triggerVM.loadingProviders}
+          templates={triggerVM.templates}
+          loadingTemplates={triggerVM.loadingTemplates}
           onGroupIdChange={triggerVM.setGroupId}
           onGroupNameChange={triggerVM.setGroupName}
           onPlatformChange={triggerVM.setPlatform}
           onProviderChange={triggerVM.setProviderId}
+          onTemplateChange={triggerVM.setTemplateName}
           onClose={triggerVM.handleClose}
           onSubmit={triggerVM.handleSubmit}
         />

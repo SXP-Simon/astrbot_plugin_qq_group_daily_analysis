@@ -288,6 +288,49 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get thumbnail or content of a config file path",
             ),
+            # 8. 插件数据管理
+            (
+                f"/{PLUGIN_NAME}/plugin-data/overview",
+                self.api_get_plugin_data_overview,
+                ["GET"],
+                "Get size and file count overview for each plugin data section",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/avatars/clear",
+                self.api_clear_avatar_cache,
+                ["POST"],
+                "Clear avatar image cache",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/reports/clear",
+                self.api_clear_reports,
+                ["POST"],
+                "Clear all generated report files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/temp/clear",
+                self.api_clear_temp_files,
+                ["POST"],
+                "Clear temporary generated files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/custom-templates/clear",
+                self.api_clear_custom_templates,
+                ["POST"],
+                "Clear user-customized T2I template backups",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-files/clear",
+                self.api_clear_config_files,
+                ["POST"],
+                "Clear uploaded config reference files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups/clear",
+                self.api_clear_config_backups,
+                ["POST"],
+                "Clear historical automatic configuration backup files",
+            ),
         ]
 
         for path, handler, methods, desc in routes:
@@ -366,6 +409,16 @@ class PluginPageWebUIBridge:
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
 
+            template_name = (
+                payload.get("template_name") or payload.get("template")
+                if isinstance(payload, dict)
+                else None
+            )
+            if not template_name and hasattr(request, "query"):
+                template_name = request.query.get("template_name") or request.query.get(
+                    "template"
+                )
+
             # 启动后台异步任务
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
@@ -374,6 +427,7 @@ class PluginPageWebUIBridge:
                     group_name=group_name,
                     platform=platform,
                     provider_id=provider_id,
+                    template_name=template_name,
                 )
             )
 
@@ -394,6 +448,7 @@ class PluginPageWebUIBridge:
                     "data": {
                         "trace_id": trace_id,
                         "group_id": group_id,
+                        "template_name": template_name,
                         "message": "Analysis task queued successfully",
                     },
                 }
@@ -409,6 +464,7 @@ class PluginPageWebUIBridge:
         group_name: str,
         platform: str,
         provider_id: str | None = None,
+        template_name: str | None = None,
     ) -> None:
         """后台异步执行触发任务"""
         trace_ctx = TraceContext.set(
@@ -420,6 +476,8 @@ class PluginPageWebUIBridge:
         )
         if provider_id:
             trace_ctx.metadata["override_provider_id"] = str(provider_id)
+        if template_name and template_name != "auto":
+            trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
                 result = await self.analysis_service.execute_daily_analysis(
@@ -1847,4 +1905,236 @@ class PluginPageWebUIBridge:
             )
         except Exception as e:
             logger.error(f"获取配置文件内容异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    # ------------------------------------------------------------------
+    # 8. 插件数据管理
+    # ------------------------------------------------------------------
+
+    def _get_plugin_data_dir(self) -> Path | None:
+        """获取 AstrBot 标准 plugin_data 目录（StarTools.get_data_dir）"""
+        try:
+            from astrbot.api.star import StarTools
+
+            return StarTools.get_data_dir(PLUGIN_NAME)
+        except Exception:
+            return None
+
+    def _dir_stats(self, directory: Path) -> dict:
+        """统计目录下文件数量与总字节数，目录不存在时返回零值。"""
+        if not directory.exists():
+            return {"count": 0, "size_bytes": 0}
+        count = 0
+        total = 0
+        for p in directory.rglob("*"):
+            if p.is_file():
+                count += 1
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+        return {"count": count, "size_bytes": total}
+
+    async def api_get_plugin_data_overview(self) -> Any:
+        """返回各数据分区的文件数量与字节大小概览"""
+        try:
+            data_dir = self._get_plugin_data_dir()
+
+            # 头像缓存
+            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_stats = (
+                self._dir_stats(avatar_dir)
+                if avatar_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 自定义 T2I 模板备份
+            custom_tmpl_dir = data_dir / "custom_t2i_templates" if data_dir else None
+            custom_tmpl_stats = (
+                self._dir_stats(custom_tmpl_dir)
+                if custom_tmpl_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 上传的配置参考图
+            config_files_dir = data_dir / "files" if data_dir else None
+            config_files_stats = (
+                self._dir_stats(config_files_dir)
+                if config_files_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 配置自动备份
+            config_backups_dir = data_dir / "config_backups" if data_dir else None
+            config_backups_stats = (
+                self._dir_stats(config_backups_dir)
+                if config_backups_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 历史报告
+            report_stats: dict = {"count": 0, "size_bytes": 0}
+            if self.report_output_dir and Path(self.report_output_dir).exists():
+                report_stats = self._dir_stats(Path(self.report_output_dir))
+
+            # 临时文件（AstrBot 全局 temp 目录下本插件生成的图片）
+            temp_stats: dict = {"count": 0, "size_bytes": 0}
+            try:
+                from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+                temp_dir = Path(get_astrbot_temp_path())
+                if temp_dir.exists():
+                    count = 0
+                    size = 0
+                    for f in temp_dir.iterdir():
+                        if f.is_file() and f.name.startswith("io_temp_img_"):
+                            count += 1
+                            try:
+                                size += f.stat().st_size
+                            except OSError:
+                                pass
+                    temp_stats = {"count": count, "size_bytes": size}
+            except Exception:
+                pass
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "avatars": avatar_stats,
+                        "custom_templates": custom_tmpl_stats,
+                        "config_files": config_files_stats,
+                        "config_backups": config_backups_stats,
+                        "reports": report_stats,
+                        "temp_files": temp_stats,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取插件数据概览异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_avatar_cache(self) -> Any:
+        """清空头像缓存目录"""
+        try:
+            data_dir = self._get_plugin_data_dir()
+            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            if not avatar_dir or not avatar_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in avatar_dir.iterdir():
+                if f.is_file():
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空头像缓存，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空头像缓存异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_reports(self) -> Any:
+        """清空历史报告目录（图片与 HTML 文件）"""
+        try:
+            if not self.report_output_dir:
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            report_dir = Path(self.report_output_dir)
+            if not report_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in report_dir.iterdir():
+                if f.is_file() and f.suffix.lower() in {
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".webp",
+                    ".html",
+                }:
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空历史报告，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空历史报告异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_temp_files(self) -> Any:
+        """清空由本插件产生的临时图片文件（io_temp_img_* 前缀）"""
+        try:
+            from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+            temp_dir = Path(get_astrbot_temp_path())
+            if not temp_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in temp_dir.iterdir():
+                if f.is_file() and f.name.startswith("io_temp_img_"):
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空临时文件，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空临时文件异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_custom_templates(self) -> Any:
+        """清空用户自定义 T2I 模板备份目录"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            custom_tmpl_dir = data_dir / "custom_t2i_templates" if data_dir else None
+            if not custom_tmpl_dir or not custom_tmpl_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in custom_tmpl_dir.rglob("*") if p.is_file())
+            shutil.rmtree(custom_tmpl_dir, ignore_errors=True)
+            custom_tmpl_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空自定义模板，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空自定义模板异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_config_files(self) -> Any:
+        """清空上传的配置参考图文件"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            files_dir = data_dir / "files" if data_dir else None
+            if not files_dir or not files_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in files_dir.rglob("*") if p.is_file())
+            shutil.rmtree(files_dir, ignore_errors=True)
+            files_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空配置参考图，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空配置参考图异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_config_backups(self) -> Any:
+        """清空配置自动备份历史文件"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            backups_dir = data_dir / "config_backups" if data_dir else None
+            if not backups_dir or not backups_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in backups_dir.rglob("*") if p.is_file())
+            shutil.rmtree(backups_dir, ignore_errors=True)
+            backups_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空配置历史自动备份，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空配置历史自动备份异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
