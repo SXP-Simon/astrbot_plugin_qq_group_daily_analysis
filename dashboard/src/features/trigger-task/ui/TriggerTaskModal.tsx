@@ -2,6 +2,7 @@ import React from "react";
 import { Modal, Form, Input, Select } from "antd";
 import { ConnectedPlatform } from "../../../entities/task/api/taskApi";
 import { LLMProviderItem } from "../../../entities/trace/api/traceApi";
+import { ReportTemplateItem, formatTemplateOptions } from "../../../entities/report/model/templates";
 
 interface TriggerTaskModalProps {
   open: boolean;
@@ -9,15 +10,19 @@ interface TriggerTaskModalProps {
   groupName: string;
   platform: string;
   providerId?: string;
+  templateName?: string;
   submitting: boolean;
   connectedPlatforms?: ConnectedPlatform[];
   loadingPlatforms?: boolean;
   providers?: LLMProviderItem[];
   loadingProviders?: boolean;
+  templates?: ReportTemplateItem[];
+  loadingTemplates?: boolean;
   onGroupIdChange: (val: string) => void;
   onGroupNameChange: (val: string) => void;
   onPlatformChange: (val: string) => void;
   onProviderChange?: (val: string) => void;
+  onTemplateChange?: (val: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }
@@ -28,15 +33,19 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
   groupName,
   platform,
   providerId = "auto",
+  templateName = "auto",
   submitting,
   connectedPlatforms = [],
   loadingPlatforms = false,
   providers = [],
   loadingProviders = false,
+  templates = [],
+  loadingTemplates = false,
   onGroupIdChange,
   onGroupNameChange,
   onPlatformChange,
   onProviderChange,
+  onTemplateChange,
   onClose,
   onSubmit,
 }) => {
@@ -62,6 +71,8 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
       value: p.id,
     })),
   ];
+
+  const templateOptions = formatTemplateOptions(templates, true);
 
   return (
     <Modal
@@ -120,7 +131,20 @@ export const TriggerTaskModal: React.FC<TriggerTaskModalProps> = ({
             options={providerOptions}
           />
         </Form.Item>
+
+        <Form.Item
+          label="报告视觉模板 (选填)"
+          extra="指定本次分析生成的报告模板主题，留空则使用基础配置中的默认模板"
+        >
+          <Select
+            value={templateName}
+            onChange={onTemplateChange}
+            loading={loadingTemplates}
+            options={templateOptions}
+          />
+        </Form.Item>
       </Form>
     </Modal>
   );
 };
+
