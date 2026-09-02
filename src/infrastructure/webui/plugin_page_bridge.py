@@ -1843,9 +1843,7 @@ class PluginPageWebUIBridge:
             )
 
             # 配置自动备份
-            config_backups_dir = (
-                data_dir / "config_backups" if data_dir else None
-            )
+            config_backups_dir = data_dir / "config_backups" if data_dir else None
             config_backups_stats = (
                 self._dir_stats(config_backups_dir)
                 if config_backups_dir
@@ -2018,4 +2016,3 @@ class PluginPageWebUIBridge:
         except Exception as e:
             logger.error(f"清空配置历史自动备份异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
-
