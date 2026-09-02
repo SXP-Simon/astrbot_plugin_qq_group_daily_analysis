@@ -32,8 +32,9 @@ const GALLERY_FALLBACK =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>";
 
 /** 自定义模板的预览图：按需从后端取模板目录内 preview.jpg 等 */
-const CustomPreviewImage: React.FC<{ templateName: string }> = ({
+const CustomPreviewImage: React.FC<{ templateName: string; height?: number }> = ({
   templateName,
+  height = 180,
 }) => {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -51,8 +52,9 @@ const CustomPreviewImage: React.FC<{ templateName: string }> = ({
     <Image
       src={src || GALLERY_FALLBACK}
       alt={templateName}
-      style={{ width: "100%", height: 180, objectFit: "cover", objectPosition: "top" }}
+      style={{ width: "100%", height, objectFit: "cover", objectPosition: "top" }}
       fallback={GALLERY_FALLBACK}
+      preview={{ src: src || undefined }}
     />
   );
 };
@@ -138,8 +140,9 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
     });
   }, [remoteTemplates]);
 
+  // 当前选中模板的展示信息：与画廊/下拉同源的元信息合并（API 优先、KNOWN 兜底）
   const currentMeta =
-    KNOWN_TEMPLATES.find((t) => t.key === currentTemplate) || {
+    galleryItems.find((g) => g.key === currentTemplate) || {
       key: currentTemplate,
       name: currentTemplate,
       desc: "自定义或外部模板",
@@ -223,19 +226,23 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           }}
           onClick={() => setPreviewVisible(true)}
         >
-          <Image
-            src={currentCdnUrl}
-            alt={currentTemplate}
-            width={72}
-            height={96}
-            style={{ objectFit: "cover" }}
-            preview={{
-              visible: previewVisible,
-              onVisibleChange: setPreviewVisible,
-              src: currentCdnUrl,
-            }}
-            fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
-          />
+          {currentMeta.isCustom ? (
+            <CustomPreviewImage templateName={currentTemplate} height={96} />
+          ) : (
+            <Image
+              src={currentCdnUrl}
+              alt={currentTemplate}
+              width={72}
+              height={96}
+              style={{ objectFit: "cover" }}
+              preview={{
+                visible: previewVisible,
+                onVisibleChange: setPreviewVisible,
+                src: currentCdnUrl,
+              }}
+              fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
+            />
+          )}
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
