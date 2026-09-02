@@ -44,7 +44,7 @@ MIME_TYPE_OVERRIDES = {
 
 
 class FileSystemResourceCacheRepository(IResourceCacheRepository):
-    """用于下载与持久化管理静态资源的本地文件系统缓存仓储，支持按模板分组存储与排障。"""
+    """用于下载与持久化管理静态资源的本地文件系统缓存仓储，按模板分组存储与排障。"""
 
     def __init__(self, base_cache_dir: Path | str):
         """初始化资源缓存目录体系。
@@ -55,12 +55,6 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         self.base_dir = Path(base_cache_dir)
         self.templates_dir = self.base_dir / "templates"
         self.meta_dir = self.base_dir / "meta"
-
-        # 兼容旧版顶层分类目录
-        self.legacy_fonts_dir = self.base_dir / "fonts"
-        self.legacy_css_dir = self.base_dir / "css"
-        self.legacy_images_dir = self.base_dir / "images"
-        self.legacy_scripts_dir = self.base_dir / "scripts"
 
         self.templates_dir.mkdir(parents=True, exist_ok=True)
         self.meta_dir.mkdir(parents=True, exist_ok=True)
@@ -244,7 +238,7 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         return file_path
 
     async def get_path(self, url: str, template: str | None = None) -> Path | None:
-        """获取已缓存资源的本地文件路径（优先匹配指定模板，其次跨模板共享查找）。"""
+        """获取已缓存资源的本地文件路径（优先匹配元数据与指定模板，其次跨模板共享查找）。"""
         url_hash = self._get_url_hash(url)
         meta_path = self._get_meta_path(url_hash)
 
@@ -274,18 +268,6 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
             matches = list(self.templates_dir.rglob(f"{url_hash}.*"))
             if matches and matches[0].is_file() and matches[0].stat().st_size > 0:
                 return matches[0]
-
-        # 3. 扫描旧版扁平目录兜底
-        for cat_dir in [
-            self.legacy_fonts_dir,
-            self.legacy_css_dir,
-            self.legacy_images_dir,
-            self.legacy_scripts_dir,
-        ]:
-            if cat_dir.is_dir():
-                matches = list(cat_dir.glob(f"{url_hash}.*"))
-                if matches and matches[0].is_file() and matches[0].stat().st_size > 0:
-                    return matches[0]
 
         return None
 
@@ -480,7 +462,7 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                 except Exception:
                     pass
 
-        # 若 meta 为空则扫描磁盘文件作为兜底
+        # 若 meta 为空则扫描 templates 磁盘文件作为兜底
         if stats["total_files"] == 0 and self.templates_dir.is_dir():
             for p in self.templates_dir.rglob("*"):
                 if p.is_file():
@@ -565,23 +547,6 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                         await asyncio.to_thread(meta_file.unlink, True)
                 except Exception as e:
                     logger.warning(f"清理缓存元数据文件失败 {meta_file}: {e}")
-
-        # 如果全量清空，也清理整个 templates 目录与旧版目录
-        if (not filter_template or filter_template == "all") and (
-            not category or category == "all"
-        ):
-            for legacy_dir in [
-                self.legacy_fonts_dir,
-                self.legacy_css_dir,
-                self.legacy_images_dir,
-                self.legacy_scripts_dir,
-            ]:
-                if legacy_dir.is_dir():
-                    for f in legacy_dir.glob("*"):
-                        if f.is_file():
-                            freed_bytes += f.stat().st_size
-                            await asyncio.to_thread(f.unlink, True)
-                            deleted_files += 1
 
         return {
             "deleted_files": deleted_files,
