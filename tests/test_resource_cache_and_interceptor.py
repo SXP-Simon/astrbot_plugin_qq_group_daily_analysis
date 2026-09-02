@@ -5,7 +5,8 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 
 import pytest
 
@@ -474,4 +475,82 @@ async def test_resource_prefetch_single_template():
     assert res["template"] == "scrapbook"
     assert res["duration_ms"] >= 0.0
     assert res["stats"]["total_files"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_custom_template_resource_caching_and_prefetching(tmp_path: Path):
+    """验证用户自定义模板的资源本地化、隔离存储、细粒度预取与动态发现。"""
+    repo = FileSystemResourceCacheRepository(tmp_path / "resources")
+    localizer = HTMLResourceLocalizer(repo)
+
+    # 1. 模拟自定义模板渲染触发按需本地化
+    custom_theme = "my_custom_theme"
+    input_html = """
+    <html>
+      <head>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=CustomFont">
+      </head>
+      <body><div>Custom Template Content</div></body>
+    </html>
+    """
+    with patch.object(
+        repo,
+        "get_or_download",
+        AsyncMock(
+            return_value=(
+                b"@font-face { font-family: 'CustomFont'; }",
+                "text/css",
+            )
+        ),
+    ):
+        localized = await localizer.localize_html(
+            input_html, context={"template": custom_theme}
+        )
+        assert "<style" in localized
+
+    await repo.set(
+        "https://fonts.googleapis.com/css2?family=CustomFont",
+        b"@font-face { font-family: 'CustomFont'; }",
+        mime_type="text/css",
+        template=custom_theme,
+    )
+
+
+    # 2. 验证自定义模板目录存在且与 global / 其他模板相互隔离
+    stats = repo.get_stats()
+    assert custom_theme in stats["by_template"]
+    assert stats["by_template"][custom_theme]["files"] >= 1
+    assert (
+        "global" not in stats["by_template"]
+        or stats["by_template"]["global"]["files"] == 0
+    )
+
+
+
+
+    # 3. 验证自定义模板目录扫描预取
+    custom_tpl_dir = (
+        tmp_path / "custom_t2i_templates" / "reporting_templates" / custom_theme
+    )
+    custom_tpl_dir.mkdir(parents=True, exist_ok=True)
+    (custom_tpl_dir / "image_template.html").write_text(
+        input_html, encoding="utf-8"
+    )
+
+    mock_config = MagicMock()
+    mock_config.get_custom_report_template_dir = MagicMock(
+        return_value=custom_tpl_dir
+    )
+
+    mock_templates = MagicMock()
+    mock_templates.base_dir = str(tmp_path / "builtin_templates")
+    mock_templates.config_manager = mock_config
+    mock_templates.render_template.return_value = input_html
+
+    service = ResourcePrefetchService(localizer, mock_templates)
+    prefetch_res = await service.prefetch_template(custom_theme)
+
+    assert prefetch_res["template"] == custom_theme
+    assert prefetch_res["duration_ms"] >= 0.0
+
 
