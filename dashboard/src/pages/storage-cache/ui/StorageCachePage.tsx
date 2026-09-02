@@ -77,13 +77,18 @@ export const StorageCachePage: React.FC = () => {
       icon: <ThunderboltOutlined style={{ color: "#d97706" }} />,
       onClick: () => handlePrefetch("all"),
     },
-    { type: "divider" as const },
-    ...availableTemplates.map((t) => ({
-      key: t.id,
-      label: `预取 ${t.label}`,
-      onClick: () => handlePrefetch(t.id),
-    })),
+    ...(availableTemplates.length > 0
+      ? [
+          { type: "divider" as const },
+          ...availableTemplates.map((t) => ({
+            key: t.id,
+            label: `预取 ${t.label || t.id}`,
+            onClick: () => handlePrefetch(t.id),
+          })),
+        ]
+      : []),
   ];
+
 
   // 表格列定义
   const columns: ColumnsType<ResourceCacheItem> = [
@@ -488,21 +493,24 @@ export const StorageCachePage: React.FC = () => {
               模板资源缓存
             </span>
 
-            {/* 完整模板筛选下拉 */}
+            {/* 动态模板筛选下拉 */}
             <Select
               size="small"
               value={selectedTemplate}
               onChange={setSelectedTemplate}
-              style={{ width: 170, fontSize: 12 }}
+              style={{ width: 180, fontSize: 12 }}
               options={[
                 { label: "全部模板", value: "all" },
-                { label: "global (通用)", value: "global" },
+                ...(stats?.by_template?.global
+                  ? [{ label: "global (全局兜底)", value: "global" }]
+                  : []),
                 ...availableTemplates.map((t) => ({
-                  label: t.label,
+                  label: t.label || t.id,
                   value: t.id,
                 })),
               ]}
             />
+
 
             {/* 分类筛选下拉 */}
             <Select
