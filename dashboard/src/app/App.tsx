@@ -7,6 +7,7 @@ import {
   FolderOpenOutlined,
   FileTextOutlined,
   SettingOutlined,
+  HddOutlined,
 } from "@ant-design/icons";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -26,9 +27,11 @@ import { LogsPage } from "../pages/logs/ui/LogsPage";
 import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
 import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
+import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
+
 
 export const App: React.FC = () => {
   const { isDark } = useTheme();
@@ -184,6 +187,15 @@ export const App: React.FC = () => {
         </span>
       ),
       children: <ConfigPage viewModel={configVM} />,
+    },
+    {
+      key: "plugin-data",
+      label: (
+        <span>
+          <HddOutlined /> 数据管理
+        </span>
+      ),
+      children: <PluginDataPage />,
     },
   ];
 
