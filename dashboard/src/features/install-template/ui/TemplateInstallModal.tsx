@@ -166,7 +166,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                   rules={[
                     { required: true, message: "请填写 GitHub 仓库链接" },
                     {
-                      pattern: /^https?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i,
+                      pattern: /^https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/i,
                       message: "仅支持 github.com 仓库链接（如 https://github.com/owner/repo）",
                     },
                   ]}

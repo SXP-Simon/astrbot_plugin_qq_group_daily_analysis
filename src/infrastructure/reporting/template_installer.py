@@ -104,7 +104,9 @@ def _assert_target_free(store_dir: Path, name: str) -> None:
         )
     target = store_dir / name
     if target.exists():
-        raise TemplateInstallError(f"模板 '{name}' 已存在，请先卸载或换个名字。")
+        raise TemplateInstallError(
+            f"模板 '{name}' 已存在，请换个名字（或手动删除数据目录中的同名文件夹）。"
+        )
 
 
 def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
@@ -299,7 +301,9 @@ def install_template_from_zip(
                     src_file = extract_dir / rel
                     dest_file = target / rel
                     dest_file.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(src_file, dest_file)
+                    # 用 shutil.move（而非 os.replace）：临时目录与插件数据目录可能位于不同
+                    # 文件系统/磁盘，os.replace 跨设备会抛 EXDEV，shutil.move 自动降级为复制。
+                    shutil.move(str(src_file), str(dest_file))
             except Exception:
                 shutil.rmtree(target, ignore_errors=True)
                 raise
@@ -388,6 +392,19 @@ def aiohttp_client_timeout(seconds: float) -> Any:
     return aiohttp.ClientTimeout(total=seconds)
 
 
+def _archive_url_candidates(resolved_branch: str) -> list[str]:
+    """根据解析结果生成待尝试的归档分支候选。
+
+    规则：
+    - 用户显式指定了分支（含 /tree/<分支> 形式）：只尝试该分支，静默回退会违背用户预期；
+    - GitHub API 解析成功：只尝试解析出的默认分支；
+    - API 不可用（返回空）：依次回退 main → master。
+    """
+    if resolved_branch:
+        return [resolved_branch]
+    return ["main", "master"]
+
+
 async def download_github_archive(
     owner: str,
     repo: str,
@@ -396,12 +413,11 @@ async def download_github_archive(
     """下载 GitHub 源码 ZIP。分支未指定时先查默认分支，失败后回退 main/master。"""
     import aiohttp
 
-    candidates: list[str] = []
     async with aiohttp.ClientSession(trust_env=True) as session:
-        resolved = branch or await _resolve_default_branch(session, owner, repo)
-        candidates.append(resolved or "main")
-        if (resolved or "main") != "master":
-            candidates.append("master")
+        resolved = branch
+        if not resolved:
+            resolved = await _resolve_default_branch(session, owner, repo)
+        candidates = _archive_url_candidates(resolved)
 
         last_error = ""
         for candidate in candidates:

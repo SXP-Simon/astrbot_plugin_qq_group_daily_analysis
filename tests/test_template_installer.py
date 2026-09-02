@@ -10,6 +10,7 @@ import pytest
 
 from src.infrastructure.reporting.template_installer import (
     TemplateInstallError,
+    _archive_url_candidates,
     install_template_from_zip,
     parse_github_repo_url,
     validate_template_name,
@@ -185,6 +186,18 @@ def test_validate_template_name_rejects(bad_name):
 def test_validate_template_name_allows_unicode():
     assert validate_template_name("群分析_樱雨") == "群分析_樱雨"
     assert validate_template_name("gda_miku-dream_v2") == "gda_miku-dream_v2"
+
+
+def test_archive_url_candidates():
+    """归档分支候选：显式分支不回退；API 解析成功只用结果；解析失败回退 main→master。"""
+    # 用户显式指定分支（含 /tree/<分支>）→ 只尝试该分支，不静默回退
+    assert _archive_url_candidates("feature/x") == ["feature/x"]
+    assert _archive_url_candidates("dev") == ["dev"]
+    # GitHub API 解析出默认分支 → 只用解析结果
+    assert _archive_url_candidates("main") == ["main"]
+    assert _archive_url_candidates("dev3") == ["dev3"]
+    # API 不可用（空串）→ 依次回退 main → master
+    assert _archive_url_candidates("") == ["main", "master"]
 
 
 def test_parse_github_repo_url_valid():
