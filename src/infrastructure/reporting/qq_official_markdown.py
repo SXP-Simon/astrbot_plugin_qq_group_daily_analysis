@@ -17,10 +17,12 @@ class QQOfficialMarkdownReportGenerator:
         config_manager: Any,
         html_templates: Any = None,
         render_semaphore: Any = None,
+        resource_localizer: Any = None,
     ) -> None:
         self.config_manager = config_manager
         self.html_templates = html_templates
         self.render_semaphore = render_semaphore
+        self.resource_localizer = resource_localizer
 
     async def generate(
         self, analysis_result: dict, html_render_func=None
@@ -81,6 +83,12 @@ class QQOfficialMarkdownReportGenerator:
         )
         if not html_content:
             return None
+
+        if self.resource_localizer is not None:
+            try:
+                html_content = await self.resource_localizer.localize_html(html_content)
+            except Exception as exc:
+                logger.warning("[QQOfficial] 本地化静态资源失败: %s", exc)
 
         options = {
             "type": "png",

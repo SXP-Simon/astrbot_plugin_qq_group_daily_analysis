@@ -29,6 +29,8 @@ from PIL import Image, UnidentifiedImageError
 from ...domain.repositories.report_repository import IReportGenerator
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from ..resources.html_resource_localizer import HTMLResourceLocalizer
+from ..resources.resource_cache_repository import FileSystemResourceCacheRepository
 from ..utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
 from .qq_official_markdown import QQOfficialMarkdownReportGenerator
@@ -116,10 +118,21 @@ class ReportGenerator(IReportGenerator):
         # 使用专用的 T2I 并发配置项
         max_concurrent = self.config_manager.get_t2i_max_concurrent()
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
+
+        # 静态资源与字体持久化缓存及拦截层
+        self.plugin_root = Path(__file__).resolve().parents[3]
+        self.resource_cache_repo = FileSystemResourceCacheRepository(
+            self.data_dir / "cache" / "resources"
+        )
+        self.resource_localizer = HTMLResourceLocalizer(
+            self.resource_cache_repo, plugin_root=self.plugin_root
+        )
+
         self._qq_official_markdown_generator = QQOfficialMarkdownReportGenerator(
             config_manager,
             self.html_templates,
             self._render_semaphore,
+            resource_localizer=self.resource_localizer,
         )
 
         # 运行时缓存，用于在一次分析任务中避免重复下载同一个头像
@@ -397,7 +410,21 @@ class ReportGenerator(IReportGenerator):
                 render_payload.get("avatar_reuse_aliases", {}),
             )
 
+            # 自动识别并本地化外部字体及静态资源，确保 Playwright 渲染时 0 网络请求
+            if (
+                html_content
+                and hasattr(self, "resource_localizer")
+                and self.resource_localizer
+            ):
+                try:
+                    html_content = await self.resource_localizer.localize_html(
+                        html_content
+                    )
+                except Exception as e:
+                    logger.warning(f"静态资源与字体本地化失败，继续使用原始 HTML: {e}")
+
             # 检查HTML内容是否有效
+
             if not html_content:
                 logger.error("图片报告HTML渲染失败：返回空内容")
                 return None, None
@@ -787,7 +814,20 @@ class ReportGenerator(IReportGenerator):
                 )
                 logger.debug("使用 image_template.html 渲染成功")
 
+            if (
+                html_content
+                and hasattr(self, "resource_localizer")
+                and self.resource_localizer
+            ):
+                try:
+                    html_content = await self.resource_localizer.localize_html(
+                        html_content
+                    )
+                except Exception as e:
+                    logger.warning(f"HTML报告静态资源本地化失败: {e}")
+
             # 检查HTML内容是否有效
+
             if not html_content:
                 logger.error("HTML报告渲染失败：返回空内容")
                 return None, None

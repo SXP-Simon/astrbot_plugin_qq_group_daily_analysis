@@ -6,7 +6,10 @@
 """
 
 from .incremental_merge_service import IncrementalMergeService
+from .resource_interceptor import IHTMLResourceLocalizer, IResourceInterceptor
 
 __all__ = [
     "IncrementalMergeService",
+    "IResourceInterceptor",
+    "IHTMLResourceLocalizer",
 ]

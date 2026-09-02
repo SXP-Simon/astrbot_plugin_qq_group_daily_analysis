@@ -1,7 +1,9 @@
 """Tests for on-demand lazy platform loading and Lark removal."""
 
+from pathlib import Path
 import pytest
 from src.domain.value_objects.platform_capabilities import get_capabilities
+
 from src.infrastructure.platform.factory import PlatformAdapterFactory
 from src.shared.constants import Platform
 
@@ -74,12 +76,15 @@ def test_importing_factory_does_not_import_sdk_modules():
         "assert 'src.infrastructure.platform.adapters.telegram_adapter' not in sys.modules\n"
         "print('OK')\n"
     )
+    plugin_root = Path(__file__).resolve().parent.parent
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        cwd=str(plugin_root),
     )
     assert result.returncode == 0, f"Subprocess failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "OK" in result.stdout
+
 
 
