@@ -214,6 +214,11 @@ class HTMLTemplates:
             pass
         return ""
 
+    def invalidate_env(self, template_name: str) -> None:
+        """使指定主题的 Jinja2 环境缓存失效（模板卸载后调用）。"""
+        with self._env_lock:
+            self._envs.pop(template_name, None)
+
     async def _get_env_async(self, template_theme: str | None = None) -> Environment:
         """获取当前配置或指定主题的模板环境（异步版本）"""
         return await asyncio.to_thread(self._get_env_sync, template_theme)

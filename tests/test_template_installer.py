@@ -13,6 +13,7 @@ from src.infrastructure.reporting.template_installer import (
     _archive_url_candidates,
     install_template_from_zip,
     parse_github_repo_url,
+    uninstall_template,
     validate_template_name,
 )
 
@@ -237,3 +238,82 @@ def test_parse_github_repo_url_http_scheme_allowed():
 def test_parse_github_repo_url_rejects(bad_url):
     with pytest.raises(TemplateInstallError):
         parse_github_repo_url(bad_url)
+
+
+def test_install_writes_marker(tmp_path):
+    """安装后在模板目录写入 .tpl_installed.json 卸载标记。"""
+    zip_data = build_zip(
+        {"image_template.html": "<html></html>"},
+        leading_root="MarkerTheme-main",
+    )
+    result = install_template_from_zip(
+        zip_data, store_dir=tmp_path, source="url", source_url="https://github.com/x/y"
+    )
+    marker = tmp_path / result["name"] / ".tpl_installed.json"
+    assert marker.is_file()
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["source"] == "url"
+    assert payload["source_url"] == "https://github.com/x/y"
+    assert payload["installed_by"]
+
+
+def test_uninstall_removes_installed_template(tmp_path):
+    """卸载已安装（带标记）的模板：目录被删除并返回结果。"""
+    zip_data = build_zip(
+        {"image_template.html": "<html></html>", "topic_item.html": "<div></div>"}
+    )
+    install_template_from_zip(
+        zip_data, store_dir=tmp_path, name="gda_mine"
+    )
+    assert (tmp_path / "gda_mine").is_dir()
+
+    result = uninstall_template("gda_mine", store_dir=tmp_path)
+    assert result["removed"] is True
+    assert result["name"] == "gda_mine"
+    assert not (tmp_path / "gda_mine").exists()
+
+
+def test_uninstall_rejects_builtin(tmp_path):
+    """内置模板名（simple）不允许卸载。"""
+    with pytest.raises(TemplateInstallError, match="内置模板"):
+        uninstall_template("simple", store_dir=tmp_path)
+
+
+def test_uninstall_rejects_unmanaged_dir(tmp_path):
+    """手动放入数据目录（无安装标记）的模板不允许自动卸载。"""
+    manual = tmp_path / "manual_theme"
+    manual.mkdir()
+    (manual / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    with pytest.raises(TemplateInstallError, match="不是通过插件安装器"):
+        uninstall_template("manual_theme", store_dir=tmp_path)
+    # 目录未被删除
+    assert manual.is_dir()
+
+
+def test_uninstall_rejects_nonexistent(tmp_path):
+    with pytest.raises(TemplateInstallError, match="不存在"):
+        uninstall_template("gda_ghost", store_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    ["", "../x", "a/b", "..", "name:bad", "a" * 51],
+)
+def test_uninstall_rejects_invalid_name(tmp_path, bad_name):
+    with pytest.raises(TemplateInstallError):
+        uninstall_template(bad_name, store_dir=tmp_path)
+
+
+def test_uninstall_clears_only_marked(tmp_path):
+    """批量场景：带标记模板被卸载后，无标记的兄弟目录保留。"""
+    marked = tmp_path / "gda_keep"
+    marked.mkdir()
+    (marked / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    (marked / ".tpl_installed.json").write_text("{}", encoding="utf-8")
+    manual = tmp_path / "manual_bro"
+    manual.mkdir()
+    (manual / "image_template.html").write_text("<html></html>", encoding="utf-8")
+
+    uninstall_template("gda_keep", store_dir=tmp_path)
+    assert not marked.exists()
+    assert manual.is_dir()

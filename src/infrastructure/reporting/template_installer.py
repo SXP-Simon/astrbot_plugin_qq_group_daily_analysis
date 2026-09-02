@@ -21,6 +21,7 @@ import re
 import shutil
 import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -31,6 +32,9 @@ from ...utils.logger import logger
 IMAGE_TEMPLATE_MARKER = "image_template.html"
 HTML_TEMPLATE_MARKER = "html_template.html"
 TEMPLATE_META_FILENAME = "template.json"  # 可选: {"name": "显示名"}
+# 安装器写入的安装标记：用于区分“通过插件安装器下载的模板”与“手动放入的目录”，
+# 只有带此标记的模板才允许通过 WebUI 自动卸载。
+INSTALL_MARKER_FILENAME = ".tpl_installed.json"
 
 MAX_TEMPLATE_NAME_LEN = 50
 MAX_ARCHIVE_MEMBERS = 300
@@ -231,10 +235,28 @@ def _read_template_meta(extract_dir: Path) -> dict[str, Any]:
     return meta
 
 
+def _write_install_marker(target_dir: Path, *, source: str, source_url: str) -> None:
+    """写入安装标记文件（卸载权限的依据）。"""
+    payload = {
+        "installed_by": PLUGIN_NAME,
+        "source": source,
+        "source_url": source_url,
+        "installed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    try:
+        (target_dir / INSTALL_MARKER_FILENAME).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.warning(f"写入安装标记失败: {exc}")
+
+
 def install_template_from_zip(
     zip_data: bytes,
     store_dir: Path | None = None,
     name: str | None = None,
+    source: str = "upload",
+    source_url: str = "",
 ) -> dict[str, Any]:
     """从 zip 字节安装模板。
 
@@ -307,6 +329,8 @@ def install_template_from_zip(
             except Exception:
                 shutil.rmtree(target, ignore_errors=True)
                 raise
+
+            _write_install_marker(target, source=source, source_url=source_url)
 
     label = meta.get("name") or template_name
     logger.info(
@@ -449,6 +473,46 @@ async def download_github_archive(
     )
 
 
+def uninstall_template(
+    name: str,
+    store_dir: Path | None = None,
+) -> dict[str, Any]:
+    """卸载通过插件安装器下载的自定义模板。
+
+    仅允许卸载带安装标记（.tpl_installed.json）的模板：
+    - 内置模板（位于插件内置 templates 目录）不在此目录下，且按名字直接拒绝；
+    - 手动放入数据目录、未经安装器安装的目录无标记，拒绝自动卸载。
+
+    Args:
+        name: 模板目录名。
+        store_dir: 自定义模板存储根目录；None 时使用插件数据目录。
+
+    Returns:
+        卸载结果字典: name / removed。
+    """
+    template_name = validate_template_name(name)
+    if template_name in builtin_template_names():
+        raise TemplateInstallError(
+            f"模板 '{template_name}' 是内置模板，不支持卸载。"
+        )
+    store = store_dir or default_template_store_dir()
+    base_real = os.path.normcase(str(store.resolve()))
+    target = (store / template_name).resolve()
+    if os.path.normcase(os.path.commonpath([str(target), base_real])) != base_real:
+        raise TemplateInstallError("模板名非法。")
+    if not target.is_dir():
+        raise TemplateInstallError(f"模板 '{template_name}' 不存在。")
+    if not (target / INSTALL_MARKER_FILENAME).is_file():
+        raise TemplateInstallError(
+            f"模板 '{template_name}' 不是通过插件安装器下载的，无法自动卸载；"
+            "如需移除请手动删除数据目录下的同名文件夹。"
+        )
+
+    shutil.rmtree(target)
+    logger.info(f"模板已卸载: {template_name}")
+    return {"name": template_name, "removed": True}
+
+
 async def install_template_from_github_url(
     repo_url: str,
     store_dir: Path | None = None,
@@ -459,4 +523,6 @@ async def install_template_from_github_url(
     zip_data = await download_github_archive(
         parsed["owner"], parsed["repo"], parsed["branch"]
     )
-    return install_template_from_zip(zip_data, store_dir=store_dir, name=name)
+    return install_template_from_zip(
+        zip_data, store_dir=store_dir, name=name, source="url", source_url=repo_url
+    )

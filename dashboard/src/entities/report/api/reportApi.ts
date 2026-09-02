@@ -50,16 +50,18 @@ export interface TemplateInstallResult {
   files: string[];
 }
 
-function assertInstallResult(
+function unwrapDataOrThrow(
   res: unknown,
   fallback: string
-): TemplateInstallResult | null {
+): Record<string, unknown> {
   // extractData 会把顶层错误响应（如 {status:"error", message}）直接造型为结果，
-  // 这里显式校验：必须是含 name 的安装结果，否则按失败处理并透传后端错误信息。
-  if (!res || typeof res !== "object") return null;
+  // 这里显式解包并校验：成功响应必须含 data.name，否则按失败处理并透传后端错误信息。
+  if (!res || typeof res !== "object") {
+    throw new Error(fallback);
+  }
   const obj = res as Record<string, unknown>;
   let candidate: unknown = obj;
-  // 兼容标准的 json_response 双层包装：{data:{data:{name...}}} 与单层 {data:{name...}}
+  // 兼容标准的 json_response 双层包装：{data:{data:{...}}} 与单层 {data:{...}}
   for (let i = 0; i < 2; i += 1) {
     const inner = candidate as Record<string, unknown> | null;
     if (inner && "data" in inner) {
@@ -68,14 +70,21 @@ function assertInstallResult(
       break;
     }
   }
-  if (
-    candidate &&
-    typeof candidate === "object" &&
-    typeof (candidate as Record<string, unknown>).name === "string"
-  ) {
-    return candidate as unknown as TemplateInstallResult;
+  if (candidate && typeof candidate === "object") {
+    return candidate as Record<string, unknown>;
   }
   const msg = typeof obj.message === "string" && obj.message ? obj.message : fallback;
+  throw new Error(msg);
+}
+
+function assertInstallResult(res: unknown, fallback: string): TemplateInstallResult | null {
+  const data = unwrapDataOrThrow(res, fallback);
+  if (typeof data.name === "string") {
+    return data as unknown as TemplateInstallResult;
+  }
+  const msg = typeof (res as Record<string, unknown>).message === "string"
+    ? ((res as Record<string, unknown>).message as string)
+    : fallback;
   throw new Error(msg);
 }
 
@@ -103,5 +112,18 @@ export async function installTemplateFromFile(
     name: name || undefined,
   });
   return assertInstallResult(res, "安装失败，请确认压缩包内包含 image_template.html。");
+}
+
+export async function uninstallTemplate(
+  name: string
+): Promise<{ name: string; removed: boolean } | null> {
+  const res = await apiPost<{ name: string; removed: boolean }>(`templates/uninstall`, {
+    name,
+  });
+  const data = unwrapDataOrThrow(res, "卸载失败，请查看服务器日志。");
+  if (data.name === name && data.removed === true) {
+    return data as unknown as { name: string; removed: boolean };
+  }
+  throw new Error("卸载失败，请查看服务器日志。");
 }
 

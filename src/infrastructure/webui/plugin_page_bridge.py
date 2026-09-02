@@ -75,6 +75,7 @@ from ..reporting.template_installer import (
     TemplateInstallError,
     install_template_from_github_url,
     install_template_from_zip,
+    uninstall_template,
 )
 from .active_task_manager import ActiveTaskManager
 
@@ -229,6 +230,12 @@ class PluginPageWebUIBridge:
                 self.api_install_template_from_file,
                 ["POST"],
                 "Install a custom report template from an uploaded zip archive",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/uninstall",
+                self.api_uninstall_template,
+                ["POST"],
+                "Uninstall a custom report template installed via the installer",
             ),
             # 5. SSE 实时事件流
             (
@@ -1369,6 +1376,39 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"从压缩包安装模板异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_uninstall_template(self) -> Any:
+        """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            name = str(body.get("name") or "").strip()
+            if not name:
+                return error_response("缺少模板名 (name)", status_code=400)
+
+            result = await asyncio.to_thread(uninstall_template, name)
+
+            # 卸载成功后使该主题的 Jinja2 环境缓存失效，防止残留目录句柄/缓存
+            generator = getattr(
+                self.analysis_service, "report_generator", None
+            ) or getattr(self.report_dispatcher, "report_generator", None)
+            html_tpls = getattr(generator, "html_templates", None)
+            if html_tpls and hasattr(html_tpls, "invalidate_env"):
+                html_tpls.invalidate_env(name)
+
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"卸载模板异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_stream_events(self) -> Any:
