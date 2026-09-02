@@ -92,10 +92,9 @@ class TemplateCommandService:
                 item_path = custom_dir / item
                 if not item_path.is_dir() or item.startswith("."):
                     continue
-                if (
-                    (item_path / "html_template.html").is_file()
-                    or (item_path / "image_template.html").is_file()
-                ):
+                if (item_path / "html_template.html").is_file() or (
+                    item_path / "image_template.html"
+                ).is_file():
                     templates.add(item)
 
         return sorted(templates)
@@ -117,9 +116,7 @@ class TemplateCommandService:
                 default_template_store_dir,
             )
 
-            custom_dir = os.path.join(
-                str(default_template_store_dir()), template_name
-            )
+            custom_dir = os.path.join(str(default_template_store_dir()), template_name)
         except Exception:
             custom_dir = None
 

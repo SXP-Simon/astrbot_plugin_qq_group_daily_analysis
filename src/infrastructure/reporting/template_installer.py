@@ -124,7 +124,9 @@ def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
     for member in members:
         norm = member.filename.replace("\\", "/")
         if any(ord(ch) < 32 for ch in member.filename):
-            raise TemplateInstallError(f"压缩包包含控制字符的文件名: {member.filename!r}")
+            raise TemplateInstallError(
+                f"压缩包包含控制字符的文件名: {member.filename!r}"
+            )
         if (
             norm.startswith("/")
             or norm.startswith("//")
@@ -135,9 +137,7 @@ def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
         if any(part in {".", ".."} for part in parts):
             raise TemplateInstallError(f"压缩包包含非法路径段: {member.filename}")
         if member.file_size > MAX_SINGLE_FILE_SIZE:
-            raise TemplateInstallError(
-                f"压缩包内文件过大（{member.filename}）。"
-            )
+            raise TemplateInstallError(f"压缩包内文件过大（{member.filename}）。")
         total_size += member.file_size
         if total_size > MAX_ARCHIVE_TOTAL_SIZE:
             raise TemplateInstallError("压缩包解压后总大小超出限制。")
@@ -168,9 +168,7 @@ def _locate_template_root(members: list[zipfile.ZipInfo]) -> str:
 
     min_depth = min(depth for _, (_, depth) in marker_dirs.items())
     shallowest = [
-        directory
-        for directory, (_, depth) in marker_dirs.items()
-        if depth == min_depth
+        directory for directory, (_, depth) in marker_dirs.items() if depth == min_depth
     ]
     if len(shallowest) > 1:
         raise TemplateInstallError(
@@ -298,9 +296,7 @@ def install_template_from_zip(
         elif derived:
             template_name = validate_template_name(derived)
         else:
-            raise TemplateInstallError(
-                "无法从压缩包推断模板名，请手动指定模板名。"
-            )
+            raise TemplateInstallError("无法从压缩包推断模板名，请手动指定模板名。")
 
         _assert_target_free(store, template_name)
 
@@ -454,21 +450,24 @@ async def download_github_archive(
         last_error = ""
         for candidate in candidates:
             url = (
-                f"https://github.com/{owner}/{repo}/archive/"
-                f"refs/heads/{candidate}.zip"
+                f"https://github.com/{owner}/{repo}/archive/refs/heads/{candidate}.zip"
             )
             logger.info(f"下载模板压缩包: {url}")
             try:
-                async with session.get(url, timeout=aiohttp_client_timeout(120)) as resp:
+                async with session.get(
+                    url, timeout=aiohttp_client_timeout(120)
+                ) as resp:
                     if resp.status != 200:
                         last_error = f"下载失败 (HTTP {resp.status}): {url}"
                         continue
                     # 流式下载并限制大小：先查 Content-Length，读取时再累计兜底
                     declared = resp.headers.get("Content-Length")
-                    if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD_SIZE:
-                        raise TemplateInstallError(
-                            "下载的压缩包超出大小限制（64MB）。"
-                        )
+                    if (
+                        declared
+                        and declared.isdigit()
+                        and int(declared) > MAX_DOWNLOAD_SIZE
+                    ):
+                        raise TemplateInstallError("下载的压缩包超出大小限制（64MB）。")
                     body = bytearray()
                     async for chunk in resp.content.iter_chunked(64 * 1024):
                         body.extend(chunk)
@@ -484,9 +483,7 @@ async def download_github_archive(
             except Exception as exc:
                 last_error = f"下载异常: {exc}"
 
-    raise TemplateInstallError(
-        last_error or f"无法下载 {owner}/{repo} 的压缩包。"
-    )
+    raise TemplateInstallError(last_error or f"无法下载 {owner}/{repo} 的压缩包。")
 
 
 def uninstall_template(
@@ -508,9 +505,7 @@ def uninstall_template(
     """
     template_name = validate_template_name(name)
     if template_name in builtin_template_names():
-        raise TemplateInstallError(
-            f"模板 '{template_name}' 是内置模板，不支持卸载。"
-        )
+        raise TemplateInstallError(f"模板 '{template_name}' 是内置模板，不支持卸载。")
     store = store_dir or default_template_store_dir()
     base_real = os.path.normcase(str(store.resolve()))
     raw_target = store / template_name
@@ -520,9 +515,9 @@ def uninstall_template(
         raise TemplateInstallError("模板名非法。")
     target = raw_target.resolve()
     try:
-        on_base = os.path.normcase(
-            os.path.commonpath([str(target), base_real])
-        ) == base_real
+        on_base = (
+            os.path.normcase(os.path.commonpath([str(target), base_real])) == base_real
+        )
     except ValueError:
         # Windows 下 commonpath 对不同驱动器的路径会抛 ValueError
         on_base = False
@@ -539,9 +534,7 @@ def uninstall_template(
     try:
         shutil.rmtree(target)
     except Exception as exc:
-        raise TemplateInstallError(
-            f"卸载模板 '{template_name}' 失败：{exc}"
-        ) from exc
+        raise TemplateInstallError(f"卸载模板 '{template_name}' 失败：{exc}") from exc
     logger.info(f"模板已卸载: {template_name}")
     return {"name": template_name, "removed": True}
 

@@ -238,7 +238,9 @@ class HTMLTemplates:
         with self._env_lock:
             self._envs.pop(template_name, None)
 
-    async def _get_env_async(self, template_theme: str | None = None) -> SandboxedEnvironment:
+    async def _get_env_async(
+        self, template_theme: str | None = None
+    ) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（异步版本）"""
         return await asyncio.to_thread(self._get_env_sync, template_theme)
 

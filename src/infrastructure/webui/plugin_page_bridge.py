@@ -1415,9 +1415,7 @@ class PluginPageWebUIBridge:
                     continue
                 content = await asyncio.to_thread(candidate.read_bytes)
                 mime = (
-                    "image/png"
-                    if candidate.suffix.lower() == ".png"
-                    else "image/jpeg"
+                    "image/png" if candidate.suffix.lower() == ".png" else "image/jpeg"
                 )
                 data_url = (
                     f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
@@ -1443,7 +1441,9 @@ class PluginPageWebUIBridge:
             repo_url = str(body.get("repo_url") or "")
             name = str(body.get("name") or "").strip() or None
             if not repo_url:
-                return error_response("缺少 GitHub 仓库链接 (repo_url)", status_code=400)
+                return error_response(
+                    "缺少 GitHub 仓库链接 (repo_url)", status_code=400
+                )
 
             result = await install_template_from_github_url(repo_url, name=name)
             return json_response({"status": "ok", "data": result})
