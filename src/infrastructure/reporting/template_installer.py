@@ -123,6 +123,8 @@ def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
     total_size = 0
     for member in members:
         norm = member.filename.replace("\\", "/")
+        if any(ord(ch) < 32 for ch in member.filename):
+            raise TemplateInstallError(f"压缩包包含控制字符的文件名: {member.filename!r}")
         if (
             norm.startswith("/")
             or norm.startswith("//")
@@ -511,7 +513,12 @@ def uninstall_template(
         )
     store = store_dir or default_template_store_dir()
     base_real = os.path.normcase(str(store.resolve()))
-    target = (store / template_name).resolve()
+    raw_target = store / template_name
+    # 拒绝符号链接目标：rmtree 对指向目录的链接（Linux 上常见）会删除链接所指内容，
+    # resolve() 无法区分“合法目录”与“指向同目录下其他位置的链接”。
+    if raw_target.is_symlink():
+        raise TemplateInstallError("模板名非法。")
+    target = raw_target.resolve()
     try:
         on_base = os.path.normcase(
             os.path.commonpath([str(target), base_real])

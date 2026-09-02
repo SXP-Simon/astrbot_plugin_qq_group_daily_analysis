@@ -118,6 +118,42 @@ def test_install_rejects_absolute_path(tmp_path):
         install_template_from_zip(zip_data, store_dir=tmp_path)
 
 
+def test_install_rejects_control_char_filename():
+    """zip 成员文件名含控制字符时拒绝（防御性；标准库无法构造真实样本，直接测校验函数）。"""
+    from src.infrastructure.reporting.template_installer import (
+        _validate_archive_members,
+    )
+
+    class FakeMember:
+        def __init__(self, name: str, size: int = 1):
+            self.filename = name
+            self.file_size = size
+
+    class FakeZip:
+        def infolist(self):
+            return [FakeMember("ok.html"), FakeMember("bad\x00name.html")]
+
+    with pytest.raises(TemplateInstallError, match="控制字符"):
+        _validate_archive_members(FakeZip())  # type: ignore[arg-type]
+
+
+def test_uninstall_rejects_symlink_target(tmp_path):
+    """卸载目标为符号链接时拒绝（防删除链接指向的其他目录）。"""
+    real_dir = tmp_path / "real_target"
+    real_dir.mkdir()
+    (real_dir / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    link = tmp_path / "gda_link"
+    try:
+        link.symlink_to(real_dir, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("当前环境不支持创建目录符号链接")
+    with pytest.raises(TemplateInstallError, match="模板名非法"):
+        uninstall_template("gda_link", store_dir=tmp_path)
+    # 链接与目标均未被删除
+    assert real_dir.is_dir()
+    assert link.is_symlink()
+
+
 def test_install_rejects_duplicate_with_builtin(tmp_path):
     """与内置模板重名（如 simple）时拒绝，避免与内置模板隐晦合并。"""
     zip_data = build_zip({"image_template.html": "<html></html>"})
