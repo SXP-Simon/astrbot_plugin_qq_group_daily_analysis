@@ -14,6 +14,9 @@ if "astrbot.api" not in sys.modules:
     astrbot_event_module = types.ModuleType("astrbot.api.event")
     astrbot_provider_module = types.ModuleType("astrbot.api.provider")
     astrbot_star_module = types.ModuleType("astrbot.api.star")
+    astrbot_message_components_module = types.ModuleType(
+        "astrbot.api.message_components"
+    )
 
     class AstrMessageEvent:
         pass
@@ -23,6 +26,32 @@ if "astrbot.api" not in sys.modules:
 
     class StarTools:
         pass
+
+    class BaseMessageComponent:
+        pass
+
+    class Plain(BaseMessageComponent):
+        def __init__(self, text=""):
+            self.text = text
+
+    class Image(BaseMessageComponent):
+        @classmethod
+        def fromFileSystem(cls, path):
+            return cls()
+
+        @classmethod
+        def fromURL(cls, url):
+            return cls()
+
+    class Node(BaseMessageComponent):
+        def __init__(self, uin=None, name=None, content=None):
+            self.uin = uin
+            self.name = name
+            self.content = content
+
+    class Nodes(BaseMessageComponent):
+        def __init__(self, nodes=None):
+            self.nodes = nodes or []
 
     class LLMResponse:
         def __init__(
@@ -42,6 +71,11 @@ if "astrbot.api" not in sys.modules:
     astrbot_provider_module.LLMResponse = LLMResponse
     astrbot_star_module.Context = Context
     astrbot_star_module.StarTools = StarTools
+    astrbot_message_components_module.BaseMessageComponent = BaseMessageComponent
+    astrbot_message_components_module.Plain = Plain
+    astrbot_message_components_module.Image = Image
+    astrbot_message_components_module.Node = Node
+    astrbot_message_components_module.Nodes = Nodes
     astrbot_api_module.AstrBotConfig = dict
     astrbot_module.api = astrbot_api_module
     sys.modules.setdefault("astrbot", astrbot_module)
@@ -49,3 +83,6 @@ if "astrbot.api" not in sys.modules:
     sys.modules.setdefault("astrbot.api.event", astrbot_event_module)
     sys.modules.setdefault("astrbot.api.provider", astrbot_provider_module)
     sys.modules.setdefault("astrbot.api.star", astrbot_star_module)
+    sys.modules.setdefault(
+        "astrbot.api.message_components", astrbot_message_components_module
+    )

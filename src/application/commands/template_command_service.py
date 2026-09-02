@@ -56,16 +56,28 @@ class TemplateCommandService:
             item_path = os.path.join(base_dir, item)
             if not os.path.isdir(item_path):
                 continue
-            if item.startswith("__") or item.startswith("."):
+            if item.startswith("__") or item.startswith(".") or item == "format":
                 continue
-            if os.path.isfile(os.path.join(item_path, "template.html")):
+            if (
+                os.path.isfile(os.path.join(item_path, "html_template.html"))
+                or os.path.isfile(os.path.join(item_path, "image_template.html"))
+                or os.path.isfile(os.path.join(item_path, "template.html"))
+            ):
                 templates.append(item)
         return sorted(templates)
 
     async def template_exists(self, template_name: str) -> bool:
-        """检查模板目录是否存在。"""
+        """检查模板目录是否存在且包含有效模板文件。"""
         template_dir = os.path.join(self.resolve_template_base_dir(), template_name)
-        return await asyncio.to_thread(os.path.exists, template_dir)
+        if not await asyncio.to_thread(os.path.isdir, template_dir):
+            return False
+        return await asyncio.to_thread(
+            lambda: (
+                os.path.isfile(os.path.join(template_dir, "html_template.html"))
+                or os.path.isfile(os.path.join(template_dir, "image_template.html"))
+                or os.path.isfile(os.path.join(template_dir, "template.html"))
+            )
+        )
 
     def parse_template_input(
         self, template_input: str, available_templates: list[str]
