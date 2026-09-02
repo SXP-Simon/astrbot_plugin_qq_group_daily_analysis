@@ -39,7 +39,8 @@ export function useStorageCacheViewModel() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
 
   const refresh = useCallback(
     async (isManual = false) => {

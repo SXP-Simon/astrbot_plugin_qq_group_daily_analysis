@@ -14,7 +14,6 @@ import {
   Popconfirm,
   Alert,
   Dropdown,
-  Spin,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -31,8 +30,8 @@ import {
   CopyOutlined,
   LoadingOutlined,
   DownOutlined,
-  CheckCircleOutlined,
 } from "@ant-design/icons";
+
 import { MetricCard } from "../../../shared/ui/MetricCard";
 import { useStorageCacheViewModel } from "../model/useStorageCacheViewModel";
 import { ResourceCacheItem } from "../../../entities/resource/model/types";
@@ -238,8 +237,9 @@ export const StorageCachePage: React.FC = () => {
       key: "action",
       width: 90,
       align: "right",
-      render: (_: any, record: ResourceCacheItem) => (
+      render: (_: unknown, record: ResourceCacheItem) => (
         <Button
+
           type="link"
           size="small"
           icon={<CopyOutlined style={{ fontSize: 12 }} />}

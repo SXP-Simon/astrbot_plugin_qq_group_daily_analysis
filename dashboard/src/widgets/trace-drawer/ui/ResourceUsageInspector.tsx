@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Typography, Tooltip, Button } from "antd";
+import { Tooltip, Button } from "antd";
 import {
   CheckCircleOutlined,
   CloudDownloadOutlined,
@@ -10,7 +10,6 @@ import {
 } from "@ant-design/icons";
 import { ResourceLocalizationTelemetry } from "../../../entities/resource/model/types";
 
-const { Text } = Typography;
 
 interface ResourceUsageInspectorProps {
   data?: ResourceLocalizationTelemetry | null;

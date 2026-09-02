@@ -73,7 +73,7 @@ export async function triggerResourcePrefetch(
   success: boolean;
   message: string;
   duration_ms?: number;
-  data?: any;
+  data?: unknown;
 }> {
   const body: Record<string, unknown> = {};
   if (template && template !== "all") {
@@ -85,14 +85,18 @@ export async function triggerResourcePrefetch(
     total_duration_ms?: number;
   }>("resources/prefetch", body);
   if (res && res.status === "ok") {
-    const dur =
-      (res.data as any)?.duration_ms || (res.data as any)?.total_duration_ms;
+    const resData = res.data as {
+      duration_ms?: number;
+      total_duration_ms?: number;
+    } | undefined;
+    const dur = resData?.duration_ms || resData?.total_duration_ms;
     return {
       success: true,
       message: res.message || "预取完成",
       duration_ms: dur,
       data: res.data,
     };
+
   }
   return {
     success: false,

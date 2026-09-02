@@ -29,6 +29,8 @@ import { ResumeTaskModal } from "../../features/resume-task/ui/ResumeTaskModal";
 import { TraceLogViewer } from "./ui/TraceLogViewer";
 import { TraceSummaryCard } from "./ui/TraceSummaryCard";
 import { ResourceUsageInspector } from "./ui/ResourceUsageInspector";
+import { ResourceLocalizationTelemetry } from "../../entities/resource/model/types";
+
 
 
 const { Text, Paragraph } = Typography;
@@ -351,9 +353,15 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
           />
 
           {/* 静态资源本地化与缓存利用情况 */}
-          {trace.metadata?.resource_localization && (
-            <ResourceUsageInspector data={trace.metadata.resource_localization} />
+          {Boolean(trace.metadata?.resource_localization) && (
+            <ResourceUsageInspector
+              data={
+                trace.metadata
+                  ?.resource_localization as ResourceLocalizationTelemetry
+              }
+            />
           )}
+
 
           {/* 执行阶段时间线 */}
 
