@@ -51,10 +51,39 @@ export async function clearResourceCache(
   return null;
 }
 
-export async function triggerResourcePrefetch(): Promise<boolean> {
-  const res = await apiPost("resources/prefetch", {});
-  return !!res && res.status === "ok";
+export async function triggerResourcePrefetch(
+  template?: string
+): Promise<{
+  success: boolean;
+  message: string;
+  duration_ms?: number;
+  data?: any;
+}> {
+  const body: Record<string, unknown> = {};
+  if (template && template !== "all") {
+    body.template = template;
+  }
+  const res = await apiPost<{
+    template?: string;
+    duration_ms?: number;
+    total_duration_ms?: number;
+  }>("resources/prefetch", body);
+  if (res && res.status === "ok") {
+    const dur =
+      (res.data as any)?.duration_ms || (res.data as any)?.total_duration_ms;
+    return {
+      success: true,
+      message: res.message || "预取完成",
+      duration_ms: dur,
+      data: res.data,
+    };
+  }
+  return {
+    success: false,
+    message: res?.message || "预取失败",
+  };
 }
+
 
 export async function fetchStorageOverview(): Promise<StorageOverview | null> {
   const res = await apiGet<StorageOverview>("storage/overview");

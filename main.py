@@ -313,20 +313,6 @@ class GroupDailyAnalysis(Star):
                     self.auto_scheduler.schedule_jobs(self.context)
                     await self.auto_scheduler.start_incremental_trigger()
 
-                # 异步预取模板静态资源与字体（后台执行，不阻塞启动）
-                prefetch_svc = getattr(self, "resource_prefetch_service", None)
-                if prefetch_svc:
-                    try:
-                        prefetch_task = asyncio.create_task(
-                            prefetch_svc.prefetch_all_templates()
-                        )
-                        bg_tasks = getattr(self, "_background_tasks", None)
-                        if bg_tasks is not None:
-                            bg_tasks.add(prefetch_task)
-                            prefetch_task.add_done_callback(bg_tasks.discard)
-                    except Exception as e:
-                        logger.debug(f"启动模板静态资源预取失败: {e}")
-
                 self._initialized = True
                 self._discovery_run = True
                 logger.info(f"插件初始化完成（来源：{source}）")
@@ -1620,41 +1606,72 @@ class GroupDailyAnalysis(Star):
         "预取资源", alias={"prefetch_resources", "缓存字体", "prefetch_fonts"}
     )
     @filter.permission_type(PermissionType.ADMIN)
-    async def prefetch_resources_command(self, event: AstrMessageEvent):
-        """
-        预取并本地化缓存所有模板的外部字体和静态资源（跨平台支持）
-        用法: /预取资源
+    async def prefetch_resources_command(
+        self, event: AstrMessageEvent, template: str = ""
+    ):
+        """预取并本地化缓存指定模板或全部模板的外部字体和静态资源（跨平台支持）
+
+        用法:
+        /预取资源            - 预取所有模板
+        /预取资源 <模板名称>  - 仅预取指定模板（如 /预取资源 scrapbook）
         """
         event.should_call_llm(True)
-        yield event.plain_result(
-            "⏳ 开始预取并本地化所有模板的外部字体和静态资源，请稍候..."
-        )
-        try:
-            res = await self.resource_prefetch_service.prefetch_all_templates()
-            stats = res.get("stats", {})
-            total_files = stats.get("total_files", 0)
-            total_mb = stats.get("total_bytes", 0) / (1024 * 1024)
-            by_cat = stats.get("by_category", {})
-            fonts_count = by_cat.get("fonts", {}).get("files", 0)
-            images_count = by_cat.get("images", {}).get("files", 0)
-            css_count = by_cat.get("css", {}).get("files", 0)
-            scripts_count = by_cat.get("scripts", {}).get("files", 0)
-            templates_count = len(res.get("templates", []))
-
-            msg = (
-                f"✅ 资源预取完成！\n"
-                f"• 扫描模板: {templates_count} 个\n"
-                f"• 缓存字体: {fonts_count} 个\n"
-                f"• 缓存样式: {css_count} 个\n"
-                f"• 缓存图片: {images_count} 个\n"
-                f"• 缓存脚本: {scripts_count} 个\n"
-                f"• 缓存总量: {total_files} 个文件 ({total_mb:.2f} MB)\n"
-                f"后续生成报告时将 0 网络请求秒级出图。"
+        target_template = template.strip() if template else ""
+        if target_template:
+            yield event.plain_result(
+                f"⏳ 开始预取并本地化模板 [{target_template}] 的外部字体和静态资源，请稍候..."
             )
-            yield event.plain_result(msg)
-        except Exception as e:
-            logger.error(f"预取资源失败: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 预取资源时发生异常: {e}")
+            try:
+                res = await self.resource_prefetch_service.prefetch_template(
+                    target_template
+                )
+                stats = res.get("stats", {})
+                t_stat = res.get("template_stats", {})
+                duration_ms = res.get("duration_ms", 0)
+                msg = (
+                    f"✅ 模板 [{target_template}] 资源预取完成！(耗时 {duration_ms}ms)\n"
+                    f"• 该模板已缓存文件: {t_stat.get('files', 0)} 个 ({(t_stat.get('bytes', 0) / 1024):.1f} KB)\n"
+                    f"• 命中访问: {t_stat.get('access_count', 0)} 次\n"
+                    f"• 全局缓存总量: {stats.get('total_files', 0)} 个文件\n"
+                    f"后续渲染此模板将 0 网络请求秒级出图。"
+                )
+                yield event.plain_result(msg)
+            except Exception as e:
+                logger.error(f"预取模板 [{target_template}] 失败: {e}", exc_info=True)
+                yield event.plain_result(
+                    f"❌ 预取模板 [{target_template}] 时发生异常: {e}"
+                )
+        else:
+            yield event.plain_result(
+                "⏳ 开始预取并本地化所有模板的外部字体和静态资源，请稍候..."
+            )
+            try:
+                res = await self.resource_prefetch_service.prefetch_all_templates()
+                stats = res.get("stats", {})
+                total_files = stats.get("total_files", 0)
+                total_mb = stats.get("total_bytes", 0) / (1024 * 1024)
+                by_cat = stats.get("by_category", {})
+                fonts_count = by_cat.get("fonts", {}).get("files", 0)
+                images_count = by_cat.get("images", {}).get("files", 0)
+                css_count = by_cat.get("css", {}).get("files", 0)
+                scripts_count = by_cat.get("scripts", {}).get("files", 0)
+                templates_count = len(res.get("templates", []))
+                duration_ms = res.get("total_duration_ms", 0)
+
+                msg = (
+                    f"✅ 全部模板资源预取完成！(总耗时 {duration_ms}ms)\n"
+                    f"• 扫描模板: {templates_count} 个\n"
+                    f"• 缓存字体: {fonts_count} 个\n"
+                    f"• 缓存样式: {css_count} 个\n"
+                    f"• 缓存图片: {images_count} 个\n"
+                    f"• 缓存脚本: {scripts_count} 个\n"
+                    f"• 缓存总量: {total_files} 个文件 ({total_mb:.2f} MB)\n"
+                    f"后续生成报告时将 0 网络请求秒级出图。"
+                )
+                yield event.plain_result(msg)
+            except Exception as e:
+                logger.error(f"预取资源失败: {e}", exc_info=True)
+                yield event.plain_result(f"❌ 预取资源时发生异常: {e}")
 
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)

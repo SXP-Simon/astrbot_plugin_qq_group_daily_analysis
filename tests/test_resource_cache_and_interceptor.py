@@ -453,3 +453,25 @@ async def test_resource_prefetch_service():
     assert "scrapbook" in result["templates"]
     assert "ATRI" in result["templates"]
     assert result["stats"]["total_files"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_resource_prefetch_single_template():
+    """测试单个特定模板的细粒度预取。"""
+    mock_repo = MockResourceCacheRepository()
+    localizer = HTMLResourceLocalizer(mock_repo)
+
+    mock_templates = MagicMock()
+    mock_templates.base_dir = "/mock/templates"
+    mock_templates.config_manager = MagicMock()
+    mock_templates.render_template.return_value = """
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ScrapbookFont">
+    """
+
+    service = ResourcePrefetchService(localizer, mock_templates)
+    res = await service.prefetch_template("scrapbook")
+
+    assert res["template"] == "scrapbook"
+    assert res["duration_ms"] >= 0.0
+    assert res["stats"]["total_files"] >= 1
+

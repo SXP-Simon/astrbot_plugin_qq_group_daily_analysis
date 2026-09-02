@@ -175,6 +175,44 @@ async def test_api_trigger_resource_prefetch(tmp_path: Path):
     data = resp.get("data") if isinstance(resp, dict) else resp
     assert data is not None
     assert data["status"] == "ok"
+    assert prefetch_svc.prefetch_all_templates.called
+
+
+@pytest.mark.asyncio
+async def test_api_trigger_resource_prefetch_single_template(tmp_path: Path):
+    """测试手动触发单个模板静态资源预取 API。"""
+    prefetch_svc = MagicMock()
+    prefetch_svc.prefetch_template = AsyncMock(
+        return_value={"template": "scrapbook", "duration_ms": 12.5}
+    )
+
+    bridge = PluginPageWebUIBridge(
+        context=MagicMock(),
+        trace_store=MagicMock(),
+        active_task_manager=MagicMock(),
+        analysis_service=MagicMock(),
+        resource_prefetch_service=prefetch_svc,
+        plugin_data_dir=tmp_path,
+    )
+
+    mock_request = MagicMock()
+    mock_request.json = AsyncMock(return_value={"template": "scrapbook"})
+    mock_request.query = {}
+
+    from unittest.mock import patch
+
+    with patch(
+        "src.infrastructure.webui.plugin_page_bridge.request",
+        mock_request,
+        create=True,
+    ):
+        resp = await bridge.api_trigger_resource_prefetch()
+        data = resp.get("data") if isinstance(resp, dict) else resp
+        assert data is not None
+        assert data["status"] == "ok"
+        assert prefetch_svc.prefetch_template.called
+
+
 
 
 @pytest.mark.asyncio

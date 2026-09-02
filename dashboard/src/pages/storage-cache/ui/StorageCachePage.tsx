@@ -6,7 +6,8 @@ import {
   Popconfirm,
   Tooltip,
   Spin,
-  Space,
+  Alert,
+  Dropdown,
 } from "antd";
 import {
   ReloadOutlined,
@@ -17,10 +18,10 @@ import {
   FolderOpenOutlined,
   FileZipOutlined,
   PictureOutlined,
-  CodeOutlined,
   FileTextOutlined,
-  CheckCircleOutlined,
   CopyOutlined,
+  LoadingOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import { useStorageCacheViewModel } from "../model/useStorageCacheViewModel";
 
@@ -31,7 +32,7 @@ export const StorageCachePage: React.FC = () => {
     resources,
     allResourcesCount,
     loading,
-    prefetching,
+    prefetchProgress,
     clearing,
     selectedTemplate,
     setSelectedTemplate,
@@ -48,6 +49,25 @@ export const StorageCachePage: React.FC = () => {
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  const isSelectedSpecific = selectedTemplate && selectedTemplate !== "all";
+
+  // 更多预取菜单选项
+  const prefetchMenuItems = [
+    {
+      key: "all",
+      label: "全量预取所有模板资源",
+      icon: <ThunderboltOutlined className="text-amber-500" />,
+      onClick: () => handlePrefetch("all"),
+    },
+    ...availableTemplates
+      .filter((t) => t !== "global")
+      .map((t) => ({
+        key: t,
+        label: `预取模板 [${t}]`,
+        onClick: () => handlePrefetch(t),
+      })),
+  ];
 
   return (
     <div className="space-y-3">
@@ -71,20 +91,60 @@ export const StorageCachePage: React.FC = () => {
           >
             刷新
           </Button>
-          <Button
-            type="primary"
-            size="small"
-            icon={<ThunderboltOutlined spin={prefetching} />}
-            loading={prefetching}
-            onClick={handlePrefetch}
-            className="text-xs rounded bg-[#2563eb] text-white hover:bg-blue-700 font-medium"
+
+          {/* 细粒度预取按钮组 */}
+          {isSelectedSpecific ? (
+            <Button
+              type="primary"
+              size="small"
+              icon={
+                prefetchProgress.active ? (
+                  <LoadingOutlined />
+                ) : (
+                  <ThunderboltOutlined />
+                )
+              }
+              loading={prefetchProgress.active}
+              onClick={() => handlePrefetch(selectedTemplate)}
+              className="text-xs rounded bg-[#2563eb] text-white hover:bg-blue-700 font-medium"
+            >
+              预取当前模板 [{selectedTemplate}]
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              size="small"
+              icon={
+                prefetchProgress.active ? (
+                  <LoadingOutlined />
+                ) : (
+                  <ThunderboltOutlined />
+                )
+              }
+              loading={prefetchProgress.active}
+              onClick={() => handlePrefetch("all")}
+              className="text-xs rounded bg-[#2563eb] text-white hover:bg-blue-700 font-medium"
+            >
+              全量预取所有模板
+            </Button>
+          )}
+
+          <Dropdown
+            menu={{ items: prefetchMenuItems }}
+            placement="bottomRight"
+            disabled={prefetchProgress.active}
           >
-            全量预取静态资源
-          </Button>
+            <Button
+              size="small"
+              icon={<DownOutlined className="text-[10px]" />}
+              className="text-xs rounded px-1.5"
+            />
+          </Dropdown>
+
           <Popconfirm
             title="确认清理静态资源缓存？"
             description={
-              selectedTemplate !== "all"
+              isSelectedSpecific
                 ? `将清理模板 [${selectedTemplate}] 下的所有已缓存资源文件`
                 : "将清空全部已缓存的字体、样式表和图片资源"
             }
@@ -101,11 +161,39 @@ export const StorageCachePage: React.FC = () => {
               loading={clearing}
               className="text-xs rounded font-medium"
             >
-              清理缓存
+              {isSelectedSpecific
+                ? `清理模板 [${selectedTemplate}] 缓存`
+                : "清理全部缓存"}
             </Button>
           </Popconfirm>
         </div>
       </div>
+
+      {/* 友好预取中进度与耗时提示卡片 (Friendly Prefetch Alert) */}
+      {prefetchProgress.active && (
+        <Alert
+          type="info"
+          showIcon
+          icon={<LoadingOutlined className="text-blue-500 text-sm" />}
+          message={
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
+              <span>
+                正在预取【{prefetchProgress.templateName}】的外部字体与样式表...
+              </span>
+              <span className="font-mono text-blue-600 dark:text-blue-400">
+                已耗时：{prefetchProgress.elapsedSeconds} 秒
+              </span>
+            </div>
+          }
+          description={
+            <div className="text-[11px] text-[#64748b] dark:text-[#8b949e] mt-0.5">
+              系统正在后台下载 Google Fonts / CDN
+              字体切片并持久化写入本地缓存，国内网络初次拉取切片较多，请耐心等待...
+            </div>
+          }
+          className="border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/30 rounded py-2 px-3"
+        />
+      )}
 
       {/* 1. Plugin Data 存储空间概览 (KPI Cards) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -298,7 +386,7 @@ export const StorageCachePage: React.FC = () => {
           </div>
         ) : resources.length === 0 ? (
           <div className="p-8 text-center text-xs text-[#64748b] dark:text-[#8b949e]">
-            暂无匹配的已缓存静态资源。可点击右上角【全量预取静态资源】自动扫描并预热下载。
+            暂无已缓存资源。在日常分析实际渲染时将自动按需缓存；亦可点击上方按钮手动预取。
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -352,7 +440,8 @@ export const StorageCachePage: React.FC = () => {
                       {item.mime_type}
                     </td>
                     <td className="py-1.5 px-3 font-mono text-[#64748b] dark:text-[#8b949e]">
-                      {item.size_formatted || `${(item.size / 1024).toFixed(1)} KB`}
+                      {item.size_formatted ||
+                        `${(item.size / 1024).toFixed(1)} KB`}
                     </td>
                     <td className="py-1.5 px-3 font-mono font-medium text-emerald-600 dark:text-emerald-400">
                       {item.access_count ?? 1}

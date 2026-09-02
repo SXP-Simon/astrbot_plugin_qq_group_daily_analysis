@@ -1816,20 +1816,46 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_trigger_resource_prefetch(self) -> Any:
-        """手动触发所有报告模板的静态资源与字体全量预取"""
+        """手动触发指定模板或所有报告模板的静态资源与字体预取"""
         try:
             if not self.resource_prefetch_service:
                 return error_response(
                     "Resource prefetch service is not available",
                     status_code=400,
                 )
-            asyncio.create_task(self.resource_prefetch_service.prefetch_all_templates())
-            return json_response(
-                {
-                    "status": "ok",
-                    "message": "已在后台启动模板静态资源与字体全量预取任务",
-                }
+            payload: dict[str, Any] = {}
+            if request is not None and hasattr(request, "json"):
+                try:
+                    payload_raw = await request.json(default={})
+                    payload = payload_raw if isinstance(payload_raw, dict) else {}
+                except Exception:
+                    pass
+            template = payload.get("template") or (
+                request.query.get("template")
+                if request is not None and hasattr(request, "query")
+                else None
             )
+
+            if template and template != "all":
+                result = await self.resource_prefetch_service.prefetch_template(
+                    template
+                )
+                return json_response(
+                    {
+                        "status": "ok",
+                        "message": f"模板 [{template}] 静态资源与字体预取完成",
+                        "data": result,
+                    }
+                )
+            else:
+                result = await self.resource_prefetch_service.prefetch_all_templates()
+                return json_response(
+                    {
+                        "status": "ok",
+                        "message": "全量模板静态资源与字体预取完成",
+                        "data": result,
+                    }
+                )
         except Exception as e:
             logger.error(f"触发静态资源预取异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

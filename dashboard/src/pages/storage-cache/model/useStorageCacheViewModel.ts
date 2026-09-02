@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { message } from "antd";
 import {
   clearResourceCache,
@@ -12,16 +12,29 @@ import {
   StorageOverview,
 } from "../../../entities/resource/model/types";
 
+export interface PrefetchProgressState {
+  active: boolean;
+  templateName?: string;
+  startTime?: number;
+  elapsedSeconds: number;
+}
+
 export function useStorageCacheViewModel() {
   const [storage, setStorage] = useState<StorageOverview | null>(null);
   const [stats, setStats] = useState<ResourceCacheStats | null>(null);
   const [resources, setResources] = useState<ResourceCacheItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [prefetching, setPrefetching] = useState(false);
+  const [prefetchProgress, setPrefetchProgress] =
+    useState<PrefetchProgressState>({
+      active: false,
+      elapsedSeconds: 0,
+    });
   const [clearing, setClearing] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const timerRef = useRef<any>(null);
 
   const refresh = useCallback(
     async (isManual = false) => {
@@ -55,20 +68,57 @@ export function useStorageCacheViewModel() {
     refresh();
   }, [refresh]);
 
-  const handlePrefetch = async () => {
-    setPrefetching(true);
+  // 预取计时器
+  useEffect(() => {
+    if (prefetchProgress.active) {
+      timerRef.current = setInterval(() => {
+        setPrefetchProgress((prev) => ({
+          ...prev,
+          elapsedSeconds: prev.elapsedSeconds + 1,
+        }));
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [prefetchProgress.active]);
+
+  const handlePrefetch = async (targetTemplate?: string) => {
+    const tmpl = targetTemplate || (selectedTemplate === "all" ? undefined : selectedTemplate);
+    const isAll = !tmpl || tmpl === "all";
+
+    setPrefetchProgress({
+      active: true,
+      templateName: isAll ? "全部模板" : tmpl,
+      startTime: Date.now(),
+      elapsedSeconds: 0,
+    });
+
     try {
-      const ok = await triggerResourcePrefetch();
-      if (ok) {
-        message.success("已在后台触发模板静态资源与字体全量预取！");
-        setTimeout(() => refresh(true), 1500);
+      const res = await triggerResourcePrefetch(tmpl);
+      if (res.success) {
+        const durStr = res.duration_ms
+          ? ` (总耗时 ${(res.duration_ms / 1000).toFixed(1)}s)`
+          : "";
+        message.success(
+          `${isAll ? "全部模板" : `模板 [${tmpl}]`} 静态资源与字体预取完成！${durStr}`
+        );
+        await refresh(true);
       } else {
-        message.error("触发预取失败");
+        message.error(`预取失败: ${res.message}`);
       }
     } catch (err) {
       message.error(`预取请求异常: ${err}`);
     } finally {
-      setPrefetching(false);
+      setPrefetchProgress({
+        active: false,
+        elapsedSeconds: 0,
+      });
     }
   };
 
@@ -112,7 +162,7 @@ export function useStorageCacheViewModel() {
     resources: filteredResources,
     allResourcesCount: resources.length,
     loading,
-    prefetching,
+    prefetchProgress,
     clearing,
     selectedTemplate,
     setSelectedTemplate,
