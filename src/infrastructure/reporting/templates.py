@@ -13,7 +13,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from jinja2 import ChoiceLoader, Environment, FileSystemLoader, select_autoescape
+from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 
 from ...utils.logger import logger
 from .template_installer import INSTALL_MARKER_FILENAME
@@ -45,7 +46,7 @@ class HTMLTemplates:
         "simple": "极简黑白 (Simple)",
     }
 
-    def _get_env_sync(self, template_theme: str | None = None) -> Environment:
+    def _get_env_sync(self, template_theme: str | None = None) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（同步版本，供 asyncio.to_thread 调用）"""
         template_name = template_theme or self.config_manager.get_report_template()
 
@@ -89,11 +90,12 @@ class HTMLTemplates:
             ):
                 loaders.append(FileSystemLoader(default_dir))
 
-        env = Environment(
+        env = SandboxedEnvironment(
             loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml"]),
             trim_blocks=True,
             lstrip_blocks=True,
+            # 沙箱模式：禁止模板访问 dunder 属性/敏感对象（防第三方模板 SSTI→RCE）
         )
 
         # 使用双重检查锁定，避免在高并发下重复创建相同 template_name 的 env
@@ -236,11 +238,11 @@ class HTMLTemplates:
         with self._env_lock:
             self._envs.pop(template_name, None)
 
-    async def _get_env_async(self, template_theme: str | None = None) -> Environment:
+    async def _get_env_async(self, template_theme: str | None = None) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（异步版本）"""
         return await asyncio.to_thread(self._get_env_sync, template_theme)
 
-    def _get_env(self, template_theme: str | None = None) -> Environment:
+    def _get_env(self, template_theme: str | None = None) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（同步版本，向后兼容）"""
         return self._get_env_sync(template_theme=template_theme)
 
@@ -307,7 +309,7 @@ class HTMLTemplates:
         """渲染与报告主题解耦的平台专用模板。"""
         try:
             template_dir = os.path.join(self.platform_base_dir, platform_name)
-            env = Environment(
+            env = SandboxedEnvironment(
                 loader=FileSystemLoader(template_dir),
                 autoescape=select_autoescape(["html", "xml"]),
                 trim_blocks=True,

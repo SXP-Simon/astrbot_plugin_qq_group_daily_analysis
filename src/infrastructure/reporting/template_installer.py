@@ -382,7 +382,13 @@ def parse_github_repo_url(repo_url: str) -> dict[str, str]:
     if len(parts) == 2:
         branch = ""
     elif len(parts) >= 4 and parts[2] == "tree":
-        branch = "/".join(parts[3:])
+        branch_parts = parts[3:]
+        if any(
+            not re.match(r"^[A-Za-z0-9._-]+$", seg) or seg in {".", ".."}
+            for seg in branch_parts
+        ):
+            raise TemplateInstallError("GitHub 分支名包含非法字符。")
+        branch = "/".join(branch_parts)
     else:
         raise TemplateInstallError("仅支持仓库主页或 /tree/<分支> 形式的链接。")
 
@@ -455,14 +461,22 @@ async def download_github_archive(
                     if resp.status != 200:
                         last_error = f"下载失败 (HTTP {resp.status}): {url}"
                         continue
-                    body = await resp.read()
-                    if len(body) > MAX_DOWNLOAD_SIZE:
+                    # 流式下载并限制大小：先查 Content-Length，读取时再累计兜底
+                    declared = resp.headers.get("Content-Length")
+                    if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD_SIZE:
                         raise TemplateInstallError(
                             "下载的压缩包超出大小限制（64MB）。"
                         )
+                    body = bytearray()
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        body.extend(chunk)
+                        if len(body) > MAX_DOWNLOAD_SIZE:
+                            raise TemplateInstallError(
+                                "下载的压缩包超出大小限制（64MB）。"
+                            )
                     if not body:
                         raise TemplateInstallError("下载的压缩包为空。")
-                    return body
+                    return bytes(body)
             except TemplateInstallError:
                 raise
             except Exception as exc:

@@ -234,11 +234,53 @@ def test_parse_github_repo_url_http_scheme_allowed():
         "https://github.com/owner/repo/issues/1",
         "https://github.com/owner/repo/archive/refs/heads/main.zip",
         "https://github.com/owner/../repo",
+        "https://github.com/owner/repo/tree/../x",
+        "https://github.com/owner/repo/tree/..",
+        "https://github.com/owner/repo/tree/feat%2f..%2fevil",
+        "https://github.com/owner/repo/tree/feat/..%2f..",
     ],
 )
 def test_parse_github_repo_url_rejects(bad_url):
     with pytest.raises(TemplateInstallError):
         parse_github_repo_url(bad_url)
+
+
+def test_sandbox_blocks_dunder_access(tmp_path):
+    """Jinja 沙箱拦截模板内的 dunder 属性访问（SSTI 防护）。"""
+    from unittest.mock import MagicMock
+
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    custom_root = tmp_path / "custom"
+    theme = custom_root / "gda_evil"
+    theme.mkdir(parents=True)
+    (theme / "image_template.html").write_text(
+        "{{ ''.__class__.__mro__[1].__subclasses__() }}", encoding="utf-8"
+    )
+    mock = MagicMock()
+    mock.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda n: (custom_root / n) if n else custom_root
+    )
+    mock.get_report_template = MagicMock(return_value="gda_evil")
+    mgr = HTMLTemplates(mock)
+
+    out = mgr.render_template("image_template.html", template_theme="gda_evil")
+    # 沙箱拦截 → 渲染失败 → 返回空串；若沙箱失效则输出会包含 __subclasses__ 信息
+    assert out == ""
+
+
+def test_template_exists_rejects_path_traversal():
+    """template_exists 拒绝路径穿越类模板名。"""
+    import asyncio
+
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+
+    service = TemplateCommandService(plugin_root=".")
+    assert not asyncio.run(service.template_exists("../../etc"))
+    assert not asyncio.run(service.template_exists(".."))
+    assert not asyncio.run(service.template_exists("simple/.."))
 
 
 def test_install_writes_marker(tmp_path):

@@ -101,17 +101,43 @@ class TemplateCommandService:
         return sorted(templates)
 
     async def template_exists(self, template_name: str) -> bool:
-        """检查模板目录是否存在且包含有效模板文件。"""
-        template_dir = os.path.join(self.resolve_template_base_dir(), template_name)
-        if not await asyncio.to_thread(os.path.isdir, template_dir):
-            return False
-        return await asyncio.to_thread(
-            lambda: (
-                os.path.isfile(os.path.join(template_dir, "html_template.html"))
-                or os.path.isfile(os.path.join(template_dir, "image_template.html"))
-                or os.path.isfile(os.path.join(template_dir, "template.html"))
+        """检查模板目录是否存在且包含有效模板文件（含模板名安全校验）。"""
+        try:
+            from ...infrastructure.reporting.template_installer import (
+                validate_template_name,
             )
-        )
+
+            template_name = validate_template_name(template_name)
+        except Exception:
+            return False
+        template_dir = os.path.join(self.resolve_template_base_dir(), template_name)
+        custom_dir = None
+        try:
+            from ...infrastructure.reporting.template_installer import (
+                default_template_store_dir,
+            )
+
+            custom_dir = os.path.join(
+                str(default_template_store_dir()), template_name
+            )
+        except Exception:
+            custom_dir = None
+
+        for candidate_dir in (template_dir, custom_dir):
+            if not candidate_dir or not await asyncio.to_thread(
+                os.path.isdir, candidate_dir
+            ):
+                continue
+            valid = await asyncio.to_thread(
+                lambda base=candidate_dir: (
+                    os.path.isfile(os.path.join(base, "html_template.html"))
+                    or os.path.isfile(os.path.join(base, "image_template.html"))
+                    or os.path.isfile(os.path.join(base, "template.html"))
+                )
+            )
+            if valid:
+                return True
+        return False
 
     def parse_template_input(
         self, template_input: str, available_templates: list[str]

@@ -220,6 +220,19 @@ python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti
 python scripts/debug_all_pdf_themes.py
 ```
 
+## 11. 安全须知
+
+- **仅安装可信来源的模板**：安装器不执行模板代码，但模板会在**渲染服务端**
+  （AstrBot T2I，可能是远程 y 服务或本机 Shiki 运行时）以完整 HTML 打开，
+  恶意模板可在渲染环境发起网络请求/消耗资源。请像对待普通软件一样对待模板来源。
+- **Jinja 渲染已启用沙箱**（`SandboxedEnvironment`）：模板无法访问
+  `__class__`/`__subclasses__` 等 dunder 属性（SSTI 防护），但这**不限制**模板
+  在 HTML 输出中引用任意 URL/资源。
+- **命名校验**：模板名禁止路径分隔符与危险字符，安装/卸载/预览接口均有
+  路径穿越防护；GitHub 分支名仅允许 `[A-Za-z0-9._-]`。
+- **上传/下载限额**：zip 解压后总量 ≤ 64MB、单文件 ≤ 20MB、成员 ≤ 300、
+  下载体 ≤ 64MB（流式限制），防止资源耗尽。
+
 ## 9. 贡献为内置模板时的改动清单（仅贡献者）
 
 除模板目录外，还需要修改（参照已有主题的注册方式）：
