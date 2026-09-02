@@ -22,12 +22,13 @@ export interface ResourceCacheResponse {
 }
 
 export async function fetchReportTemplates(): Promise<TemplateOption[]> {
-  const res = await apiGet<TemplateOption[]>("templates");
+  const res = await apiGet<TemplateOption[]>("reports/templates");
   if (res && res.data && Array.isArray(res.data)) {
     return res.data;
   }
   return [];
 }
+
 
 
 export async function fetchResourceCache(

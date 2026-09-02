@@ -218,6 +218,12 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get available built-in and custom report visual templates",
             ),
+            (
+                f"/{PLUGIN_NAME}/templates",
+                self.api_get_report_templates,
+                ["GET"],
+                "Get available built-in and custom report visual templates (alias)",
+            ),
             # 5. SSE 实时事件流
             (
                 f"/{PLUGIN_NAME}/events/stream",

@@ -21,13 +21,28 @@ export interface PrefetchProgressState {
   elapsedSeconds: number;
 }
 
+export const DEFAULT_BUILTIN_TEMPLATES: TemplateOption[] = [
+  { id: "scrapbook", label: "剪贴本 (内置模板)" },
+  { id: "BlueArchive", label: "蔚蓝档案 (内置模板)" },
+  { id: "ATRI", label: "亚托莉 (内置模板)" },
+  { id: "chinese_style", label: "国风水墨 (内置模板)" },
+  { id: "cyberpunk", label: "赛博朋克 (内置模板)" },
+  { id: "HatsuneMiku", label: "初音未来 (内置模板)" },
+  { id: "modern", label: "现代简约 (内置模板)" },
+  { id: "retro_futurism", label: "复古未来 (内置模板)" },
+  { id: "sketch", label: "素描手绘 (内置模板)" },
+  { id: "steam", label: "蒸汽朋克 (内置模板)" },
+  { id: "watercolor", label: "水彩插画 (内置模板)" },
+  { id: "default", label: "经典默认 (内置模板)" },
+];
+
 export function useStorageCacheViewModel() {
   const [storage, setStorage] = useState<StorageOverview | null>(null);
   const [stats, setStats] = useState<ResourceCacheStats | null>(null);
   const [resources, setResources] = useState<ResourceCacheItem[]>([]);
   const [availableTemplates, setAvailableTemplates] = useState<
     TemplateOption[]
-  >([]);
+  >(DEFAULT_BUILTIN_TEMPLATES);
   const [loading, setLoading] = useState(false);
   const [prefetchProgress, setPrefetchProgress] =
     useState<PrefetchProgressState>({
@@ -40,7 +55,6 @@ export function useStorageCacheViewModel() {
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
 
   const refresh = useCallback(
     async (isManual = false) => {
@@ -61,19 +75,32 @@ export function useStorageCacheViewModel() {
         if (cacheRes.status === "fulfilled" && cacheRes.value) {
           setStats(cacheRes.value.stats);
           setResources(cacheRes.value.resources || []);
-          if (
-            cacheRes.value.available_templates &&
-            cacheRes.value.available_templates.length > 0
-          ) {
-            setAvailableTemplates(cacheRes.value.available_templates);
-          }
+        }
+
+        const incomingTemplates: TemplateOption[] = [];
+        if (
+          cacheRes.status === "fulfilled" &&
+          cacheRes.value?.available_templates
+        ) {
+          incomingTemplates.push(...cacheRes.value.available_templates);
         }
         if (
           tplRes.status === "fulfilled" &&
           tplRes.value &&
           tplRes.value.length > 0
         ) {
-          setAvailableTemplates((prev) => (prev.length > 0 ? prev : tplRes.value));
+          incomingTemplates.push(...tplRes.value);
+        }
+
+        if (incomingTemplates.length > 0) {
+          const map = new Map<string, TemplateOption>();
+          for (const t of DEFAULT_BUILTIN_TEMPLATES) {
+            map.set(t.id, t);
+          }
+          for (const t of incomingTemplates) {
+            map.set(t.id, t);
+          }
+          setAvailableTemplates(Array.from(map.values()));
         }
       } catch (err) {
         if (isManual) message.error(`刷新存储指标失败: ${err}`);
