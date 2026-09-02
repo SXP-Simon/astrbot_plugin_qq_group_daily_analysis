@@ -7,6 +7,7 @@ import {
   FolderOpenOutlined,
   FileTextOutlined,
   SettingOutlined,
+  DatabaseOutlined,
 } from "@ant-design/icons";
 import { subscribeSSE } from "../shared/api/bridge";
 import { useTheme } from "../shared/lib/useTheme";
@@ -26,6 +27,8 @@ import { LogsPage } from "../pages/logs/ui/LogsPage";
 import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
 import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
+import { StorageCachePage } from "../pages/storage-cache/ui/StorageCachePage";
+
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -177,6 +180,15 @@ export const App: React.FC = () => {
       ),
     },
     {
+      key: "storage-cache",
+      label: (
+        <span>
+          <DatabaseOutlined /> 存储与缓存
+        </span>
+      ),
+      children: <StorageCachePage />,
+    },
+    {
       key: "config",
       label: (
         <span>
@@ -186,6 +198,7 @@ export const App: React.FC = () => {
       children: <ConfigPage viewModel={configVM} />,
     },
   ];
+
 
   return (
     <ConfigProvider

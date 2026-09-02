@@ -40,7 +40,9 @@ export interface TraceRecord {
   error_message?: string;
   stack_trace?: string;
   extra?: Record<string, unknown>;
+  metadata?: Record<string, any>;
   total_tokens?: number;
+
   estimated_cost?: number;
   raw_message_count?: number;
   cleaned_message_count?: number;

@@ -28,6 +28,8 @@ import { formatStageName } from "../../shared/lib/formatters";
 import { ResumeTaskModal } from "../../features/resume-task/ui/ResumeTaskModal";
 import { TraceLogViewer } from "./ui/TraceLogViewer";
 import { TraceSummaryCard } from "./ui/TraceSummaryCard";
+import { ResourceUsageInspector } from "./ui/ResourceUsageInspector";
+
 
 const { Text, Paragraph } = Typography;
 
@@ -348,7 +350,13 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             onDownloadFile={handleDownloadFile}
           />
 
+          {/* 静态资源本地化与缓存利用情况 */}
+          {trace.metadata?.resource_localization && (
+            <ResourceUsageInspector data={trace.metadata.resource_localization} />
+          )}
+
           {/* 执行阶段时间线 */}
+
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
               执行生命周期阶段 (Spans)
