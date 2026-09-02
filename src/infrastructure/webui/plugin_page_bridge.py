@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import re
 import time
 from collections.abc import Iterable
@@ -73,9 +74,11 @@ from ..platform.factory import PlatformAdapterFactory
 from ..reporting.template_installer import (
     MAX_ZIP_B64_SIZE,
     TemplateInstallError,
+    default_template_store_dir,
     install_template_from_github_url,
     install_template_from_zip,
     uninstall_template,
+    validate_template_name,
 )
 from .active_task_manager import ActiveTaskManager
 
@@ -1388,10 +1391,23 @@ class PluginPageWebUIBridge:
             )
             if not template_name:
                 return error_response("缺少模板名 (template_name)", status_code=400)
+            try:
+                template_name = validate_template_name(template_name)
+            except TemplateInstallError as e:
+                return error_response(str(e), status_code=400)
 
-            from ..reporting.template_installer import default_template_store_dir
+            # 防路径穿越：确认解析后的目标路径仍位于自定义模板根目录内
+            store = default_template_store_dir().resolve()
+            custom_dir = (store / template_name).resolve()
+            try:
+                on_base = os.path.normcase(
+                    os.path.commonpath([str(custom_dir), str(store)])
+                ) == os.path.normcase(str(store))
+            except ValueError:
+                on_base = False  # Windows 跨盘
+            if not on_base:
+                return error_response("模板名非法", status_code=400)
 
-            custom_dir = default_template_store_dir() / template_name
             candidates = ["preview.jpg", "preview.png", "demo.jpg", "demo.png"]
             for candidate_name in candidates:
                 candidate = custom_dir / candidate_name

@@ -40,6 +40,7 @@ const CustomPreviewImage: React.FC<{ templateName: string; height?: number }> = 
 
   useEffect(() => {
     let cancelled = false;
+    setSrc(null);
     fetchTemplatePreview(templateName).then((url) => {
       if (!cancelled && url) setSrc(url);
     });
