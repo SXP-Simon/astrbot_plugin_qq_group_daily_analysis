@@ -34,6 +34,9 @@ from .src.application.services.message_processing_service import (
 from .src.application.services.resource_prefetch_service import (
     ResourcePrefetchService,
 )
+from .src.domain.repositories.resource_cache_repository import (
+    IResourceCacheRepository,
+)
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
 from .src.domain.services.incremental_merge_service import IncrementalMergeService
 from .src.domain.services.statistics_service import StatisticsService
@@ -91,6 +94,7 @@ class GroupDailyAnalysis(Star):
     checkpoint_store: CheckpointStore
     active_task_manager: ActiveTaskManager
     webui_bridge: PluginPageWebUIBridge
+    resource_cache_repo: IResourceCacheRepository
     resource_prefetch_service: ResourcePrefetchService
 
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -108,6 +112,7 @@ class GroupDailyAnalysis(Star):
         self.plugin_data_dir = plugin_data_dir
 
         self.report_generator = ReportGenerator(self.config_manager, plugin_data_dir)
+        self.resource_cache_repo = self.report_generator.resource_cache_repo
         self.resource_prefetch_service = ResourcePrefetchService(
             resource_localizer=self.report_generator.resource_localizer,
             html_templates=self.report_generator.html_templates,
@@ -1629,10 +1634,11 @@ class GroupDailyAnalysis(Star):
             stats = res.get("stats", {})
             total_files = stats.get("total_files", 0)
             total_mb = stats.get("total_bytes", 0) / (1024 * 1024)
-            fonts_count = stats.get("fonts", 0)
-            images_count = stats.get("images", 0)
-            css_count = stats.get("css", 0)
-            scripts_count = stats.get("scripts", 0)
+            by_cat = stats.get("by_category", {})
+            fonts_count = by_cat.get("fonts", {}).get("files", 0)
+            images_count = by_cat.get("images", {}).get("files", 0)
+            css_count = by_cat.get("css", {}).get("files", 0)
+            scripts_count = by_cat.get("scripts", {}).get("files", 0)
             templates_count = len(res.get("templates", []))
 
             msg = (
