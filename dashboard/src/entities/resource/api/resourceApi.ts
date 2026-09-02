@@ -2,7 +2,7 @@
  * 静态资源与存储可观测性 API 客户端
  */
 
-import { apiGet, apiPost } from "../../../shared/api/bridge";
+import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import {
   ResourceCacheItem,
   ResourceCacheStats,
@@ -23,13 +23,12 @@ export interface ResourceCacheResponse {
 
 export async function fetchReportTemplates(): Promise<TemplateOption[]> {
   const res = await apiGet<TemplateOption[]>("reports/templates");
-  if (res && res.data && Array.isArray(res.data)) {
-    return res.data;
+  const data = extractData<TemplateOption[]>(res);
+  if (data && Array.isArray(data)) {
+    return data;
   }
   return [];
 }
-
-
 
 export async function fetchResourceCache(
   template?: string,
@@ -39,12 +38,10 @@ export async function fetchResourceCache(
   if (template && template !== "all") params.template = template;
   if (category && category !== "all") params.category = category;
 
-  const res = await apiGet<ResourceCacheResponse>(
-    "resources/cache",
-    params
-  );
-  if (res && res.data) {
-    return res.data;
+  const res = await apiGet<ResourceCacheResponse>("resources/cache", params);
+  const data = extractData<ResourceCacheResponse>(res);
+  if (data) {
+    return data;
   }
   return null;
 }
@@ -62,8 +59,13 @@ export async function clearResourceCache(
     freed_bytes: number;
     freed_mb: number;
   }>("resources/cache/clear", body);
-  if (res && res.data) {
-    return res.data;
+  const data = extractData<{
+    deleted_files: number;
+    freed_bytes: number;
+    freed_mb: number;
+  }>(res);
+  if (data) {
+    return data;
   }
   return null;
 }
@@ -85,19 +87,24 @@ export async function triggerResourcePrefetch(
     duration_ms?: number;
     total_duration_ms?: number;
   }>("resources/prefetch", body);
-  if (res && res.status === "ok") {
-    const resData = res.data as {
-      duration_ms?: number;
-      total_duration_ms?: number;
-    } | undefined;
-    const dur = resData?.duration_ms || resData?.total_duration_ms;
+  const data = extractData<{
+    template?: string;
+    duration_ms?: number;
+    total_duration_ms?: number;
+  }>(res);
+  if (
+    res &&
+    (res.status === "ok" ||
+      (res.data as Record<string, unknown>)?.status === "ok" ||
+      data !== null)
+  ) {
+    const dur = data?.duration_ms || data?.total_duration_ms;
     return {
       success: true,
       message: res.message || "预取完成",
       duration_ms: dur,
-      data: res.data,
+      data: data,
     };
-
   }
   return {
     success: false,
@@ -105,11 +112,11 @@ export async function triggerResourcePrefetch(
   };
 }
 
-
 export async function fetchStorageOverview(): Promise<StorageOverview | null> {
   const res = await apiGet<StorageOverview>("storage/overview");
-  if (res && res.data) {
-    return res.data;
+  const data = extractData<StorageOverview>(res);
+  if (data) {
+    return data;
   }
   return null;
 }

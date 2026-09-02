@@ -1913,27 +1913,53 @@ class PluginPageWebUIBridge:
                 return 0
 
             # 1. 数据库占用
-            db_path = root_data / "traces.sqlite"
-            db_size = _get_file_size(db_path)
+            db_candidates = [
+                root_data / "traces.db",
+                root_data / "traces.sqlite",
+                root_data / "traces.db-wal",
+                root_data / "traces.sqlite-wal",
+            ]
+            db_size = sum(_get_file_size(p) for p in db_candidates)
             history_db = root_data / "message_history.db"
             history_db_size = _get_file_size(history_db)
 
             # 2. 静态资源持久化缓存
-            res_cache_dir = root_data / "cache" / "resources"
+            if self.resource_cache_repo and hasattr(
+                self.resource_cache_repo, "cache_dir"
+            ):
+                res_cache_dir = Path(str(self.resource_cache_repo.cache_dir))
+            else:
+                res_cache_dir = root_data / "cache" / "resources"
             res_count, res_size = _get_dir_size(res_cache_dir)
             res_stats = (
                 self.resource_cache_repo.get_stats() if self.resource_cache_repo else {}
             )
+            if (
+                res_stats
+                and "total_bytes" in res_stats
+                and res_stats["total_bytes"] > 0
+            ):
+                res_size = int(res_stats["total_bytes"])
+                res_count = int(res_stats.get("total_files", res_count))
 
             # 3. 报告产物（图片 + 自托管 HTML）
             reports_dir = root_data / "reports"
             rep_count, rep_size = _get_dir_size(reports_dir)
-            hosted_reports = Path.cwd() / "data" / "self_hosted_html_reports"
+            hosted_reports = root_data / "self_hosted_html_reports"
             h_count, h_size = _get_dir_size(hosted_reports)
+            if not hosted_reports.exists():
+                hosted_cwd = Path.cwd() / "data" / "self_hosted_html_reports"
+                hc, hs = _get_dir_size(hosted_cwd)
+                h_count += hc
+                h_size += hs
 
             # 4. 头像缓存
-            avatars_dir = root_data / "avatars"
-            av_count, av_size = _get_dir_size(avatars_dir)
+            av_count = 0
+            av_size = 0
+            for ad_name in ["avatar", "avatars"]:
+                c, s = _get_dir_size(root_data / ad_name)
+                av_count += c
+                av_size += s
 
             # 5. 增量与断点存储
             checkpoints_dir = root_data / "checkpoints"
@@ -1984,6 +2010,7 @@ class PluginPageWebUIBridge:
                     },
                 }
             )
+
         except Exception as e:
             logger.error(f"获取存储占用概览异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
