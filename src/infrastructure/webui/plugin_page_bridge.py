@@ -341,6 +341,16 @@ class PluginPageWebUIBridge:
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
 
+            template_name = (
+                payload.get("template_name") or payload.get("template")
+                if isinstance(payload, dict)
+                else None
+            )
+            if not template_name and hasattr(request, "query"):
+                template_name = request.query.get("template_name") or request.query.get(
+                    "template"
+                )
+
             # 启动后台异步任务
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
@@ -349,6 +359,7 @@ class PluginPageWebUIBridge:
                     group_name=group_name,
                     platform=platform,
                     provider_id=provider_id,
+                    template_name=template_name,
                 )
             )
 
@@ -369,6 +380,7 @@ class PluginPageWebUIBridge:
                     "data": {
                         "trace_id": trace_id,
                         "group_id": group_id,
+                        "template_name": template_name,
                         "message": "Analysis task queued successfully",
                     },
                 }
@@ -384,6 +396,7 @@ class PluginPageWebUIBridge:
         group_name: str,
         platform: str,
         provider_id: str | None = None,
+        template_name: str | None = None,
     ) -> None:
         """后台异步执行触发任务"""
         trace_ctx = TraceContext.set(
@@ -395,6 +408,8 @@ class PluginPageWebUIBridge:
         )
         if provider_id:
             trace_ctx.metadata["override_provider_id"] = str(provider_id)
+        if template_name and template_name != "auto":
+            trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
                 result = await self.analysis_service.execute_daily_analysis(

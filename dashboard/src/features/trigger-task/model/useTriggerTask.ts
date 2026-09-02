@@ -9,6 +9,10 @@ import {
   fetchProviderList,
   LLMProviderItem,
 } from "../../../entities/trace/api/traceApi";
+import {
+  fetchReportTemplates,
+} from "../../../entities/report/api/reportApi";
+import { ReportTemplateItem } from "../../../entities/report/model/templates";
 import { GroupItem } from "../../../entities/group/model/types";
 
 export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void) {
@@ -17,27 +21,34 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
   const [groupName, setGroupName] = useState("");
   const [platform, setPlatform] = useState("auto");
   const [providerId, setProviderId] = useState("auto");
+  const [templateName, setTemplateName] = useState("auto");
   const [submitting, setSubmitting] = useState(false);
   const [connectedPlatforms, setConnectedPlatforms] = useState<ConnectedPlatform[]>([]);
   const [loadingPlatforms, setLoadingPlatforms] = useState(false);
   const [providers, setProviders] = useState<LLMProviderItem[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
+  const [templates, setTemplates] = useState<ReportTemplateItem[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
 
   const loadOptions = async () => {
     try {
       setLoadingPlatforms(true);
       setLoadingProviders(true);
-      const [platList, provList] = await Promise.allSettled([
+      setLoadingTemplates(true);
+      const [platList, provList, tmplList] = await Promise.allSettled([
         fetchConnectedPlatforms(),
         fetchProviderList(),
+        fetchReportTemplates(),
       ]);
       if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
       if (provList.status === "fulfilled") setProviders(provList.value);
+      if (tmplList.status === "fulfilled") setTemplates(tmplList.value);
     } catch {
       // Ignore background failure, fallback options will be displayed
     } finally {
       setLoadingPlatforms(false);
       setLoadingProviders(false);
+      setLoadingTemplates(false);
     }
   };
 
@@ -46,6 +57,7 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     setGroupName("");
     setPlatform("auto");
     setProviderId("auto");
+    setTemplateName("auto");
     setOpen(true);
     loadOptions();
   };
@@ -80,7 +92,8 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
         trimmedId,
         groupName.trim(),
         platform,
-        providerId !== "auto" ? providerId : undefined
+        providerId !== "auto" ? providerId : undefined,
+        templateName !== "auto" ? templateName : undefined
       );
       if (res.status === "ok") {
         const traceInfo = res.trace_id ? ` (任务编号: ${res.trace_id})` : "";
@@ -108,13 +121,18 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
     setPlatform,
     providerId,
     setProviderId,
+    templateName,
+    setTemplateName,
     submitting,
     connectedPlatforms,
     loadingPlatforms,
     providers,
     loadingProviders,
+    templates,
+    loadingTemplates,
     handleOpen,
     handleClose,
     handleSubmit,
   };
 }
+

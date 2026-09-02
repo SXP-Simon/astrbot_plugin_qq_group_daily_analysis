@@ -242,15 +242,19 @@ export const App: React.FC = () => {
           groupName={triggerVM.groupName}
           platform={triggerVM.platform}
           providerId={triggerVM.providerId}
+          templateName={triggerVM.templateName}
           submitting={triggerVM.submitting}
           connectedPlatforms={triggerVM.connectedPlatforms}
           loadingPlatforms={triggerVM.loadingPlatforms}
           providers={triggerVM.providers}
           loadingProviders={triggerVM.loadingProviders}
+          templates={triggerVM.templates}
+          loadingTemplates={triggerVM.loadingTemplates}
           onGroupIdChange={triggerVM.setGroupId}
           onGroupNameChange={triggerVM.setGroupName}
           onPlatformChange={triggerVM.setPlatform}
           onProviderChange={triggerVM.setProviderId}
+          onTemplateChange={triggerVM.setTemplateName}
           onClose={triggerVM.handleClose}
           onSubmit={triggerVM.handleSubmit}
         />
