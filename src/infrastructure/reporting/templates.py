@@ -214,7 +214,7 @@ class HTMLTemplates:
         return result
 
     @staticmethod
-    def _read_template_meta(template_dir: str) -> dict[str, str]:
+    def _read_template_meta(template_dir: str | Path) -> dict[str, str]:
         """读取模板目录中可选 template.json 的展示元信息（name/desc/tag/tag_color）。"""
         meta_path = os.path.join(template_dir, "template.json")
         if not os.path.isfile(meta_path):
