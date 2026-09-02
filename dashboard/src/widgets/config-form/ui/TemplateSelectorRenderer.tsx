@@ -144,6 +144,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const currentMeta =
     galleryItems.find((g) => g.key === currentTemplate) || {
       key: currentTemplate,
+      isCustom: false,
       name: currentTemplate,
       desc: "自定义或外部模板",
       tag: "模板",
