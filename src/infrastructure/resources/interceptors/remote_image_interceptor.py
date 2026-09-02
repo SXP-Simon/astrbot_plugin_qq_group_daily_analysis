@@ -75,7 +75,10 @@ class RemoteImageInterceptor(BaseResourceInterceptor):
         Returns:
             完成图片本地化内联后的 HTML 字符串。
         """
-        timeout = float((context or {}).get("timeout", 5.0))
+        ctx = context or {}
+        timeout = float(ctx.get("timeout", 5.0))
+        template = ctx.get("template")
+        telemetry = ctx.get("telemetry")
         result = content
 
         urls_to_replace: set[str] = set()
@@ -100,6 +103,19 @@ class RemoteImageInterceptor(BaseResourceInterceptor):
                 mime_type = self._guess_image_mime(img_url)
                 data_uri = self.to_base64_data_uri(local_data, mime_type)
                 result = result.replace(img_url, data_uri)
+                if telemetry is not None:
+                    telemetry["local_asset_hits"] += 1
+                    telemetry["inlined_bytes"] += len(local_data)
+                    telemetry["items"].append(
+                        {
+                            "url": img_url,
+                            "type": "image",
+                            "mime": mime_type,
+                            "size": len(local_data),
+                            "cached": True,
+                            "source": "local_assets",
+                        }
+                    )
                 logger.debug(f"[图片拦截器] 从本地插件目录直读静态图片: {img_url}")
                 continue
 
@@ -108,15 +124,34 @@ class RemoteImageInterceptor(BaseResourceInterceptor):
             if full_url.startswith("//"):
                 full_url = f"https:{full_url}"
 
+            had_cached = await self.cache_repo.has(full_url, template=template)
             data, mime = await self.cache_repo.get_or_download(
-                full_url, timeout=timeout
+                full_url, timeout=timeout, template=template
             )
             if data:
                 mime_type = self._guess_image_mime(full_url, mime)
                 data_uri = self.to_base64_data_uri(data, mime_type)
                 result = result.replace(img_url, data_uri)
+                if telemetry is not None:
+                    telemetry["inlined_bytes"] += len(data)
+                    if had_cached:
+                        telemetry["cache_hits"] += 1
+                    else:
+                        telemetry["downloaded"] += 1
+                    telemetry["items"].append(
+                        {
+                            "url": full_url,
+                            "type": "image",
+                            "mime": mime_type,
+                            "size": len(data),
+                            "cached": had_cached,
+                            "source": "remote_image",
+                        }
+                    )
                 logger.debug(f"[图片拦截器] 成功本地化并内联远程图片: {img_url}")
             else:
+                if telemetry is not None:
+                    telemetry["failed"] += 1
                 logger.warning(f"[图片拦截器] 下载或内联远程图片失败: {img_url}")
 
         return result

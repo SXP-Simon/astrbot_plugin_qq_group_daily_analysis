@@ -229,6 +229,14 @@ class TraceContext:
             cur["total_tokens"] += total
             self._token_usage["per_analyzer"][analyzer_name] = cur
 
+    def record_resource_localization(self, metrics: dict[str, Any]) -> None:
+        """记录静态资源与字体本地化拦截利用情况。
+
+        Args:
+            metrics: 本地化统计详情字典。
+        """
+        self.metadata["resource_localization"] = metrics
+
     def finish(
         self,
         status: str = "succeeded",

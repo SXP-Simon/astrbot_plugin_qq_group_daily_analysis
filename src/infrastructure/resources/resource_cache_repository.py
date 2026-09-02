@@ -1,4 +1,4 @@
-"""基于本地文件系统的静态资源与字体持久化缓存仓储实现。"""
+"""基于本地文件系统的静态资源与字体持久化缓存仓储实现（按模板分类组织）。"""
 
 from __future__ import annotations
 
@@ -6,13 +6,16 @@ import asyncio
 import hashlib
 import json
 import mimetypes
+import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import aiohttp
 
-from ...domain.repositories.resource_cache_repository import IResourceCacheRepository
+from ...domain.repositories.resource_cache_repository import (
+    IResourceCacheRepository,
+)
 from ...utils.logger import logger
 
 # 现代浏览器 User-Agent，确保 Google Fonts 等字体服务返回 WOFF2 格式
@@ -41,29 +44,26 @@ MIME_TYPE_OVERRIDES = {
 
 
 class FileSystemResourceCacheRepository(IResourceCacheRepository):
-    """用于下载静态资源的本地文件系统持久化缓存仓储。"""
+    """用于下载与持久化管理静态资源的本地文件系统缓存仓储，支持按模板分组存储与排障。"""
 
     def __init__(self, base_cache_dir: Path | str):
-        """初始化资源缓存目录。
+        """初始化资源缓存目录体系。
 
         Args:
             base_cache_dir: 根缓存目录路径（如 plugin_data/cache/resources）。
         """
         self.base_dir = Path(base_cache_dir)
-        self.fonts_dir = self.base_dir / "fonts"
-        self.css_dir = self.base_dir / "css"
-        self.images_dir = self.base_dir / "images"
-        self.scripts_dir = self.base_dir / "scripts"
+        self.templates_dir = self.base_dir / "templates"
         self.meta_dir = self.base_dir / "meta"
 
-        for directory in [
-            self.fonts_dir,
-            self.css_dir,
-            self.images_dir,
-            self.scripts_dir,
-            self.meta_dir,
-        ]:
-            directory.mkdir(parents=True, exist_ok=True)
+        # 兼容旧版顶层分类目录
+        self.legacy_fonts_dir = self.base_dir / "fonts"
+        self.legacy_css_dir = self.base_dir / "css"
+        self.legacy_images_dir = self.base_dir / "images"
+        self.legacy_scripts_dir = self.base_dir / "scripts"
+
+        self.templates_dir.mkdir(parents=True, exist_ok=True)
+        self.meta_dir.mkdir(parents=True, exist_ok=True)
 
         self._session: aiohttp.ClientSession | None = None
         self._session_lock = asyncio.Lock()
@@ -74,17 +74,26 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         """计算 URL 的 SHA256 十六进制哈希值。"""
         return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()
 
+    def _sanitize_template_name(self, template: str | None) -> str:
+        """格式化模板名称作为安全合法的目录名。"""
+        if not template or not template.strip():
+            return "global"
+        safe = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in template.strip()
+        )
+        return safe.strip("_") or "global"
+
     def _determine_category_and_extension(
         self, url: str, mime_type: str | None = None
-    ) -> tuple[Path, str, str]:
-        """确定资源所属的目录分类、扩展名与 MIME 类型。
+    ) -> tuple[str, str, str]:
+        """确定资源所属的分类名（fonts, css, images, scripts）、文件扩展名与 MIME 类型。
 
         Args:
             url: 资源远程链接。
             mime_type: 可选的已知 MIME 类型。
 
         Returns:
-            (分类目录Path, 文件扩展名, 解析后的MIME类型) 元组。
+            (分类名category, 文件扩展名ext, 解析后的MIME类型) 元组。
         """
         parsed = urlparse(url)
         path = parsed.path.lower()
@@ -93,13 +102,13 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         for ext, mime in MIME_TYPE_OVERRIDES.items():
             if path.endswith(ext):
                 if ext in {".woff2", ".woff", ".ttf", ".otf", ".eot"}:
-                    return self.fonts_dir, ext, mime
+                    return "fonts", ext, mime
                 if ext == ".css":
-                    return self.css_dir, ext, mime
+                    return "css", ext, mime
                 if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
-                    return self.images_dir, ext, mime
+                    return "images", ext, mime
                 if ext in {".js", ".mjs"}:
-                    return self.scripts_dir, ext, mime
+                    return "scripts", ext, mime
 
         # 其次按传入的 MIME 类型判断
         if mime_type:
@@ -112,50 +121,56 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                     if "woff" in mime_lower
                     else ".ttf"
                 )
-                return self.fonts_dir, ext, mime_type
+                return "fonts", ext, mime_type
             if "css" in mime_lower:
-                return self.css_dir, ".css", "text/css"
+                return "css", ".css", "text/css"
             if "image" in mime_lower:
                 ext = mimetypes.guess_extension(mime_type) or ".png"
-                return self.images_dir, ext, mime_type
+                return "images", ext, mime_type
             if "javascript" in mime_lower:
-                return self.scripts_dir, ".js", "application/javascript"
+                return "scripts", ".js", "application/javascript"
 
         # 根据 URL 特征识别（如 google fonts css2）
         if "css2" in path or "css" in path or "fonts.googleapis.com" in parsed.netloc:
-            return self.css_dir, ".css", "text/css"
+            return "css", ".css", "text/css"
 
         # 根据域名或路径特征回退
         if "font" in path or "font" in parsed.netloc:
-            return self.fonts_dir, ".woff2", "font/woff2"
+            return "fonts", ".woff2", "font/woff2"
 
-        return self.images_dir, ".bin", mime_type or "application/octet-stream"
+        return "images", ".bin", mime_type or "application/octet-stream"
 
     def _get_cache_file_path(
-        self, url: str, mime_type: str | None = None
-    ) -> tuple[Path, str]:
-        """计算给定 URL 的本地存储路径与 MIME 类型。"""
+        self,
+        url: str,
+        mime_type: str | None = None,
+        template: str | None = None,
+    ) -> tuple[Path, str, str, str]:
+        """计算给定 URL 的按模板组织的本地存储路径、分类、扩展名与 MIME 类型。"""
         url_hash = self._get_url_hash(url)
-        category_dir, ext, resolved_mime = self._determine_category_and_extension(
+        template_name = self._sanitize_template_name(template)
+        category, ext, resolved_mime = self._determine_category_and_extension(
             url, mime_type
         )
-        file_path = category_dir / f"{url_hash}{ext}"
-        return file_path, resolved_mime
+        target_dir = self.templates_dir / template_name / category
+        file_path = target_dir / f"{url_hash}{ext}"
+        return file_path, category, ext, resolved_mime
 
     def _get_meta_path(self, url_hash: str) -> Path:
         """获取哈希对应的元数据文件路径。"""
         return self.meta_dir / f"{url_hash}.json"
 
-    async def get(self, url: str) -> bytes | None:
+    async def get(self, url: str, template: str | None = None) -> bytes | None:
         """从本地磁盘读取已缓存的资源二进制。
 
         Args:
             url: 远程资源链接。
+            template: 关联的模板主题名称。
 
         Returns:
             文件二进制字节流，未命中则返回 None。
         """
-        file_path = await self.get_path(url)
+        file_path = await self.get_path(url, template=template)
         if file_path and file_path.is_file():
             try:
                 return await asyncio.to_thread(file_path.read_bytes)
@@ -163,29 +178,63 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                 logger.warning(f"读取本地缓存资源文件失败 {file_path}: {e}")
         return None
 
-    async def set(self, url: str, data: bytes, mime_type: str | None = None) -> Path:
-        """将二进制数据持久化保存到本地缓存。
+    async def set(
+        self,
+        url: str,
+        data: bytes,
+        mime_type: str | None = None,
+        template: str | None = None,
+    ) -> Path:
+        """将二进制数据按模板结构持久化保存到本地缓存。
 
         Args:
             url: 远程资源链接。
             data: 待缓存的二进制数据。
             mime_type: 可选的 MIME 类型。
+            template: 关联模板名称。
 
         Returns:
             保存后的本地文件 Path。
         """
         url_hash = self._get_url_hash(url)
-        file_path, resolved_mime = self._get_cache_file_path(url, mime_type)
+        template_name = self._sanitize_template_name(template)
+        file_path, category, ext, resolved_mime = self._get_cache_file_path(
+            url, mime_type, template=template_name
+        )
         meta_path = self._get_meta_path(url_hash)
 
+        # 确保模板分类目录存在
+        await asyncio.to_thread(file_path.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(file_path.write_bytes, data)
+
+        now_ts = time.time()
+        existing_meta = {}
+        if meta_path.is_file():
+            try:
+                meta_raw = await asyncio.to_thread(
+                    meta_path.read_text, encoding="utf-8"
+                )
+                existing_meta = json.loads(meta_raw)
+            except Exception:
+                pass
+
+        access_count = existing_meta.get("access_count", 0) + 1
+        created_at = existing_meta.get("created_at", now_ts)
 
         meta_info = {
             "url": url,
             "hash": url_hash,
+            "template": template_name,
+            "category": category,
             "mime_type": resolved_mime,
             "size": len(data),
             "file_path": str(file_path),
+            "relative_path": str(file_path.relative_to(self.base_dir)).replace(
+                "\\", "/"
+            ),
+            "created_at": created_at,
+            "last_accessed_at": now_ts,
+            "access_count": access_count,
         }
         await asyncio.to_thread(
             meta_path.write_text,
@@ -194,8 +243,8 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         )
         return file_path
 
-    async def get_path(self, url: str) -> Path | None:
-        """获取已缓存资源的本地文件路径。"""
+    async def get_path(self, url: str, template: str | None = None) -> Path | None:
+        """获取已缓存资源的本地文件路径（优先匹配指定模板，其次跨模板共享查找）。"""
         url_hash = self._get_url_hash(url)
         meta_path = self._get_meta_path(url_hash)
 
@@ -211,22 +260,38 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
             except Exception:
                 pass
 
-        # 扫描各分类子目录作为兜底检查
-        for category_dir in [
-            self.fonts_dir,
-            self.css_dir,
-            self.images_dir,
-            self.scripts_dir,
-        ]:
-            matches = list(category_dir.glob(f"{url_hash}.*"))
+        # 1. 优先在指定模板子目录查找
+        if template:
+            template_name = self._sanitize_template_name(template)
+            t_dir = self.templates_dir / template_name
+            if t_dir.is_dir():
+                matches = list(t_dir.rglob(f"{url_hash}.*"))
+                if matches and matches[0].is_file() and matches[0].stat().st_size > 0:
+                    return matches[0]
+
+        # 2. 扫描 templates 全局/其他模板目录查找
+        if self.templates_dir.is_dir():
+            matches = list(self.templates_dir.rglob(f"{url_hash}.*"))
             if matches and matches[0].is_file() and matches[0].stat().st_size > 0:
                 return matches[0]
 
+        # 3. 扫描旧版扁平目录兜底
+        for cat_dir in [
+            self.legacy_fonts_dir,
+            self.legacy_css_dir,
+            self.legacy_images_dir,
+            self.legacy_scripts_dir,
+        ]:
+            if cat_dir.is_dir():
+                matches = list(cat_dir.glob(f"{url_hash}.*"))
+                if matches and matches[0].is_file() and matches[0].stat().st_size > 0:
+                    return matches[0]
+
         return None
 
-    async def has(self, url: str) -> bool:
+    async def has(self, url: str, template: str | None = None) -> bool:
         """检查资源是否已在本地缓存。"""
-        path = await self.get_path(url)
+        path = await self.get_path(url, template=template)
         return path is not None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -250,13 +315,15 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
         url: str,
         custom_headers: dict[str, str] | None = None,
         timeout: float = 5.0,
+        template: str | None = None,
     ) -> tuple[bytes | None, str | None]:
-        """优先读取本地缓存，未命中则异步从网络下载并固化缓存。
+        """优先读取本地缓存，未命中则异步从网络下载并持久化缓存。
 
         Args:
             url: 远程资源链接。
             custom_headers: 可选自定义请求头。
             timeout: 下载超时时间（秒）。
+            template: 关联模板名称。
 
         Returns:
             (二进制字节流, MIME 类型) 元组。
@@ -274,7 +341,7 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
 
         async with url_lock:
             # 1. 检查本地缓存
-            cached_path = await self.get_path(clean_url)
+            cached_path = await self.get_path(clean_url, template=template)
             if cached_path and cached_path.is_file():
                 try:
                     data = await asyncio.to_thread(cached_path.read_bytes)
@@ -288,6 +355,14 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                                 )
                             )
                             mime = meta.get("mime_type")
+                            # 更新访问计数与时间
+                            meta["access_count"] = meta.get("access_count", 0) + 1
+                            meta["last_accessed_at"] = time.time()
+                            await asyncio.to_thread(
+                                meta_path.write_text,
+                                json.dumps(meta, ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
                         except Exception:
                             pass
                     if not mime:
@@ -333,9 +408,14 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
                                     if content_type
                                     else None
                                 )
-                                await self.set(clean_url, content, mime_type)
+                                await self.set(
+                                    clean_url,
+                                    content,
+                                    mime_type,
+                                    template=template,
+                                )
                                 logger.info(
-                                    f"[资源缓存] 成功下载并缓存静态资源: {clean_url} ({len(content)} 字节)"
+                                    f"[资源缓存] 成功下载并缓存静态资源 (模板: {template or 'global'}): {clean_url} ({len(content)} 字节)"
                                 )
                                 return content, mime_type
                         else:
@@ -351,27 +431,163 @@ class FileSystemResourceCacheRepository(IResourceCacheRepository):
             return None, None
 
     def get_stats(self) -> dict[str, Any]:
-        """获取本地缓存文件汇总统计。"""
-        stats = {
+        """获取本地缓存文件汇总统计（支持按模板和分类聚合分析）。"""
+        stats: dict[str, Any] = {
             "total_files": 0,
             "total_bytes": 0,
-            "fonts": 0,
-            "css": 0,
-            "images": 0,
-            "scripts": 0,
+            "total_access_count": 0,
+            "by_category": {
+                "fonts": {"files": 0, "bytes": 0},
+                "css": {"files": 0, "bytes": 0},
+                "images": {"files": 0, "bytes": 0},
+                "scripts": {"files": 0, "bytes": 0},
+            },
+            "by_template": {},
         }
-        for category, folder in [
-            ("fonts", self.fonts_dir),
-            ("css", self.css_dir),
-            ("images", self.images_dir),
-            ("scripts", self.scripts_dir),
-        ]:
-            if folder.is_dir():
-                files = [f for f in folder.iterdir() if f.is_file()]
-                stats[category] = len(files)
-                stats["total_files"] += len(files)
-                stats["total_bytes"] += sum(f.stat().st_size for f in files)
+
+        # 扫描 meta 目录提取详细统计
+        if self.meta_dir.is_dir():
+            for meta_file in self.meta_dir.glob("*.json"):
+                try:
+                    meta = json.loads(meta_file.read_text(encoding="utf-8"))
+                    size = meta.get("size", 0)
+                    category = meta.get("category", "images")
+                    t_name = meta.get("template", "global")
+                    access_count = meta.get("access_count", 1)
+
+                    stats["total_files"] += 1
+                    stats["total_bytes"] += size
+                    stats["total_access_count"] += access_count
+
+                    if category in stats["by_category"]:
+                        stats["by_category"][category]["files"] += 1
+                        stats["by_category"][category]["bytes"] += size
+
+                    if t_name not in stats["by_template"]:
+                        stats["by_template"][t_name] = {
+                            "files": 0,
+                            "bytes": 0,
+                            "access_count": 0,
+                            "categories": {},
+                        }
+                    stats["by_template"][t_name]["files"] += 1
+                    stats["by_template"][t_name]["bytes"] += size
+                    stats["by_template"][t_name]["access_count"] += access_count
+
+                    if category not in stats["by_template"][t_name]["categories"]:
+                        stats["by_template"][t_name]["categories"][category] = 0
+                    stats["by_template"][t_name]["categories"][category] += 1
+                except Exception:
+                    pass
+
+        # 若 meta 为空则扫描磁盘文件作为兜底
+        if stats["total_files"] == 0 and self.templates_dir.is_dir():
+            for p in self.templates_dir.rglob("*"):
+                if p.is_file():
+                    stats["total_files"] += 1
+                    stats["total_bytes"] += p.stat().st_size
+
         return stats
+
+    async def list_resources(
+        self, template: str | None = None, category: str | None = None
+    ) -> list[dict[str, Any]]:
+        """获取所有缓存资源的详细列表，支持按模板和分类过滤。"""
+        resources: list[dict[str, Any]] = []
+        if not self.meta_dir.is_dir():
+            return resources
+
+        filter_template = self._sanitize_template_name(template) if template else None
+
+        for meta_file in sorted(
+            self.meta_dir.glob("*.json"),
+            key=lambda f: f.stat().st_mtime,
+            reverse=True,
+        ):
+            try:
+                raw = await asyncio.to_thread(meta_file.read_text, encoding="utf-8")
+                meta = json.loads(raw)
+                item_template = meta.get("template", "global")
+                item_category = meta.get("category", "images")
+
+                if (
+                    filter_template
+                    and item_template != filter_template
+                    and filter_template != "all"
+                ):
+                    continue
+                if category and item_category != category and category != "all":
+                    continue
+
+                # 检查文件是否实际存在
+                f_path = Path(meta.get("file_path", ""))
+                meta["exists"] = f_path.is_file()
+                if meta["exists"]:
+                    meta["size_formatted"] = f"{meta.get('size', 0) / 1024:.1f} KB"
+                resources.append(meta)
+            except Exception:
+                pass
+
+        return resources
+
+    async def clear_cache(
+        self, template: str | None = None, category: str | None = None
+    ) -> dict[str, Any]:
+        """清理满足条件的缓存文件及对应元数据。"""
+        filter_template = self._sanitize_template_name(template) if template else None
+        deleted_files = 0
+        freed_bytes = 0
+
+        if self.meta_dir.is_dir():
+            for meta_file in list(self.meta_dir.glob("*.json")):
+                try:
+                    raw = await asyncio.to_thread(meta_file.read_text, encoding="utf-8")
+                    meta = json.loads(raw)
+                    item_template = meta.get("template", "global")
+                    item_category = meta.get("category", "images")
+
+                    should_delete = True
+                    if (
+                        filter_template
+                        and filter_template != "all"
+                        and item_template != filter_template
+                    ):
+                        should_delete = False
+                    if category and category != "all" and item_category != category:
+                        should_delete = False
+
+                    if should_delete:
+                        f_path = Path(meta.get("file_path", ""))
+                        if f_path.is_file():
+                            freed_bytes += f_path.stat().st_size
+                            await asyncio.to_thread(f_path.unlink, True)
+                            deleted_files += 1
+                        await asyncio.to_thread(meta_file.unlink, True)
+                except Exception as e:
+                    logger.warning(f"清理缓存元数据文件失败 {meta_file}: {e}")
+
+        # 如果全量清空，也清理整个 templates 目录与旧版目录
+        if (not filter_template or filter_template == "all") and (
+            not category or category == "all"
+        ):
+            for legacy_dir in [
+                self.legacy_fonts_dir,
+                self.legacy_css_dir,
+                self.legacy_images_dir,
+                self.legacy_scripts_dir,
+            ]:
+                if legacy_dir.is_dir():
+                    for f in legacy_dir.glob("*"):
+                        if f.is_file():
+                            freed_bytes += f.stat().st_size
+                            await asyncio.to_thread(f.unlink, True)
+                            deleted_files += 1
+
+        return {
+            "deleted_files": deleted_files,
+            "freed_bytes": freed_bytes,
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+        }
 
     async def close(self) -> None:
         """关闭底层的 HTTP 客户端会话。"""

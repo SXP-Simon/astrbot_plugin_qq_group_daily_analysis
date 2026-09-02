@@ -30,7 +30,10 @@ class FontFaceInterceptor(BaseResourceInterceptor):
         Returns:
             完成字体本地化后的字符串。
         """
-        timeout = float((context or {}).get("timeout", 5.0))
+        ctx = context or {}
+        timeout = float(ctx.get("timeout", 5.0))
+        template = ctx.get("template")
+        telemetry = ctx.get("telemetry")
         result = content
 
         urls_to_replace: set[str] = set()
@@ -47,11 +50,11 @@ class FontFaceInterceptor(BaseResourceInterceptor):
             if full_url.startswith("//"):
                 full_url = f"https:{full_url}"
 
+            had_cached = await self.cache_repo.has(full_url, template=template)
             data, mime = await self.cache_repo.get_or_download(
-                full_url, timeout=timeout
+                full_url, timeout=timeout, template=template
             )
             if data:
-                # 若未返回 MIME 则根据扩展名推导
                 lower_url = full_url.lower()
                 if ".woff2" in lower_url:
                     mime_type = "font/woff2"
@@ -72,8 +75,26 @@ class FontFaceInterceptor(BaseResourceInterceptor):
                     re.IGNORECASE,
                 )
                 result = pattern.sub(f"url('{data_uri}')", result)
+                if telemetry is not None:
+                    telemetry["inlined_bytes"] += len(data)
+                    if had_cached:
+                        telemetry["cache_hits"] += 1
+                    else:
+                        telemetry["downloaded"] += 1
+                    telemetry["items"].append(
+                        {
+                            "url": full_url,
+                            "type": "font_face",
+                            "mime": mime_type,
+                            "size": len(data),
+                            "cached": had_cached,
+                            "source": "font_face",
+                        }
+                    )
                 logger.debug(f"[字体拦截器] 成功本地化字体: {font_url}")
             else:
+                if telemetry is not None:
+                    telemetry["failed"] += 1
                 logger.warning(f"[字体拦截器] 下载字体文件失败: {font_url}")
 
         return result

@@ -26,7 +26,12 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
     """拦截通用外部 CSS 样式表，下载并递归内联其中的字体与子资源，转换为内联 <style>。"""
 
     async def _localize_stylesheet_content(
-        self, base_url: str, css_text: str, timeout: float = 5.0
+        self,
+        base_url: str,
+        css_text: str,
+        timeout: float = 5.0,
+        template: str | None = None,
+        telemetry: dict[str, Any] | None = None,
     ) -> str:
         """解析并内联 CSS 中引用的所有相对或绝对子资源（字体、背景图等）。
 
@@ -34,11 +39,13 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
             base_url: CSS 文件的 URL（用于解析相对路径）。
             css_text: 原始 CSS 文本。
             timeout: 下载超时时间。
+            template: 关联模板名称。
+            telemetry: 可选遥测收集字典。
 
         Returns:
             完成子资源内联后的 CSS 文本。
         """
-        urls_to_replace: set[str] = set()
+        urls_to_replace: set[tuple[str, str]] = set()
         for match in CSS_SUBRESOURCE_PATTERN.finditer(css_text):
             raw_url = match.group("url").strip()
             if raw_url.startswith("data:"):
@@ -48,7 +55,10 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
 
         result_css = css_text
         for raw_url, abs_url in urls_to_replace:
-            data, mime = await self.cache_repo.get_or_download(abs_url, timeout=timeout)
+            had_cached = await self.cache_repo.has(abs_url, template=template)
+            data, mime = await self.cache_repo.get_or_download(
+                abs_url, timeout=timeout, template=template
+            )
             if data:
                 mime_type = mime or (
                     "font/woff2"
@@ -61,7 +71,25 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
                     re.IGNORECASE,
                 )
                 result_css = pattern.sub(f"url('{data_uri}')", result_css)
+                if telemetry is not None:
+                    telemetry["inlined_bytes"] += len(data)
+                    if had_cached:
+                        telemetry["cache_hits"] += 1
+                    else:
+                        telemetry["downloaded"] += 1
+                    telemetry["items"].append(
+                        {
+                            "url": abs_url,
+                            "type": "subresource",
+                            "mime": mime_type,
+                            "size": len(data),
+                            "cached": had_cached,
+                            "source": "css_subresource",
+                        }
+                    )
             else:
+                if telemetry is not None:
+                    telemetry["failed"] += 1
                 logger.warning(f"[CSS样式表拦截器] 子资源下载或内联失败: {abs_url}")
 
         return result_css
@@ -78,7 +106,10 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
         Returns:
             完成内联后的 HTML 字符串。
         """
-        timeout = float((context or {}).get("timeout", 5.0))
+        ctx = context or {}
+        timeout = float(ctx.get("timeout", 5.0))
+        template = ctx.get("template")
+        telemetry = ctx.get("telemetry")
         result = content
 
         matches = list(STYLESHEET_LINK_PATTERN.finditer(result))
@@ -98,13 +129,34 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
             ):
                 continue
 
+            had_cached = await self.cache_repo.has(css_url, template=template)
             css_data, _ = await self.cache_repo.get_or_download(
-                css_url, timeout=timeout
+                css_url, timeout=timeout, template=template
             )
             if css_data:
+                if telemetry is not None:
+                    if had_cached:
+                        telemetry["cache_hits"] += 1
+                    else:
+                        telemetry["downloaded"] += 1
+                    telemetry["items"].append(
+                        {
+                            "url": css_url,
+                            "type": "stylesheet",
+                            "mime": "text/css",
+                            "size": len(css_data),
+                            "cached": had_cached,
+                            "source": "external_css",
+                        }
+                    )
+
                 css_text = css_data.decode("utf-8", errors="replace")
                 inlined_css = await self._localize_stylesheet_content(
-                    css_url, css_text, timeout=timeout
+                    css_url,
+                    css_text,
+                    timeout=timeout,
+                    template=template,
+                    telemetry=telemetry,
                 )
                 replacement = (
                     f"<style data-localized-stylesheet='true'>\n{inlined_css}\n</style>"
@@ -112,6 +164,8 @@ class CssStylesheetInterceptor(BaseResourceInterceptor):
                 result = result.replace(full_tag, replacement)
                 logger.debug(f"[CSS样式表拦截器] 成功内联外部样式表: {css_url}")
             else:
+                if telemetry is not None:
+                    telemetry["failed"] += 1
                 logger.warning(f"[CSS样式表拦截器] 无法下载外部样式表: {css_url}")
 
         return result

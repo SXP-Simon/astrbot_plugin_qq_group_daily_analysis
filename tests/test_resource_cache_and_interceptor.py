@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,23 +46,29 @@ class MockResourceCacheRepository(IResourceCacheRepository):
     """内存模拟资源缓存仓储，用于快速、确定性的单元测试。"""
 
     def __init__(self):
-        self._store: dict[str, tuple[bytes, str | None]] = {}
+        self._store: dict[str, tuple[bytes, str | None, str | None]] = {}
 
-    async def get(self, url: str) -> bytes | None:
-        return self._store.get(url, (None, None))[0]
+    async def get(self, url: str, template: str | None = None) -> bytes | None:
+        return self._store.get(url, (None, None, None))[0]
 
     async def set(
-        self, url: str, data: bytes, mime_type: str | None = None
+        self,
+        url: str,
+        data: bytes,
+        mime_type: str | None = None,
+        template: str | None = None,
     ) -> Path:
-        self._store[url] = (data, mime_type)
+        self._store[url] = (data, mime_type, template)
         return Path(f"/mock/cache/{hash(url)}")
 
-    async def get_path(self, url: str) -> Path | None:
+    async def get_path(
+        self, url: str, template: str | None = None
+    ) -> Path | None:
         if url in self._store:
             return Path(f"/mock/cache/{hash(url)}")
         return None
 
-    async def has(self, url: str) -> bool:
+    async def has(self, url: str, template: str | None = None) -> bool:
         return url in self._store
 
     async def get_or_download(
@@ -69,9 +76,11 @@ class MockResourceCacheRepository(IResourceCacheRepository):
         url: str,
         custom_headers: dict[str, str] | None = None,
         timeout: float = 5.0,
+        template: str | None = None,
     ) -> tuple[bytes | None, str | None]:
         if url in self._store:
-            return self._store[url]
+            item = self._store[url]
+            return item[0], item[1]
         # 未命中时生成模拟数据
         dummy_data = f"/* content of {url} */".encode("utf-8")
         mime = "application/octet-stream"
@@ -83,23 +92,58 @@ class MockResourceCacheRepository(IResourceCacheRepository):
             mime = "image/png"
         elif url.endswith(".js"):
             mime = "application/javascript"
-        self._store[url] = (dummy_data, mime)
+        self._store[url] = (dummy_data, mime, template)
         return dummy_data, mime
 
-    def get_stats(self) -> dict[str, int]:
+    def get_stats(self) -> dict[str, Any]:
+        fonts_count = sum(
+            1 for u in self._store if "woff" in u or "font" in u
+        )
+        css_count = sum(1 for u in self._store if "css" in u)
+        images_count = sum(1 for u in self._store if "png" in u or "image" in u)
+        scripts_count = sum(1 for u in self._store if "js" in u)
         return {
             "total_files": len(self._store),
             "total_bytes": sum(len(d[0]) for d in self._store.values()),
-            "fonts": sum(1 for u in self._store if "woff" in u or "font" in u),
-            "css": sum(1 for u in self._store if "css" in u),
-            "images": sum(1 for u in self._store if "png" in u or "image" in u),
-            "scripts": sum(1 for u in self._store if "js" in u),
+            "total_access_count": len(self._store),
+            "by_category": {
+                "fonts": {"files": fonts_count, "bytes": 0},
+                "css": {"files": css_count, "bytes": 0},
+                "images": {"files": images_count, "bytes": 0},
+                "scripts": {"files": scripts_count, "bytes": 0},
+            },
+            "by_template": {},
         }
+
+    async def list_resources(
+        self, template: str | None = None, category: str | None = None
+    ) -> list[dict[str, Any]]:
+        results = []
+        for url, (data, mime, tmpl) in self._store.items():
+            if template and template != "all" and tmpl != template:
+                continue
+            results.append(
+                {
+                    "url": url,
+                    "mime_type": mime,
+                    "size": len(data),
+                    "template": tmpl or "global",
+                    "category": "fonts" if "woff" in url else "images",
+                }
+            )
+        return results
+
+    async def clear_cache(
+        self, template: str | None = None, category: str | None = None
+    ) -> dict[str, Any]:
+        count = len(self._store)
+        self._store.clear()
+        return {"deleted_files": count, "freed_bytes": 0, "freed_mb": 0.0}
 
 
 @pytest.mark.asyncio
 async def test_filesystem_resource_cache_repository(tmp_path: Path):
-    """测试基于本地磁盘的文件缓存仓储基本增删查功能。"""
+    """测试基于本地磁盘的文件缓存仓储增删查与模板分目录组织。"""
     repo = FileSystemResourceCacheRepository(tmp_path / "cache")
     test_url = "https://fonts.gstatic.com/s/notosans/v30/mock.woff2"
     test_data = b"dummy woff2 binary data"
@@ -108,25 +152,41 @@ async def test_filesystem_resource_cache_repository(tmp_path: Path):
     assert not await repo.has(test_url)
     assert await repo.get(test_url) is None
 
-    # 保存至缓存
-    saved_path = await repo.set(test_url, test_data, "font/woff2")
+    # 保存至指定模板缓存
+    saved_path = await repo.set(
+        test_url, test_data, "font/woff2", template="scrapbook"
+    )
     assert saved_path.is_file()
     assert saved_path.read_bytes() == test_data
+    assert "scrapbook" in str(saved_path)
 
     # 从缓存中读取
     assert await repo.has(test_url)
-    cached_data = await repo.get(test_url)
+    cached_data = await repo.get(test_url, template="scrapbook")
     assert cached_data == test_data
 
     # get_or_download 命中缓存
-    data, mime = await repo.get_or_download(test_url)
+    data, mime = await repo.get_or_download(test_url, template="scrapbook")
     assert data == test_data
     assert mime == "font/woff2"
 
     stats = repo.get_stats()
     assert stats["total_files"] == 1
-    assert stats["fonts"] == 1
+    assert stats["by_category"]["fonts"]["files"] == 1
+    assert "scrapbook" in stats["by_template"]
     assert stats["total_bytes"] == len(test_data)
+
+    # list_resources 列表查询
+    items = await repo.list_resources(template="scrapbook")
+    assert len(items) == 1
+    assert items[0]["url"] == test_url
+    assert items[0]["template"] == "scrapbook"
+
+    # clear_cache 清理
+    clear_res = await repo.clear_cache(template="scrapbook")
+    assert clear_res["deleted_files"] == 1
+    assert not await repo.has(test_url)
+
     await repo.close()
 
 
@@ -144,8 +204,12 @@ async def test_google_fonts_interceptor():
     font_bytes = b"\x00\x01\x02\x03\x04"
 
     # 预先填充 mock 仓储
-    await mock_repo.set(css_url, raw_css.encode("utf-8"), "text/css")
-    await mock_repo.set(font_woff2_url, font_bytes, "font/woff2")
+    await mock_repo.set(
+        css_url, raw_css.encode("utf-8"), "text/css", template="scrapbook"
+    )
+    await mock_repo.set(
+        font_woff2_url, font_bytes, "font/woff2", template="scrapbook"
+    )
 
     html_input = f"""
     <html>
@@ -157,11 +221,13 @@ async def test_google_fonts_interceptor():
     </html>
     """
 
-    result_html = await interceptor.intercept(html_input)
+    context = {"template": "scrapbook", "telemetry": {"items": [], "inlined_bytes": 0, "cache_hits": 0, "downloaded": 0, "failed": 0}}
+    result_html = await interceptor.intercept(html_input, context=context)
     assert css_url not in result_html
     assert "<style data-localized-fonts='google-fonts'>" in result_html
     encoded_font = base64.b64encode(font_bytes).decode("ascii")
     assert f"data:font/woff2;base64,{encoded_font}" in result_html
+    assert context["telemetry"]["cache_hits"] >= 1
 
 
 @pytest.mark.asyncio
@@ -221,7 +287,6 @@ async def test_font_face_interceptor():
 @pytest.mark.asyncio
 async def test_remote_image_interceptor(tmp_path: Path):
     """测试远程图片拦截与本地插件 assets 零网络直读。"""
-    # 创建模拟本地插件静态文件
     assets_dir = tmp_path / "assets" / "HatsuneMiku"
     assets_dir.mkdir(parents=True, exist_ok=True)
     local_img_file = assets_dir / "deco.png"
@@ -287,11 +352,10 @@ async def test_remote_script_and_preconnect_interceptors():
 
 @pytest.mark.asyncio
 async def test_html_resource_localizer_full_pipeline(tmp_path: Path):
-    """测试 HTMLResourceLocalizer 完整流水线端到端 0 外链效果。"""
+    """测试 HTMLResourceLocalizer 完整流水线端到端 0 外链及遥测收集效果。"""
     mock_repo = MockResourceCacheRepository()
     localizer = HTMLResourceLocalizer(mock_repo, plugin_root=tmp_path)
 
-    # 预设多种静态资源
     google_css = (
         "https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap"
     )
@@ -328,7 +392,8 @@ async def test_html_resource_localizer_full_pipeline(tmp_path: Path):
     </html>
     """
 
-    localized_html = await localizer.localize_html(html_source)
+    context: dict[str, Any] = {"template": "test_theme"}
+    localized_html = await localizer.localize_html(html_source, context=context)
 
     # 验证最终 HTML 中无任何外部网络外链
     assert "https://fonts.googleapis.com" not in localized_html
@@ -339,10 +404,16 @@ async def test_html_resource_localizer_full_pipeline(tmp_path: Path):
     assert "data:font/woff2;base64," in localized_html
     assert "data:image/png;base64," in localized_html
 
+    # 验证遥测指标已正确收集
+    telemetry = context.get("telemetry", {})
+    assert telemetry["total_intercepted"] >= 3
+    assert telemetry["inlined_bytes"] > 0
+    assert telemetry["duration_ms"] >= 0.0
+
 
 @pytest.mark.asyncio
 async def test_open_closed_principle_extensibility():
-    """验证拦截器流水线开闭原则扩展性（无需修改已有代码即可添加新类型拦截器）。"""
+    """验证拦截器流水线开闭原则扩展性。"""
     mock_repo = MockResourceCacheRepository()
     localizer = HTMLResourceLocalizer(mock_repo)
 

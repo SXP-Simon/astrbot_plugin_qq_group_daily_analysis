@@ -418,7 +418,7 @@ class ReportGenerator(IReportGenerator):
             ):
                 try:
                     html_content = await self.resource_localizer.localize_html(
-                        html_content
+                        html_content, context={"template": template_theme}
                     )
                 except Exception as e:
                     logger.warning(f"静态资源与字体本地化失败，继续使用原始 HTML: {e}")
@@ -821,7 +821,7 @@ class ReportGenerator(IReportGenerator):
             ):
                 try:
                     html_content = await self.resource_localizer.localize_html(
-                        html_content
+                        html_content, context={"template": template_theme}
                     )
                 except Exception as e:
                     logger.warning(f"HTML报告静态资源本地化失败: {e}")

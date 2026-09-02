@@ -11,11 +11,12 @@ class IResourceCacheRepository(ABC):
     """用于缓存与读取静态资源（字体、CSS、图片、脚本）的抽象仓储接口。"""
 
     @abstractmethod
-    async def get(self, url: str) -> bytes | None:
+    async def get(self, url: str, template: str | None = None) -> bytes | None:
         """根据 URL 获取本地缓存的资源二进制数据。
 
         Args:
             url: 远程资源链接。
+            template: 关联的模板主题名称（如 scrapbook, ATRI 等）。
 
         Returns:
             若已缓存返回二进制字节流，未命中则返回 None。
@@ -23,13 +24,20 @@ class IResourceCacheRepository(ABC):
         pass
 
     @abstractmethod
-    async def set(self, url: str, data: bytes, mime_type: str | None = None) -> Path:
+    async def set(
+        self,
+        url: str,
+        data: bytes,
+        mime_type: str | None = None,
+        template: str | None = None,
+    ) -> Path:
         """将资源二进制数据存入本地持久化缓存。
 
         Args:
             url: 远程资源链接。
             data: 资源二进制数据。
             mime_type: 可选的 MIME 类型。
+            template: 关联的模板主题名称。
 
         Returns:
             保存后的本地文件路径。
@@ -37,11 +45,12 @@ class IResourceCacheRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_path(self, url: str) -> Path | None:
+    async def get_path(self, url: str, template: str | None = None) -> Path | None:
         """获取已缓存资源的本地文件路径。
 
         Args:
             url: 远程资源链接。
+            template: 关联的模板主题名称。
 
         Returns:
             若存在返回本地文件 Path，否则返回 None。
@@ -49,11 +58,12 @@ class IResourceCacheRepository(ABC):
         pass
 
     @abstractmethod
-    async def has(self, url: str) -> bool:
+    async def has(self, url: str, template: str | None = None) -> bool:
         """检查指定资源是否已在本地缓存。
 
         Args:
             url: 远程资源链接。
+            template: 关联的模板主题名称。
 
         Returns:
             已缓存且文件有效返回 True，否则返回 False。
@@ -66,6 +76,7 @@ class IResourceCacheRepository(ABC):
         url: str,
         custom_headers: dict[str, str] | None = None,
         timeout: float = 5.0,
+        template: str | None = None,
     ) -> tuple[bytes | None, str | None]:
         """优先从缓存获取，若未命中则异步下载并持久化缓存。
 
@@ -73,6 +84,7 @@ class IResourceCacheRepository(ABC):
             url: 远程资源链接。
             custom_headers: 可选的 HTTP 请求头。
             timeout: 下载超时时间（秒）。
+            template: 关联的模板主题名称。
 
         Returns:
             (二进制字节流, MIME 类型) 元组，下载失败时二进制数据为 None。
@@ -81,9 +93,39 @@ class IResourceCacheRepository(ABC):
 
     @abstractmethod
     def get_stats(self) -> dict[str, Any]:
-        """获取缓存统计信息（文件数量、总大小等）。
+        """获取缓存统计信息（文件数量、总大小、按模板及分类分布等）。
 
         Returns:
             包含统计指标的字典。
+        """
+        pass
+
+    @abstractmethod
+    async def list_resources(
+        self, template: str | None = None, category: str | None = None
+    ) -> list[dict[str, Any]]:
+        """获取缓存资源列表明细（支持按模板和分类筛选）。
+
+        Args:
+            template: 可选的模板过滤名称。
+            category: 可选的分类过滤名称（fonts, css, images, scripts）。
+
+        Returns:
+            包含资源元数据详情的列表。
+        """
+        pass
+
+    @abstractmethod
+    async def clear_cache(
+        self, template: str | None = None, category: str | None = None
+    ) -> dict[str, Any]:
+        """清理缓存资源（支持按模板或分类清理，或全量清理）。
+
+        Args:
+            template: 可选的模板过滤名称。
+            category: 可选的分类过滤名称。
+
+        Returns:
+            包含已删除文件数与释放字节数的字典。
         """
         pass

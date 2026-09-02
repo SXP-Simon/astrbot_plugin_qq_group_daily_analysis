@@ -86,7 +86,9 @@ class QQOfficialMarkdownReportGenerator:
 
         if self.resource_localizer is not None:
             try:
-                html_content = await self.resource_localizer.localize_html(html_content)
+                html_content = await self.resource_localizer.localize_html(
+                    html_content, context={"template": "qq_official_markdown"}
+                )
             except Exception as exc:
                 logger.warning("[QQOfficial] 本地化静态资源失败: %s", exc)
 

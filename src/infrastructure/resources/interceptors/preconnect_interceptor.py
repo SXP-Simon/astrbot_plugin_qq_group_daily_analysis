@@ -30,6 +30,12 @@ class PreconnectInterceptor(BaseResourceInterceptor):
         Returns:
             清理后的 HTML 字符串。
         """
+        ctx = context or {}
+        telemetry = ctx.get("telemetry")
+        matches = list(PRECONNECT_PATTERN.finditer(content))
+        if matches and telemetry is not None:
+            telemetry["preconnect_tags_stripped"] = len(matches)
+
         cleaned = PRECONNECT_PATTERN.sub("", content)
         logger.debug("[Preconnect拦截器] 已清理冗余 preconnect / dns-prefetch 标签。")
         return cleaned
