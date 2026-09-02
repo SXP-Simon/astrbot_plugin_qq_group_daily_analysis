@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { message } from "antd";
 import {
   clearResourceCache,
+  fetchReportTemplates,
   fetchResourceCache,
   fetchStorageOverview,
+  TemplateOption,
   triggerResourcePrefetch,
 } from "../../../entities/resource/api/resourceApi";
 import {
@@ -23,6 +25,9 @@ export function useStorageCacheViewModel() {
   const [storage, setStorage] = useState<StorageOverview | null>(null);
   const [stats, setStats] = useState<ResourceCacheStats | null>(null);
   const [resources, setResources] = useState<ResourceCacheItem[]>([]);
+  const [availableTemplates, setAvailableTemplates] = useState<
+    TemplateOption[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [prefetchProgress, setPrefetchProgress] =
     useState<PrefetchProgressState>({
@@ -40,12 +45,13 @@ export function useStorageCacheViewModel() {
     async (isManual = false) => {
       if (!isManual) setLoading(true);
       try {
-        const [storageRes, cacheRes] = await Promise.allSettled([
+        const [storageRes, cacheRes, tplRes] = await Promise.allSettled([
           fetchStorageOverview(),
           fetchResourceCache(
             selectedTemplate === "all" ? undefined : selectedTemplate,
             selectedCategory === "all" ? undefined : selectedCategory
           ),
+          fetchReportTemplates(),
         ]);
 
         if (storageRes.status === "fulfilled" && storageRes.value) {
@@ -54,6 +60,19 @@ export function useStorageCacheViewModel() {
         if (cacheRes.status === "fulfilled" && cacheRes.value) {
           setStats(cacheRes.value.stats);
           setResources(cacheRes.value.resources || []);
+          if (
+            cacheRes.value.available_templates &&
+            cacheRes.value.available_templates.length > 0
+          ) {
+            setAvailableTemplates(cacheRes.value.available_templates);
+          }
+        }
+        if (
+          tplRes.status === "fulfilled" &&
+          tplRes.value &&
+          tplRes.value.length > 0
+        ) {
+          setAvailableTemplates((prev) => (prev.length > 0 ? prev : tplRes.value));
         }
       } catch (err) {
         if (isManual) message.error(`刷新存储指标失败: ${err}`);
@@ -89,12 +108,22 @@ export function useStorageCacheViewModel() {
   }, [prefetchProgress.active]);
 
   const handlePrefetch = async (targetTemplate?: string) => {
-    const tmpl = targetTemplate || (selectedTemplate === "all" ? undefined : selectedTemplate);
+    const tmpl =
+      targetTemplate ||
+      (selectedTemplate === "all" ? undefined : selectedTemplate);
     const isAll = !tmpl || tmpl === "all";
+
+    // 查找用户友好的模板名称
+    const matched = availableTemplates.find((t) => t.id === tmpl);
+    const displayTitle = isAll
+      ? "全部模板"
+      : matched
+      ? matched.label
+      : `模板 [${tmpl}]`;
 
     setPrefetchProgress({
       active: true,
-      templateName: isAll ? "全部模板" : tmpl,
+      templateName: displayTitle,
       startTime: Date.now(),
       elapsedSeconds: 0,
     });
@@ -105,9 +134,7 @@ export function useStorageCacheViewModel() {
         const durStr = res.duration_ms
           ? ` (总耗时 ${(res.duration_ms / 1000).toFixed(1)}s)`
           : "";
-        message.success(
-          `${isAll ? "全部模板" : `模板 [${tmpl}]`} 静态资源与字体预取完成！${durStr}`
-        );
+        message.success(`${displayTitle} 静态资源与字体预取完成！${durStr}`);
         await refresh(true);
       } else {
         message.error(`预取失败: ${res.message}`);
@@ -141,8 +168,6 @@ export function useStorageCacheViewModel() {
       setClearing(false);
     }
   };
-
-  const availableTemplates = Object.keys(stats?.by_template || {});
 
   const filteredResources = resources.filter((item) => {
     if (!searchQuery) return true;

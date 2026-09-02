@@ -1,14 +1,23 @@
 import React from "react";
 import {
-  Input,
-  Select,
+  Card,
+  Table,
   Button,
-  Popconfirm,
+  Select,
+  Input,
+  Space,
+  Tag,
+  Row,
+  Col,
+  Typography,
   Tooltip,
-  Spin,
+  Popconfirm,
   Alert,
   Dropdown,
+  Spin,
+  message,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
   ReloadOutlined,
   ThunderboltOutlined,
@@ -22,8 +31,13 @@ import {
   CopyOutlined,
   LoadingOutlined,
   DownOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
+import { MetricCard } from "../../../shared/ui/MetricCard";
 import { useStorageCacheViewModel } from "../model/useStorageCacheViewModel";
+import { ResourceCacheItem } from "../../../entities/resource/model/types";
+
+const { Text } = Typography;
 
 export const StorageCachePage: React.FC = () => {
   const {
@@ -48,52 +62,244 @@ export const StorageCachePage: React.FC = () => {
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
+    message.success("资源链接已复制到剪贴板");
   };
 
   const isSelectedSpecific = selectedTemplate && selectedTemplate !== "all";
+  const selectedTemplateObj = availableTemplates.find(
+    (t) => t.id === selectedTemplate
+  );
 
   // 更多预取菜单选项
   const prefetchMenuItems = [
     {
       key: "all",
-      label: "全量预取所有模板资源",
-      icon: <ThunderboltOutlined className="text-amber-500" />,
+      label: "全量预取所有模板静态资源",
+      icon: <ThunderboltOutlined style={{ color: "#d97706" }} />,
       onClick: () => handlePrefetch("all"),
     },
-    ...availableTemplates
-      .filter((t) => t !== "global")
-      .map((t) => ({
-        key: t,
-        label: `预取模板 [${t}]`,
-        onClick: () => handlePrefetch(t),
-      })),
+    { type: "divider" as const },
+    ...availableTemplates.map((t) => ({
+      key: t.id,
+      label: `预取 ${t.label}`,
+      onClick: () => handlePrefetch(t.id),
+    })),
+  ];
+
+  // 表格列定义
+  const columns: ColumnsType<ResourceCacheItem> = [
+    {
+      title: "模板归属",
+      dataIndex: "template",
+      key: "template",
+      width: 130,
+      render: (tmpl: string) => (
+        <Tag
+          bordered
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            margin: 0,
+            borderRadius: 4,
+          }}
+        >
+          {tmpl || "global"}
+        </Tag>
+      ),
+    },
+    {
+      title: "资源分类",
+      dataIndex: "category",
+      key: "category",
+      width: 90,
+      render: (cat: string) => {
+        let color = "default";
+        if (cat === "fonts") color = "warning";
+        else if (cat === "css") color = "processing";
+        else if (cat === "scripts") color = "purple";
+        else if (cat === "images") color = "success";
+
+        return (
+          <Tag
+            color={color}
+            bordered
+            style={{
+              fontFamily: "monospace",
+              fontSize: 11,
+              margin: 0,
+              borderRadius: 4,
+            }}
+          >
+            {cat}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: "远程资源 URL",
+      dataIndex: "url",
+      key: "url",
+      ellipsis: true,
+      render: (url: string) => (
+        <Tooltip title={url} placement="topLeft">
+          <Text
+            copyable={{ text: url }}
+            style={{
+              fontFamily: "monospace",
+              fontSize: 12,
+              color: "#1e293b",
+            }}
+          >
+            {url}
+          </Text>
+        </Tooltip>
+      ),
+    },
+    {
+      title: "MIME 类型",
+      dataIndex: "mime_type",
+      key: "mime_type",
+      width: 140,
+      render: (mime: string) => (
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: 11,
+            color: "#64748b",
+          }}
+        >
+          {mime || "application/octet-stream"}
+        </span>
+      ),
+    },
+    {
+      title: "本地大小",
+      dataIndex: "size",
+      key: "size",
+      width: 100,
+      sorter: (a, b) => a.size - b.size,
+      render: (size: number, record: ResourceCacheItem) => (
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: 12,
+            fontWeight: 500,
+            color: "#334155",
+          }}
+        >
+          {record.size_formatted || `${(size / 1024).toFixed(1)} KB`}
+        </span>
+      ),
+    },
+    {
+      title: "命中次数",
+      dataIndex: "access_count",
+      key: "access_count",
+      width: 90,
+      sorter: (a, b) => (a.access_count || 1) - (b.access_count || 1),
+      render: (count: number) => (
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#16a34a",
+          }}
+        >
+          {count || 1}
+        </span>
+      ),
+    },
+    {
+      title: "本地相对存储路径",
+      dataIndex: "relative_path",
+      key: "relative_path",
+      width: 220,
+      ellipsis: true,
+      render: (relPath: string, record: ResourceCacheItem) => {
+        const display = relPath || record.file_path;
+        return (
+          <Tooltip title={display} placement="topLeft">
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: 11,
+                color: "#64748b",
+              }}
+            >
+              {display}
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: "操作",
+      key: "action",
+      width: 90,
+      align: "right",
+      render: (_: any, record: ResourceCacheItem) => (
+        <Button
+          type="link"
+          size="small"
+          icon={<CopyOutlined style={{ fontSize: 12 }} />}
+          onClick={() => handleCopy(record.url)}
+          style={{ padding: "0 4px", fontSize: 12 }}
+        >
+          复制
+        </Button>
+      ),
+    },
   ];
 
   return (
-    <div className="space-y-3">
-      {/* 顶部紧凑状态与操作栏 (Header Toolbar) */}
-      <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <DatabaseOutlined className="text-blue-600 dark:text-blue-400 text-sm" />
-          <span className="font-semibold text-xs md:text-sm text-[#1e293b] dark:text-[#c9d1d9]">
+    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      {/* 顶部紧凑控制栏 */}
+
+      <Card
+        size="small"
+        styles={{
+          body: {
+            padding: "8px 14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 8,
+          },
+        }}
+      >
+        <Space wrap align="center">
+          <DatabaseOutlined style={{ color: "#2563eb", fontSize: 16 }} />
+          <span style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>
             存储空间全景与静态资源缓存控制台
           </span>
-          <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono rounded bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+          <Tag
+            color="success"
+            bordered
+            style={{
+              borderRadius: 4,
+              fontSize: 11,
+              fontFamily: "monospace",
+              margin: 0,
+            }}
+          >
             ● 0 外网请求拦截就绪
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
+          </Tag>
+        </Space>
+
+        <Space wrap align="center" size="small">
           <Button
             size="small"
             icon={<ReloadOutlined spin={loading} />}
             onClick={() => refresh(true)}
-            className="text-xs rounded border border-[#e2e8f0] dark:border-[#30363d] bg-white dark:bg-[#21262d] text-[#1e293b] dark:text-[#c9d1d9]"
+            style={{ fontSize: 12, borderRadius: 4 }}
           >
             刷新
           </Button>
 
-          {/* 细粒度预取按钮组 */}
-          {isSelectedSpecific ? (
+          {/* 细粒度模板预取与全量预取组合按键 */}
+          <Space.Compact size="small">
             <Button
               type="primary"
               size="small"
@@ -105,47 +311,45 @@ export const StorageCachePage: React.FC = () => {
                 )
               }
               loading={prefetchProgress.active}
-              onClick={() => handlePrefetch(selectedTemplate)}
-              className="text-xs rounded bg-[#2563eb] text-white hover:bg-blue-700 font-medium"
-            >
-              预取当前模板 [{selectedTemplate}]
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              size="small"
-              icon={
-                prefetchProgress.active ? (
-                  <LoadingOutlined />
-                ) : (
-                  <ThunderboltOutlined />
+              onClick={() =>
+                handlePrefetch(
+                  isSelectedSpecific ? selectedTemplate : "all"
                 )
               }
-              loading={prefetchProgress.active}
-              onClick={() => handlePrefetch("all")}
-              className="text-xs rounded bg-[#2563eb] text-white hover:bg-blue-700 font-medium"
+              style={{
+                fontSize: 12,
+                borderRadius: "4px 0 0 4px",
+                backgroundColor: "#2563eb",
+                fontWeight: 500,
+              }}
             >
-              全量预取所有模板
+              {isSelectedSpecific
+                ? `预取 ${selectedTemplateObj?.label || selectedTemplate}`
+                : "全量预取所有模板"}
             </Button>
-          )}
-
-          <Dropdown
-            menu={{ items: prefetchMenuItems }}
-            placement="bottomRight"
-            disabled={prefetchProgress.active}
-          >
-            <Button
-              size="small"
-              icon={<DownOutlined className="text-[10px]" />}
-              className="text-xs rounded px-1.5"
-            />
-          </Dropdown>
+            <Dropdown
+              menu={{ items: prefetchMenuItems }}
+              placement="bottomRight"
+              disabled={prefetchProgress.active}
+            >
+              <Button
+                type="primary"
+                size="small"
+                icon={<DownOutlined style={{ fontSize: 10 }} />}
+                style={{
+                  borderRadius: "0 4px 4px 0",
+                  backgroundColor: "#1d4ed8",
+                  padding: "0 6px",
+                }}
+              />
+            </Dropdown>
+          </Space.Compact>
 
           <Popconfirm
             title="确认清理静态资源缓存？"
             description={
               isSelectedSpecific
-                ? `将清理模板 [${selectedTemplate}] 下的所有已缓存资源文件`
+                ? `将清理模板 [${selectedTemplateObj?.label || selectedTemplate}] 下的所有已缓存静态资源`
                 : "将清空全部已缓存的字体、样式表和图片资源"
             }
             onConfirm={() => handleClear()}
@@ -159,173 +363,153 @@ export const StorageCachePage: React.FC = () => {
               danger
               icon={<DeleteOutlined />}
               loading={clearing}
-              className="text-xs rounded font-medium"
+              style={{ fontSize: 12, borderRadius: 4, fontWeight: 500 }}
             >
               {isSelectedSpecific
-                ? `清理模板 [${selectedTemplate}] 缓存`
+                ? `清理 [${selectedTemplateObj?.label || selectedTemplate}] 缓存`
                 : "清理全部缓存"}
             </Button>
           </Popconfirm>
-        </div>
-      </div>
+        </Space>
+      </Card>
 
-      {/* 友好预取中进度与耗时提示卡片 (Friendly Prefetch Alert) */}
+      {/* 友好预取进度提示 */}
       {prefetchProgress.active && (
         <Alert
           type="info"
           showIcon
-          icon={<LoadingOutlined className="text-blue-500 text-sm" />}
+          icon={<LoadingOutlined style={{ color: "#2563eb", fontSize: 15 }} />}
           message={
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
-              <span>
-                正在预取【{prefetchProgress.templateName}】的外部字体与样式表...
-              </span>
-              <span className="font-mono text-blue-600 dark:text-blue-400">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              <span>正在预取【{prefetchProgress.templateName}】的外部字体与样式表...</span>
+              <span style={{ fontFamily: "monospace", color: "#2563eb" }}>
                 已耗时：{prefetchProgress.elapsedSeconds} 秒
               </span>
             </div>
           }
           description={
-            <div className="text-[11px] text-[#64748b] dark:text-[#8b949e] mt-0.5">
-              系统正在后台下载 Google Fonts / CDN
-              字体切片并持久化写入本地缓存，国内网络初次拉取切片较多，请耐心等待...
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+              系统正在从高速网络拉取字体切片并写入本地磁盘持久化，保证后续渲染 0 网络请求，请耐心等待...
             </div>
           }
-          className="border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/30 rounded py-2 px-3"
+          style={{
+            borderRadius: 6,
+            border: "1px solid #bfdbfe",
+            backgroundColor: "#eff6ff",
+            padding: "8px 14px",
+          }}
         />
       )}
 
-      {/* 1. Plugin Data 存储空间概览 (KPI Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {/* 总占用 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">数据目录总空间</span>
-            <FolderOpenOutlined />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-[#1e293b] dark:text-[#c9d1d9]">
-              {storage?.total?.mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB ({storage?.total?.files ?? 0} 项)
-            </span>
-          </div>
-        </div>
+      {/* 1. Plugin Data 存储空间指标矩阵 (KPI Matrix) */}
+      <Row gutter={[10, 10]}>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="数据目录总空间"
+            value={storage?.total?.mb ?? 0}
+            suffix="MB"
+            prefix={<FolderOpenOutlined style={{ color: "#2563eb" }} />}
+            subTitle={`${storage?.total?.files ?? 0} 个文件`}
+            loading={loading}
+          />
+        </Col>
 
-        {/* 静态资源缓存 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">静态资源与字体缓存</span>
-            <FileZipOutlined className="text-amber-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-amber-600 dark:text-amber-400">
-              {storage?.resources_cache?.mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB ({storage?.resources_cache?.files ?? 0} 文件)
-            </span>
-          </div>
-        </div>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="静态资源与字体缓存"
+            value={storage?.resources_cache?.mb ?? 0}
+            suffix="MB"
+            prefix={<FileZipOutlined style={{ color: "#d97706" }} />}
+            subTitle={`${storage?.resources_cache?.files ?? 0} 个文件`}
+            loading={loading}
+          />
+        </Col>
 
-        {/* SQLite 链路库 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">链路数据库 (Traces)</span>
-            <DatabaseOutlined className="text-blue-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-blue-600 dark:text-blue-400">
-              {storage?.database?.traces_sqlite_mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB (SQLite)
-            </span>
-          </div>
-        </div>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="链路数据库 (Traces)"
+            value={storage?.database?.traces_sqlite_mb ?? 0}
+            suffix="MB"
+            prefix={<DatabaseOutlined style={{ color: "#2563eb" }} />}
+            subTitle="SQLite 链路记录"
+            loading={loading}
+          />
+        </Col>
 
-        {/* 产物报告 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">历史报告与图片</span>
-            <PictureOutlined className="text-purple-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-[#1e293b] dark:text-[#c9d1d9]">
-              {storage?.reports?.mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB ({storage?.reports?.files ?? 0} 份)
-            </span>
-          </div>
-        </div>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="历史报告与图片"
+            value={storage?.reports?.mb ?? 0}
+            suffix="MB"
+            prefix={<PictureOutlined style={{ color: "#9333ea" }} />}
+            subTitle={`${storage?.reports?.files ?? 0} 份产物报告`}
+            loading={loading}
+          />
+        </Col>
 
-        {/* 增量与断点 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">断点与增量记录</span>
-            <FileTextOutlined className="text-emerald-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-[#1e293b] dark:text-[#c9d1d9]">
-              {storage?.checkpoints?.mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB ({storage?.checkpoints?.files ?? 0} 项)
-            </span>
-          </div>
-        </div>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="断点与增量记录"
+            value={storage?.checkpoints?.mb ?? 0}
+            suffix="MB"
+            prefix={<FileTextOutlined style={{ color: "#16a34a" }} />}
+            subTitle={`${storage?.checkpoints?.files ?? 0} 项检查点`}
+            loading={loading}
+          />
+        </Col>
 
-        {/* 头像缓存 */}
-        <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded px-3 py-2 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#64748b] dark:text-[#8b949e]">
-            <span className="font-medium">用户头像缓存</span>
-            <PictureOutlined className="text-cyan-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1">
-            <span className="font-mono font-semibold text-base md:text-lg text-[#1e293b] dark:text-[#c9d1d9]">
-              {storage?.avatars?.mb ?? 0}
-            </span>
-            <span className="text-[10px] text-[#64748b] dark:text-[#8b949e]">
-              MB ({storage?.avatars?.files ?? 0} 张)
-            </span>
-          </div>
-        </div>
-      </div>
+        <Col xs={12} sm={8} md={4}>
+          <MetricCard
+            title="用户头像缓存"
+            value={storage?.avatars?.mb ?? 0}
+            suffix="MB"
+            prefix={<PictureOutlined style={{ color: "#06b6d4" }} />}
+            subTitle={`${storage?.avatars?.files ?? 0} 张头像`}
+            loading={loading}
+          />
+        </Col>
+      </Row>
 
-      {/* 2. 静态资源与字体缓存看板 (按模板组织) */}
-      <div className="bg-white dark:bg-[#161b22] border border-[#e2e8f0] dark:border-[#30363d] rounded overflow-hidden">
-        {/* 表头筛选与搜索栏 */}
-        <div className="p-2.5 border-b border-[#e2e8f0] dark:border-[#30363d] flex flex-wrap items-center justify-between gap-2 bg-[#f8fafc] dark:bg-[#161b22]/80">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-[#1e293b] dark:text-[#c9d1d9]">
+      {/* 2. 静态资源与字体缓存看板 */}
+      <Card
+        size="small"
+        title={
+          <Space wrap align="center" size="small">
+            <span style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>
               模板资源缓存
             </span>
 
-            {/* 模板选择 */}
+            {/* 完整模板筛选下拉 */}
             <Select
               size="small"
               value={selectedTemplate}
               onChange={setSelectedTemplate}
-              style={{ width: 140 }}
-              className="text-xs font-mono"
+              style={{ width: 170, fontSize: 12 }}
               options={[
                 { label: "全部模板", value: "all" },
                 { label: "global (通用)", value: "global" },
-                ...availableTemplates
-                  .filter((t) => t !== "global")
-                  .map((t) => ({ label: t, value: t })),
+                ...availableTemplates.map((t) => ({
+                  label: t.label,
+                  value: t.id,
+                })),
               ]}
             />
 
-            {/* 分类选择 */}
+            {/* 分类筛选下拉 */}
             <Select
               size="small"
               value={selectedCategory}
               onChange={setSelectedCategory}
-              style={{ width: 120 }}
-              className="text-xs font-mono"
+              style={{ width: 130, fontSize: 12 }}
               options={[
                 { label: "全部分类", value: "all" },
                 {
@@ -351,124 +535,58 @@ export const StorageCachePage: React.FC = () => {
             <Input
               size="small"
               placeholder="搜索 URL / 路径 / MIME..."
-              prefix={<SearchOutlined className="text-slate-400" />}
+              prefix={<SearchOutlined style={{ color: "#94a3b8" }} />}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               allowClear
-              style={{ width: 220 }}
-              className="text-xs"
+              style={{ width: 220, fontSize: 12 }}
             />
-          </div>
-
-          <div className="flex items-center gap-2 text-[10px] text-[#64748b] dark:text-[#8b949e]">
+          </Space>
+        }
+        extra={
+          <Space size="middle" style={{ fontSize: 12, color: "#64748b" }}>
             <span>
               已加载{" "}
-              <strong className="font-mono text-[#1e293b] dark:text-[#c9d1d9]">
+              <strong style={{ fontFamily: "monospace", color: "#1e293b" }}>
                 {resources.length}
               </strong>{" "}
               / {allResourcesCount} 项
             </span>
-            <span>•</span>
             <span>
               总命中访问{" "}
-              <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+              <strong style={{ fontFamily: "monospace", color: "#16a34a" }}>
                 {stats?.total_access_count ?? 0}
               </strong>{" "}
               次
             </span>
-          </div>
-        </div>
-
-        {/* 紧凑数据表格 (Data-Dense Table) */}
-        {loading ? (
-          <div className="p-8 text-center">
-            <Spin tip="正在读取静态资源索引..." />
-          </div>
-        ) : resources.length === 0 ? (
-          <div className="p-8 text-center text-xs text-[#64748b] dark:text-[#8b949e]">
-            暂无已缓存资源。在日常分析实际渲染时将自动按需缓存；亦可点击上方按钮手动预取。
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-[#e2e8f0] dark:border-[#30363d] bg-[#f8fafc] dark:bg-[#161b22]/60 text-[10px] md:text-xs uppercase tracking-wider text-[#64748b] dark:text-[#8b949e]">
-                  <th className="py-2 px-3 font-medium">模板归属</th>
-                  <th className="py-2 px-3 font-medium">分类</th>
-                  <th className="py-2 px-3 font-medium">资源 URL</th>
-                  <th className="py-2 px-3 font-medium">MIME 类型</th>
-                  <th className="py-2 px-3 font-medium">本地大小</th>
-                  <th className="py-2 px-3 font-medium">命中次数</th>
-                  <th className="py-2 px-3 font-medium">相对路径</th>
-                  <th className="py-2 px-3 font-medium text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e2e8f0] dark:divide-[#30363d]">
-                {resources.map((item) => (
-                  <tr
-                    key={item.hash}
-                    className="hover:bg-[#f8fafc] dark:hover:bg-[#21262d] transition-colors"
-                  >
-                    <td className="py-1.5 px-3">
-                      <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                        {item.template || "global"}
-                      </span>
-                    </td>
-                    <td className="py-1.5 px-3">
-                      <span
-                        className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono rounded border ${
-                          item.category === "fonts"
-                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800"
-                            : item.category === "css"
-                            ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800"
-                            : item.category === "scripts"
-                            ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
-                        }`}
-                      >
-                        {item.category}
-                      </span>
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-[#1e293b] dark:text-[#c9d1d9] max-w-[280px] truncate">
-                      <Tooltip title={item.url}>
-                        <span className="cursor-pointer select-all">
-                          {item.url}
-                        </span>
-                      </Tooltip>
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-[#64748b] dark:text-[#8b949e] text-[11px]">
-                      {item.mime_type}
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-[#64748b] dark:text-[#8b949e]">
-                      {item.size_formatted ||
-                        `${(item.size / 1024).toFixed(1)} KB`}
-                    </td>
-                    <td className="py-1.5 px-3 font-mono font-medium text-emerald-600 dark:text-emerald-400">
-                      {item.access_count ?? 1}
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-[10px] text-[#64748b] dark:text-[#8b949e] max-w-[200px] truncate">
-                      <Tooltip title={item.relative_path || item.file_path}>
-                        <span>{item.relative_path || item.file_path}</span>
-                      </Tooltip>
-                    </td>
-                    <td className="py-1.5 px-3 text-right">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<CopyOutlined className="text-[10px]" />}
-                        onClick={() => handleCopy(item.url)}
-                        className="text-[11px] px-1 text-[#2563eb] dark:text-[#58a6ff]"
-                      >
-                        复制链接
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
+          </Space>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table<ResourceCacheItem>
+          columns={columns}
+          dataSource={resources}
+          rowKey="hash"
+          size="small"
+          loading={loading}
+          pagination={{
+            size: "small",
+            showSizeChanger: true,
+            defaultPageSize: 20,
+            pageSizeOptions: ["10", "20", "50", "100"],
+            showTotal: (total) => `共 ${total} 项缓存资源`,
+            style: { padding: "8px 16px", margin: 0 },
+          }}
+          scroll={{ x: 900 }}
+          locale={{
+            emptyText: (
+              <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 12 }}>
+                暂无已缓存资源。在日常分析实际渲染时将自动按需缓存；亦可点击上方按钮手动预取。
+              </div>
+            ),
+          }}
+        />
+      </Card>
+    </Space>
   );
 };

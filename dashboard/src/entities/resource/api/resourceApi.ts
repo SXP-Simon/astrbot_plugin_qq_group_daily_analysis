@@ -9,10 +9,26 @@ import {
   StorageOverview,
 } from "../model/types";
 
+export interface TemplateOption {
+  id: string;
+  label: string;
+  is_custom?: boolean;
+}
+
 export interface ResourceCacheResponse {
   stats: ResourceCacheStats;
   resources: ResourceCacheItem[];
+  available_templates?: TemplateOption[];
 }
+
+export async function fetchReportTemplates(): Promise<TemplateOption[]> {
+  const res = await apiGet<TemplateOption[]>("templates");
+  if (res && res.data && Array.isArray(res.data)) {
+    return res.data;
+  }
+  return [];
+}
+
 
 export async function fetchResourceCache(
   template?: string,

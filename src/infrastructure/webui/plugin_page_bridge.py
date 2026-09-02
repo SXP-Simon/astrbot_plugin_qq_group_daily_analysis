@@ -1779,12 +1779,29 @@ class PluginPageWebUIBridge:
             resources = await self.resource_cache_repo.list_resources(
                 template=template, category=category
             )
+
+            # 获取系统全部可用视觉模板列表
+            templates_list: list[dict[str, Any]] = []
+            if self.resource_prefetch_service and hasattr(
+                self.resource_prefetch_service, "html_templates"
+            ):
+                templates_list = self.resource_prefetch_service.html_templates.get_available_templates()
+            else:
+                try:
+                    from ..reporting.templates import HTMLTemplates
+
+                    tpl_mgr = HTMLTemplates(None)
+                    templates_list = tpl_mgr.get_available_templates()
+                except Exception:
+                    pass
+
             return json_response(
                 {
                     "status": "ok",
                     "data": {
                         "stats": stats,
                         "resources": resources,
+                        "available_templates": templates_list,
                     },
                 }
             )
