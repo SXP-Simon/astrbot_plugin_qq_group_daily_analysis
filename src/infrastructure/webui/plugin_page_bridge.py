@@ -220,6 +220,12 @@ class PluginPageWebUIBridge:
                 "Get available built-in and custom report visual templates",
             ),
             (
+                f"/{PLUGIN_NAME}/templates/preview",
+                self.api_get_template_preview,
+                ["GET"],
+                "Get preview image of a custom report template as base64 data URL",
+            ),
+            (
                 f"/{PLUGIN_NAME}/templates/install_from_url",
                 self.api_install_template_from_url,
                 ["POST"],
@@ -1370,6 +1376,40 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": templates})
         except Exception as e:
             logger.error(f"获取模板列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_template_preview(self) -> Any:
+        """获取自定义模板的预览图（base64 data URL，供 WebUI 画廊等展示）"""
+        try:
+            template_name = (
+                str(request.query.get("template_name") or "").strip()
+                if hasattr(request, "query") and request.query
+                else ""
+            )
+            if not template_name:
+                return error_response("缺少模板名 (template_name)", status_code=400)
+
+            from ..reporting.template_installer import default_template_store_dir
+
+            custom_dir = default_template_store_dir() / template_name
+            candidates = ["preview.jpg", "preview.png", "demo.jpg", "demo.png"]
+            for candidate_name in candidates:
+                candidate = custom_dir / candidate_name
+                if not candidate.is_file():
+                    continue
+                content = await asyncio.to_thread(candidate.read_bytes)
+                mime = (
+                    "image/png"
+                    if candidate.suffix.lower() == ".png"
+                    else "image/jpeg"
+                )
+                data_url = (
+                    f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+                )
+                return json_response({"status": "ok", "data": {"data_url": data_url}})
+            return error_response("该模板没有预览图", status_code=404)
+        except Exception as e:
+            logger.error(f"获取模板预览图异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_install_template_from_url(self) -> Any:

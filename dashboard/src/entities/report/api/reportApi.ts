@@ -26,6 +26,23 @@ export async function fetchReportTemplates(): Promise<ReportTemplateItem[]> {
   return DEFAULT_REPORT_TEMPLATES;
 }
 
+export async function fetchTemplatePreview(
+  templateName: string
+): Promise<string | null> {
+  try {
+    const res = await apiGet<{ data_url?: string }>("templates/preview", {
+      template_name: templateName,
+    });
+    const data = extractData<{ data_url?: string }>(res);
+    if (data && typeof data === "object" && typeof data.data_url === "string") {
+      return data.data_url;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export async function rerenderReport(params: {
   group_id: string;
   date_str?: string;
