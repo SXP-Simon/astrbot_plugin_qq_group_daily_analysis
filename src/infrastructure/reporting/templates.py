@@ -16,6 +16,7 @@ from typing import Any
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader, select_autoescape
 
 from ...utils.logger import logger
+from .template_installer import INSTALL_MARKER_FILENAME
 
 
 class HTMLTemplates:
@@ -128,6 +129,7 @@ class HTMLTemplates:
                             "has_image": has_image,
                             "has_html": has_html,
                             "display_name": entry,
+                            "can_uninstall": False,
                         }
 
         # 2. 扫描用户自定义模板目录
@@ -189,6 +191,9 @@ class HTMLTemplates:
                             "has_image": has_image,
                             "has_html": has_html,
                             "display_name": meta_name or entry,
+                            # 仅安装器写入标记的模板可被 WebUI 自动卸载；
+                            # 内置模板的手动修改备份与手动放置目录均不可
+                            "can_uninstall": (p / INSTALL_MARKER_FILENAME).is_file(),
                         }
 
         # 确保默认的 scrapbook 始终位于第一个

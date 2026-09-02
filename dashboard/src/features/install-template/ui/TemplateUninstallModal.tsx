@@ -44,8 +44,9 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
     setLoading(true);
     try {
       const list = await fetchReportTemplates();
-      // 仅展示“自定义模板”（is_custom），内置模板不会出现在这里
-      setTemplates(list.filter((t) => t.is_custom === true));
+      // 仅展示可通过安装器卸载的自定义模板（带安装标记的后端确认项）；
+      // 内置模板与手动放置/自动备份目录（含内置模板的“自定义修改版”）不显示
+      setTemplates(list.filter((t) => t.can_uninstall === true));
     } catch {
       setTemplates([]);
     } finally {

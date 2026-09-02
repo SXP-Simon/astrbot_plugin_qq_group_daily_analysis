@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -317,3 +318,38 @@ def test_uninstall_clears_only_marked(tmp_path):
     uninstall_template("gda_keep", store_dir=tmp_path)
     assert not marked.exists()
     assert manual.is_dir()
+
+
+def test_available_templates_can_uninstall_flag(tmp_path):
+    """模板列表的 can_uninstall 仅对带安装标记的自定义目录为真。"""
+    from unittest.mock import MagicMock
+
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    custom_root = tmp_path / "custom"
+    managed = custom_root / "gda_managed"
+    unmanaged = custom_root / "manual_theme"
+    modified_builtin = custom_root / "simple"  # 模拟内置模板的“自定义修改版”备份
+    for dir_name in (managed, unmanaged, modified_builtin):
+        dir_name.mkdir(parents=True)
+        (dir_name / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    (managed / ".tpl_installed.json").write_text("{}", encoding="utf-8")
+    # 未修改的内置拷贝：哈希与内置模板一致 → 不会被误判为自定义
+    builtin_dir = Path(HTMLTemplates(MagicMock()).base_dir) / "simple"
+    if (builtin_dir / "image_template.html").exists():
+        (modified_builtin / "image_template.html").write_bytes(
+            (builtin_dir / "image_template.html").read_bytes()
+        )
+
+    mock = MagicMock()
+    mock.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda n: (custom_root / n) if n else custom_root
+    )
+    items = {
+        t["id"]: t for t in HTMLTemplates(mock).get_available_templates()
+    }
+
+    assert items["gda_managed"]["can_uninstall"] is True
+    assert items["manual_theme"]["can_uninstall"] is False
+    # 内置模板不可卸载
+    assert items["scrapbook"]["can_uninstall"] is False

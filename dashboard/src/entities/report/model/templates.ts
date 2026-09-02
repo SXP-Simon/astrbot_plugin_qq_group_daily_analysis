@@ -4,6 +4,7 @@ export interface ReportTemplateItem {
   is_custom?: boolean;
   has_image?: boolean;
   has_html?: boolean;
+  can_uninstall?: boolean;
 }
 
 export interface SelectOptionItem {

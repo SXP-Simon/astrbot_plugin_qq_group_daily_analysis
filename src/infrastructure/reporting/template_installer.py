@@ -498,7 +498,14 @@ def uninstall_template(
     store = store_dir or default_template_store_dir()
     base_real = os.path.normcase(str(store.resolve()))
     target = (store / template_name).resolve()
-    if os.path.normcase(os.path.commonpath([str(target), base_real])) != base_real:
+    try:
+        on_base = os.path.normcase(
+            os.path.commonpath([str(target), base_real])
+        ) == base_real
+    except ValueError:
+        # Windows 下 commonpath 对不同驱动器的路径会抛 ValueError
+        on_base = False
+    if not on_base:
         raise TemplateInstallError("模板名非法。")
     if not target.is_dir():
         raise TemplateInstallError(f"模板 '{template_name}' 不存在。")
@@ -508,7 +515,12 @@ def uninstall_template(
             "如需移除请手动删除数据目录下的同名文件夹。"
         )
 
-    shutil.rmtree(target)
+    try:
+        shutil.rmtree(target)
+    except Exception as exc:
+        raise TemplateInstallError(
+            f"卸载模板 '{template_name}' 失败：{exc}"
+        ) from exc
     logger.info(f"模板已卸载: {template_name}")
     return {"name": template_name, "removed": True}
 
