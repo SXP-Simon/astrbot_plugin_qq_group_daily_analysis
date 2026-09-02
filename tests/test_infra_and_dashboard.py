@@ -771,6 +771,32 @@ async def test_plugin_config_api(tmp_path: Path):
         assert save_res is not None
 
 
+@pytest.mark.asyncio
+async def test_template_command_service_list_and_exists():
+    """测试 TemplateCommandService 能够正确识别 html_template.html / image_template.html 并列出可用模板。"""
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
 
+    service = TemplateCommandService(str(PLUGIN_ROOT))
+    templates = service.list_available_templates()
 
+    # 1. 验证内置模板均被正确扫描到
+    assert len(templates) >= 6
+    assert "scrapbook" in templates
+    assert "retro_futurism" in templates
+    assert "ATRI" in templates
+    assert "format" not in templates
 
+    # 2. 验证 template_exists 正确性
+    assert await service.template_exists("scrapbook") is True
+    assert await service.template_exists("non_existent_template_xyz") is False
+
+    # 3. 验证 parse_template_input 序号与名称解析
+    parsed_by_num, err = service.parse_template_input("1", templates)
+    assert err is None
+    assert parsed_by_num == templates[0]
+
+    parsed_by_name, err = service.parse_template_input("scrapbook", templates)
+    assert err is None
+    assert parsed_by_name == "scrapbook"
