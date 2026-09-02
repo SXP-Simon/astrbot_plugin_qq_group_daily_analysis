@@ -199,7 +199,11 @@ class GroupDailyAnalysis(Star):
             analysis_service=self.analysis_service,
             report_dispatcher=self.auto_scheduler.report_dispatcher,
             report_output_dir=plugin_data_dir / "reports",
+            resource_cache_repo=self.resource_cache_repo,
+            resource_prefetch_service=self.resource_prefetch_service,
+            plugin_data_dir=plugin_data_dir,
         )
+
         self.webui_bridge.register_routes()
 
         # 同步全局限流并进行初始化配置

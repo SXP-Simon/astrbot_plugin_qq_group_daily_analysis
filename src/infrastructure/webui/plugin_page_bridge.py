@@ -101,6 +101,9 @@ class PluginPageWebUIBridge:
         analysis_service: Any,
         report_dispatcher: Any = None,
         report_output_dir: Path | None = None,
+        resource_cache_repo: Any = None,
+        resource_prefetch_service: Any = None,
+        plugin_data_dir: Path | None = None,
     ):
         self.context = context
         self.trace_store = trace_store
@@ -108,6 +111,9 @@ class PluginPageWebUIBridge:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
+        self.resource_cache_repo = resource_cache_repo
+        self.resource_prefetch_service = resource_prefetch_service
+        self.plugin_data_dir = plugin_data_dir
         TraceContext.set_active_task_manager(self.active_task_manager)
 
     def register_routes(self) -> None:
@@ -238,7 +244,32 @@ class PluginPageWebUIBridge:
                 ["POST"],
                 "Clear in-memory plugin log buffer",
             ),
-            # 7. 插件配置中心
+            # 7. 静态资源持久化缓存与存储可观测性
+            (
+                f"/{PLUGIN_NAME}/resources/cache",
+                self.api_get_resource_cache,
+                ["GET"],
+                "Get cached static resources list and utilization stats",
+            ),
+            (
+                f"/{PLUGIN_NAME}/resources/cache/clear",
+                self.api_clear_resource_cache,
+                ["POST"],
+                "Clear cached static resources by template or category",
+            ),
+            (
+                f"/{PLUGIN_NAME}/resources/prefetch",
+                self.api_trigger_resource_prefetch,
+                ["POST"],
+                "Trigger static resource prefetch across all templates",
+            ),
+            (
+                f"/{PLUGIN_NAME}/storage/overview",
+                self.api_get_storage_overview,
+                ["GET"],
+                "Get plugin_data storage metrics and disk footprint",
+            ),
+            # 8. 插件配置中心
             (
                 f"/{PLUGIN_NAME}/config",
                 self.api_get_config,
@@ -1725,4 +1756,185 @@ class PluginPageWebUIBridge:
             )
         except Exception as e:
             logger.error(f"获取配置文件内容异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_resource_cache(self) -> Any:
+        """获取静态资源持久化缓存统计与列表明细"""
+        try:
+            if not self.resource_cache_repo:
+                return json_response(
+                    {"status": "ok", "data": {"stats": {}, "resources": []}}
+                )
+            template = (
+                request.query.get("template")
+                if request is not None and hasattr(request, "query")
+                else None
+            )
+            category = (
+                request.query.get("category")
+                if request is not None and hasattr(request, "query")
+                else None
+            )
+            stats = self.resource_cache_repo.get_stats()
+            resources = await self.resource_cache_repo.list_resources(
+                template=template, category=category
+            )
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "stats": stats,
+                        "resources": resources,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取静态资源缓存列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_resource_cache(self) -> Any:
+        """按模板或分类清理静态资源持久化缓存"""
+        try:
+            if not self.resource_cache_repo:
+                return error_response(
+                    "Resource cache repository is not initialized",
+                    status_code=400,
+                )
+            payload: dict[str, Any] = {}
+            if request is not None and hasattr(request, "json"):
+                payload_raw = await request.json(default={})
+                payload = payload_raw if isinstance(payload_raw, dict) else {}
+            template = payload.get("template")
+            category = payload.get("category")
+            result = await self.resource_cache_repo.clear_cache(
+                template=template, category=category
+            )
+            return json_response({"status": "ok", "data": result})
+
+        except Exception as e:
+            logger.error(f"清理静态资源缓存异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_trigger_resource_prefetch(self) -> Any:
+        """手动触发所有报告模板的静态资源与字体全量预取"""
+        try:
+            if not self.resource_prefetch_service:
+                return error_response(
+                    "Resource prefetch service is not available",
+                    status_code=400,
+                )
+            asyncio.create_task(self.resource_prefetch_service.prefetch_all_templates())
+            return json_response(
+                {
+                    "status": "ok",
+                    "message": "已在后台启动模板静态资源与字体全量预取任务",
+                }
+            )
+        except Exception as e:
+            logger.error(f"触发静态资源预取异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_storage_overview(self) -> Any:
+        """获取 plugin_data 内部各模块磁盘存储占用概览与分布指标"""
+        try:
+            root_data = self.plugin_data_dir
+            if not root_data or not root_data.is_dir():
+                root_data = Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
+
+            def _get_dir_size(path: Path) -> tuple[int, int]:
+                if not path.is_dir():
+                    return 0, 0
+                count = 0
+                total_bytes = 0
+                for f in path.rglob("*"):
+                    if f.is_file():
+                        count += 1
+                        try:
+                            total_bytes += f.stat().st_size
+                        except Exception:
+                            pass
+                return count, total_bytes
+
+            def _get_file_size(path: Path) -> int:
+                if path.is_file():
+                    try:
+                        return path.stat().st_size
+                    except Exception:
+                        pass
+                return 0
+
+            # 1. 数据库占用
+            db_path = root_data / "traces.sqlite"
+            db_size = _get_file_size(db_path)
+            history_db = root_data / "message_history.db"
+            history_db_size = _get_file_size(history_db)
+
+            # 2. 静态资源持久化缓存
+            res_cache_dir = root_data / "cache" / "resources"
+            res_count, res_size = _get_dir_size(res_cache_dir)
+            res_stats = (
+                self.resource_cache_repo.get_stats() if self.resource_cache_repo else {}
+            )
+
+            # 3. 报告产物（图片 + 自托管 HTML）
+            reports_dir = root_data / "reports"
+            rep_count, rep_size = _get_dir_size(reports_dir)
+            hosted_reports = Path.cwd() / "data" / "self_hosted_html_reports"
+            h_count, h_size = _get_dir_size(hosted_reports)
+
+            # 4. 头像缓存
+            avatars_dir = root_data / "avatars"
+            av_count, av_size = _get_dir_size(avatars_dir)
+
+            # 5. 增量与断点存储
+            checkpoints_dir = root_data / "checkpoints"
+            cp_count, cp_size = _get_dir_size(checkpoints_dir)
+            inc_dir = root_data / "incremental"
+            inc_count, inc_size = _get_dir_size(inc_dir)
+
+            # 6. 总数据目录空间
+            tot_count, tot_size = _get_dir_size(root_data)
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "root_path": str(root_data),
+                        "total": {
+                            "files": tot_count,
+                            "bytes": tot_size,
+                            "mb": round(tot_size / (1024 * 1024), 2),
+                        },
+                        "database": {
+                            "traces_sqlite_bytes": db_size,
+                            "traces_sqlite_mb": round(db_size / (1024 * 1024), 2),
+                            "history_db_bytes": history_db_size,
+                            "history_db_mb": round(history_db_size / (1024 * 1024), 2),
+                        },
+                        "resources_cache": {
+                            "files": res_count,
+                            "bytes": res_size,
+                            "mb": round(res_size / (1024 * 1024), 2),
+                            "stats": res_stats,
+                        },
+                        "reports": {
+                            "files": rep_count + h_count,
+                            "bytes": rep_size + h_size,
+                            "mb": round((rep_size + h_size) / (1024 * 1024), 2),
+                        },
+                        "avatars": {
+                            "files": av_count,
+                            "bytes": av_size,
+                            "mb": round(av_size / (1024 * 1024), 2),
+                        },
+                        "checkpoints": {
+                            "files": cp_count + inc_count,
+                            "bytes": cp_size + inc_size,
+                            "mb": round((cp_size + inc_size) / (1024 * 1024), 2),
+                        },
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取存储占用概览异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
