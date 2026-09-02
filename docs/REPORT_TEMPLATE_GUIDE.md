@@ -220,7 +220,7 @@ python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti
 python scripts/debug_all_pdf_themes.py
 ```
 
-## 11. 安全须知
+## 9. 安全须知
 
 - **仅安装可信来源的模板**：安装器不执行模板代码，但模板会在**渲染服务端**
   （AstrBot T2I，可能是远程 y 服务或本机 Shiki 运行时）以完整 HTML 打开，
@@ -233,7 +233,7 @@ python scripts/debug_all_pdf_themes.py
 - **上传/下载限额**：zip 解压后总量 ≤ 64MB、单文件 ≤ 20MB、成员 ≤ 300、
   下载体 ≤ 64MB（流式限制），防止资源耗尽。
 
-## 9. 贡献为内置模板时的改动清单（仅贡献者）
+## 10. 贡献为内置模板时的改动清单（仅贡献者）
 
 除模板目录外，还需要修改（参照已有主题的注册方式）：
 
