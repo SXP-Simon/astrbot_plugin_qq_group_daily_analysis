@@ -129,7 +129,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       axisLabel: {
         color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', Consolas, -apple-system, sans-serif",
       },
     },
     yAxis: {
@@ -143,7 +143,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       axisLabel: {
         color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', Consolas, -apple-system, sans-serif",
       },
     },
     series: [
@@ -225,7 +225,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       axisLabel: {
         color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', Consolas, -apple-system, sans-serif",
       },
     },
     yAxis: {
@@ -239,7 +239,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       axisLabel: {
         color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', Consolas, -apple-system, sans-serif",
         formatter: (val: number) => (val >= 1000 ? `${Math.round(val / 1000)}k` : `${val}`),
       },
     },
@@ -332,7 +332,7 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
       textStyle: {
         color: isDark ? "#8b949e" : "#64748b",
         fontSize: 11,
-        fontFamily: "monospace",
+        fontFamily: "'JetBrains Mono', Consolas, -apple-system, sans-serif",
       },
       formatter: (name: string) => {
         const shortName = name.length > 14 ? `${name.slice(0, 12)}...` : name;
