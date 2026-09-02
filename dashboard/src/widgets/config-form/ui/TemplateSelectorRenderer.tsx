@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Select,
   Button,
@@ -22,7 +22,9 @@ import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
   getTemplateCdnUrl,
+  ReportTemplateItem,
 } from "../../../entities/report/model/templates";
+import { fetchReportTemplates } from "../../../entities/report/api/reportApi";
 import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
 import { TemplateUninstallModal } from "../../../features/install-template/ui/TemplateUninstallModal";
 
@@ -46,6 +48,14 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const [previewVisible, setPreviewVisible] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [remoteTemplates, setRemoteTemplates] = useState<ReportTemplateItem[]>([]);
+
+  useEffect(() => {
+    // 拉取全量模板（含自定义模板的 display_name/desc/tag 元信息，失败则静默降级）
+    fetchReportTemplates()
+      .then((list) => setRemoteTemplates(Array.isArray(list) ? list : []))
+      .catch(() => setRemoteTemplates([]));
+  }, []);
 
   const currentTemplate =
     typeof value === "string" && value
@@ -54,9 +64,28 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       ? defaultValue
       : "scrapbook";
 
-  const templateOptions = Array.isArray(options) && options.length > 0
-    ? options.map((opt) => String(opt))
-    : KNOWN_TEMPLATES.map((t) => t.key);
+  // 下拉选项：schema options（内置）为基底，追加 API 返回的自定义模板；
+  // 展示名为 API 元信息（display_name/tag/desc）优先，KNOWN_TEMPLATES 兜底
+  const templateOptions = useMemo(() => {
+    const baseKeys =
+      Array.isArray(options) && options.length > 0
+        ? options.map((opt) => String(opt))
+        : KNOWN_TEMPLATES.map((t) => t.key);
+    const remoteCustom = (remoteTemplates || []).filter(
+      (t) => t.is_custom === true && !baseKeys.includes(t.id)
+    );
+    return [...baseKeys, ...remoteCustom.map((t) => t.id)].map((key) => {
+      const remote = (remoteTemplates || []).find((t) => t.id === key);
+      const known = KNOWN_TEMPLATES.find((t) => t.key === key);
+      const displayName = remote?.display_name || known?.name || key;
+      const tag = remote?.tag || known?.tag || "";
+      return {
+        label: tag ? `${displayName} [${tag}]` : displayName,
+        value: key,
+        title: remote?.desc || known?.desc || "",
+      };
+    });
+  }, [options, remoteTemplates]);
 
   const currentMeta =
     KNOWN_TEMPLATES.find((t) => t.key === currentTemplate) || {
@@ -77,13 +106,9 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           value={currentTemplate}
           onChange={(v) => onChange(v)}
           style={{ minWidth: 200, flex: 1 }}
-          options={templateOptions.map((key) => {
-            const info = KNOWN_TEMPLATES.find((t) => t.key === key);
-            return {
-              label: info ? `${info.name} [${info.tag}]` : key,
-              value: key,
-            };
-          })}
+          options={templateOptions}
+          optionFilterProp="label"
+          showSearch
         />
         <Button
           icon={<EyeOutlined />}

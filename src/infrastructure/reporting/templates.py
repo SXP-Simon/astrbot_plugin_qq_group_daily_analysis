@@ -122,13 +122,17 @@ class HTMLTemplates:
                         label = self.KNOWN_TEMPLATE_NAMES.get(
                             entry, f"{entry} (内置模板)"
                         )
+                        meta = self._read_template_meta(p)
                         found_themes[entry] = {
                             "id": entry,
                             "label": label,
                             "is_custom": False,
                             "has_image": has_image,
                             "has_html": has_html,
-                            "display_name": entry,
+                            "display_name": meta.get("name") or entry,
+                            "desc": meta.get("desc", ""),
+                            "tag": meta.get("tag", ""),
+                            "tag_color": meta.get("tag_color", ""),
                             "can_uninstall": False,
                         }
 
@@ -152,7 +156,8 @@ class HTMLTemplates:
                     if has_image or has_html:
                         builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
                         builtin_dir = os.path.join(self.base_dir, entry)
-                        meta_name = self._read_template_meta_name(p)
+                        meta = self._read_template_meta(p)
+                        meta_name = meta.get("name", "")
 
                         is_custom = True
                         if builtin_label and os.path.isdir(builtin_dir):
@@ -191,6 +196,9 @@ class HTMLTemplates:
                             "has_image": has_image,
                             "has_html": has_html,
                             "display_name": meta_name or entry,
+                            "desc": meta.get("desc", ""),
+                            "tag": meta.get("tag", ""),
+                            "tag_color": meta.get("tag_color", ""),
                             # 仅安装器写入标记的模板可被 WebUI 自动卸载；
                             # 内置模板的手动修改备份与手动放置目录均不可
                             "can_uninstall": (p / INSTALL_MARKER_FILENAME).is_file(),
@@ -204,20 +212,24 @@ class HTMLTemplates:
         return result
 
     @staticmethod
-    def _read_template_meta_name(template_dir: str) -> str:
-        """读取自定义模板目录中可选 template.json 的 name 显示名。"""
+    def _read_template_meta(template_dir: str) -> dict[str, str]:
+        """读取模板目录中可选 template.json 的展示元信息（name/desc/tag/tag_color）。"""
         meta_path = os.path.join(template_dir, "template.json")
         if not os.path.isfile(meta_path):
-            return ""
+            return {}
         try:
             with open(meta_path, encoding="utf-8") as f:
-                meta = json.load(f)
-            name = meta.get("name") if isinstance(meta, dict) else None
-            if isinstance(name, str) and name.strip():
-                return name.strip()[:100]
+                raw = json.load(f)
         except Exception:
-            pass
-        return ""
+            return {}
+        meta: dict[str, str] = {}
+        if not isinstance(raw, dict):
+            return meta
+        for key in ("name", "desc", "tag", "tag_color"):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                meta[key] = value.strip()[:100]
+        return meta
 
     def invalidate_env(self, template_name: str) -> None:
         """使指定主题的 Jinja2 环境缓存失效（模板卸载后调用）。"""

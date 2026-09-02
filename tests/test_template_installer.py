@@ -320,6 +320,73 @@ def test_uninstall_clears_only_marked(tmp_path):
     assert manual.is_dir()
 
 
+def test_available_templates_meta_fields(tmp_path):
+    """template.json 的 name/desc/tag/tag_color 透出到模板列表。"""
+    from unittest.mock import MagicMock
+
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    custom_root = tmp_path / "custom"
+    theme = custom_root / "gda_meta"
+    theme.mkdir(parents=True)
+    (theme / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    (theme / "template.json").write_text(
+        json.dumps({"name": "樱雨日记", "desc": "樱花风格", "tag": "水彩樱花", "tag_color": "pink"}),
+        encoding="utf-8",
+    )
+    mock = MagicMock()
+    mock.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda n: (custom_root / n) if n else custom_root
+    )
+    items = {t["id"]: t for t in HTMLTemplates(mock).get_available_templates()}
+    meta = items["gda_meta"]
+    assert meta["display_name"] == "樱雨日记"
+    assert meta["desc"] == "樱花风格"
+    assert meta["tag"] == "水彩樱花"
+    assert meta["tag_color"] == "pink"
+
+
+def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
+    """/查看模板 的可用列表包含自定义模板目录。"""
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+    from src.infrastructure.reporting import template_installer
+
+    custom_root = tmp_path / "custom"
+    (custom_root / "gda_installed").mkdir(parents=True)
+    (custom_root / "gda_installed" / "image_template.html").write_text(
+        "<html></html>", encoding="utf-8"
+    )
+    monkeypatch.setattr(template_installer, "default_template_store_dir", lambda: custom_root)
+
+    service = TemplateCommandService(plugin_root=str(tmp_path))
+    names = service.list_available_templates()
+    assert "gda_installed" in names
+
+
+def test_resolve_template_preview_path_prefers_template_dir(tmp_path, monkeypatch):
+    """模板目录内预览图优先于插件仓库 assets 目录。"""
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+    from src.infrastructure.reporting import template_installer
+
+    custom_root = tmp_path / "custom"
+    theme = custom_root / "gda_sky"
+    theme.mkdir(parents=True)
+    (theme / "preview.png").write_bytes(b"png")
+    (theme / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    plugin_root = tmp_path / "plugin"
+    (plugin_root / "assets").mkdir(parents=True)
+    (plugin_root / "assets" / "gda_sky-demo.jpg").write_bytes(b"jpg")
+    monkeypatch.setattr(template_installer, "default_template_store_dir", lambda: custom_root)
+
+    service = TemplateCommandService(plugin_root=str(plugin_root))
+    resolved = service.resolve_template_preview_path("gda_sky")
+    assert resolved is not None and resolved.endswith("preview.png")
+
+
 def test_available_templates_can_uninstall_flag(tmp_path):
     """模板列表的 can_uninstall 仅对带安装标记的自定义目录为真。"""
     from unittest.mock import MagicMock

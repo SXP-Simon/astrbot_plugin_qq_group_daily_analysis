@@ -154,7 +154,9 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
                     }
                     description={
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        {item.has_image && item.has_html
+                        {item.desc
+                          ? item.desc
+                          : item.has_image && item.has_html
                           ? "长图 + 网页 双模式"
                           : item.has_image
                           ? "长图模式"

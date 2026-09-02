@@ -146,15 +146,38 @@
 - **手动放置**：把模板文件夹放入
   `data/plugin_data/astrbot_plugin_qq_group_daily_analysis/custom_t2i_templates/reporting_templates/<模板名>/`。
 
-### 6.4 显示名
+### 6.4 展示元信息（template.json）
 
 zip 内可选 `template.json`：
 
 ```json
-{ "name": "樱雨日记", "desc": "樱花与水彩风格的日记手账" }
+{
+  "name": "樱雨日记",
+  "desc": "樱花与水彩风格的日记手账",
+  "tag": "水彩樱花",
+  "tag_color": "pink"
+}
 ```
 
-`name` 会作为下拉框/列表中的显示名；缺省时直接使用模板目录名。
+| 字段 | 用途 |
+| --- | --- |
+| `name` | WebUI 下拉/列表中的显示名；缺省时直接使用模板目录名 |
+| `desc` | WebUI 下拉悬停提示与卸载列表中的描述 |
+| `tag` | WebUI 下拉中的风格标签（`名称 [标签]` 形式展示） |
+| `tag_color` | 标签配色（antd Tag 颜色名：blue/green/pink/purple/...） |
+
+### 6.5 预览图（随模板打包）
+
+在模板目录内放 `preview.jpg`（或 `preview.png` / `demo.jpg` / `demo.png`），
+随 zip 一起安装后，QQ `/查看模板` 会优先显示该图（其次查找插件仓库
+`assets/<模板名>-demo.jpg`，最后回退仓库图库链接）。
+
+```text
+<模板名>/
+├── preview.jpg      ← 可选：/查看模板 使用的预览图
+├── image_template.html
+└── ...
+```
 
 ## 7. 卸载
 

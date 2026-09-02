@@ -36,7 +36,25 @@ class TemplateCommandService:
         return candidate_dirs[0]
 
     def resolve_template_preview_path(self, template_name: str) -> str | None:
-        """解析模板预览图路径。"""
+        """解析模板预览图路径。
+
+        优先级：
+        1. 自定义模板目录内随模板打包的预览图
+           （custom_t2i_templates/reporting_templates/<模板名>/ 下的
+           preview.jpg/png 或 demo.jpg/png）；
+        2. 插件仓库 assets/<模板名>-demo.jpg（本地）；
+        3. 无本地文件时返回 None，由调用方回退仓库图库链接。
+        """
+        from ...infrastructure.reporting.template_installer import (
+            default_template_store_dir,
+        )
+
+        custom_dir = default_template_store_dir() / template_name
+        for candidate_name in ("preview.jpg", "preview.png", "demo.jpg", "demo.png"):
+            candidate = custom_dir / candidate_name
+            if candidate.is_file():
+                return str(candidate)
+
         candidate_paths = [
             os.path.join(self.plugin_root, "assets", f"{template_name}-demo.jpg"),
         ]
@@ -46,24 +64,40 @@ class TemplateCommandService:
         return None
 
     def list_available_templates(self) -> list[str]:
-        """获取本地所有可用模板名称列表。"""
-        base_dir = self.resolve_template_base_dir()
-        if not os.path.isdir(base_dir):
-            return []
+        """获取本地所有可用模板名称列表（内置 + 用户自定义）。"""
+        from ...infrastructure.reporting.template_installer import (
+            default_template_store_dir,
+        )
 
-        templates: list[str] = []
-        for item in os.listdir(base_dir):
-            item_path = os.path.join(base_dir, item)
-            if not os.path.isdir(item_path):
-                continue
-            if item.startswith("__") or item.startswith(".") or item == "format":
-                continue
-            if (
-                os.path.isfile(os.path.join(item_path, "html_template.html"))
-                or os.path.isfile(os.path.join(item_path, "image_template.html"))
-                or os.path.isfile(os.path.join(item_path, "template.html"))
-            ):
-                templates.append(item)
+        templates: set[str] = set()
+
+        base_dir = self.resolve_template_base_dir()
+        if os.path.isdir(base_dir):
+            for item in os.listdir(base_dir):
+                item_path = os.path.join(base_dir, item)
+                if not os.path.isdir(item_path):
+                    continue
+                if item.startswith("__") or item.startswith(".") or item == "format":
+                    continue
+                if (
+                    os.path.isfile(os.path.join(item_path, "html_template.html"))
+                    or os.path.isfile(os.path.join(item_path, "image_template.html"))
+                    or os.path.isfile(os.path.join(item_path, "template.html"))
+                ):
+                    templates.add(item)
+
+        custom_dir = default_template_store_dir()
+        if custom_dir.is_dir():
+            for item in os.listdir(custom_dir):
+                item_path = custom_dir / item
+                if not item_path.is_dir() or item.startswith("."):
+                    continue
+                if (
+                    (item_path / "html_template.html").is_file()
+                    or (item_path / "image_template.html").is_file()
+                ):
+                    templates.add(item)
+
         return sorted(templates)
 
     async def template_exists(self, template_name: str) -> bool:
