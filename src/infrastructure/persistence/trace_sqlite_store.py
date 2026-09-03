@@ -151,6 +151,7 @@ class TraceSQLiteStore:
                     group_id=CASE WHEN excluded.group_id != '' THEN excluded.group_id ELSE analysis_traces.group_id END,
                     group_name=CASE WHEN excluded.group_name != '' AND excluded.group_name != '未知群' THEN excluded.group_name ELSE analysis_traces.group_name END,
                     platform=CASE WHEN excluded.platform != '' AND excluded.platform NOT IN ('auto', 'default', 'all') THEN excluded.platform ELSE analysis_traces.platform END,
+                    trigger_type=CASE WHEN excluded.trigger_type != '' THEN excluded.trigger_type ELSE analysis_traces.trigger_type END,
                     status=excluded.status,
                     completed_at=excluded.completed_at,
                     duration_ms=excluded.duration_ms,
@@ -437,13 +438,14 @@ class TraceSQLiteStore:
         offset: int = 0,
         group_id: str | None = None,
         status: str | None = None,
+        trigger_type: str | None = None,
         search: str | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
         sort_by: str = "started_at",
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, Any]], int]:
-        """分页筛选查询 Trace 列表（支持按群组、状态、关键词、时间范围筛选与排序）"""
+        """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
         conditions = []
         params: list[Any] = []
 
@@ -453,6 +455,9 @@ class TraceSQLiteStore:
         if status:
             conditions.append("t.status = ?")
             params.append(status)
+        if trigger_type:
+            conditions.append("t.trigger_type = ?")
+            params.append(trigger_type)
         if start_time is not None:
             conditions.append("t.started_at >= ?")
             params.append(float(start_time))

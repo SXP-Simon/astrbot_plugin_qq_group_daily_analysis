@@ -14,6 +14,7 @@ export function useTracesViewModel() {
   const [pageSize, setPageSize] = useState(15);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [triggerTypeFilter, setTriggerTypeFilter] = useState<string | undefined>(undefined);
   const [selectedGroup, setSelectedGroup] = useState<string | undefined>(undefined);
   const [dateRange, setDateRange] = useState<[number, number] | null>(null);
   const [sortField, setSortField] = useState<string>("started_at");
@@ -44,6 +45,7 @@ export function useTracesViewModel() {
         group_id: selectedGroup || undefined,
         search: search.trim() || undefined,
         status: statusFilter || undefined,
+        trigger_type: triggerTypeFilter || undefined,
         start_time: dateRange ? dateRange[0] : undefined,
         end_time: dateRange ? dateRange[1] : undefined,
         sort_by: currentSortField,
@@ -66,7 +68,7 @@ export function useTracesViewModel() {
     loadData(1, pageSize, sortField, sortOrder);
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, selectedGroup, dateRange, sortField, sortOrder]);
+  }, [search, statusFilter, triggerTypeFilter, selectedGroup, dateRange, sortField, sortOrder]);
 
   const handleTableChange = (
     pagination: TablePaginationConfig,
@@ -102,6 +104,8 @@ export function useTracesViewModel() {
     setSearch,
     statusFilter,
     setStatusFilter,
+    triggerTypeFilter,
+    setTriggerTypeFilter,
     selectedGroup,
     setSelectedGroup,
     dateRange,
