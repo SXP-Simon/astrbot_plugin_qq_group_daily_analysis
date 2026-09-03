@@ -6,6 +6,7 @@ export interface ListTracesParams {
   offset?: number;
   group_id?: string;
   status?: string;
+  trigger_type?: string;
   search?: string;
   start_time?: number;
   end_time?: number;

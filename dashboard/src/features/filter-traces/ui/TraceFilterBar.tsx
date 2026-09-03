@@ -9,11 +9,13 @@ interface TraceFilterBarProps {
   search: string;
   selectedGroup?: string;
   statusFilter?: string;
+  triggerTypeFilter?: string;
   groups: GroupItem[];
   loading: boolean;
   onSearchChange: (val: string) => void;
   onGroupChange: (val?: string) => void;
   onStatusChange: (val?: string) => void;
+  onTriggerTypeChange?: (val?: string) => void;
   onDateRangeChange: (dates: [number, number] | null) => void;
   onRefresh: () => void;
 }
@@ -22,11 +24,13 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
   search,
   selectedGroup,
   statusFilter,
+  triggerTypeFilter,
   groups,
   loading,
   onSearchChange,
   onGroupChange,
   onStatusChange,
+  onTriggerTypeChange,
   onDateRangeChange,
   onRefresh,
 }) => {
@@ -48,7 +52,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
           prefix={<SearchOutlined />}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          style={{ width: 200 }}
+          style={{ width: 190 }}
           allowClear
         />
 
@@ -57,7 +61,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
           placeholder="选择群聊"
           value={selectedGroup}
           onChange={onGroupChange}
-          style={{ width: 170 }}
+          style={{ width: 160 }}
           allowClear
           showSearch
           optionFilterProp="label"
@@ -66,6 +70,28 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
             value: g.group_id,
           }))}
         />
+
+        {onTriggerTypeChange && (
+          <Select
+            size="small"
+            placeholder="触发方式"
+            value={triggerTypeFilter}
+            onChange={onTriggerTypeChange}
+            style={{ width: 115 }}
+            allowClear
+            options={[
+              { label: "全部方式", value: undefined },
+              { label: "增量日报", value: "incremental_report" },
+              { label: "增量分析", value: "incremental" },
+              { label: "定时分析", value: "auto" },
+              { label: "手动触发", value: "manual" },
+              { label: "控制台触发", value: "web_manual" },
+              { label: "群漫画生成", value: "comic_manual" },
+              { label: "断点续跑", value: "resume_analysis" },
+              { label: "主题重绘", value: "rerender_report" },
+            ]}
+          />
+        )}
 
         <Select
           size="small"

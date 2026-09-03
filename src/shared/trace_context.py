@@ -363,7 +363,7 @@ class TraceContext:
 
     @staticmethod
     def generate(prefix: str = "", group_name: str = "") -> str:
-        timestamp = datetime.now().strftime("%H%M")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         parts: list[str] = []
         if prefix:
             parts.append(prefix)
