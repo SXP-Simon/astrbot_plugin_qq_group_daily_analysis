@@ -170,7 +170,28 @@
 
 ### 6.4 展示元信息（template.json）
 
-zip 内可选 `template.json`：
+**文件位置**：模板**根目录**下的 `template.json`（与 `image_template.html` 同级），
+内置模板目录、自定义模板目录、zip 打包时均相同：
+
+```text
+<模板名>/
+├── template.json        ← 本文件（可选）
+├── image_template.html
+├── html_template.html   （可选）
+├── topic_item.html      （可选）
+├── preview.jpg          （可选，见 §6.5）
+└── ...
+```
+
+**最小可选示例**（仅需 `name`，其余字段可省）：
+
+```json
+{
+  "name": "樱雨日记"
+}
+```
+
+**完整示例**（全部字段）：
 
 ```json
 {
@@ -181,12 +202,16 @@ zip 内可选 `template.json`：
 }
 ```
 
-| 字段 | 用途 |
-| --- | --- |
-| `name` | WebUI 下拉/列表中的显示名；缺省时直接使用模板目录名 |
-| `desc` | WebUI 下拉悬停提示与卸载列表中的描述 |
-| `tag` | WebUI 下拉中的风格标签（`名称 [标签]` 形式展示） |
-| `tag_color` | 标签配色（antd Tag 颜色名：blue/green/pink/purple/...） |
+| 字段 | 必填 | 用途 |
+| --- | --- | --- |
+| `name` | 可选 | WebUI 下拉/列表中的显示名；缺省时直接使用模板目录名 |
+| `desc` | 可选 | WebUI 下拉悬停提示与卸载列表中的描述 |
+| `tag` | 可选 | WebUI 下拉中的风格标签（`名称 [标签]` 形式展示） |
+| `tag_color` | 可选 | 标签配色（antd Tag 颜色名：`default/blue/green/cyan/pink/purple/red/orange/lime/geekblue`） |
+
+> 全部字段均为字符串，长度上限 100 字符，多余部分自动截断；
+> 文件缺失、JSON 解析失败或字段为空时自动忽略，模板依旧可用。
+> 仅支持 JSON（不接受 YAML）。
 
 ### 6.5 预览图（随模板打包）
 
