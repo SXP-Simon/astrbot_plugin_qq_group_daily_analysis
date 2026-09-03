@@ -9,6 +9,7 @@ import {
   Tag,
   Typography,
   Image,
+  message,
 } from "antd";
 import {
   EyeOutlined,
@@ -92,6 +93,18 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
         setRemoteTemplates([]);
       });
   }, []);
+
+  // 安装/卸载后主动重新拉取模板列表，保证画廊与下拉立即出现/移除对应模板；
+  // 拉取失败时保留现有展示（不置空），并提示用户（与“自定义模板静默消失”问题一致）
+  const refreshRemoteTemplates = async () => {
+    try {
+      const list = await fetchReportTemplates();
+      setRemoteTemplates(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn("[templates] 刷新模板列表失败，保留现有展示", e);
+      message.warning("模板列表刷新失败，请稍后重试或刷新页面。");
+    }
+  };
 
   const currentTemplate =
     typeof value === "string" && value
@@ -200,10 +213,18 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       <TemplateInstallModal
         open={installOpen}
         onClose={() => setInstallOpen(false)}
+        onInstalled={() => void refreshRemoteTemplates()}
       />
       <TemplateUninstallModal
         open={uninstallOpen}
         onClose={() => setUninstallOpen(false)}
+        onUninstalled={(name) => {
+          void refreshRemoteTemplates();
+          // 若卸载的正是当前选中模板，回退到内置默认，避免表单值指向已删除模板
+          if (currentTemplate === name) {
+            onChange("scrapbook");
+          }
+        }}
       />
 
       {/* 选定模板的实时缩略图与简介卡片 */}

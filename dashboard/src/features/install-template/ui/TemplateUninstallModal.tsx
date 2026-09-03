@@ -28,7 +28,7 @@ const { Text } = Typography;
 interface TemplateUninstallModalProps {
   open: boolean;
   onClose: () => void;
-  onUninstalled?: () => void;
+  onUninstalled?: (name: string) => void;
 }
 
 export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
@@ -67,7 +67,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
       const result = await uninstallTemplate(name);
       if (result) {
         message.success(`模板已卸载：${name}`);
-        onUninstalled?.();
+        onUninstalled?.(name);
         await loadTemplates();
       } else {
         message.error("卸载失败，请查看服务器日志。");
