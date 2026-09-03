@@ -1324,6 +1324,11 @@ class PluginPageWebUIBridge:
         group_id = str(body.get("group_id", "")).strip()
         date_str = str(body.get("date_str", "")).strip()
         template_name = str(body.get("template_name", "default")).strip()
+        # 模板名安全校验：拒绝路径分隔符/穿越（渲染入口防线）
+        try:
+            template_name = validate_template_name(template_name)
+        except TemplateInstallError:
+            return error_response("模板名包含非法字符。", status_code=400)
         render_format = str(body.get("render_format", "image")).strip()
         platform_id = body.get("platform_id")
         trace_id = str(body.get("trace_id", "")).strip()
@@ -1446,7 +1451,8 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"从 URL 安装模板异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("安装模板失败，请查看服务器日志。", status_code=500)
 
     async def api_install_template_from_file(self) -> Any:
         """从上传的 zip 压缩包安装自定义报告视觉模板（JSON Base64 编码）"""
@@ -1485,7 +1491,8 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"从压缩包安装模板异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("安装模板失败，请查看服务器日志。", status_code=500)
 
     async def api_uninstall_template(self) -> Any:
         """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
@@ -1518,7 +1525,8 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=400)
         except Exception as e:
             logger.error(f"卸载模板异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("卸载模板失败，请查看服务器日志。", status_code=500)
 
     async def api_stream_events(self) -> Any:
         """SSE 实时推送任务生命周期事件"""

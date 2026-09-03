@@ -126,6 +126,19 @@ def preview_candidate_files(template_dir: Path) -> list[Path]:
     return result
 
 
+def template_dir_has_symlink_entries(template_dir: Path) -> bool:
+    """模板目录内的主模板文件（image_template.html / html_template.html / template.html）
+    是否含符号链接。
+
+    文件级 symlink 与目录级同属本地威胁模型：is_file/FileSystemLoader 会跟随链接读取
+    外部文件内容，加载/渲染前必须拒绝。安装器解压不会产生 symlink，仅手动放置场景命中。
+    """
+    return any(
+        (template_dir / name).is_symlink()
+        for name in (IMAGE_TEMPLATE_MARKER, HTML_TEMPLATE_MARKER, "template.html")
+    )
+
+
 def builtin_template_names() -> list[str]:
     """返回内置模板目录名列表（用于重名冲突检测）。"""
     base_dir = Path(__file__).resolve().parent / "templates"
@@ -309,7 +322,9 @@ def _write_install_marker(target_dir: Path, *, source: str, source_url: str) -> 
     except OSError as exc:
         # 标记是“可通过 WebUI 卸载”的唯一依据：写入失败必须视为安装失败，
         # 由调用方清理已移动的目标目录，避免出现“装上了却无法卸载”的孤儿模板。
-        raise TemplateInstallError(f"写入安装标记失败: {exc}") from exc
+        # 细节仅记录日志，客户端消息不透传异常（可能含服务器路径）。
+        logger.error(f"写入安装标记失败: {exc}")
+        raise TemplateInstallError("写入安装标记失败。") from exc
 
 
 def install_template_from_zip(
@@ -600,7 +615,9 @@ def uninstall_template(
     try:
         shutil.rmtree(target)
     except Exception as exc:
-        raise TemplateInstallError(f"卸载模板 '{template_name}' 失败：{exc}") from exc
+        # 细节仅记录日志，客户端消息不透传异常（可能含服务器绝对路径）
+        logger.error(f"卸载模板 '{template_name}' 失败: {exc}", exc_info=True)
+        raise TemplateInstallError("卸载模板失败，请查看服务器日志。") from exc
     logger.info(f"模板已卸载: {template_name}")
     return {"name": template_name, "removed": True}
 

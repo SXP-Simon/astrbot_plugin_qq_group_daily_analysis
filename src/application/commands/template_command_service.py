@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 
 from astrbot.api.message_components import (
     BaseMessageComponent,
@@ -77,6 +78,7 @@ class TemplateCommandService:
         """获取本地所有可用模板名称列表（内置 + 用户自定义）。"""
         from ...infrastructure.reporting.template_installer import (
             default_template_store_dir,
+            template_dir_has_symlink_entries,
         )
 
         templates: set[str] = set()
@@ -100,7 +102,13 @@ class TemplateCommandService:
         if custom_dir.is_dir():
             for item in os.listdir(custom_dir):
                 item_path = custom_dir / item
-                if not item_path.is_dir() or item.startswith("."):
+                # 拒绝符号链接目录及其内主模板文件（与卸载/预览侧防护一致）
+                if (
+                    not item_path.is_dir()
+                    or item_path.is_symlink()
+                    or item.startswith(".")
+                    or template_dir_has_symlink_entries(item_path)
+                ):
                     continue
                 if (item_path / "html_template.html").is_file() or (
                     item_path / "image_template.html"
@@ -113,6 +121,7 @@ class TemplateCommandService:
         """检查模板目录是否存在且包含有效模板文件（含模板名安全校验）。"""
         try:
             from ...infrastructure.reporting.template_installer import (
+                template_dir_has_symlink_entries,
                 validate_template_name,
             )
 
@@ -134,6 +143,12 @@ class TemplateCommandService:
             if not candidate_dir or not await asyncio.to_thread(
                 os.path.isdir, candidate_dir
             ):
+                continue
+            # 拒绝符号链接目录：os.path.isdir 会跟随链接，可能把外部目录误判为有效模板
+            if os.path.islink(candidate_dir):
+                continue
+            # 拒绝目录内的符号链接主模板文件（文件级 symlink 会跟随读外部内容）
+            if template_dir_has_symlink_entries(Path(candidate_dir)):
                 continue
             valid = await asyncio.to_thread(
                 lambda base=candidate_dir: (

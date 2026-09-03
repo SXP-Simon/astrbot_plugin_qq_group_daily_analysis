@@ -17,7 +17,11 @@ from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
 
 from ...utils.logger import logger
-from .template_installer import INSTALL_MARKER_FILENAME
+from .template_installer import (
+    INSTALL_MARKER_FILENAME,
+    template_dir_has_symlink_entries,
+    validate_template_name,
+)
 
 
 class HTMLTemplates:
@@ -56,6 +60,12 @@ class HTMLTemplates:
             if env is not None:
                 return env
 
+        # 模板名安全校验：拒绝路径分隔符/穿越（渲染入口的最终防线），非法时回退默认模板
+        try:
+            template_name = validate_template_name(template_name)
+        except Exception:
+            template_name = "scrapbook"
+
         template_dir = os.path.join(self.base_dir, template_name)
         get_custom_template_dir = getattr(
             self.config_manager, "get_custom_report_template_dir", None
@@ -70,7 +80,13 @@ class HTMLTemplates:
         )
 
         loaders = []
-        if custom_template_dir and custom_template_dir.exists():
+        # 拒绝符号链接的自定义模板目录或其内的主模板文件：FileSystemLoader 会跟随链接加载外部文件
+        if (
+            custom_template_dir
+            and custom_template_dir.exists()
+            and not custom_template_dir.is_symlink()
+            and not template_dir_has_symlink_entries(custom_template_dir)
+        ):
             loaders.append(FileSystemLoader(str(custom_template_dir)))
         if os.path.exists(template_dir):
             loaders.append(FileSystemLoader(template_dir))
@@ -151,7 +167,13 @@ class HTMLTemplates:
 
         if custom_base and custom_base.is_dir():
             for p in sorted(custom_base.iterdir()):
-                if p.is_dir() and not p.name.startswith("."):
+                # 拒绝符号链接目录及其内的主模板文件：避免外部目录/文件被当作自定义模板展示
+                if (
+                    p.is_dir()
+                    and not p.is_symlink()
+                    and not p.name.startswith(".")
+                    and not template_dir_has_symlink_entries(p)
+                ):
                     entry = p.name
                     has_image = (p / "image_template.html").exists()
                     has_html = (p / "html_template.html").exists()

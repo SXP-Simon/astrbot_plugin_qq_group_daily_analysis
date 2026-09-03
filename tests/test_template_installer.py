@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -583,3 +584,124 @@ def test_available_templates_can_uninstall_flag(tmp_path):
     assert items["manual_theme"]["can_uninstall"] is False
     # 内置模板不可卸载
     assert items["scrapbook"]["can_uninstall"] is False
+
+
+def _make_theme_store(tmp_path):
+    """创建带模板的 store 与指向外部的 symlink 模板目录（Windows 无权限时返回 None）。"""
+    from unittest.mock import MagicMock
+
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+    from src.infrastructure.reporting import template_installer
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "gda_normal").mkdir()
+    (store / "gda_normal" / "image_template.html").write_text(
+        "<html></html>", encoding="utf-8"
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "image_template.html").write_text("OUTSIDE_SENTINEL", encoding="utf-8")
+    try:
+        os.symlink(outside, store / "gda_link", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        return None
+
+    service = TemplateCommandService(plugin_root=str(tmp_path))
+    mock = MagicMock()
+    mock.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda n: (store / n) if n else store
+    )
+    return {
+        "store": store,
+        "service": service,
+        "html_templates": HTMLTemplates(mock),
+        "monkeypatch_target": template_installer,
+    }
+
+
+def test_symlink_template_dir_rejected_everywhere(tmp_path, monkeypatch):
+    """符号链接模板目录在列表/校验/扫描/渲染四处均被拒绝（与卸载/预览侧防护一致）。"""
+    ctx = _make_theme_store(tmp_path)
+    if ctx is None:
+        pytest.skip("当前平台不支持创建符号链接")
+
+    monkeypatch.setattr(
+        ctx["monkeypatch_target"], "default_template_store_dir", lambda: ctx["store"]
+    )
+
+    # 1) list_available_templates：正常目录在，symlink 目录不在
+    names = ctx["service"].list_available_templates()
+    assert "gda_normal" in names
+    assert "gda_link" not in names
+
+    # 2) template_exists：symlink 目录不被认定为有效模板
+    assert asyncio.run(ctx["service"].template_exists("gda_link")) is False
+    assert asyncio.run(ctx["service"].template_exists("gda_normal")) is True
+
+    # 3) HTMLTemplates 扫描：symlink 目录不出现在画廊/下拉元信息中
+    items = {t["id"]: t for t in ctx["html_templates"].get_available_templates()}
+    assert "gda_normal" in items
+    assert "gda_link" not in items
+
+    # 4) 渲染 loader：symlink 目录不被追加为搜索路径，模板源码不来自外部目录
+    #    （哨兵写在 image_template.html，必须读该文件断言才有效）
+    env = ctx["html_templates"]._get_env_sync("gda_link")
+    src = env.loader.get_source(env, "image_template.html")[0]
+    assert "OUTSIDE_SENTINEL" not in src
+
+
+def test_symlinked_template_file_rejected(tmp_path, monkeypatch):
+    """目录内的主模板文件为符号链接时：列表/校验/渲染均拒绝（文件级 symlink）。"""
+    from unittest.mock import MagicMock
+
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+    from src.infrastructure.reporting import template_installer
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    store = tmp_path / "store"
+    store.mkdir()
+    tpl = store / "gda_filelink"
+    tpl.mkdir()
+    (tpl / "image_template.html").write_text("<html></html>", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "evil.html").write_text("FILE_SENTINEL", encoding="utf-8")
+    try:
+        os.symlink(outside / "evil.html", tpl / "html_template.html")
+    except (OSError, NotImplementedError):
+        pytest.skip("当前平台不支持创建符号链接")
+
+    monkeypatch.setattr(template_installer, "default_template_store_dir", lambda: store)
+
+    service = TemplateCommandService(plugin_root=str(tmp_path))
+    # 列表排除 + template_exists 拒绝
+    assert "gda_filelink" not in service.list_available_templates()
+    assert asyncio.run(service.template_exists("gda_filelink")) is False
+
+    # 渲染 loader 拒绝：读 html_template.html 时不应命中外部哨兵文件
+    mock = MagicMock()
+    mock.get_custom_report_template_dir = MagicMock(
+        side_effect=lambda n: (store / n) if n else store
+    )
+    env = HTMLTemplates(mock)._get_env_sync("gda_filelink")
+    src = env.loader.get_source(env, "html_template.html")[0]
+    assert "FILE_SENTINEL" not in src
+
+
+def test_get_env_validates_template_name():
+    """渲染入口对非法模板名回退到默认 scrapbook（不抛错、不越界）。"""
+    from unittest.mock import MagicMock
+
+    from src.infrastructure.reporting.templates import HTMLTemplates
+
+    env = HTMLTemplates(MagicMock())._get_env_sync("../../evil")
+    assert env is not None
+    # 回退后的环境可正常加载 scrapbook 模板源码
+    src = env.loader.get_source(env, "html_template.html")[0]
+    assert isinstance(src, str) and src
