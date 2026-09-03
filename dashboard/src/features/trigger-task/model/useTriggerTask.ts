@@ -43,6 +43,10 @@ export function useTriggerTask(groups: GroupItem[] = [], onSuccess?: () => void)
       if (platList.status === "fulfilled") setConnectedPlatforms(platList.value);
       if (provList.status === "fulfilled") setProviders(provList.value);
       if (tmplList.status === "fulfilled") setTemplates(tmplList.value);
+      else {
+        // 模板列表失败：下拉回退内置模板（formatTemplateOptions 兜底），显式提示避免静默
+        message.warning("模板列表获取失败，已回退显示内置模板");
+      }
     } catch {
       // Ignore background failure, fallback options will be displayed
     } finally {

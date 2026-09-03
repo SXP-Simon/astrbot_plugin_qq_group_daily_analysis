@@ -1,6 +1,6 @@
 import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ReportItem } from "../model/types";
-import { ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../model/templates";
+import { ReportTemplateItem } from "../model/templates";
 
 export async function fetchReportHistory(): Promise<ReportItem[]> {
   const res = await apiGet<ReportItem[]>("reports/history");
@@ -16,14 +16,11 @@ export async function fetchReportContent(filename: string): Promise<ReportItem |
 }
 
 export async function fetchReportTemplates(): Promise<ReportTemplateItem[]> {
-  try {
-    const res = await apiGet<ReportTemplateItem[]>("reports/templates");
-    const data = extractData<ReportTemplateItem[]>(res);
-    if (Array.isArray(data) && data.length > 0) return data;
-  } catch {
-    // fallback to defaults on network/bridge error
-  }
-  return DEFAULT_REPORT_TEMPLATES;
+  const res = await apiGet<ReportTemplateItem[]>("reports/templates");
+  const data = extractData<ReportTemplateItem[]>(res);
+  if (Array.isArray(data) && data.length > 0) return data;
+  // 不再静默降级：失败交由调用方提示（避免自定义模板无声消失）
+  throw new Error("模板列表获取失败");
 }
 
 export async function fetchTemplatePreview(

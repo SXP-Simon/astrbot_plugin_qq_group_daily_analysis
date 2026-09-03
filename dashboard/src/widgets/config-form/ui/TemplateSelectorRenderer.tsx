@@ -83,10 +83,14 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const [remoteTemplates, setRemoteTemplates] = useState<ReportTemplateItem[]>([]);
 
   useEffect(() => {
-    // 拉取全量模板（含自定义模板的 display_name/desc/tag 元信息，失败则静默降级）
+    // 拉取全量模板（含自定义模板的 display_name/desc/tag 元信息；
+    // 失败时 KNOWN_TEMPLATES 兜底展示内置模板，控制台留日志便于排查）
     fetchReportTemplates()
       .then((list) => setRemoteTemplates(Array.isArray(list) ? list : []))
-      .catch(() => setRemoteTemplates([]));
+      .catch((e) => {
+        console.warn("[templates] 获取模板列表失败，回退到内置模板展示", e);
+        setRemoteTemplates([]);
+      });
   }, []);
 
   const currentTemplate =

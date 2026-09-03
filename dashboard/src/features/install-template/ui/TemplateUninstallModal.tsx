@@ -48,6 +48,7 @@ export const TemplateUninstallModal: React.FC<TemplateUninstallModalProps> = ({
       // 内置模板与手动放置/自动备份目录（含内置模板的“自定义修改版”）不显示
       setTemplates(list.filter((t) => t.can_uninstall === true));
     } catch {
+      message.warning("模板列表获取失败，请检查插件运行状态");
       setTemplates([]);
     } finally {
       setLoading(false);

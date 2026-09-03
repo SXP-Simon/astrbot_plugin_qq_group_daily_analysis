@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Modal, Alert, Form, Select, Space } from "antd";
+import { Modal, Alert, Form, Select, Space, message } from "antd";
 import { SyncOutlined, ApiOutlined, SkinOutlined } from "@ant-design/icons";
 import { fetchProviderList, LLMProviderItem } from "../../../entities/trace/api/traceApi";
 import { fetchReportTemplates } from "../../../entities/report/api/reportApi";
-import { formatTemplateOptions, ReportTemplateItem } from "../../../entities/report/model/templates";
+import { formatTemplateOptions, ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../../../entities/report/model/templates";
 
 interface ResumeTaskModalProps {
   open: boolean;
@@ -37,7 +37,10 @@ export const ResumeTaskModal: React.FC<ResumeTaskModalProps> = ({
         .finally(() => setLoadingProviders(false));
       fetchReportTemplates()
         .then((list) => setTemplates(list))
-        .catch(() => {})
+        .catch(() => {
+          message.warning("模板列表获取失败，已回退显示内置模板");
+          setTemplates(DEFAULT_REPORT_TEMPLATES);
+        })
         .finally(() => setLoadingTemplates(false));
     }
   }, [open]);
