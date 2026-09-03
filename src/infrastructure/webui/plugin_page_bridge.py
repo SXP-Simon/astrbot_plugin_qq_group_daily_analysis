@@ -720,6 +720,7 @@ class PluginPageWebUIBridge:
             offset = int(request.query.get("offset", 0))
             group_id = request.query.get("group_id")
             status = request.query.get("status")
+            trigger_type = request.query.get("trigger_type")
             search = request.query.get("search")
             start_time_raw = request.query.get("start_time")
             end_time_raw = request.query.get("end_time")
@@ -734,6 +735,7 @@ class PluginPageWebUIBridge:
                 offset=offset,
                 group_id=group_id,
                 status=status,
+                trigger_type=trigger_type,
                 search=search,
                 start_time=start_time,
                 end_time=end_time,
