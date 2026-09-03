@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -13,7 +14,9 @@ from src.infrastructure.reporting.template_installer import (
     TemplateInstallError,
     _archive_url_candidates,
     install_template_from_zip,
+    is_path_within,
     parse_github_repo_url,
+    preview_candidate_files,
     uninstall_template,
     validate_template_name,
 )
@@ -67,9 +70,7 @@ def test_install_from_zip_flat_root(tmp_path):
     with pytest.raises(TemplateInstallError, match="无法从压缩包推断模板名"):
         install_template_from_zip(zip_data, store_dir=tmp_path)
 
-    result = install_template_from_zip(
-        zip_data, store_dir=tmp_path, name="gda_flat"
-    )
+    result = install_template_from_zip(zip_data, store_dir=tmp_path, name="gda_flat")
     assert result["has_image"] is True
     assert (tmp_path / "gda_flat" / "activity_chart.html").is_file()
 
@@ -248,15 +249,92 @@ def test_parse_github_repo_url_valid():
     parsed = parse_github_repo_url("https://github.com/owner/repo.git")
     assert parsed["repo"] == "repo"
 
-    parsed = parse_github_repo_url(
-        "https://github.com/owner/repo/tree/feat/theme-beta"
-    )
+    parsed = parse_github_repo_url("https://github.com/owner/repo/tree/feat/theme-beta")
     assert parsed["branch"] == "feat/theme-beta"
 
 
-def test_parse_github_repo_url_http_scheme_allowed():
-    parsed = parse_github_repo_url("http://github.com/owner/repo")
-    assert parsed["owner"] == "owner"
+def test_parse_github_repo_url_http_scheme_rejected():
+    # 明文 http 一律拒绝：下载链路虽然硬编码 https，但入口收紧避免误导与中间人疑虑
+    with pytest.raises(TemplateInstallError):
+        parse_github_repo_url("http://github.com/owner/repo")
+
+
+def test_is_path_within_basic(tmp_path):
+    """is_path_within：根内为 True（含自身），根外与含 .. 的归一化路径按解析结果判定。"""
+    store = tmp_path / "store"
+    store.mkdir()
+    inner = store / "gda_theme"
+    inner.mkdir()
+    (store / "a" / "b").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    assert is_path_within(store, store) is True
+    assert is_path_within(inner, store) is True
+    assert is_path_within(store / "a" / "b" / ".." / "c", store) is True
+    assert is_path_within(outside, store) is False
+    # 根内的路径即使不存在也判定为“在范围内”（语义仅比较解析后的路径，
+    # 不要求文件存在——预览未安装模板时由此进入后续 404 分支）
+    assert is_path_within(store / "not_exist", store) is True
+
+
+def test_preview_candidate_files_selects_jpg_png(tmp_path):
+    """preview/demo 的 jpg/png 中仅存在且非链接的文件被返回，其他类型被忽略。"""
+    tpl_dir = tmp_path / "gda_theme"
+    tpl_dir.mkdir()
+    (tpl_dir / "preview.jpg").write_bytes(b"small-jpg")
+    (tpl_dir / "demo.png").write_bytes(b"small-png")
+    (tpl_dir / "not_a_preview.txt").write_text("x")
+
+    found = preview_candidate_files(tpl_dir)
+    assert [p.name for p in found] == ["preview.jpg", "demo.png"]
+
+
+def test_preview_candidate_files_rejects_oversize(tmp_path, monkeypatch):
+    """超过 MAX_PREVIEW_FILE_SIZE 的预览文件被拒绝（防超大图读入内存）。"""
+    tpl_dir = tmp_path / "gda_theme"
+    tpl_dir.mkdir()
+    (tpl_dir / "preview.jpg").write_bytes(b"x" * 64)
+
+    monkeypatch.setattr(
+        "src.infrastructure.reporting.template_installer.MAX_PREVIEW_FILE_SIZE", 32
+    )
+    assert preview_candidate_files(tpl_dir) == []
+
+
+def test_preview_candidate_files_rejects_symlink(tmp_path):
+    """指向模板目录外文件的符号链接预览图被拒绝（防读取任意本地文件）。"""
+    tpl_dir = tmp_path / "gda_theme"
+    tpl_dir.mkdir()
+    outside = tmp_path / "outside.jpg"
+    outside.write_bytes(b"secret-picture")
+
+    try:
+        os.symlink(outside, tpl_dir / "preview.jpg")
+    except (OSError, NotImplementedError):
+        pytest.skip("当前平台不支持创建符号链接")
+
+    (tpl_dir / "demo.png").write_bytes(b"ok")
+    found = preview_candidate_files(tpl_dir)
+    assert [p.name for p in found] == ["demo.png"]
+
+
+def test_install_marker_write_failure_cleans_target(tmp_path, monkeypatch):
+    """安装标记写入失败必须视为安装失败并清理目标目录（否则留下无法卸载的孤儿模板）。"""
+    import src.infrastructure.reporting.template_installer as tpl_mod
+
+    zip_data = build_zip(
+        {"image_template.html": "<html></html>"},
+        leading_root="gda_badge-main",
+    )
+
+    def boom(*args, **kwargs):
+        raise TemplateInstallError("写入安装标记失败: disk full")
+
+    monkeypatch.setattr(tpl_mod, "_write_install_marker", boom)
+    with pytest.raises(TemplateInstallError, match="写入安装标记失败"):
+        install_template_from_zip(zip_data, store_dir=tmp_path)
+    assert not (tmp_path / "gda_badge").exists()
 
 
 @pytest.mark.parametrize(
@@ -341,9 +419,7 @@ def test_uninstall_removes_installed_template(tmp_path):
     zip_data = build_zip(
         {"image_template.html": "<html></html>", "topic_item.html": "<div></div>"}
     )
-    install_template_from_zip(
-        zip_data, store_dir=tmp_path, name="gda_mine"
-    )
+    install_template_from_zip(zip_data, store_dir=tmp_path, name="gda_mine")
     assert (tmp_path / "gda_mine").is_dir()
 
     result = uninstall_template("gda_mine", store_dir=tmp_path)
@@ -409,7 +485,14 @@ def test_available_templates_meta_fields(tmp_path):
     theme.mkdir(parents=True)
     (theme / "image_template.html").write_text("<html></html>", encoding="utf-8")
     (theme / "template.json").write_text(
-        json.dumps({"name": "樱雨日记", "desc": "樱花风格", "tag": "水彩樱花", "tag_color": "pink"}),
+        json.dumps(
+            {
+                "name": "樱雨日记",
+                "desc": "樱花风格",
+                "tag": "水彩樱花",
+                "tag_color": "pink",
+            }
+        ),
         encoding="utf-8",
     )
     mock = MagicMock()
@@ -436,7 +519,9 @@ def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
     (custom_root / "gda_installed" / "image_template.html").write_text(
         "<html></html>", encoding="utf-8"
     )
-    monkeypatch.setattr(template_installer, "default_template_store_dir", lambda: custom_root)
+    monkeypatch.setattr(
+        template_installer, "default_template_store_dir", lambda: custom_root
+    )
 
     service = TemplateCommandService(plugin_root=str(tmp_path))
     names = service.list_available_templates()
@@ -458,7 +543,9 @@ def test_resolve_template_preview_path_prefers_template_dir(tmp_path, monkeypatc
     plugin_root = tmp_path / "plugin"
     (plugin_root / "assets").mkdir(parents=True)
     (plugin_root / "assets" / "gda_sky-demo.jpg").write_bytes(b"jpg")
-    monkeypatch.setattr(template_installer, "default_template_store_dir", lambda: custom_root)
+    monkeypatch.setattr(
+        template_installer, "default_template_store_dir", lambda: custom_root
+    )
 
     service = TemplateCommandService(plugin_root=str(plugin_root))
     resolved = service.resolve_template_preview_path("gda_sky")
@@ -490,9 +577,7 @@ def test_available_templates_can_uninstall_flag(tmp_path):
     mock.get_custom_report_template_dir = MagicMock(
         side_effect=lambda n: (custom_root / n) if n else custom_root
     )
-    items = {
-        t["id"]: t for t in HTMLTemplates(mock).get_available_templates()
-    }
+    items = {t["id"]: t for t in HTMLTemplates(mock).get_available_templates()}
 
     assert items["gda_managed"]["can_uninstall"] is True
     assert items["manual_theme"]["can_uninstall"] is False

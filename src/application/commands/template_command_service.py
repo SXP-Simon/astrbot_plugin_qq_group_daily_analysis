@@ -47,12 +47,22 @@ class TemplateCommandService:
         """
         from ...infrastructure.reporting.template_installer import (
             default_template_store_dir,
+            is_path_within,
+            preview_candidate_files,
+            validate_template_name,
         )
 
-        custom_dir = default_template_store_dir() / template_name
-        for candidate_name in ("preview.jpg", "preview.png", "demo.jpg", "demo.png"):
-            candidate = custom_dir / candidate_name
-            if candidate.is_file():
+        try:
+            template_name = validate_template_name(template_name)
+        except Exception:
+            return None
+
+        store = default_template_store_dir()
+        custom_dir = store / template_name
+        # 目录级校验：模板目录必须位于存储根内（拒绝对根目录外路径的读取），
+        # 候选文件同样拒绝符号链接且 resolve 后仍需位于模板目录内
+        if is_path_within(custom_dir, store):
+            for candidate in preview_candidate_files(custom_dir):
                 return str(candidate)
 
         candidate_paths = [

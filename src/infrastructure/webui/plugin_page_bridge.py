@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import re
 import time
 from collections.abc import Iterable
@@ -77,6 +76,8 @@ from ..reporting.template_installer import (
     default_template_store_dir,
     install_template_from_github_url,
     install_template_from_zip,
+    is_path_within,
+    preview_candidate_files,
     uninstall_template,
     validate_template_name,
 )
@@ -1400,21 +1401,12 @@ class PluginPageWebUIBridge:
 
             # 防路径穿越：确认解析后的目标路径仍位于自定义模板根目录内
             store = default_template_store_dir().resolve()
-            custom_dir = (store / template_name).resolve()
-            try:
-                on_base = os.path.normcase(
-                    os.path.commonpath([str(custom_dir), str(store)])
-                ) == os.path.normcase(str(store))
-            except ValueError:
-                on_base = False  # Windows 跨盘
-            if not on_base:
+            custom_dir = store / template_name
+            if not is_path_within(custom_dir, store):
                 return error_response("模板名非法", status_code=400)
 
-            candidates = ["preview.jpg", "preview.png", "demo.jpg", "demo.png"]
-            for candidate_name in candidates:
-                candidate = custom_dir / candidate_name
-                if not candidate.is_file():
-                    continue
+            # 候选文件拒绝符号链接并确认解析后仍在模板目录内（防 symlink 读取任意文件）
+            for candidate in preview_candidate_files(custom_dir):
                 content = await asyncio.to_thread(candidate.read_bytes)
                 mime = (
                     "image/png" if candidate.suffix.lower() == ".png" else "image/jpeg"
@@ -1426,7 +1418,8 @@ class PluginPageWebUIBridge:
             return error_response("该模板没有预览图", status_code=404)
         except Exception as e:
             logger.error(f"获取模板预览图异常: {e}", exc_info=True)
-            return error_response(str(e), status_code=500)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("读取模板预览图失败。", status_code=500)
 
     async def api_install_template_from_url(self) -> Any:
         """从 GitHub 仓库链接安装自定义报告视觉模板"""

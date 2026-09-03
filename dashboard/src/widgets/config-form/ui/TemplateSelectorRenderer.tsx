@@ -32,11 +32,15 @@ import { TemplateUninstallModal } from "../../../features/install-template/ui/Te
 const GALLERY_FALLBACK =
   "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>";
 
-/** 自定义模板的预览图：按需从后端取模板目录内 preview.jpg 等 */
-const CustomPreviewImage: React.FC<{ templateName: string; height?: number }> = ({
-  templateName,
-  height = 180,
-}) => {
+/** 自定义模板的预览图：按需从后端取模板目录内 preview.jpg 等；
+ *  visible/onVisibleChange 可选：传入时预览弹层为受控模式（供"预览当前效果"按钮联动），
+ *  不传时保持点击图片内部预览（画廊场景） */
+const CustomPreviewImage: React.FC<{
+  templateName: string;
+  height?: number;
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+}> = ({ templateName, height = 180, visible, onVisibleChange }) => {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,7 +60,7 @@ const CustomPreviewImage: React.FC<{ templateName: string; height?: number }> = 
       alt={templateName}
       style={{ width: "100%", height, objectFit: "cover", objectPosition: "top" }}
       fallback={GALLERY_FALLBACK}
-      preview={{ src: src || undefined }}
+      preview={{ src: src || undefined, visible, onVisibleChange }}
     />
   );
 };
@@ -112,6 +116,11 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       : typeof defaultValue === "string" && defaultValue
       ? defaultValue
       : "scrapbook";
+
+  // 模板切换/卸载回退后重置预览弹层状态，避免预览残留叠加（如与画廊弹窗同开）
+  useEffect(() => {
+    setPreviewVisible(false);
+  }, [currentTemplate]);
 
   // 下拉选项：schema options（内置）为基底，追加 API 返回的自定义模板；
   // 展示名为 API 元信息（display_name/tag/desc）优先，KNOWN_TEMPLATES 兜底
@@ -254,7 +263,12 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           onClick={() => setPreviewVisible(true)}
         >
           {currentMeta.isCustom ? (
-            <CustomPreviewImage templateName={currentTemplate} height={96} />
+            <CustomPreviewImage
+              templateName={currentTemplate}
+              height={96}
+              visible={previewVisible}
+              onVisibleChange={setPreviewVisible}
+            />
           ) : (
             <Image
               src={currentCdnUrl}

@@ -42,6 +42,8 @@ MAX_ARCHIVE_TOTAL_SIZE = 64 * 1024 * 1024  # 解压后总大小上限
 MAX_SINGLE_FILE_SIZE = 20 * 1024 * 1024
 MAX_DOWNLOAD_SIZE = 64 * 1024 * 1024
 MAX_ZIP_B64_SIZE = 80 * 1024 * 1024
+# 预览图读取上限：与压缩包单文件上限一致，防止手动放入的超大图片造成内存/带宽消耗
+MAX_PREVIEW_FILE_SIZE = 20 * 1024 * 1024
 
 # 模板名中禁止的字符：路径分隔符与 Windows/Linux 文件名危险字符（允许中文等任意其余字符）
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -65,6 +67,63 @@ def default_template_store_dir() -> Path:
     except Exception:
         pass
     return data_dir / "custom_t2i_templates" / "reporting_templates"
+
+
+def is_path_within(path: Path, base: Path) -> bool:
+    """判断 path（resolve 后）是否位于 base（resolve 后）目录内（含 base 自身）。
+
+    用于路径穿越与符号链接防护；Windows 下跨盘符等场景 commonpath 抛 ValueError，
+    一律按“不在范围内”处理。
+    """
+    try:
+        resolved = path.resolve()
+        base_real = base.resolve()
+        return os.path.normcase(
+            os.path.commonpath([str(resolved), str(base_real)])
+        ) == os.path.normcase(str(base_real))
+    except (OSError, ValueError):
+        # 权限/符号链接环等（OSError）或 Windows 跨盘符（ValueError）均按不在范围内处理
+        return False
+
+
+def preview_candidate_files(template_dir: Path) -> list[Path]:
+    """列出模板目录内可安全读取的预览图文件（preview/demo 的 jpg/png）。
+
+    防护（与卸载侧对模板目录的 symlink 拒绝策略一致）：
+    - 拒绝符号链接条目（is_file/read_bytes 会跟随链接读取目标内容）；
+    - 拒绝 resolve 后解析到模板目录之外的文件；
+    - 拒绝超过 MAX_PREVIEW_FILE_SIZE 的文件（防止超大图片读入内存/大体积响应）。
+    返回的路径均已 resolve，可直接读取。
+    """
+    try:
+        base_real = os.path.normcase(str(template_dir.resolve()))
+    except (OSError, ValueError):
+        return []
+    result: list[Path] = []
+    for name in ("preview.jpg", "preview.png", "demo.jpg", "demo.png"):
+        raw = template_dir / name
+        if raw.is_symlink():
+            continue
+        try:
+            resolved = raw.resolve()
+        except OSError:
+            continue
+        try:
+            inside = (
+                os.path.normcase(os.path.commonpath([str(resolved), base_real]))
+                == base_real
+            )
+        except ValueError:
+            inside = False
+        if not inside or not resolved.is_file():
+            continue
+        try:
+            if resolved.stat().st_size > MAX_PREVIEW_FILE_SIZE:
+                continue
+        except OSError:
+            continue
+        result.append(resolved)
+    return result
 
 
 def builtin_template_names() -> list[str]:
@@ -248,7 +307,9 @@ def _write_install_marker(target_dir: Path, *, source: str, source_url: str) -> 
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except OSError as exc:
-        logger.warning(f"写入安装标记失败: {exc}")
+        # 标记是“可通过 WebUI 卸载”的唯一依据：写入失败必须视为安装失败，
+        # 由调用方清理已移动的目标目录，避免出现“装上了却无法卸载”的孤儿模板。
+        raise TemplateInstallError(f"写入安装标记失败: {exc}") from exc
 
 
 def install_template_from_zip(
@@ -328,7 +389,12 @@ def install_template_from_zip(
                 shutil.rmtree(target, ignore_errors=True)
                 raise
 
-            _write_install_marker(target, source=source, source_url=source_url)
+            try:
+                _write_install_marker(target, source=source, source_url=source_url)
+            except TemplateInstallError:
+                # 标记写入失败视为安装失败，清理已移动的目标目录（不留下孤儿模板）
+                shutil.rmtree(target, ignore_errors=True)
+                raise
 
     label = meta.get("name") or template_name
     logger.info(
@@ -359,8 +425,8 @@ def parse_github_repo_url(repo_url: str) -> dict[str, str]:
         raise TemplateInstallError("GitHub 链接不能为空。")
     url = repo_url.strip()
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise TemplateInstallError("仅支持 http/https 链接。")
+    if parsed.scheme != "https":
+        raise TemplateInstallError("仅支持 https 链接。")
     if parsed.hostname not in _GITHUB_HOSTS:
         raise TemplateInstallError("仅支持 github.com 仓库链接。")
 
