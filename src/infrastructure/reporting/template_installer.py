@@ -37,11 +37,11 @@ TEMPLATE_META_FILENAME = "template.json"  # 可选: {"name": "显示名"}
 INSTALL_MARKER_FILENAME = ".tpl_installed.json"
 
 MAX_TEMPLATE_NAME_LEN = 50
-MAX_ARCHIVE_MEMBERS = 300
-MAX_ARCHIVE_TOTAL_SIZE = 64 * 1024 * 1024  # 解压后总大小上限
-MAX_SINGLE_FILE_SIZE = 20 * 1024 * 1024
-MAX_DOWNLOAD_SIZE = 64 * 1024 * 1024
-MAX_ZIP_B64_SIZE = 80 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 100
+MAX_ARCHIVE_TOTAL_SIZE = 5 * 1024 * 1024  # 解压后总大小上限 (5MB)
+MAX_SINGLE_FILE_SIZE = 3 * 1024 * 1024  # 单文件上限 (3MB)
+MAX_DOWNLOAD_SIZE = 5 * 1024 * 1024  # GitHub 下载压缩包上限 (5MB)
+MAX_ZIP_B64_SIZE = 8 * 1024 * 1024  # WebUI Base64 上传上限 (~6MB ZIP)
 # 预览图读取上限：限制单张预览图最大不超过 3MB，防止手动放入/打包的超大图片造成内存/带宽消耗
 MAX_PREVIEW_FILE_SIZE = 3 * 1024 * 1024
 
@@ -548,13 +548,13 @@ async def download_github_archive(
                         and declared.isdigit()
                         and int(declared) > MAX_DOWNLOAD_SIZE
                     ):
-                        raise TemplateInstallError("下载的压缩包超出大小限制（64MB）。")
+                        raise TemplateInstallError("下载的压缩包超出大小限制（5MB）。")
                     body = bytearray()
                     async for chunk in resp.content.iter_chunked(64 * 1024):
                         body.extend(chunk)
                         if len(body) > MAX_DOWNLOAD_SIZE:
                             raise TemplateInstallError(
-                                "下载的压缩包超出大小限制（64MB）。"
+                                "下载的压缩包超出大小限制（5MB）。"
                             )
                     if not body:
                         raise TemplateInstallError("下载的压缩包为空。")
