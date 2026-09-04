@@ -1,0 +1,13 @@
+# 核心运行时依赖
+-r requirements.txt
+astrbot
+httpx
+aiohttp
+python-telegram-bot
+qq-botpy
+
+# 开发、测试与静态类型检查依赖
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+ruff>=0.8.0

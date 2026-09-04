@@ -41,6 +41,49 @@ export function useOverviewViewModel() {
     }
   }, []);
 
+  const handleSSEEvent = useCallback(
+    (eventPayload: unknown) => {
+      if (!eventPayload || typeof eventPayload !== "object") return;
+      const evt = eventPayload as { event?: string; data?: unknown };
+      if (!evt.event) return;
+
+      if (evt.event === "initial_state") {
+        if (Array.isArray(evt.data)) {
+          setActiveTasks(evt.data as ActiveTask[]);
+        }
+      } else if (evt.event === "task_started") {
+        const newTask = evt.data as ActiveTask;
+        if (newTask && newTask.task_id) {
+          setActiveTasks((prev) => {
+            const filtered = prev.filter((t) => t.task_id !== newTask.task_id);
+            return [newTask, ...filtered];
+          });
+        }
+      } else if (evt.event === "task_progress") {
+        const updatedTask = evt.data as ActiveTask;
+        if (updatedTask && updatedTask.task_id) {
+          setActiveTasks((prev) =>
+            prev.map((t) =>
+              t.task_id === updatedTask.task_id
+                ? { ...t, ...updatedTask }
+                : t
+            )
+          );
+        }
+      } else if (evt.event === "task_finished") {
+        const finishData = evt.data as { task_id?: string } | undefined;
+        if (finishData?.task_id) {
+          setActiveTasks((prev) =>
+            prev.filter((t) => t.task_id !== finishData.task_id)
+          );
+        }
+        // 任务完成时，静默刷新总览 KPI 指标
+        loadData(true);
+      }
+    },
+    [loadData]
+  );
+
   const handleCancelTask = async (taskId: string) => {
     await cancelActiveTask(taskId);
     await loadData(true);
@@ -66,6 +109,7 @@ export function useOverviewViewModel() {
     activeTasks,
     loading,
     refresh: (silent = true) => loadData(silent),
+    handleSSEEvent,
     handleCancelTask,
   };
 }
