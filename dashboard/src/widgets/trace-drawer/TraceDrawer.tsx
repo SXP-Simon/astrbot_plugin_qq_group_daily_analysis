@@ -301,7 +301,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                       loading={resuming}
                       onClick={() => setResumeModalOpen(true)}
                     >
-                      🔄 从 Checkpoint 幂等续跑此任务
+                      从 Checkpoint 幂等续跑此任务
                     </Button>
                   </div>
                   {trace.stack_trace && (

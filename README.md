@@ -481,6 +481,13 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
    - **轻量局部定制**：如果仅针对长图外框或主布局进行微调（例如仅提供了 `image_template.html`），插件的 Jinja2 多层回退引擎会自动使用默认手账模板（`scrapbook`）中对应的小模块 HTML 作为兜底加载，确保即使子模块不全也能稳定渲染。
 4. **即选即用**：
    放入新模板目录后无需重启机器人，在 Web 控制台的 **断点续跑弹窗** 与 **报告归档管理（免 Token 切换主题重绘）** 下拉菜单中均会自动实时出现该选项。
+5. **在线安装与卸载**：
+   在 Web 控制台配置页的模板选择器旁点击「安装模板」，可通过 **GitHub 仓库链接**
+   （如 `https://github.com/owner/repo`，支持 `/tree/<分支>`）自动下载安装，
+   或直接上传 **zip 压缩包**；安装后立即生效，可随时通过「卸载模板」移除。
+   **内置模板不可卸载**，仅可卸载通过安装器下载的自定义模板。
+   📖 完整模板制作指南（变量契约、回退机制、打包规范、调试、贡献清单）见
+   **《[报告视觉模板开发指南](docs/REPORT_TEMPLATE_GUIDE.md)》**，参考示例仓库：[lingyun14beta/daily-analysis-report-theme](https://github.com/lingyun14beta/daily-analysis-report-theme)。
 
 ### 插件更新升级配置保护
 

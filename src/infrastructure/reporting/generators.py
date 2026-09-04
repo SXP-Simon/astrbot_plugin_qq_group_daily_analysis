@@ -375,6 +375,15 @@ class ReportGenerator(IReportGenerator):
             tuple[str | None, str | None]: (image_url, html_content)
         """
         html_content = None
+        if not template_theme:
+            trace_ctx = TraceContext.current()
+            if trace_ctx and trace_ctx.metadata.get("override_template_name"):
+                template_theme = trace_ctx.metadata.get("override_template_name")
+            elif hasattr(self.config_manager, "get_report_template"):
+                template_theme = self.config_manager.get_report_template()
+            else:
+                template_theme = "scrapbook"
+
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(
@@ -520,7 +529,7 @@ class ReportGenerator(IReportGenerator):
                                                 {
                                                     "format": "image",
                                                     "template": template_theme
-                                                    or "scrapbook (默认)",
+                                                    or "scrapbook",
                                                     "viewport": viewport_description,
                                                     "render_attempt": attempt,
                                                     "image_format": str(
@@ -714,6 +723,15 @@ class ReportGenerator(IReportGenerator):
         Returns:
             tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
         """
+        if not template_theme:
+            trace_ctx = TraceContext.current()
+            if trace_ctx and trace_ctx.metadata.get("override_template_name"):
+                template_theme = trace_ctx.metadata.get("override_template_name")
+            elif hasattr(self.config_manager, "get_report_template"):
+                template_theme = self.config_manager.get_report_template()
+            else:
+                template_theme = "scrapbook"
+
         try:
             import json
 
@@ -845,7 +863,7 @@ class ReportGenerator(IReportGenerator):
                         s.setdefault("payload", {}).update(
                             {
                                 "format": "html",
-                                "template": template_theme or "default",
+                                "template": template_theme or "scrapbook",
                                 "html_chars": len(html_content) if html_content else 0,
                                 "html_file": html_path.name,
                                 "topics_rendered": len(
