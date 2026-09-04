@@ -264,7 +264,6 @@ python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti
 | `_conf_schema.json` | `report_template.options` 数组追加模板名（WebUI 配置下拉） |
 | `dashboard/src/entities/report/model/templates.ts` | `KNOWN_TEMPLATES`（画廊信息：名称/描述/标签/标签色）与 `DEFAULT_REPORT_TEMPLATES`（兜底列表） |
 | `assets/<模板名>-demo.jpg` | 预览图（仓库展示与图库链接） |
-| `scripts/debug_all_pdf_themes.py` | `themes` 列表追加（可选） |
 | `README.md` / `CHANGELOG.md` | 模板展示与更新记录 |
 
 前端改动后需重新构建 dashboard：`cd dashboard && pnpm install && pnpm build`
