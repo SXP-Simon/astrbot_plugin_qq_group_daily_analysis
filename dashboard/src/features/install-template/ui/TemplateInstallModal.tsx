@@ -35,7 +35,7 @@ interface TemplateInstallModalProps {
 const NAMING_GUIDE = (
   <Space direction="vertical" size={2} style={{ width: "100%" }}>
     <Text strong>
-      📝 命名与参考规范
+      命名与参考规范
     </Text>
     <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
       模板名建议使用小写英文蛇形并带命名空间前缀（如{" "}
@@ -254,7 +254,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
         ]}
       />
       <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-        💡 模板结构参考：内置模板位于插件目录{" "}
+        模板结构参考：内置模板位于插件目录{" "}
         <Text code style={{ fontSize: 12 }}>src/infrastructure/reporting/templates/scrapbook/</Text>
         ，完整 7 件套为 image_template.html / html_template.html / topic_item.html /
         user_title_item.html / quote_item.html / activity_chart.html / chat_quality_item.html。

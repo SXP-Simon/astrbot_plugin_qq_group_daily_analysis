@@ -57,7 +57,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         trace_id: report.trace_id,
       });
       if (res && res.success) {
-        message.success("✨ 免 Token 切换主题渲染成功！新报告已生成");
+        message.success("免 Token 切换主题渲染成功！新报告已生成");
         onSuccess();
         onClose();
       } else {

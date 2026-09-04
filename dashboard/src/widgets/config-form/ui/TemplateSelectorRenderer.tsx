@@ -305,7 +305,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
             type="secondary"
             style={{ fontSize: 11, display: "block", marginTop: 4 }}
           >
-            💡 点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
+            点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
           </Text>
         </div>
       </div>
