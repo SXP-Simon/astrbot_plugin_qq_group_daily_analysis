@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ConfigProvider, Tabs, theme } from "antd";
 import {
   DashboardOutlined,
@@ -32,11 +32,15 @@ import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
 
-
 export const App: React.FC = () => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   // ViewModels
   const overviewVM = useOverviewViewModel();
@@ -48,21 +52,37 @@ export const App: React.FC = () => {
     handleRefreshAll();
   });
 
+  // 保持最新的 ViewModel 引用，防止 SSE 长监听闭包引用过时的分页/筛选状态
+  const viewModelsRef = useRef({
+    overviewVM,
+    tracesVM,
+    contextInsightVM,
+    reportsVM,
+    logsVM,
+  });
+  viewModelsRef.current = {
+    overviewVM,
+    tracesVM,
+    contextInsightVM,
+    reportsVM,
+    logsVM,
+  };
+
   const handleRefreshAll = () => {
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
     invalidateTraceCache();
     invalidateGroupsCache();
-    overviewVM.refresh();
-    tracesVM.refresh();
-    contextInsightVM.refresh();
-    reportsVM.refresh();
-    logsVM.refresh();
+    overviewVM.refresh(false);
+    tracesVM.refresh(false);
+    contextInsightVM.refresh(false);
+    reportsVM.refresh(false);
+    logsVM.refresh(false);
   };
 
   const triggerVM = useTriggerTask(tracesVM.groups, () => {
     invalidateGroupsCache();
-    overviewVM.refresh();
-    tracesVM.refresh();
+    overviewVM.refresh(true);
+    if (activeTabRef.current === "traces") tracesVM.refresh(true);
   });
 
   // 当 activeTab 切换时，自动将选中的 Tab 元素平滑居中滚动至可视区域中央（防止移动端右侧 Tab 溢出不可见）
@@ -82,35 +102,67 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [activeTab]);
 
-  // SSE 实时事件订阅：接收到后端任务状态变更时精准失效相关缓存
+  // SSE 实时事件订阅：纯内存更新任务中间态 + 终态精准无死角同步
   useEffect(() => {
     const unsubscribe = subscribeSSE({
       onMessage: (eventPayload: unknown) => {
-        // 若有具体 task_id 变更，失效该条目的不可变缓存
-        if (eventPayload && typeof eventPayload === "object" && "data" in eventPayload) {
-          const data = (eventPayload as { data?: { task_id?: string } }).data;
-          if (data?.task_id) {
-            invalidateTraceCache(data.task_id);
+        if (!eventPayload || typeof eventPayload !== "object") return;
+        const evt = eventPayload as { event?: string; data?: unknown };
+
+        const currentVMs = viewModelsRef.current;
+
+        // 1. 活跃任务状态变更：由 overviewVM 内存增量更新（0 HTTP 请求、0 毫秒延时）
+        currentVMs.overviewVM.handleSSEEvent(eventPayload);
+
+        // 2. 终态事件（task_finished）：精准失效该条缓存并仅刷新当前展示的活跃 Tab
+        if (evt.event === "task_finished") {
+          const data = evt.data as { task_id?: string } | undefined;
+          const taskId = data?.task_id;
+          if (taskId) {
+            invalidateTraceCache(taskId);
+          } else {
+            invalidateTraceCache();
           }
-        } else {
-          invalidateTraceCache();
+          invalidateGroupsCache();
+
+          // 仅拉取当前视口激活的 Tab，未激活 Tab 在用户点击切换时再拉取（Lazy Tab Sync）
+          const currentTab = activeTabRef.current;
+          if (currentTab === "traces") {
+            currentVMs.tracesVM.refresh(true);
+          } else if (currentTab === "context") {
+            currentVMs.contextInsightVM.refresh(true);
+          } else if (currentTab === "reports") {
+            currentVMs.reportsVM.refresh(true);
+          } else if (currentTab === "logs") {
+            currentVMs.logsVM.refresh(true);
+          }
         }
-        invalidateGroupsCache();
-        overviewVM.refresh(true);
-        tracesVM.refresh(true);
-        contextInsightVM.refresh(true);
-        reportsVM.refresh(true);
       },
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleViewTrace = (traceId: string) => {
     setSelectedTraceId(traceId);
+  };
+
+  const handleTabChange = (key: string) => {
+    setActiveTab(key);
+    // 标签页按需激活（Lazy Tab Sync）：切换到对应 Tab 时触发该 Tab 的静默刷新
+    if (key === "overview") {
+      overviewVM.refresh(true);
+    } else if (key === "traces") {
+      tracesVM.refresh(true);
+    } else if (key === "context") {
+      contextInsightVM.refresh(true);
+    } else if (key === "reports") {
+      reportsVM.refresh(true);
+    } else if (key === "logs") {
+      logsVM.refresh(true);
+    }
   };
 
   const tabItems = [
@@ -234,14 +286,7 @@ export const App: React.FC = () => {
         {/* 核心 Tab 导航与页面路由 */}
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => {
-            setActiveTab(key);
-            if (key === "overview") overviewVM.refresh();
-            else if (key === "traces") tracesVM.refresh();
-            else if (key === "context") contextInsightVM.refresh();
-            else if (key === "reports") reportsVM.refresh();
-            else if (key === "logs") logsVM.refresh();
-          }}
+          onChange={handleTabChange}
           items={tabItems}
           type="card"
           size="small"

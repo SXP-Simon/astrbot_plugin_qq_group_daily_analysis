@@ -139,6 +139,6 @@ export function useLogsViewModel() {
     autoRefresh,
     setAutoRefresh,
     clearLogs: handleClearLogs,
-    refresh: () => loadLogs(false),
+    refresh: (silent = false) => loadLogs(silent),
   };
 }
