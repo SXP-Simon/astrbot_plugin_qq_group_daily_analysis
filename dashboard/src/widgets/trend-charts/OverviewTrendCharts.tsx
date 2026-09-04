@@ -198,14 +198,16 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
           <div style="font-weight: 600; font-family: monospace; font-size: 12px; margin-bottom: 6px; color: ${isDark ? "#ffffff" : "#0f172a"};">
             ${item.date_full || item.date}
           </div>
-          <div style="font-size: 12px; color: #2563eb; margin-bottom: 3px;">
+          <div style="font-size: 12px; color: #2563eb; margin-bottom: 4px;">
             总消耗: <b style="font-family: monospace;">${formatTokens(item.total_tokens)}</b>
           </div>
-          <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
-            输入 (Prompt): ${formatTokens(item.prompt_tokens)}
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace; margin-bottom: 2px;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #2563eb; flex-shrink: 0;"></span>
+            <span>输入 (Prompt): <b style="color: ${isDark ? "#c9d1d9" : "#334155"}">${formatTokens(item.prompt_tokens)}</b></span>
           </div>
-          <div style="font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
-            输出 (Completion): ${formatTokens(item.completion_tokens)}
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: ${isDark ? "#8b949e" : "#64748b"}; font-family: monospace;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: #60a5fa; flex-shrink: 0;"></span>
+            <span>输出 (Completion): <b style="color: ${isDark ? "#c9d1d9" : "#334155"}">${formatTokens(item.completion_tokens)}</b></span>
           </div>
         `;
       },
@@ -455,10 +457,22 @@ export const OverviewTrendCharts: React.FC<OverviewTrendChartsProps> = ({
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
-                <BarChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
-                Tokens 消耗趋势
-              </Text>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Text strong style={{ fontSize: 12, color: isDark ? "#c9d1d9" : "#334155" }}>
+                  <BarChartOutlined style={{ color: "#2563eb", marginRight: 6 }} />
+                  Tokens 消耗趋势
+                </Text>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: "#2563eb" }} />
+                    <span>输入</span>
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 2, background: "#60a5fa" }} />
+                    <span>输出</span>
+                  </span>
+                </div>
+              </div>
               <Text strong className="font-mono" style={{ fontSize: 12, color: "#2563eb" }}>
                 {rangeTotalTokens > 0 ? formatSmartTokens(rangeTotalTokens) : formatSmartTokens(totalTokens)}
               </Text>
