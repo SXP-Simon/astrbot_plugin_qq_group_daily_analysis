@@ -21,6 +21,8 @@
 
 > 安装以自定义形态落到数据目录，**升级插件不会被删除**（插件本体在
 > `data/plugins/`，与数据目录分离）。
+>
+> 💡 **参考示例仓库**：可参考社区标准示例模板 [lingyun14beta/daily-analysis-report-theme](https://github.com/lingyun14beta/daily-analysis-report-theme) 学习目录结构、`template.json` 配置与打包规范。
 
 ## 2. 模板目录结构（完整 7 件套）
 

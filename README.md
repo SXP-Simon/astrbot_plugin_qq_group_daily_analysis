@@ -487,7 +487,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
    或直接上传 **zip 压缩包**；安装后立即生效，可随时通过「卸载模板」移除。
    **内置模板不可卸载**，仅可卸载通过安装器下载的自定义模板。
    📖 完整模板制作指南（变量契约、回退机制、打包规范、调试、贡献清单）见
-   **《[报告视觉模板开发指南](docs/REPORT_TEMPLATE_GUIDE.md)》**。
+   **《[报告视觉模板开发指南](docs/REPORT_TEMPLATE_GUIDE.md)》**，参考示例仓库：[lingyun14beta/daily-analysis-report-theme](https://github.com/lingyun14beta/daily-analysis-report-theme)。
 
 ### 插件更新升级配置保护
 

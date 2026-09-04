@@ -35,17 +35,26 @@ interface TemplateInstallModalProps {
 const NAMING_GUIDE = (
   <Space direction="vertical" size={2} style={{ width: "100%" }}>
     <Text strong>
-      📝 命名建议
+      📝 命名与参考规范
     </Text>
     <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.6 }}>
       模板名建议使用小写英文蛇形并带命名空间前缀（如{" "}
       <Text code style={{ fontSize: 12 }}>gda_miku_dream</Text>
-      ）：仅含小写字母、数字、下划线，长度不超过 50，避免空格与特殊字符，
+      ）：仅含小写字母、数字、下划线，长度不超过 50。避免空格与特殊字符，
       以免报告文件名、预览图与 CDN 链接出错，并与内置模板（scrapbook 等）区分。
       不填写时将从压缩包 / 仓库名自动推断（GitHub 归档的 -main 后缀会被自动去除）。
-      中文显示名可在压缩包内放置可选的{" "}
+      中文显示名可在模板根目录下放置可选的{" "}
       <Text code style={{ fontSize: 12 }}>template.json</Text>{" "}
-      （如 {"{\"name\": \"初音梦境\"}"}），作为下拉框中的展示名称。
+      （如 {"{\"name\": \"初音梦境\"}"}），作为下拉框中的展示名称。可参考标准示例仓库{" "}
+      <Typography.Link
+        href="https://github.com/lingyun14beta/daily-analysis-report-theme"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ fontSize: 12 }}
+      >
+        lingyun14beta/daily-analysis-report-theme
+      </Typography.Link>
+      。
     </Text>
   </Space>
 );
@@ -172,7 +181,7 @@ export const TemplateInstallModal: React.FC<TemplateInstallModalProps> = ({
                   ]}
                 >
                   <Input
-                    placeholder="https://github.com/SXP-Simon/my-report-theme"
+                    placeholder="https://github.com/lingyun14beta/daily-analysis-report-theme"
                     allowClear
                   />
                 </Form.Item>
