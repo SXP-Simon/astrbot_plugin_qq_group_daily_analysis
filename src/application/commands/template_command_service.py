@@ -18,7 +18,23 @@ from astrbot.api.message_components import (
 class TemplateCommandService:
     """封装模板命令的文件系统与消息构建逻辑。"""
 
-    _CIRCLE_NUMBERS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"]
+    @staticmethod
+    def _format_index_label(index: int) -> str:
+        """生成序号标签。
+
+        1-20 使用 Unicode 带圈数字（①~⑳），
+        21-35 使用 ㉑~㉟，
+        36-50 使用 ㊱~㊿，
+        超过 50 时自动回退为 [N] 格式，支持任意数量的模板扩展。
+        """
+        num = index + 1
+        if 1 <= num <= 20:
+            return chr(0x2460 + num - 1)
+        if 21 <= num <= 35:
+            return chr(0x3251 + num - 21)
+        if 36 <= num <= 50:
+            return chr(0x32B1 + num - 36)
+        return f"[{num}]"
 
     def __init__(self, plugin_root: str):
         self.plugin_root = plugin_root
@@ -197,11 +213,7 @@ class TemplateCommandService:
 
         for index, template_name in enumerate(available_templates):
             current_mark = " ✅" if template_name == current_template else ""
-            num_label = (
-                self._CIRCLE_NUMBERS[index]
-                if index < len(self._CIRCLE_NUMBERS)
-                else f"({index + 1})"
-            )
+            num_label = self._format_index_label(index)
 
             node_content: list[BaseMessageComponent] = [
                 Plain(f"{num_label} {template_name}{current_mark}")
