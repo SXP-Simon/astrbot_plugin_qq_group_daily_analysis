@@ -215,15 +215,31 @@ class TemplateCommandService:
             current_mark = " ✅" if template_name == current_template else ""
             num_label = self._format_index_label(index)
 
-            node_content: list[BaseMessageComponent] = [
-                Plain(f"{num_label} {template_name}{current_mark}")
-            ]
             preview_image_path = self.resolve_template_preview_path(template_name)
             if preview_image_path:
-                node_content.append(Image.fromFileSystem(preview_image_path))
+                node_content: list[BaseMessageComponent] = [
+                    Plain(f"{num_label} {template_name}{current_mark}"),
+                    Image.fromFileSystem(preview_image_path),
+                ]
             else:
-                cdn_url = f"https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/{template_name}-demo.jpg"
-                node_content.append(Image.fromURL(cdn_url))
+                from ...infrastructure.reporting.template_installer import (
+                    builtin_template_names,
+                )
+
+                # 仅内置模板在本地 assets 缺失时尝试从官方 GitHub CDN 加载；
+                # 自定义模板若未提供本地预览图，避免拼接 404 的 CDN 链接
+                if template_name in builtin_template_names():
+                    cdn_url = f"https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/{template_name}-demo.jpg"
+                    node_content = [
+                        Plain(f"{num_label} {template_name}{current_mark}"),
+                        Image.fromURL(cdn_url),
+                    ]
+                else:
+                    node_content = [
+                        Plain(
+                            f"{num_label} {template_name}{current_mark}\n(未提供预览图)"
+                        )
+                    ]
 
             node_list.append(Node(uin=bot_id, name=template_name, content=node_content))
 
