@@ -1,5 +1,21 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.2.1] - WEBUI SSE 实时事件内存增量更新与控制台按需同步 (#221)
+
+*   **🚀 【性能与体验】SSE 实时事件内存增量更新与控制台按需同步 (Lazy Tab Sync) (#221)**：
+    *   **活跃任务内存增量演进**：前端监听到后端 SSE 实时事件（`task_started`、`task_progress`、`task_finished`）时，由 `useOverviewViewModel` 在内存中直接增量更新活跃任务列表与状态，实现 0 冗余 HTTP 轮询请求、0ms 延时的丝滑实时反馈。
+    *   **标签页按需激活与同步 (Lazy Tab Sync)**：任务完成终态时仅精准失效对应条目缓存并静默刷新当前激活的视口 Tab；其他未激活 Tab（如「分析记录」、「上下文透视」、「历史报告」、「运行日志」）仅在用户实际切换至该 Tab 时按需静默拉取，彻底消除以往后台多页面同时并发刷新的网络风暴与卡顿。
+    *   **防闭包陈旧与异步时序竞争治理**：通过 `viewModelsRef` 动态维护最新的 ViewModel 引用上下文，消除 SSE 长生命周期监听器中闭包捕获旧 State 的隐患；引入自增请求序号 `reqIdRef` 自动丢弃陈旧的过时异步响应，防止慢网络下的回包覆盖最新 SSE 状态。
+    *   **Trace 列表接口大体积 Payload 剔除**：在拉取分析记录列表时剔除 `llm_prompts`、`llm_attempts`、`checkpoint_summary` 等大体积详情字段，大幅降低网络传输流量与首屏解析耗时。
+
+*   **📊 【交互与视觉】Token 消耗趋势图双色图例与 Tooltip 颜色标示**：
+    *   **双色图例标识**：为 Tokens 消耗趋势图增加直观的输入 (Prompt, `#2563eb`) 与输出 (Completion, `#60a5fa`) 颜色图例。
+    *   **悬浮卡片高亮呈现**：Tooltip 弹窗内增加与图表一致的色块圆点标识及结构化排版，让输入/输出 Token 消耗占比一目了然。
+
+*   **🛠️ 【工程规范与 CI 治理】开发依赖解耦与跨平台换行符一致性保障**：
+    *   **独立 `requirements-dev.txt`**：将开发测试依赖（`pytest`, `pytest-asyncio`, `pytest-cov`, `ruff` 等）从生产运行依赖中拆分解耦，并同步更新 `CONTRIBUTING.md` 安装指引。
+    *   **构建产物换行符与 CI 门禁治理**：完善 `.gitattributes` 与 CI 构建一致性工作流，全量统一换行符为 `LF`，杜绝跨平台（Windows/Linux）构建产物换行符差异触发 CI 门禁误报。
+
 ## [v5.2.0] - 支持安装/卸载自定义报告模版 (#220 @lingyun14beta)
 
 *   **🎨 【新特性】自定义报告视觉模板在线安装与生命周期管理 (#220 @lingyun14beta)**：
