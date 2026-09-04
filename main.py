@@ -1027,10 +1027,20 @@ class GroupDailyAnalysis(Star):
             return None
 
         trace = TraceContext.current()
+        override_theme = trace.metadata.get("override_template_name") if trace else None
+        template_theme = (
+            override_theme
+            or getattr(
+                self.config_manager, "get_report_template", lambda: "scrapbook"
+            )()
+        )
 
         if output_format == "image":
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "image"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "image", "template": template_theme},
+                ):
                     (
                         image_url,
                         html_content,
@@ -1042,6 +1052,7 @@ class GroupDailyAnalysis(Star):
                         nickname_getter=nickname_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
+                        template_theme=template_theme,
                     )
             else:
                 (
@@ -1055,6 +1066,7 @@ class GroupDailyAnalysis(Star):
                     nickname_getter=nickname_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=is_qq_official,
+                    template_theme=template_theme,
                 )
 
             if image_url:
@@ -1079,7 +1091,10 @@ class GroupDailyAnalysis(Star):
         elif output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "html"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "html", "template": template_theme},
+                ):
                     (
                         html_path,
                         json_path,
@@ -1090,6 +1105,7 @@ class GroupDailyAnalysis(Star):
                         nickname_getter=nickname_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
+                        template_theme=template_theme,
                         trace_id=cur_trace_id,
                     )
             else:
@@ -1100,6 +1116,7 @@ class GroupDailyAnalysis(Star):
                     nickname_getter=nickname_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=is_qq_official,
+                    template_theme=template_theme,
                     trace_id=cur_trace_id,
                 )
             if html_path:

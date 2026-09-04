@@ -800,3 +800,76 @@ async def test_template_command_service_list_and_exists():
     parsed_by_name, err = service.parse_template_input("scrapbook", templates)
     assert err is None
     assert parsed_by_name == "scrapbook"
+
+
+@pytest.mark.asyncio
+async def test_render_report_span_reports_correct_template_theme(tmp_path: Path):
+    """测试当指定或配置了自定义/内置模板时，RENDER_REPORT span 上报准确的主题名称而非默认 scrapbook。"""
+    from types import SimpleNamespace
+    from src.infrastructure.reporting.generators import ReportGenerator
+
+    trace = TraceContext.set(
+        trace_id="test_render_span_custom_theme",
+        group_id="123456",
+        trigger_type="manual",
+    )
+
+    mock_config = MagicMock()
+    mock_config.get_report_template = MagicMock(return_value="miku")
+    mock_config.get_t2i_max_concurrent = MagicMock(return_value=2)
+    mock_config.get_t2i_rendering_strategies = MagicMock(return_value=[{"type": "jpeg", "full_page": True, "device_scale_factor_level": 2, "timeout": 30}])
+    mock_config.get_profile_mapping = MagicMock(return_value="{}")
+    mock_config.get_html_output_dir = MagicMock(return_value=str(tmp_path / "html"))
+    mock_config.get_html_filename_format = MagicMock(return_value="report_{group_id}_{date}")
+
+    mock_tpl = MagicMock()
+    mock_tpl.render_template = MagicMock(return_value="<html>miku</html>")
+
+    generator = ReportGenerator(
+        config_manager=mock_config,
+        data_dir=tmp_path,
+    )
+    generator.html_templates = mock_tpl
+
+    dummy_analysis = {
+        "topics": [],
+        "user_titles": [],
+        "statistics": GroupStatistics(
+            message_count=10,
+            total_characters=100,
+            participant_count=5,
+            most_active_period="12:00",
+            golden_quotes=[],
+            emoji_count={},
+        ),
+    }
+
+    # 1. 验证 generate_image_report 在 template_theme 未传时自动继承 config 中的 "miku" 并上报
+    with trace.span("RENDER_REPORT", {"format": "image"}):
+        async def dummy_render(html, data, return_url, options):
+            return b"\xff\xd8\xff\xe0" + b"fake_jpeg_content"
+
+        await generator.generate_image_report(
+            analysis_result=dummy_analysis,
+            group_id="123456",
+            html_render_func=dummy_render,
+            template_theme=None,
+        )
+
+    image_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "image"]
+    assert len(image_spans) == 1
+    assert image_spans[0]["payload"]["template"] == "miku"
+
+    # 2. 验证 override_template_name 显式覆盖生效
+    trace.metadata["override_template_name"] = "gda_miku_dream"
+    with trace.span("RENDER_REPORT", {"format": "html"}):
+        await generator.generate_html_report(
+            analysis_result=dummy_analysis,
+            group_id="123456",
+            template_theme=None,
+        )
+
+    html_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "html"]
+    assert len(html_spans) == 1
+    assert html_spans[0]["payload"]["template"] == "gda_miku_dream"
+

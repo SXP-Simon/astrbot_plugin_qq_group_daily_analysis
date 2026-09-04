@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Select,
   Button,
@@ -9,18 +9,62 @@ import {
   Tag,
   Typography,
   Image,
+  message,
 } from "antd";
 import {
   EyeOutlined,
   AppstoreOutlined,
   CheckCircleOutlined,
   PictureOutlined,
+  DownloadOutlined,
+  DeleteOutlined,
+  BulbOutlined,
 } from "@ant-design/icons";
 import { useTheme } from "../../../shared/lib/useTheme";
 import {
   KNOWN_TEMPLATES,
   getTemplateCdnUrl,
+  ReportTemplateItem,
 } from "../../../entities/report/model/templates";
+import { fetchReportTemplates, fetchTemplatePreview } from "../../../entities/report/api/reportApi";
+import { TemplateInstallModal } from "../../../features/install-template/ui/TemplateInstallModal";
+import { TemplateUninstallModal } from "../../../features/install-template/ui/TemplateUninstallModal";
+
+const GALLERY_FALLBACK =
+  "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>";
+
+/** 自定义模板的预览图：按需从后端取模板目录内 preview.jpg 等；
+ *  visible/onVisibleChange 可选：传入时预览弹层为受控模式（供"预览当前效果"按钮联动），
+ *  不传时保持点击图片内部预览（画廊场景） */
+const CustomPreviewImage: React.FC<{
+  templateName: string;
+  height?: number;
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+}> = ({ templateName, height = 180, visible, onVisibleChange }) => {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSrc(null);
+    fetchTemplatePreview(templateName).then((url) => {
+      if (!cancelled && url) setSrc(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [templateName]);
+
+  return (
+    <Image
+      src={src || GALLERY_FALLBACK}
+      alt={templateName}
+      style={{ width: "100%", height, objectFit: "cover", objectPosition: "top" }}
+      fallback={GALLERY_FALLBACK}
+      preview={{ src: src || undefined, visible, onVisibleChange }}
+    />
+  );
+};
 
 const { Text, Paragraph } = Typography;
 
@@ -40,6 +84,32 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
   const { isDark } = useTheme();
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [remoteTemplates, setRemoteTemplates] = useState<ReportTemplateItem[]>([]);
+
+  useEffect(() => {
+    // 拉取全量模板（含自定义模板的 display_name/desc/tag 元信息；
+    // 失败时 KNOWN_TEMPLATES 兜底展示内置模板，控制台留日志便于排查）
+    fetchReportTemplates()
+      .then((list) => setRemoteTemplates(Array.isArray(list) ? list : []))
+      .catch((e) => {
+        console.warn("[templates] 获取模板列表失败，回退到内置模板展示", e);
+        setRemoteTemplates([]);
+      });
+  }, []);
+
+  // 安装/卸载后主动重新拉取模板列表，保证画廊与下拉立即出现/移除对应模板；
+  // 拉取失败时保留现有展示（不置空），并提示用户（与“自定义模板静默消失”问题一致）
+  const refreshRemoteTemplates = async () => {
+    try {
+      const list = await fetchReportTemplates();
+      setRemoteTemplates(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn("[templates] 刷新模板列表失败，保留现有展示", e);
+      message.warning("模板列表刷新失败，请稍后重试或刷新页面。");
+    }
+  };
 
   const currentTemplate =
     typeof value === "string" && value
@@ -48,13 +118,61 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       ? defaultValue
       : "scrapbook";
 
-  const templateOptions = Array.isArray(options) && options.length > 0
-    ? options.map((opt) => String(opt))
-    : KNOWN_TEMPLATES.map((t) => t.key);
+  // 模板切换/卸载回退后重置预览弹层状态，避免预览残留叠加（如与画廊弹窗同开）
+  useEffect(() => {
+    setPreviewVisible(false);
+  }, [currentTemplate]);
 
+  // 下拉选项：schema options（内置）为基底，追加 API 返回的自定义模板；
+  // 展示名为 API 元信息（display_name/tag/desc）优先，KNOWN_TEMPLATES 兜底
+  const templateOptions = useMemo(() => {
+    const baseKeys =
+      Array.isArray(options) && options.length > 0
+        ? options.map((opt) => String(opt))
+        : KNOWN_TEMPLATES.map((t) => t.key);
+    const remoteCustom = (remoteTemplates || []).filter(
+      (t) => t.is_custom === true && !baseKeys.includes(t.id)
+    );
+    return [...baseKeys, ...remoteCustom.map((t) => t.id)].map((key) => {
+      const remote = (remoteTemplates || []).find((t) => t.id === key);
+      const known = KNOWN_TEMPLATES.find((t) => t.key === key);
+      const displayName = remote?.display_name || known?.name || key;
+      const tag = remote?.tag || known?.tag || "";
+      return {
+        label: tag ? `${displayName} [${tag}]` : displayName,
+        value: key,
+        title: remote?.desc || known?.desc || "",
+      };
+    });
+  }, [options, remoteTemplates]);
+
+  // 画廊条目：API 全量（内置+自定义）为基底，并集 KNOWN_TEMPLATES（覆盖 format 等
+  // 未被 API 列出的内置模板），元信息 API 优先、KNOWN 兜底
+  const galleryItems = useMemo(() => {
+    const items: ReportTemplateItem[] = [...remoteTemplates];
+    KNOWN_TEMPLATES.forEach((k) => {
+      if (!items.some((t) => t.id === k.key)) {
+        items.push({ id: k.key, is_custom: false } as ReportTemplateItem);
+      }
+    });
+    return items.map((remote) => {
+      const known = KNOWN_TEMPLATES.find((t) => t.key === remote.id);
+      return {
+        key: remote.id,
+        isCustom: Boolean(remote.is_custom),
+        name: remote.display_name || known?.name || remote.id,
+        desc: remote.desc || known?.desc || "",
+        tag: remote.tag || known?.tag || "",
+        tagColor: remote.tag_color || known?.tagColor || "default",
+      };
+    });
+  }, [remoteTemplates]);
+
+  // 当前选中模板的展示信息：与画廊/下拉同源的元信息合并（API 优先、KNOWN 兜底）
   const currentMeta =
-    KNOWN_TEMPLATES.find((t) => t.key === currentTemplate) || {
+    galleryItems.find((g) => g.key === currentTemplate) || {
       key: currentTemplate,
+      isCustom: false,
       name: currentTemplate,
       desc: "自定义或外部模板",
       tag: "模板",
@@ -71,13 +189,9 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           value={currentTemplate}
           onChange={(v) => onChange(v)}
           style={{ minWidth: 200, flex: 1 }}
-          options={templateOptions.map((key) => {
-            const info = KNOWN_TEMPLATES.find((t) => t.key === key);
-            return {
-              label: info ? `${info.name} [${info.tag}]` : key,
-              value: key,
-            };
-          })}
+          options={templateOptions}
+          optionFilterProp="label"
+          showSearch
         />
         <Button
           icon={<EyeOutlined />}
@@ -93,7 +207,35 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
         >
           浏览全部模板画廊
         </Button>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={() => setInstallOpen(true)}
+        >
+          安装模板
+        </Button>
+        <Button
+          icon={<DeleteOutlined />}
+          onClick={() => setUninstallOpen(true)}
+        >
+          卸载模板
+        </Button>
       </div>
+      <TemplateInstallModal
+        open={installOpen}
+        onClose={() => setInstallOpen(false)}
+        onInstalled={() => void refreshRemoteTemplates()}
+      />
+      <TemplateUninstallModal
+        open={uninstallOpen}
+        onClose={() => setUninstallOpen(false)}
+        onUninstalled={(name) => {
+          void refreshRemoteTemplates();
+          // 若卸载的正是当前选中模板，回退到内置默认，避免表单值指向已删除模板
+          if (currentTemplate === name) {
+            onChange("scrapbook");
+          }
+        }}
+      />
 
       {/* 选定模板的实时缩略图与简介卡片 */}
       <div
@@ -121,19 +263,28 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           }}
           onClick={() => setPreviewVisible(true)}
         >
-          <Image
-            src={currentCdnUrl}
-            alt={currentTemplate}
-            width={72}
-            height={96}
-            style={{ objectFit: "cover" }}
-            preview={{
-              visible: previewVisible,
-              onVisibleChange: setPreviewVisible,
-              src: currentCdnUrl,
-            }}
-            fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
-          />
+          {currentMeta.isCustom ? (
+            <CustomPreviewImage
+              templateName={currentTemplate}
+              height={96}
+              visible={previewVisible}
+              onVisibleChange={setPreviewVisible}
+            />
+          ) : (
+            <Image
+              src={currentCdnUrl}
+              alt={currentTemplate}
+              width={72}
+              height={96}
+              style={{ objectFit: "cover" }}
+              preview={{
+                visible: previewVisible,
+                onVisibleChange: setPreviewVisible,
+                src: currentCdnUrl,
+              }}
+              fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='96' viewBox='0 0 72 96'><rect width='72' height='96' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='10'>预览图</text></svg>"
+            />
+          )}
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -155,7 +306,8 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
             type="secondary"
             style={{ fontSize: 11, display: "block", marginTop: 4 }}
           >
-            💡 点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
+            <BulbOutlined style={{ marginRight: 4, color: "#faad14" }} />
+            点击缩略图可全屏缩放预览完整长图，或点击上方「浏览全部模板画廊」进行对比选型。
           </Text>
         </div>
       </div>
@@ -176,9 +328,9 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       >
         <Image.PreviewGroup>
           <Row gutter={[16, 16]}>
-            {KNOWN_TEMPLATES.map((tmpl) => {
+            {galleryItems.map((tmpl) => {
               const isSelected = tmpl.key === currentTemplate;
-              const cdnUrl = getTemplateCdnUrl(tmpl.key);
+              const isCustom = tmpl.isCustom;
 
               return (
                 <Col xs={24} sm={12} md={8} key={tmpl.key}>
@@ -200,23 +352,32 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
                       },
                     }}
                     cover={
-                      <Image
-                        src={cdnUrl}
-                        alt={tmpl.name}
-                        style={{
-                          width: "100%",
-                          height: 180,
-                          objectFit: "cover",
-                          objectPosition: "top",
-                        }}
-                        fallback="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='180' viewBox='0 0 200 180'><rect width='200' height='180' fill='%23333'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%23aaa' font-size='12'>预览图</text></svg>"
-                      />
+                      isCustom ? (
+                        <CustomPreviewImage templateName={tmpl.key} />
+                      ) : (
+                        <Image
+                          src={getTemplateCdnUrl(tmpl.key)}
+                          alt={tmpl.name}
+                          style={{
+                            width: "100%",
+                            height: 180,
+                            objectFit: "cover",
+                            objectPosition: "top",
+                          }}
+                          fallback={GALLERY_FALLBACK}
+                        />
+                      )
                     }
                   >
                     <div style={{ marginBottom: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <Text strong style={{ fontSize: 13 }}>
                           {tmpl.name}
+                          {isCustom && (
+                            <Tag color="blue" style={{ fontSize: 10, marginLeft: 6, padding: "0 4px" }}>
+                              自定义
+                            </Tag>
+                          )}
                         </Text>
                         <Tag color={tmpl.tagColor} style={{ fontSize: 10, padding: "0 4px" }}>
                           {tmpl.tag}

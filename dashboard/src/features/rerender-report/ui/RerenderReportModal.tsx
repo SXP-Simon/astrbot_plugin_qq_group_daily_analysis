@@ -3,7 +3,7 @@ import { Modal, Form, Select, Radio, Alert, Space, Typography, message } from "a
 import { SkinOutlined } from "@ant-design/icons";
 import { ReportItem } from "../../../entities/report/model/types";
 import { fetchReportTemplates, rerenderReport } from "../../../entities/report/api/reportApi";
-import { formatTemplateOptions, ReportTemplateItem } from "../../../entities/report/model/templates";
+import { formatTemplateOptions, ReportTemplateItem, DEFAULT_REPORT_TEMPLATES } from "../../../entities/report/model/templates";
 
 const { Text } = Typography;
 
@@ -30,7 +30,10 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
       setLoadingTemplates(true);
       fetchReportTemplates()
         .then((list) => setTemplates(list))
-        .catch(() => {})
+        .catch(() => {
+          message.warning("模板列表获取失败，已回退显示内置模板");
+          setTemplates(DEFAULT_REPORT_TEMPLATES);
+        })
         .finally(() => setLoadingTemplates(false));
     }
     if (open && report) {
@@ -54,7 +57,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         trace_id: report.trace_id,
       });
       if (res && res.success) {
-        message.success("✨ 免 Token 切换主题渲染成功！新报告已生成");
+        message.success("免 Token 切换主题渲染成功！新报告已生成");
         onSuccess();
         onClose();
       } else {
