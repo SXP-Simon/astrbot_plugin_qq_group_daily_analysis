@@ -510,7 +510,13 @@ class TraceSQLiteStore:
             for r in rows:
                 item = dict(r)
                 try:
-                    item["extra"] = json.loads(item.pop("extra_json") or "{}")
+                    extra = json.loads(item.pop("extra_json") or "{}")
+                    if isinstance(extra, dict):
+                        # 列表接口剔除大体积 Payload，极大降低传输流量
+                        extra.pop("llm_prompts", None)
+                        extra.pop("llm_attempts", None)
+                        extra.pop("checkpoint_summary", None)
+                    item["extra"] = extra if isinstance(extra, dict) else {}
                 except Exception:
                     item["extra"] = {}
                 traces.append(item)
@@ -905,3 +911,17 @@ class TraceSQLiteStore:
                 deleted_count += excess
 
         return deleted_count
+
+    def delete_trace(self, trace_id: str) -> bool:
+        """删除指定 Trace 记录及其所有关联数据 (级联外键已开启)"""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+            )
+            return cursor.rowcount > 0
+
+    def clear_all_traces(self) -> int:
+        """清空所有 Trace 历史记录"""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM analysis_traces")
+            return cursor.rowcount
