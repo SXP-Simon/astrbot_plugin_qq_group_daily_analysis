@@ -239,10 +239,6 @@
 ```bash
 # 渲染指定模板为 HTML，浏览器直接打开查看效果（无需真实运行机器人/LLM）
 python scripts/debug_render.py -t <模板名> -o debug_output.html [-m mbti|sbti|acgti]
-
-# 一次性渲染全部内置主题为 PDF（debug_all_pdf_themes.py 内的主题列表为硬编码，
-# 新增内置主题时记得同时补充）
-python scripts/debug_all_pdf_themes.py
 ```
 
 ## 9. 安全须知
