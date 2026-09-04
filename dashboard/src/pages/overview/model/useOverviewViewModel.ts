@@ -21,8 +21,10 @@ export function useOverviewViewModel() {
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([]);
   const [loading, setLoading] = useState(false);
   const hasLoadedOnce = useRef(false);
+  const reqIdRef = useRef(0);
 
   const loadData = useCallback(async (silent = false) => {
+    const currentReqId = ++reqIdRef.current;
     if (!silent && !hasLoadedOnce.current) {
       setLoading(true);
     }
@@ -31,13 +33,17 @@ export function useOverviewViewModel() {
         fetchActiveTasks(),
         fetchMetricsSummary(),
       ]);
+      // 忽略陈旧的过时异步响应，防止覆盖最新的 SSE 状态
+      if (currentReqId !== reqIdRef.current) return;
       setActiveTasks(tasks);
       if (summary) setMetrics(summary);
       hasLoadedOnce.current = true;
     } catch {
       // 忽略加载异常
     } finally {
-      setLoading(false);
+      if (currentReqId === reqIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -77,7 +83,7 @@ export function useOverviewViewModel() {
             prev.filter((t) => t.task_id !== finishData.task_id)
           );
         }
-        // 任务完成时，静默刷新总览 KPI 指标
+        // 任务完成时使先前可能在途中的全量拉取失效，并静默刷新总览 KPI 指标
         loadData(true);
       }
     },

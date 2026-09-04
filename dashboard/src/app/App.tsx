@@ -52,6 +52,22 @@ export const App: React.FC = () => {
     handleRefreshAll();
   });
 
+  // 保持最新的 ViewModel 引用，防止 SSE 长监听闭包引用过时的分页/筛选状态
+  const viewModelsRef = useRef({
+    overviewVM,
+    tracesVM,
+    contextInsightVM,
+    reportsVM,
+    logsVM,
+  });
+  viewModelsRef.current = {
+    overviewVM,
+    tracesVM,
+    contextInsightVM,
+    reportsVM,
+    logsVM,
+  };
+
   const handleRefreshAll = () => {
     // 显式清理前端冷数据缓存，确保强制刷新时数据 100% 同步
     invalidateTraceCache();
@@ -93,8 +109,10 @@ export const App: React.FC = () => {
         if (!eventPayload || typeof eventPayload !== "object") return;
         const evt = eventPayload as { event?: string; data?: unknown };
 
+        const currentVMs = viewModelsRef.current;
+
         // 1. 活跃任务状态变更：由 overviewVM 内存增量更新（0 HTTP 请求、0 毫秒延时）
-        overviewVM.handleSSEEvent(eventPayload);
+        currentVMs.overviewVM.handleSSEEvent(eventPayload);
 
         // 2. 终态事件（task_finished）：精准失效该条缓存并仅刷新当前展示的活跃 Tab
         if (evt.event === "task_finished") {
@@ -110,13 +128,13 @@ export const App: React.FC = () => {
           // 仅拉取当前视口激活的 Tab，未激活 Tab 在用户点击切换时再拉取（Lazy Tab Sync）
           const currentTab = activeTabRef.current;
           if (currentTab === "traces") {
-            tracesVM.refresh(true);
+            currentVMs.tracesVM.refresh(true);
           } else if (currentTab === "context") {
-            contextInsightVM.refresh(true);
+            currentVMs.contextInsightVM.refresh(true);
           } else if (currentTab === "reports") {
-            reportsVM.refresh(true);
+            currentVMs.reportsVM.refresh(true);
           } else if (currentTab === "logs") {
-            logsVM.refresh(true);
+            currentVMs.logsVM.refresh(true);
           }
         }
       },
@@ -125,7 +143,6 @@ export const App: React.FC = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleViewTrace = (traceId: string) => {
