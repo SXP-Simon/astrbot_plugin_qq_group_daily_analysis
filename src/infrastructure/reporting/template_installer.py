@@ -42,8 +42,8 @@ MAX_ARCHIVE_TOTAL_SIZE = 64 * 1024 * 1024  # 解压后总大小上限
 MAX_SINGLE_FILE_SIZE = 20 * 1024 * 1024
 MAX_DOWNLOAD_SIZE = 64 * 1024 * 1024
 MAX_ZIP_B64_SIZE = 80 * 1024 * 1024
-# 预览图读取上限：与压缩包单文件上限一致，防止手动放入的超大图片造成内存/带宽消耗
-MAX_PREVIEW_FILE_SIZE = 20 * 1024 * 1024
+# 预览图读取上限：限制单张预览图最大不超过 3MB，防止手动放入/打包的超大图片造成内存/带宽消耗
+MAX_PREVIEW_FILE_SIZE = 3 * 1024 * 1024
 
 # 模板名中禁止的字符：路径分隔符与 Windows/Linux 文件名危险字符（允许中文等任意其余字符）
 _INVALID_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
