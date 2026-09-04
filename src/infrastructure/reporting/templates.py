@@ -60,18 +60,15 @@ class HTMLTemplates:
             if env is not None:
                 return env
 
-        # 模板名安全校验：拒绝路径分隔符/穿越（渲染入口的最终防线），非法时回退默认模板
-        try:
-            template_name = validate_template_name(template_name)
-        except Exception:
-            template_name = "scrapbook"
+        # 模板名安全校验：拒绝路径分隔符/穿越（渲染入口的最终防线）
+        clean_name = validate_template_name(template_name)
 
-        template_dir = os.path.join(self.base_dir, template_name)
+        template_dir = os.path.join(self.base_dir, clean_name)
         get_custom_template_dir = getattr(
             self.config_manager, "get_custom_report_template_dir", None
         )
         custom_template_res = (
-            get_custom_template_dir(template_name)
+            get_custom_template_dir(clean_name)
             if callable(get_custom_template_dir)
             else None
         )
@@ -91,20 +88,17 @@ class HTMLTemplates:
         if os.path.exists(template_dir):
             loaders.append(FileSystemLoader(template_dir))
 
-        # 若目标模板既不在自定义目录也不在内置目录，回退到默认的 scrapbook
+        # 若目标模板既不在自定义目录也不在内置目录，明确抛出未找到异常
         if not loaders:
-            logger.warning(f"模板目录不存在: {template_dir}，回退到 scrapbook")
-            template_name = "scrapbook"
-            template_dir = os.path.join(self.base_dir, template_name)
-            loaders.append(FileSystemLoader(template_dir))
-        else:
-            # 无论何种情况，将默认的 scrapbook 目录追加为最底层 Fallback，避免自定义模板缺少局部组件时渲染失败
-            default_dir = os.path.join(self.base_dir, "scrapbook")
-            if default_dir != template_dir and not any(
-                isinstance(ld, FileSystemLoader) and ld.searchpath == [default_dir]
-                for ld in loaders
-            ):
-                loaders.append(FileSystemLoader(default_dir))
+            raise FileNotFoundError(f"未找到指定的报告主题模板「{clean_name}」")
+
+        # 将默认的 scrapbook 目录追加为最底层 Fallback，避免自定义模板缺少局部组件时渲染失败
+        default_dir = os.path.join(self.base_dir, "scrapbook")
+        if default_dir != template_dir and not any(
+            isinstance(ld, FileSystemLoader) and ld.searchpath == [default_dir]
+            for ld in loaders
+        ):
+            loaders.append(FileSystemLoader(default_dir))
 
         env = SandboxedEnvironment(
             loader=ChoiceLoader(loaders),

@@ -647,11 +647,15 @@ def test_symlink_template_dir_rejected_everywhere(tmp_path, monkeypatch):
     assert "gda_normal" in items
     assert "gda_link" not in items
 
-    # 4) 渲染 loader：symlink 目录不被追加为搜索路径，模板源码不来自外部目录
-    #    （哨兵写在 image_template.html，必须读该文件断言才有效）
-    env = ctx["html_templates"]._get_env_sync("gda_link")
-    src = env.loader.get_source(env, "image_template.html")[0]
-    assert "OUTSIDE_SENTINEL" not in src
+    # 4) 渲染 loader：symlink 目录被拒绝加载，抛出 FileNotFoundError，且 render_template 返回空
+    with pytest.raises(FileNotFoundError, match="未找到指定的报告主题模板"):
+        ctx["html_templates"]._get_env_sync("gda_link")
+    assert (
+        ctx["html_templates"].render_template(
+            "image_template.html", template_theme="gda_link"
+        )
+        == ""
+    )
 
 
 def test_symlinked_template_file_rejected(tmp_path, monkeypatch):
@@ -684,24 +688,40 @@ def test_symlinked_template_file_rejected(tmp_path, monkeypatch):
     assert "gda_filelink" not in service.list_available_templates()
     assert asyncio.run(service.template_exists("gda_filelink")) is False
 
-    # 渲染 loader 拒绝：读 html_template.html 时不应命中外部哨兵文件
+    # 渲染 loader 拒绝：含有 symlink 的模板目录被拒绝加载，抛出 FileNotFoundError，且 render_template 返回空
     mock = MagicMock()
     mock.get_custom_report_template_dir = MagicMock(
         side_effect=lambda n: (store / n) if n else store
     )
-    env = HTMLTemplates(mock)._get_env_sync("gda_filelink")
-    src = env.loader.get_source(env, "html_template.html")[0]
-    assert "FILE_SENTINEL" not in src
+    with pytest.raises(FileNotFoundError, match="未找到指定的报告主题模板"):
+        HTMLTemplates(mock)._get_env_sync("gda_filelink")
+    assert (
+        HTMLTemplates(mock).render_template(
+            "html_template.html", template_theme="gda_filelink"
+        )
+        == ""
+    )
 
 
 def test_get_env_validates_template_name():
-    """渲染入口对非法模板名回退到默认 scrapbook（不抛错、不越界）。"""
+    """渲染入口对非法模板名与不存在模板抛出明确异常，不静默回退 scrapbook。"""
     from unittest.mock import MagicMock
 
+    import pytest
+    from src.infrastructure.reporting.template_installer import TemplateInstallError
     from src.infrastructure.reporting.templates import HTMLTemplates
 
-    env = HTMLTemplates(MagicMock())._get_env_sync("../../evil")
-    assert env is not None
-    # 回退后的环境可正常加载 scrapbook 模板源码
-    src = env.loader.get_source(env, "html_template.html")[0]
-    assert isinstance(src, str) and src
+    html_tpl = HTMLTemplates(MagicMock())
+    # 非法路径穿越模板名抛出 TemplateInstallError
+    with pytest.raises(TemplateInstallError):
+        html_tpl._get_env_sync("../../evil")
+
+    # 不存在的模板名抛出 FileNotFoundError
+    with pytest.raises(FileNotFoundError, match="未找到指定的报告主题模板"):
+        html_tpl._get_env_sync("non_existent_template_xyz")
+
+    # render_template 优雅捕获异常并返回空字符串
+    rendered = html_tpl.render_template(
+        "image_template.html", template_theme="non_existent_template_xyz"
+    )
+    assert rendered == ""
