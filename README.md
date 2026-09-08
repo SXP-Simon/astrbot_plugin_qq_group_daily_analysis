@@ -6,7 +6,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis) 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 
 <table align="center" style="border: none;">
   <tr>
@@ -23,13 +23,21 @@
   </tr>
 </table>
 
-
 _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [NapNeko/NapCatQQ<img src="https://avatars.githubusercontent.com/u/165024194?s=200&v=4" width="14px" >](https://napneko.github.io/), [LLOneBot/LuckyLilliaBot<img src="https://avatars.githubusercontent.com/u/161472069?s=200&v=4" width="14px" >](https://www.llonebot.com/), [SnowLuma/SnowLuma<img src="https://avatars.githubusercontent.com/u/216149176?s=200&v=4" width="14px" >](https://snowluma.github.io/))、**QQ 官方机器人**、**Telegram**、**Discord**，未来支持更多平台。 ✨_
 
 <img src="https://count.getloli.com/@astrbot-qq-group-daily-analysis?name=astrbot-qq-group-daily-analysis&theme=booru-jaypee&padding=6&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="count" />
 </div>
 
-
+- [常见问题 (FAQ)](#常见问题-FAQ)
+- [效果](#效果)
+- [功能特色](#功能特色)
+- [配置选项](#配置选项)
+- [每日群漫画配置](#每日群漫画配置)
+- [使用方法](#使用方法)
+- [平台支持与要求](#平台支持与要求)
+- [增量分析模式](#增量分析模式-beta)
+- [HTML报告与自建外链](#HTML-报告与自建外链)
+- [人格设定 (Persona)](#人格设定-Persona)
 
 ## 效果
 
@@ -77,10 +85,10 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   </tr>
 </table>
 
-
 ## 功能特色
 
 ### 🎯 智能分析
+
 - **统计数据**: 全面的群聊活跃度和参与度统计
 - **话题分析**: 使用LLM智能提取群聊中的热门话题和讨论要点
 - **用户画像**: 基于聊天行为分析用户特征，分配个性化称号
@@ -88,6 +96,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
 ### 🎛️ WebUI 控制台
+
 - **内嵌管理面板**: 原生集成在 AstrBot 插件管理页面，无需额外部署，集中提供运行总览、分析记录、统计与消耗、历史报告、运行日志与配置中心六大板块
 - **插件配置中心**: 内置专属可视化配置界面，提供 12 个功能分组导航与即时搜索；支持已有人格与大模型服务商下拉点选、漫画参考图本地上传与灯箱预览，修改保存即时生效
 - **趋势分析与消耗看板**: 支持近48小时、近7天、近14天、近30天等不同时间跨度切换，直观呈现 API 请求走势、大模型 Tokens 消耗堆叠图与服务商消耗占比环形饼图
@@ -140,96 +149,28 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   </tr>
 </table>
 
-
 ### 📊 可视化报告
+
 - **多种格式**: 支持图片和文本输出格式
-    - **精美图片**: 生成美观的可视化报告
-    - **HTML报告**: 生成清晰的HTML格式分析报告，可以进一步配置为外链形式发送
-    - **QQ群**: 支持上传到群相册和群文件，查阅黑历史友好
+  - **精美图片**: 生成美观的可视化报告
+  - **HTML报告**: 生成清晰的HTML格式分析报告，可以进一步配置为外链形式发送
+  - **QQ群**: 支持上传到群相册和群文件，查阅黑历史友好
 - **详细数据**: 包含消息统计、时间分布、关键词、金句等
-
-
-> [!TIP]
-> **图片生成失败/渲染超时的解决办法**
-> 
-> 如果生成图片失败，日志显示 `渲染策略 ... 返回了无效或空数据`、`Endpoint ... failed` 等并回退到文本总结，通常是因为日报内容过大导致 T2I 渲染超时（默认 30s 左右）。
-> 
-> ### 1. 调整插件渲染参数
-> 插件现支持 **两轮渲染策略**，可在配置面板的 **图片渲染策略 (`t2i_rendering`)** 分组中按需调整：
-> 
-> - **增加超时时间**：若日报极其复杂（包含大量内联 CSS/JS/图表），请将 `渲染超时 (ms)` 调大。建议范围：30,000ms - 180,000ms (3 分钟)。
-> - **优化回退策略**：建议第一轮使用 `png` + `ultra` 追求极致清晰；第二轮作为回退，建议使用 `jpeg` + `high/normal` 分辨率并配合更长的超时时间，以确保即使在资源受限的情况下也能产出报告。
-> 
-> ### 2. 使用备用 T2I 服务或自部署
-> <details>
-> <summary><b>若配置调整后渲染仍频繁失败，可尝试更换 T2I 服务（点击此行展开说明）：</b></summary>
->
-> - **Hugging Face 服务**: `https://huggingface.co/spaces/clown145/astrbot-t2i-service`
-> - **API 接口地址**: `https://clown145-astrbot-t2i-service.hf.space`
->   - **说明**: 
->     1. **复制空间**：可访问上方空间地址并点击 **Duplicate Space** 复制到自己的账号下使用。
->     2. **配置填写**：在 **AstrBot 系统配置** 中填入相应的 API 地址（格式通常为 `https://用户名-空间名.hf.space`）。
->     3. **稳定性**：上方地址为维护者提供 T2I 服务（国外网络环境），在一段时间内大概率稳定，但不保证长期有效，如果自己不想部署可以使用。
->     4. **休眠保活**：由于免费空间若长时间（约 48 小时）无人访问会进入休眠。可选择使用保活服务（如 [UptimeRobot](https://uptimerobot.com/)）定期访问 API 地址以保持其处于唤醒状态。
->
-> - **国内加速**: `https://t2i.vercel.ciallo.de5.net`
->   - **说明**: 在国内直接访问原始域名下载图片可能较慢，可选择使用此代理域名。在一段时间内大概率稳定。
-> </details>
->
-> **更换 T2I 端点或自部署 T2I 参考文档**：[docs.astrbot.app/others/self-host-t2i.html](https://docs.astrbot.app/others/self-host-t2i.html)
-
-> [!warning]
-> **实验性开发中**：
-> - 多平台支持功能尚在开发中，当前仅支持 OneBot (NapCat, LLOneBot, Snowluma), QQ 官方机器人, Discord, Telegram。
-
-> [!IMPORTANT]
-> **QQ 官方机器人用户注意**：
-> 插件同时支持 AstrBot 的 `qq_official` 与 `qq_official_webhook` 平台。
-> - 在群聊中需要由群主允许机器人接收群内全部消息，使 AstrBot 能收到 `GROUP_MESSAGE_CREATE` 事件；只开放 @ 消息时，报告只能覆盖 @ 机器人的聊天。
-> - QQ 官方 API 不提供“按群拉取历史消息”的接口。插件会从启用后开始实时保存消息，并从 AstrBot 本地消息历史库分页读取；启用前的群聊无法自动回填。
-> - 官方群和成员使用 `group_openid` / `member_openid`，不是群号或 QQ 号。配置白名单、定时任务时建议先在群内执行 `/sid`，填写完整 UMO。
-> - 官方群事件提供有效昵称时会用于报告；昵称缺失时使用群内稳定匿名名，避免直接展示 `member_openid`。
-> - QQ 官方文本报告使用自定义 Markdown，并默认通过 AstrBot T2I 生成透明背景的群聊概览图，将日期、基础统计和 24 小时竖向直方图合并为紧凑布局。可在 `QQ 官方机器人` 配置组关闭；渲染失败时自动回退为包含文字条形图的完整文本报告。
-> - Markdown 概览图直接使用 AstrBot T2I 返回的公网 URL。请确保当前 T2I 端点域名已加入 QQ 开放平台的消息 URL 配置。
-> - 本次适配只覆盖普通 QQ 群，不包含频道或子频道。
-
-> [!CAUTION]
-> **Discord 用户重点注意**：
-> 如果机器人无法获取群列表或分析报 `403 Forbidden`，请检查 Discord 开发者面板中：
-> 1. **Privileged Gateway Intents**: 开启 `Message Content Intent`。
-> 2. **频道权限**: 确保机器人所在的频道，对应的角色拥有 **“查看消息历史记录”** 权限。
-
-> [!IMPORTANT]
-> **Telegram 用户重点注意**：
-> 1. 如果 TG Bot 不是群管理员，务必在拉入群前先关闭 BotFather 隐私模式。
-> 2. 如果 Bot 已经在群里且不是管理员，关闭隐私模式后必须先移除再重新拉入群，否则新设置不会生效。
->
-> 注：群聊隐私模式关闭流程：`@BotFather`→左下角Open→选择要调整的bot→Bot Settings→将`Group Privacy`关闭
-
-### 🛠️ 灵活配置
-- **多平台支持**: 自动识别并适配 OneBot, QQ 官方机器人, Discord, Telegram 等平台
-- **群组管理**: 支持指定特定群组启用功能（支持跨平台黑白名单）
-- **参数调节**: 可自定义分析天数、消息数量等参数
-- **定时任务**: 支持设置每日自动分析时间
-- **增量分析**: 全新的滑动窗口分析模式，全天候覆盖群聊消息
-- **自定义LLM服务**: 支持自定义指定的LLM服务
-
-
 
 ## 配置选项
 
 > [!NOTE]
 > 以下配置情况仅供参考，请仔细阅读插件配置页面中各个字段的说明，以插件配置中的说明为准。
 
-| 配置项 | 说明 | 备注 |
-|--------|------|--------|
-| 定时分析名单模式 + 列表 | 控制哪些群参与定时任务（报告时间点触发）。 | 可选 `inherit` 继承基础群权限；`whitelist + 空列表` 表示不注册定时任务 |
-| 增量分析名单模式 + 列表 | 控制哪些群走增量模式，其他群走传统全量。 | 可选 `inherit` 继承定时分析最终名单；`whitelist + 空列表` 表示不启用增量周期任务 |
-| 每日群漫画 | 分析结果完成后并行生成漫画，也可用 `/群漫画` 单独生成。 | `enable_daily_comic` 是总开关，`enable_auto_daily_comic` 控制分析后自动联动 |
-| HTML 格式 (自建) | 配置 `html_base_url` 后，机器人会发送可直接点击的报告外链。 | 输出格式需设为 html |
-| 自定义 LLM 服务 | 用户可自行选取个人提供的服务商。 | 留空则回退到默认服务商 |
+| 配置项                  | 说明                                                        | 备注                                                                             |
+| ----------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 定时分析名单模式 + 列表 | 控制哪些群参与定时任务（报告时间点触发）。                  | 可选 `inherit` 继承基础群权限；`whitelist + 空列表` 表示不注册定时任务           |
+| 增量分析名单模式 + 列表 | 控制哪些群走增量模式，其他群走传统全量。                    | 可选 `inherit` 继承定时分析最终名单；`whitelist + 空列表` 表示不启用增量周期任务 |
+| 每日群漫画              | 分析结果完成后并行生成漫画，也可用 `/群漫画` 单独生成。     | `enable_daily_comic` 是总开关，`enable_auto_daily_comic` 控制分析后自动联动      |
+| HTML 格式 (自建)        | 配置 `html_base_url` 后，机器人会发送可直接点击的报告外链。 | 输出格式需设为 html                                                              |
+| 自定义 LLM 服务         | 用户可自行选取个人提供的服务商。                            | 留空则回退到默认服务商                                                           |
 
-### 每日群漫画配置
+## 每日群漫画配置
 
 每日群漫画不按自然日限流：每次成功得到群分析结果时都会尝试生成一张。手动群分析、定时传统分析、定时增量最终报告，以及开启“增量分析立即报告”后的即时增量最终报告都适用。同一群已有漫画在排队或生成时，新请求会直接跳过，避免重复出图；不同群仍受漫画并发配置限制。
 
@@ -253,19 +194,19 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 供应商预设负责将漫画分镜和角色参考图转换为各家的原生请求格式。是否可用仍取决于你的账号权限、模型名称、区域和上游服务状态；选择 OpenAI 兼容 Chat 预设时，也需要上游模型本身能够在聊天响应中返回图片。
 
-| 预设 | 请求协议 | 参考图 | 主要能力与限制 |
-| --- | --- | --- | --- |
-| Google Gemini | Gemini `generateContent` | 支持，最多 14 张 | 支持 `1K/2K/4K` 与宽高比。 |
-| OpenAI / Z.ai / grok2api | OpenAI 兼容 Chat Completions | 支持 | 将尺寸与布局要求写入提示词，图片从聊天响应中提取；由上游模型决定是否支持生图。 |
-| OpenAI Images | `/v1/images/generations`、`/edits` | 支持，可设置上限 | GPT Image 可设置质量、背景、响应格式、JPEG/WebP 压缩、审核和仅文生图模式。 |
-| xAI | xAI Images | 支持，最多 5 张 | 自动在文生图与 edits 间切换。 |
-| Agnes AI | 原生 Images | 支持 | 通过 `extra_body.image` 发送参考图。国际站使用 `apihub.agnes-ai.com`，中国站使用 `api.agnes-ai.cn`，请按 API Key 所属站点选择预设。 |
-| MiniMax | `/v1/image_generation` | 支持，最多 9 张 | 使用 `subject_reference` 角色参考图字段。 |
-| 阶跃星辰 | Images generations / edits | 支持，首张 | 有参考图时使用官方 multipart edits 请求。 |
-| 豆包 Seedream | 火山方舟 Images | 支持 | 普通模型最多 14 张，Seedream 5.0 Pro 最多 10 张且不支持组图；支持 Endpoint ID、自定义尺寸、提示词优化和组图。 |
-| SenseNova U1 Fast | SenseNova Images | 不支持 | 仅文生图；支持官方尺寸映射，单次生成数量限制为 1-4 张。 |
-| DashScope | 通义万相 / 千问原生接口 | 支持，最多 9 张 | 支持自定义尺寸、数量、水印、负面提示词和提示词扩展；wan2.7 的推理与顺序组图互斥，qwen-image-2.0 最多 6 张。 |
-| 自定义协议 | Images / Chat / Grok / Gemini | 取决于协议 | 用于未列出的兼容服务；请选择与实际端点一致的协议。 |
+| 预设                     | 请求协议                           | 参考图           | 主要能力与限制                                                                                                                      |
+| ------------------------ | ---------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Google Gemini            | Gemini `generateContent`           | 支持，最多 14 张 | 支持 `1K/2K/4K` 与宽高比。                                                                                                          |
+| OpenAI / Z.ai / grok2api | OpenAI 兼容 Chat Completions       | 支持             | 将尺寸与布局要求写入提示词，图片从聊天响应中提取；由上游模型决定是否支持生图。                                                      |
+| OpenAI Images            | `/v1/images/generations`、`/edits` | 支持，可设置上限 | GPT Image 可设置质量、背景、响应格式、JPEG/WebP 压缩、审核和仅文生图模式。                                                          |
+| xAI                      | xAI Images                         | 支持，最多 5 张  | 自动在文生图与 edits 间切换。                                                                                                       |
+| Agnes AI                 | 原生 Images                        | 支持             | 通过 `extra_body.image` 发送参考图。国际站使用 `apihub.agnes-ai.com`，中国站使用 `api.agnes-ai.cn`，请按 API Key 所属站点选择预设。 |
+| MiniMax                  | `/v1/image_generation`             | 支持，最多 9 张  | 使用 `subject_reference` 角色参考图字段。                                                                                           |
+| 阶跃星辰                 | Images generations / edits         | 支持，首张       | 有参考图时使用官方 multipart edits 请求。                                                                                           |
+| 豆包 Seedream            | 火山方舟 Images                    | 支持             | 普通模型最多 14 张，Seedream 5.0 Pro 最多 10 张且不支持组图；支持 Endpoint ID、自定义尺寸、提示词优化和组图。                       |
+| SenseNova U1 Fast        | SenseNova Images                   | 不支持           | 仅文生图；支持官方尺寸映射，单次生成数量限制为 1-4 张。                                                                             |
+| DashScope                | 通义万相 / 千问原生接口            | 支持，最多 9 张  | 支持自定义尺寸、数量、水印、负面提示词和提示词扩展；wan2.7 的推理与顺序组图互斥，qwen-image-2.0 最多 6 张。                         |
+| 自定义协议               | Images / Chat / Grok / Gemini      | 取决于协议       | 用于未列出的兼容服务；请选择与实际端点一致的协议。                                                                                  |
 
 所有条目均可单独配置 `proxy`；条目代理优先于全局 `drawing_proxy`，全局代理也会用于下载同次生图响应中的图片。请求超时按条目配置，重试、下载代理和投递策略仍为全局设置。
 
@@ -290,10 +231,10 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 `inherit` 不保存或复制任何名单，而是在判定时复用上一级的最终结果：
 
-| 配置组 | 设为 `inherit` 后的行为 | 该组列表 |
-| --- | --- | --- |
-| 定时分析（`auto_analysis`） | 直接继承基础群权限。基础白名单允许的群会参与定时分析；基础黑名单排除的群不会参与。 | 忽略 |
-| 增量分析（`incremental`） | 直接继承“基础群权限 + 定时分析名单”的最终结果。通过定时分析的群全部使用增量。 | 忽略 |
+| 配置组                      | 设为 `inherit` 后的行为                                                            | 该组列表 |
+| --------------------------- | ---------------------------------------------------------------------------------- | -------- |
+| 定时分析（`auto_analysis`） | 直接继承基础群权限。基础白名单允许的群会参与定时分析；基础黑名单排除的群不会参与。 | 忽略     |
+| 增量分析（`incremental`）   | 直接继承“基础群权限 + 定时分析名单”的最终结果。通过定时分析的群全部使用增量。      | 忽略     |
 
 因此，最省配置的组合是：基础名单填一次，定时分析设为 `inherit`，增量分析也设为 `inherit`。名单变更后，定时目标和增量消息计数状态会按新的继承结果刷新。
 
@@ -307,7 +248,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 4. 在 `自动分析时间列表` 里填时间（例如 `09:00`、`21:30`）。
 5. 去 `增量分析设置`：
 6. 把 `增量分析名单模式` 设为 `whitelist`，并保持 `增量分析群列表` 为空。  
-这样就是“这个群会自动跑，但走普通分析，不走增量”。
+   这样就是“这个群会自动跑，但走普通分析，不走增量”。
 
 #### 场景 B：除了某个群，其他群都自动跑
 
@@ -343,65 +284,76 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 #### 你可能会问（关键边界）
 
 - 不在“定时白名单”里，但在“增量白名单”里，会触发吗？  
-不会。因为会先被“定时白名单”拦住，进不到增量判断。
+  不会。因为会先被“定时白名单”拦住，进不到增量判断。
 
 - 不在“基础群权限”里，但你开了定时分析，会触发吗？  
-不会。基础群权限是第一关，不通过就不会进入后续流程。
+  不会。基础群权限是第一关，不通过就不会进入后续流程。
 
 > [!IMPORTANT]
 > **多平台配置注意**：
+>
 > - **自动发现**: 插件会自动发现已登录的 Bot 实例。
 
 > [!TIP]
 > **自定义 LLM 服务回退机制**：性能优先，策略如下：
->    1. 尝试从配置获取指定的 provider_id
->    2. 回退到主 LLM provider_id
->    3. 回退到当前会话的 Provider (UMO)
->    4. 回退到第一个可用的 Provider
-
+>
+> 1.  尝试从配置获取指定的 provider_id
+> 2.  回退到主 LLM provider_id
+> 3.  回退到当前会话的 Provider (UMO)
+> 4.  回退到第一个可用的 Provider
 
 ## 使用方法
 
 ### 基础命令
 
 #### 群分析
+
 ```
 /群分析 [天数]
 ```
+
 - 分析群聊近期活动
 - 天数可选，默认为1天
 - 例如：`/群分析 3` 分析最近3天的群聊
 
 #### 群漫画
+
 ```
 /群漫画 [天数]
 ```
+
 - 单独生成群聊趣味漫画，不生成日报
 - 天数可选，默认为基础配置中的分析天数
 - 例如：`/群漫画 3` 根据最近3天群聊话题生成漫画
 
 #### 增量状态
+
 ```
 /增量状态
 ```
+
 - 查看当前增量分析的实时状态
 - 显示当前滑动窗口内的分析次数、消息数、话题数等统计
 - **仅在启用增量分析模式时可用**
 
 #### 分析设置
+
 ```
 /分析设置 [操作]
 ```
+
 - `enable`: 为当前群启用分析功能
-- `disable`: 为当前群禁用分析功能  
+- `disable`: 为当前群禁用分析功能
 - `status`: 查看当前群的启用状态
 - 例如：`/分析设置 enable`
 
 #### 模板设置
+
 ```
 /查看模板
 /设置模板 [模板名称或序号]
 ```
+
 - `/查看模板`: 查看所有可用模板及预览图
 - `/设置模板`: 查看当前模板和可用模板列表
 - `/设置模板 [序号]`: 切换到指定序号的模板
@@ -409,18 +361,49 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 ## 平台支持与要求
 
-| 平台 | 适配器类型 | 特殊要求/说明 |
-|------|-----------|--------------|
-| **QQ** | OneBot v11 | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。 |
-| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。 |
-| **Discord** | Discord | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。 |
-| **Telegram** | Telegram Bot API | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
+| 平台              | 适配器类型                         | 特殊要求/说明                                                                                                                                                        |
+| ----------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **QQ**            | OneBot v11                         | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。                                                                                                                   |
+| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。                                      |
+| **Discord**       | Discord                            | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。                                                                                                       |
+| **Telegram**      | Telegram Bot API                   | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
+> [!warning]
+> **实验性开发中**：
+>
+> - 多平台支持功能尚在开发中，当前仅支持 OneBot (NapCat, LLOneBot, Snowluma), QQ 官方机器人, Discord, Telegram。
 
+> [!IMPORTANT]
+> **QQ 官方机器人用户注意**：
+> 插件同时支持 AstrBot 的 `qq_official` 与 `qq_official_webhook` 平台。
+>
+> - 在群聊中需要由群主允许机器人接收群内全部消息，使 AstrBot 能收到 `GROUP_MESSAGE_CREATE` 事件；只开放 @ 消息时，报告只能覆盖 @ 机器人的聊天。
+> - QQ 官方 API 不提供“按群拉取历史消息”的接口。插件会从启用后开始实时保存消息，并从 AstrBot 本地消息历史库分页读取；启用前的群聊无法自动回填。
+> - 官方群和成员使用 `group_openid` / `member_openid`，不是群号或 QQ 号。配置白名单、定时任务时建议先在群内执行 `/sid`，填写完整 UMO。
+> - 官方群事件提供有效昵称时会用于报告；昵称缺失时使用群内稳定匿名名，避免直接展示 `member_openid`。
+> - QQ 官方文本报告使用自定义 Markdown，并默认通过 AstrBot T2I 生成透明背景的群聊概览图，将日期、基础统计和 24 小时竖向直方图合并为紧凑布局。可在 `QQ 官方机器人` 配置组关闭；渲染失败时自动回退为包含文字条形图的完整文本报告。
+> - Markdown 概览图直接使用 AstrBot T2I 返回的公网 URL。请确保当前 T2I 端点域名已加入 QQ 开放平台的消息 URL 配置。
+> - 本次适配只覆盖普通 QQ 群，不包含频道或子频道。
+
+> [!CAUTION]
+> **Discord 用户重点注意**：
+> 如果机器人无法获取群列表或分析报 `403 Forbidden`，请检查 Discord 开发者面板中：
+>
+> 1. **Privileged Gateway Intents**: 开启 `Message Content Intent`。
+> 2. **频道权限**: 确保机器人所在的频道，对应的角色拥有 **“查看消息历史记录”** 权限。
+
+> [!IMPORTANT]
+> **Telegram 用户重点注意**：
+>
+> 1. 如果 TG Bot 不是群管理员，务必在拉入群前先关闭 BotFather 隐私模式。
+> 2. 如果 Bot 已经在群里且不是管理员，关闭隐私模式后必须先移除再重新拉入群，否则新设置不会生效。
+>
+> 注：群聊隐私模式关闭流程：`@BotFather`→左下角Open→选择要调整的bot→Bot Settings→将`Group Privacy`关闭
 
 ## 注意事项
 
 > [!WARNING]
+>
 > 1. **性能考虑**: 大量消息分析可能消耗较多 LLM tokens
 > 2. **数据准确性**: 分析结果基于可获取的群聊记录，可能不完全准确
 
@@ -429,11 +412,13 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 增量分析模式是为了解决消息量大的群聊（如日均消息 > 500 条）在单次分析时容易丢失上下文的问题。
 
 **核心特性：**
+
 - **滑动窗口**：不再受限于自然日，分析窗口随时间滑动（如过去 24 小时），确保任何时候生成的报告都覆盖完整的时间段。
 - **按量分批**：目标群每累计到配置的消息数就执行一个固定规模批次，平滑 LLM 负载。
 - **自动去重**：智能识别重复话题和金句，合并生成最终报告。
 
 **启用方法：**
+
 - 通过 `incremental_group_list_mode + incremental_group_list` 指定哪些群走增量模式，并使用 `incremental_min_messages` 设置每批触发消息数。
 
 ## HTML 报告与自建外链
@@ -441,21 +426,23 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 如果你希望在群里发送的不是图片，而是一个可以点击跳转的精美网页链接，可以使用 HTML 格式输出。
 
 ### 1. 配置流程
+
 1. **设置输出格式**：在 `basic` 设置中将 `output_format` 改为 `html`。
 2. **指定储存目录 (`html_output_dir`)**：设置 HTML 文件在服务器上的保存路径。留空则默认保存在插件数据目录。
 3. **配置外链基址 (`html_base_url`)**：这是关键。如果你使用 Nginx/Apache 等 Web 服务器将上述目录映射到了公网，请在这里填写访问的前缀（如 `https://report.example.com`）。
 
 ### 2. 工作原理
+
 - 机器人生成 HTML 报告并保存到本地目录。
 - 机器人根据文件名和 `html_base_url` 拼接成完整链接发送到群里。
 - **注意**：本插件**不提供** Web 服务器功能，你需要自行使用 Nginx 或 AstrBot 所在的服务器环境来实现静态文件的公网访问。
-
 
 ## 人格设定 (Persona)
 
 插件支持深度的“人格化”分析，让 AI 能够以特定的人设风格（口吻、偏好、语气）来产出摘要和锐评。
 
 ### 人格识别优先级
+
 插件在构建分析任务时，会按以下顺序确定最终使用的“人设状态”：
 
 1.  **强制插件人格 (优先级最高)**：在配置中开启 `强制使用插件指定人格` 并选择 ID。此时 **全平台、所有群聊** 都会统一使用这一种人设，忽略群聊本身的设置。
@@ -509,16 +496,48 @@ AstrBot 更新插件时会先删除旧插件目录，再解压或移动新目录
 
 **忽略**：如果只是偶尔出现（如回复久远消息），不影响机器人核心功能（收发消息），可以直接忽略。
 
+### 图片生成失败/渲染超时的解决办法
+
+> [!TIP]
+> **图片生成失败/渲染超时的解决办法**
+>
+> 如果生成图片失败，日志显示 `渲染策略 ... 返回了无效或空数据`、`Endpoint ... failed` 等并回退到文本总结，通常是因为日报内容过大导致 T2I 渲染超时（默认 30s 左右）。
+>
+> ### 1. 调整插件渲染参数
+>
+> 插件现支持 **两轮渲染策略**，可在配置面板的 **图片渲染策略 (`t2i_rendering`)** 分组中按需调整：
+>
+> - **增加超时时间**：若日报极其复杂（包含大量内联 CSS/JS/图表），请将 `渲染超时 (ms)` 调大。建议范围：30,000ms - 180,000ms (3 分钟)。
+> - **优化回退策略**：建议第一轮使用 `png` + `ultra` 追求极致清晰；第二轮作为回退，建议使用 `jpeg` + `high/normal` 分辨率并配合更长的超时时间，以确保即使在资源受限的情况下也能产出报告。
+>
+> ### 2. 使用备用 T2I 服务或自部署
+>
+> <details>
+> <summary><b>若配置调整后渲染仍频繁失败，可尝试更换 T2I 服务（点击此行展开说明）：</b></summary>
+>
+> - **Hugging Face 服务**: `https://huggingface.co/spaces/clown145/astrbot-t2i-service`
+> - **API 接口地址**: `https://clown145-astrbot-t2i-service.hf.space`
+>   - **说明**:
+>     1. **复制空间**：可访问上方空间地址并点击 **Duplicate Space** 复制到自己的账号下使用。
+>     2. **配置填写**：在 **AstrBot 系统配置** 中填入相应的 API 地址（格式通常为 `https://用户名-空间名.hf.space`）。
+>     3. **稳定性**：上方地址为维护者提供 T2I 服务（国外网络环境），在一段时间内大概率稳定，但不保证长期有效，如果自己不想部署可以使用。
+>     4. **休眠保活**：由于免费空间若长时间（约 48 小时）无人访问会进入休眠。可选择使用保活服务（如 [UptimeRobot](https://uptimerobot.com/)）定期访问 API 地址以保持其处于唤醒状态。
+> - **国内加速**: `https://t2i.vercel.ciallo.de5.net`
+>   - **说明**: 在国内直接访问原始域名下载图片可能较慢，可选择使用此代理域名。在一段时间内大概率稳定。
+>   </details>
+>
+> **更换 T2I 端点或自部署 T2I 参考文档**：[docs.astrbot.app/others/self-host-t2i.html](https://docs.astrbot.app/others/self-host-t2i.html)
 
 ## 🤝 参与贡献 (Contributing)
 
 我们非常欢迎社区参与插件的开发与改进！
 
 如果你希望：
-* 🛠️ 参与 Python 后端或 WebUI 前端代码开发
-* 🎨 贡献新的精美视觉模板（提供离线热调预览工具）
-* 🐛 提交 Bug 修复或性能优化 PR
-* 📝 了解代码规范（Google-style Docstring、FSD、0 any、Ruff 格式化、Conventional Commits）
+
+- 🛠️ 参与 Python 后端或 WebUI 前端代码开发
+- 🎨 贡献新的精美视觉模板（提供离线热调预览工具）
+- 🐛 提交 Bug 修复或性能优化 PR
+- 📝 了解代码规范（Google-style Docstring、FSD、0 any、Ruff 格式化、Conventional Commits）
 
 👉 请参阅完整的 **[贡献指南 (CONTRIBUTING.md)](./CONTRIBUTING.md)**。
 
@@ -533,6 +552,5 @@ AstrBot 更新插件时会先删除旧插件目录，再解压或移动新目录
 ## 许可证
 
 MIT License
-
 
 欢迎提交Issue和Pull Request来改进这个插件！
