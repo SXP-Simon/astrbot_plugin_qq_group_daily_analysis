@@ -186,10 +186,8 @@ class BotManager:
                         except Exception:
                             pass
 
-                # 后备检测：如果不支持名称
-                if not platform_name or not PlatformAdapterFactory.is_supported(
-                    str(platform_name)
-                ):
+                # 仅当未从元数据获取到平台名称时，尝试从 bot 实例后备检测
+                if not platform_name and bot_client:
                     detected = self._detect_platform_name(bot_client)
                     if detected:
                         platform_name = detected
@@ -278,63 +276,58 @@ class BotManager:
     # ==================== DDD 集成方法 ====================
 
     def get_adapter(self, platform_id: str | None = None) -> PlatformAdapter | None:
-        """
-        获取指定平台的 PlatformAdapter。
+        """获取指定平台的 PlatformAdapter（精准匹配）。
 
-        支持平台实例 ID 精确匹配、大小写不敏感匹配、协议别名匹配 (如 qq -> aiocqhttp) 与单实例兜底。
+        仅支持：
+        1. 平台实例 ID 精确匹配（如 'aiocqhttp_1'、'nuits'）
+        2. 大小写与首尾空格不敏感匹配
+        3. 标准协议类型名称匹配（如传入 'aiocqhttp'、'telegram' 时匹配对应协议适配器实例）
+
+        若未指定 platform_id 或未精准匹配到任何有效适配器，返回 None。
         """
         # 如果没有任何适配器，尝试全局刷新一次
         if not self._adapters:
             self._refresh_from_stored_platforms()
 
-        if not platform_id or str(platform_id).lower().strip() in (
-            "auto",
-            "default",
-            "all",
-            "none",
-            "",
-        ):
-            if self._adapters:
-                if len(self._adapters) == 1:
-                    return list(self._adapters.values())[0]
-                # 多个适配器且未指定，优先返回第一个就绪的适配器
-                for adp in self._adapters.values():
-                    if adp:
-                        return adp
+        if not platform_id:
+            logger.warning(
+                "[BotManager] get_adapter 调用未提供 platform_id，拒绝模糊匹配"
+            )
+            return None
+
+        clean_id = str(platform_id).strip()
+        if not clean_id or clean_id.lower() in ("auto", "default", "all", "none"):
+            logger.warning(
+                f"[BotManager] get_adapter 传入通配/无效标识 '{platform_id}'，拒绝模糊匹配"
+            )
             return None
 
         # 检查存储的平台实例是否有最新变动
-        if platform_id in self._platforms:
+        if clean_id in self._platforms:
             self._refresh_from_stored_platforms()
 
-        # 1. 精确匹配平台 ID
-        if platform_id in self._adapters:
-            return self._adapters[platform_id]
+        # 1. 精确匹配平台实例 ID
+        if clean_id in self._adapters:
+            return self._adapters[clean_id]
 
-        # 2. 大小写不敏感匹配
-        p_id_lower = str(platform_id).lower().strip()
+        # 2. 大小写与空格不敏感匹配
+        clean_id_lower = clean_id.lower()
         for k, adp in self._adapters.items():
-            if k.lower().strip() == p_id_lower:
+            if k.strip().lower() == clean_id_lower:
                 return adp
 
-        # 3. 通过 PlatformAdapterFactory 注册类型匹配
-        if PlatformAdapterFactory.is_supported(p_id_lower):
-            expected_adapter_cls = PlatformAdapterFactory.get_adapter_class(p_id_lower)
+        # 3. 通过 PlatformAdapterFactory 注册类型匹配（当调用方传入标准协议名如 aiocqhttp/telegram 时）
+        if PlatformAdapterFactory.is_supported(clean_id_lower):
+            expected_adapter_cls = PlatformAdapterFactory.get_adapter_class(
+                clean_id_lower
+            )
             if expected_adapter_cls:
                 for k, adp in self._adapters.items():
                     if isinstance(adp, expected_adapter_cls):
                         logger.info(
-                            f"[BotManager] 平台类型 '{platform_id}' 匹配到已注册适配器 '{k}'"
+                            f"[BotManager] 平台类型 '{platform_id}' 精准匹配到已注册适配器 '{k}'"
                         )
                         return adp
-
-        # 4. 单实例容错兜底：若系统仅有 1 个活跃适配器，自动作为兜底并记录日志
-        if len(self._adapters) == 1:
-            fallback_k, fallback_adp = list(self._adapters.items())[0]
-            logger.info(
-                f"[BotManager] 未找到指定平台 '{platform_id}'，系统当前仅有 1 个活跃适配器 '{fallback_k}'，已自动作为容错兜底使用"
-            )
-            return fallback_adp
 
         logger.warning(
             f"[BotManager] 未找到匹配平台 '{platform_id}' 的适配器。当前已有适配器列表: {list(self._adapters.keys())}"
@@ -461,11 +454,8 @@ class BotManager:
                         if isinstance(dict_name, str):
                             platform_name = dict_name
 
-                # 验证此平台名称是否受支持，如果不支持，尝试从bot实例检测（如果可用）
-                if (
-                    not platform_name
-                    or not PlatformAdapterFactory.is_supported(str(platform_name))
-                ) and bot_client:
+                # 仅当未从元数据获取到平台名称时，尝试从 bot 实例后备检测
+                if not platform_name and bot_client:
                     detected = self._detect_platform_name(bot_client)
                     if detected:
                         platform_name = detected

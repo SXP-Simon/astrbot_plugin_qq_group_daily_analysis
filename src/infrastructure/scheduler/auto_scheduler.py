@@ -84,46 +84,41 @@ class AutoScheduler:
         self.set_bot_self_ids(bot_qq_ids)
 
     async def get_platform_id_for_group(self, group_id):
-        """根据群ID获取对应的平台ID"""
+        """根据群ID获取对应的平台ID（精准验证）。"""
         try:
-            # 首先检查已注册的bot实例
-            if (
-                hasattr(self.bot_manager, "_bot_instances")
-                and self.bot_manager._bot_instances
-            ):
-                # 如果只有一个实例，直接返回
-                if self.bot_manager.get_platform_count() == 1:
-                    platform_id = self.bot_manager.get_platform_ids()[0]
-                    logger.debug(f"只有一个适配器，使用平台: {platform_id}")
-                    return platform_id
-
-                # 如果有多个实例，尝试通过适配器检查群属于哪个平台
-                logger.info(f"检测到多个适配器，正在验证群 {group_id} 属于哪个平台...")
-                for platform_id in self.bot_manager.get_platform_ids():
-                    try:
-                        adapter = self.bot_manager.get_adapter(platform_id)
-                        if adapter:
-                            # 通过统一接口尝试获取群信息，如果能获取到则说明属于该平台
-                            info = await adapter.get_group_info(str(group_id))
-                            if info:
-                                logger.info(f"✅ 群 {group_id} 属于平台 {platform_id}")
-                                return platform_id
-                            else:
-                                logger.debug(
-                                    f"平台 {platform_id} 无法获取群 {group_id} 信息"
-                                )
-                    except Exception as e:
-                        logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
-                        continue
-
-                # 如果所有适配器都尝试失败，记录错误并返回 None
-                logger.error(
-                    f"❌ 无法确定群 {group_id} 属于哪个平台 (已尝试: {list(self.bot_manager._bot_instances.keys())})"
-                )
+            adapters = (
+                self.bot_manager.get_all_adapters()
+                if hasattr(self.bot_manager, "get_all_adapters")
+                else {}
+            )
+            if not adapters:
+                logger.error("❌ 没有注册的平台适配器")
                 return None
 
-            # 没有任何bot实例，返回None
-            logger.error("❌ 没有注册的bot实例")
+            logger.info(
+                f"正在验证群 {group_id} 属于哪个平台 (已注册适配器: {list(adapters.keys())})..."
+            )
+            for platform_id, adapter in adapters.items():
+                try:
+                    if adapter:
+                        info = await adapter.get_group_info(str(group_id))
+                        if info:
+                            actual_pid = self.bot_manager.get_adapter_platform_id(
+                                adapter
+                            ) or str(platform_id)
+                            logger.info(f"✅ 群 {group_id} 属于平台 {actual_pid}")
+                            return actual_pid
+                        else:
+                            logger.debug(
+                                f"平台 {platform_id} 无法获取群 {group_id} 信息"
+                            )
+                except Exception as e:
+                    logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
+                    continue
+
+            logger.error(
+                f"❌ 无法确定群 {group_id} 属于哪个平台 (已尝试适配器: {list(adapters.keys())})"
+            )
             return None
         except Exception as e:
             logger.error(f"❌ 获取平台ID失败: {e}")
@@ -285,6 +280,7 @@ class AutoScheduler:
         all_groups = await self._get_all_groups()
 
         result = []
+        seen_targets = set()
 
         # 遍历所有平台上的群组
         for platform_id, group_id_orig in all_groups:
@@ -307,7 +303,10 @@ class AutoScheduler:
             if mode_filter and effective_mode != mode_filter:
                 continue
 
-            result.append((group_id, platform_id, effective_mode))
+            target_key = (group_id, platform_id, effective_mode)
+            if target_key not in seen_targets:
+                seen_targets.add(target_key)
+                result.append(target_key)
 
         logger.info(
             f"分层调度解析完成：符合条件的群组共 {len(result)} 个"
@@ -1184,14 +1183,15 @@ class AutoScheduler:
                 continue
 
             try:
-                # 1. 优先从 BotManager 获取已创建的适配器
+                # 1. 优先从 BotManager 获取已创建的适配器（精准匹配）
                 adapter = self.bot_manager.get_adapter(platform_id)
 
-                # 2. 如果没有，尝试临时创建（降级方案）
-                platform_name = None
+                # 2. 如果没有，尝试临时创建（降级方案，仅当受支持时）
                 if not adapter:
                     platform_name = self.bot_manager._detect_platform_name(bot_instance)
-                    if platform_name:
+                    if platform_name and PlatformAdapterFactory.is_supported(
+                        platform_name
+                    ):
                         adapter = PlatformAdapterFactory.create(
                             platform_name,
                             bot_instance,
@@ -1204,6 +1204,9 @@ class AutoScheduler:
                 # 3. 使用适配器获取群列表
                 if adapter:
                     try:
+                        actual_platform_id = self.bot_manager.get_adapter_platform_id(
+                            adapter
+                        ) or str(platform_id)
                         groups = await adapter.get_group_list()
                         groups = [
                             str(group_id).strip()
@@ -1220,18 +1223,18 @@ class AutoScheduler:
                                 p_name = None
 
                         for group_id in groups:
-                            all_groups.add((platform_id, str(group_id)))
+                            all_groups.add((actual_platform_id, str(group_id)))
 
                         logger.info(
-                            f"平台 {platform_id} ({p_name or 'unknown'}) 成功获取 {len(groups)} 个群组"
+                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 成功获取 {len(groups)} 个群组"
                         )
                         continue
 
                     except Exception as e:
                         logger.warning(f"适配器 {platform_id} 获取群列表失败: {e}")
 
-                # 4. 降级：无法通过适配器获取
-                logger.debug(f"平台 {platform_id} 无法通过适配器获取群列表")
+                # 4. 降级：无法通过适配器获取（跳过该平台）
+                logger.debug(f"平台 {platform_id} 无匹配适配器，跳过获取群列表")
 
             except Exception as e:
                 logger.error(f"平台 {platform_id} 获取群列表异常: {e}")
