@@ -48,6 +48,7 @@ class HTMLTemplates:
         "hack": "黑客赛博 (Hack)",
         "BlueArchive": "蔚蓝档案 (BlueArchive)",
         "simple": "极简黑白 (Simple)",
+        "art_nouveau": "新艺术运动 (Art Nouveau)",
     }
 
     def _get_env_sync(self, template_theme: str | None = None) -> SandboxedEnvironment:

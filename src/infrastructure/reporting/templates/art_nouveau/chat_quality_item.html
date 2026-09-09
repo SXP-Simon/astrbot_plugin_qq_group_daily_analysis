@@ -1,0 +1,81 @@
+<div class="an-quality-box avoid-break">
+    <div class="an-quality-header-wrap">
+        <div class="an-quality-title-plate">
+            <span class="an-plate-rosette">❧</span>
+            <span class="an-quality-title-text">{{ title }}</span>
+            <span class="an-plate-rosette">☙</span>
+        </div>
+        <div class="an-quality-subtitle-text">{{ subtitle }}</div>
+    </div>
+
+    <!-- 穆夏彩色花窗式堆叠维度律动条 -->
+    <div class="an-mosaic-bar-frame">
+        <div class="an-mosaic-bar-inner">
+            {% set an_colors = ['#2d5016', '#c9a227', '#8b6db5', '#a0522d', '#4a7c3f', '#b8860b', '#704f99', '#556b2f'] %}
+            {% for dim in dimensions %}
+            {% set safe_percentage = dim.percentage|float %}
+            {% if safe_percentage < 0 %}
+            {% set safe_percentage = 0 %}
+            {% elif safe_percentage > 100 %}
+            {% set safe_percentage = 100 %}
+            {% endif %}
+            {% if safe_percentage > 0 %}
+            <div class="an-mosaic-segment"
+                style="width: {{ safe_percentage }}%; background-color: {{ an_colors[loop.index0 % an_colors|length] }};"
+                title="{{ dim.name }}: {{ '%.1f'|format(safe_percentage) }}%">
+                <span class="an-mosaic-label">
+                    {{ dim.name }} {{ '%.0f'|format(safe_percentage) }}%
+                </span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- 维度格律细评 -->
+    <div class="an-dimensions-mosaic-grid">
+        {% set an_colors = ['#2d5016', '#c9a227', '#8b6db5', '#a0522d', '#4a7c3f', '#b8860b', '#704f99', '#556b2f'] %}
+        {% for dim in dimensions %}
+        {% set safe_percentage = dim.percentage|float %}
+        {% if safe_percentage < 0 %}
+        {% set safe_percentage = 0 %}
+        {% elif safe_percentage > 100 %}
+        {% set safe_percentage = 100 %}
+        {% endif %}
+        {% if safe_percentage > 0 %}
+        {% set dim_color = an_colors[loop.index0 % an_colors|length] %}
+        <div class="an-dim-card avoid-break" style="--card-accent: {{ dim_color }};">
+            <div class="an-dim-head">
+                <span class="an-dim-name">
+                    <span class="an-dim-dot" style="background-color: {{ dim_color }};"></span>
+                    {{ dim.name }}
+                </span>
+                <span class="an-dim-percent" style="color: {{ dim_color }};">{{ '%.1f'|format(safe_percentage) }}%</span>
+            </div>
+            <div class="an-dim-stem-track">
+                <div class="an-dim-stem-fill" style="width: {{ safe_percentage }}%; background-color: {{ dim_color }};"></div>
+            </div>
+            <p class="an-dim-critique-body">{{ dim.comment }}</p>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- 整体洞察华章 -->
+    {% if summary %}
+    <div class="an-quality-grand-summary">
+        <div class="an-summary-crest">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2Z"/>
+                <path d="M12 6V18"/>
+                <path d="M6 12H18"/>
+                <circle cx="12" cy="12" r="4"/>
+            </svg>
+        </div>
+        <div class="an-summary-text-wrap">
+            <div class="an-summary-crest-label">群聊综合评述 · Atmosphere Summary</div>
+            <p class="an-summary-content">{{ summary }}</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
