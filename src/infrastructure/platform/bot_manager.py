@@ -291,15 +291,12 @@ class BotManager:
 
         if not platform_id:
             logger.warning(
-                "[BotManager] get_adapter 调用未提供 platform_id，拒绝模糊匹配"
+                "[BotManager] get_adapter 调用未提供 platform_id，无法确定使用哪个适配器。请明确指定 platform_id。"
             )
             return None
 
         clean_id = str(platform_id).strip()
-        if not clean_id or clean_id.lower() in ("auto", "default", "all", "none"):
-            logger.warning(
-                f"[BotManager] get_adapter 传入通配/无效标识 '{platform_id}'，拒绝模糊匹配"
-            )
+        if not clean_id:
             return None
 
         # 检查存储的平台实例是否有最新变动

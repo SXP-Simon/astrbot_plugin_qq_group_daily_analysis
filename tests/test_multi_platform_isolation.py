@@ -91,6 +91,14 @@ def test_get_adapter_exact_and_case_insensitive_match():
     adapter_ci = bot_mgr.get_adapter("  ONEBOT_MAIN  ")
     assert adapter_ci is adapter
 
+    # 3. Supports platform ID named 'default'
+    bot_mgr.set_bot_instance(
+        mock_onebot_client, platform_id="default", platform_name="aiocqhttp"
+    )
+    adapter_default = bot_mgr.get_adapter("default")
+    assert adapter_default is not None
+    assert bot_mgr.get_adapter_platform_id(adapter_default) == "default"
+
 
 def test_get_adapter_protocol_type_match():
     """Verify get_adapter matches registered adapters by supported protocol type name."""
@@ -146,10 +154,9 @@ def test_get_adapter_rejects_empty_and_wildcard_placeholders():
     assert bot_mgr.get_adapter(None) is None
     assert bot_mgr.get_adapter("") is None
     assert bot_mgr.get_adapter("   ") is None
-    assert bot_mgr.get_adapter("auto") is None
-    assert bot_mgr.get_adapter("default") is None
-    assert bot_mgr.get_adapter("all") is None
     assert bot_mgr.get_adapter("none") is None
+    assert bot_mgr.get_adapter("null") is None
+    assert bot_mgr.get_adapter("unknown_platform_id") is None
 
 
 @pytest.mark.asyncio
