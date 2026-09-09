@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -1785,65 +1785,11 @@
                 <div class="html-slot">{{ hourly_chart_html | safe }}</div>
             </section>
 
-            <section class="glass-card section topic-section">
-                <div class="section-header">
-                    <div class="section-title-wrap">
-                        <div class="section-icon"><svg class="icon-svg">
-                                <use href="#icon-flame"></use>
-                            </svg></div>
-                        <div>
-                            <h3 class="section-title">高亮记忆碎片<img class="section-kawaii"
-                                    src="{{ t2i_atri_font_mirror }}/file/1775130581843_1774881262835_疑惑.webp"
-                                    alt="kawaii icon"></h3>
-                            <div class="section-sub">亚托莉捕获的最亮眼的记忆碎片！</div>
-                        </div>
-                    </div>
-                    <div class="section-badge">TOPIC BOARD <img class="badge-kawaii"
-                            src="{{ t2i_atri_font_mirror }}/file/1775130585446_1774881263342_观察.webp"
-                            alt="badge icon"></div>
-                </div>
-                <div class="html-slot">{{ topics_html | safe }}</div>
-            </section>
+            {{ topics_html | safe }}
 
-            <section class="glass-card section title-section">
-                <div class="section-header">
-                    <div class="section-title-wrap">
-                        <div class="section-icon"><svg class="icon-svg">
-                                <use href="#icon-badge-check"></use>
-                            </svg></div>
-                        <div>
-                            <h3 class="section-title">神人名片颁发<img class="section-kawaii"
-                                    src="{{ t2i_atri_font_mirror }}/file/1775130598778_1774881267181_得意.webp"
-                                    alt="kawaii icon"></h3>
-                            <div class="section-sub">颁发给各位的高性能称号！</div>
-                        </div>
-                    </div>
-                    <div class="section-badge">SPOTLIGHT <img class="badge-kawaii"
-                            src="{{ t2i_atri_font_mirror }}/file/1775130599184_1774881267385_得意-1.webp"
-                            alt="badge icon"></div>
-                </div>
-                <div class="html-slot title-grid">{{ titles_html | safe }}</div>
-            </section>
+            {{ titles_html | safe }}
 
-            <section class="glass-card section quote-section">
-                <div class="section-header">
-                    <div class="section-title-wrap">
-                        <div class="section-icon"><svg class="icon-svg">
-                                <use href="#icon-quote"></use>
-                            </svg></div>
-                        <div>
-                            <h3 class="section-title">亚托莉的宝藏瓶<img class="section-kawaii"
-                                    src="{{ t2i_atri_font_mirror }}/file/1775130605165_1774881270686_爱心.webp"
-                                    alt="kawaii icon"></h3>
-                            <div class="section-sub">亚托莉偷偷记在小本子上的宝藏名言！</div>
-                        </div>
-                    </div>
-                    <div class="section-badge">PRECIOUS WORDS <img class="badge-kawaii"
-                            src="{{ t2i_atri_font_mirror }}/file/1775130588642_1774881263748_可爱-3.webp"
-                            alt="badge icon"></div>
-                </div>
-                <div class="html-slot">{{ quotes_html | safe }}</div>
-            </section>
+            {{ quotes_html | safe }}
 
             {% if chat_quality_html %}
             <section class="glass-card section review-section">

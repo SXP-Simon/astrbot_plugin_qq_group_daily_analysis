@@ -1,33 +1,55 @@
-{% set quote_emojis = [
-    t2i_atri_font_mirror ~ '/file/1775132814629_1774881270686_爱心.gif',
-    t2i_atri_font_mirror ~ '/file/1775132815504_1774881268554_可爱.gif',
-    t2i_atri_font_mirror ~ '/file/1775132809943_1774881264350_睡觉.gif',
-    t2i_atri_font_mirror ~ '/file/1775175892953_1774881267664_舔屏幕.gif'
-] %}
-{% for quote in quotes %}
-<div class="quote-wrapper">
-    <div class="q-flex-container">
-        <div class="q-user-col">
-            {% if quote.avatar_url %}
-            <div class="q-avatar-box">
-                <img src="{{ quote.avatar_url }}" class="q-avatar">
-            </div>
-            {% endif %}
-        </div>
-
-        <div class="q-content-col">
-            <div class="q-sender-name">{{ quote.sender }}</div>
-            <div class="q-bubble-wrap">
-                <div class="q-bubble">
-                    <div class="q-content">{{ quote.content }}</div>
-                </div>
-                <img class="quote-floating-emoji" src="{{ quote_emojis | random }}" alt="金句表情">
-            </div>
-            <div class="q-analysis-note">
-                <span class="note-label">📝 亚托莉的高性能分析：</span>
-                {{ quote.reason | safe }}
+{% if quotes %}
+<section class="glass-card section quote-section">
+    <div class="section-header">
+        <div class="section-title-wrap">
+            <div class="section-icon"><svg class="icon-svg">
+                    <use href="#icon-quote"></use>
+                </svg></div>
+            <div>
+                <h3 class="section-title">亚托莉的宝藏瓶<img class="section-kawaii"
+                        src="{{ t2i_atri_font_mirror }}/file/1775130605165_1774881270686_爱心.webp"
+                        alt="kawaii icon"></h3>
+                <div class="section-sub">亚托莉偷偷记在小本子上的宝藏名言！</div>
             </div>
         </div>
+        <div class="section-badge">PRECIOUS WORDS <img class="badge-kawaii"
+                src="{{ t2i_atri_font_mirror }}/file/1775130588642_1774881263748_可爱-3.webp"
+                alt="badge icon"></div>
     </div>
-</div>
-{% endfor %}
+    <div class="html-slot">
+        {% set quote_emojis = [
+            t2i_atri_font_mirror ~ '/file/1775132814629_1774881270686_爱心.gif',
+            t2i_atri_font_mirror ~ '/file/1775132815504_1774881268554_可爱.gif',
+            t2i_atri_font_mirror ~ '/file/1775132809943_1774881264350_睡觉.gif',
+            t2i_atri_font_mirror ~ '/file/1775175892953_1774881267664_舔屏幕.gif'
+        ] %}
+        {% for quote in quotes %}
+        <div class="quote-wrapper">
+            <div class="q-flex-container">
+                <div class="q-user-col">
+                    {% if quote.avatar_url %}
+                    <div class="q-avatar-box">
+                        <img src="{{ quote.avatar_url }}" class="q-avatar">
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="q-content-col">
+                    <div class="q-sender-name">{{ quote.sender }}</div>
+                    <div class="q-bubble-wrap">
+                        <div class="q-bubble">
+                            <div class="q-content">{{ quote.content }}</div>
+                        </div>
+                        <img class="quote-floating-emoji" src="{{ quote_emojis | random }}" alt="金句表情">
+                    </div>
+                    <div class="q-analysis-note">
+                        <span class="note-label">📝 亚托莉的高性能分析：</span>
+                        {{ quote.reason | safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

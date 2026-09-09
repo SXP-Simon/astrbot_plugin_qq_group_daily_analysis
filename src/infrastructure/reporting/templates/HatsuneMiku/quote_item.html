@@ -1,4 +1,12 @@
-﻿{% if quotes %}
+{% if quotes %}
+<div style="margin-bottom: 50px;">
+    <div class="section-header">
+        <div class="v-bar" style="background: var(--miku-pink-light);"></div>
+        <div class="section-title-text">
+            <i data-lucide="quote" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
+            今日圣经
+        </div>
+    </div>
     {% for quote in quotes %}
     <div class="miku-quote-row" style="margin-bottom: 25px; display: flex; flex-direction: column; align-items: {% if loop.index0 is even %}flex-start{% else %}flex-end{% endif %};">
         <div class="miku-quote-wrap" style="display: flex; gap: 15px; max-width: 85%; {% if loop.index0 is odd %}flex-direction: row-reverse;{% endif %}">
@@ -26,5 +34,6 @@
         </div>
     </div>
     {% endfor %}
+</div>
 {% endif %}
 

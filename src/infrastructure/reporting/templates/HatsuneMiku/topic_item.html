@@ -1,37 +1,48 @@
-﻿{% set miku_topic_images = [
-    "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810150449.png",
-    "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810143720.png",
-    "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810151717.png",
-    "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810153327.png",
-    "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810145078.png"
-] %}
-{% for topic in topics %}
-<div class="card-common miku-topic-card" style="padding: 24px; border-left: 6px solid var(--miku-base); display: flex; gap: 20px; margin-bottom: 25px; transition: all 0.3s ease;">
-    <div style="font-family: var(--font-num); font-size: 1.8rem; color: var(--miku-pink-light); font-weight: 800; padding-top: 2px; opacity: 0.8;">
-        #{{ "%02d" | format(topic.index) }}
+{% if topics %}
+<div style="margin-bottom: 50px;">
+    <div class="section-header">
+        <div class="v-bar" style="background: var(--miku-pink-light);"></div>
+        <div class="section-title-text">
+            <i data-lucide="message-square" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
+            话题总结
+        </div>
     </div>
-    <div style="flex: 1;">
-        <div style="font-weight: 800; font-size: 1.25rem; color: var(--accent-dark); margin-bottom: 10px; line-height: 1.4;">
-            {{ topic.topic.topic }}
+    {% set miku_topic_images = [
+        "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810150449.png",
+        "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810143720.png",
+        "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810151717.png",
+        "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810153327.png",
+        "https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku/retouch_2026032810145078.png"
+    ] %}
+    {% for topic in topics %}
+    <div class="card-common miku-topic-card" style="padding: 24px; border-left: 6px solid var(--miku-base); display: flex; gap: 20px; margin-bottom: 25px; transition: all 0.3s ease;">
+        <div style="font-family: var(--font-num); font-size: 1.8rem; color: var(--miku-pink-light); font-weight: 800; padding-top: 2px; opacity: 0.8;">
+            #{{ "%02d" | format(topic.index) }}
         </div>
-        <div style="line-height: 1.8; color: var(--text-main); font-size: 1rem; background: rgba(255,255,255,0.5); padding: 12px; border-radius: 8px;">
-            {{ topic.detail | safe }}
-        </div>
-        
-        <div style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div style="font-size: 0.85rem; color: var(--text-sub); background: var(--miku-blue); padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-miku-light);">
-                <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" style="width: 16px; height: 16px; color: var(--miku-dark);">
-                    <path d="m12 8-9.04 9.06a2.82 2.82 0 1 0 3.98 3.98L16 12"/>
-                    <circle cx="17" cy="7" r="5"/>
-                </svg>                <span style="font-weight: 500;">参与成员:</span> 
-                <span style="color: var(--miku-dark); font-weight: 700;">{{ topic.contributors }}</span>
+        <div style="flex: 1;">
+            <div style="font-weight: 800; font-size: 1.25rem; color: var(--accent-dark); margin-bottom: 10px; line-height: 1.4;">
+                {{ topic.topic.topic }}
+            </div>
+            <div style="line-height: 1.8; color: var(--text-main); font-size: 1rem; background: rgba(255,255,255,0.5); padding: 12px; border-radius: 8px;">
+                {{ topic.detail | safe }}
             </div>
             
-            <div style="display: flex; align-items: center; height: 65px; opacity: 1; flex-shrink: 0;">
-                <img src="{{ miku_topic_images[loop.index0 % miku_topic_images|length] }}" alt="装饰图" style="height: 100%; width: auto; max-width: 150px; border: none; outline: none; background: transparent; object-fit: contain;">
+            <div style="margin-top: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 0.85rem; color: var(--text-sub); background: var(--miku-blue); padding: 8px 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-miku-light);">
+                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" style="width: 16px; height: 16px; color: var(--miku-dark);">
+                        <path d="m12 8-9.04 9.06a2.82 2.82 0 1 0 3.98 3.98L16 12"/>
+                        <circle cx="17" cy="7" r="5"/>
+                    </svg>                <span style="font-weight: 500;">参与成员:</span> 
+                    <span style="color: var(--miku-dark); font-weight: 700;">{{ topic.contributors }}</span>
+                </div>
+                
+                <div style="display: flex; align-items: center; height: 65px; opacity: 1; flex-shrink: 0;">
+                    <img src="{{ miku_topic_images[loop.index0 % miku_topic_images|length] }}" alt="装饰图" style="height: 100%; width: auto; max-width: 150px; border: none; outline: none; background: transparent; object-fit: contain;">
+                </div>
             </div>
         </div>
     </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endif %}
 

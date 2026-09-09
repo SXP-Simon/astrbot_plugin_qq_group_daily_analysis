@@ -1180,8 +1180,12 @@ class ReportGenerator(IReportGenerator):
             "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
         }
 
-        topics_html = self.html_templates.render_template(
-            "topic_item.html", topics=topics_list, **common_context
+        topics_html = (
+            self.html_templates.render_template(
+                "topic_item.html", topics=topics_list, **common_context
+            )
+            if topics_list
+            else ""
         )
         logger.debug(f"话题HTML生成完成，长度: {len(topics_html)}")
 
@@ -1227,8 +1231,12 @@ class ReportGenerator(IReportGenerator):
             title_data.update(profile_info)
             titles_list.append(title_data)
 
-        titles_html = self.html_templates.render_template(
-            "user_title_item.html", titles=titles_list, **common_context
+        titles_html = (
+            self.html_templates.render_template(
+                "user_title_item.html", titles=titles_list, **common_context
+            )
+            if titles_list
+            else ""
         )
         logger.debug(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
@@ -1277,8 +1285,12 @@ class ReportGenerator(IReportGenerator):
                 }
             )
 
-        quotes_html = self.html_templates.render_template(
-            "quote_item.html", quotes=quotes_list, **common_context
+        quotes_html = (
+            self.html_templates.render_template(
+                "quote_item.html", quotes=quotes_list, **common_context
+            )
+            if quotes_list
+            else ""
         )
         logger.debug(f"金句HTML生成完成，长度: {len(quotes_html)}")
 

@@ -1536,46 +1536,13 @@
         {% endif %}
 
         <!-- Topic Details Section -->
-        {% if topics_html %}
-        <div style="margin-bottom: 50px;">
-            <div class="section-header">
-                <div class="v-bar" style="background: var(--miku-pink-light);"></div>
-                <div class="section-title-text">
-                    <i data-lucide="message-square" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    话题总结
-                </div>
-            </div>
-            {{topics_html | safe}}
-        </div>
-        {% endif %}
+        {{topics_html | safe}}
 
         <!-- User Portraits Section -->
-        {% if titles_html %}
-        <div style="margin-bottom: 50px;">
-            <div class="section-header">
-                <div class="v-bar"></div>
-                <div class="section-title-text">
-                    <i data-lucide="users" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    群友画像
-                </div>
-            </div>
-            {{titles_html | safe}}
-        </div>
-        {% endif %}
+        {{titles_html | safe}}
 
         <!-- Golden Quotes Section -->
-        {% if quotes_html %}
-        <div style="margin-bottom: 50px;">
-            <div class="section-header">
-                <div class="v-bar" style="background: var(--miku-pink-light);"></div>
-                <div class="section-title-text">
-                    <i data-lucide="quote" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    今日圣经
-                </div>
-            </div>
-            {{quotes_html | safe}}
-        </div>
-        {% endif %}
+        {{quotes_html | safe}}
 
         <!-- Chat Quality Review -->
         {% if chat_quality_html %}
