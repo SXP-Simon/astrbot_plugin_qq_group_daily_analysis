@@ -1,5 +1,18 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.3.0] - 上线「新艺术运动风」典雅画报模版与分析区域智能隐藏渲染优化
+
+*   **🎨 【新特性】全新「新艺术运动风 (Art Nouveau)」群聊艺术画报模版上线**：
+    *   **复古艺术美学设计**：以 19 世纪末新艺术运动与穆夏（Alphonse Mucha）装饰艺术为灵感，采用温润羊皮纸底色、流动藤蔓花纹与古典金边装饰，将群聊数据装帧为古典画报。
+    *   **双色交错和谐排版**：核心数据、热议话题、群芳雅鉴与金句回响采用森林绿与复古金双色交替排版，层次分明、典雅克制。
+
+<a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
+
+
+*   **🪄 【体验优化】模版分析区域智能隐藏（告别未开启功能的空白标题）**：
+    *   **按需动态渲染**：全面优化各大内置模版（初音未来 HatsuneMiku、亚托莉 ATRI、新艺术运动风等）的局部渲染逻辑。
+    *   **彻底消除空标题占位**：当在设置中未开启某项分析功能（如未开启“金句语录”、“核心话题”或“群友画像”）时，生成的日报将自动隐藏对应区域与板块标题，不再出现孤立空标题或大块空白，使画面布局更加紧凑美观。
+
 ## [v5.2.2] - 修复多平台共存时定时报告重复发送缺陷 (#223)
 
 *   **🛡️ 【核心修复】多消息平台环境下的群聊扫描与调度隔离 (#223)**：
