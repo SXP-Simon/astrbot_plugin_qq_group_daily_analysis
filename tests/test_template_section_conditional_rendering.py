@@ -95,7 +95,7 @@ def create_analysis_result(empty=False):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('template_theme', ['scrapbook', 'HatsuneMiku', 'ATRI'])
+@pytest.mark.parametrize('template_theme', ['scrapbook', 'HatsuneMiku', 'ATRI', 'art_nouveau'])
 @pytest.mark.parametrize('template_file', ['image_template.html', 'html_template.html'])
 async def test_template_hides_empty_sections_when_no_content(tmp_path, template_theme, template_file):
     config = MockConfigManager(template_theme)
@@ -130,12 +130,17 @@ async def test_template_hides_empty_sections_when_no_content(tmp_path, template_
             assert '群友画像 Portraits' not in rendered_html
             assert '群贤毕至 Bible Quotes' not in rendered_html
             assert '群聊质量锐评' not in rendered_html
+        elif template_theme == 'art_nouveau':
+            assert '核心热议话题' not in rendered_html
+            assert '群友特质画像' not in rendered_html
+            assert '精选金句回响' not in rendered_html
+            assert '群聊氛围洞察' not in rendered_html
     finally:
         await generator.close()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('template_theme', ['scrapbook', 'HatsuneMiku', 'ATRI'])
+@pytest.mark.parametrize('template_theme', ['scrapbook', 'HatsuneMiku', 'ATRI', 'art_nouveau'])
 @pytest.mark.parametrize('template_file', ['image_template.html', 'html_template.html'])
 async def test_template_shows_sections_when_content_present(tmp_path, template_theme, template_file):
     config = MockConfigManager(template_theme)
@@ -173,6 +178,13 @@ async def test_template_shows_sections_when_content_present(tmp_path, template_t
             assert '今日话题 Topics' in rendered_html
             assert '群友画像 Portraits' in rendered_html
             assert '群贤毕至 Bible Quotes' in rendered_html
+            assert '测试话题1' in rendered_html
+            assert '水群之王' in rendered_html
+            assert '名言名句' in rendered_html
+        elif template_theme == 'art_nouveau':
+            assert '核心热议话题' in rendered_html
+            assert '群芳雅鉴' in rendered_html
+            assert '精选金句回响' in rendered_html
             assert '测试话题1' in rendered_html
             assert '水群之王' in rendered_html
             assert '名言名句' in rendered_html

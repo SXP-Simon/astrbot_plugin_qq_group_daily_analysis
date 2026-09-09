@@ -1,0 +1,49 @@
+<div class="an-chart-container">
+    {% for item in chart_data %}
+    {% set bar_percentage = item.percentage | float %}
+    {% if bar_percentage < 0 %}
+    {% set bar_percentage = 0 %}
+    {% elif bar_percentage > 100 %}
+    {% set bar_percentage = 100 %}
+    {% endif %}
+
+    {% set stem_bg = '#d6cca8' %}
+    {% set stem_height = '4px' %}
+    {% set stem_opacity = '0.5' %}
+    {% set bud_display = 'none' %}
+
+    {% if item.count == 0 %}
+    {% set stem_bg = 'rgba(201, 162, 39, 0.25)' %}
+    {% set stem_height = '4px' %}
+    {% set stem_opacity = '0.4' %}
+    {% elif bar_percentage >= 70 %}
+    {% set stem_bg = 'linear-gradient(180deg, #c9a227 0%, #2d5016 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '1' %}
+    {% set bud_display = 'block' %}
+    {% elif bar_percentage >= 30 %}
+    {% set stem_bg = 'linear-gradient(180deg, #4a7c3f 0%, #2d5016 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '0.9' %}
+    {% set bud_display = 'block' %}
+    {% else %}
+    {% set stem_bg = 'linear-gradient(180deg, #8ba873 0%, #4a7c3f 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '0.85' %}
+    {% set bud_display = 'block' %}
+    {% endif %}
+
+    <div class="an-chart-col">
+        {% if item.count > 0 %}
+        <div class="an-chart-val">{{ item.count }}</div>
+        {% endif %}
+
+        <div class="an-stem-wrapper">
+            <div class="an-flower-bud" style="display: {{ bud_display }};"></div>
+            <div class="an-stem-bar" style="height: {{ stem_height }}; background: {{ stem_bg }}; opacity: {{ stem_opacity }};"></div>
+        </div>
+
+        <div class="an-chart-axis-label">{{ "%02d" | format(item.hour) }}</div>
+    </div>
+    {% endfor %}
+</div>
