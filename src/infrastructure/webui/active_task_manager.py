@@ -220,9 +220,13 @@ class ActiveTaskManager:
                 logger.error(f"[TaskReaper] 开机自愈对账异常: {e}")
 
         if self._reaper_task is None or self._reaper_task.done():
-            self._reaper_task = asyncio.create_task(
-                self._reaper_loop(interval_seconds, timeout_seconds)
-            )
+            try:
+                loop = asyncio.get_running_loop()
+                self._reaper_task = loop.create_task(
+                    self._reaper_loop(interval_seconds, timeout_seconds)
+                )
+            except RuntimeError:
+                self._reaper_task = None
 
     def stop_reaper(self) -> None:
         """停止守护协程"""
