@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -137,6 +138,26 @@ class PipelineContext:
             payload=span_record.setdefault("payload", {}),
         )
 
+        heartbeat_task: asyncio.Task[None] | None = None
+        if self.trace is not None and self.trace.trace_id:
+
+            async def _heartbeat_keeper_loop() -> None:
+                try:
+                    while True:
+                        await asyncio.sleep(20)
+                        if self.trace is not None:
+                            self.trace.touch_heartbeat()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as err:
+                    logger.debug(f"阶段心跳保活协程异常: {err}")
+
+            try:
+                loop = asyncio.get_running_loop()
+                heartbeat_task = loop.create_task(_heartbeat_keeper_loop())
+            except RuntimeError:
+                pass
+
         try:
             yield step_obj
 
@@ -173,6 +194,8 @@ class PipelineContext:
             step_obj.mark_failed(str(exc))
             raise
         finally:
+            if heartbeat_task is not None and not heartbeat_task.done():
+                heartbeat_task.cancel()
             if span_cm is not None:
                 span_cm.__exit__(None, None, None)
 

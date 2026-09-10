@@ -128,3 +128,44 @@ def test_checkpoint_store_query_by_group_date(tmp_path: Path):
     assert AnalysisStage.CLEAN_MESSAGES.value in stage_names
     assert AnalysisStage.LLM_ANALYSIS.value in stage_names
     assert "INCREMENTAL_BATCH_a1b2c3d4" in stage_names
+
+
+@pytest.mark.asyncio
+async def test_pipeline_heartbeat_keeper_refreshes_active_task(tmp_path: Path):
+    """验证 PipelineContext.step 在执行期间能自动刷新活跃任务的心跳时间戳。"""
+    from src.infrastructure.webui.active_task_manager import ActiveTaskManager
+
+    db_path = tmp_path / "test_traces.db"
+    store = CheckpointStore(db_path)
+    active_mgr = ActiveTaskManager()
+    TraceContext.set_active_task_manager(active_mgr)
+
+    trace_id = "trace_heartbeat_test"
+    await active_mgr.register_task(
+        task_id=trace_id,
+        group_id="88888",
+        group_name="心跳群",
+    )
+
+    # 模拟过去的心跳时间
+    old_heartbeat = 1000000.0
+    active_mgr._tasks[trace_id].last_heartbeat = old_heartbeat
+
+    with TraceContext(trace_id=trace_id) as trace:
+        pipeline = PipelineContext(
+            trace=trace,
+            checkpoint_store=store,
+            group_id="88888",
+            date_str="2026-09-10",
+        )
+
+        async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
+            # 验证 touch_heartbeat 手动与自动保活
+            trace.touch_heartbeat()
+            new_heartbeat = active_mgr._tasks[trace_id].last_heartbeat
+            assert new_heartbeat > old_heartbeat
+
+        # 退出 step 后检查 span 完成
+        assert len(trace._spans) == 1
+        assert trace._spans[0]["status"] == "success"
+

@@ -240,6 +240,44 @@ async def test_active_task_manager_and_reaper(temp_db: Path):
 
 
 @pytest.mark.asyncio
+async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
+    """测试 Task Reaper 扫描协程能自动回收超过 timeout_seconds 的超时任务。"""
+    store = TraceSQLiteStore(temp_db)
+    manager = ActiveTaskManager(trace_store=store)
+
+    async def hung_job():
+        await asyncio.sleep(100)
+
+    hung_task = asyncio.create_task(hung_job())
+    await manager.register_task(
+        task_id="timeout_001",
+        group_id="999",
+        group_name="超时群",
+        current_stage="LLM_ANALYSIS",
+        asyncio_task=hung_task,
+    )
+
+    # 模拟心跳过期 (200秒前，超过默认 180s 阈值)
+    manager._tasks["timeout_001"].last_heartbeat = time.time() - 200
+
+    # 启动 reaper (极短 interval 用于测试)
+    manager.start_reaper(interval_seconds=0.01, timeout_seconds=180)
+    await asyncio.sleep(0.05)
+    manager.stop_reaper()
+
+    # 验证活跃列表已清理
+    assert len(manager.get_active_tasks()) == 0
+    # 验证底层 asyncio task 已被强制取消
+    assert hung_task.cancelled()
+
+    # 验证持久化状态被标记为 failed 并记录 Reaped
+    reaped_trace = store.get_trace("timeout_001")
+    assert reaped_trace is not None
+    assert reaped_trace["status"] == "failed"
+    assert "Reaped" in reaped_trace["error_message"]
+
+
+@pytest.mark.asyncio
 async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     from unittest.mock import AsyncMock, MagicMock
     from src.application.services.analysis_application_service import AnalysisApplicationService
