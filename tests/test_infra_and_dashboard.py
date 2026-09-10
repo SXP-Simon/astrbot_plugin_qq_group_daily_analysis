@@ -514,6 +514,44 @@ async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path, tmp_path:
     assert call_kwargs["golden_quote_enabled"] is True
 
 
+@pytest.mark.asyncio
+async def test_resume_analysis_falls_back_to_fresh_run_when_checkpoint_missing(
+    temp_db: Path,
+):
+    """验证当缺少前置清洗快照时，续跑自动降级为全量重新分析并标记 fallback 元数据。"""
+    chk_store = CheckpointStore(temp_db)
+    mock_service = AnalysisApplicationService(
+        config_manager=MagicMock(),
+        bot_manager=MagicMock(),
+        history_manager=MagicMock(get_analysis=AsyncMock(return_value=None)),
+        report_generator=MagicMock(),
+        llm_analyzer=MagicMock(),
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=chk_store,
+    )
+
+    # Mock execute_daily_analysis
+    mock_service.execute_daily_analysis = AsyncMock(
+        return_value={"success": True, "analysis_result": {"topics": []}}
+    )
+
+    with TraceContext(trace_id="trace_fallback_test_001") as trace:
+        res = await mock_service.resume_analysis(
+            trace_id="trace_fallback_test_001",
+            group_id="77777",
+            date_str="2026-08-26",
+        )
+
+        assert res["success"] is True
+        assert res["fallback_to_fresh_run"] is True
+        assert res["fallback_reason"] == "checkpoint_missing_auto_refetched"
+        assert res["resumed_from"] == "fresh_run_fallback"
+        assert trace.metadata.get("fallback_to_fresh_run") is True
+        assert trace.metadata.get("resumed_from") == "fresh_run_fallback"
+        assert mock_service.execute_daily_analysis.called
+
+
 def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(temp_db: Path):
     """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
     from src.infrastructure.visualization.activity_charts import ActivityVisualizer
