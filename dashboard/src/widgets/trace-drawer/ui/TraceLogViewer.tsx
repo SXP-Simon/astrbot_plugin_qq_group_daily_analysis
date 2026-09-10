@@ -21,7 +21,8 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
     const text = logs
       .map(
         (l) =>
-          `[${l.time_str}] [${l.level}] ${l.tag ? `[${l.tag}] ` : ""}${l.message}`
+          l.raw ||
+          `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`
       )
       .join("\n");
     copyToClipboard(text);
@@ -34,7 +35,8 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
       const text = logs
         .map(
           (l) =>
-            `[${l.time_str}] [${l.level}] ${l.tag ? `[${l.tag}] ` : ""}${l.message}`
+            l.raw ||
+            `[${l.time_str}] [${l.level}] ${l.location ? `[${l.location}] ` : ""}${l.tag ? `[${l.tag}] ` : ""}${l.message}`
         )
         .join("\n");
       copyToClipboard(text);
@@ -140,6 +142,18 @@ export const TraceLogViewer: React.FC<TraceLogViewerProps> = ({ logs }) => {
                       >
                         {l.tag}
                       </Tag>
+                    )}
+                    {l.location && (
+                      <span
+                        style={{
+                          color: isDark ? "#8b949e" : "#64748b",
+                          marginRight: 6,
+                          fontSize: 10,
+                        }}
+                        title={`代码调用位置: ${l.location}`}
+                      >
+                        [{l.location}]
+                      </span>
                     )}
                     <span>{l.message}</span>
                   </div>

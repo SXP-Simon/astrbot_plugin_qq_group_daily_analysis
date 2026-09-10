@@ -183,7 +183,21 @@ export const LogsPage: React.FC<LogsPageProps> = ({
                   {item.tag}
                 </Tag>
 
-                {/* 4. TraceID 交互标签（可直接点击查看详情抽屉） */}
+                {/* 4. 代码调用位置 */}
+                {item.location && (
+                  <span
+                    style={{
+                      color: isDark ? "#8b949e" : "#64748b",
+                      fontSize: 11,
+                      flexShrink: 0,
+                    }}
+                    title={`代码调用位置: ${item.location}`}
+                  >
+                    [{item.location}]
+                  </span>
+                )}
+
+                {/* 5. TraceID 交互标签（可直接点击查看详情抽屉） */}
                 {item.trace_id && (
                   <a
                     onClick={() => onViewTrace(item.trace_id!)}
