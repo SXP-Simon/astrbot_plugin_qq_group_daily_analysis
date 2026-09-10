@@ -6,12 +6,16 @@
 .ace-tool/
 .tmp_refs/
 
-# Python caches
+# Python caches & test coverage
 **/__pycache__
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .uv-cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 
 # Debug files & test outputs
 debug_*.html
