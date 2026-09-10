@@ -56,10 +56,15 @@ class ActiveTaskManager:
         group_name: str = "",
         platform: str = "",
         trigger_type: str = "manual",
-        current_stage: str = "FETCH_MESSAGES",
+        current_stage: Any = "FETCH_MESSAGES",
         asyncio_task: asyncio.Task[Any] | None = None,
     ) -> None:
         """注册新运行中的任务"""
+        stage_str = (
+            current_stage.value
+            if hasattr(current_stage, "value")
+            else str(current_stage)
+        )
         async with self._lock:
             info = ActiveTaskInfo(
                 task_id=task_id,
@@ -67,17 +72,20 @@ class ActiveTaskManager:
                 group_name=group_name,
                 platform=platform,
                 trigger_type=trigger_type,
-                current_stage=current_stage,
+                current_stage=stage_str,
                 asyncio_task=asyncio_task,
             )
             self._tasks[task_id] = info
         await self._broadcast_event({"event": "task_started", "data": info.to_dict()})
 
-    async def update_stage(self, task_id: str, stage_name: str) -> None:
+    async def update_stage(self, task_id: str, stage_name: Any) -> None:
         """更新当前活跃任务的阶段名称并更新心跳"""
+        stage_str = (
+            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+        )
         async with self._lock:
             if task_id in self._tasks:
-                self._tasks[task_id].current_stage = stage_name
+                self._tasks[task_id].current_stage = stage_str
                 self._tasks[task_id].last_heartbeat = time.time()
                 info = self._tasks[task_id]
             else:
@@ -90,10 +98,13 @@ class ActiveTaskManager:
 
     update_task_stage = update_stage
 
-    def update_stage_sync(self, task_id: str, stage_name: str) -> None:
+    def update_stage_sync(self, task_id: str, stage_name: Any) -> None:
         """同步更新活跃任务阶段（供 Span 上下文即时调用）"""
+        stage_str = (
+            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+        )
         if task_id in self._tasks:
-            self._tasks[task_id].current_stage = stage_name
+            self._tasks[task_id].current_stage = stage_str
             self._tasks[task_id].last_heartbeat = time.time()
             info = self._tasks[task_id]
             try:

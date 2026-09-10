@@ -5,19 +5,8 @@
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
 
-
-class TaskStatus(Enum):
-    PENDING = "pending"
-    CHECKING_PLATFORM = "checking_platform"
-    FETCHING_MESSAGES = "fetching_messages"
-    ANALYZING = "analyzing"
-    GENERATING_REPORT = "generating_report"
-    SENDING = "sending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    UNSUPPORTED_PLATFORM = "unsupported_platform"
+from ...shared.constants import AnalysisStage, TaskStatus
 
 
 @dataclass
@@ -29,6 +18,7 @@ class AnalysisTask:
     platform_name: str = ""
     trace_id: str = ""
     status: TaskStatus = TaskStatus.PENDING
+    current_stage: AnalysisStage | str = AnalysisStage.FETCH_MESSAGES
     is_manual: bool = False
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
@@ -37,18 +27,30 @@ class AnalysisTask:
     error_message: str | None = None
 
     def start(self, can_analyze: bool) -> bool:
-        """启动任务，验证平台能力"""
+        """启动任务，验证平台能力。
+
+        Args:
+            can_analyze: 平台是否支持消息分析能力。
+
+        Returns:
+            bool: 任务启动是否成功。
+        """
         if not can_analyze:
-            self.status = TaskStatus.UNSUPPORTED_PLATFORM
+            self.status = TaskStatus.FAILED
             self.error_message = f"平台 {self.platform_name} 不支持分析"
             return False
-        self.status = TaskStatus.FETCHING_MESSAGES
+        self.status = TaskStatus.RUNNING
+        self.current_stage = AnalysisStage.FETCH_MESSAGES
         self.started_at = time.time()
         return True
 
-    def advance_to(self, status: TaskStatus):
-        """推进到下一个状态"""
-        self.status = status
+    def advance_to(self, stage: AnalysisStage | str) -> None:
+        """推进到下一个流水线阶段。
+
+        Args:
+            stage: 目标阶段。
+        """
+        self.current_stage = stage
 
     def complete(self, result_id: str):
         """标记任务为已完成"""
