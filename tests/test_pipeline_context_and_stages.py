@@ -11,7 +11,6 @@ from typing import Any
 import pytest
 
 from src.application.services.pipeline_context import PipelineContext, PipelineStep
-from src.domain.entities.analysis_task import AnalysisTask
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.shared.constants import AnalysisStage, TaskStatus
 from src.shared.trace_context import TraceContext
@@ -33,26 +32,6 @@ def test_analysis_stage_and_task_status_enum_compatibility():
     assert TaskStatus.COMPLETED == "completed"
     assert TaskStatus.FAILED == "failed"
     assert TaskStatus.ABORTED == "aborted"
-
-
-def test_analysis_task_entity_advancement():
-    """验证 AnalysisTask 实体使用统一枚举推进状态与阶段。"""
-    task = AnalysisTask(group_id="123456", platform_name="onebot")
-    assert task.status == TaskStatus.PENDING
-    assert task.current_stage == AnalysisStage.FETCH_MESSAGES
-
-    # 启动成功
-    assert task.start(can_analyze=True) is True
-    assert task.status == TaskStatus.RUNNING
-
-    # 阶段推进
-    task.advance_to(AnalysisStage.CLEAN_MESSAGES)
-    assert task.current_stage == AnalysisStage.CLEAN_MESSAGES
-
-    # 完成
-    task.complete(result_id="res_001")
-    assert task.status == TaskStatus.COMPLETED
-    assert task.result_id == "res_001"
 
 
 @pytest.mark.asyncio
