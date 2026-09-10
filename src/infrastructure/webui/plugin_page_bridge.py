@@ -2356,14 +2356,12 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_delete_incremental_batch(self) -> Any:
-        """单点删除指定增量批次"""
+        """删除指定群的单个增量批次"""
         try:
-            payload = {}
-            if hasattr(request, "json"):
-                try:
-                    payload = await request.json()
-                except Exception:
-                    payload = {}
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()
@@ -2398,12 +2396,10 @@ class PluginPageWebUIBridge:
     async def api_reset_incremental_group(self) -> Any:
         """一键清空指定群全部增量批次并将游标归零"""
         try:
-            payload = {}
-            if hasattr(request, "json"):
-                try:
-                    payload = await request.json()
-                except Exception:
-                    payload = {}
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()
@@ -2506,12 +2502,10 @@ class PluginPageWebUIBridge:
     async def api_delete_checkpoint(self) -> Any:
         """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
         try:
-            payload = {}
-            if hasattr(request, "json"):
-                try:
-                    payload = await request.json()
-                except Exception:
-                    payload = {}
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()
