@@ -14,7 +14,7 @@ import time as time_mod
 import weakref
 from collections import defaultdict
 from collections.abc import Mapping
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +30,10 @@ from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
 from ...infrastructure.persistence.incremental_store import IncrementalStore
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .pipeline_context import PipelineContext
 
 _LLM_SEMAPHORE_INFO_SECONDS = 1.0
 _LLM_SEMAPHORE_WARN_SECONDS = 15.0
@@ -267,26 +269,31 @@ class AnalysisApplicationService:
                 except Exception as e:
                     logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
+            date_str = dt.datetime.now().strftime("%Y-%m-%d")
+            pipeline = PipelineContext(
+                trace=trace,
+                checkpoint_store=self.checkpoint_store,
+                group_id=group_id,
+                date_str=date_str,
+            )
+
             # 2. 拉取消息
             if days is None:
                 days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
 
-            with trace.span("FETCH_MESSAGES", {"days": days, "max_count": max_count}):
+            async with pipeline.step(
+                AnalysisStage.FETCH_MESSAGES,
+                initial_payload={"days": days, "max_count": max_count},
+            ) as step:
                 raw_messages = await adapter.fetch_messages(
                     group_id=group_id, days=days, max_count=max_count
                 )
-                if trace:
-                    for s in reversed(trace._spans):
-                        if s.get("stage_name") == "FETCH_MESSAGES":
-                            s.setdefault("payload", {}).update(
-                                {
-                                    "days": days,
-                                    "max_count": max_count,
-                                    "fetched_count": len(raw_messages),
-                                }
-                            )
-                            break
+                step.set_payload(
+                    days=days,
+                    max_count=max_count,
+                    fetched_count=len(raw_messages),
+                )
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -318,36 +325,27 @@ class AnalysisApplicationService:
             )
 
             # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
-            with trace.span("CLEAN_MESSAGES"):
+            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
-                if trace:
-                    for s in reversed(trace._spans):
-                        if s.get("stage_name") == "CLEAN_MESSAGES":
-                            s.setdefault("payload", {}).update(
-                                {
-                                    "raw_count": len(raw_messages),
-                                    "cleaned_count": len(unified_messages),
-                                    "dropped_count": max(
-                                        len(raw_messages) - len(unified_messages), 0
-                                    ),
-                                    "retention_rate": round(
-                                        len(unified_messages)
-                                        / max(len(raw_messages), 1)
-                                        * 100,
-                                        1,
-                                    ),
-                                    "bot_filter_enabled": bool(
-                                        self.config_manager.get_filter_bot_messages()
-                                    ),
-                                }
-                            )
-                            break
-            trace.set_context_metrics(
-                raw_message_count=len(raw_messages),
-                cleaned_message_count=len(unified_messages),
-            )
+                step.set_payload(
+                    raw_count=len(raw_messages),
+                    cleaned_count=len(unified_messages),
+                    dropped_count=max(len(raw_messages) - len(unified_messages), 0),
+                    retention_rate=round(
+                        len(unified_messages) / max(len(raw_messages), 1) * 100,
+                        1,
+                    ),
+                    bot_filter_enabled=bool(
+                        self.config_manager.get_filter_bot_messages()
+                    ),
+                )
+            if trace:
+                trace.set_context_metrics(
+                    raw_message_count=len(raw_messages),
+                    cleaned_message_count=len(unified_messages),
+                )
             logger.info(
                 "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
                 group_id,
@@ -365,7 +363,7 @@ class AnalysisApplicationService:
                 return {"success": False, "reason": "below_threshold"}
 
             # 5. 基础统计 (Domain Service)
-            with trace.span("STATS_ANALYSIS"):
+            async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
                 statistics = await asyncio.to_thread(
                     self.statistics_service.calculate_group_statistics, unified_messages
                 )
@@ -374,34 +372,18 @@ class AnalysisApplicationService:
                     unified_messages,
                     bot_self_ids,
                 )
-                if trace:
-                    for s in reversed(trace._spans):
-                        if s.get("stage_name") == "STATS_ANALYSIS":
-                            s.setdefault("payload", {}).update(
-                                {
-                                    "message_count": getattr(
-                                        statistics,
-                                        "message_count",
-                                        len(unified_messages),
-                                    ),
-                                    "character_count": getattr(
-                                        statistics, "total_characters", 0
-                                    ),
-                                    "participant_count": getattr(
-                                        statistics, "participant_count", 0
-                                    ),
-                                    "most_active_period": getattr(
-                                        statistics, "most_active_period", ""
-                                    ),
-                                    "emoji_count": getattr(
-                                        statistics, "emoji_count", 0
-                                    ),
-                                    "active_users_analyzed": len(user_activity)
-                                    if user_activity
-                                    else 0,
-                                }
-                            )
-                            break
+                step.set_payload(
+                    message_count=getattr(
+                        statistics,
+                        "message_count",
+                        len(unified_messages),
+                    ),
+                    character_count=getattr(statistics, "total_characters", 0),
+                    participant_count=getattr(statistics, "participant_count", 0),
+                    most_active_period=getattr(statistics, "most_active_period", ""),
+                    emoji_count=getattr(statistics, "emoji_count", 0),
+                    active_users_analyzed=len(user_activity) if user_activity else 0,
+                )
 
             max_user_titles = self.config_manager.get_max_user_titles()
             top_users = self.analysis_domain_service.get_top_users(
@@ -411,11 +393,10 @@ class AnalysisApplicationService:
             # 保存前置清洗与基础统计 Checkpoint，用于后续一键断点续跑 (Resume)
             if self.checkpoint_store:
                 try:
-                    date_str = dt.datetime.now().strftime("%Y-%m-%d")
                     self.checkpoint_store.save_checkpoint(
                         group_id=group_id,
                         date_str=date_str,
-                        stage_name="CLEAN_MESSAGES",
+                        stage_name=AnalysisStage.CLEAN_MESSAGES.value,
                         data={
                             "group_id": group_id,
                             "platform_id": platform_id,
@@ -462,7 +443,7 @@ class AnalysisApplicationService:
                 or golden_quote_enabled
                 or chat_quality_enabled
             ):
-                with trace.span("LLM_ANALYSIS") as span_rec:
+                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
                     async with self._llm_slot(group_id, analysis_stage):
                         logger.debug(
                             f"[LLM] 已进入普通全量分析队列 "
@@ -506,21 +487,21 @@ class AnalysisApplicationService:
                     )
 
                     if enabled_count > 0 and success_count == 0:
-                        span_rec["status"] = "failed"
-                        span_rec.setdefault("payload", {})["error"] = (
+                        step.mark_failed(
                             "大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
                         )
                         if trace:
                             trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = "LLM_ANALYSIS"
+                            trace.metadata["failure_stage"] = (
+                                AnalysisStage.LLM_ANALYSIS.value
+                            )
                         return {
                             "success": False,
                             "reason": "llm_analysis_failed",
                             "error": "大模型文本分析全部子任务失败，已中止后续报告生成与发送",
                         }
                     elif enabled_count > 0 and success_count < enabled_count:
-                        span_rec["status"] = "warning"
-                        span_rec.setdefault("payload", {})["warning"] = (
+                        step.mark_warning(
                             f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
                         )
                         if trace:
@@ -539,31 +520,28 @@ class AnalysisApplicationService:
             }
 
             # 6. 持久化摘要 (Persistence)
-            with trace.span("SAVE_SUMMARY"):
+            async with pipeline.step(
+                AnalysisStage.SAVE_SUMMARY,
+                save_checkpoint=True,
+                serializer=self._serialize_analysis_result,
+            ) as step:
                 await self.history_manager.save_analysis(group_id, analysis_result)
-                date_str = dt.datetime.now().strftime("%Y-%m-%d")
                 if self.checkpoint_store:
                     try:
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
-                            stage_name="LLM_ANALYSIS",
+                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
                             data=self._serialize_analysis_result(analysis_result),
                         )
                     except Exception as e:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
-                if trace:
-                    for s in reversed(trace._spans):
-                        if s.get("stage_name") == "SAVE_SUMMARY":
-                            s.setdefault("payload", {}).update(
-                                {
-                                    "date": date_str,
-                                    "topics_persisted": len(topics),
-                                    "titles_persisted": len(user_titles),
-                                    "checkpoint_saved": bool(self.checkpoint_store),
-                                }
-                            )
-                            break
+                step.set_payload(
+                    date=date_str,
+                    topics_persisted=len(topics),
+                    titles_persisted=len(user_titles),
+                    checkpoint_saved=bool(self.checkpoint_store),
+                )
 
             # 7. 生成报告并发送 (应用层编排发送动作)
             # 这里由调用方处理发送，本服务只返回分析结果和可能的视觉产物
@@ -905,8 +883,17 @@ class AnalysisApplicationService:
         chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
 
         # 1. 优先检查是否有已完成的 LLM_ANALYSIS Checkpoint 或历史分析记录
+        pipeline = PipelineContext(
+            trace=trace,
+            checkpoint_store=self.checkpoint_store,
+            group_id=group_id,
+            date_str=date_str,
+        )
+
         cached_llm = (
-            self.checkpoint_store.get_checkpoint(group_id, date_str, "LLM_ANALYSIS")
+            self.checkpoint_store.get_checkpoint(
+                group_id, date_str, AnalysisStage.LLM_ANALYSIS.value
+            )
             if self.checkpoint_store
             else None
         )
@@ -945,15 +932,10 @@ class AnalysisApplicationService:
                 )
                 async with self.group_lock(group_id, "daily"):
                     adapter = self.bot_manager.get_adapter(platform_id)
-                    with trace.span(
-                        "CHECKPOINT_RESTORE",
-                        {
-                            "stage": "LLM_ANALYSIS",
-                            "restored": True,
-                            "direct_render": True,
-                        },
-                    ):
-                        pass
+                    pipeline.restore_checkpoint_span(
+                        AnalysisStage.LLM_ANALYSIS,
+                        {"direct_render": True},
+                    )
                     return {
                         "success": True,
                         "analysis_result": cached_result,
@@ -965,13 +947,15 @@ class AnalysisApplicationService:
                         "adapter": adapter,
                         "group_id": group_id,
                         "platform_id": getattr(adapter, "platform_id", platform_id),
-                        "resumed_from": "LLM_ANALYSIS",
+                        "resumed_from": AnalysisStage.LLM_ANALYSIS.value,
                         "trace_id": trace_id,
                     }
 
         # 2. 检查是否有前置清洗 Checkpoint
         clean_checkpoint = (
-            self.checkpoint_store.get_checkpoint(group_id, date_str, "CLEAN_MESSAGES")
+            self.checkpoint_store.get_checkpoint(
+                group_id, date_str, AnalysisStage.CLEAN_MESSAGES.value
+            )
             if self.checkpoint_store
             else None
         )
@@ -1005,11 +989,7 @@ class AnalysisApplicationService:
             top_users = deserialized.get("user_titles", [])
             unified_messages = clean_checkpoint.get("unified_messages", [])
 
-            with trace.span(
-                "CHECKPOINT_RESTORE",
-                {"stage": "CLEAN_MESSAGES", "restored": True},
-            ):
-                pass
+            pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
             cached_result = (
                 self._deserialize_analysis_result(cached_llm) if cached_llm else {}
@@ -1057,7 +1037,7 @@ class AnalysisApplicationService:
             )
 
             if run_topic or run_user_title or run_golden_quote or run_chat_quality:
-                with trace.span("LLM_ANALYSIS") as span_rec:
+                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
                     async with self._llm_slot(group_id, "resume"):
                         (
                             new_topics,
@@ -1111,21 +1091,21 @@ class AnalysisApplicationService:
                     )
 
                     if enabled_count > 0 and success_count == 0:
-                        span_rec["status"] = "failed"
-                        span_rec.setdefault("payload", {})["error"] = (
+                        step.mark_failed(
                             "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
                         )
                         if trace:
                             trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = "LLM_ANALYSIS"
+                            trace.metadata["failure_stage"] = (
+                                AnalysisStage.LLM_ANALYSIS.value
+                            )
                         return {
                             "success": False,
                             "reason": "llm_analysis_failed",
                             "error": "大模型文本分析全部子任务失败，已中止续跑",
                         }
                     elif enabled_count > 0 and success_count < enabled_count:
-                        span_rec["status"] = "warning"
-                        span_rec.setdefault("payload", {})["warning"] = (
+                        step.mark_warning(
                             f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
                         )
                         if trace:
@@ -1142,24 +1122,34 @@ class AnalysisApplicationService:
                 "chat_quality_review": chat_quality_review,
             }
 
-            with trace.span("SAVE_SUMMARY"):
+            async with pipeline.step(
+                AnalysisStage.SAVE_SUMMARY,
+                save_checkpoint=True,
+                serializer=self._serialize_analysis_result,
+            ) as step:
                 await self.history_manager.save_analysis(group_id, analysis_result)
                 if self.checkpoint_store:
                     try:
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
-                            stage_name="LLM_ANALYSIS",
+                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
                             data=self._serialize_analysis_result(analysis_result),
                         )
                     except Exception as e:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
+                step.set_payload(
+                    date=date_str,
+                    topics_persisted=len(topics),
+                    titles_persisted=len(user_titles),
+                    checkpoint_saved=bool(self.checkpoint_store),
+                )
 
             return {
                 "success": True,
                 "analysis_result": analysis_result,
                 "adapter": adapter,
-                "resumed_from": "CLEAN_MESSAGES",
+                "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
             }
 
     async def execute_comic_topic_analysis(
@@ -1215,19 +1205,30 @@ class AnalysisApplicationService:
 
             trace = TraceContext.current()
 
-            with trace.span("FETCH_MESSAGES") if trace else nullcontext() as fetch_span:
+            pipeline = PipelineContext(
+                trace=trace,
+                checkpoint_store=self.checkpoint_store,
+                group_id=group_id,
+                date_str=dt.datetime.now().strftime("%Y-%m-%d"),
+            )
+
+            async with pipeline.step(
+                AnalysisStage.FETCH_MESSAGES,
+                initial_payload={
+                    "days": days,
+                    "max_count": max_count,
+                    "platform": platform_id or "default",
+                },
+            ) as step:
                 raw_messages = await adapter.fetch_messages(
                     group_id=group_id, days=days, max_count=max_count
                 )
-                if fetch_span and isinstance(fetch_span, dict):
-                    fetch_span.setdefault("payload", {}).update(
-                        {
-                            "raw_count": len(raw_messages),
-                            "days": days,
-                            "max_count": max_count,
-                            "platform": platform_id or "default",
-                        }
-                    )
+                step.set_payload(
+                    raw_count=len(raw_messages),
+                    days=days,
+                    max_count=max_count,
+                    platform=platform_id or "default",
+                )
             logger.info(
                 "手动漫画消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -1245,21 +1246,18 @@ class AnalysisApplicationService:
             bot_self_ids = self.config_manager.get_bot_self_ids()
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
-            with trace.span("CLEAN_MESSAGES") if trace else nullcontext() as clean_span:
+            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
                 dropped_count = max(len(raw_messages) - len(unified_messages), 0)
-                if clean_span and isinstance(clean_span, dict):
-                    clean_span.setdefault("payload", {}).update(
-                        {
-                            "cleaned_count": len(unified_messages),
-                            "dropped_count": dropped_count,
-                            "filter_bot_messages": bool(
-                                self.config_manager.get_filter_bot_messages()
-                            ),
-                        }
-                    )
+                step.set_payload(
+                    cleaned_count=len(unified_messages),
+                    dropped_count=dropped_count,
+                    filter_bot_messages=bool(
+                        self.config_manager.get_filter_bot_messages()
+                    ),
+                )
             logger.info(
                 "手动漫画消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
                 group_id,
@@ -1277,22 +1275,17 @@ class AnalysisApplicationService:
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
-            with trace.span("LLM_ANALYSIS") if trace else nullcontext() as llm_span:
+            async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
                 async with self._llm_slot(group_id, "comic_manual"):
                     topics, token_usage = await self.llm_analyzer.analyze_topics(
                         legacy_messages, unified_msg_origin
                     )
-                if llm_span and isinstance(llm_span, dict):
-                    llm_span.setdefault("payload", {}).update(
-                        {
-                            "topics_count": len(topics) if topics else 0,
-                            "prompt_tokens": getattr(token_usage, "prompt_tokens", 0),
-                            "completion_tokens": getattr(
-                                token_usage, "completion_tokens", 0
-                            ),
-                            "total_tokens": getattr(token_usage, "total_tokens", 0),
-                        }
-                    )
+                step.set_payload(
+                    topics_count=len(topics) if topics else 0,
+                    prompt_tokens=getattr(token_usage, "prompt_tokens", 0),
+                    completion_tokens=getattr(token_usage, "completion_tokens", 0),
+                    total_tokens=getattr(token_usage, "total_tokens", 0),
+                )
 
             if not topics:
                 return {"success": False, "reason": "no_topics"}
@@ -1386,14 +1379,30 @@ class AnalysisApplicationService:
             min_messages = self.config_manager.get_incremental_min_messages()
             max_count = max(self.config_manager.get_max_messages(), min_messages)
 
+            date_str = dt.datetime.now().strftime("%Y-%m-%d")
+            pipeline = PipelineContext(
+                trace=trace,
+                checkpoint_store=self.checkpoint_store,
+                group_id=group_id,
+                date_str=date_str,
+            )
+
             # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
             fetch_started_at = time_mod.monotonic()
-            with trace.span("FETCH_MESSAGES", {"days": days, "max_count": max_count}):
+            async with pipeline.step(
+                AnalysisStage.FETCH_MESSAGES,
+                initial_payload={"days": days, "max_count": max_count},
+            ) as step:
                 raw_messages = await adapter.fetch_messages(
                     group_id=group_id,
                     days=days,
                     max_count=max_count,
                     since_ts=last_analyzed_ts,
+                )
+                step.set_payload(
+                    raw_count=len(raw_messages),
+                    days=days,
+                    max_count=max_count,
                 )
             raw_count = len(raw_messages)
             fetch_duration = time_mod.monotonic() - fetch_started_at
@@ -1415,16 +1424,22 @@ class AnalysisApplicationService:
                 self.config_manager.get_filter_bot_messages(),
                 len(bot_self_ids),
             )
-            with trace.span("CLEAN_MESSAGES"):
+            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
+                step.set_payload(
+                    raw_count=raw_count,
+                    cleaned_count=len(unified_messages),
+                    dropped_count=max(raw_count - len(unified_messages), 0),
+                )
             cleaned_count = len(unified_messages)
-            trace.set_context_metrics(
-                raw_message_count=raw_count,
-                cleaned_message_count=cleaned_count,
-                incremental_batches=1,
-            )
+            if trace:
+                trace.set_context_metrics(
+                    raw_message_count=raw_count,
+                    cleaned_message_count=cleaned_count,
+                    incremental_batches=1,
+                )
 
             # 5. 复合游标去重，避免同一秒内分批时遗漏消息。
             if last_analyzed_ts > 0:
@@ -1479,7 +1494,7 @@ class AnalysisApplicationService:
             )
 
             # 6. 计算基础统计
-            with trace.span("STATS_ANALYSIS"):
+            async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
                 statistics = await asyncio.to_thread(
                     self.statistics_service.calculate_group_statistics, unified_messages
                 )
@@ -1487,6 +1502,10 @@ class AnalysisApplicationService:
                     self.analysis_domain_service.analyze_user_activity,
                     unified_messages,
                     bot_self_ids,
+                )
+                step.set_payload(
+                    messages_analyzed=len(unified_messages),
+                    participants=len(user_activity) if user_activity else 0,
                 )
 
             # 计算本批次的小时分布
@@ -1521,7 +1540,7 @@ class AnalysisApplicationService:
             chat_quality_review = None
 
             if topic_enabled or golden_quote_enabled or chat_quality_enabled:
-                with trace.span("LLM_ANALYSIS"):
+                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
                     async with self._llm_slot(group_id, "incremental"):
                         logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
                         (
@@ -1538,6 +1557,13 @@ class AnalysisApplicationService:
                             golden_quote_enabled=golden_quote_enabled,
                             chat_quality_enabled=chat_quality_enabled,
                         )
+                    step.set_payload(
+                        topics_count=len(topics),
+                        quotes_count=len(golden_quotes),
+                        prompt_tokens=getattr(token_usage, "prompt_tokens", 0),
+                        completion_tokens=getattr(token_usage, "completion_tokens", 0),
+                        total_tokens=getattr(token_usage, "total_tokens", 0),
+                    )
 
             # 8. 构建 IncrementalBatch
             # 8a. 转换话题: SummaryTopic -> dict
@@ -1642,6 +1668,17 @@ class AnalysisApplicationService:
                     "reason": "batch_persistence_failed",
                     "messages_count": 0,
                 }
+
+            if self.checkpoint_store:
+                try:
+                    self.checkpoint_store.save_checkpoint(
+                        group_id=group_id,
+                        date_str=date_str,
+                        stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
+                        data=batch.to_dict(),
+                    )
+                except Exception as e:
+                    logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
 
             # 安全更新水位线：取消息最大时间戳，但不能超过当前时间+1分钟，防止未来时间戳毒化导致后续分析死锁
             import time
