@@ -27,6 +27,7 @@ class PluginLogEntry:
     tag: str
     message: str
     raw: str
+    location: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -126,6 +127,7 @@ class PluginLogBuffer(logging.Handler):
         msg: str,
         trace_id: str | None = None,
         logger_name: str = "plugin",
+        location: str | None = None,
     ) -> PluginLogEntry:
         """主动记录日志条目并实时推送给前端监听器"""
         self._counter += 1
@@ -167,6 +169,9 @@ class PluginLogBuffer(logging.Handler):
                 stage = stage_label
                 break
 
+        loc_label = f"[{location}]" if location else f"[{logger_name}]"
+        raw = f"[{full_time_str}] [{level.upper()}] {loc_label}: {msg}"
+
         entry = PluginLogEntry(
             id=f"log_{self._counter}",
             timestamp=now,
@@ -177,7 +182,8 @@ class PluginLogBuffer(logging.Handler):
             stage=stage,
             tag=tag,
             message=msg,
-            raw=f"[{full_time_str}] [{level.upper()}] [{logger_name}]: {msg}",
+            raw=raw,
+            location=location,
         )
         self._buffer.append(entry)
 
@@ -205,6 +211,12 @@ class PluginLogBuffer(logging.Handler):
                 return
 
             trace_id = getattr(record, "trace_id", None)
+            location = None
+            if record.pathname and record.lineno:
+                import os
+
+                location = f"{os.path.basename(record.pathname)}:{record.lineno}"
+
             self.record_log(
                 level=record.levelname,
                 msg=msg,
@@ -212,6 +224,7 @@ class PluginLogBuffer(logging.Handler):
                 logger_name=logger_name.split(".")[-1]
                 if "." in logger_name
                 else logger_name,
+                location=location,
             )
         except Exception:
             self.handleError(record)
@@ -244,6 +257,7 @@ class PluginLogBuffer(logging.Handler):
                     search_kw not in entry.message.lower()
                     and search_kw not in (entry.trace_id or "").lower()
                     and search_kw not in entry.logger_name.lower()
+                    and search_kw not in (entry.location or "").lower()
                 ):
                     continue
             results.append(entry)

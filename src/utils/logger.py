@@ -1,7 +1,42 @@
+from __future__ import annotations
+
+import os
+import sys
+
 from astrbot.api import logger as astrbot_logger
 
 from ..infrastructure.logging.plugin_log_buffer import global_log_buffer
 from ..shared.trace_context import TraceContext
+
+
+def _extract_caller_location(stacklevel: int = 1) -> str | None:
+    """提取调用当前日志记录器的方法所在文件与行号
+
+    Args:
+        stacklevel: 额外向上回溯的调用栈层数（默认为 1，表示直接调用方）。
+
+    Returns:
+        形如 'filename.py:line' 的代码位置字符串，无法获取时返回 None。
+    """
+    try:
+        frame = sys._getframe(1)
+        current_file = os.path.abspath(__file__)
+        # 逐层回溯并跳过 logger.py 内部的调用帧
+        while frame and os.path.abspath(frame.f_code.co_filename) == current_file:
+            frame = frame.f_back
+
+        # 若指定了额外 stacklevel，继续向上回溯
+        for _ in range(max(0, stacklevel - 1)):
+            if frame and frame.f_back:
+                frame = frame.f_back
+
+        if frame:
+            basename = os.path.basename(frame.f_code.co_filename)
+            lineno = frame.f_lineno
+            return f"{basename}:{lineno}"
+    except Exception:
+        pass
+    return None
 
 
 class PluginLogger:
@@ -27,50 +62,63 @@ class PluginLogger:
         formatted_msg: str,
         trace_id: str | None,
         args: tuple = (),
+        stacklevel: int = 1,
     ) -> None:
         try:
             rendered = (formatted_msg % args) if args else formatted_msg
         except Exception:
             rendered = formatted_msg
+        location = _extract_caller_location(stacklevel=stacklevel)
         try:
-            global_log_buffer.record_log(level=level, msg=rendered, trace_id=trace_id)
+            global_log_buffer.record_log(
+                level=level,
+                msg=rendered,
+                trace_id=trace_id,
+                location=location,
+            )
         except Exception:
             pass
 
     def info(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("INFO", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("INFO", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.info(formatted_msg, *args, **kwargs)
 
     def error(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("ERROR", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("ERROR", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.error(formatted_msg, *args, **kwargs)
 
     def warning(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("WARNING", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("WARNING", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.warning(formatted_msg, *args, **kwargs)
 
     def debug(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("DEBUG", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("DEBUG", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.debug(formatted_msg, *args, **kwargs)
 
     def critical(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("CRITICAL", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("CRITICAL", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.critical(formatted_msg, *args, **kwargs)
 
     def exception(self, msg: str, *args, **kwargs):
         formatted_msg, trace_id = self._format_msg(msg)
-        self._record("ERROR", formatted_msg, trace_id, args)
-        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        req_stack = kwargs.get("stacklevel", 1)
+        self._record("ERROR", formatted_msg, trace_id, args, stacklevel=req_stack)
+        kwargs["stacklevel"] = req_stack + 1
         astrbot_logger.exception(formatted_msg, *args, **kwargs)
 
 
