@@ -19,6 +19,26 @@ class Platform(str, Enum):
     SLACK = "slack"
 
 
+class AnalysisStage(str, Enum):
+    """
+    分析与渲染流水线阶段枚举
+
+    定义了全链路追踪、活跃任务打点与 Checkpoint 存储所使用的标准阶段名称。
+    """
+
+    FETCH_MESSAGES = "FETCH_MESSAGES"
+    CLEAN_MESSAGES = "CLEAN_MESSAGES"
+    STATS_ANALYSIS = "STATS_ANALYSIS"
+    LLM_ANALYSIS = "LLM_ANALYSIS"
+    SAVE_SUMMARY = "SAVE_SUMMARY"
+    RENDER_REPORT = "RENDER_REPORT"
+    DISPATCH_REPORT = "DISPATCH_REPORT"
+    CHECKPOINT_RESTORE = "CHECKPOINT_RESTORE"
+    # 漫画生成扩展阶段
+    COMIC_STORYBOARD = "COMIC_STORYBOARD"
+    COMIC_DRAWING = "COMIC_DRAWING"
+
+
 class TaskStatus(str, Enum):
     """
     分析任务执行状态枚举
@@ -31,6 +51,8 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    ABORTED = "aborted"
+    SKIPPED = "skipped"
 
 
 class ContentType(str, Enum):
