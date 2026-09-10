@@ -9,7 +9,7 @@ on:
 
 jobs:
   python-lint:
-    name: Python Lint & Type Check
+    name: Python Lint, Type Check & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -30,7 +30,7 @@ jobs:
           uvx ruff check .
           uvx ruff format --check .
 
-      - name: Install Dependencies for Pyright
+      - name: Install Dependencies
         run: |
           uv venv .venv
           uv pip install -r requirements-dev.txt
@@ -42,6 +42,11 @@ jobs:
 
       - name: Pyright Type Check
         run: npx pyright
+
+      - name: Run Pytest Suite
+        run: |
+          .venv/bin/pytest tests/
+
 
   frontend-check:
     name: Frontend Lint & Build
