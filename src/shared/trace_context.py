@@ -118,29 +118,32 @@ class TraceContext:
 
     @contextmanager
     def span(
-        self, stage_name: str, payload: dict[str, Any] | None = None
+        self, stage_name: Any, payload: dict[str, Any] | None = None
     ) -> Generator[dict[str, Any]]:
         """
         创建一个细粒度 Span 上下文，自动记录该步骤耗时与执行状态。
 
         Args:
-            stage_name: 阶段名称，如 'FETCH_MESSAGES', 'LLM_TOPICS', 'RENDER_REPORT'
+            stage_name: 阶段名称，如 AnalysisStage.FETCH_MESSAGES 或字符串
             payload: 随 Span 记录的参数或快照字典
         """
-        self.current_stage = stage_name
+        stage_str = (
+            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+        )
+        self.current_stage = stage_str
         _active_traces[self.trace_id] = self
         if _global_active_task_manager is not None:
             try:
-                _global_active_task_manager.update_stage_sync(self.trace_id, stage_name)
+                _global_active_task_manager.update_stage_sync(self.trace_id, stage_str)
             except Exception:
                 pass
 
         start_ts = time.time()
-        span_id = f"{self.trace_id}_{stage_name}_{len(self._spans) + 1}"
+        span_id = f"{self.trace_id}_{stage_str}_{len(self._spans) + 1}"
         span_record: dict[str, Any] = {
             "span_id": span_id,
             "trace_id": self.trace_id,
-            "stage_name": stage_name,
+            "stage_name": stage_str,
             "status": "running",
             "started_at": start_ts,
             "duration_ms": None,
