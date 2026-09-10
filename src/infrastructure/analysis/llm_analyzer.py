@@ -13,7 +13,7 @@ from ...domain.models.data_models import (
     UserTitle,
 )
 from ...domain.repositories.analysis_repository import IAnalysisProvider
-from ...shared.constants import PLUGIN_NAME
+from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .analyzers.chat_quality_analyzer import ChatQualityAnalyzer
@@ -403,7 +403,7 @@ class LLMAnalyzer(IAnalysisProvider):
                     )
                 # 丰富 LLM_ANALYSIS span payload 便于 WebUI 详情精准诊断
                 for s in reversed(trace._spans):
-                    if s.get("stage_name") == "LLM_ANALYSIS":
+                    if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {
                                 "topics_count": len(topics),
@@ -443,7 +443,7 @@ class LLMAnalyzer(IAnalysisProvider):
             trace = TraceContext.current()
             if trace:
                 for s in reversed(trace._spans):
-                    if s.get("stage_name") == "LLM_ANALYSIS":
+                    if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {
                                 "error": str(e),
@@ -611,7 +611,7 @@ class LLMAnalyzer(IAnalysisProvider):
                             analyzer_name="chat_quality",
                         )
                     for s in reversed(trace._spans):
-                        if s.get("stage_name") == "LLM_ANALYSIS":
+                        if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                             s.setdefault("payload", {}).update(
                                 {
                                     "incremental": True,
@@ -652,7 +652,7 @@ class LLMAnalyzer(IAnalysisProvider):
             trace = TraceContext.current()
             if trace:
                 for s in reversed(trace._spans):
-                    if s.get("stage_name") == "LLM_ANALYSIS":
+                    if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).update(
                             {
                                 "error": str(e),

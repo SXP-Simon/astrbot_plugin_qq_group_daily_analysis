@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ...shared.constants import AnalysisStage
+
 
 class TraceSQLiteStore:
     """基于 SQLite 的 Trace 链路持久化仓储"""
@@ -284,7 +286,7 @@ class TraceSQLiteStore:
                     s["payload"] = json.loads(s.pop("stage_payload_json") or "{}")
                 except Exception:
                     s["payload"] = {}
-                if s.get("stage_name") == "LLM_ANALYSIS":
+                if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                     if extra_prompts and not s["payload"].get("prompts"):
                         s["payload"]["prompts"] = extra_prompts
                     if extra_attempts and not s["payload"].get("llm_attempts"):
@@ -378,6 +380,28 @@ class TraceSQLiteStore:
                 except Exception:
                     pass
         return mapping
+
+    def get_crashed_traces_on_startup(self) -> list[dict[str, Any]]:
+        """获取开机前因系统异常终止而遗留的 running 任务列表。"""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT trace_id, group_id, group_name, platform, trigger_type,
+                       started_at, extra_json
+                FROM analysis_traces
+                WHERE status = 'running'
+                ORDER BY started_at ASC
+                """
+            ).fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["extra"] = json.loads(item.pop("extra_json") or "{}")
+                except Exception:
+                    item["extra"] = {}
+                result.append(item)
+            return result
 
     def reconcile_crashed_traces_on_startup(self) -> int:
         """开机对账扫描：将上次因系统异常终止/重启而未正常收尾的 running 任务标记为 aborted。"""
