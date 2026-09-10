@@ -12,6 +12,7 @@ from typing import Any
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context
 
+from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
@@ -598,7 +599,7 @@ async def call_provider_with_retry(
                 }
                 attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
-                    if s.get("stage_name") == "LLM_ANALYSIS":
+                    if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).setdefault(
                             "llm_attempts", []
                         ).append(attempt_item)
@@ -620,7 +621,7 @@ async def call_provider_with_retry(
                 }
                 attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
-                    if s.get("stage_name") == "LLM_ANALYSIS":
+                    if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                         s.setdefault("payload", {}).setdefault(
                             "llm_attempts", []
                         ).append(attempt_item)

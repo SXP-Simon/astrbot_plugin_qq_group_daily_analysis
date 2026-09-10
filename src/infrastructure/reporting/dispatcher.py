@@ -123,7 +123,7 @@ class ReportDispatcher:
 
             if trace:
                 with trace.span(
-                    "RENDER_REPORT",
+                    AnalysisStage.RENDER_REPORT,
                     {"format": "image", "template": template_theme},
                 ):
                     (
@@ -294,7 +294,7 @@ class ReportDispatcher:
 
             if trace:
                 with trace.span(
-                    "RENDER_REPORT",
+                    AnalysisStage.RENDER_REPORT,
                     {"format": "html", "template": template_theme},
                 ):
                     (

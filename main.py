@@ -28,6 +28,7 @@ from .src.application.services.analysis_application_service import (
     DuplicateGroupTaskError,
 )
 from .src.application.services.comic_application_service import ComicApplicationService
+from .src.application.services.crash_recovery_service import CrashRecoveryService
 from .src.application.services.message_processing_service import (
     MessageProcessingService,
 )
@@ -193,6 +194,14 @@ class GroupDailyAnalysis(Star):
         )
         self.webui_bridge.register_routes()
 
+        # 开机崩溃对账与自愈恢复服务
+        self.crash_recovery_service = CrashRecoveryService(
+            trace_store=self.trace_store,
+            checkpoint_store=self.checkpoint_store,
+            analysis_service=self.analysis_service,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
+        )
+
         # 同步全局限流并进行初始化配置
         GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
 
@@ -294,6 +303,21 @@ class GroupDailyAnalysis(Star):
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
                     await self.auto_scheduler.start_incremental_trigger()
+
+                # 异步启动开机崩溃任务对账与自愈恢复
+                crash_recovery = getattr(self, "crash_recovery_service", None)
+                if crash_recovery:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        recovery_task = loop.create_task(
+                            crash_recovery.recover_crashed_tasks()
+                        )
+                        bg_tasks = getattr(self, "_background_tasks", None)
+                        if isinstance(bg_tasks, set):
+                            bg_tasks.add(recovery_task)
+                            recovery_task.add_done_callback(bg_tasks.discard)
+                    except RuntimeError:
+                        pass
 
                 self._initialized = True
                 self._discovery_run = True

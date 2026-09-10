@@ -27,6 +27,7 @@ from markupsafe import Markup
 from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
@@ -523,7 +524,10 @@ class ReportGenerator(IReportGenerator):
                                 trace_ctx = TraceContext.current()
                                 if trace_ctx:
                                     for s in reversed(trace_ctx._spans):
-                                        if s.get("stage_name") == "RENDER_REPORT":
+                                        if (
+                                            s.get("stage_name")
+                                            == AnalysisStage.RENDER_REPORT.value
+                                        ):
                                             payload = s.setdefault("payload", {})
                                             payload.update(
                                                 {
@@ -610,7 +614,10 @@ class ReportGenerator(IReportGenerator):
                         trace_ctx = TraceContext.current()
                         if trace_ctx:
                             for s in reversed(trace_ctx._spans):
-                                if s.get("stage_name") == "RENDER_REPORT":
+                                if (
+                                    s.get("stage_name")
+                                    == AnalysisStage.RENDER_REPORT.value
+                                ):
                                     s.setdefault("payload", {}).setdefault(
                                         "render_attempts", []
                                     ).append(
@@ -633,7 +640,10 @@ class ReportGenerator(IReportGenerator):
                         trace_ctx = TraceContext.current()
                         if trace_ctx:
                             for s in reversed(trace_ctx._spans):
-                                if s.get("stage_name") == "RENDER_REPORT":
+                                if (
+                                    s.get("stage_name")
+                                    == AnalysisStage.RENDER_REPORT.value
+                                ):
                                     s.setdefault("payload", {}).setdefault(
                                         "render_attempts", []
                                     ).append(
@@ -859,7 +869,7 @@ class ReportGenerator(IReportGenerator):
             trace_ctx = TraceContext.current()
             if trace_ctx:
                 for s in reversed(trace_ctx._spans):
-                    if s.get("stage_name") == "RENDER_REPORT":
+                    if s.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
                         s.setdefault("payload", {}).update(
                             {
                                 "format": "html",
