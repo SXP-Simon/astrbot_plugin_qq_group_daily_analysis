@@ -155,6 +155,151 @@ class CheckpointStore:
                 for row in rows
             ]
 
+    def delete_checkpoint(self, group_id: str, date_str: str, stage_name: str) -> bool:
+        """单点删除指定群在指定日期的特定阶段 Checkpoint。
+
+        Args:
+            group_id: 群号。
+            date_str: 日期字符串（YYYY-MM-DD）。
+            stage_name: 阶段名称。
+
+        Returns:
+            bool: 是否成功删除。
+        """
+        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM stage_checkpoints WHERE checkpoint_id = ?",
+                (checkpoint_id,),
+            )
+            return cursor.rowcount > 0
+
+    def list_all_checkpoints(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        group_id: str | None = None,
+        date_str: str | None = None,
+        stage_name: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """多维条件分页查询有效 Checkpoint 列表。
+
+        Args:
+            limit: 分页数量限制。
+            offset: 偏移量。
+            group_id: 可选群号筛选。
+            date_str: 可选日期筛选。
+            stage_name: 可选阶段筛选。
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: Checkpoint 列表与总数。
+        """
+        now = time.time()
+        conditions = ["expire_at >= ?"]
+        params: list[Any] = [now]
+
+        if group_id:
+            conditions.append("group_id = ?")
+            params.append(str(group_id))
+        if date_str:
+            conditions.append("date_str = ?")
+            params.append(str(date_str))
+        if stage_name:
+            conditions.append("stage_name = ?")
+            params.append(str(stage_name))
+
+        where_clause = " AND ".join(conditions)
+
+        with self._get_connection() as conn:
+            count_row = conn.execute(
+                f"SELECT COUNT(*) as total FROM stage_checkpoints WHERE {where_clause}",
+                params,
+            ).fetchone()
+            total = count_row["total"] if count_row else 0
+
+            query_sql = f"""
+                SELECT checkpoint_id, group_id, date_str, stage_name, created_at, expire_at, LENGTH(data_json) as data_size
+                FROM stage_checkpoints
+                WHERE {where_clause}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """
+            rows = conn.execute(query_sql, params + [limit, offset]).fetchall()
+            items = [
+                {
+                    "checkpoint_id": row["checkpoint_id"],
+                    "group_id": row["group_id"],
+                    "date_str": row["date_str"],
+                    "stage_name": row["stage_name"],
+                    "created_at": row["created_at"],
+                    "created_at_formatted": time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
+                    ),
+                    "expire_at": row["expire_at"],
+                    "data_size": row["data_size"],
+                    "data_size_bytes": row["data_size"],
+                }
+                for row in rows
+            ]
+            return items, total
+
+    def get_checkpoint_detail(
+        self, group_id: str, date_str: str, stage_name: str
+    ) -> dict[str, Any] | None:
+        """获取单个 Checkpoint 的元数据及反序列化后的产物 JSON。
+
+        Args:
+            group_id: 群号。
+            date_str: 日期字符串。
+            stage_name: 阶段名称。
+
+        Returns:
+            dict[str, Any] | None: 包含 metadata 和 data 的字典，不存在或过期返回 None。
+        """
+        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
+        now = time.time()
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ?",
+                (checkpoint_id,),
+            ).fetchone()
+            if not row or row["expire_at"] < now:
+                return None
+            try:
+                data = json.loads(row["data_json"])
+            except Exception:
+                data = row["data_json"]
+
+            return {
+                "checkpoint_id": row["checkpoint_id"],
+                "group_id": row["group_id"],
+                "date_str": row["date_str"],
+                "stage_name": row["stage_name"],
+                "created_at": row["created_at"],
+                "created_at_formatted": time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
+                ),
+                "expire_at": row["expire_at"],
+                "checkpoint_data": data,
+                "data": data,
+                "data_size": len(row["data_json"]),
+                "data_size_bytes": len(row["data_json"]),
+            }
+
+    def get_distinct_checkpoint_groups(self) -> list[str]:
+        """获取所有拥有有效 Checkpoint 记录的群号列表。
+
+        Returns:
+            list[str]: 去重群号列表。
+        """
+        now = time.time()
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT group_id FROM stage_checkpoints WHERE expire_at >= ? ORDER BY group_id ASC",
+                (now,),
+            ).fetchall()
+            return [str(row["group_id"]) for row in rows if row["group_id"]]
+
     def cleanup_expired(self) -> int:
         """清理所有已过期的 Checkpoint。
 
