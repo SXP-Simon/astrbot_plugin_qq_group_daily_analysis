@@ -107,15 +107,60 @@ class CheckpointStore:
                 return None
 
     def clear_checkpoints(self, group_id: str, date_str: str) -> None:
-        """任务全部成功后清理该群当天的临时 Checkpoint"""
+        """任务全部成功后清理该群当天的临时 Checkpoint。
+
+        Args:
+            group_id: 群号。
+            date_str: 日期字符串。
+        """
         with self._get_connection() as conn:
             conn.execute(
                 "DELETE FROM stage_checkpoints WHERE group_id = ? AND date_str = ?",
                 (str(group_id), str(date_str)),
             )
 
+    def get_checkpoints_by_group_date(
+        self, group_id: str, date_str: str
+    ) -> list[dict[str, Any]]:
+        """获取指定群在指定日期的所有有效 Checkpoint 快照摘要列表。
+
+        Args:
+            group_id: 群号。
+            date_str: 日期字符串（YYYY-MM-DD）。
+
+        Returns:
+            list[dict[str, Any]]: Checkpoint 摘要元数据列表。
+        """
+        now = time.time()
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT checkpoint_id, group_id, date_str, stage_name, created_at, expire_at, LENGTH(data_json) as data_size
+                FROM stage_checkpoints
+                WHERE group_id = ? AND date_str = ? AND expire_at >= ?
+                ORDER BY created_at ASC
+                """,
+                (str(group_id), str(date_str), now),
+            ).fetchall()
+            return [
+                {
+                    "checkpoint_id": row["checkpoint_id"],
+                    "group_id": row["group_id"],
+                    "date_str": row["date_str"],
+                    "stage_name": row["stage_name"],
+                    "created_at": row["created_at"],
+                    "expire_at": row["expire_at"],
+                    "data_size": row["data_size"],
+                }
+                for row in rows
+            ]
+
     def cleanup_expired(self) -> int:
-        """清理所有已过期的 Checkpoint"""
+        """清理所有已过期的 Checkpoint。
+
+        Returns:
+            int: 清理的过期记录数。
+        """
         now = time.time()
         with self._get_connection() as conn:
             cursor = conn.execute(
