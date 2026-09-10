@@ -317,12 +317,14 @@ async def debug_render(
     # 4. Prepare Render Data
     # Note: _prepare_render_data handles converting Entities to template-friendly dicts
     render_payload = await generator._prepare_render_data(
-        analysis_result, avatar_url_getter=mock_get_user_avatar
+        analysis_result,
+        template_theme=template_name,
+        avatar_url_getter=mock_get_user_avatar,
     )
 
     # Use Jinja2 renderer
     final_html = generator.html_templates.render_template(
-        "image_template.html", **render_payload
+        "image_template.html", template_theme=template_name, **render_payload
     )
 
     # 复用最终 HTML 中所有内联头像资源，并注入复用样式
