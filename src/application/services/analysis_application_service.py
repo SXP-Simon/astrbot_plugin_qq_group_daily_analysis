@@ -962,11 +962,20 @@ class AnalysisApplicationService:
 
         if not clean_checkpoint:
             logger.info(f"未找到群 {group_id} 的前置清洗快照，回退到全量重新分析")
-            return await self.execute_daily_analysis(
+            if trace:
+                trace.metadata["fallback_to_fresh_run"] = True
+                trace.metadata["fallback_reason"] = "checkpoint_missing_auto_refetched"
+                trace.metadata["resumed_from"] = "fresh_run_fallback"
+            result = await self.execute_daily_analysis(
                 group_id=group_id,
                 platform_id=platform_id,
                 manual=True,
             )
+            if isinstance(result, dict):
+                result["fallback_to_fresh_run"] = True
+                result["fallback_reason"] = "checkpoint_missing_auto_refetched"
+                result["resumed_from"] = "fresh_run_fallback"
+            return result
 
         logger.info(
             f"群 {group_id} 命中 Checkpoint 快照，跳过消息拉取与清洗，直接进入 LLM 幂等续跑"

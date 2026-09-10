@@ -660,6 +660,17 @@ class PluginPageWebUIBridge:
                     template_name=template_name,
                 )
                 if result and result.get("success"):
+                    if result.get("fallback_to_fresh_run"):
+                        trace_ctx.metadata["fallback_to_fresh_run"] = True
+                        trace_ctx.metadata["fallback_reason"] = str(
+                            result.get(
+                                "fallback_reason",
+                                "checkpoint_missing_auto_refetched",
+                            )
+                        )
+                        trace_ctx.metadata["resumed_from"] = str(
+                            result.get("resumed_from", "fresh_run_fallback")
+                        )
                     analysis_result = result.get("analysis_result")
                     adapter = result.get("adapter")
                     bot_mgr = getattr(self.analysis_service, "bot_manager", None)

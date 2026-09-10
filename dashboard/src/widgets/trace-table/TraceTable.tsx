@@ -1,5 +1,5 @@
 import React from "react";
-import { Table, Tag, Tooltip, Progress, Button, Skeleton, Empty } from "antd";
+import { Table, Tag, Tooltip, Progress, Button, Skeleton, Empty, Space } from "antd";
 import type { TablePaginationConfig } from "antd/es/table";
 import type { FilterValue, SorterResult } from "antd/es/table/interface";
 import { EyeOutlined } from "@ant-design/icons";
@@ -75,8 +75,25 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       title: "触发方式",
       dataIndex: "trigger_type",
       key: "trigger_type",
-      width: 100,
-      render: (t: string) => <TriggerTypeTag triggerType={t} />,
+      width: 120,
+      render: (t: string, record: TraceRecord) => {
+        const isFallback = Boolean(
+          record.extra?.fallback_to_fresh_run ||
+            (record.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback"
+        );
+        return (
+          <Space size={2} wrap>
+            <TriggerTypeTag triggerType={t} />
+            {isFallback && (
+              <Tooltip title="未检测到历史快照，已自动降级为全量重新拉取分析">
+                <Tag color="orange" style={{ margin: 0, fontSize: 10, padding: "0 4px", lineHeight: "16px" }}>
+                  降级全量
+                </Tag>
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: "状态",
