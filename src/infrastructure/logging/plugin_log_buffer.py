@@ -12,6 +12,8 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from ...shared.constants import AnalysisStage
+
 
 @dataclass
 class PluginLogEntry:
@@ -91,14 +93,15 @@ class PluginLogBuffer(logging.Handler):
     ]
 
     STAGE_NAMES = {
-        "FETCH_MESSAGES": "拉取聊天记录",
-        "CLEAN_MESSAGES": "消息清洗过滤",
-        "STATS_ANALYSIS": "基础统计分析",
-        "LLM_ANALYSIS": "大模型话题与画像分析",
-        "SAVE_SUMMARY": "历史记录持久化",
-        "RENDER_REPORT": "报告图片渲染与发送",
-        "COMIC_STORYBOARD": "漫画分镜提示词提取",
-        "COMIC_DRAWING": "漫画长图生成与投递",
+        AnalysisStage.FETCH_MESSAGES.value: "拉取聊天记录",
+        AnalysisStage.CLEAN_MESSAGES.value: "消息清洗过滤",
+        AnalysisStage.STATS_ANALYSIS.value: "基础统计分析",
+        AnalysisStage.LLM_ANALYSIS.value: "大模型话题与画像分析",
+        AnalysisStage.SAVE_SUMMARY.value: "历史记录持久化",
+        AnalysisStage.RENDER_REPORT.value: "报告图片渲染与发送",
+        AnalysisStage.DISPATCH_REPORT.value: "群聊消息投递与分发",
+        AnalysisStage.COMIC_STORYBOARD.value: "漫画分镜提示词提取",
+        AnalysisStage.COMIC_DRAWING.value: "漫画长图生成与投递",
         "CRASH_RECOVERY": "异常终止恢复",
     }
 

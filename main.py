@@ -55,7 +55,7 @@ from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
 from .src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
-from .src.shared.constants import PLUGIN_NAME
+from .src.shared.constants import PLUGIN_NAME, AnalysisStage
 from .src.shared.trace_context import TraceContext
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
@@ -714,7 +714,7 @@ class GroupDailyAnalysis(Star):
                     group_name=group_name,
                     platform=platform_id or "",
                     trigger_type="manual",
-                    current_stage="FETCH_MESSAGES",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
                     asyncio_task=current_task,
                 )
 
@@ -878,7 +878,7 @@ class GroupDailyAnalysis(Star):
                     group_name=group_name or group_id,
                     platform=platform_id or "",
                     trigger_type="comic_manual",
-                    current_stage="FETCH_MESSAGES",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
                     asyncio_task=current_task,
                 )
 

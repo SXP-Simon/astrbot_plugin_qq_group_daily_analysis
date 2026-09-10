@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -160,7 +161,7 @@ class ReportDispatcher:
         if image_url:
             with (
                 trace_ctx.span(
-                    "DISPATCH_REPORT",
+                    AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
                         "group_id": group_id,
@@ -326,7 +327,7 @@ class ReportDispatcher:
         if html_path:
             with (
                 trace_ctx.span(
-                    "DISPATCH_REPORT",
+                    AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
                         "group_id": group_id,
@@ -460,7 +461,7 @@ class ReportDispatcher:
 
         with (
             trace_ctx.span(
-                "DISPATCH_REPORT",
+                AnalysisStage.DISPATCH_REPORT,
                 {
                     "platform": platform_id or "auto",
                     "group_id": group_id,
