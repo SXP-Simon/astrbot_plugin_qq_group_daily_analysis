@@ -11,6 +11,7 @@ from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
 )
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -69,7 +70,7 @@ class ComicApplicationService:
         trace = TraceContext.current()
 
         # 1. 提取分镜和金句
-        sb_ctx = trace.span("COMIC_STORYBOARD") if trace else nullcontext()
+        sb_ctx = trace.span(AnalysisStage.COMIC_STORYBOARD) if trace else nullcontext()
         with sb_ctx as sb_rec:
             (
                 storyboards,
@@ -145,7 +146,7 @@ class ComicApplicationService:
                     f"[Comic] 无法加载参考图: {Path(reference_image_path).name}"
                 )
 
-        draw_ctx = trace.span("COMIC_DRAWING") if trace else nullcontext()
+        draw_ctx = trace.span(AnalysisStage.COMIC_DRAWING) if trace else nullcontext()
         with draw_ctx as draw_rec:
             # 4. 若配置为外部绘图后端，优先走对应插件出图
             backend = self.config_manager.get_drawing_backend()

@@ -65,7 +65,7 @@ else:
             return content
 
 
-from ...shared.constants import PLUGIN_NAME
+from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..persistence.trace_sqlite_store import TraceSQLiteStore
@@ -448,7 +448,7 @@ class PluginPageWebUIBridge:
                 group_name=group_name,
                 platform=platform,
                 trigger_type="web_ui",
-                current_stage="FETCH_MESSAGES",
+                current_stage=AnalysisStage.FETCH_MESSAGES,
                 asyncio_task=asyncio_task,
             )
 
@@ -547,9 +547,9 @@ class PluginPageWebUIBridge:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(status="succeeded")
             else:
-                with trace_ctx.span("FETCH_MESSAGES"):
+                with trace_ctx.span(AnalysisStage.FETCH_MESSAGES):
                     await asyncio.sleep(0.5)
-                with trace_ctx.span("LLM_ANALYSIS"):
+                with trace_ctx.span(AnalysisStage.LLM_ANALYSIS):
                     await asyncio.sleep(1.0)
                 trace_ctx.set_context_metrics(1200, 800)
                 trace_ctx.add_token_usage(1500, 300, "topics")
@@ -608,7 +608,7 @@ class PluginPageWebUIBridge:
                 group_name=group_name,
                 platform=platform,
                 trigger_type="resume",
-                current_stage="LLM_ANALYSIS",
+                current_stage=AnalysisStage.LLM_ANALYSIS,
                 asyncio_task=asyncio_task,
             )
 
@@ -691,7 +691,7 @@ class PluginPageWebUIBridge:
                     if self.report_dispatcher and analysis_result:
                         try:
                             with trace_ctx.span(
-                                "DISPATCH_REPORT",
+                                AnalysisStage.DISPATCH_REPORT,
                                 {
                                     "platform": dispatch_platform_id or "auto",
                                     "group_id": group_id,
@@ -1004,7 +1004,7 @@ class PluginPageWebUIBridge:
                     else (
                         task_info.get("current_stage", "")
                         if task_info
-                        else "FETCH_MESSAGES"
+                        else AnalysisStage.FETCH_MESSAGES.value
                     )
                 )
                 spans = list(active_trace._spans) if active_trace else []
