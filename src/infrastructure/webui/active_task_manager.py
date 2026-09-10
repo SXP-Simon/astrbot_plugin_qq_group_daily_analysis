@@ -118,6 +118,20 @@ class ActiveTaskManager:
             except RuntimeError:
                 pass
 
+    def touch_heartbeat(self, task_id: str) -> bool:
+        """刷新活跃任务的最后心跳时间戳（无需广播进度事件，保持极低内存开销）。
+
+        Args:
+            task_id: 任务唯一标识。
+
+        Returns:
+            bool: 是否成功找到并刷新心跳。
+        """
+        if task_id in self._tasks:
+            self._tasks[task_id].last_heartbeat = time.time()
+            return True
+        return False
+
     async def finish_task(self, task_id: str) -> None:
         """标记任务结束并移出活跃列表"""
         async with self._lock:
