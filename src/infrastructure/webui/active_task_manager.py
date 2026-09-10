@@ -204,7 +204,7 @@ class ActiveTaskManager:
     # ── Task Reaper 守护线程 ──
 
     def start_reaper(
-        self, interval_seconds: int = 30, timeout_seconds: int = 600
+        self, interval_seconds: int = 30, timeout_seconds: int = 180
     ) -> None:
         """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录"""
         if self.trace_store and hasattr(
