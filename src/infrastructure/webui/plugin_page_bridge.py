@@ -298,7 +298,7 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get thumbnail or content of a config file path",
             ),
-            # 8. 插件数据管理
+            # 8. 插件数据管理（存储分区清理）
             (
                 f"/{PLUGIN_NAME}/plugin-data/overview",
                 self.api_get_plugin_data_overview,
@@ -340,6 +340,61 @@ class PluginPageWebUIBridge:
                 self.api_clear_config_backups,
                 ["POST"],
                 "Clear historical automatic configuration backup files",
+            ),
+            # 9. 增量批次与 Checkpoint 观测及 CRUD 管理
+            (
+                f"/{PLUGIN_NAME}/data/incremental/groups",
+                self.api_get_incremental_groups,
+                ["GET"],
+                "Get groups list with incremental batches or cursors",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batches",
+                self.api_get_incremental_batches,
+                ["GET"],
+                "Get incremental batches list and cursor status for a group",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batch/detail",
+                self.api_get_incremental_batch_detail,
+                ["GET"],
+                "Get full detail of a single incremental batch",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batch",
+                self.api_delete_incremental_batch,
+                ["DELETE", "POST"],
+                "Delete a specific incremental batch",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/reset",
+                self.api_reset_incremental_group,
+                ["POST"],
+                "Reset all incremental batches and cursor for a group",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoints",
+                self.api_list_checkpoints,
+                ["GET"],
+                "List and filter stage checkpoints",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoints/groups",
+                self.api_get_checkpoint_groups,
+                ["GET"],
+                "Get distinct groups list with valid checkpoints",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoint/detail",
+                self.api_get_checkpoint_detail,
+                ["GET"],
+                "Get full JSON content and metadata of a specific checkpoint",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoint",
+                self.api_delete_checkpoint,
+                ["DELETE", "POST"],
+                "Delete a specific stage checkpoint or all checkpoints for group and date",
             ),
         ]
 
@@ -2207,4 +2262,288 @@ class PluginPageWebUIBridge:
             return json_response({"status": "ok", "data": {"deleted": count}})
         except Exception as e:
             logger.error(f"清空配置历史自动备份异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    # ================================================================
+    # 增量批次与 Checkpoint 快照管理 API
+    # ================================================================
+
+    @property
+    def _incremental_store(self) -> Any:
+        return getattr(self.analysis_service, "incremental_store", None)
+
+    @property
+    def _checkpoint_store(self) -> Any:
+        return getattr(self.analysis_service, "checkpoint_store", None)
+
+    async def api_get_incremental_groups(self) -> Any:
+        """获取所有拥有增量批次或游标记录的群号列表"""
+        try:
+            store = self._incremental_store
+            tracked: set[str] = set()
+            if store and hasattr(store, "get_tracked_groups"):
+                tracked.update(await store.get_tracked_groups())
+
+            # 补充包含历史记录的群聊
+            if self.trace_store:
+                for g in self.trace_store.get_distinct_groups():
+                    gid = str(g.get("group_id", "")).strip()
+                    if gid:
+                        tracked.add(gid)
+
+            sorted_groups = sorted(tracked)
+            return json_response({"status": "ok", "data": {"groups": sorted_groups}})
+        except Exception as e:
+            logger.error(f"获取增量群聊列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_incremental_batches(self) -> Any:
+        """获取指定群聊的增量批次列表与当前游标状态"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            if not group_id:
+                return error_response("Missing group_id parameter", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            batches = await store.get_all_batches_with_details(group_id)
+            cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(group_id)
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "group_id": group_id,
+                        "batches": batches,
+                        "cursor": {
+                            "timestamp": cursor_ts,
+                            "tracked_message_ids_count": len(cursor_msg_ids),
+                        },
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取增量批次列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_incremental_batch_detail(self) -> Any:
+        """获取单条增量批次完整结构化数据"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            batch_id = request.query.get("batch_id", "").strip()
+            if not group_id or not batch_id:
+                return error_response("Missing group_id or batch_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            batch = await store.get_batch_detail(group_id, batch_id)
+            if not batch:
+                return error_response(
+                    f"Batch {batch_id} not found for group {group_id}", status_code=404
+                )
+
+            return json_response({"status": "ok", "data": batch.to_dict()})
+        except Exception as e:
+            logger.error(f"获取增量批次详情异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_delete_incremental_batch(self) -> Any:
+        """删除指定群的单个增量批次"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            batch_id = str(
+                payload.get("batch_id") or request.query.get("batch_id") or ""
+            ).strip()
+
+            if not group_id or not batch_id:
+                return error_response("Missing group_id or batch_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            deleted = await store.delete_batch(group_id, batch_id)
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "deleted": deleted,
+                        "group_id": group_id,
+                        "batch_id": batch_id,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"删除增量批次异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_reset_incremental_group(self) -> Any:
+        """一键清空指定群全部增量批次并将游标归零"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            if not group_id:
+                return error_response("Missing group_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            deleted_count = await store.reset_group(group_id)
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "group_id": group_id,
+                        "deleted_batches": deleted_count,
+                        "message": f"Successfully reset incremental state for group {group_id}",
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"重置增量状态异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_list_checkpoints(self) -> Any:
+        """分页条件查询 Checkpoint 列表"""
+        try:
+            limit = int(request.query.get("limit", 50))
+            offset = int(request.query.get("offset", 0))
+            group_id = request.query.get("group_id") or None
+            date_str = request.query.get("date_str") or None
+            stage_name = request.query.get("stage_name") or None
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            items, total = store.list_all_checkpoints(
+                limit=limit,
+                offset=offset,
+                group_id=group_id,
+                date_str=date_str,
+                stage_name=stage_name,
+            )
+            return json_response(
+                {"status": "ok", "data": {"items": items, "total": total}}
+            )
+        except Exception as e:
+            logger.error(f"查询 Checkpoint 列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_checkpoint_groups(self) -> Any:
+        """获取所有拥有有效 Checkpoint 的群号列表"""
+        try:
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+            groups = store.get_distinct_checkpoint_groups()
+            return json_response({"status": "ok", "data": {"groups": groups}})
+        except Exception as e:
+            logger.error(f"获取 Checkpoint 群号列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_checkpoint_detail(self) -> Any:
+        """获取单条 Checkpoint 产物 JSON 与元数据"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            date_str = request.query.get("date_str", "").strip()
+            stage_name = request.query.get("stage_name", "").strip()
+
+            if not group_id or not date_str or not stage_name:
+                return error_response(
+                    "group_id, date_str, stage_name are all required", status_code=400
+                )
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            detail = store.get_checkpoint_detail(group_id, date_str, stage_name)
+            if not detail:
+                return error_response(
+                    "Checkpoint not found or expired", status_code=404
+                )
+
+            return json_response({"status": "ok", "detail": detail, "data": detail})
+        except Exception as e:
+            logger.error(f"获取 Checkpoint 详情异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_delete_checkpoint(self) -> Any:
+        """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            date_str = str(
+                payload.get("date_str") or request.query.get("date_str") or ""
+            ).strip()
+            stage_name = str(
+                payload.get("stage_name") or request.query.get("stage_name") or ""
+            ).strip()
+
+            if not group_id or not date_str:
+                return error_response(
+                    "group_id and date_str are required", status_code=400
+                )
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            if stage_name:
+                deleted = store.delete_checkpoint(group_id, date_str, stage_name)
+            else:
+                store.clear_checkpoints(group_id, date_str)
+                deleted = True
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "deleted": deleted,
+                        "group_id": group_id,
+                        "date_str": date_str,
+                        "stage_name": stage_name or None,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"删除 Checkpoint 异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
