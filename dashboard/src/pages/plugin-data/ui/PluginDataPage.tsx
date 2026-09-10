@@ -46,6 +46,7 @@ import {
   formatBytes,
   formatTimestamp,
   formatTokens,
+  formatStageName,
 } from "../../../shared/lib/formatters";
 import { usePluginDataViewModel } from "../model/usePluginDataViewModel";
 import {
@@ -77,10 +78,24 @@ interface PartitionItem {
   clearKey: string;
 }
 
-const STAGE_LABELS: Record<string, { label: string; color: string }> = {
-  stage_1_fetch_messages: { label: "阶段 1：拉取群消息", color: "blue" },
-  stage_2_analyze_topics: { label: "阶段 2：话题分析与画像", color: "purple" },
-  stage_3_render_and_send: { label: "阶段 3：渲染报告与投递", color: "green" },
+const getStageMeta = (stage: string): { label: string; color: string } => {
+  const label = formatStageName(stage);
+  const colorMap: Record<string, string> = {
+    FETCH_MESSAGES: "blue",
+    CLEAN_MESSAGES: "geekblue",
+    STATS_ANALYSIS: "orange",
+    LLM_ANALYSIS: "purple",
+    SAVE_SUMMARY: "gold",
+    RENDER_REPORT: "cyan",
+    DISPATCH_REPORT: "green",
+    COMIC_STORYBOARD: "magenta",
+    COMIC_DRAWING: "volcano",
+    CRASH_RECOVERY: "red",
+  };
+  return {
+    label,
+    color: colorMap[stage] || colorMap[stage.toUpperCase()] || "default",
+  };
 };
 
 export const PluginDataPage: React.FC = () => {
@@ -539,34 +554,51 @@ export const PluginDataPage: React.FC = () => {
       key: "stage_name",
       width: 220,
       render: (stage: string) => {
-        const meta = STAGE_LABELS[stage] || { label: stage, color: "default" };
+        const meta = getStageMeta(stage);
         return (
-          <Tag color={meta.color} style={{ fontSize: 12 }}>
-            {meta.label}
-          </Tag>
+          <Tooltip title={`底层阶段标识: ${stage}`}>
+            <Tag color={meta.color} style={{ fontSize: 12 }}>
+              {meta.label} ({stage})
+            </Tag>
+          </Tooltip>
         );
       },
     },
     {
       title: "快照大小",
-      dataIndex: "data_size_bytes",
-      key: "data_size_bytes",
+      key: "data_size",
       width: 110,
       align: "right" as const,
-      render: (bytes: number) => (
-        <span style={SANS_NUM_STYLE}>{formatBytes(bytes)}</span>
-      ),
+      render: (_: unknown, row: CheckpointItem) => {
+        const bytes = row.data_size_bytes ?? row.data_size ?? 0;
+        return <span style={SANS_NUM_STYLE}>{formatBytes(bytes)}</span>;
+      },
     },
     {
       title: "快照写入时间",
-      dataIndex: "updated_at",
-      key: "updated_at",
+      key: "created_at",
       width: 170,
-      render: (timeStr: string) => (
-        <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
-          {timeStr || "-"}
-        </span>
-      ),
+      render: (_: unknown, row: CheckpointItem) => {
+        if (row.created_at_formatted) {
+          return (
+            <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+              {row.created_at_formatted}
+            </span>
+          );
+        }
+        if (typeof row.created_at === "number") {
+          return (
+            <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+              {formatTimestamp(row.created_at)}
+            </span>
+          );
+        }
+        return (
+          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+            {row.created_at || row.updated_at || "-"}
+          </span>
+        );
+      },
     },
     {
       title: "操作",
@@ -976,9 +1008,14 @@ export const PluginDataPage: React.FC = () => {
                     vm.loadCheckpoints(1, checkpointsPageSize, ckptFilterGroup, ckptFilterDate, val);
                   }}
                   options={[
-                    { label: "阶段 1：拉取群消息", value: "stage_1_fetch_messages" },
-                    { label: "阶段 2：话题分析与画像", value: "stage_2_analyze_topics" },
-                    { label: "阶段 3：渲染报告与投递", value: "stage_3_render_and_send" },
+                    { label: "全部阶段", value: "" },
+                    { label: "拉取聊天记录 (FETCH_MESSAGES)", value: "FETCH_MESSAGES" },
+                    { label: "消息清洗过滤 (CLEAN_MESSAGES)", value: "CLEAN_MESSAGES" },
+                    { label: "基础统计分析 (STATS_ANALYSIS)", value: "STATS_ANALYSIS" },
+                    { label: "大模型话题与画像分析 (LLM_ANALYSIS)", value: "LLM_ANALYSIS" },
+                    { label: "历史记录持久化 (SAVE_SUMMARY)", value: "SAVE_SUMMARY" },
+                    { label: "报告长图渲染 (RENDER_REPORT)", value: "RENDER_REPORT" },
+                    { label: "群聊消息投递 (DISPATCH_REPORT)", value: "DISPATCH_REPORT" },
                   ]}
                 />
               </Col>
@@ -1160,7 +1197,7 @@ export const PluginDataPage: React.FC = () => {
           <Space>
             <SaveOutlined style={{ color: "#2563eb" }} />
             <span>
-              阶段快照产物 JSON: {selectedCkptDetail?.stage_name}
+              阶段快照产物 JSON: {formatStageName(selectedCkptDetail?.stage_name)} ({selectedCkptDetail?.stage_name || "-"})
             </span>
           </Space>
         }
@@ -1189,15 +1226,17 @@ export const PluginDataPage: React.FC = () => {
             <Row gutter={[8, 8]}>
               <Col span={8}>
                 <Text type="secondary">群号: </Text>
-                <Text strong>{selectedCkptDetail.group_id}</Text>
+                <Text strong>{selectedCkptDetail.group_id || "-"}</Text>
               </Col>
               <Col span={8}>
                 <Text type="secondary">日期: </Text>
-                <Tag color="cyan">{selectedCkptDetail.date_str}</Tag>
+                <Tag color="cyan">{selectedCkptDetail.date_str || "-"}</Tag>
               </Col>
               <Col span={8}>
                 <Text type="secondary">阶段: </Text>
-                <Tag color="purple">{selectedCkptDetail.stage_name}</Tag>
+                <Tag color={getStageMeta(selectedCkptDetail.stage_name || "").color}>
+                  {formatStageName(selectedCkptDetail.stage_name)} ({selectedCkptDetail.stage_name || "-"})
+                </Tag>
               </Col>
             </Row>
 

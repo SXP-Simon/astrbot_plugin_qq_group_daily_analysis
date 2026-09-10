@@ -232,8 +232,12 @@ class CheckpointStore:
                     "date_str": row["date_str"],
                     "stage_name": row["stage_name"],
                     "created_at": row["created_at"],
+                    "created_at_formatted": time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
+                    ),
                     "expire_at": row["expire_at"],
                     "data_size": row["data_size"],
+                    "data_size_bytes": row["data_size"],
                 }
                 for row in rows
             ]
@@ -272,9 +276,14 @@ class CheckpointStore:
                 "date_str": row["date_str"],
                 "stage_name": row["stage_name"],
                 "created_at": row["created_at"],
+                "created_at_formatted": time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
+                ),
                 "expire_at": row["expire_at"],
+                "checkpoint_data": data,
                 "data": data,
                 "data_size": len(row["data_json"]),
+                "data_size_bytes": len(row["data_json"]),
             }
 
     def get_distinct_checkpoint_groups(self) -> list[str]:

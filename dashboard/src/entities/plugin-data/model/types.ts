@@ -59,12 +59,16 @@ export interface IncrementalBatchesResponse {
 }
 
 export interface CheckpointItem {
+  checkpoint_id?: string;
   group_id: string;
   date_str: string;
   stage_name: string;
   data_size_bytes?: number;
-  created_at?: string;
+  data_size?: number;
+  created_at?: number | string;
+  created_at_formatted?: string;
   updated_at?: string;
+  expire_at?: number;
   has_data?: boolean;
 }
 
@@ -74,10 +78,15 @@ export interface CheckpointsListResponse {
 }
 
 export interface CheckpointDetail {
+  checkpoint_id?: string;
   group_id: string;
   date_str: string;
   stage_name: string;
-  data: unknown;
-  created_at?: string;
-  updated_at?: string;
+  data?: unknown;
+  checkpoint_data?: unknown;
+  data_size_bytes?: number;
+  data_size?: number;
+  created_at?: number | string;
+  created_at_formatted?: string;
+  expire_at?: number;
 }

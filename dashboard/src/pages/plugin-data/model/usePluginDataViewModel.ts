@@ -233,7 +233,16 @@ export function usePluginDataViewModel() {
   // 查看 Checkpoint JSON 详情
   const handleOpenCkptDetail = async (item: CheckpointItem) => {
     setCkptDetailModalOpen(true);
-    setSelectedCkptDetail(null);
+    setSelectedCkptDetail({
+      checkpoint_id: item.checkpoint_id,
+      group_id: item.group_id,
+      date_str: item.date_str,
+      stage_name: item.stage_name,
+      created_at: item.created_at,
+      created_at_formatted: item.created_at_formatted,
+      data_size_bytes: item.data_size_bytes ?? item.data_size,
+      data: null,
+    });
     setLoadingCkptDetail(true);
     try {
       const detail = await fetchCheckpointDetail(
@@ -242,7 +251,24 @@ export function usePluginDataViewModel() {
         item.stage_name
       );
       if (detail) {
-        setSelectedCkptDetail(detail);
+        const payloadData =
+          detail.checkpoint_data !== undefined
+            ? detail.checkpoint_data
+            : detail.data !== undefined
+            ? detail.data
+            : detail;
+        setSelectedCkptDetail({
+          checkpoint_id: detail.checkpoint_id || item.checkpoint_id,
+          group_id: detail.group_id || item.group_id,
+          date_str: detail.date_str || item.date_str,
+          stage_name: detail.stage_name || item.stage_name,
+          created_at: detail.created_at ?? item.created_at,
+          created_at_formatted:
+            detail.created_at_formatted || item.created_at_formatted,
+          data_size_bytes:
+            detail.data_size_bytes ?? detail.data_size ?? item.data_size_bytes,
+          data: payloadData,
+        });
       } else {
         message.error("快照数据不存在或已过期");
       }

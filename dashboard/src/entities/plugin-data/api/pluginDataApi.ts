@@ -137,11 +137,25 @@ export async function fetchCheckpointDetail(
   dateStr: string,
   stageName: string
 ): Promise<CheckpointDetail | null> {
-  const res = await apiGet<CheckpointDetail>("data/checkpoint/detail", {
-    group_id: groupId,
-    date_str: dateStr,
-    stage_name: stageName,
-  });
+  const res = await apiGet<CheckpointDetail | { detail?: CheckpointDetail }>(
+    "data/checkpoint/detail",
+    {
+      group_id: groupId,
+      date_str: dateStr,
+      stage_name: stageName,
+    }
+  );
+  if (!res) return null;
+  const anyRes = res as Record<string, unknown>;
+  if (anyRes.detail && typeof anyRes.detail === "object") {
+    return anyRes.detail as CheckpointDetail;
+  }
+  if (anyRes.data && typeof anyRes.data === "object") {
+    const dataObj = anyRes.data as Record<string, unknown>;
+    if ("checkpoint_id" in dataObj || "stage_name" in dataObj) {
+      return anyRes.data as CheckpointDetail;
+    }
+  }
   return extractData<CheckpointDetail>(res);
 }
 

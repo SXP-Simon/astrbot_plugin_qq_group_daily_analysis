@@ -2494,7 +2494,7 @@ class PluginPageWebUIBridge:
                     "Checkpoint not found or expired", status_code=404
                 )
 
-            return json_response({"status": "ok", "data": detail})
+            return json_response({"status": "ok", "detail": detail, "data": detail})
         except Exception as e:
             logger.error(f"获取 Checkpoint 详情异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
