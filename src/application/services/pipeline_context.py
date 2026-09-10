@@ -108,7 +108,7 @@ class PipelineContext:
         save_checkpoint: bool = False,
         serializer: Callable[[Any], dict[str, Any]] | None = None,
         ttl_seconds: int = 86400 * 30,
-    ) -> AsyncGenerator[PipelineStep, None]:
+    ) -> AsyncGenerator[PipelineStep]:
         """开启一个流水线执行阶段，自动管理 Span 耗时与 Checkpoint 持久化。
 
         Args:

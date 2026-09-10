@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
 
 
@@ -56,7 +57,7 @@ class ActiveTaskManager:
         group_name: str = "",
         platform: str = "",
         trigger_type: str = "manual",
-        current_stage: Any = "FETCH_MESSAGES",
+        current_stage: Any = AnalysisStage.FETCH_MESSAGES,
         asyncio_task: asyncio.Task[Any] | None = None,
     ) -> None:
         """注册新运行中的任务"""
