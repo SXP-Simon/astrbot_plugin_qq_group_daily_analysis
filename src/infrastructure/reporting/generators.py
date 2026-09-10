@@ -389,6 +389,7 @@ class ReportGenerator(IReportGenerator):
             # 准备渲染数据
             render_payload = await self._prepare_render_data(
                 analysis_result,
+                template_theme=template_theme,
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
@@ -780,6 +781,7 @@ class ReportGenerator(IReportGenerator):
             # 准备渲染数据
             render_data = await self._prepare_render_data(
                 analysis_result,
+                template_theme=template_theme,
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
@@ -1074,6 +1076,7 @@ class ReportGenerator(IReportGenerator):
     async def _prepare_render_data(
         self,
         analysis_result: dict,
+        template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
         avatar_url_getter=None,
         nickname_getter=None,
@@ -1192,7 +1195,10 @@ class ReportGenerator(IReportGenerator):
 
         topics_html = (
             self.html_templates.render_template(
-                "topic_item.html", topics=topics_list, **common_context
+                "topic_item.html",
+                template_theme=template_theme,
+                topics=topics_list,
+                **common_context,
             )
             if topics_list
             else ""
@@ -1243,7 +1249,10 @@ class ReportGenerator(IReportGenerator):
 
         titles_html = (
             self.html_templates.render_template(
-                "user_title_item.html", titles=titles_list, **common_context
+                "user_title_item.html",
+                template_theme=template_theme,
+                titles=titles_list,
+                **common_context,
             )
             if titles_list
             else ""
@@ -1297,7 +1306,10 @@ class ReportGenerator(IReportGenerator):
 
         quotes_html = (
             self.html_templates.render_template(
-                "quote_item.html", quotes=quotes_list, **common_context
+                "quote_item.html",
+                template_theme=template_theme,
+                quotes=quotes_list,
+                **common_context,
             )
             if quotes_list
             else ""
@@ -1309,7 +1321,10 @@ class ReportGenerator(IReportGenerator):
             activity_viz.hourly_activity
         )
         hourly_chart_html = self.html_templates.render_template(
-            chart_template, chart_data=chart_data, **common_context
+            chart_template,
+            template_theme=template_theme,
+            chart_data=chart_data,
+            **common_context,
         )
         logger.debug(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
@@ -1367,7 +1382,10 @@ class ReportGenerator(IReportGenerator):
                 }
 
             chat_quality_html = self.html_templates.render_template(
-                "chat_quality_item.html", **review_data, **common_context
+                "chat_quality_item.html",
+                template_theme=template_theme,
+                **review_data,
+                **common_context,
             )
             logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
