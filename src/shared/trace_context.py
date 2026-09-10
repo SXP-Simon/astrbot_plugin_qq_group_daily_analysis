@@ -167,6 +167,19 @@ class TraceContext:
                 except Exception:
                     pass
 
+    def touch_heartbeat(self) -> None:
+        """刷新当前 Trace 关联的活跃任务心跳时间戳（供长耗时阶段保活）。"""
+        if _global_active_task_manager is not None and self.trace_id:
+            try:
+                if hasattr(_global_active_task_manager, "touch_heartbeat"):
+                    _global_active_task_manager.touch_heartbeat(self.trace_id)
+                elif hasattr(_global_active_task_manager, "update_stage_sync"):
+                    _global_active_task_manager.update_stage_sync(
+                        self.trace_id, self.current_stage
+                    )
+            except Exception:
+                pass
+
     def set_context_metrics(
         self,
         raw_message_count: int,

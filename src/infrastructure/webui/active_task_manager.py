@@ -118,6 +118,20 @@ class ActiveTaskManager:
             except RuntimeError:
                 pass
 
+    def touch_heartbeat(self, task_id: str) -> bool:
+        """刷新活跃任务的最后心跳时间戳（无需广播进度事件，保持极低内存开销）。
+
+        Args:
+            task_id: 任务唯一标识。
+
+        Returns:
+            bool: 是否成功找到并刷新心跳。
+        """
+        if task_id in self._tasks:
+            self._tasks[task_id].last_heartbeat = time.time()
+            return True
+        return False
+
     async def finish_task(self, task_id: str) -> None:
         """标记任务结束并移出活跃列表"""
         async with self._lock:
@@ -190,7 +204,7 @@ class ActiveTaskManager:
     # ── Task Reaper 守护线程 ──
 
     def start_reaper(
-        self, interval_seconds: int = 30, timeout_seconds: int = 600
+        self, interval_seconds: int = 30, timeout_seconds: int = 180
     ) -> None:
         """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录"""
         if self.trace_store and hasattr(
