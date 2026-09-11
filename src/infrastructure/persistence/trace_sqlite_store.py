@@ -288,7 +288,9 @@ class TraceSQLiteStore:
                         float(perf_metrics.get("peak_memory_mb", 0.0)),
                         float(perf_metrics.get("final_memory_mb", 0.0)),
                         float(perf_metrics.get("delta_memory_mb", 0.0)),
-                        json.dumps(perf_metrics.get("metrics_extra", {}), ensure_ascii=False),
+                        json.dumps(
+                            perf_metrics.get("metrics_extra", {}), ensure_ascii=False
+                        ),
                     ),
                 )
 

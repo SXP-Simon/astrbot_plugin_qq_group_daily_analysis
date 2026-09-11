@@ -8,7 +8,6 @@ from collections.abc import Sized
 from typing import Generic, TypeVar
 
 from ....domain.models.data_models import TokenUsage
-from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
@@ -290,38 +289,11 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         """
         return True, data_list, None
 
-    def _save_debug_data(self, prompt: str, session_id: str):
-        """
-        保存调试数据到文件
-
-        Args:
-            prompt: 提示词内容
-            session_id: 会话ID
-        """
-        try:
-            from astrbot.api.star import StarTools
-
-            data_path = StarTools.get_data_dir(PLUGIN_NAME) / "debug_data"
-
-            data_path.mkdir(parents=True, exist_ok=True)
-
-            file_name = f"{session_id}_{self.get_data_type()}.txt"
-            file_path = data_path / file_name
-
-            logger.info(f"正在保存调试数据到: {file_path}")
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(prompt)
-
-            logger.info(f"已保存 {self.get_data_type()} 分析 Prompt 到 {file_path}")
-
-        except Exception as e:
-            logger.error(f"保存调试数据失败: {e}", exc_info=True)
-
     def _apply_persona_reinforcement(
         self, prompt: str, system_prompt: str | None
     ) -> str:
-        """
-        核心的人格强化注入逻辑。采用首尾深度注入与指令交织策略。
+        """核心的人格强化注入逻辑。采用首尾深度注入与指令交织策略。
+
         不仅强化输出口吻，更强调使用人格的逻辑视角进行分析过程。
         """
         if not system_prompt or not system_prompt.strip():
@@ -352,17 +324,14 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         self,
         data: TInputData,
         umo: str | None = None,
-        session_id: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
     ) -> tuple[list[TDataObject], TokenUsage]:
-        """
-        统一的分析流程
+        """统一的分析流程
 
         Args:
             data: 输入数据
             umo: 模型唯一标识符
-            session_id: 会话ID (用于调试模式)
             persona_id: 显式指定的人格 ID，传入时优先于常规人格选择逻辑
             prompt_override: 调用方指定的提示词模板，供支持专属模板的分析器使用
 
@@ -385,13 +354,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             logger.debug(
                 f"{self.get_data_type()}分析prompt前100字符: {prompt[:100] if prompt else 'None'}..."
             )
-
-            # 保存调试数据
-            debug_mode = self.config_manager.get_debug_mode()
-            if debug_mode and session_id and prompt:
-                self._save_debug_data(prompt, session_id)
-            elif debug_mode and not session_id:
-                logger.warning("[Debug] Debug mode enabled but no session_id provided")
 
             # 检查 prompt 是否为空
             if not prompt or not prompt.strip():
@@ -421,12 +383,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             prompt = self._apply_persona_reinforcement(prompt, system_prompt)
 
             logger.info(f"[{self.get_data_type()}分析] 开始发起 LLM 请求, umo: {umo}")
-
-            # [Debug] 记录调试信息
-            if debug_mode:
-                logger.debug(
-                    f"[Debug] debug_mode={debug_mode}, umo={umo}, session_id={session_id}, prompt_len={len(prompt) if prompt else 0}"
-                )
 
             from ....shared.trace_context import TraceContext
 

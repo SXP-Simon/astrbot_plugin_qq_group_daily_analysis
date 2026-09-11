@@ -620,10 +620,6 @@ class ConfigManager:
         """获取是否启用流式 LLM 调用"""
         return self._get_group("llm").get("enable_streaming_llm_call", False)
 
-    def get_debug_mode(self) -> bool:
-        """获取是否启用调试模式"""
-        return self._get_group("basic").get("debug_mode", False)
-
     def get_enable_base64_image(self) -> bool:
         """获取是否启用 Base64 图片传输"""
         return self._get_group("basic").get("enable_base64_image", False)

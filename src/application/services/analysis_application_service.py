@@ -290,10 +290,7 @@ class AnalysisApplicationService:
                     group_id=group_id, days=days, max_count=max_count
                 )
                 raw_data_size_kb = round(
-                    sum(
-                        len(getattr(m, "text_content", "") or "")
-                        for m in raw_messages
-                    )
+                    sum(len(getattr(m, "text_content", "") or "") for m in raw_messages)
                     / 1024,
                     2,
                 )
@@ -340,12 +337,9 @@ class AnalysisApplicationService:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
-                clean_duration_s = max(
-                    0.001, time_mod.perf_counter() - clean_start_ts
-                )
+                clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
                 cleaned_data_size_kb = round(
-                    sum(len(m.text_content or "") for m in unified_messages)
-                    / 1024,
+                    sum(len(m.text_content or "") for m in unified_messages) / 1024,
                     2,
                 )
                 dropped_cnt = max(len(raw_messages) - len(unified_messages), 0)
@@ -353,9 +347,7 @@ class AnalysisApplicationService:
                     len(unified_messages) / max(len(raw_messages), 1) * 100,
                     1,
                 )
-                cleaning_speed_mps = round(
-                    len(raw_messages) / clean_duration_s, 1
-                )
+                cleaning_speed_mps = round(len(raw_messages) / clean_duration_s, 1)
                 step.set_payload(
                     raw_count=len(raw_messages),
                     cleaned_count=len(unified_messages),

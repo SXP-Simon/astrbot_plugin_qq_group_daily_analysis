@@ -408,7 +408,9 @@ class ReportGenerator(IReportGenerator):
                 render_payload.get("avatar_reuse_registry", {}),
                 render_payload.get("avatar_reuse_aliases", {}),
             )
-            template_render_ms = round((time.perf_counter() - tpl_render_start_ts) * 1000, 2)
+            template_render_ms = round(
+                (time.perf_counter() - tpl_render_start_ts) * 1000, 2
+            )
             html_size_kb = (
                 round(len(html_content.encode("utf-8")) / 1024, 2)
                 if html_content
@@ -465,7 +467,9 @@ class ReportGenerator(IReportGenerator):
                             False,  # return_url=False，直接获取图片数据
                             image_options,
                         )
-                        t2i_render_ms = round((time.perf_counter() - t2i_start_ts) * 1000, 2)
+                        t2i_render_ms = round(
+                            (time.perf_counter() - t2i_start_ts) * 1000, 2
+                        )
 
                         if image_data:
                             # 校验是否为合法图片（防止 T2I 返回 500 错误 HTML 字符流）
@@ -527,7 +531,7 @@ class ReportGenerator(IReportGenerator):
                                         os.path.getsize(image_data)
                                         if (
                                             isinstance(image_data, str)
-                                             and os.path.exists(image_data)
+                                            and os.path.exists(image_data)
                                         )
                                         else 0
                                     )
@@ -538,7 +542,9 @@ class ReportGenerator(IReportGenerator):
                                     if isinstance(image_data, bytes):
                                         with Image.open(BytesIO(image_data)) as img:
                                             dimensions = f"{img.width}x{img.height}"
-                                    elif isinstance(image_data, str) and os.path.exists(image_data):
+                                    elif isinstance(image_data, str) and os.path.exists(
+                                        image_data
+                                    ):
                                         with Image.open(image_data) as img:
                                             dimensions = f"{img.width}x{img.height}"
                                 except Exception:

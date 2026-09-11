@@ -665,9 +665,6 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
         def get_llm_provider_id(self):
             return "test_provider"
 
-        def get_debug_mode(self):
-            return False
-
         def get_bot_self_ids(self):
             return []
 

@@ -241,7 +241,9 @@ class ReportDispatcher:
                     )
                 except Exception as e:
                     logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
-                dispatch_api_ms = round((time.perf_counter() - dispatch_start_ts) * 1000, 2)
+                dispatch_api_ms = round(
+                    (time.perf_counter() - dispatch_start_ts) * 1000, 2
+                )
 
                 # 5. 尝试上传到群文件/群相册（静默处理）
                 try:

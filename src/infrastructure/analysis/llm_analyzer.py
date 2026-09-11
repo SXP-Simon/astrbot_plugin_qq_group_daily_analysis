@@ -13,7 +13,7 @@ from ...domain.models.data_models import (
     UserTitle,
 )
 from ...domain.repositories.analysis_repository import IAnalysisProvider
-from ...shared.constants import PLUGIN_NAME, AnalysisStage
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .analyzers.chat_quality_analyzer import ChatQualityAnalyzer
@@ -57,44 +57,23 @@ class LLMAnalyzer(IAnalysisProvider):
             context, config_manager
         )
 
-    @staticmethod
-    def _make_session_id(
-        session_id: str | None, umo: str | None = None, prefix: str = ""
-    ) -> str:
-        """Generate a session ID if not already provided."""
-        if session_id:
-            return session_id
-        from datetime import datetime
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if umo:
-            safe_umo = umo.replace(":", "_")
-            return f"{prefix}{timestamp}_{safe_umo}"
-        return f"{prefix}{timestamp}"
-
     async def analyze_topics(
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
-        """
-        使用LLM分析话题
-        保持原有接口，委托给专门的TopicAnalyzer处理
+        """使用LLM分析话题
 
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
-            session_id: 会话ID (用于调试模式)
 
         Returns:
             (话题列表, Token使用统计)
         """
         try:
-            session_id = self._make_session_id(session_id, umo)
-
-            logger.info(f"开始话题分析, session_id: {session_id}")
-            return await self.topic_analyzer.analyze_topics(messages, umo, session_id)
+            logger.info("开始话题分析")
+            return await self.topic_analyzer.analyze_topics(messages, umo)
         except Exception as e:
             logger.error(f"话题分析失败: {e}")
             return [], TokenUsage()
@@ -105,28 +84,22 @@ class LLMAnalyzer(IAnalysisProvider):
         user_activity: dict,
         umo: str | None = None,
         top_users: list[dict] | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
-        """
-        使用LLM分析用户称号
-        保持原有接口，委托给专门的UserTitleAnalyzer处理
+        """使用LLM分析用户称号
 
         Args:
             messages: 群聊消息列表
             user_activity: 用户分析统计
             umo: 模型唯一标识符
             top_users: 活跃用户列表(可选)
-            session_id: 会话ID (用于调试模式)
 
         Returns:
             (用户称号列表, Token使用统计)
         """
         try:
-            session_id = self._make_session_id(session_id, umo)
-
-            logger.info(f"开始用户称号分析, session_id: {session_id}")
+            logger.info("开始用户称号分析")
             return await self.user_title_analyzer.analyze_user_titles(
-                messages, user_activity, umo, top_users, session_id
+                messages, user_activity, umo, top_users
             )
         except Exception as e:
             logger.error(f"用户称号分析失败: {e}")
@@ -136,27 +109,19 @@ class LLMAnalyzer(IAnalysisProvider):
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
-        """
-        使用LLM分析群聊金句
-        保持原有接口，委托给专门的GoldenQuoteAnalyzer处理
+        """使用LLM分析群聊金句
 
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
-            session_id: 会话ID (用于调试模式)
 
         Returns:
             (金句列表, Token使用统计)
         """
         try:
-            session_id = self._make_session_id(session_id, umo)
-
-            logger.info(f"开始金句分析, session_id: {session_id}")
-            return await self.golden_quote_analyzer.analyze_golden_quotes(
-                messages, umo, session_id
-            )
+            logger.info("开始金句分析")
+            return await self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
         except Exception as e:
             logger.error(f"金句分析失败: {e}")
             return [], TokenUsage()
@@ -165,7 +130,6 @@ class LLMAnalyzer(IAnalysisProvider):
         self,
         topics: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
     ) -> tuple[list[dict], TokenUsage]:
@@ -174,7 +138,6 @@ class LLMAnalyzer(IAnalysisProvider):
         Args:
             topics: 已提取的有效群聊话题。
             umo: 群聊统一消息来源标识。
-            session_id: 调试会话标识。
             persona_id: 漫画分镜专用人格 ID。
             prompt_template: 角色专属的漫画分镜提示词模板。
 
@@ -182,14 +145,15 @@ class LLMAnalyzer(IAnalysisProvider):
             分镜列表和 Token 使用统计。
         """
         try:
-            session_id = self._make_session_id(session_id, umo)
-
-            logger.info(f"开始漫画分镜分析, session_id: {session_id}")
+            logger.info("开始漫画分镜分析")
             (
                 storyboards,
                 usage,
             ) = await self.comic_storyboard_analyzer.analyze_storyboards(
-                topics, umo, session_id, persona_id, prompt_template
+                topics,
+                umo=umo,
+                persona_id=persona_id,
+                prompt_template=prompt_template,
             )
             trace = TraceContext.current()
             if trace and usage and usage.total_tokens > 0:
@@ -207,13 +171,10 @@ class LLMAnalyzer(IAnalysisProvider):
         self,
         batch_reviews: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
-        """
-        汇总多个质量分析报告（增量模式使用）
-        """
+        """汇总多个质量分析报告（增量模式使用）"""
         return await self.chat_quality_analyzer.summarize_batch_reviews(
-            batch_reviews, umo, session_id
+            batch_reviews, umo
         )
 
     async def analyze_all_concurrent(
@@ -249,48 +210,34 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 用户称号列表, 金句列表, 总Token使用统计)
         """
         try:
-            session_id = self._make_session_id(None, umo)
-
             logger.info(
-                f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled}, 质量:{chat_quality_enabled})，会话ID: {session_id}"
+                f"开始并发执行分析任务 (话题:{topic_enabled}, 称号:{user_title_enabled}, 金句:{golden_quote_enabled}, 质量:{chat_quality_enabled})"
             )
-
-            # 保存原始消息数据 (Debug Mode)
-            if self.config_manager.get_debug_mode():
-                self._save_debug_messages(messages, session_id)
 
             # 构建并发任务列表
             tasks = []
             task_names = []
 
             if topic_enabled:
-                tasks.append(
-                    self.topic_analyzer.analyze_topics(messages, umo, session_id)
-                )
+                tasks.append(self.topic_analyzer.analyze_topics(messages, umo))
                 task_names.append("topic")
 
             if user_title_enabled:
                 tasks.append(
                     self.user_title_analyzer.analyze_user_titles(
-                        messages, user_activity, umo, top_users, session_id
+                        messages, user_activity, umo, top_users
                     )
                 )
                 task_names.append("user_title")
 
             if golden_quote_enabled:
                 tasks.append(
-                    self.golden_quote_analyzer.analyze_golden_quotes(
-                        messages, umo, session_id
-                    )
+                    self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
                 )
                 task_names.append("golden_quote")
 
             if chat_quality_enabled:
-                tasks.append(
-                    self.chat_quality_analyzer.analyze_quality(
-                        messages, umo, session_id
-                    )
-                )
+                tasks.append(self.chat_quality_analyzer.analyze_quality(messages, umo))
                 task_names.append("chat_quality")
 
             if not tasks:
@@ -480,18 +427,12 @@ class LLMAnalyzer(IAnalysisProvider):
             (话题列表, 金句列表, 总Token使用统计)
         """
         try:
-            session_id = self._make_session_id(None, umo, "incr_")
-
             logger.info(
                 f"开始增量并发分析 (话题:{topic_enabled}/{topics_per_batch}, 金句:{golden_quote_enabled}/{quotes_per_batch}, 质量锐评:{chat_quality_enabled})，"
-                f"消息数量: {len(messages)}，会话ID: {session_id}"
+                f"消息数量: {len(messages)}"
             )
 
-            # 保存原始消息数据 (Debug Mode)
-            if self.config_manager.get_debug_mode():
-                self._save_debug_messages(messages, session_id)
-
-            # 设置增量模式的最大数量覆盖值
+            # 设置增量模式的模型最大数量覆盖值
             self.topic_analyzer._incremental_max_count = topics_per_batch
             self.golden_quote_analyzer._incremental_max_count = quotes_per_batch
 
@@ -501,24 +442,18 @@ class LLMAnalyzer(IAnalysisProvider):
                 task_names = []
 
                 if topic_enabled:
-                    tasks.append(
-                        self.topic_analyzer.analyze_topics(messages, umo, session_id)
-                    )
+                    tasks.append(self.topic_analyzer.analyze_topics(messages, umo))
                     task_names.append("topic")
 
                 if golden_quote_enabled:
                     tasks.append(
-                        self.golden_quote_analyzer.analyze_golden_quotes(
-                            messages, umo, session_id
-                        )
+                        self.golden_quote_analyzer.analyze_golden_quotes(messages, umo)
                     )
                     task_names.append("golden_quote")
 
                 if chat_quality_enabled:
                     tasks.append(
-                        self.chat_quality_analyzer.analyze_quality(
-                            messages, umo, session_id
-                        )
+                        self.chat_quality_analyzer.analyze_quality(messages, umo)
                     )
                     task_names.append("chat_quality")
 
@@ -661,28 +596,6 @@ class LLMAnalyzer(IAnalysisProvider):
                         )
                         break
             return [], [], TokenUsage(), None
-
-    def _save_debug_messages(self, messages: list[dict], session_id: str):
-        """
-        保存调试消息数据到文件（Debug Mode 专用）
-
-        Args:
-            messages: 群聊消息列表
-            session_id: 会话ID
-        """
-        try:
-            import json
-
-            from astrbot.api.star import StarTools
-
-            debug_dir = StarTools.get_data_dir(PLUGIN_NAME) / "debug_data"
-            debug_dir.mkdir(parents=True, exist_ok=True)
-
-            msg_file_path = debug_dir / f"{session_id}_messages.json"
-            with open(msg_file_path, "w", encoding="utf-8") as f:
-                json.dump(messages, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
 
     # 向后兼容的方法，保持原有调用方式
     async def _call_provider_with_retry(
