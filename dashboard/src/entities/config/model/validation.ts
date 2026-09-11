@@ -27,8 +27,9 @@ export function buildFieldZodSchema(
   fieldKey: string,
   field: SchemaFieldItem
 ): z.ZodType {
-  // 1. 下拉选项校验（排除可自定义的 report_template）
+  // 1. 单选下拉选项校验（排除 list 多选类型以及可自定义的 report_template）
   if (
+    field.type !== "list" &&
     Array.isArray(field.options) &&
     field.options.length > 0 &&
     fieldKey !== "report_template" &&
