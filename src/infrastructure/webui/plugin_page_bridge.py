@@ -2073,7 +2073,7 @@ class PluginPageWebUIBridge:
                 else {"count": 0, "size_bytes": 0}
             )
 
-            # 自定义 T2I 模板备份
+            # 自定义报告模板
             custom_tmpl_dir = data_dir / "custom_t2i_templates" if data_dir else None
             custom_tmpl_stats = (
                 self._dir_stats(custom_tmpl_dir)
@@ -2211,7 +2211,7 @@ class PluginPageWebUIBridge:
             return error_response(str(e), status_code=500)
 
     async def api_clear_custom_templates(self) -> Any:
-        """清空用户自定义 T2I 模板备份目录"""
+        """清空用户自定义报告模板目录"""
         try:
             import shutil
 
@@ -2222,10 +2222,10 @@ class PluginPageWebUIBridge:
             count = sum(1 for p in custom_tmpl_dir.rglob("*") if p.is_file())
             shutil.rmtree(custom_tmpl_dir, ignore_errors=True)
             custom_tmpl_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"[plugin-data] 已清空自定义模板，删除 {count} 个文件")
+            logger.info(f"[plugin-data] 已清空自定义报告模板，删除 {count} 个文件")
             return json_response({"status": "ok", "data": {"deleted": count}})
         except Exception as e:
-            logger.error(f"清空自定义模板异常: {e}", exc_info=True)
+            logger.error(f"清空自定义报告模板异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
     async def api_clear_config_files(self) -> Any:

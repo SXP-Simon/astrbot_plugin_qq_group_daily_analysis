@@ -328,7 +328,7 @@ export function usePluginDataViewModel() {
     clearReports: () => runClear("reports", clearReports, "历史报告"),
     clearTempFiles: () => runClear("temp_files", clearTempFiles, "临时渲染缓存"),
     clearCustomTemplates: () =>
-      runClear("custom_templates", clearCustomTemplates, "自定义模板备份"),
+      runClear("custom_templates", clearCustomTemplates, "自定义报告模板"),
     clearConfigFiles: () =>
       runClear("config_files", clearConfigFiles, "配置参考素材"),
     clearConfigBackups: () =>

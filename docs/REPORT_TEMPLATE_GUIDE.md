@@ -11,13 +11,10 @@
 
 | 形态 | 位置 | 说明 |
 | --- | --- | --- |
-| **内置模板** | 插件目录 `src/infrastructure/reporting/templates/<模板名>/` | 随插件分发，跟随版本升级 |
-| **自定义模板** | 插件数据目录 `data/plugin_data/astrbot_plugin_qq_group_daily_analysis/custom_t2i_templates/reporting_templates/<模板名>/` | 用户通过 WebUI「安装模板」在线安装，或手动放入 |
+| **内置模板** | 插件目录 `src/infrastructure/reporting/templates/<模板名>/` | 随插件分发，跟随版本升级统一维护 |
+| **自定义模板** | 插件数据目录 `data/plugin_data/astrbot_plugin_qq_group_daily_analysis/custom_t2i_templates/reporting_templates/<模板名>/` | 用户通过 WebUI「安装模板」在线安装，或手动放入独立主题目录 |
 
-两条路径**按模板名共同作用于渲染**：同名的自定义目录优先于内置目录
-（用于“覆盖修改内置模板”），同名内置模板没有的局部文件会向自定义目录回退后再回退
-默认手账模板（详见 §4）。模板放入后**无需重启机器人**，
-在「断点续跑」「免 Token 切换主题重绘」及 `/查看模板` 中即时可见。
+官方内置模板始终优先由源码统一提供并渲染，自定义模板用于承载第三方独立主题；自定义主题若未提供完整子组件，会自动向默认手账模板（`scrapbook`）优雅兜底（详见 §4）。模板放入后**无需重启机器人**，在「断点续跑」「免 Token 切换主题重绘」及 `/查看模板` 中即时可见。
 
 > 安装以自定义形态落到数据目录，**升级插件不会被删除**（插件本体在
 > `data/plugins/`，与数据目录分离）。

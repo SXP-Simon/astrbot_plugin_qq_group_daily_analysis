@@ -217,13 +217,13 @@ export const PluginDataPage: React.FC = () => {
     },
     {
       key: "custom_templates",
-      name: "自定义模板备份",
+      name: "自定义报告模板",
       icon: <AppstoreOutlined style={{ color: "#722ed1" }} />,
-      pathTag: "plugin_data/custom_t2i_templates/",
+      pathTag: "plugin_data/custom_t2i_templates/reporting_templates/",
       count: overview.custom_templates.count,
       sizeBytes: overview.custom_templates.size_bytes,
-      description: "用户个性化修改过的 T2I 报告模板备份与覆盖文件。",
-      impactNotice: "清理后自定义模板备份将重置，插件升级后将自动还原为官方默认样式。",
+      description: "用户安装或上传的第三方/自定义 T2I 报告主题模板。",
+      impactNotice: "清理后已安装的自定义报告模板将被移除，报告将使用官方内置主题渲染。",
       clearKey: "custom_templates",
       onClear: vm.clearCustomTemplates,
     },
@@ -669,7 +669,7 @@ export const PluginDataPage: React.FC = () => {
               key: "partitions",
               label: (
                 <span>
-                  <FolderOpenOutlined /> 存储空间全景
+                  <FolderOpenOutlined /> 存储空间概览
                 </span>
               ),
             },
@@ -770,7 +770,7 @@ export const PluginDataPage: React.FC = () => {
               <Space size={8}>
                 <FolderOpenOutlined style={{ color: "#2563eb" }} />
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
-                  存储空间全景与分区独立管理
+                  存储分区明细与管理
                 </span>
                 <Tag
                   color="blue"
