@@ -136,15 +136,12 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
-        """
-        分析群聊金句
+        """分析群聊金句
 
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
-            session_id: 会话ID (用于调试模式)
 
         Returns:
             (金句列表, Token使用统计)
@@ -158,7 +155,7 @@ class GoldenQuoteAnalyzer(BaseAnalyzer[GoldenQuote, list[dict]]):
                 return [], TokenUsage()
 
             logger.info(f"开始从 {len(interesting_messages)} 条圣经消息中提取金句")
-            quotes, usage = await self.analyze(interesting_messages, umo, session_id)
+            quotes, usage = await self.analyze(interesting_messages, umo)
 
             # 建立 ID 到昵称的映射表用于恢复显示
             id_to_nickname = {}

@@ -78,6 +78,22 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
 
   if (!payload) return null;
 
+  const renderMemoryPill = () => {
+    if (payload.delta_memory_mb !== undefined && payload.delta_memory_mb !== null) {
+      const delta = Number(payload.delta_memory_mb);
+      const isIncrease = delta > 0;
+      return (
+        <MetricPill
+          isDark={isDark}
+          label="内存RSS"
+          value={`${isIncrease ? `+${delta.toFixed(1)}` : delta.toFixed(1)} MB`}
+          status={delta > 15 ? "warning" : "default"}
+        />
+      );
+    }
+    return null;
+  };
+
   switch (stageName) {
     case "FETCH_MESSAGES":
       return (
@@ -91,6 +107,13 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.max_count !== undefined && (
             <MetricPill isDark={isDark} label="最大限制" value={`${Number(payload.max_count)} 条`} />
           )}
+          {payload.raw_data_size_kb !== undefined && Number(payload.raw_data_size_kb) > 0 && (
+            <MetricPill isDark={isDark} label="原始体量" value={`${Number(payload.raw_data_size_kb)} KB`} />
+          )}
+          {Boolean(payload.source) && (
+            <MetricPill isDark={isDark} label="平台源" value={String(payload.source)} isMono={false} />
+          )}
+          {renderMemoryPill()}
         </div>
       );
 
@@ -114,6 +137,13 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
               status={Number(payload.retention_rate) > 40 ? "success" : "default"}
             />
           )}
+          {payload.cleaning_speed_mps !== undefined && Number(payload.cleaning_speed_mps) > 0 && (
+            <MetricPill isDark={isDark} label="清洗速度" value={`${Number(payload.cleaning_speed_mps).toLocaleString()} 条/秒`} />
+          )}
+          {payload.cleaned_data_size_kb !== undefined && Number(payload.cleaned_data_size_kb) > 0 && (
+            <MetricPill isDark={isDark} label="净化体量" value={`${Number(payload.cleaned_data_size_kb)} KB`} />
+          )}
+          {renderMemoryPill()}
         </div>
       );
 
@@ -135,13 +165,15 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.emoji_count !== undefined && (
             <MetricPill isDark={isDark} label="表情总数" value={`${Number(payload.emoji_count)} 个`} />
           )}
+          {renderMemoryPill()}
         </div>
       );
 
     case "CHECKPOINT_RESTORE":
       return (
-        <div style={{ marginBottom: 6 }}>
+        <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
           <MetricPill isDark={isDark} label="快照恢复" value="已恢复前置清洗与基础统计快照，免重复拉取" isMono={false} status="success" />
+          {renderMemoryPill()}
         </div>
       );
 
@@ -160,6 +192,7 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.checkpoint_saved) && (
             <MetricPill isDark={isDark} label="快照存储" value="成功 (可免 Token 重绘)" isMono={false} status="success" />
           )}
+          {renderMemoryPill()}
         </div>
       );
 
@@ -172,8 +205,20 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.template) && (
             <MetricPill isDark={isDark} label="主题" value={String(payload.template)} isMono={false} />
           )}
+          {payload.html_size_kb !== undefined && Number(payload.html_size_kb) > 0 && (
+            <MetricPill isDark={isDark} label="HTML源码" value={`${Number(payload.html_size_kb)} KB`} />
+          )}
+          {payload.template_render_ms !== undefined && Number(payload.template_render_ms) > 0 && (
+            <MetricPill isDark={isDark} label="模板耗时" value={`${Number(payload.template_render_ms)} ms`} />
+          )}
+          {payload.t2i_render_ms !== undefined && Number(payload.t2i_render_ms) > 0 && (
+            <MetricPill isDark={isDark} label="T2I耗时" value={`${Number(payload.t2i_render_ms)} ms`} />
+          )}
+          {Boolean(payload.dimensions) && (
+            <MetricPill isDark={isDark} label="分辨率" value={String(payload.dimensions)} />
+          )}
           {payload.image_bytes !== undefined && Number(payload.image_bytes) > 0 && (
-            <MetricPill isDark={isDark} label="体积" value={`${(Number(payload.image_bytes) / 1024).toFixed(1)} KB`} />
+            <MetricPill isDark={isDark} label="图片体积" value={`${(Number(payload.image_bytes) / 1024).toFixed(1)} KB`} />
           )}
           {payload.render_attempt !== undefined && (
             <MetricPill isDark={isDark} label="轮次" value={`第 ${Number(payload.render_attempt)} 轮`} />
@@ -193,6 +238,7 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {Boolean(payload.hide_user_names) && (
             <MetricPill isDark={isDark} label="隐私保护" value="匿名模式" isMono={false} />
           )}
+          {renderMemoryPill()}
         </div>
       );
 
@@ -201,6 +247,28 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
           {Boolean(payload.platform) && (
             <MetricPill isDark={isDark} label="目标平台" value={String(payload.platform)} isMono={false} />
+          )}
+          {Boolean(payload.transmission_mode) && (
+            <MetricPill
+              isDark={isDark}
+              label="传输协议"
+              value={payload.transmission_mode === "base64" ? "Base64 数据流" : "本地物理路径"}
+              isMono={false}
+            />
+          )}
+          {Boolean(payload.bloat_ratio) && (
+            <MetricPill
+              isDark={isDark}
+              label="数据膨胀"
+              value={String(payload.bloat_ratio)}
+              status="warning"
+            />
+          )}
+          {payload.base64_payload_kb !== undefined && Number(payload.base64_payload_kb) > 0 && (
+            <MetricPill isDark={isDark} label="传输载荷" value={`${Number(payload.base64_payload_kb)} KB`} />
+          )}
+          {payload.dispatch_api_ms !== undefined && Number(payload.dispatch_api_ms) > 0 && (
+            <MetricPill isDark={isDark} label="API耗时" value={`${Number(payload.dispatch_api_ms)} ms`} />
           )}
           {(Boolean(payload.format) || Boolean(payload.formats)) && (
             <MetricPill
@@ -237,6 +305,7 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
               status={payload.html_sent ? "success" : "default"}
             />
           )}
+          {renderMemoryPill()}
         </div>
       );
 

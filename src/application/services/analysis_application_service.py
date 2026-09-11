@@ -289,10 +289,24 @@ class AnalysisApplicationService:
                 raw_messages = await adapter.fetch_messages(
                     group_id=group_id, days=days, max_count=max_count
                 )
+                raw_data_size_kb = round(
+                    sum(
+                        len(
+                            (getattr(m, "text_content", "") or "").encode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        for m in raw_messages
+                    )
+                    / 1024,
+                    2,
+                )
                 step.set_payload(
                     days=days,
                     max_count=max_count,
                     fetched_count=len(raw_messages),
+                    raw_data_size_kb=raw_data_size_kb,
+                    source=str(actual_platform or platform_id or "onebot"),
                 )
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
@@ -326,17 +340,36 @@ class AnalysisApplicationService:
 
             # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
             async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
+                clean_start_ts = time_mod.perf_counter()
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
+                clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
+                cleaned_data_size_kb = round(
+                    sum(
+                        len(
+                            (getattr(m, "text_content", "") or "").encode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        for m in unified_messages
+                    )
+                    / 1024,
+                    2,
+                )
+                dropped_cnt = max(len(raw_messages) - len(unified_messages), 0)
+                retention = round(
+                    len(unified_messages) / max(len(raw_messages), 1) * 100,
+                    1,
+                )
+                cleaning_speed_mps = round(len(raw_messages) / clean_duration_s, 1)
                 step.set_payload(
                     raw_count=len(raw_messages),
                     cleaned_count=len(unified_messages),
-                    dropped_count=max(len(raw_messages) - len(unified_messages), 0),
-                    retention_rate=round(
-                        len(unified_messages) / max(len(raw_messages), 1) * 100,
-                        1,
-                    ),
+                    dropped_count=dropped_cnt,
+                    retention_rate=retention,
+                    cleaned_data_size_kb=cleaned_data_size_kb,
+                    cleaning_speed_mps=cleaning_speed_mps,
                     bot_filter_enabled=bool(
                         self.config_manager.get_filter_bot_messages()
                     ),

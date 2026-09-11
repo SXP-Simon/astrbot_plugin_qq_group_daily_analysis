@@ -14,13 +14,24 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
 
 # 用于匹配报告 Caption 中去重 Token 的正则模式
 REPORT_CAPTION_PATTERN = re.compile(r"\| (\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+
+
+def _get_process_rss_mb() -> float:
+    """获取当前 Python 进程常驻内存集 (RSS, MB)。"""
+    try:
+        import psutil
+
+        return round(psutil.Process().memory_info().rss / (1024 * 1024), 2)
+    except Exception:
+        return 0.0
+
 
 # 当前追踪的上下文变量
 _current_trace: ContextVar[TraceContext | None] = ContextVar(
@@ -38,7 +49,7 @@ class TraceContext:
     """
     核心组件：全链路追踪上下文 (Tracing Context)
 
-    集成 TraceId 传递、Span 级细粒度耗时打点、dsh-context 风格的上下文演进与 Token 审计。
+    集成 TraceId 传递、Span 级细粒度耗时与内存增量打点、dsh-context 风格的上下文演进与 Token 审计。
     """
 
     trace_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -67,6 +78,19 @@ class TraceContext:
     # dsh-context 上下文演进指标
     _context_metrics: dict[str, Any] | None = field(default=None, init=False)
 
+    # 遥测开关 (类级别默认 True)
+    _enable_metrics: ClassVar[bool] = True
+
+    # 运行期内存性能监控 (RSS MB)
+    _init_memory_mb: float = field(default=0.0, init=False)
+    _peak_memory_mb: float = field(default=0.0, init=False)
+    _final_memory_mb: float = field(default=0.0, init=False)
+
+    def __post_init__(self) -> None:
+        init_rss = _get_process_rss_mb() if self._enable_metrics else 0.0
+        self._init_memory_mb = init_rss
+        self._peak_memory_mb = init_rss
+
     # Token 消耗与成本审计
     _token_usage: dict[str, Any] = field(
         default_factory=lambda: {
@@ -82,6 +106,16 @@ class TraceContext:
     # 传统锚点兼容
     _checkpoints: dict[str, datetime] = field(default_factory=dict, init=False)
     _token: Token | None = field(default=None, init=False, repr=False)
+
+    @classmethod
+    def set_metrics_enabled(cls, enabled: bool) -> None:
+        """设置全链路运行时指标遥测开关"""
+        cls._enable_metrics = enabled
+
+    @classmethod
+    def is_metrics_enabled(cls) -> bool:
+        """检查全链路运行时指标遥测是否启用"""
+        return cls._enable_metrics
 
     @classmethod
     def set_global_store(cls, store: Any) -> None:
@@ -121,7 +155,7 @@ class TraceContext:
         self, stage_name: Any, payload: dict[str, Any] | None = None
     ) -> Generator[dict[str, Any]]:
         """
-        创建一个细粒度 Span 上下文，自动记录该步骤耗时与执行状态。
+        创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
 
         Args:
             stage_name: 阶段名称，如 AnalysisStage.FETCH_MESSAGES 或字符串
@@ -139,6 +173,10 @@ class TraceContext:
                 pass
 
         start_ts = time.time()
+        start_mem = _get_process_rss_mb() if self._enable_metrics else 0.0
+        if start_mem > self._peak_memory_mb:
+            self._peak_memory_mb = start_mem
+
         span_id = f"{self.trace_id}_{stage_str}_{len(self._spans) + 1}"
         span_record: dict[str, Any] = {
             "span_id": span_id,
@@ -147,6 +185,9 @@ class TraceContext:
             "status": "running",
             "started_at": start_ts,
             "duration_ms": None,
+            "start_memory_mb": start_mem,
+            "end_memory_mb": None,
+            "delta_memory_mb": None,
             "payload": payload or {},
         }
         self._spans.append(span_record)
@@ -160,7 +201,24 @@ class TraceContext:
             span_record.setdefault("payload", {})["error"] = str(exc)
             raise
         finally:
-            span_record["duration_ms"] = round((time.time() - start_ts) * 1000, 2)
+            end_ts = time.time()
+            end_mem = _get_process_rss_mb() if self._enable_metrics else 0.0
+            if end_mem > self._peak_memory_mb:
+                self._peak_memory_mb = end_mem
+
+            span_record["duration_ms"] = round((end_ts - start_ts) * 1000, 2)
+            span_record["end_memory_mb"] = end_mem
+            span_record["delta_memory_mb"] = round(end_mem - start_mem, 2)
+
+            # 同步填充到 payload 字典供前端组件灵活读取
+            p = span_record.setdefault("payload", {})
+            if "start_memory_mb" not in p:
+                p["start_memory_mb"] = start_mem
+            if "end_memory_mb" not in p:
+                p["end_memory_mb"] = end_mem
+            if "delta_memory_mb" not in p:
+                p["delta_memory_mb"] = span_record["delta_memory_mb"]
+
             if self.status != "running" and _global_trace_store is not None:
                 try:
                     _global_trace_store.save_trace(self.to_dict())
@@ -270,6 +328,10 @@ class TraceContext:
         self.status = status
         self.completed_at = time.time()
         self.duration_ms = round((self.completed_at - self.started_at) * 1000, 2)
+        self._final_memory_mb = _get_process_rss_mb() if self._enable_metrics else 0.0
+        if self._final_memory_mb > self._peak_memory_mb:
+            self._peak_memory_mb = self._final_memory_mb
+
         if error_stage:
             self.error_stage = error_stage
         if error_message:
@@ -299,6 +361,9 @@ class TraceContext:
 
     def to_dict(self) -> dict[str, Any]:
         """将完整链路快照序列化为字典"""
+        curr_mem = self._final_memory_mb or (
+            _get_process_rss_mb() if self._enable_metrics else 0.0
+        )
         return {
             "trace_id": self.trace_id,
             "group_id": self.group_id,
@@ -320,6 +385,12 @@ class TraceContext:
             "extra": self.metadata,
             "spans": list(self._spans),
             "context_metrics": self._context_metrics,
+            "performance_metrics": {
+                "init_memory_mb": self._init_memory_mb,
+                "peak_memory_mb": self._peak_memory_mb,
+                "final_memory_mb": curr_mem,
+                "delta_memory_mb": round(curr_mem - self._init_memory_mb, 2),
+            },
             "token_usage": self._token_usage,
             "checkpoints": {k: v.isoformat() for k, v in self._checkpoints.items()},
         }

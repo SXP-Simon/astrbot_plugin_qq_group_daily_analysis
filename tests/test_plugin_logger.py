@@ -1,5 +1,6 @@
 import inspect
 import logging
+import os
 
 from src.infrastructure.logging.plugin_log_buffer import (
     PluginLogBuffer,
@@ -27,7 +28,7 @@ def test_plugin_logger_records_business_call_site(monkeypatch):
     logger_module.logger.info("记录真实业务调用位置")
 
     assert len(records) == 1
-    assert records[0].pathname == __file__
+    assert os.path.normcase(records[0].pathname) == os.path.normcase(__file__)
     assert records[0].lineno == expected_line
 
     # 验证插件内部 log_buffer 也准确捕获了代码点与行号

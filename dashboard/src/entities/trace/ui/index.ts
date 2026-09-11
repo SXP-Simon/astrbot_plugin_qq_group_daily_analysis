@@ -6,3 +6,4 @@ export * from "./RenderAttemptsTable";
 export * from "./PromptsInspector";
 export * from "./SpanPayloadViewer";
 export * from "./StageMetricsBadges";
+export * from "./TraceMetricsChart";
