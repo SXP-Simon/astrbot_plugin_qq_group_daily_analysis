@@ -200,7 +200,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
           if (pipelineMode === "effective" && attemptsCount > 1) {
             retryHtml = `
               <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed ${isDark ? "#30363d" : "#e2e8f0"}; font-size: 11px; color: #ea580c;">
-                ⚠️ 该阶段共执行 <b>${attemptsCount}</b> 次 (累计前序重试损耗: ${(retryOverhead / 1000).toFixed(2)}s)
+                ⚠️ 该阶段共执行 <b>${attemptsCount}</b> 次 (累计前序重试损耗: ${formatDuration(retryOverhead)})
               </div>
             `;
           }
@@ -628,7 +628,7 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
         }}
       >
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
-          有效耗时: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{trace.duration_ms ? `${(trace.duration_ms / 1000).toFixed(2)}s` : "计算中"}</b>
+          有效耗时: <b style={{ color: isDark ? "#f0f6fc" : "#0f172a", fontFamily: "monospace" }}>{trace.duration_ms ? formatDuration(trace.duration_ms) : "计算中"}</b>
         </span>
         <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
         <span style={{ fontSize: 11, color: isDark ? "#8b949e" : "#64748b" }}>
@@ -645,12 +645,12 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
         {hasRetries && (
           <>
             <span style={{ color: isDark ? "#30363d" : "#e2e8f0" }}>|</span>
-            <Tooltip title={`检测到任务包含断点续跑或阶段重试 (${retrySummary.summaryText})，累计产生约 ${(retrySummary.totalOverheadMs / 1000).toFixed(2)}s 前序重试开销`}>
+            <Tooltip title={`检测到任务包含断点续跑或阶段重试 (${retrySummary.summaryText})，累计产生约 ${formatDuration(retrySummary.totalOverheadMs)} 前序重试开销`}>
               <Tag
                 color="volcano"
                 style={{ margin: 0, padding: "0 6px", fontSize: 10, lineHeight: "16px", height: 16, cursor: "pointer" }}
               >
-                重试损耗: +{(retrySummary.totalOverheadMs / 1000).toFixed(1)}s ({retrySummary.retriedStages.length}个阶段发生重试)
+                重试损耗: +{formatDuration(retrySummary.totalOverheadMs)} ({retrySummary.retriedStages.length}个阶段发生重试)
               </Tag>
             </Tooltip>
           </>
