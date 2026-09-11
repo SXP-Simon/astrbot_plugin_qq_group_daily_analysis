@@ -307,7 +307,8 @@ def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog, c
     assert "group=group-1" in messages
     assert "stage=full_manual" in messages
     assert "area=话题" in messages
-    assert "Provider" in messages
+    assert "provider=provider-a" in messages
+    assert "LLM 阻塞诊断" in messages
     assert "block_point=context.llm_generate" in messages
 
 
