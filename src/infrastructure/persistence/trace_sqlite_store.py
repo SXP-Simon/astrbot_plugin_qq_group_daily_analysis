@@ -82,12 +82,36 @@ class TraceSQLiteStore:
                     FOREIGN KEY (trace_id) REFERENCES analysis_traces(trace_id) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS performance_metrics (
+                    trace_id TEXT PRIMARY KEY,
+                    init_memory_mb REAL DEFAULT 0.0,
+                    peak_memory_mb REAL DEFAULT 0.0,
+                    final_memory_mb REAL DEFAULT 0.0,
+                    delta_memory_mb REAL DEFAULT 0.0,
+                    metrics_json TEXT DEFAULT '{}',
+                    FOREIGN KEY (trace_id) REFERENCES analysis_traces(trace_id) ON DELETE CASCADE
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_traces_started_at ON analysis_traces(started_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_traces_group_id ON analysis_traces(group_id);
                 CREATE INDEX IF NOT EXISTS idx_traces_status ON analysis_traces(status);
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
                 """
             )
+            # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
+            try:
+                cols = [
+                    row[1]
+                    for row in conn.execute(
+                        "PRAGMA table_info(performance_metrics)"
+                    ).fetchall()
+                ]
+                if cols and "metrics_json" not in cols:
+                    conn.execute(
+                        "ALTER TABLE performance_metrics ADD COLUMN metrics_json TEXT DEFAULT '{}';"
+                    )
+            except Exception:
+                pass
 
     def save_trace(self, trace_dict: dict[str, Any]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
@@ -257,8 +281,35 @@ class TraceSQLiteStore:
                     ),
                 )
 
+            # 5. 写入 Performance Metrics
+            perf_metrics = trace_dict.get("performance_metrics")
+            if perf_metrics and isinstance(perf_metrics, dict):
+                conn.execute(
+                    """
+                    INSERT INTO performance_metrics (
+                        trace_id, init_memory_mb, peak_memory_mb, final_memory_mb, delta_memory_mb, metrics_json
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(trace_id) DO UPDATE SET
+                        init_memory_mb=excluded.init_memory_mb,
+                        peak_memory_mb=excluded.peak_memory_mb,
+                        final_memory_mb=excluded.final_memory_mb,
+                        delta_memory_mb=excluded.delta_memory_mb,
+                        metrics_json=excluded.metrics_json;
+                    """,
+                    (
+                        trace_id,
+                        float(perf_metrics.get("init_memory_mb", 0.0)),
+                        float(perf_metrics.get("peak_memory_mb", 0.0)),
+                        float(perf_metrics.get("final_memory_mb", 0.0)),
+                        float(perf_metrics.get("delta_memory_mb", 0.0)),
+                        json.dumps(
+                            perf_metrics.get("metrics_extra", {}), ensure_ascii=False
+                        ),
+                    ),
+                )
+
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
-        """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage）"""
+        """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
         with self._get_connection() as conn:
             trace_row = conn.execute(
                 "SELECT * FROM analysis_traces WHERE trace_id = ?", (trace_id,)
@@ -315,6 +366,22 @@ class TraceSQLiteStore:
                 trace_data["token_usage"] = t_data
             else:
                 trace_data["token_usage"] = None
+
+            # 查询 Performance Metrics
+            perf_row = conn.execute(
+                "SELECT * FROM performance_metrics WHERE trace_id = ?", (trace_id,)
+            ).fetchone()
+            if perf_row:
+                p_data = dict(perf_row)
+                try:
+                    p_data["metrics_extra"] = json.loads(
+                        p_data.pop("metrics_json") or "{}"
+                    )
+                except Exception:
+                    p_data["metrics_extra"] = {}
+                trace_data["performance_metrics"] = p_data
+            else:
+                trace_data["performance_metrics"] = None
 
             raw_rfiles = trace_data.get("extra", {}).get("report_files", [])
             seen_rfiles = set()

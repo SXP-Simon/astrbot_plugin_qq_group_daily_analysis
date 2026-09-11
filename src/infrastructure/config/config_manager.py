@@ -527,6 +527,10 @@ class ConfigManager:
         """获取分析天数"""
         return self._get_group("basic").get("analysis_days", 1)
 
+    def get_enable_runtime_metrics(self) -> bool:
+        """获取是否开启全链路性能指标与资源监控。"""
+        return self._get_group("basic").get("enable_runtime_metrics", True)
+
     def get_auto_analysis_time(self) -> list[str]:
         """获取自动分析时间列表"""
         group = self._get_group("auto_analysis")
@@ -615,10 +619,6 @@ class ConfigManager:
     def get_enable_streaming_llm_call(self) -> bool:
         """获取是否启用流式 LLM 调用"""
         return self._get_group("llm").get("enable_streaming_llm_call", False)
-
-    def get_debug_mode(self) -> bool:
-        """获取是否启用调试模式"""
-        return self._get_group("basic").get("debug_mode", False)
 
     def get_enable_base64_image(self) -> bool:
         """获取是否启用 Base64 图片传输"""

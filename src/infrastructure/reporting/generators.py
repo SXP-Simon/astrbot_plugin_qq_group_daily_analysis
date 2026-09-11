@@ -399,6 +399,7 @@ class ReportGenerator(IReportGenerator):
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
+            tpl_render_start_ts = time.perf_counter()
             html_content = self.html_templates.render_template(
                 "image_template.html", template_theme=template_theme, **render_payload
             )
@@ -407,13 +408,24 @@ class ReportGenerator(IReportGenerator):
                 render_payload.get("avatar_reuse_registry", {}),
                 render_payload.get("avatar_reuse_aliases", {}),
             )
+            template_render_ms = round(
+                (time.perf_counter() - tpl_render_start_ts) * 1000, 2
+            )
+            html_size_kb = (
+                round(len(html_content.encode("utf-8")) / 1024, 2)
+                if html_content
+                else 0.0
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
                 logger.error("图片报告HTML渲染失败：返回空内容")
                 return None, None
 
-            logger.debug(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+            logger.debug(
+                f"图片报告HTML渲染完成，耗时 {template_render_ms}ms, "
+                f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
+            )
 
             # 从配置中获取两轮渲染策略
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
@@ -448,11 +460,15 @@ class ReportGenerator(IReportGenerator):
                         )
 
                         # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
+                        t2i_start_ts = time.perf_counter()
                         image_data = await html_render_func(
                             html_content,  # 渲染后的HTML内容
                             {},  # 空数据字典，因为数据已包含在HTML中
                             False,  # return_url=False，直接获取图片数据
                             image_options,
+                        )
+                        t2i_render_ms = round(
+                            (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
 
                         if image_data:
@@ -521,6 +537,19 @@ class ReportGenerator(IReportGenerator):
                                     )
                                 )
 
+                                dimensions = None
+                                try:
+                                    if isinstance(image_data, bytes):
+                                        with Image.open(BytesIO(image_data)) as img:
+                                            dimensions = f"{img.width}x{img.height}"
+                                    elif isinstance(image_data, str) and os.path.exists(
+                                        image_data
+                                    ):
+                                        with Image.open(image_data) as img:
+                                            dimensions = f"{img.width}x{img.height}"
+                                except Exception:
+                                    pass
+
                                 # 上报渲染全量参数与产物指标至当前 Span
                                 trace_ctx = TraceContext.current()
                                 if trace_ctx:
@@ -543,6 +572,10 @@ class ReportGenerator(IReportGenerator):
                                                         )
                                                     ),
                                                     "image_bytes": image_size,
+                                                    "dimensions": dimensions,
+                                                    "template_render_ms": template_render_ms,
+                                                    "html_size_kb": html_size_kb,
+                                                    "t2i_render_ms": t2i_render_ms,
                                                     "topics_rendered": len(
                                                         analysis_result.get(
                                                             "topics", []
@@ -587,6 +620,7 @@ class ReportGenerator(IReportGenerator):
                                                         )
                                                     ),
                                                     "viewport": viewport_description,
+                                                    "duration_ms": t2i_render_ms,
                                                     "status": "success",
                                                 }
                                             )

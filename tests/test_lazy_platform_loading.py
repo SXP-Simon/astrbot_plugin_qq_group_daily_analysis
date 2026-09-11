@@ -61,11 +61,22 @@ def test_lazy_imports_from_platform_package():
 
 def test_importing_factory_does_not_import_sdk_modules():
     """Verify importing factory does not eagerly import heavy SDK modules."""
+    import os
     import subprocess
     import sys
+    from pathlib import Path
+
+    plugin_root = Path(__file__).resolve().parents[1]
+    astrbot_root = plugin_root.parents[2] if len(plugin_root.parents) >= 3 else None
 
     code = (
-        "import sys\n"
+        "import sys, types, logging\n"
+        "astrbot = types.ModuleType('astrbot')\n"
+        "astrbot_api = types.ModuleType('astrbot.api')\n"
+        "astrbot_api.logger = logging.getLogger('astrbot-test')\n"
+        "astrbot.api = astrbot_api\n"
+        "sys.modules.setdefault('astrbot', astrbot)\n"
+        "sys.modules.setdefault('astrbot.api', astrbot_api)\n"
         "from src.infrastructure.platform.factory import PlatformAdapterFactory\n"
         "assert 'lark_oapi' not in sys.modules, 'lark_oapi should not be imported'\n"
         "assert 'discord' not in sys.modules, 'discord should not be imported'\n"
@@ -74,10 +85,17 @@ def test_importing_factory_does_not_import_sdk_modules():
         "assert 'src.infrastructure.platform.adapters.telegram_adapter' not in sys.modules\n"
         "print('OK')\n"
     )
+    env = os.environ.copy()
+    search_paths = [str(plugin_root)]
+    if astrbot_root and astrbot_root.exists():
+        search_paths.append(str(astrbot_root))
+    search_paths.extend(sys.path)
+    env["PYTHONPATH"] = os.pathsep.join(search_paths)
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        env=env,
     )
     assert result.returncode == 0, f"Subprocess failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
     assert "OK" in result.stdout
