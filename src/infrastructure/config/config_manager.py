@@ -527,6 +527,10 @@ class ConfigManager:
         """获取分析天数"""
         return self._get_group("basic").get("analysis_days", 1)
 
+    def get_enable_runtime_metrics(self) -> bool:
+        """获取是否开启全链路性能指标与资源监控。"""
+        return self._get_group("basic").get("enable_runtime_metrics", True)
+
     def get_auto_analysis_time(self) -> list[str]:
         """获取自动分析时间列表"""
         group = self._get_group("auto_analysis")

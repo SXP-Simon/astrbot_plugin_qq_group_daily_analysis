@@ -63,6 +63,12 @@
                 "default": true,
                 "hint": "在分析中优先使用用户的群名片作为昵称显示"
             },
+            "enable_runtime_metrics": {
+                "type": "bool",
+                "description": "全链路性能指标与资源监控",
+                "default": true,
+                "hint": "开启后，插件将在分析任务执行全生命周期中精确采集各阶段耗时瀑布、进程内存增量(RSS)、I/O吞吐与Base64传输体积膨胀比，并在前端任务详情抽屉中呈现专属可视化 ECharts 图表。"
+            },
             "output_format": {
                 "type": "list",
                 "description": "输出格式（可多选）",
