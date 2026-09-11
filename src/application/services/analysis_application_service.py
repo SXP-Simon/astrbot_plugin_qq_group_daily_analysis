@@ -241,6 +241,8 @@ class AnalysisApplicationService:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
             # 确立并回填实际运行的真实平台标识 (Real Platform Identity: 优先使用具体平台实例 ID 如 nuits)
+            # 【架构说明】：'default' 仅为 AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）。
+            # 系统优先使用适配器实际注册的实例标识，若无则使用 adapter 属性或传入的 platform_id。
             actual_platform = (
                 (
                     self.bot_manager.get_adapter_platform_id(adapter)
@@ -249,11 +251,7 @@ class AnalysisApplicationService:
                 )
                 or getattr(adapter, "platform_id", "")
                 or getattr(adapter, "platform_name", "")
-                or (
-                    platform_id
-                    if platform_id and platform_id not in ("auto", "default", "all")
-                    else ""
-                )
+                or (platform_id or "")
             )
             if trace and actual_platform:
                 trace.platform = str(actual_platform)
@@ -306,12 +304,12 @@ class AnalysisApplicationService:
                     max_count=max_count,
                     fetched_count=len(raw_messages),
                     raw_data_size_kb=raw_data_size_kb,
-                    source=str(actual_platform or platform_id or "onebot"),
+                    source=str(actual_platform or platform_id or ""),
                 )
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
-                platform_id or "default",
+                actual_platform or platform_id or "unknown",
                 len(raw_messages),
                 days,
                 max_count,
@@ -382,7 +380,7 @@ class AnalysisApplicationService:
             logger.info(
                 "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
                 group_id,
-                platform_id or "default",
+                actual_platform or platform_id or "unknown",
                 len(unified_messages),
                 max(len(raw_messages) - len(unified_messages), 0),
             )

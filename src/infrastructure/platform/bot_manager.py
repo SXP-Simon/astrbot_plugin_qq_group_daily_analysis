@@ -30,7 +30,9 @@ class BotManager:
         self._bot_self_ids: list[str] = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
         self._context: object | None = None
         self._is_initialized = False
-        self._default_platform = "default"  # 默认平台
+        self._default_platform = (
+            "default"  # AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）
+        )
         self._plugin_instance: object | None = None  # 插件实例引用，用于适配器回调
 
     def set_context(self, context):

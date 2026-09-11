@@ -497,6 +497,7 @@ class GroupDailyAnalysis(Star):
                 and hasattr(event.platform_meta, "id")
             ):
                 return event.platform_meta.id
+            # 注意: 此处回退 "default" 仅用于兼容未提供平台元数据的历史 AstrBot 初始默认命名实例，并不代表业务上的全局默认平台
             return "default"
 
     # ================================================================
