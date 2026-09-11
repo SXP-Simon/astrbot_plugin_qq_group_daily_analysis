@@ -23,6 +23,7 @@ import {
   UploadOutlined,
   DeleteOutlined,
   EyeOutlined,
+  ExclamationCircleFilled,
 } from "@ant-design/icons";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
@@ -116,6 +117,8 @@ interface FieldRendererProps {
   personas?: AvailablePersona[];
   isSubField?: boolean;
   fullKeyPath?: string;
+  error?: string;
+  subErrors?: Record<string, string>;
   onChange: (val: unknown) => void;
 }
 
@@ -127,6 +130,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   personas = [],
   isSubField = false,
   fullKeyPath,
+  error,
+  subErrors,
   onChange,
 }) => {
   const { token } = theme.useToken();
@@ -199,6 +204,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             if (subField.invisible || subField.hidden) return null;
             const subValue =
               objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
+            const subKeyPath = `${fullKeyPath || fieldKey}.${subKey}`;
+            const subErrorMsg =
+              subErrors?.[subKey] || subErrors?.[subKeyPath] || undefined;
 
             return (
               <FieldRenderer
@@ -209,7 +217,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 providers={providers}
                 personas={personas}
                 isSubField={true}
-                fullKeyPath={`${fullKeyPath || fieldKey}.${subKey}`}
+                fullKeyPath={subKeyPath}
+                error={subErrorMsg}
                 onChange={(newSubVal) => {
                   const nextObj = { ...objVal, [subKey]: newSubVal };
                   onChange(nextObj);
@@ -246,6 +255,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           options={providerOptions}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
+          status={error ? "error" : undefined}
           filterOption={(inputValue, option) =>
             String(option?.label || "")
               .toLowerCase()
@@ -261,6 +271,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             }
             placeholder="从下拉列表选择已有 Provider，或直接输入 ID"
             allowClear
+            status={error ? "error" : undefined}
             style={{ fontFamily: SANS_MONO_FONT }}
           />
         </AutoComplete>
@@ -292,6 +303,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           options={personaOptions}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
+          status={error ? "error" : undefined}
           filterOption={(inputValue, option) =>
             String(option?.label || "")
               .toLowerCase()
@@ -307,6 +319,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             }
             placeholder="从下拉列表选择已有 Persona 人设，或直接输入人设 ID"
             allowClear
+            status={error ? "error" : undefined}
             style={{ fontFamily: SANS_MONO_FONT }}
           />
         </AutoComplete>
@@ -371,6 +384,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           value={currentVal}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
+          status={error ? "error" : undefined}
           options={options.map((opt) => ({
             label: String(opt),
             value: String(opt),
@@ -392,6 +406,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           value={currentVal}
           onChange={(e) => onChange(e.target.value)}
           autoSize={{ minRows: 4, maxRows: 16 }}
+          status={error ? "error" : undefined}
           placeholder={hint || "请输入文本内容"}
           style={{
             fontFamily: SANS_MONO_FONT,
@@ -415,6 +430,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           value={numVal}
           step={type === "float" ? 0.1 : 1}
           precision={type === "float" ? 2 : 0}
+          status={error ? "error" : undefined}
           onChange={(v) => onChange(v ?? 0)}
           style={{ width: "100%", maxWidth: 240 }}
         />
@@ -457,6 +473,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           mode="multiple"
           allowClear
           style={{ width: "100%" }}
+          status={error ? "error" : undefined}
           placeholder="请选择配置项（支持多选）"
           value={selectedVals}
           onChange={(vals) => onChange(vals)}
@@ -787,6 +804,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           onChange={(e) => onChange(e.target.value)}
           placeholder={hint || `请输入 ${title}`}
           allowClear
+          status={error ? "error" : undefined}
           style={{
             fontFamily:
               fieldKey.includes("id") ||
@@ -817,6 +835,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }
         }}
         autoSize={{ minRows: 2, maxRows: 6 }}
+        status={error ? "error" : undefined}
         style={{ fontFamily: SANS_MONO_FONT, fontSize: 11 }}
       />
     );
@@ -826,22 +845,41 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     defaultValue !== undefined &&
     JSON.stringify(value) !== JSON.stringify(defaultValue);
 
+  const containerDomId = `cfg-field-${
+    fullKeyPath ? fullKeyPath.replace(/\./g, "-") : fieldKey
+  }`;
+
   return (
     <div
+      id={containerDomId}
+      data-field-key={fieldKey}
       style={{
         display: "flex",
         flexDirection: "column",
         gap: 6,
         marginBottom: isSubField ? 8 : 12,
         padding: isSubField ? "8px 10px" : "12px 14px",
-        background: isSubField ? "transparent" : token.colorBgContainer,
-        border: isSubField
-          ? `1px dashed ${token.colorBorderSecondary}`
-          : `1px solid ${token.colorBorderSecondary}`,
+        background: isSubField
+          ? "transparent"
+          : error
+            ? isDark
+              ? "rgba(255, 77, 79, 0.06)"
+              : "#fffbfb"
+            : token.colorBgContainer,
+        border: error
+          ? "1px solid #ff4d4f"
+          : isSubField
+            ? `1px dashed ${token.colorBorderSecondary}`
+            : `1px solid ${token.colorBorderSecondary}`,
         borderRadius: 6,
-        boxShadow: isSubField ? "none" : "0 1px 2px rgba(0, 0, 0, 0.02)",
+        boxShadow: error
+          ? "0 0 0 2px rgba(255, 77, 79, 0.15)"
+          : isSubField
+            ? "none"
+            : "0 1px 2px rgba(0, 0, 0, 0.02)",
         width: "100%",
         boxSizing: "border-box",
+        transition: "border-color 0.2s, box-shadow 0.2s, background 0.2s",
       }}
     >
       {/* 头部标题与恢复默认控制 */}
@@ -858,7 +896,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
             strong
             style={{
               fontSize: isSubField ? 12 : 13,
-              color: token.colorText,
+              color: error ? "#ff4d4f" : token.colorText,
               letterSpacing: "-0.2px",
             }}
           >
@@ -899,6 +937,30 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
       {/* 核心控件区域 (Full Width) */}
       <div style={{ width: "100%", marginTop: 2 }}>{renderControl()}</div>
+
+      {/* 校验错误提示条 */}
+      {error && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginTop: 4,
+            padding: "4px 8px",
+            background: isDark ? "rgba(255, 77, 79, 0.12)" : "#fff2f0",
+            border: `1px solid ${isDark ? "rgba(255, 77, 79, 0.3)" : "#ffccc7"}`,
+            borderRadius: 4,
+            fontSize: 12,
+            color: "#ff4d4f",
+            fontWeight: 500,
+          }}
+        >
+          <ExclamationCircleFilled
+            style={{ fontSize: 13, color: "#ff4d4f", flexShrink: 0 }}
+          />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* 底部详细说明文字：支持 Markdown 语法高亮与超链接渲染 */}
       {hint && (
