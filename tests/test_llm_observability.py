@@ -736,3 +736,49 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
     asyncio.run(scenario())
 
 
+def test_diagnose_llm_task_block_scenarios():
+    """测试不同协程栈特征下的 LLM 阻塞点智能诊断。"""
+    from src.infrastructure.analysis.utils.llm_utils import diagnose_llm_task_block
+
+    # 1. 任务为空时的兜底处理
+    d_none = diagnose_llm_task_block(None, 60.0)
+    assert not d_none.is_known
+    assert d_none.state == "UNKNOWN"
+
+    # 2. 模拟常规推理中等待（Upstream Response Generating）
+    async def mock_generating():
+        await asyncio.sleep(10)
+
+    async def run_generating_test():
+        task = asyncio.create_task(mock_generating())
+        await asyncio.sleep(0.001)  # 让任务进入挂起态
+        diag = diagnose_llm_task_block(task, 120.0)
+        assert diag.is_known
+        assert diag.state == "WAITING_UPSTREAM_RESPONSE"
+        assert "正在等待大模型服务端生成返回数据" in diag.status_title
+        assert "120s" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_generating_test())
+
+
+def test_plugin_log_buffer_strips_duplicate_trace_id_in_message():
+    """验证日志内存缓冲自动剔除 message 中的重复 trace_id 前缀。"""
+    from src.infrastructure.logging.plugin_log_buffer import PluginLogBuffer
+
+    buf = PluginLogBuffer()
+    entry = buf.record_log(
+        level="WARN",
+        msg="[test-trace-123] [群分析插件] [LLM 阻塞诊断] 正在等待上游响应",
+        trace_id="test-trace-123",
+    )
+    assert entry.trace_id == "test-trace-123"
+    assert entry.message == "[群分析插件] [LLM 阻塞诊断] 正在等待上游响应"
+    assert not entry.message.startswith("[test-trace-123]")
+
+
+

@@ -7,6 +7,7 @@ import asyncio
 import inspect
 import random
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from astrbot.api.provider import LLMResponse
@@ -25,6 +26,18 @@ _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 120.0
 _LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
 _LLM_REQUEST_STACK_MAX_DEPTH = 32
+
+
+@dataclass
+class LLMBlockDiagnosis:
+    """LLM 任务长时间阻塞点的结构化诊断结果。"""
+
+    state: str
+    status_title: str
+    guidance_hint: str
+    is_known: bool
+    await_chain: str
+    block_point: str
 
 
 def _format_task_await_chain(
@@ -102,6 +115,149 @@ def _format_task_await_chain(
     if truncated:
         chain.append("<await 链已截断>")
     return " -> ".join(chain)
+
+
+def diagnose_llm_task_block(
+    task: asyncio.Task | None,
+    elapsed_seconds: float,
+    default_block_point: str = "context.llm_generate",
+) -> LLMBlockDiagnosis:
+    """分析长时间运行的 LLM 任务阻塞点并生成对用户友好的诊断信息。
+
+    识别常见已知阻塞场景：
+    1. 网络建立/握手阻塞（TCP/SSL 连接或代理延迟）
+    2. 等待上游大模型服务端生成返回数据（模型推理排队或生成耗时）
+    3. AstrBot 内部重试退避等待中（SDK 429/5xx 重试）
+    4. 插件全局并发限流排队中（RateLimiter 信号量等待）
+    5. 未知阻塞点（保留完整 await 链供维护者排查）
+
+    Args:
+        task: 当前执行中的异步任务。
+        elapsed_seconds: 当前请求已消耗的秒数。
+        default_block_point: 默认的业务阻塞路径。
+
+    Returns:
+        LLMBlockDiagnosis: 结构化诊断对象。
+    """
+    if task is None:
+        return LLMBlockDiagnosis(
+            state="UNKNOWN",
+            status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
+            guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），未获取到有效任务句柄。",
+            is_known=False,
+            await_chain="<无可用任务句柄>",
+            block_point=default_block_point,
+        )
+
+    await_chain = _format_task_await_chain(task)
+    chain_lower = await_chain.lower()
+
+    # 1. 检查是否在全局限流排队中
+    is_rate_limiting = "globalratelimiter" in chain_lower or (
+        "semaphore" in chain_lower and "acquire" in chain_lower
+    )
+    if is_rate_limiting:
+        return LLMBlockDiagnosis(
+            state="RATE_LIMIT_QUEUE",
+            status_title="⏳ 正在排队等待全局大模型并发槽位 (并发排队中)",
+            guidance_hint=(
+                f"当前并发大模型任务已达上限，正在排队等待释放槽位（已排队 {elapsed_seconds:.0f}s）。"
+                "如需提升并发，可在插件配置中适当调整 llm_max_concurrent。"
+            ),
+            is_known=True,
+            await_chain=await_chain,
+            block_point="limiter.queue",
+        )
+
+    # 2. 检查是否为 SDK 重试退避
+    is_retry_backoff = (
+        "request_retry" in chain_lower
+        or "retry_provider_request" in chain_lower
+        or "asyncretrying" in chain_lower
+    ) and "sleep" in chain_lower
+
+    if is_retry_backoff:
+        return LLMBlockDiagnosis(
+            state="SDK_RETRY_BACKOFF",
+            status_title="🔄 上游请求正在执行自动重试等待 (SDK 故障退避中)",
+            guidance_hint=(
+                f"上游 API 请求失败，AstrBot 正在进行退避重试（耗时已达 {elapsed_seconds:.0f}s，"
+                "前序调用可能遇到了 429 频控或 5xx 临时错误）。"
+            ),
+            is_known=True,
+            await_chain=await_chain,
+            block_point="provider.retry_backoff",
+        )
+
+    # 3. 检查是否为网络连接 / 握手阻塞
+    is_connecting = (
+        "do_handshake" in chain_lower
+        or "getaddrinfo" in chain_lower
+        or "open_connection" in chain_lower
+        or "create_connection" in chain_lower
+        or "aiohttp.connector" in chain_lower
+        or ("httpcore" in chain_lower and "connect" in chain_lower)
+        or (
+            "connection_pool" in chain_lower
+            and ("acquire" in chain_lower or "connect" in chain_lower)
+        )
+    ) and not any(r in chain_lower for r in ("aread", "receive_response_body"))
+
+    if is_connecting:
+        return LLMBlockDiagnosis(
+            state="CONNECTING_NETWORK",
+            status_title="🌐 正在尝试与大模型 API 服务端建立网络连接 (TCP/SSL 握手中)",
+            guidance_hint=(
+                f"网络连接或 SSL 握手耗时已达 {elapsed_seconds:.0f}s。"
+                "请检查网络代理连通性、API 中转站域名或网络出口状态。"
+            ),
+            is_known=True,
+            await_chain=await_chain,
+            block_point="network.connect",
+        )
+
+    # 4. 检查是否正在等待大模型服务端生成返回数据
+    is_generating = (
+        "aread" in chain_lower
+        or "receive_response_body" in chain_lower
+        or "async_generator_asend" in chain_lower
+        or (
+            "read" in chain_lower
+            and (
+                "httpx" in chain_lower
+                or "aiohttp" in chain_lower
+                or "response" in chain_lower
+            )
+        )
+        or "completions" in chain_lower
+        or "llm_generate" in chain_lower
+        or "text_chat" in chain_lower
+        or "openai" in chain_lower
+        or "sleep" in chain_lower
+    )
+
+    if is_generating:
+        return LLMBlockDiagnosis(
+            state="WAITING_UPSTREAM_RESPONSE",
+            status_title="⌛ 正在等待大模型服务端生成返回数据 (LLM 推理中)",
+            guidance_hint=(
+                f"网络连接已正常建立，当前正在等待大模型服务端推理生成（耗时已达 {elapsed_seconds:.0f}s，"
+                "长文本或深度思考模型生成较慢，请耐心等待）。"
+            ),
+            is_known=True,
+            await_chain=await_chain,
+            block_point=default_block_point,
+        )
+
+    # 5. 未知阻塞点（Fallback）
+    return LLMBlockDiagnosis(
+        state="UNKNOWN",
+        status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
+        guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），详细协程 await 栈见下方栈观测日志。",
+        is_known=False,
+        await_chain=await_chain,
+        block_point=default_block_point,
+    )
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -539,16 +695,22 @@ async def call_provider_with_retry(
                             break
                         except TimeoutError:
                             elapsed_seconds = time.monotonic() - request_started_at
+                            diagnosis = diagnose_llm_task_block(
+                                request_task,
+                                elapsed_seconds,
+                                default_block_point=call_path,
+                            )
                             logger.warning(
-                                f"[LLM 调用观测] Provider 请求仍在运行超过 "
-                                f"{elapsed_seconds:.0f}s: "
+                                f"[LLM 阻塞诊断] {diagnosis.status_title}: "
                                 f"group={observation_group}, "
                                 f"stage={observation_stage}, area={observation_area}, "
                                 f"attempt={attempt_num}, "
                                 f"fallback={is_fallback_request}, provider={pid}, "
-                                f"block_point={call_path}"
+                                f"elapsed={elapsed_seconds:.0f}s, "
+                                f"block_point={diagnosis.block_point} | "
+                                f"提示: {diagnosis.guidance_hint}"
                             )
-                            if elapsed_seconds >= next_stack_dump_seconds:
+                            if not diagnosis.is_known:
                                 logger.warning(
                                     f"[LLM 栈观测] Provider 请求 await 链: "
                                     f"group={observation_group}, "
@@ -557,10 +719,17 @@ async def call_provider_with_retry(
                                     f"attempt={attempt_num}, "
                                     f"fallback={is_fallback_request}, "
                                     f"provider={pid}, elapsed={elapsed_seconds:.0f}s, "
-                                    f"block_point={call_path}, "
-                                    f"await_chain={_format_task_await_chain(request_task)}"
+                                    f"block_point={diagnosis.block_point}, "
+                                    f"await_chain={diagnosis.await_chain}"
                                 )
-                                next_stack_dump_seconds *= 2
+                            else:
+                                if elapsed_seconds >= next_stack_dump_seconds:
+                                    logger.debug(
+                                        f"[LLM 栈观测] Provider 请求 await 链 (已知状态 {diagnosis.state}): "
+                                        f"group={observation_group}, area={observation_area}, "
+                                        f"await_chain={diagnosis.await_chain}"
+                                    )
+                                    next_stack_dump_seconds *= 2
                 except asyncio.CancelledError:
                     if not request_task.done():
                         request_task.cancel()
