@@ -290,7 +290,14 @@ class AnalysisApplicationService:
                     group_id=group_id, days=days, max_count=max_count
                 )
                 raw_data_size_kb = round(
-                    sum(len(getattr(m, "text_content", "") or "") for m in raw_messages)
+                    sum(
+                        len(
+                            (getattr(m, "text_content", "") or "").encode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        for m in raw_messages
+                    )
                     / 1024,
                     2,
                 )
@@ -339,7 +346,15 @@ class AnalysisApplicationService:
                 )
                 clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
                 cleaned_data_size_kb = round(
-                    sum(len(m.text_content or "") for m in unified_messages) / 1024,
+                    sum(
+                        len(
+                            (getattr(m, "text_content", "") or "").encode(
+                                "utf-8", errors="replace"
+                            )
+                        )
+                        for m in unified_messages
+                    )
+                    / 1024,
                     2,
                 )
                 dropped_cnt = max(len(raw_messages) - len(unified_messages), 0)

@@ -217,3 +217,43 @@ def test_enable_runtime_metrics_config_default():
         schema = json.load(f)
     assert schema["basic"]["items"]["enable_runtime_metrics"]["default"] is True
 
+
+def test_trace_context_disabled_metrics():
+    """测试关闭遥测开关时 TraceContext 跳过 RSS 采样。"""
+    try:
+        TraceContext.set_metrics_enabled(False)
+        assert TraceContext.is_metrics_enabled() is False
+
+        with TraceContext(trace_id="no_metrics_trace") as trace:
+            assert trace._init_memory_mb == 0.0
+            assert trace._peak_memory_mb == 0.0
+
+            with trace.span(AnalysisStage.FETCH_MESSAGES) as s:
+                assert s["start_memory_mb"] == 0.0
+
+            data = trace.to_dict()
+            perf = data["performance_metrics"]
+            assert perf["init_memory_mb"] == 0.0
+            assert perf["peak_memory_mb"] == 0.0
+            assert perf["final_memory_mb"] == 0.0
+    finally:
+        TraceContext.set_metrics_enabled(True)
+        assert TraceContext.is_metrics_enabled() is True
+
+
+def test_log_buffer_raw_trace_id_sanitization():
+    """测试 PluginLogBuffer 在记录包含 [trace_id] 消息时 raw 字段不重复前缀。"""
+    from src.infrastructure.logging.plugin_log_buffer import PluginLogBuffer
+
+    buffer = PluginLogBuffer()
+    entry = buffer.record_log(
+        level="INFO",
+        msg="[test_trace_123] 消息拉取完成",
+        trace_id="test_trace_123",
+        logger_name="analysis",
+    )
+    assert entry.message == "消息拉取完成"
+    assert not entry.raw.endswith("[test_trace_123] [test_trace_123] 消息拉取完成")
+    assert entry.raw.endswith("[analysis]: 消息拉取完成")
+
+

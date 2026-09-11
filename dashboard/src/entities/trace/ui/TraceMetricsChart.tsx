@@ -135,7 +135,11 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     }
 
     const peakMem = perf?.peak_memory_mb || Math.max(...memValues, 1);
-    const minMem = Math.max(0, Math.floor(Math.min(...memValues.filter((v) => v > 0)) * 0.9));
+    const positiveMemValues = memValues.filter((v) => v > 0);
+    const minMem =
+      positiveMemValues.length > 0
+        ? Math.max(0, Math.floor(Math.min(...positiveMemValues) * 0.9))
+        : 0;
 
     return {
       backgroundColor: "transparent",
@@ -349,7 +353,10 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     return htmlKb > 0 || rawImageKb > 0 || b64Kb > 0;
   }, [spans]);
 
-  const hasMetrics = spans.length > 0 || Boolean(perf);
+  const hasMetrics =
+    spans.length > 0 ||
+    Boolean(perf?.peak_memory_mb) ||
+    Boolean(perf?.init_memory_mb);
 
   if (!hasMetrics) return null;
 

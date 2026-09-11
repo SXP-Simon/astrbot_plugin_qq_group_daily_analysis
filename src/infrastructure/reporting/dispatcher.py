@@ -227,10 +227,15 @@ class ReportDispatcher:
                 bloat_ratio = None
                 if is_b64:
                     b64_str = image_url[9:]
-                    base64_payload_kb = round(len(b64_str) / 1024, 2)
-                    raw_bytes_len = len(b64_str) * 3 // 4
+                    b64_len = len(b64_str)
+                    base64_payload_kb = round(b64_len / 1024, 2)
+                    padding = b64_str.count("=", max(0, b64_len - 2))
+                    raw_bytes_len = max(0, (b64_len * 3 // 4) - padding)
                     raw_image_kb = round(raw_bytes_len / 1024, 2)
-                    bloat_ratio = "+33.3%"
+                    bloat_pct = round(
+                        ((b64_len - raw_bytes_len) / max(raw_bytes_len, 1)) * 100, 1
+                    )
+                    bloat_ratio = f"+{bloat_pct}%"
                 elif os.path.exists(image_url):
                     raw_image_kb = round(os.path.getsize(image_url) / 1024, 2)
 

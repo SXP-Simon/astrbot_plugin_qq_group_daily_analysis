@@ -169,13 +169,13 @@ class PluginLogBuffer(logging.Handler):
                 stage = stage_label
                 break
 
-        loc_label = f"[{location}]" if location else f"[{logger_name}]"
-        raw = f"[{full_time_str}] [{level.upper()}] {loc_label}: {msg}"
-
         # 清理 message 中已包含的冗余 [trace_id] 前缀，避免前端日志列表中重复显示
         clean_msg = msg
         if trace_id and clean_msg.startswith(f"[{trace_id}] "):
             clean_msg = clean_msg[len(f"[{trace_id}] ") :]
+
+        loc_label = f"[{location}]" if location else f"[{logger_name}]"
+        raw = f"[{full_time_str}] [{level.upper()}] {loc_label}: {clean_msg}"
 
         entry = PluginLogEntry(
             id=f"log_{self._counter}",

@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
@@ -78,10 +78,18 @@ class TraceContext:
     # dsh-context 上下文演进指标
     _context_metrics: dict[str, Any] | None = field(default=None, init=False)
 
+    # 遥测开关 (类级别默认 True)
+    _enable_metrics: ClassVar[bool] = True
+
     # 运行期内存性能监控 (RSS MB)
-    _init_memory_mb: float = field(default_factory=_get_process_rss_mb, init=False)
-    _peak_memory_mb: float = field(default_factory=_get_process_rss_mb, init=False)
+    _init_memory_mb: float = field(default=0.0, init=False)
+    _peak_memory_mb: float = field(default=0.0, init=False)
     _final_memory_mb: float = field(default=0.0, init=False)
+
+    def __post_init__(self) -> None:
+        init_rss = _get_process_rss_mb() if self._enable_metrics else 0.0
+        self._init_memory_mb = init_rss
+        self._peak_memory_mb = init_rss
 
     # Token 消耗与成本审计
     _token_usage: dict[str, Any] = field(
@@ -98,6 +106,16 @@ class TraceContext:
     # 传统锚点兼容
     _checkpoints: dict[str, datetime] = field(default_factory=dict, init=False)
     _token: Token | None = field(default=None, init=False, repr=False)
+
+    @classmethod
+    def set_metrics_enabled(cls, enabled: bool) -> None:
+        """设置全链路运行时指标遥测开关"""
+        cls._enable_metrics = enabled
+
+    @classmethod
+    def is_metrics_enabled(cls) -> bool:
+        """检查全链路运行时指标遥测是否启用"""
+        return cls._enable_metrics
 
     @classmethod
     def set_global_store(cls, store: Any) -> None:
@@ -155,7 +173,7 @@ class TraceContext:
                 pass
 
         start_ts = time.time()
-        start_mem = _get_process_rss_mb()
+        start_mem = _get_process_rss_mb() if self._enable_metrics else 0.0
         if start_mem > self._peak_memory_mb:
             self._peak_memory_mb = start_mem
 
@@ -184,7 +202,7 @@ class TraceContext:
             raise
         finally:
             end_ts = time.time()
-            end_mem = _get_process_rss_mb()
+            end_mem = _get_process_rss_mb() if self._enable_metrics else 0.0
             if end_mem > self._peak_memory_mb:
                 self._peak_memory_mb = end_mem
 
@@ -310,7 +328,7 @@ class TraceContext:
         self.status = status
         self.completed_at = time.time()
         self.duration_ms = round((self.completed_at - self.started_at) * 1000, 2)
-        self._final_memory_mb = _get_process_rss_mb()
+        self._final_memory_mb = _get_process_rss_mb() if self._enable_metrics else 0.0
         if self._final_memory_mb > self._peak_memory_mb:
             self._peak_memory_mb = self._final_memory_mb
 
@@ -343,7 +361,9 @@ class TraceContext:
 
     def to_dict(self) -> dict[str, Any]:
         """将完整链路快照序列化为字典"""
-        curr_mem = self._final_memory_mb or _get_process_rss_mb()
+        curr_mem = self._final_memory_mb or (
+            _get_process_rss_mb() if self._enable_metrics else 0.0
+        )
         return {
             "trace_id": self.trace_id,
             "group_id": self.group_id,

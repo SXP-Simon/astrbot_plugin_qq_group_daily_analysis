@@ -112,6 +112,9 @@ class GroupDailyAnalysis(Star):
         # 1.1 Trace & Checkpoint 基础设施 (持久化)
         self.trace_store = TraceSQLiteStore(plugin_data_dir / "traces.db")
         TraceContext.set_global_store(self.trace_store)
+        TraceContext.set_metrics_enabled(
+            self.config_manager.get_enable_runtime_metrics()
+        )
         self.checkpoint_store = CheckpointStore(plugin_data_dir / "traces.db")
 
         # 2. 领域层
