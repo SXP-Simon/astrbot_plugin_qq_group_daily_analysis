@@ -113,3 +113,107 @@ def test_trace_sqlite_store_performance_metrics_persistence(tmp_path: Path):
     assert dispatch_span["payload"]["transmission_mode"] == "base64"
     assert dispatch_span["payload"]["bloat_ratio"] == "+33.3%"
     assert dispatch_span["payload"]["dispatch_api_ms"] == 320.0
+
+
+def test_trace_sqlite_store_migration_from_old_schema(tmp_path: Path):
+    """测试旧版 SQLite 数据库平滑升级与缺少 performance_metrics/metrics_json 时的容错。"""
+    import sqlite3
+    db_path = tmp_path / "legacy_traces.db"
+
+    # 1. 模拟旧版数据库表结构（无 performance_metrics 表）
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE analysis_traces (
+                trace_id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                group_name TEXT DEFAULT '',
+                platform TEXT DEFAULT '',
+                trigger_type TEXT DEFAULT 'manual',
+                status TEXT NOT NULL,
+                started_at REAL NOT NULL,
+                completed_at REAL,
+                duration_ms REAL,
+                error_stage TEXT,
+                error_message TEXT,
+                stack_trace TEXT,
+                extra_json TEXT DEFAULT '{}'
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO analysis_traces (trace_id, group_id, status, started_at) VALUES ('old_trace_1', '1001', 'succeeded', 1000.0)"
+        )
+
+    # 2. 用新版本 TraceSQLiteStore 打开该数据库（触发自动迁移与表补齐）
+    store = TraceSQLiteStore(db_path)
+    old_trace = store.get_trace("old_trace_1")
+    assert old_trace is not None
+    assert old_trace["trace_id"] == "old_trace_1"
+    assert old_trace["performance_metrics"] is None
+
+    # 3. 模拟旧版本建了 performance_metrics 表但无 metrics_json 列的情况
+    db_path_2 = tmp_path / "legacy_traces_no_col.db"
+    with sqlite3.connect(str(db_path_2)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE analysis_traces (
+                trace_id TEXT PRIMARY KEY,
+                group_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                started_at REAL NOT NULL
+            );
+            CREATE TABLE performance_metrics (
+                trace_id TEXT PRIMARY KEY,
+                init_memory_mb REAL DEFAULT 0.0,
+                peak_memory_mb REAL DEFAULT 0.0,
+                final_memory_mb REAL DEFAULT 0.0,
+                delta_memory_mb REAL DEFAULT 0.0
+            );
+            INSERT INTO analysis_traces (trace_id, group_id, status, started_at) VALUES ('old_trace_2', '1002', 'succeeded', 2000.0);
+            INSERT INTO performance_metrics (trace_id, init_memory_mb, peak_memory_mb) VALUES ('old_trace_2', 100.0, 150.0);
+            """
+        )
+
+    store_2 = TraceSQLiteStore(db_path_2)
+    trace_migrated = store_2.get_trace("old_trace_2")
+    assert trace_migrated is not None
+    assert trace_migrated["performance_metrics"] is not None
+    assert trace_migrated["performance_metrics"]["init_memory_mb"] == 100.0
+    assert trace_migrated["performance_metrics"]["metrics_extra"] == {}
+
+
+def test_trace_sqlite_store_corrupted_metrics_json_tolerance(tmp_path: Path):
+    """测试 metrics_json 数据损坏（非法 JSON）时 get_trace() 安全容错。"""
+    import sqlite3
+    db_path = tmp_path / "corrupted_traces.db"
+    store = TraceSQLiteStore(db_path)
+
+    with store._get_connection() as conn:
+        conn.execute(
+            "INSERT INTO analysis_traces (trace_id, group_id, status, started_at) VALUES ('bad_json_trace', '1003', 'succeeded', 3000.0)"
+        )
+        conn.execute(
+            "INSERT INTO performance_metrics (trace_id, init_memory_mb, metrics_json) VALUES ('bad_json_trace', 80.0, '{invalid-json-string}')"
+        )
+
+    trace = store.get_trace("bad_json_trace")
+    assert trace is not None
+    assert trace["performance_metrics"] is not None
+    assert trace["performance_metrics"]["init_memory_mb"] == 80.0
+    assert trace["performance_metrics"]["metrics_extra"] == {}
+
+
+def test_enable_runtime_metrics_config_default():
+    """测试 enable_runtime_metrics 默认开启 (True) 并与 Schema 一致。"""
+    import json
+    from src.infrastructure.config.config_manager import ConfigManager
+
+    cfg = ConfigManager({})
+    assert cfg.get_enable_runtime_metrics() is True
+
+    schema_file = Path(__file__).parent.parent / "_conf_schema.json"
+    with open(schema_file, encoding="utf-8") as f:
+        schema = json.load(f)
+    assert schema["basic"]["items"]["enable_runtime_metrics"]["default"] is True
+

@@ -746,13 +746,32 @@ def test_diagnose_llm_task_block_scenarios():
     assert not d_none.is_known
     assert d_none.state == "UNKNOWN"
 
-    # 2. 模拟常规推理中等待（Upstream Response Generating）
-    async def mock_generating():
+    # 2. 无关普通协程（单纯 sleep，无 LLM/重试栈）应回退到 UNKNOWN 而非误判
+    async def arbitrary_sleep_task():
+        await asyncio.sleep(10)
+
+    async def run_arbitrary_test():
+        task = asyncio.create_task(arbitrary_sleep_task())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 45.0)
+        assert not diag.is_known
+        assert diag.state == "UNKNOWN"
+        assert "45s" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_arbitrary_test())
+
+    # 3. 包含 llm_generate / text_chat 栈的生成中等待 (WAITING_UPSTREAM_RESPONSE)
+    async def mock_llm_generate():
         await asyncio.sleep(10)
 
     async def run_generating_test():
-        task = asyncio.create_task(mock_generating())
-        await asyncio.sleep(0.001)  # 让任务进入挂起态
+        task = asyncio.create_task(mock_llm_generate())
+        await asyncio.sleep(0.001)
         diag = diagnose_llm_task_block(task, 120.0)
         assert diag.is_known
         assert diag.state == "WAITING_UPSTREAM_RESPONSE"
@@ -765,6 +784,45 @@ def test_diagnose_llm_task_block_scenarios():
             pass
 
     asyncio.run(run_generating_test())
+
+    # 4. 包含 request_retry / asyncretrying 的重试退避 (SDK_RETRY_BACKOFF)
+    async def mock_request_retry_backoff():
+        await asyncio.sleep(10)
+
+    async def run_retry_test():
+        task = asyncio.create_task(mock_request_retry_backoff())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 30.0)
+        assert diag.is_known
+        assert diag.state == "SDK_RETRY_BACKOFF"
+        assert "正在执行自动重试等待" in diag.status_title
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_retry_test())
+
+    # 5. 包含 do_handshake 的网络连接建立 (CONNECTING_NETWORK)
+    async def mock_do_handshake():
+        # 无 aread / response body
+        await asyncio.Future()
+
+    async def run_connecting_test():
+        task = asyncio.create_task(mock_do_handshake())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 15.0)
+        assert diag.is_known
+        assert diag.state == "CONNECTING_NETWORK"
+        assert "正在尝试与大模型 API 服务端建立网络连接" in diag.status_title
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_connecting_test())
 
 
 def test_plugin_log_buffer_strips_duplicate_trace_id_in_message():

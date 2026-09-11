@@ -98,6 +98,20 @@ class TraceSQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
                 """
             )
+            # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
+            try:
+                cols = [
+                    row[1]
+                    for row in conn.execute(
+                        "PRAGMA table_info(performance_metrics)"
+                    ).fetchall()
+                ]
+                if cols and "metrics_json" not in cols:
+                    conn.execute(
+                        "ALTER TABLE performance_metrics ADD COLUMN metrics_json TEXT DEFAULT '{}';"
+                    )
+            except Exception:
+                pass
 
     def save_trace(self, trace_dict: dict[str, Any]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""

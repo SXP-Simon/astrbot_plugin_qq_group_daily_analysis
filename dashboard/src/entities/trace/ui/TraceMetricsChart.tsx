@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Card, Segmented, Typography, Space, Tooltip, Tag } from "antd";
+import { Card, Segmented, Typography, Space, Tooltip, Tag, Empty } from "antd";
 import ReactECharts from "echarts-for-react";
 import {
   ClockCircleOutlined,
@@ -336,6 +336,19 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
     };
   }, [spans, isDark]);
 
+  const hasDataflowData = useMemo(() => {
+    const renderSpan = spans.find((s) => s.stage_name === "RENDER_REPORT");
+    const dispatchSpan = spans.find((s) => s.stage_name === "DISPATCH_REPORT");
+    const htmlKb = Number(renderSpan?.payload?.html_size_kb || 0);
+    const rawImageBytes = Number(renderSpan?.payload?.image_bytes || 0);
+    const rawImageKb =
+      rawImageBytes > 0
+        ? Number((rawImageBytes / 1024).toFixed(1))
+        : Number(dispatchSpan?.payload?.raw_image_kb || 0);
+    const b64Kb = Number(dispatchSpan?.payload?.base64_payload_kb || 0);
+    return htmlKb > 0 || rawImageKb > 0 || b64Kb > 0;
+  }, [spans]);
+
   const hasMetrics = spans.length > 0 || Boolean(perf);
 
   if (!hasMetrics) return null;
@@ -441,13 +454,33 @@ export const TraceMetricsChart: React.FC<TraceMetricsChartProps> = ({ trace }) =
             opts={{ renderer: "svg" }}
           />
         )}
-        {viewMode === "dataflow" && (
-          <ReactECharts
-            option={dataflowChartOption}
-            style={{ height: 150, width: "100%" }}
-            opts={{ renderer: "svg" }}
-          />
-        )}
+        {viewMode === "dataflow" &&
+          (hasDataflowData ? (
+            <ReactECharts
+              option={dataflowChartOption}
+              style={{ height: 150, width: "100%" }}
+              opts={{ renderer: "svg" }}
+            />
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: 150,
+              }}
+            >
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: isDark ? "#8b949e" : "#94a3b8", fontSize: 11 }}>
+                    当前报告未产生图片或 Base64 媒体载荷数据（纯文本或未开启图片输出）
+                  </span>
+                }
+                style={{ margin: 0 }}
+              />
+            </div>
+          ))}
       </div>
     </Card>
   );

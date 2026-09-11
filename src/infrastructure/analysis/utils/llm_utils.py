@@ -174,7 +174,12 @@ def diagnose_llm_task_block(
         "request_retry" in chain_lower
         or "retry_provider_request" in chain_lower
         or "asyncretrying" in chain_lower
-    ) and "sleep" in chain_lower
+        or "tenacity" in chain_lower
+    ) and (
+        "sleep" in chain_lower
+        or "asyncio.tasks.sleep" in chain_lower
+        or "time.sleep" in chain_lower
+    )
 
     if is_retry_backoff:
         return LLMBlockDiagnosis(
@@ -201,7 +206,9 @@ def diagnose_llm_task_block(
             "connection_pool" in chain_lower
             and ("acquire" in chain_lower or "connect" in chain_lower)
         )
-    ) and not any(r in chain_lower for r in ("aread", "receive_response_body"))
+    ) and not any(
+        r in chain_lower for r in ("aread", "receive_response_body", "read_response")
+    )
 
     if is_connecting:
         return LLMBlockDiagnosis(
@@ -233,7 +240,8 @@ def diagnose_llm_task_block(
         or "llm_generate" in chain_lower
         or "text_chat" in chain_lower
         or "openai" in chain_lower
-        or "sleep" in chain_lower
+        or "chat_provider" in chain_lower
+        or "provider.text_chat_stream" in chain_lower
     )
 
     if is_generating:
