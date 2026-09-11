@@ -40,36 +40,35 @@ class LLMBlockDiagnosis:
     block_point: str
 
 
-def _format_task_await_chain(
+@dataclass
+class _TaskAwaitFrame:
+    """异步任务调用链路中的单个调用帧元数据。"""
+
+    filename: str
+    lineno: int | None
+    func_name: str
+    target_type: str
+
+
+def _extract_task_await_frames(
     task: asyncio.Task,
     max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
-) -> str:
-    """格式化异步任务当前 await 链路。
+) -> list[_TaskAwaitFrame]:
+    """提取异步任务当前 await 链路的结构化调用帧列表。
 
-    这里只输出协程的文件、行号与函数名，不读取 frame locals，避免将 prompt、
-    API Key 或 Provider 请求参数写入日志。该链路用于定位长时间 LLM 请求到底
-    卡在插件、AstrBot Context、Provider SDK 还是 HTTP 客户端层。
-
-    Args:
-        task: 正在执行的 asyncio 任务。
-        max_depth: 最大追踪层数，避免异常 await 链导致日志过长。
-
-    Returns:
-        可直接写入日志的 await 链路描述。
+    从 task.get_coro() 开始逐层遍历 cr_await / gi_yieldfrom / ag_await，
+    获取完整的调用链路帧，仅保留文件名、行号与函数名，绝不读取 frame locals。
     """
-    chain: list[str] = []
+    frames: list[_TaskAwaitFrame] = []
     current = task.get_coro()
     seen: set[int] = set()
 
-    truncated = False
-
-    for depth in range(max_depth):
+    for _ in range(max_depth):
         if current is None:
             break
 
         current_id = id(current)
         if current_id in seen:
-            chain.append("<循环 await 链>")
             break
         seen.add(current_id)
 
@@ -91,30 +90,78 @@ def _format_task_await_chain(
             next_awaitable = current.ag_await
         elif isinstance(current, asyncio.Task):
             next_awaitable = current.get_coro()
-            chain.append(
-                f"Task(done={current.done()}, cancelled={current.cancelled()})"
+            frames.append(
+                _TaskAwaitFrame(
+                    filename="<Task>",
+                    lineno=None,
+                    func_name="Task",
+                    target_type=type(current).__name__,
+                )
             )
             current = next_awaitable
             continue
         else:
-            chain.append(type(current).__name__)
+            frames.append(
+                _TaskAwaitFrame(
+                    filename="<Awaitable>",
+                    lineno=None,
+                    func_name=type(current).__name__,
+                    target_type=type(current).__name__,
+                )
+            )
             break
 
-        if frame is not None and code is not None:
-            chain.append(f"{code.co_filename}:{frame.f_lineno} in {code.co_name}")
-        elif code is not None:
-            chain.append(f"{code.co_filename}:? in {code.co_name}")
+        if code is not None:
+            frames.append(
+                _TaskAwaitFrame(
+                    filename=code.co_filename,
+                    lineno=frame.f_lineno if frame is not None else None,
+                    func_name=code.co_name,
+                    target_type=type(current).__name__,
+                )
+            )
         else:
-            chain.append(type(current).__name__)
+            frames.append(
+                _TaskAwaitFrame(
+                    filename="<Unknown>",
+                    lineno=None,
+                    func_name=type(current).__name__,
+                    target_type=type(current).__name__,
+                )
+            )
 
         current = next_awaitable
-        truncated = depth == max_depth - 1 and current is not None
 
-    if not chain:
+    return frames
+
+
+def _format_task_await_chain(
+    task: asyncio.Task,
+    max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
+) -> str:
+    """格式化异步任务当前 await 链路。
+
+    这里只输出协程的文件、行号与函数名，不读取 frame locals，避免将 prompt、
+    API Key 或 Provider 请求参数写入日志。该链路用于定位长时间 LLM 请求到底
+    卡在插件、AstrBot Context、Provider SDK 还是 HTTP 客户端层。
+
+    Args:
+        task: 正在执行的 asyncio 任务。
+        max_depth: 最大追踪层数，避免异常 await 链导致日志过长。
+
+    Returns:
+        可直接写入日志的 await 链路描述。
+    """
+    frames = _extract_task_await_frames(task, max_depth)
+    if not frames:
         return "<无可用 await 链>"
-    if truncated:
-        chain.append("<await 链已截断>")
-    return " -> ".join(chain)
+    formatted = [
+        f"{f.filename}:{f.lineno or '?'} in {f.func_name}"
+        if f.filename not in ("<Task>", "<Awaitable>", "<Unknown>")
+        else f.func_name
+        for f in frames
+    ]
+    return " -> ".join(formatted)
 
 
 def diagnose_llm_task_block(
@@ -122,14 +169,15 @@ def diagnose_llm_task_block(
     elapsed_seconds: float,
     default_block_point: str = "context.llm_generate",
 ) -> LLMBlockDiagnosis:
-    """分析长时间运行的 LLM 任务阻塞点并生成对用户友好的诊断信息。
+    """分析长时间运行的 LLM 任务阻塞点并生成对用户友好的结构化诊断信息。
 
-    识别常见已知阻塞场景：
-    1. 网络建立/握手阻塞（TCP/SSL 连接或代理延迟）
-    2. 等待上游大模型服务端生成返回数据（模型推理排队或生成耗时）
-    3. AstrBot 内部重试退避等待中（SDK 429/5xx 重试）
-    4. 插件全局并发限流排队中（RateLimiter 信号量等待）
-    5. 未知阻塞点（保留完整 await 链供维护者排查）
+    基于 AstrBot 核心 Provider 调用链（ProviderManager / request_retry / OpenAI / Anthropic / Gemini / httpx）
+    的具体协程栈特征进行逐层分类：
+    1. 全局限流排队（RateLimiter / Semaphore acquire 等待中）
+    2. SDK 故障退避重试（request_retry / tenacity 在异常后处于退避 sleep 中）
+    3. 网络建连阻塞（TCP / SSL 握手 / DNS 解析中）
+    4. 大模型上游响应等待（HTTP 连接已就绪，服务端推理生成或流式传输中）
+    5. 未知阻塞点（安全回退，输出完整 await 链）
 
     Args:
         task: 当前执行中的异步任务。
@@ -149,12 +197,32 @@ def diagnose_llm_task_block(
             block_point=default_block_point,
         )
 
+    frames = _extract_task_await_frames(task)
     await_chain = _format_task_await_chain(task)
-    chain_lower = await_chain.lower()
+    if not frames:
+        return LLMBlockDiagnosis(
+            state="UNKNOWN",
+            status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
+            guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），详细协程 await 栈见下方栈观测日志。",
+            is_known=False,
+            await_chain=await_chain,
+            block_point=default_block_point,
+        )
 
-    # 1. 检查是否在全局限流排队中
-    is_rate_limiting = "globalratelimiter" in chain_lower or (
-        "semaphore" in chain_lower and "acquire" in chain_lower
+    # 1. 检查是否在全局限流排队中 (RateLimiter / Semaphore acquire)
+    is_rate_limiting = any(
+        (
+            f.func_name in ("acquire", "_acquire", "_acquire_slot")
+            or "semaphore" in f.filename.lower()
+            or "globalratelimiter" in f.filename.lower()
+        )
+        and (
+            "semaphore" in f.filename.lower()
+            or "globalratelimiter" in f.filename.lower()
+            or "locks" in f.filename.lower()
+            or "resilience" in f.filename.lower()
+        )
+        for f in frames
     )
     if is_rate_limiting:
         return LLMBlockDiagnosis(
@@ -169,48 +237,89 @@ def diagnose_llm_task_block(
             block_point="limiter.queue",
         )
 
-    # 2. 检查是否为 SDK 重试退避
-    is_retry_backoff = (
-        "request_retry" in chain_lower
-        or "retry_provider_request" in chain_lower
-        or "asyncretrying" in chain_lower
-        or "tenacity" in chain_lower
-    ) and (
-        "sleep" in chain_lower
-        or "asyncio.tasks.sleep" in chain_lower
-        or "time.sleep" in chain_lower
+    # 2. 检查是否为 SDK 故障退避重试 (request_retry / AsyncRetrying 在重试等待中)
+    # AstrBot 在 retry_provider_request 中通过 tenacity 的 AsyncRetrying 循环重试。
+    # 当处于退避等待时，当前调用栈在 retry_provider_request/tenacity 下直接执行 sleep，未处于 request_factory 内部。
+    retry_frame_idx = next(
+        (
+            idx
+            for idx, f in enumerate(frames)
+            if "request_retry" in f.filename.lower()
+            or "retry" in f.func_name.lower()
+            or "tenacity" in f.filename.lower()
+        ),
+        None,
+    )
+    if retry_frame_idx is not None:
+        sub_frames = frames[retry_frame_idx + 1 :]
+        # 若 retry 帧下方没有具体的 client query / request 帧，而是在 sleep 或 tenacity 内部迭代，则确定为退避等待
+        is_querying = any(
+            any(
+                q in f.func_name.lower()
+                for q in (
+                    "query",
+                    "text_chat",
+                    "create",
+                    "send",
+                    "handle_async_request",
+                )
+            )
+            or any(
+                k in f.filename.lower()
+                for k in (
+                    "openai",
+                    "anthropic",
+                    "google",
+                    "httpcore",
+                    "httpx",
+                    "aiohttp",
+                )
+            )
+            for f in sub_frames
+        )
+        if not is_querying:
+            return LLMBlockDiagnosis(
+                state="SDK_RETRY_BACKOFF",
+                status_title="🔄 上游请求正在执行自动重试等待 (SDK 故障退避中)",
+                guidance_hint=(
+                    f"上游 API 请求失败，AstrBot 正在进行退避重试（耗时已达 {elapsed_seconds:.0f}s，"
+                    "前序调用可能遇到了 429 频控或 5xx 临时错误）。"
+                ),
+                is_known=True,
+                await_chain=await_chain,
+                block_point="provider.retry_backoff",
+            )
+
+    # 3. 检查是否为网络建连 / TCP / SSL 握手阻塞
+    is_connecting = any(
+        any(
+            conn_kw in f.func_name.lower()
+            for conn_kw in (
+                "do_handshake",
+                "getaddrinfo",
+                "open_connection",
+                "create_connection",
+                "connect_tcp",
+                "connect",
+            )
+        )
+        or any(k in f.filename.lower() for k in ("ssl", "connector", "connect"))
+        for f in frames
+    )
+    has_entered_reading = any(
+        any(
+            r in f.func_name.lower()
+            for r in (
+                "aread",
+                "read",
+                "receive_response",
+                "read_stream",
+            )
+        )
+        for f in frames
     )
 
-    if is_retry_backoff:
-        return LLMBlockDiagnosis(
-            state="SDK_RETRY_BACKOFF",
-            status_title="🔄 上游请求正在执行自动重试等待 (SDK 故障退避中)",
-            guidance_hint=(
-                f"上游 API 请求失败，AstrBot 正在进行退避重试（耗时已达 {elapsed_seconds:.0f}s，"
-                "前序调用可能遇到了 429 频控或 5xx 临时错误）。"
-            ),
-            is_known=True,
-            await_chain=await_chain,
-            block_point="provider.retry_backoff",
-        )
-
-    # 3. 检查是否为网络连接 / 握手阻塞
-    is_connecting = (
-        "do_handshake" in chain_lower
-        or "getaddrinfo" in chain_lower
-        or "open_connection" in chain_lower
-        or "create_connection" in chain_lower
-        or "aiohttp.connector" in chain_lower
-        or ("httpcore" in chain_lower and "connect" in chain_lower)
-        or (
-            "connection_pool" in chain_lower
-            and ("acquire" in chain_lower or "connect" in chain_lower)
-        )
-    ) and not any(
-        r in chain_lower for r in ("aread", "receive_response_body", "read_response")
-    )
-
-    if is_connecting:
+    if is_connecting and not has_entered_reading:
         return LLMBlockDiagnosis(
             state="CONNECTING_NETWORK",
             status_title="🌐 正在尝试与大模型 API 服务端建立网络连接 (TCP/SSL 握手中)",
@@ -223,25 +332,35 @@ def diagnose_llm_task_block(
             block_point="network.connect",
         )
 
-    # 4. 检查是否正在等待大模型服务端生成返回数据
-    is_generating = (
-        "aread" in chain_lower
-        or "receive_response_body" in chain_lower
-        or "async_generator_asend" in chain_lower
-        or (
-            "read" in chain_lower
-            and (
-                "httpx" in chain_lower
-                or "aiohttp" in chain_lower
-                or "response" in chain_lower
+    # 4. 检查是否正在等待大模型服务端生成返回数据 (LLM 推理中 / 接收响应流)
+    is_generating = any(
+        any(
+            gen_kw in f.func_name.lower()
+            for gen_kw in (
+                "aread",
+                "read",
+                "receive_response",
+                "read_stream",
+                "async_generator_asend",
+                "text_chat",
+                "query",
+                "llm_generate",
+                "completions",
             )
         )
-        or "completions" in chain_lower
-        or "llm_generate" in chain_lower
-        or "text_chat" in chain_lower
-        or "openai" in chain_lower
-        or "chat_provider" in chain_lower
-        or "provider.text_chat_stream" in chain_lower
+        or any(
+            k in f.filename.lower()
+            for k in (
+                "openai",
+                "anthropic",
+                "google",
+                "httpx",
+                "httpcore",
+                "aiohttp",
+                "context.py",
+            )
+        )
+        for f in frames
     )
 
     if is_generating:
@@ -257,7 +376,7 @@ def diagnose_llm_task_block(
             block_point=default_block_point,
         )
 
-    # 5. 未知阻塞点（Fallback）
+    # 5. 未知阻塞点（Fallback：不符合已知 LLM/HTTP 链路的普通协程）
     return LLMBlockDiagnosis(
         state="UNKNOWN",
         status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
