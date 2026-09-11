@@ -545,11 +545,40 @@ class PluginPageWebUIBridge:
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
+                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
+                target_platform = None
+
+                # 1. 若传入了具体有效且已就绪的平台标识，直接采用
+                if platform and bot_mgr and bot_mgr.get_adapter(platform):
+                    target_platform = str(platform).strip()
+                elif bot_mgr:
+                    adapters = (
+                        bot_mgr.get_all_adapters()
+                        if hasattr(bot_mgr, "get_all_adapters")
+                        else {}
+                    )
+                    # 2. 单实例绑定：若系统仅注册了 1 个适配器，直接绑定该唯一实例
+                    if len(adapters) == 1:
+                        target_platform = next(iter(adapters.keys()))
+                    # 3. 多实例群归属探测：若系统存在多个适配器，优先遍历探测该群聊实际归属的平台实例
+                    elif len(adapters) > 1 and group_id:
+                        for p_id, adp in adapters.items():
+                            try:
+                                if hasattr(
+                                    adp, "get_group_info"
+                                ) and await adp.get_group_info(str(group_id)):
+                                    target_platform = (
+                                        bot_mgr.get_adapter_platform_id(adp)
+                                        if hasattr(bot_mgr, "get_adapter_platform_id")
+                                        else str(p_id)
+                                    ) or str(p_id)
+                                    break
+                            except Exception:
+                                continue
+
                 result = await self.analysis_service.execute_daily_analysis(
                     group_id=group_id,
-                    platform_id=platform
-                    if platform and platform not in ("all", "auto", "default")
-                    else None,
+                    platform_id=target_platform,
                     manual=True,
                 )
                 if result and result.get("success"):
@@ -563,11 +592,8 @@ class PluginPageWebUIBridge:
                             else ""
                         )
                         or getattr(adapter, "platform_id", "")
-                        or (
-                            platform
-                            if platform and platform not in ("all", "auto", "default")
-                            else ""
-                        )
+                        or target_platform
+                        or ""
                     )
                     trace_ctx.platform = str(dispatch_platform_id)
                     # 调度生成报告长图并推送到目标群聊
@@ -706,12 +732,41 @@ class PluginPageWebUIBridge:
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "resume_analysis"):
+                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
+                target_platform = None
+
+                # 1. 若传入了具体有效且已就绪的平台标识，直接采用
+                if platform and bot_mgr and bot_mgr.get_adapter(platform):
+                    target_platform = str(platform).strip()
+                elif bot_mgr:
+                    adapters = (
+                        bot_mgr.get_all_adapters()
+                        if hasattr(bot_mgr, "get_all_adapters")
+                        else {}
+                    )
+                    # 2. 单实例绑定：若系统仅注册了 1 个适配器，直接绑定该唯一实例
+                    if len(adapters) == 1:
+                        target_platform = next(iter(adapters.keys()))
+                    # 3. 多实例群归属探测：若系统存在多个适配器，优先遍历探测该群聊实际归属的平台实例
+                    elif len(adapters) > 1 and group_id:
+                        for p_id, adp in adapters.items():
+                            try:
+                                if hasattr(
+                                    adp, "get_group_info"
+                                ) and await adp.get_group_info(str(group_id)):
+                                    target_platform = (
+                                        bot_mgr.get_adapter_platform_id(adp)
+                                        if hasattr(bot_mgr, "get_adapter_platform_id")
+                                        else str(p_id)
+                                    ) or str(p_id)
+                                    break
+                            except Exception:
+                                continue
+
                 result = await self.analysis_service.resume_analysis(
                     trace_id=trace_id,
                     group_id=group_id,
-                    platform_id=platform
-                    if platform and platform not in ("all", "auto", "default")
-                    else None,
+                    platform_id=target_platform,
                     template_name=template_name,
                 )
                 if result and result.get("success"):
@@ -736,11 +791,8 @@ class PluginPageWebUIBridge:
                             else ""
                         )
                         or getattr(adapter, "platform_id", "")
-                        or (
-                            platform
-                            if platform and platform not in ("all", "auto", "default")
-                            else ""
-                        )
+                        or target_platform
+                        or ""
                     )
                     trace_ctx.platform = str(dispatch_platform_id)
                     if self.report_dispatcher and analysis_result:
