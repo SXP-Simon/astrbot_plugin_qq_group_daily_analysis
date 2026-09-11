@@ -11,6 +11,7 @@ import {
   Empty,
   Badge,
   Spin,
+  Alert,
 } from "antd";
 import {
   SaveOutlined,
@@ -44,6 +45,8 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     currentGroupFields,
     activeGroupMeta,
     searchQuery,
+    errors,
+    groupErrorCounts,
     setSearchQuery,
     setActiveCategory,
     handleFieldChange,
@@ -166,6 +169,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                   const isActive = activeCategory === cat.key;
                   const isVisible =
                     cat.matchCount === undefined || cat.matchCount > 0;
+                  const errCount = groupErrorCounts[cat.key] || 0;
 
                   if (!isVisible) return null;
 
@@ -198,24 +202,36 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {cat.label}
                       </span>
-                      {cat.matchCount !== undefined ? (
-                        <Badge
-                          count={cat.matchCount}
-                          style={{
-                            backgroundColor: isActive ? "#ffffff" : "#1677ff",
-                            color: isActive ? "#1677ff" : "#ffffff",
-                          }}
-                        />
-                      ) : (
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: isActive ? "rgba(255, 255, 255, 0.75)" : "#8c8c8c",
-                          }}
-                        >
-                          {cat.totalFields} 项
-                        </Text>
-                      )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {errCount > 0 && (
+                          <Badge
+                            count={errCount}
+                            title={`${errCount} 项填写有误`}
+                            style={{
+                              backgroundColor: "#ff4d4f",
+                              boxShadow: "none",
+                            }}
+                          />
+                        )}
+                        {cat.matchCount !== undefined ? (
+                          <Badge
+                            count={cat.matchCount}
+                            style={{
+                              backgroundColor: isActive ? "#ffffff" : "#1677ff",
+                              color: isActive ? "#1677ff" : "#ffffff",
+                            }}
+                          />
+                        ) : errCount === 0 ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: isActive ? "rgba(255, 255, 255, 0.75)" : "#8c8c8c",
+                            }}
+                          >
+                            {cat.totalFields} 项
+                          </Text>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })}
@@ -260,6 +276,15 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                 </div>
               )}
 
+              {groupErrorCounts[activeCategory] > 0 && (
+                <Alert
+                  type="error"
+                  showIcon
+                  message={`当前分组内有 ${groupErrorCounts[activeCategory]} 项配置填写有误，请核对并修改标红字段。`}
+                  style={{ marginBottom: 16, borderRadius: 6 }}
+                />
+              )}
+
               {currentGroupFields.length === 0 ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -301,6 +326,8 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           providers={providers}
                           personas={personas}
                           fullKeyPath={`${activeCategory}.${field.key}`}
+                          error={errors[activeCategory]?.[field.key]}
+                          subErrors={errors[activeCategory]}
                           onChange={(newVal) =>
                             handleFieldChange(activeCategory, field.key, newVal)
                           }
