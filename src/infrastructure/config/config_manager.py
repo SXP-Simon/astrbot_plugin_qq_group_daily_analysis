@@ -42,7 +42,7 @@ class ConfigManager:
         self._protect_upgrade_data()
 
     def _protect_upgrade_data(self) -> None:
-        """在插件升级时备份发生结构变更的旧配置，并保护用户修改的模板。"""
+        """在插件升级且配置结构发生变更时备份旧配置。"""
         plugin_root = self._get_plugin_root()
         current_version = self._get_plugin_version(plugin_root)
         current_schema_fingerprint = self._get_schema_fingerprint(plugin_root)
@@ -51,7 +51,6 @@ class ConfigManager:
         )
         previous_state = self._read_upgrade_protection_state(state_path)
         previous_version = str(previous_state.get("version", "")).strip()
-        version_changed = bool(previous_version and previous_version != current_version)
 
         if not previous_state:
             logger.debug("升级保护基线已建立，后续配置结构变化时可备份本次快照。")
@@ -67,19 +66,12 @@ class ConfigManager:
                 logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
                 return
 
-        template_hashes = self._protect_custom_t2i_templates(
-            plugin_root,
-            previous_state.get("template_hashes", {}),
-            version_changed,
-            bool(previous_state),
-        )
         self._save_upgrade_protection_state(
             state_path,
             {
                 "version": current_version,
                 "schema_fingerprint": current_schema_fingerprint,
                 "config": dict(self.config),
-                "template_hashes": template_hashes,
             },
         )
 
@@ -205,70 +197,8 @@ class ConfigManager:
             logger.warning(f"备份插件旧配置失败: {exc}")
             return False
 
-    def _protect_custom_t2i_templates(
-        self,
-        plugin_root: Path,
-        previous_hashes: object,
-        version_changed: bool,
-        has_previous_state: bool,
-    ) -> dict[str, str]:
-        """将本版本内用户改动过的 T2I 模板保存到插件数据目录。
-
-        Args:
-            plugin_root: 当前插件根目录。
-            previous_hashes: 上一次启动记录的官方或用户模板哈希。
-            version_changed: 当前版本是否已发生变化。
-            has_previous_state: 是否已有上一次启动的完整状态。
-
-        Returns:
-            本次启动读取到的模板哈希。
-        """
-        known_hashes = previous_hashes if isinstance(previous_hashes, dict) else {}
-        template_roots = {
-            "reporting_templates": plugin_root
-            / "src/infrastructure/reporting/templates",
-            "standalone_templates": plugin_root / "data/t2i_templates",
-        }
-        current_hashes = {}
-        plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
-        for category, template_root in template_roots.items():
-            if not template_root.is_dir():
-                continue
-            for template_path in template_root.rglob("*.html"):
-                relative_path = template_path.relative_to(template_root)
-                state_key = f"{category}/{relative_path.as_posix()}"
-                try:
-                    content_hash = hashlib.sha256(
-                        template_path.read_bytes()
-                    ).hexdigest()
-                except OSError as exc:
-                    logger.warning(
-                        f"读取 T2I 模板失败，跳过保护: {template_path}: {exc}"
-                    )
-                    continue
-                is_standalone_template = category == "standalone_templates"
-                if (
-                    (not has_previous_state and not is_standalone_template)
-                    or (version_changed and not is_standalone_template)
-                    or known_hashes.get(state_key) == content_hash
-                ):
-                    current_hashes[state_key] = content_hash
-                    continue
-
-                backup_path = plugin_data_dir / "custom_t2i_templates" / state_key
-                try:
-                    backup_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(template_path, backup_path)
-                    current_hashes[state_key] = content_hash
-                    logger.info(f"已保护用户修改的 T2I 模板: {relative_path}")
-                except OSError as exc:
-                    if state_key in known_hashes:
-                        current_hashes[state_key] = known_hashes[state_key]
-                    logger.warning(f"保存用户 T2I 模板失败: {template_path}: {exc}")
-        return current_hashes
-
     def get_custom_report_template_dir(self, template_name: str) -> Path | None:
-        """获取指定报告模板的用户覆盖目录。"""
+        """获取指定报告模板的用户自定义模板目录。"""
         custom_dir = (
             StarTools.get_data_dir(PLUGIN_NAME)
             / "custom_t2i_templates/reporting_templates"

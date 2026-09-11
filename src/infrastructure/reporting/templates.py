@@ -6,7 +6,6 @@ HTML模板模块
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import threading
@@ -78,18 +77,19 @@ class HTMLTemplates:
         )
 
         loaders = []
-        # 拒绝符号链接的自定义模板目录或其内的主模板文件：FileSystemLoader 会跟随链接加载外部文件
-        if (
+        # 1. 官方内置模板：优先加载官方内置模板目录，绝不加载任何自定义覆盖，保持官方模板的纯净与最新
+        if os.path.exists(template_dir):
+            loaders.append(FileSystemLoader(template_dir))
+        # 2. 用户自定义模板：如果不是官方内置模板，从用户自定义模板目录加载
+        elif (
             custom_template_dir
             and custom_template_dir.exists()
             and not custom_template_dir.is_symlink()
             and not template_dir_has_symlink_entries(custom_template_dir)
         ):
             loaders.append(FileSystemLoader(str(custom_template_dir)))
-        if os.path.exists(template_dir):
-            loaders.append(FileSystemLoader(template_dir))
 
-        # 若目标模板既不在自定义目录也不在内置目录，明确抛出未找到异常
+        # 若目标模板既不在内置目录也不在自定义目录，明确抛出未找到异常
         if not loaders:
             raise FileNotFoundError(f"未找到指定的报告主题模板「{clean_name}」")
 
@@ -122,7 +122,7 @@ class HTMLTemplates:
         """动态扫描内置与自定义数据目录，返回所有可用的视觉主题模板列表"""
         found_themes: dict[str, dict[str, Any]] = {}
 
-        # 1. 扫描内置模板目录
+        # 1. 扫描内置模板目录（官方模板始终由源码管理）
         if os.path.isdir(self.base_dir):
             for entry in sorted(os.listdir(self.base_dir)):
                 if entry.startswith(".") or entry == "format":
@@ -149,7 +149,7 @@ class HTMLTemplates:
                             "can_uninstall": False,
                         }
 
-        # 2. 扫描用户自定义模板目录
+        # 2. 扫描用户自定义模板目录（仅登记非官方内置的独立自定义主题）
         get_custom_dir = getattr(
             self.config_manager, "get_custom_report_template_dir", None
         )
@@ -170,56 +170,31 @@ class HTMLTemplates:
                     and not template_dir_has_symlink_entries(p)
                 ):
                     entry = p.name
+                    # 若与官方内置模板同名，则忽略自定义目录下的同名残留，严格使用官方版本
+                    if entry in found_themes:
+                        continue
+
                     has_image = (p / "image_template.html").exists()
                     has_html = (p / "html_template.html").exists()
                     if has_image or has_html:
-                        builtin_label = self.KNOWN_TEMPLATE_NAMES.get(entry)
-                        builtin_dir = os.path.join(self.base_dir, entry)
                         meta = self._read_template_meta(p)
                         meta_name = meta.get("name", "")
-
-                        is_custom = True
-                        if builtin_label and os.path.isdir(builtin_dir):
-                            # 对比自定义目录与内置目录中的所有 HTML 文件哈希，避免未修改时误判
-                            is_truly_modified = False
-                            for ch_file in p.glob("*.html"):
-                                bh_file = Path(builtin_dir) / ch_file.name
-                                if not bh_file.exists():
-                                    is_truly_modified = True
-                                    break
-                                try:
-                                    if (
-                                        hashlib.sha256(ch_file.read_bytes()).digest()
-                                        != hashlib.sha256(bh_file.read_bytes()).digest()
-                                    ):
-                                        is_truly_modified = True
-                                        break
-                                except Exception:
-                                    is_truly_modified = True
-                                    break
-
-                            if not is_truly_modified:
-                                is_custom = False
-                                custom_label = builtin_label
-                            else:
-                                custom_label = f"{builtin_label} (自定义修改版)"
-                        elif meta_name:
-                            custom_label = f"{meta_name} ({entry})"
-                        else:
-                            custom_label = f"{entry} (自定义本地模板)"
+                        custom_label = (
+                            f"{meta_name} ({entry})"
+                            if meta_name
+                            else f"{entry} (自定义主题)"
+                        )
 
                         found_themes[entry] = {
                             "id": entry,
                             "label": custom_label,
-                            "is_custom": is_custom,
+                            "is_custom": True,
                             "has_image": has_image,
                             "has_html": has_html,
                             "display_name": meta_name or entry,
                             "desc": meta.get("desc", ""),
                             "tag": meta.get("tag", ""),
                             "tag_color": meta.get("tag_color", ""),
-                            # 仅安装器写入标记的模板可被 WebUI 自动卸载；
-                            # 内置模板的手动修改备份与手动放置目录均不可
                             "can_uninstall": (p / INSTALL_MARKER_FILENAME).is_file(),
                         }
 

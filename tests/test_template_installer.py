@@ -581,9 +581,14 @@ def test_available_templates_can_uninstall_flag(tmp_path):
     items = {t["id"]: t for t in HTMLTemplates(mock).get_available_templates()}
 
     assert items["gda_managed"]["can_uninstall"] is True
+    assert items["gda_managed"]["is_custom"] is True
     assert items["manual_theme"]["can_uninstall"] is False
-    # 内置模板不可卸载
+    assert items["manual_theme"]["is_custom"] is True
+    # 内置模板不可卸载且不是自定义模板
     assert items["scrapbook"]["can_uninstall"] is False
+    assert items["scrapbook"]["is_custom"] is False
+    assert items["simple"]["can_uninstall"] is False
+    assert items["simple"]["is_custom"] is False
 
 
 def _make_theme_store(tmp_path):

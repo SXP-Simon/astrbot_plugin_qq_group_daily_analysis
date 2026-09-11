@@ -722,7 +722,7 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     templates_mgr = HTMLTemplates(mock_config)
     templates = templates_mgr.get_available_templates()
 
-    # 验证内置模板被正确识别
+    # 验证内置模板被正确识别（绝不被同名自定义文件夹污染为修改版）
     template_ids = [t["id"] for t in templates]
     assert "scrapbook" in template_ids
     assert "ATRI" in template_ids
@@ -733,21 +733,19 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     # 验证自定义模板被正确识别并优雅处理名称
     assert "third_party_cyber" in template_ids
 
-    # 真正修改过的 ATRI 会被标记为自定义修改版
+    # 官方内置模板始终保持官方版本属性
     atri_meta = next(t for t in templates if t["id"] == "ATRI")
-    assert atri_meta["is_custom"] is True
-    assert "自定义修改版" in atri_meta["label"]
+    assert atri_meta["is_custom"] is False
+    assert atri_meta["can_uninstall"] is False
 
-    # 未做修改的 simple 不会被误判为修改版
     simple_meta = next(t for t in templates if t["id"] == "simple")
     assert simple_meta["is_custom"] is False
-    assert "自定义修改版" not in simple_meta["label"]
+    assert simple_meta["can_uninstall"] is False
 
-    # 全新第三方模板标记为自定义本地模板
+    # 全新第三方模板标记为自定义主题
     cyber_meta = next(t for t in templates if t["id"] == "third_party_cyber")
     assert cyber_meta["is_custom"] is True
     assert "third_party_cyber" in cyber_meta["label"]
-    assert "自定义本地模板" in cyber_meta["label"]
 
 
 @pytest.mark.asyncio
