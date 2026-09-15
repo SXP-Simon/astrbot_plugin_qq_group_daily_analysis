@@ -83,8 +83,12 @@
             isDark = true;
           } else if (themeVal === "light" || params.get("isDark") === "false") {
             isDark = false;
-          } else if (localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
-            isDark = true;
+          } else {
+            try {
+              if (typeof localStorage !== "undefined" && localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
+                isDark = true;
+              }
+            } catch (_) {}
           }
           if (isDark) {
             document.documentElement.style.background = "#000000";
@@ -96,7 +100,7 @@
         } catch(e) {}
       })();
     </script>
-    <script type="module" crossorigin src="./assets/index.js"></script>
+    <script defer src="./assets/index.js"></script>
   </head>
   <body>
     <div id="root"></div>
