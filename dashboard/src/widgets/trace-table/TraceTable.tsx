@@ -50,6 +50,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
       title: "群聊",
       dataIndex: "group_id",
       key: "group_id",
+      width: 180,
       render: (gid: string, r: TraceRecord) => {
         const p = !r.platform || r.platform === "auto" || r.platform === "default" ? "" : r.platform;
         return (
@@ -218,6 +219,7 @@ export const TraceTable: React.FC<TraceTableProps> = ({
           dataSource={traces}
           rowKey="trace_id"
           loading={loading}
+          scroll={{ x: 1200 }}
           onChange={onTableChange}
           pagination={{
             current: page,

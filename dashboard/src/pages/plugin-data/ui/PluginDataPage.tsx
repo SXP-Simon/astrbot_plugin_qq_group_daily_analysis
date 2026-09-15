@@ -804,6 +804,7 @@ export const PluginDataPage: React.FC = () => {
               pagination={false}
               size="small"
               loading={loadingOverview}
+              scroll={{ x: 750 }}
               style={{ width: "100%" }}
             />
           </Card>
@@ -945,6 +946,7 @@ export const PluginDataPage: React.FC = () => {
                 dataSource={incrBatches}
                 pagination={false}
                 size="small"
+                scroll={{ x: 650 }}
                 loading={loadingIncremental}
                 locale={{
                   emptyText: (
@@ -1068,6 +1070,7 @@ export const PluginDataPage: React.FC = () => {
               dataSource={checkpoints}
               loading={loadingCheckpoints}
               size="small"
+              scroll={{ x: 850 }}
               pagination={{
                 current: checkpointsPage,
                 pageSize: checkpointsPageSize,

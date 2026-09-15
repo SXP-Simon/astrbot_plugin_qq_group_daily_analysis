@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   Row,
@@ -20,6 +20,9 @@ import {
   SettingOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
+  AppstoreOutlined,
+  DownOutlined,
+  UpOutlined,
 } from "@ant-design/icons";
 import { useConfigViewModel } from "../model/useConfigViewModel";
 import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
@@ -34,6 +37,19 @@ interface ConfigPageProps {
 
 export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
   const { isDark } = useTheme();
+  const [isMobileScreen, setIsMobileScreen] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const {
     loading,
     saving,
@@ -53,6 +69,8 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     handleSave,
     handleReload,
   } = viewModel;
+
+  const activeCategoryInfo = categories.find((c) => c.key === activeCategory);
 
   return (
     <div
@@ -137,105 +155,157 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
       <Card size="small" styles={{ body: { padding: 0 } }}>
         <Spin spinning={loading}>
           <Row style={{ minHeight: 600 }}>
-            {/* 左侧：搜索与分组导航 (Sticky 固定在 Header 下方，保持独立滚动与常驻可视) */}
+            {/* 左侧：搜索与分组导航 (桌面端 Sticky 固定，移动端支持一键收纳展开) */}
             <Col
               xs={24}
               md={6}
               style={{
-                borderRight: `1px solid ${isDark ? "#303030" : "#f0f0f0"}`,
-                padding: "16px 12px",
+                borderRight: !isMobileScreen ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}` : undefined,
+                borderBottom: isMobileScreen ? `1px solid ${isDark ? "#303030" : "#f0f0f0"}` : undefined,
+                padding: isMobileScreen ? "12px 16px" : "16px 12px",
                 background: isDark ? "#141414" : "#fafafa",
-                position: "sticky",
+                position: isMobileScreen ? "static" : "sticky",
                 top: 72,
-                maxHeight: "calc(100vh - 88px)",
-                overflowY: "auto",
+                maxHeight: isMobileScreen ? undefined : "calc(100vh - 88px)",
+                overflowY: isMobileScreen ? undefined : "auto",
                 alignSelf: "flex-start",
                 zIndex: 10,
               }}
             >
-              <div style={{ marginBottom: 12 }}>
-                <Input
-                  placeholder="搜索配置名称或说明"
-                  prefix={<SearchOutlined style={{ color: "#8c8c8c" }} />}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  allowClear
-                />
-              </div>
+              {/* 移动端分组切换与收纳指示栏 */}
+              {isMobileScreen && (
+                <div
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    background: isDark ? "#1f1f1f" : "#f0f2f5",
+                    cursor: "pointer",
+                    marginBottom: mobileMenuOpen ? 12 : 0,
+                    border: `1px solid ${isDark ? "#303030" : "#e4e7eb"}`,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+                    <AppstoreOutlined style={{ color: "#1677ff", fontSize: 16, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      当前分组: {activeCategoryInfo?.label || activeCategory}
+                    </span>
+                    {activeCategoryInfo && (
+                      <Tag color="blue" style={{ margin: 0, fontSize: 11, padding: "0 6px" }}>
+                        {activeCategoryInfo.totalFields} 项
+                      </Tag>
+                    )}
+                    {(groupErrorCounts[activeCategory] || 0) > 0 && (
+                      <Badge count={groupErrorCounts[activeCategory]} />
+                    )}
+                  </div>
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={mobileMenuOpen ? <UpOutlined /> : <DownOutlined />}
+                    style={{ padding: 0, fontSize: 12, flexShrink: 0 }}
+                  >
+                    {mobileMenuOpen ? "收起分组" : "切换分组"}
+                  </Button>
+                </div>
+              )}
 
-              {/* 分组列表 */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {categories.map((cat) => {
-                  const isActive = activeCategory === cat.key;
-                  const isVisible =
-                    cat.matchCount === undefined || cat.matchCount > 0;
-                  const errCount = groupErrorCounts[cat.key] || 0;
+              {/* 搜索框与分组列表 (桌面端常驻，移动端点击展开后显示) */}
+              {(!isMobileScreen || mobileMenuOpen) && (
+                <>
+                  <div style={{ marginBottom: 12 }}>
+                    <Input
+                      placeholder="搜索配置名称或说明"
+                      prefix={<SearchOutlined style={{ color: "#8c8c8c" }} />}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      allowClear
+                    />
+                  </div>
 
-                  if (!isVisible) return null;
+                  {/* 分组列表 */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {categories.map((cat) => {
+                      const isActive = activeCategory === cat.key;
+                      const isVisible =
+                        cat.matchCount === undefined || cat.matchCount > 0;
+                      const errCount = groupErrorCounts[cat.key] || 0;
 
-                  return (
-                    <div
-                      key={cat.key}
-                      onClick={() => setActiveCategory(cat.key)}
-                      style={{
-                        padding: "9px 12px",
-                        borderRadius: 6,
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        fontSize: 13,
-                        fontWeight: isActive ? 600 : 400,
-                        background: isActive
-                          ? "#1677ff"
-                          : isDark
-                            ? "transparent"
-                            : "transparent",
-                        color: isActive
-                          ? "#ffffff"
-                          : isDark
-                            ? "#d9d9d9"
-                            : "#262626",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {cat.label}
-                      </span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        {errCount > 0 && (
-                          <Badge
-                            count={errCount}
-                            title={`${errCount} 项填写有误`}
-                            style={{
-                              backgroundColor: "#ff4d4f",
-                              boxShadow: "none",
-                            }}
-                          />
-                        )}
-                        {cat.matchCount !== undefined ? (
-                          <Badge
-                            count={cat.matchCount}
-                            style={{
-                              backgroundColor: isActive ? "#ffffff" : "#1677ff",
-                              color: isActive ? "#1677ff" : "#ffffff",
-                            }}
-                          />
-                        ) : errCount === 0 ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: isActive ? "rgba(255, 255, 255, 0.75)" : "#8c8c8c",
-                            }}
-                          >
-                            {cat.totalFields} 项
-                          </Text>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      if (!isVisible) return null;
+
+                      return (
+                        <div
+                          key={cat.key}
+                          onClick={() => {
+                            setActiveCategory(cat.key);
+                            if (isMobileScreen) {
+                              setMobileMenuOpen(false);
+                            }
+                          }}
+                          style={{
+                            padding: "9px 12px",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 13,
+                            fontWeight: isActive ? 600 : 400,
+                            background: isActive
+                              ? "#1677ff"
+                              : isDark
+                                ? "transparent"
+                                : "transparent",
+                            color: isActive
+                              ? "#ffffff"
+                              : isDark
+                                ? "#d9d9d9"
+                                : "#262626",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {cat.label}
+                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {errCount > 0 && (
+                              <Badge
+                                count={errCount}
+                                title={`${errCount} 项填写有误`}
+                                style={{
+                                  backgroundColor: "#ff4d4f",
+                                  boxShadow: "none",
+                                }}
+                              />
+                            )}
+                            {cat.matchCount !== undefined ? (
+                              <Badge
+                                count={cat.matchCount}
+                                style={{
+                                  backgroundColor: isActive ? "#ffffff" : "#1677ff",
+                                  color: isActive ? "#1677ff" : "#ffffff",
+                                }}
+                              />
+                            ) : errCount === 0 ? (
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  color: isActive ? "rgba(255, 255, 255, 0.75)" : "#8c8c8c",
+                                }}
+                              >
+                                {cat.totalFields} 项
+                              </Text>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </Col>
 
             {/* 右侧：分组详情与表单项 */}
