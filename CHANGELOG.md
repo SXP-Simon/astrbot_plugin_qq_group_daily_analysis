@@ -1,5 +1,12 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.5.2] - 修复内网穿透与反向代理环境下 WebUI 加载白屏与跨域拦截问题
+
+*   **🛡️ 【核心修复】WebUI 内网穿透与反向代理环境适配**：
+    *   **经典脚本构建重构 (IIFE Bundle)**：前端打包模式由 ES Module 重构为经典 IIFE 传统脚本，并移除 `<script type="module">` 及 `crossorigin` 跨域属性。彻底解决通过绿联 NAS、Nginx 等反代及内网穿透服务访问时，网关 302 重定向或缺少 CORS 响应头导致的浏览器严格跨域拦截与脚本加载中断白屏。
+    *   **脚本延迟加载与 DOM 挂载安全守卫**：为构建生成的外部脚本补充 `defer` 延迟属性，并在 React 挂载入口增加 `document.readyState` 与 `DOMContentLoaded` 状态守卫，避免因脚本过早执行找不到 `#root` 节点而抛出 `Minified React error #299` 异常。
+    *   **沙箱环境 LocalStorage 访问防护**：完善前端全局与主题初始化逻辑，增加沙箱隔离 iframe 环境下访问 `localStorage` 的安全 `try...catch` 守卫，杜绝因浏览器同源策略限制抛出 `SecurityError` 导致页面崩溃。
+
 ## [v5.5.1] - 修复 WebUI 手动触发平台适配器解析异常与跨平台探测重构 (#237)
 
 *   **【核心修复】WebUI 手动分析平台解析与适配器匹配重构 (#237)**：
