@@ -268,6 +268,10 @@ export const App: React.FC = () => {
       <div
         style={{
           minHeight: "100vh",
+          width: "100%",
+          maxWidth: "100vw",
+          overflowX: "hidden",
+          boxSizing: "border-box",
           background: isDark ? "#000000" : "#f5f5f5",
           padding: 12,
           color: isDark ? "#ffffff" : "#000000",

@@ -128,6 +128,7 @@ export const ActiveTaskBoard: React.FC<ActiveTaskBoardProps> = ({
           columns={columns}
           dataSource={tasks}
           rowKey="task_id"
+          scroll={{ x: 600 }}
           pagination={false}
         />
       )}
