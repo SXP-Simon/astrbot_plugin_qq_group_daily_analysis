@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Switch,
   InputNumber,
@@ -140,6 +140,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newFileInput, setNewFileInput] = useState("");
   const [isAddingFile, setIsAddingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const title = fieldSchema.description || fieldKey;
   const hint = fieldSchema.hint || "";
@@ -740,8 +741,8 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           {/* 添加控制栏 */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <input
+              ref={fileInputRef}
               type="file"
-              id={`file-upload-${fieldKey}`}
               multiple
               accept={
                 Array.isArray(fieldSchema.file_types)
@@ -755,7 +756,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
               size="small"
               icon={<UploadOutlined />}
               onClick={() => {
-                document.getElementById(`file-upload-${fieldKey}`)?.click();
+                fileInputRef.current?.click();
               }}
             >
               上传本地图片
