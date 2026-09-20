@@ -309,15 +309,12 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
-        """
-        分析群聊话题
+        """分析群聊话题
 
         Args:
             messages: 群聊消息列表
             umo: 模型唯一标识符
-            session_id: 会话ID (用于调试模式)
 
         Returns:
             (话题列表, Token使用统计)
@@ -356,7 +353,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                     id_to_nickname[user_id] = sender
 
             # 直接传入原始消息，让 build_prompt 方法处理
-            topics, usage = await self.analyze(messages, umo, session_id)
+            topics, usage = await self.analyze(messages, umo)
 
             # 后处理：contributors 此时包含的是 ID，需要映射回昵称
             for topic in topics:

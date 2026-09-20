@@ -1,0 +1,77 @@
+{% if quotes %}
+<section class="an-section an-quotes-section avoid-break">
+    <div class="an-section-header">
+        <div class="an-header-flourish-left">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+        <div class="an-section-title-wrap">
+            <h2 class="an-section-title">精选金句回响 · Golden Quotes</h2>
+            <span class="an-section-subtitle">TIMELESS EPIGRAMS & ECHOES</span>
+        </div>
+        <div class="an-header-flourish-right">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="an-quotes-list">
+        {% for quote in quotes %}
+        <div class="an-quote-card avoid-break">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-quote-inner">
+                <div class="an-quote-avatar-col">
+                    {% if quote.avatar_url %}
+                    <div class="an-cameo-frame-sm">
+                        <img src="{{ quote.avatar_url }}" class="an-quote-avatar" alt="{{ quote.sender }}">
+                    </div>
+                    {% else %}
+                    <div class="an-cameo-frame-sm an-avatar-placeholder-sm">
+                        <svg viewBox="0 0 24 24" width="20" height="20" style="width: 20px; height: 20px;" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="8" r="4"/>
+                            <path d="M4 20C4 16 7.5 14 12 14C16.5 14 20 16 20 20"/>
+                        </svg>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="an-quote-body-col">
+                    <div class="an-quote-author-row">
+                        <span class="an-quote-sender">{{ quote.sender }}</span>
+                        <span class="an-quote-laurel-badge">精彩发言</span>
+                    </div>
+
+                    <div class="an-quote-parchment">
+                        <span class="an-quote-open-mark">“</span>
+                        <p class="an-quote-text">{{ quote.content }}</p>
+                        <span class="an-quote-close-mark">”</span>
+                    </div>
+
+                    {% if quote.reason %}
+                    <div class="an-quote-critique">
+                        <div class="an-critique-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M12 2L15 8L21 9L17 14L18 20L12 17L6 20L7 14L3 9L9 8L12 2Z"/>
+                            </svg>
+                            AI 观察锐评
+                        </div>
+                        <div class="an-critique-text">{{ quote.reason | safe }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

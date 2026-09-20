@@ -166,7 +166,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       title: "关联分析任务",
       dataIndex: "trace_id",
       key: "trace_id",
-      width: 150,
+      width: 170,
+      ellipsis: true,
       render: (tid: string) => {
         if (!tid) {
           return (
@@ -176,7 +177,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
           );
         }
         return (
-          <Tooltip title="点击在右侧查看该报告完整的全阶段分析指标与时间线">
+          <Tooltip title={`关联任务: ${tid}\n(点击查看该任务全阶段执行指标与时间线)`}>
             <Button
               type="link"
               size="small"
@@ -187,6 +188,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
                 fontFamily:
                   "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
                 height: "auto",
+                maxWidth: "100%",
+                display: "inline-block",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                verticalAlign: "bottom",
               }}
             >
               {tid}
@@ -199,9 +206,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       title: "文件大小",
       dataIndex: "size_bytes",
       key: "size_bytes",
-      width: 90,
+      width: 95,
+      ellipsis: true,
       render: (bytes: number) => (
-        <span style={{ fontSize: 12 }}>
+        <span style={{ fontSize: 12, whiteSpace: "nowrap" }}>
           {bytes > 0 ? `${(bytes / 1024).toFixed(1)} KB` : "-"}
         </span>
       ),

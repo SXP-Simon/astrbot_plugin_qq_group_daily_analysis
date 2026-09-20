@@ -1,5 +1,5 @@
 import React from "react";
-import { Descriptions, Tag, Typography, Tooltip, Space, Button } from "antd";
+import { Alert, Descriptions, Tag, Typography, Tooltip, Space, Button } from "antd";
 import {
   DatabaseOutlined,
   FileImageOutlined,
@@ -33,6 +33,11 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
 }) => {
   const { isDark } = useTheme();
 
+  const isFallbackToFresh = Boolean(
+    trace.extra?.fallback_to_fresh_run ||
+      (trace.extra as Record<string, unknown> | undefined)?.resumed_from === "fresh_run_fallback"
+  );
+
   const rawFiles =
     trace.report_files ||
     (Array.isArray(trace.extra?.report_files)
@@ -48,6 +53,16 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
 
   return (
     <>
+      {isFallbackToFresh && (
+        <Alert
+          type="info"
+          showIcon
+          message="未检测到历史快照，已自动降级为全量重新拉取分析"
+          description="本次续跑由于前置消息清洗快照不存在或已过期，系统已自动重新向平台拉取最新群消息并完成了全量分析交付。"
+          style={{ marginBottom: 12, fontSize: 12 }}
+        />
+      )}
+
       {/* 基本信息 */}
       <Descriptions
         size="small"
@@ -84,7 +99,16 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
           </Tag>
         </Descriptions.Item>
         <Descriptions.Item label="触发方式">
-          <TriggerTypeTag triggerType={trace.trigger_type} />
+          <Space size={4} wrap>
+            <TriggerTypeTag triggerType={trace.trigger_type} />
+            {isFallbackToFresh && (
+              <Tooltip title="未检测到历史清洗快照，已自动降级为全量重新拉取最新消息">
+                <Tag color="orange" style={{ margin: 0 }}>
+                  快照缺失·全量拉取
+                </Tag>
+              </Tooltip>
+            )}
+          </Space>
         </Descriptions.Item>
         <Descriptions.Item label="开始时间">
           <span>{formatTimestamp(trace.started_at)}</span>

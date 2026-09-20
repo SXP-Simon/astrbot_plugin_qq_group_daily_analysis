@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群聊艺术画报 · {{current_date}}</title>
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
+    <link href="{{ t2i_google_fonts_mirror }}/css2?family=Cinzel:wght@600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Serif+TC:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* Art Nouveau Color System */
+            --an-bg: #f5f0e1;
+            --an-bg-card: #fcfaf4;
+            --an-bg-subtle: #f8f4ea;
+            --an-bg-parchment: #ede4d1;
+
+            --an-primary: #2d5016;       /* Deep Forest Green */
+            --an-primary-dark: #1b350c;
+            --an-primary-light: #4a7c3f;
+            --an-gold: #c9a227;          /* Antique Gold */
+            --an-gold-light: #e0bc4a;
+            --an-gold-dark: #967515;
+            --an-wisteria: #8b6db5;      /* Wisteria Purple */
+            --an-wisteria-bg: #f5effc;
+            --an-terracotta: #c26d5c;    /* Rose Terracotta */
+
+            --an-text-main: #1a330e;
+            --an-text-muted: #5e6b52;
+            --an-text-gold: #8f6e14;
+
+            --an-border-gold: rgba(201, 162, 39, 0.55);
+            --an-border-thin: rgba(201, 162, 39, 0.3);
+
+            --an-radius-sm: 0.6rem;
+            --an-radius-md: 1rem;
+            --an-radius-lg: 1.25rem;
+            --an-radius-xl: 1.75rem;
+
+            --an-font-display: 'Cinzel', {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
+            --an-font-body: 'Cormorant Garamond', {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, Georgia, serif;
+            --an-font-mono: 'JetBrains Mono', 'Cinzel', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        body {
+            font-family: var(--an-font-body);
+            color: var(--an-text-main);
+            background-color: var(--an-bg);
+            /* Warm vintage parchment with delicate grain */
+            background-image:
+                radial-gradient(ellipse at top left, rgba(201, 162, 39, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse at bottom right, rgba(45, 80, 22, 0.06) 0%, transparent 60%),
+                radial-gradient(#c9a227 0.75px, transparent 0.75px);
+            background-size: 100% 100%, 100% 100%, 28px 28px;
+            min-height: 100vh;
+            padding: 36px 18px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .an-page-wrapper {
+            max-width: 980px;
+            margin: 0 auto;
+            position: relative;
+            background: var(--an-bg-card);
+            border: 2px solid var(--an-gold);
+            border-radius: var(--an-radius-xl);
+            padding: 40px 36px;
+            box-shadow:
+                0 0 0 4px var(--an-bg),
+                0 0 0 6px var(--an-border-gold),
+                0 20px 45px -8px rgba(45, 80, 22, 0.12),
+                0 4px 16px rgba(201, 162, 39, 0.15);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .avoid-break {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        /* 页面外围四角花纹 */
+        .an-page-corner {
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .an-page-tl {
+            top: 8px;
+            left: 8px;
+            border-top: 3px double var(--an-gold);
+            border-left: 3px double var(--an-gold);
+            border-top-left-radius: 12px;
+        }
+
+        .an-page-tr {
+            top: 8px;
+            right: 8px;
+            border-top: 3px double var(--an-gold);
+            border-right: 3px double var(--an-gold);
+            border-top-right-radius: 12px;
+        }
+
+        .an-page-bl {
+            bottom: 8px;
+            left: 8px;
+            border-bottom: 3px double var(--an-gold);
+            border-left: 3px double var(--an-gold);
+            border-bottom-left-radius: 12px;
+        }
+
+        .an-page-br {
+            bottom: 8px;
+            right: 8px;
+            border-bottom: 3px double var(--an-gold);
+            border-right: 3px double var(--an-gold);
+            border-bottom-right-radius: 12px;
+        }
+
+        /* ==================== 1. Mucha Halo Header ==================== */
+        .an-header {
+            text-align: center;
+            position: relative;
+            padding: 10px 10px 24px 10px;
+            border-bottom: 2px solid var(--an-border-gold);
+        }
+
+        .an-mucha-halo-bg {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 420px;
+            height: 180px;
+            pointer-events: none;
+            opacity: 0.25;
+            z-index: 0;
+        }
+
+        .an-header-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .an-crown-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(180deg, #fcf6e5 0%, #faecd0 100%);
+            border: 1.5px solid var(--an-gold);
+            padding: 5px 22px;
+            border-radius: 9999px;
+            color: var(--an-primary);
+            font-family: var(--an-font-display);
+            font-size: 0.85rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            box-shadow: 0 2px 8px rgba(201, 162, 39, 0.2);
+            margin-bottom: 14px;
+        }
+
+        .an-crown-badge-sym {
+            color: var(--an-gold);
+            font-size: 1.1rem;
+        }
+
+        .an-main-title {
+            font-family: var(--an-font-display);
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--an-primary);
+            letter-spacing: 0.03em;
+            line-height: 1.25;
+            margin: 0 0 10px;
+            text-shadow: 1px 1px 0 rgba(201, 162, 39, 0.4);
+        }
+
+        .an-title-sub-gold {
+            display: block;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--an-gold-dark);
+            letter-spacing: 0.18em;
+            margin-top: 4px;
+        }
+
+        .an-header-meta-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-top: 14px;
+        }
+
+        .an-meta-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #fbf8ef;
+            border: 1px solid var(--an-border-gold);
+            color: var(--an-primary);
+            font-family: var(--an-font-body);
+            font-size: 0.92rem;
+            font-weight: 700;
+            padding: 4px 14px;
+            border-radius: 9999px;
+        }
+
+        .an-meta-tag svg {
+            width: 14px;
+            height: 14px;
+            color: var(--an-gold);
+        }
+
+        /* ==================== 2. Key Stats & Peak Activity ==================== */
+        .an-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .an-stat-card {
+            background: var(--an-bg-subtle);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-md);
+            padding: 18px 16px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(45, 80, 22, 0.04);
+            text-align: center;
+        }
+
+        .an-stat-card::after {
+            content: "";
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: 4px;
+            bottom: 4px;
+            border: 1px dashed rgba(201, 162, 39, 0.4);
+            border-radius: calc(var(--an-radius-md) - 3px);
+            pointer-events: none;
+        }
+
+        .an-stat-icon-wreath {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 10px;
+            border-radius: 50%;
+            background: #fcf6e5;
+            border: 1.5px solid var(--an-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--an-primary);
+            box-shadow: 0 2px 6px rgba(201, 162, 39, 0.2);
+        }
+
+        .an-stat-icon-wreath svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .an-stat-label {
+            font-family: var(--an-font-display);
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--an-text-muted);
+            letter-spacing: 0.04em;
+        }
+
+        .an-stat-number {
+            font-family: var(--an-font-display);
+            font-size: 1.95rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            line-height: 1.2;
+            margin: 4px 0 2px;
+        }
+
+        .an-stat-desc {
+            font-size: 0.82rem;
+            color: var(--an-text-gold);
+            font-style: italic;
+        }
+
+        /* Subtle Alternating Stat Cards (Forest Green & Antique Gold) */
+        .an-stat-card:nth-child(2n+1) .an-stat-icon-wreath {
+            background: #f0f6ec;
+            border-color: #4a7c3f;
+            color: #2d5016;
+            box-shadow: 0 2px 6px rgba(45, 80, 22, 0.18);
+        }
+        .an-stat-card:nth-child(2n+1) .an-stat-desc {
+            color: #4a7c3f;
+        }
+
+        .an-stat-card:nth-child(2n) .an-stat-icon-wreath {
+            background: #fdf8ee;
+            border-color: #c9a227;
+            color: #967515;
+            box-shadow: 0 2px 6px rgba(201, 162, 39, 0.18);
+        }
+        .an-stat-card:nth-child(2n) .an-stat-desc {
+            color: #967515;
+        }
+
+        /* Peak Activity Banner */
+        .an-peak-banner {
+            background: linear-gradient(135deg, #fcf8ee 0%, #faecd0 50%, #fcf8ee 100%);
+            border: 2px solid var(--an-gold);
+            border-radius: var(--an-radius-lg);
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            box-shadow: 0 4px 16px rgba(201, 162, 39, 0.15);
+            position: relative;
+        }
+
+        .an-peak-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .an-peak-crest {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: var(--an-primary);
+            border: 2px solid var(--an-gold);
+            color: var(--an-gold-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(45, 80, 22, 0.3);
+        }
+
+        .an-peak-crest svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .an-peak-title {
+            font-family: var(--an-font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            letter-spacing: 0.04em;
+        }
+
+        .an-peak-subtitle {
+            font-size: 0.9rem;
+            color: var(--an-text-muted);
+            font-style: italic;
+        }
+
+        .an-peak-badge {
+            background: #ffffff;
+            border: 2px solid var(--an-gold);
+            padding: 8px 20px;
+            border-radius: 9999px;
+            font-family: var(--an-font-display);
+            font-size: 1.55rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            box-shadow: 0 2px 8px rgba(201, 162, 39, 0.25);
+            letter-spacing: 0.04em;
+        }
+
+        /* ==================== 3. Section Generic Card ==================== */
+        .an-section {
+            background: var(--an-bg-card);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-lg);
+            padding: 24px 28px;
+            box-shadow: 0 6px 18px rgba(45, 80, 22, 0.04);
+            position: relative;
+        }
+
+        .an-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 22px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--an-border-thin);
+            text-align: center;
+        }
+
+        .an-header-flourish-left,
+        .an-header-flourish-right {
+            width: 90px;
+            height: 22px;
+            flex-shrink: 0;
+            opacity: 0.75;
+        }
+
+        .an-header-flourish-right {
+            transform: scaleX(-1);
+        }
+
+        .an-section-title-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .an-section-title {
+            font-family: var(--an-font-display);
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            letter-spacing: 0.04em;
+            line-height: 1.2;
+        }
+
+        .an-section-subtitle {
+            font-family: var(--an-font-display);
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--an-gold-dark);
+            letter-spacing: 0.12em;
+            margin-top: 2px;
+        }
+
+        /* Card corner flourishes (Mucha style) */
+        .an-card-corner {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            pointer-events: none;
+            opacity: 0.65;
+        }
+
+        .an-corner-tl {
+            top: 4px;
+            left: 4px;
+            border-top: 2px solid var(--an-gold);
+            border-left: 2px solid var(--an-gold);
+            border-top-left-radius: 6px;
+        }
+
+        .an-corner-tr {
+            top: 4px;
+            right: 4px;
+            border-top: 2px solid var(--an-gold);
+            border-right: 2px solid var(--an-gold);
+            border-top-right-radius: 6px;
+        }
+
+        .an-corner-bl {
+            bottom: 4px;
+            left: 4px;
+            border-bottom: 2px solid var(--an-gold);
+            border-left: 2px solid var(--an-gold);
+            border-bottom-left-radius: 6px;
+        }
+
+        .an-corner-br {
+            bottom: 4px;
+            right: 4px;
+            border-bottom: 2px solid var(--an-gold);
+            border-right: 2px solid var(--an-gold);
+            border-bottom-right-radius: 6px;
+        }
+
+        /* ==================== 4. 24H Activity Chart ==================== */
+        .an-chart-container {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            height: 190px;
+            padding: 24px 6px 6px 6px;
+            position: relative;
+            border-bottom: 2px solid var(--an-gold);
+        }
+
+        .an-chart-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+            flex: 1;
+            margin: 0 2px;
+            position: relative;
+        }
+
+        .an-chart-val {
+            position: absolute;
+            top: -20px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--an-gold-dark);
+            font-family: var(--an-font-display);
+            width: 100%;
+            text-align: center;
+        }
+
+        .an-stem-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            position: relative;
+        }
+
+        .an-flower-bud {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--an-gold);
+            box-shadow: 0 0 6px rgba(201, 162, 39, 0.7);
+            margin-bottom: -3px;
+            z-index: 2;
+        }
+
+        .an-stem-bar {
+            width: 100%;
+            border-radius: 4px 4px 0 0;
+            min-height: 4px;
+            transition: height 0.3s ease;
+            box-shadow: 0 1px 3px rgba(45, 80, 22, 0.15);
+        }
+
+        .an-chart-axis-label {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: var(--an-primary);
+            font-family: var(--an-font-display);
+            font-weight: 700;
+            text-align: center;
+        }
+
+        /* ==================== 5. Topics Section ==================== */
+        .an-topics-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .an-topic-card {
+            background: var(--an-bg-subtle);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-md);
+            padding: 18px 22px;
+            position: relative;
+            border-left: 4px solid var(--an-primary);
+        }
+
+        .an-topic-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .an-topic-num-badge {
+            background: #fcf6e5;
+            border: 1px solid var(--an-gold);
+            color: var(--an-gold-dark);
+            font-family: var(--an-font-display);
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .an-badge-sym {
+            font-size: 0.9em;
+            color: var(--an-primary);
+        }
+
+        .an-topic-heading {
+            font-family: var(--an-font-display);
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            line-height: 1.35;
+        }
+
+        .an-topic-participants {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .an-participant-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--an-font-display);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--an-gold-dark);
+        }
+
+        .an-participant-tag svg {
+            width: 13px;
+            height: 13px;
+            color: var(--an-primary);
+        }
+
+        .an-participant-names {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--an-primary);
+        }
+
+        .an-topic-narrative {
+            font-size: 0.96rem;
+            color: #2b3a24;
+            line-height: 1.65;
+        }
+
+        /* Subtle Alternating Topic Card Styles (Forest Green & Antique Gold) */
+        .an-topic-card:nth-child(even) {
+            border-left-color: #c9a227;
+        }
+        .an-topic-card:nth-child(even) .an-topic-num-badge {
+            background: #fdf8ee;
+            border-color: #c9a227;
+            color: #967515;
+        }
+        .an-topic-card:nth-child(even) .an-topic-heading {
+            color: #7a5c0b;
+        }
+        .an-topic-card:nth-child(even) .an-participant-tag {
+            color: #967515;
+        }
+        .an-topic-card:nth-child(even) .an-participant-tag svg {
+            color: #c9a227;
+        }
+        .an-topic-card:nth-child(even) .an-participant-names {
+            color: #7a5c0b;
+        }
+
+        .an-topic-card:nth-child(odd) {
+            border-left-color: #2d5016;
+        }
+        .an-topic-card:nth-child(odd) .an-topic-num-badge {
+            background: #f0f6ec;
+            border-color: #4a7c3f;
+            color: #2d5016;
+        }
+        .an-topic-card:nth-child(odd) .an-topic-heading {
+            color: #2d5016;
+        }
+        .an-topic-card:nth-child(odd) .an-participant-tag {
+            color: #4a7c3f;
+        }
+        .an-topic-card:nth-child(odd) .an-participant-tag svg {
+            color: #2d5016;
+        }
+        .an-topic-card:nth-child(odd) .an-participant-names {
+            color: #2d5016;
+        }
+
+        /* ==================== 6. User Portraits Section ==================== */
+        .an-portraits-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .an-portrait-card {
+            background: var(--an-bg-subtle);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-md);
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+        }
+
+        /* Subtle Alternating Portrait Cards (Forest Green & Antique Gold) */
+        .an-portrait-card:nth-child(4n+1) .an-cameo-frame,
+        .an-portrait-card:nth-child(4n+4) .an-cameo-frame {
+            box-shadow: 0 0 0 2px #2d5016, 0 3px 8px rgba(45, 80, 22, 0.18);
+            border-color: #4a7c3f;
+        }
+        .an-portrait-card:nth-child(4n+1) .an-portrait-name,
+        .an-portrait-card:nth-child(4n+4) .an-portrait-name {
+            color: #2d5016;
+        }
+        .an-portrait-card:nth-child(4n+1) .an-badge-title,
+        .an-portrait-card:nth-child(4n+4) .an-badge-title {
+            background: linear-gradient(180deg, #f0f6ec 0%, #e1efd6 100%);
+            border-color: #4a7c3f;
+            color: #2d5016;
+        }
+        .an-portrait-card:nth-child(4n+1) .an-portrait-vignette,
+        .an-portrait-card:nth-child(4n+4) .an-portrait-vignette {
+            border-left: 3px solid #2d5016;
+        }
+
+        .an-portrait-card:nth-child(4n+2) .an-cameo-frame,
+        .an-portrait-card:nth-child(4n+3) .an-cameo-frame {
+            box-shadow: 0 0 0 2px #967515, 0 3px 8px rgba(150, 117, 21, 0.18);
+            border-color: #c9a227;
+        }
+        .an-portrait-card:nth-child(4n+2) .an-portrait-name,
+        .an-portrait-card:nth-child(4n+3) .an-portrait-name {
+            color: #7a5c0b;
+        }
+        .an-portrait-card:nth-child(4n+2) .an-badge-title,
+        .an-portrait-card:nth-child(4n+3) .an-badge-title {
+            background: linear-gradient(180deg, #fdf8ee 0%, #faecd0 100%);
+            border-color: #c9a227;
+            color: #967515;
+        }
+        .an-portrait-card:nth-child(4n+2) .an-portrait-vignette,
+        .an-portrait-card:nth-child(4n+3) .an-portrait-vignette {
+            border-left: 3px solid #c9a227;
+        }
+
+        .an-portrait-head {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .an-cameo-frame {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid var(--an-gold);
+            padding: 2px;
+            box-shadow: 0 0 0 2px var(--an-primary), 0 3px 8px rgba(45, 80, 22, 0.2);
+            flex-shrink: 0;
+        }
+
+        .an-cameo-border {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            overflow: hidden;
+        }
+
+        .an-avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .an-avatar-placeholder {
+            width: 100%;
+            height: 100%;
+            background: #ede4d1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--an-gold-dark);
+        }
+
+        .an-avatar-placeholder svg {
+            width: 26px;
+            height: 26px;
+        }
+
+        .an-portrait-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .an-portrait-name {
+            font-family: var(--an-font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .an-portrait-badges {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .an-badge-title {
+            background: linear-gradient(180deg, #fcf6e5 0%, #faecd0 100%);
+            border: 1px solid var(--an-gold);
+            color: var(--an-primary);
+            font-family: var(--an-font-display);
+            font-size: 0.76rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .an-badge-mbti {
+            background: var(--an-wisteria-bg);
+            border: 1px solid var(--an-wisteria);
+            color: var(--an-wisteria);
+            font-family: var(--an-font-display);
+            font-size: 0.76rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .an-portrait-vignette {
+            background: #ffffff;
+            border: 1px solid var(--an-border-thin);
+            border-left: 3px solid var(--an-gold);
+            border-radius: var(--an-radius-sm);
+            padding: 10px 14px;
+            z-index: 2;
+        }
+
+        .an-vignette-text {
+            font-size: 0.92rem;
+            color: #2b3a24;
+            line-height: 1.55;
+            font-style: italic;
+        }
+
+        /* ==================== 7. Quotes Section ==================== */
+        .an-quotes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .an-quote-card {
+            background: var(--an-bg-subtle);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-md);
+            padding: 18px 22px;
+            position: relative;
+        }
+
+        /* Subtle Alternating Quote Cards (Forest Green & Antique Gold) */
+        .an-quote-card:nth-child(odd) .an-cameo-frame-sm {
+            box-shadow: 0 0 0 2px #2d5016;
+            border-color: #4a7c3f;
+        }
+        .an-quote-card:nth-child(odd) .an-quote-sender {
+            color: #2d5016;
+        }
+        .an-quote-card:nth-child(odd) .an-quote-laurel-badge {
+            background: #f0f6ec;
+            border-color: #4a7c3f;
+            color: #2d5016;
+        }
+        .an-quote-card:nth-child(odd) .an-quote-open-mark,
+        .an-quote-card:nth-child(odd) .an-quote-close-mark {
+            color: #4a7c3f;
+        }
+        .an-quote-card:nth-child(odd) .an-quote-text {
+            color: #1a330e;
+        }
+        .an-quote-card:nth-child(odd) .an-quote-critique {
+            background: #f5f8f0;
+            border-color: rgba(45, 80, 22, 0.25);
+            border-left: 3px solid #2d5016;
+        }
+        .an-quote-card:nth-child(odd) .an-critique-tag {
+            color: #2d5016;
+        }
+        .an-quote-card:nth-child(odd) .an-critique-tag svg {
+            color: #4a7c3f;
+        }
+
+        .an-quote-card:nth-child(even) .an-cameo-frame-sm {
+            box-shadow: 0 0 0 2px #967515;
+            border-color: #c9a227;
+        }
+        .an-quote-card:nth-child(even) .an-quote-sender {
+            color: #7a5c0b;
+        }
+        .an-quote-card:nth-child(even) .an-quote-laurel-badge {
+            background: #fdf8ee;
+            border-color: #c9a227;
+            color: #967515;
+        }
+        .an-quote-card:nth-child(even) .an-quote-open-mark,
+        .an-quote-card:nth-child(even) .an-quote-close-mark {
+            color: #c9a227;
+        }
+        .an-quote-card:nth-child(even) .an-quote-text {
+            color: #3b2a03;
+        }
+        .an-quote-card:nth-child(even) .an-quote-critique {
+            background: #fdfaf2;
+            border-color: rgba(201, 162, 39, 0.3);
+            border-left: 3px solid #c9a227;
+        }
+        .an-quote-card:nth-child(even) .an-critique-tag {
+            color: #967515;
+        }
+        .an-quote-card:nth-child(even) .an-critique-tag svg {
+            color: #c9a227;
+        }
+
+        .an-quote-inner {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .an-quote-avatar-col {
+            flex-shrink: 0;
+        }
+
+        .an-cameo-frame-sm {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 2px solid var(--an-gold);
+            padding: 2px;
+            box-shadow: 0 0 0 2px var(--an-primary);
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .an-quote-avatar {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .an-avatar-placeholder-sm {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--an-gold-dark);
+            background: #ede4d1;
+        }
+
+        .an-quote-body-col {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .an-quote-author-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .an-quote-sender {
+            font-family: var(--an-font-display);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--an-primary);
+        }
+
+        .an-quote-laurel-badge {
+            background: #fcf6e5;
+            border: 1px solid var(--an-gold);
+            color: var(--an-gold-dark);
+            font-family: var(--an-font-display);
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 4px;
+        }
+
+        .an-quote-parchment {
+            background: #ffffff;
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-sm);
+            padding: 12px 18px;
+            position: relative;
+            box-shadow: inset 0 1px 4px rgba(201, 162, 39, 0.08);
+        }
+
+        .an-quote-open-mark,
+        .an-quote-close-mark {
+            color: var(--an-gold);
+            font-family: var(--an-font-display);
+            font-size: 1.4rem;
+            font-weight: bold;
+            line-height: 0;
+            vertical-align: -5px;
+        }
+
+        .an-quote-close-mark {
+            float: right;
+            margin-top: 6px;
+        }
+
+        .an-quote-text {
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            line-height: 1.55;
+            display: inline;
+        }
+
+        .an-quote-critique {
+            background: #f5f8f0;
+            border: 1px solid rgba(45, 80, 22, 0.25);
+            border-left: 3px solid var(--an-primary);
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 0.88rem;
+            color: #2b3a24;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .an-critique-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-family: var(--an-font-display);
+            font-weight: 700;
+            color: var(--an-primary);
+            white-space: nowrap;
+            font-size: 0.78rem;
+        }
+
+        .an-critique-tag svg {
+            width: 12px;
+            height: 12px;
+            color: var(--an-gold);
+        }
+
+        .an-critique-text {
+            line-height: 1.45;
+        }
+
+        /* ==================== 8. Chat Quality Review ==================== */
+        .an-quality-box {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .an-quality-header-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .an-quality-title-plate {
+            background: linear-gradient(135deg, var(--an-primary) 0%, #3e6922 100%);
+            border: 1.5px solid var(--an-gold);
+            color: #ffffff;
+            font-family: var(--an-font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            padding: 6px 18px;
+            border-radius: 9999px;
+            box-shadow: 0 4px 12px rgba(45, 80, 22, 0.25);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .an-plate-rosette {
+            color: var(--an-gold-light);
+            font-size: 1.1rem;
+        }
+
+        .an-quality-subtitle-text {
+            font-size: 0.92rem;
+            color: var(--an-text-muted);
+            font-style: italic;
+        }
+
+        .an-mosaic-bar-frame {
+            background: #ffffff;
+            border: 2px solid var(--an-gold);
+            border-radius: 9999px;
+            padding: 3px;
+            box-shadow: inset 0 1px 4px rgba(45, 80, 22, 0.1);
+        }
+
+        .an-mosaic-bar-inner {
+            display: flex;
+            height: 26px;
+            border-radius: 9999px;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .an-mosaic-segment {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 1.5px solid var(--an-gold-light);
+            transition: filter 0.2s;
+        }
+
+        .an-mosaic-label {
+            font-family: var(--an-font-display);
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+            padding: 0 6px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .an-dimensions-mosaic-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .an-dim-card {
+            background: #ffffff;
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-sm);
+            padding: 12px 16px;
+            box-shadow: 0 2px 6px rgba(201, 162, 39, 0.08);
+        }
+
+        .an-dim-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .an-dim-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--an-font-display);
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--an-primary);
+        }
+
+        .an-dim-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px var(--an-gold);
+        }
+
+        .an-dim-percent {
+            font-family: var(--an-font-display);
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .an-dim-stem-track {
+            height: 5px;
+            background: #ede4d1;
+            border-radius: 9999px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .an-dim-stem-fill {
+            height: 100%;
+            border-radius: 9999px;
+        }
+
+        .an-dim-critique-body {
+            font-size: 0.86rem;
+            color: #3b4733;
+            line-height: 1.5;
+        }
+
+        .an-quality-grand-summary {
+            background: linear-gradient(135deg, #fcf8ee 0%, #faecd0 100%);
+            border: 1.5px solid var(--an-gold);
+            border-radius: var(--an-radius-md);
+            padding: 14px 18px;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+
+        .an-summary-crest {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--an-primary);
+            border: 1.5px solid var(--an-gold);
+            color: var(--an-gold-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 6px rgba(45, 80, 22, 0.25);
+        }
+
+        .an-summary-crest svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .an-summary-text-wrap {
+            flex: 1;
+        }
+
+        .an-summary-crest-label {
+            font-family: var(--an-font-display);
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            margin-bottom: 3px;
+        }
+
+        .an-summary-content {
+            font-size: 0.92rem;
+            color: #2b3a24;
+            line-height: 1.6;
+        }
+
+        /* ==================== 9. Footer ==================== */
+        .an-footer-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 10px;
+            border-top: 2px solid var(--an-border-gold);
+            padding-top: 20px;
+        }
+
+        .an-footer-seal {
+            background: var(--an-bg-subtle);
+            border: 1.5px solid var(--an-border-gold);
+            border-radius: var(--an-radius-md);
+            padding: 16px;
+            text-align: center;
+            position: relative;
+        }
+
+        .an-footer-seal-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-family: var(--an-font-display);
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--an-primary);
+            margin-bottom: 4px;
+        }
+
+        .an-footer-seal-title svg {
+            width: 16px;
+            height: 16px;
+            color: var(--an-gold);
+        }
+
+        .an-footer-seal-body {
+            font-size: 0.82rem;
+            color: var(--an-text-muted);
+            line-height: 1.4;
+            word-break: break-all;
+        }
+
+        .an-footer-seal-body p {
+            margin: 0;
+        }
+
+        .an-footer-seal-body a {
+            color: var(--an-primary);
+            text-decoration: none;
+            border-bottom: 1px dashed rgba(201, 162, 39, 0.45);
+            padding-bottom: 1px;
+            transition: color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .an-footer-seal-body a:hover {
+            color: var(--an-gold-dark);
+            border-bottom: 1px solid var(--an-gold-dark);
+        }
+
+        /* Responsive Layout Adjustments */
+        @media (max-width: 768px) {
+            .an-page-wrapper {
+                padding: 24px 16px;
+            }
+
+            .an-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .an-portraits-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .an-dimensions-mosaic-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .an-footer-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .an-main-title {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="an-page-wrapper">
+        <!-- Page Corners (Mucha Gold Filigree) -->
+        <div class="an-page-corner an-page-tl"></div>
+        <div class="an-page-corner an-page-tr"></div>
+        <div class="an-page-corner an-page-bl"></div>
+        <div class="an-page-corner an-page-br"></div>
+
+        <!-- 1. Mucha Halo Header -->
+        <header class="an-header avoid-break">
+            <!-- Decorative SVG Halo Background -->
+            <svg class="an-mucha-halo-bg" viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="200" cy="90" r="85" stroke="#c9a227" stroke-width="2"/>
+                <circle cx="200" cy="90" r="75" stroke="#2d5016" stroke-width="1.5" stroke-dasharray="4 4"/>
+                <circle cx="200" cy="90" r="65" stroke="#c9a227" stroke-width="1"/>
+                <path d="M100 90C140 30 260 30 300 90" stroke="#c9a227" stroke-width="1.5"/>
+            </svg>
+
+            <div class="an-header-content">
+                <div class="an-crown-badge">
+                    <span class="an-crown-badge-sym">❦</span>
+                    每日群聊艺术画报 · ART NOUVEAU DAILY
+                    <span class="an-crown-badge-sym">❧</span>
+                </div>
+
+                <h1 class="an-main-title">
+                    群聊风雅漫步
+                    <span class="an-title-sub-gold">CHRONICLES OF NATURAL HARMONY</span>
+                </h1>
+
+                <div class="an-header-meta-row">
+                    <div class="an-meta-tag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        日期: {{ current_date }}
+                    </div>
+
+                    {% if group_name %}
+                    <div class="an-meta-tag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        群组: {{ group_name }}
+                    </div>
+                    {% endif %}
+
+                    <div class="an-meta-tag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        记录时间: {{ current_datetime }}
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 2. 四象核心数据 -->
+        <div class="an-stats-grid avoid-break">
+            <!-- 消息数 -->
+            <div class="an-stat-card">
+                <div class="an-stat-icon-wreath">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div class="an-stat-label">消息总数</div>
+                <div class="an-stat-number">{{ message_count }}</div>
+                <div class="an-stat-desc">全天交流互动频次</div>
+            </div>
+
+            <!-- 参与人数 -->
+            <div class="an-stat-card">
+                <div class="an-stat-icon-wreath">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <div class="an-stat-label">参与人数</div>
+                <div class="an-stat-number">{{ participant_count }}</div>
+                <div class="an-stat-desc">今日发言群友规模</div>
+            </div>
+
+            <!-- 表情统计 -->
+            <div class="an-stat-card">
+                <div class="an-stat-icon-wreath">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                        <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                        <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                    </svg>
+                </div>
+                <div class="an-stat-label">表情互动</div>
+                <div class="an-stat-number">{{ emoji_count }}</div>
+                <div class="an-stat-desc">表情包与斗图频次</div>
+            </div>
+
+            <!-- 总字符数 -->
+            <div class="an-stat-card">
+                <div class="an-stat-icon-wreath">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                        <line x1="9" y1="20" x2="15" y2="20"></line>
+                        <line x1="12" y1="4" x2="12" y2="20"></line>
+                    </svg>
+                </div>
+                <div class="an-stat-label">文字体量</div>
+                <div class="an-stat-number">{{ total_characters }}</div>
+                <div class="an-stat-desc">累计交流字符规模</div>
+            </div>
+        </div>
+
+        <!-- 3. 高峰时段典雅横幅 -->
+        {% if most_active_period %}
+        <div class="an-peak-banner avoid-break">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-peak-left">
+                <div class="an-peak-crest">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <div>
+                    <div class="an-peak-title">今日高光时段 · Peak Moments</div>
+                    <div class="an-peak-subtitle">思维碰撞与欢声笑语最密集的时刻</div>
+                </div>
+            </div>
+            <div class="an-peak-badge">{{ most_active_period }}</div>
+        </div>
+        {% endif %}
+
+        <!-- 4. 24小时自然律动图表 -->
+        <section class="an-section avoid-break">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-section-header">
+                <div class="an-header-flourish-left">
+                    <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                        <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                        <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+                    </svg>
+                </div>
+                <div class="an-section-title-wrap">
+                    <h2 class="an-section-title">廿四小时走势 · 24-Hour Rhythm</h2>
+                    <span class="an-section-subtitle">THE BOTANICAL TIMELINE OF ACTIVITY</span>
+                </div>
+                <div class="an-header-flourish-right">
+                    <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                        <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                        <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div>
+                {{ hourly_chart_html | safe }}
+            </div>
+        </section>
+
+        <!-- 5. 群聊质量锐评 -->
+        {% if chat_quality_html %}
+        <section class="an-section avoid-break">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-section-header">
+                <div class="an-header-flourish-left">
+                    <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                        <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                        <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+                    </svg>
+                </div>
+                <div class="an-section-title-wrap">
+                    <h2 class="an-section-title">群聊氛围洞察 · Atmosphere & Quality</h2>
+                    <span class="an-section-subtitle">AESTHETIC & HARMONY ANALYSIS</span>
+                </div>
+                <div class="an-header-flourish-right">
+                    <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                        <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                        <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+                    </svg>
+                </div>
+            </div>
+
+            {{ chat_quality_html | safe }}
+        </section>
+        {% endif %}
+
+        <!-- 6. 话题讨论 (由 topic_item.html 独立包裹并控制条件) -->
+        {{ topics_html | safe }}
+
+        <!-- 7. 群友画像 (由 user_title_item.html 独立包裹并控制条件) -->
+        {{ titles_html | safe }}
+
+        <!-- 8. 金句语录 (由 quote_item.html 独立包裹并控制条件) -->
+        {{ quotes_html | safe }}
+
+        <!-- 9. Footer: 艺术印章与资源消耗 -->
+        <footer class="an-footer-grid avoid-break">
+            <div class="an-footer-seal">
+                <div class="an-footer-seal-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                    AstrBot 群分析
+                </div>
+                <div class="an-footer-seal-body">
+                    <p>AstrBot 群日常分析总结插件</p>
+                    <p style="font-size: 0.74rem; color: var(--an-gold-dark);">Art Nouveau Style Template</p>
+                </div>
+            </div>
+
+            <div class="an-footer-seal">
+                <div class="an-footer-seal-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                    </svg>
+                    开源项目
+                </div>
+                <div class="an-footer-seal-body">
+                    <a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis" target="_blank" style="font-family: var(--an-font-mono); font-size: 0.75rem;">SXP-Simon/astrbot_plugin_qq_group_daily_analysis</a>
+                </div>
+            </div>
+
+            <div class="an-footer-seal">
+                <div class="an-footer-seal-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    Token 消耗统计
+                </div>
+                <div class="an-footer-seal-body">
+                    <p>总计: <strong>{{ total_tokens }}</strong> Tokens</p>
+                    <p style="font-size: 0.74rem; color: var(--an-gold-dark);">提示词: {{ prompt_tokens }} / 生成: {{ completion_tokens }}</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+
+</html>

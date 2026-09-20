@@ -12,21 +12,16 @@
         margin: 0;
         padding: 0;
         width: 100%;
+        max-width: 100%;
         min-height: 100%;
+        overflow-x: hidden;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         -webkit-text-size-adjust: 100%;
         -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
       }
       * {
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;
-      }
-      /* 增强移动端触摸交互响应性，防止点击延迟或被误当作手势吞噬 */
-      button, a, input, select, textarea,
-      .ant-btn, .ant-tabs-tab, .ant-select, .ant-select-selector, .ant-picker, .ant-tag, .ant-dropdown-trigger {
-        touch-action: manipulation !important;
-        cursor: pointer;
       }
       /* 等宽字体类 (现代无衬线等宽) */
       .font-mono {
@@ -83,8 +78,12 @@
             isDark = true;
           } else if (themeVal === "light" || params.get("isDark") === "false") {
             isDark = false;
-          } else if (localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
-            isDark = true;
+          } else {
+            try {
+              if (typeof localStorage !== "undefined" && localStorage.getItem("astrbot_plugin_theme_is_dark") === "true") {
+                isDark = true;
+              }
+            } catch (_) {}
           }
           if (isDark) {
             document.documentElement.style.background = "#000000";

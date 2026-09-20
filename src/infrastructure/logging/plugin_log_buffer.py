@@ -12,6 +12,8 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from ...shared.constants import AnalysisStage
+
 
 @dataclass
 class PluginLogEntry:
@@ -25,6 +27,7 @@ class PluginLogEntry:
     tag: str
     message: str
     raw: str
+    location: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -91,14 +94,15 @@ class PluginLogBuffer(logging.Handler):
     ]
 
     STAGE_NAMES = {
-        "FETCH_MESSAGES": "拉取聊天记录",
-        "CLEAN_MESSAGES": "消息清洗过滤",
-        "STATS_ANALYSIS": "基础统计分析",
-        "LLM_ANALYSIS": "大模型话题与画像分析",
-        "SAVE_SUMMARY": "历史记录持久化",
-        "RENDER_REPORT": "报告图片渲染与发送",
-        "COMIC_STORYBOARD": "漫画分镜提示词提取",
-        "COMIC_DRAWING": "漫画长图生成与投递",
+        AnalysisStage.FETCH_MESSAGES.value: "拉取聊天记录",
+        AnalysisStage.CLEAN_MESSAGES.value: "消息清洗过滤",
+        AnalysisStage.STATS_ANALYSIS.value: "基础统计分析",
+        AnalysisStage.LLM_ANALYSIS.value: "大模型话题与画像分析",
+        AnalysisStage.SAVE_SUMMARY.value: "历史记录持久化",
+        AnalysisStage.RENDER_REPORT.value: "报告图片渲染与发送",
+        AnalysisStage.DISPATCH_REPORT.value: "群聊消息投递与分发",
+        AnalysisStage.COMIC_STORYBOARD.value: "漫画分镜提示词提取",
+        AnalysisStage.COMIC_DRAWING.value: "漫画长图生成与投递",
         "CRASH_RECOVERY": "异常终止恢复",
     }
 
@@ -123,6 +127,7 @@ class PluginLogBuffer(logging.Handler):
         msg: str,
         trace_id: str | None = None,
         logger_name: str = "plugin",
+        location: str | None = None,
     ) -> PluginLogEntry:
         """主动记录日志条目并实时推送给前端监听器"""
         self._counter += 1
@@ -164,6 +169,14 @@ class PluginLogBuffer(logging.Handler):
                 stage = stage_label
                 break
 
+        # 清理 message 中已包含的冗余 [trace_id] 前缀，避免前端日志列表中重复显示
+        clean_msg = msg
+        if trace_id and clean_msg.startswith(f"[{trace_id}] "):
+            clean_msg = clean_msg[len(f"[{trace_id}] ") :]
+
+        loc_label = f"[{location}]" if location else f"[{logger_name}]"
+        raw = f"[{full_time_str}] [{level.upper()}] {loc_label}: {clean_msg}"
+
         entry = PluginLogEntry(
             id=f"log_{self._counter}",
             timestamp=now,
@@ -173,8 +186,9 @@ class PluginLogBuffer(logging.Handler):
             trace_id=trace_id,
             stage=stage,
             tag=tag,
-            message=msg,
-            raw=f"[{full_time_str}] [{level.upper()}] [{logger_name}]: {msg}",
+            message=clean_msg,
+            raw=raw,
+            location=location,
         )
         self._buffer.append(entry)
 
@@ -202,6 +216,12 @@ class PluginLogBuffer(logging.Handler):
                 return
 
             trace_id = getattr(record, "trace_id", None)
+            location = None
+            if record.pathname and record.lineno:
+                import os
+
+                location = f"{os.path.basename(record.pathname)}:{record.lineno}"
+
             self.record_log(
                 level=record.levelname,
                 msg=msg,
@@ -209,6 +229,7 @@ class PluginLogBuffer(logging.Handler):
                 logger_name=logger_name.split(".")[-1]
                 if "." in logger_name
                 else logger_name,
+                location=location,
             )
         except Exception:
             self.handleError(record)
@@ -241,6 +262,7 @@ class PluginLogBuffer(logging.Handler):
                     search_kw not in entry.message.lower()
                     and search_kw not in (entry.trace_id or "").lower()
                     and search_kw not in entry.logger_name.lower()
+                    and search_kw not in (entry.location or "").lower()
                 ):
                     continue
             results.append(entry)

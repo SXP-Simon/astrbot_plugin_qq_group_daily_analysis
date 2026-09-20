@@ -1,0 +1,60 @@
+{% if topics %}
+<section class="an-section an-topics-section avoid-break">
+    <div class="an-section-header">
+        <div class="an-header-flourish-left">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+        <div class="an-section-title-wrap">
+            <h2 class="an-section-title">核心热议话题 · Selected Topics</h2>
+            <span class="an-section-subtitle">FLORAL CHRONICLES & DISCUSSIONS</span>
+        </div>
+        <div class="an-header-flourish-right">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="an-topics-list">
+        {% for topic in topics %}
+        <div class="an-topic-card avoid-break">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-topic-header">
+                <div class="an-topic-num-badge">
+                    <span class="an-badge-sym">№</span> {{ "%02d"|format(topic.index) }}
+                </div>
+                <h3 class="an-topic-heading">{{ topic.topic.topic }}</h3>
+            </div>
+
+            {% if topic.contributors %}
+            <div class="an-topic-participants">
+                <span class="an-participant-tag">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2Z"/>
+                        <path d="M12 6C9.8 6 8 7.8 8 10C8 12.2 9.8 14 12 14C14.2 14 16 12.2 16 10C16 7.8 14.2 6 12 6Z"/>
+                        <path d="M6 19C7.5 16.5 9.5 15.5 12 15.5C14.5 15.5 16.5 16.5 18 19"/>
+                    </svg>
+                    主要参与群友
+                </span>
+                <span class="an-participant-names">{{ topic.contributors }}</span>
+            </div>
+            {% endif %}
+
+            <div class="an-topic-narrative">
+                {{ topic.detail | safe }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

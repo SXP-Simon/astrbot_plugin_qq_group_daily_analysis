@@ -27,6 +27,7 @@ from markupsafe import Markup
 from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
@@ -375,10 +376,20 @@ class ReportGenerator(IReportGenerator):
             tuple[str | None, str | None]: (image_url, html_content)
         """
         html_content = None
+        if not template_theme:
+            trace_ctx = TraceContext.current()
+            if trace_ctx and trace_ctx.metadata.get("override_template_name"):
+                template_theme = trace_ctx.metadata.get("override_template_name")
+            elif hasattr(self.config_manager, "get_report_template"):
+                template_theme = self.config_manager.get_report_template()
+            else:
+                template_theme = "scrapbook"
+
         try:
             # 准备渲染数据
             render_payload = await self._prepare_render_data(
                 analysis_result,
+                template_theme=template_theme,
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
@@ -388,6 +399,7 @@ class ReportGenerator(IReportGenerator):
             )
 
             # 先渲染HTML模板（使用 Jinja2 渲染器以支持逻辑标签）
+            tpl_render_start_ts = time.perf_counter()
             html_content = self.html_templates.render_template(
                 "image_template.html", template_theme=template_theme, **render_payload
             )
@@ -396,13 +408,24 @@ class ReportGenerator(IReportGenerator):
                 render_payload.get("avatar_reuse_registry", {}),
                 render_payload.get("avatar_reuse_aliases", {}),
             )
+            template_render_ms = round(
+                (time.perf_counter() - tpl_render_start_ts) * 1000, 2
+            )
+            html_size_kb = (
+                round(len(html_content.encode("utf-8")) / 1024, 2)
+                if html_content
+                else 0.0
+            )
 
             # 检查HTML内容是否有效
             if not html_content:
                 logger.error("图片报告HTML渲染失败：返回空内容")
                 return None, None
 
-            logger.debug(f"图片报告HTML渲染完成，长度: {len(html_content)} 字符")
+            logger.debug(
+                f"图片报告HTML渲染完成，耗时 {template_render_ms}ms, "
+                f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
+            )
 
             # 从配置中获取两轮渲染策略
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
@@ -437,11 +460,15 @@ class ReportGenerator(IReportGenerator):
                         )
 
                         # 改为获取 bytes 数据，避免 OneBot 无法访问内部 URL
+                        t2i_start_ts = time.perf_counter()
                         image_data = await html_render_func(
                             html_content,  # 渲染后的HTML内容
                             {},  # 空数据字典，因为数据已包含在HTML中
                             False,  # return_url=False，直接获取图片数据
                             image_options,
+                        )
+                        t2i_render_ms = round(
+                            (time.perf_counter() - t2i_start_ts) * 1000, 2
                         )
 
                         if image_data:
@@ -510,17 +537,33 @@ class ReportGenerator(IReportGenerator):
                                     )
                                 )
 
+                                dimensions = None
+                                try:
+                                    if isinstance(image_data, bytes):
+                                        with Image.open(BytesIO(image_data)) as img:
+                                            dimensions = f"{img.width}x{img.height}"
+                                    elif isinstance(image_data, str) and os.path.exists(
+                                        image_data
+                                    ):
+                                        with Image.open(image_data) as img:
+                                            dimensions = f"{img.width}x{img.height}"
+                                except Exception:
+                                    pass
+
                                 # 上报渲染全量参数与产物指标至当前 Span
                                 trace_ctx = TraceContext.current()
                                 if trace_ctx:
                                     for s in reversed(trace_ctx._spans):
-                                        if s.get("stage_name") == "RENDER_REPORT":
+                                        if (
+                                            s.get("stage_name")
+                                            == AnalysisStage.RENDER_REPORT.value
+                                        ):
                                             payload = s.setdefault("payload", {})
                                             payload.update(
                                                 {
                                                     "format": "image",
                                                     "template": template_theme
-                                                    or "scrapbook (默认)",
+                                                    or "scrapbook",
                                                     "viewport": viewport_description,
                                                     "render_attempt": attempt,
                                                     "image_format": str(
@@ -529,6 +572,10 @@ class ReportGenerator(IReportGenerator):
                                                         )
                                                     ),
                                                     "image_bytes": image_size,
+                                                    "dimensions": dimensions,
+                                                    "template_render_ms": template_render_ms,
+                                                    "html_size_kb": html_size_kb,
+                                                    "t2i_render_ms": t2i_render_ms,
                                                     "topics_rendered": len(
                                                         analysis_result.get(
                                                             "topics", []
@@ -573,6 +620,7 @@ class ReportGenerator(IReportGenerator):
                                                         )
                                                     ),
                                                     "viewport": viewport_description,
+                                                    "duration_ms": t2i_render_ms,
                                                     "status": "success",
                                                 }
                                             )
@@ -601,7 +649,10 @@ class ReportGenerator(IReportGenerator):
                         trace_ctx = TraceContext.current()
                         if trace_ctx:
                             for s in reversed(trace_ctx._spans):
-                                if s.get("stage_name") == "RENDER_REPORT":
+                                if (
+                                    s.get("stage_name")
+                                    == AnalysisStage.RENDER_REPORT.value
+                                ):
                                     s.setdefault("payload", {}).setdefault(
                                         "render_attempts", []
                                     ).append(
@@ -624,7 +675,10 @@ class ReportGenerator(IReportGenerator):
                         trace_ctx = TraceContext.current()
                         if trace_ctx:
                             for s in reversed(trace_ctx._spans):
-                                if s.get("stage_name") == "RENDER_REPORT":
+                                if (
+                                    s.get("stage_name")
+                                    == AnalysisStage.RENDER_REPORT.value
+                                ):
                                     s.setdefault("payload", {}).setdefault(
                                         "render_attempts", []
                                     ).append(
@@ -714,6 +768,15 @@ class ReportGenerator(IReportGenerator):
         Returns:
             tuple[str | None, str | None]: (html_path, json_path) - HTML文件路径和JSON文件路径
         """
+        if not template_theme:
+            trace_ctx = TraceContext.current()
+            if trace_ctx and trace_ctx.metadata.get("override_template_name"):
+                template_theme = trace_ctx.metadata.get("override_template_name")
+            elif hasattr(self.config_manager, "get_report_template"):
+                template_theme = self.config_manager.get_report_template()
+            else:
+                template_theme = "scrapbook"
+
         try:
             import json
 
@@ -752,6 +815,7 @@ class ReportGenerator(IReportGenerator):
             # 准备渲染数据
             render_data = await self._prepare_render_data(
                 analysis_result,
+                template_theme=template_theme,
                 chart_template="activity_chart.html",
                 avatar_url_getter=avatar_url_getter,
                 nickname_getter=nickname_getter,
@@ -841,11 +905,11 @@ class ReportGenerator(IReportGenerator):
             trace_ctx = TraceContext.current()
             if trace_ctx:
                 for s in reversed(trace_ctx._spans):
-                    if s.get("stage_name") == "RENDER_REPORT":
+                    if s.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
                         s.setdefault("payload", {}).update(
                             {
                                 "format": "html",
-                                "template": template_theme or "default",
+                                "template": template_theme or "scrapbook",
                                 "html_chars": len(html_content) if html_content else 0,
                                 "html_file": html_path.name,
                                 "topics_rendered": len(
@@ -1046,6 +1110,7 @@ class ReportGenerator(IReportGenerator):
     async def _prepare_render_data(
         self,
         analysis_result: dict,
+        template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
         avatar_url_getter=None,
         nickname_getter=None,
@@ -1162,8 +1227,15 @@ class ReportGenerator(IReportGenerator):
             "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
         }
 
-        topics_html = self.html_templates.render_template(
-            "topic_item.html", topics=topics_list, **common_context
+        topics_html = (
+            self.html_templates.render_template(
+                "topic_item.html",
+                template_theme=template_theme,
+                topics=topics_list,
+                **common_context,
+            )
+            if topics_list
+            else ""
         )
         logger.debug(f"话题HTML生成完成，长度: {len(topics_html)}")
 
@@ -1209,8 +1281,15 @@ class ReportGenerator(IReportGenerator):
             title_data.update(profile_info)
             titles_list.append(title_data)
 
-        titles_html = self.html_templates.render_template(
-            "user_title_item.html", titles=titles_list, **common_context
+        titles_html = (
+            self.html_templates.render_template(
+                "user_title_item.html",
+                template_theme=template_theme,
+                titles=titles_list,
+                **common_context,
+            )
+            if titles_list
+            else ""
         )
         logger.debug(f"用户称号HTML生成完成，长度: {len(titles_html)}")
 
@@ -1259,8 +1338,15 @@ class ReportGenerator(IReportGenerator):
                 }
             )
 
-        quotes_html = self.html_templates.render_template(
-            "quote_item.html", quotes=quotes_list, **common_context
+        quotes_html = (
+            self.html_templates.render_template(
+                "quote_item.html",
+                template_theme=template_theme,
+                quotes=quotes_list,
+                **common_context,
+            )
+            if quotes_list
+            else ""
         )
         logger.debug(f"金句HTML生成完成，长度: {len(quotes_html)}")
 
@@ -1269,7 +1355,10 @@ class ReportGenerator(IReportGenerator):
             activity_viz.hourly_activity
         )
         hourly_chart_html = self.html_templates.render_template(
-            chart_template, chart_data=chart_data, **common_context
+            chart_template,
+            template_theme=template_theme,
+            chart_data=chart_data,
+            **common_context,
         )
         logger.debug(f"活跃度图表HTML生成完成，长度: {len(hourly_chart_html)}")
 
@@ -1327,7 +1416,10 @@ class ReportGenerator(IReportGenerator):
                 }
 
             chat_quality_html = self.html_templates.render_template(
-                "chat_quality_item.html", **review_data, **common_context
+                "chat_quality_item.html",
+                template_theme=template_theme,
+                **review_data,
+                **common_context,
             )
             logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 

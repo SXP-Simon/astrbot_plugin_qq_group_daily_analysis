@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
 
 
@@ -56,10 +57,15 @@ class ActiveTaskManager:
         group_name: str = "",
         platform: str = "",
         trigger_type: str = "manual",
-        current_stage: str = "FETCH_MESSAGES",
+        current_stage: Any = AnalysisStage.FETCH_MESSAGES,
         asyncio_task: asyncio.Task[Any] | None = None,
     ) -> None:
         """注册新运行中的任务"""
+        stage_str = (
+            current_stage.value
+            if hasattr(current_stage, "value")
+            else str(current_stage)
+        )
         async with self._lock:
             info = ActiveTaskInfo(
                 task_id=task_id,
@@ -67,17 +73,20 @@ class ActiveTaskManager:
                 group_name=group_name,
                 platform=platform,
                 trigger_type=trigger_type,
-                current_stage=current_stage,
+                current_stage=stage_str,
                 asyncio_task=asyncio_task,
             )
             self._tasks[task_id] = info
         await self._broadcast_event({"event": "task_started", "data": info.to_dict()})
 
-    async def update_stage(self, task_id: str, stage_name: str) -> None:
+    async def update_stage(self, task_id: str, stage_name: Any) -> None:
         """更新当前活跃任务的阶段名称并更新心跳"""
+        stage_str = (
+            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+        )
         async with self._lock:
             if task_id in self._tasks:
-                self._tasks[task_id].current_stage = stage_name
+                self._tasks[task_id].current_stage = stage_str
                 self._tasks[task_id].last_heartbeat = time.time()
                 info = self._tasks[task_id]
             else:
@@ -90,10 +99,13 @@ class ActiveTaskManager:
 
     update_task_stage = update_stage
 
-    def update_stage_sync(self, task_id: str, stage_name: str) -> None:
+    def update_stage_sync(self, task_id: str, stage_name: Any) -> None:
         """同步更新活跃任务阶段（供 Span 上下文即时调用）"""
+        stage_str = (
+            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+        )
         if task_id in self._tasks:
-            self._tasks[task_id].current_stage = stage_name
+            self._tasks[task_id].current_stage = stage_str
             self._tasks[task_id].last_heartbeat = time.time()
             info = self._tasks[task_id]
             try:
@@ -105,6 +117,20 @@ class ActiveTaskManager:
                 )
             except RuntimeError:
                 pass
+
+    def touch_heartbeat(self, task_id: str) -> bool:
+        """刷新活跃任务的最后心跳时间戳（无需广播进度事件，保持极低内存开销）。
+
+        Args:
+            task_id: 任务唯一标识。
+
+        Returns:
+            bool: 是否成功找到并刷新心跳。
+        """
+        if task_id in self._tasks:
+            self._tasks[task_id].last_heartbeat = time.time()
+            return True
+        return False
 
     async def finish_task(self, task_id: str) -> None:
         """标记任务结束并移出活跃列表"""
@@ -178,7 +204,7 @@ class ActiveTaskManager:
     # ── Task Reaper 守护线程 ──
 
     def start_reaper(
-        self, interval_seconds: int = 30, timeout_seconds: int = 600
+        self, interval_seconds: int = 30, timeout_seconds: int = 180
     ) -> None:
         """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录"""
         if self.trace_store and hasattr(
@@ -194,9 +220,13 @@ class ActiveTaskManager:
                 logger.error(f"[TaskReaper] 开机自愈对账异常: {e}")
 
         if self._reaper_task is None or self._reaper_task.done():
-            self._reaper_task = asyncio.create_task(
-                self._reaper_loop(interval_seconds, timeout_seconds)
-            )
+            try:
+                loop = asyncio.get_running_loop()
+                self._reaper_task = loop.create_task(
+                    self._reaper_loop(interval_seconds, timeout_seconds)
+                )
+            except RuntimeError:
+                self._reaper_task = None
 
     def stop_reaper(self) -> None:
         """停止守护协程"""

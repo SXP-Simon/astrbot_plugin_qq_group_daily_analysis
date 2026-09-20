@@ -4,6 +4,11 @@ export interface ReportTemplateItem {
   is_custom?: boolean;
   has_image?: boolean;
   has_html?: boolean;
+  can_uninstall?: boolean;
+  display_name?: string;
+  desc?: string;
+  tag?: string;
+  tag_color?: string;
 }
 
 export interface SelectOptionItem {
@@ -78,6 +83,13 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
     tagColor: "default",
   },
   {
+    key: "art_nouveau",
+    name: "Art Nouveau (新艺术运动)",
+    desc: "源自19世纪末穆夏海报与自然美学，以流动藤蔓、雅金边框与典雅衬线排版呈现自然与艺术的和谐",
+    tag: "新艺术风",
+    tagColor: "gold",
+  },
+  {
     key: "format",
     name: "Format (标准卡片)",
     desc: "标准规范报表卡片，商务整洁",
@@ -99,6 +111,7 @@ export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
   { id: "hack", label: "黑客赛博 (Hack)", is_custom: false },
   { id: "BlueArchive", label: "蔚蓝档案 (BlueArchive)", is_custom: false },
   { id: "simple", label: "极简黑白 (Simple)", is_custom: false },
+  { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false },
   { id: "format", label: "标准卡片 (Format)", is_custom: false },
 ];
 

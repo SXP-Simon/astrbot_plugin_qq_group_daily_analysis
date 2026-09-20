@@ -5,6 +5,9 @@ export interface TraceSpan {
   status: string;
   started_at: number;
   duration_ms?: number | null;
+  start_memory_mb?: number | null;
+  end_memory_mb?: number | null;
+  delta_memory_mb?: number | null;
   payload: Record<string, unknown>;
 }
 
@@ -24,6 +27,15 @@ export interface TokenUsage {
   total_tokens: number;
   estimated_cost: number;
   per_analyzer: Record<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>;
+}
+
+export interface PerformanceMetrics {
+  trace_id?: string;
+  init_memory_mb: number;
+  peak_memory_mb: number;
+  final_memory_mb: number;
+  delta_memory_mb: number;
+  metrics_extra?: Record<string, unknown>;
 }
 
 export interface TraceRecord {
@@ -47,6 +59,7 @@ export interface TraceRecord {
   compression_ratio?: number;
   spans?: TraceSpan[];
   context_metrics?: ContextMetrics | null;
+  performance_metrics?: PerformanceMetrics | null;
   token_usage?: TokenUsage | null;
   current_stage?: string;
   report_files?: Array<{

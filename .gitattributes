@@ -1,3 +1,17 @@
+# 换行符与文本格式规范（强制 LF，防止跨平台 Windows/Linux 构建产物换行符差异触发 CI 门禁误报）
+* text=auto eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+pages/** text eol=lf
+
 ### 模板预览图与设计资源 — 仅用于文档/仓库展示/CDN，插件运行时不需要
 assets/*.jpg              export-ignore
 assets/*.png              export-ignore

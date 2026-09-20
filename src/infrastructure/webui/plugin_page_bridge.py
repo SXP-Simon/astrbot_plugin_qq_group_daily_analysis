@@ -65,11 +65,22 @@ else:
             return content
 
 
-from ...shared.constants import PLUGIN_NAME
+from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..persistence.trace_sqlite_store import TraceSQLiteStore
 from ..platform.factory import PlatformAdapterFactory
+from ..reporting.template_installer import (
+    MAX_ZIP_B64_SIZE,
+    TemplateInstallError,
+    default_template_store_dir,
+    install_template_from_github_url,
+    install_template_from_zip,
+    is_path_within,
+    preview_candidate_files,
+    uninstall_template,
+    validate_template_name,
+)
 from .active_task_manager import ActiveTaskManager
 
 
@@ -212,6 +223,30 @@ class PluginPageWebUIBridge:
                 ["GET"],
                 "Get available built-in and custom report visual templates",
             ),
+            (
+                f"/{PLUGIN_NAME}/templates/preview",
+                self.api_get_template_preview,
+                ["GET"],
+                "Get preview image of a custom report template as base64 data URL",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/install_from_url",
+                self.api_install_template_from_url,
+                ["POST"],
+                "Install a custom report template from a GitHub repository URL",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/install_from_file",
+                self.api_install_template_from_file,
+                ["POST"],
+                "Install a custom report template from an uploaded zip archive",
+            ),
+            (
+                f"/{PLUGIN_NAME}/templates/uninstall",
+                self.api_uninstall_template,
+                ["POST"],
+                "Uninstall a custom report template installed via the installer",
+            ),
             # 5. SSE 实时事件流
             (
                 f"/{PLUGIN_NAME}/events/stream",
@@ -262,6 +297,104 @@ class PluginPageWebUIBridge:
                 self.api_get_config_file_content,
                 ["GET"],
                 "Get thumbnail or content of a config file path",
+            ),
+            # 8. 插件数据管理（存储分区清理）
+            (
+                f"/{PLUGIN_NAME}/plugin-data/overview",
+                self.api_get_plugin_data_overview,
+                ["GET"],
+                "Get size and file count overview for each plugin data section",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/avatars/clear",
+                self.api_clear_avatar_cache,
+                ["POST"],
+                "Clear avatar image cache",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/reports/clear",
+                self.api_clear_reports,
+                ["POST"],
+                "Clear all generated report files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/temp/clear",
+                self.api_clear_temp_files,
+                ["POST"],
+                "Clear temporary generated files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/custom-templates/clear",
+                self.api_clear_custom_templates,
+                ["POST"],
+                "Clear user-customized T2I template backups",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-files/clear",
+                self.api_clear_config_files,
+                ["POST"],
+                "Clear uploaded config reference files",
+            ),
+            (
+                f"/{PLUGIN_NAME}/plugin-data/config-backups/clear",
+                self.api_clear_config_backups,
+                ["POST"],
+                "Clear historical automatic configuration backup files",
+            ),
+            # 9. 增量批次与 Checkpoint 观测及 CRUD 管理
+            (
+                f"/{PLUGIN_NAME}/data/incremental/groups",
+                self.api_get_incremental_groups,
+                ["GET"],
+                "Get groups list with incremental batches or cursors",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batches",
+                self.api_get_incremental_batches,
+                ["GET"],
+                "Get incremental batches list and cursor status for a group",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batch/detail",
+                self.api_get_incremental_batch_detail,
+                ["GET"],
+                "Get full detail of a single incremental batch",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/batch",
+                self.api_delete_incremental_batch,
+                ["DELETE", "POST"],
+                "Delete a specific incremental batch",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/incremental/reset",
+                self.api_reset_incremental_group,
+                ["POST"],
+                "Reset all incremental batches and cursor for a group",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoints",
+                self.api_list_checkpoints,
+                ["GET"],
+                "List and filter stage checkpoints",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoints/groups",
+                self.api_get_checkpoint_groups,
+                ["GET"],
+                "Get distinct groups list with valid checkpoints",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoint/detail",
+                self.api_get_checkpoint_detail,
+                ["GET"],
+                "Get full JSON content and metadata of a specific checkpoint",
+            ),
+            (
+                f"/{PLUGIN_NAME}/data/checkpoint",
+                self.api_delete_checkpoint,
+                ["DELETE", "POST"],
+                "Delete a specific stage checkpoint or all checkpoints for group and date",
             ),
         ]
 
@@ -341,6 +474,16 @@ class PluginPageWebUIBridge:
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
 
+            template_name = (
+                payload.get("template_name") or payload.get("template")
+                if isinstance(payload, dict)
+                else None
+            )
+            if not template_name and hasattr(request, "query"):
+                template_name = request.query.get("template_name") or request.query.get(
+                    "template"
+                )
+
             # 启动后台异步任务
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
@@ -349,6 +492,7 @@ class PluginPageWebUIBridge:
                     group_name=group_name,
                     platform=platform,
                     provider_id=provider_id,
+                    template_name=template_name,
                 )
             )
 
@@ -359,7 +503,7 @@ class PluginPageWebUIBridge:
                 group_name=group_name,
                 platform=platform,
                 trigger_type="web_ui",
-                current_stage="FETCH_MESSAGES",
+                current_stage=AnalysisStage.FETCH_MESSAGES,
                 asyncio_task=asyncio_task,
             )
 
@@ -369,6 +513,7 @@ class PluginPageWebUIBridge:
                     "data": {
                         "trace_id": trace_id,
                         "group_id": group_id,
+                        "template_name": template_name,
                         "message": "Analysis task queued successfully",
                     },
                 }
@@ -384,6 +529,7 @@ class PluginPageWebUIBridge:
         group_name: str,
         platform: str,
         provider_id: str | None = None,
+        template_name: str | None = None,
     ) -> None:
         """后台异步执行触发任务"""
         trace_ctx = TraceContext.set(
@@ -395,13 +541,44 @@ class PluginPageWebUIBridge:
         )
         if provider_id:
             trace_ctx.metadata["override_provider_id"] = str(provider_id)
+        if template_name and template_name != "auto":
+            trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "execute_daily_analysis"):
+                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
+                target_platform = None
+
+                # 1. 若传入了具体有效且已就绪的平台标识，直接采用
+                if platform and bot_mgr and bot_mgr.get_adapter(platform):
+                    target_platform = str(platform).strip()
+                elif bot_mgr:
+                    adapters = (
+                        bot_mgr.get_all_adapters()
+                        if hasattr(bot_mgr, "get_all_adapters")
+                        else {}
+                    )
+                    # 2. 单实例绑定：若系统仅注册了 1 个适配器，直接绑定该唯一实例
+                    if len(adapters) == 1:
+                        target_platform = next(iter(adapters.keys()))
+                    # 3. 多实例群归属探测：若系统存在多个适配器，优先遍历探测该群聊实际归属的平台实例
+                    elif len(adapters) > 1 and group_id:
+                        for p_id, adp in adapters.items():
+                            try:
+                                if hasattr(
+                                    adp, "get_group_info"
+                                ) and await adp.get_group_info(str(group_id)):
+                                    target_platform = (
+                                        bot_mgr.get_adapter_platform_id(adp)
+                                        if hasattr(bot_mgr, "get_adapter_platform_id")
+                                        else str(p_id)
+                                    ) or str(p_id)
+                                    break
+                            except Exception:
+                                continue
+
                 result = await self.analysis_service.execute_daily_analysis(
                     group_id=group_id,
-                    platform_id=platform
-                    if platform and platform not in ("all", "auto", "default")
-                    else None,
+                    platform_id=target_platform,
                     manual=True,
                 )
                 if result and result.get("success"):
@@ -415,11 +592,8 @@ class PluginPageWebUIBridge:
                             else ""
                         )
                         or getattr(adapter, "platform_id", "")
-                        or (
-                            platform
-                            if platform and platform not in ("all", "auto", "default")
-                            else ""
-                        )
+                        or target_platform
+                        or ""
                     )
                     trace_ctx.platform = str(dispatch_platform_id)
                     # 调度生成报告长图并推送到目标群聊
@@ -454,9 +628,9 @@ class PluginPageWebUIBridge:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(status="succeeded")
             else:
-                with trace_ctx.span("FETCH_MESSAGES"):
+                with trace_ctx.span(AnalysisStage.FETCH_MESSAGES):
                     await asyncio.sleep(0.5)
-                with trace_ctx.span("LLM_ANALYSIS"):
+                with trace_ctx.span(AnalysisStage.LLM_ANALYSIS):
                     await asyncio.sleep(1.0)
                 trace_ctx.set_context_metrics(1200, 800)
                 trace_ctx.add_token_usage(1500, 300, "topics")
@@ -515,7 +689,7 @@ class PluginPageWebUIBridge:
                 group_name=group_name,
                 platform=platform,
                 trigger_type="resume",
-                current_stage="LLM_ANALYSIS",
+                current_stage=AnalysisStage.LLM_ANALYSIS,
                 asyncio_task=asyncio_task,
             )
 
@@ -558,15 +732,55 @@ class PluginPageWebUIBridge:
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
             if hasattr(self.analysis_service, "resume_analysis"):
+                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
+                target_platform = None
+
+                # 1. 若传入了具体有效且已就绪的平台标识，直接采用
+                if platform and bot_mgr and bot_mgr.get_adapter(platform):
+                    target_platform = str(platform).strip()
+                elif bot_mgr:
+                    adapters = (
+                        bot_mgr.get_all_adapters()
+                        if hasattr(bot_mgr, "get_all_adapters")
+                        else {}
+                    )
+                    # 2. 单实例绑定：若系统仅注册了 1 个适配器，直接绑定该唯一实例
+                    if len(adapters) == 1:
+                        target_platform = next(iter(adapters.keys()))
+                    # 3. 多实例群归属探测：若系统存在多个适配器，优先遍历探测该群聊实际归属的平台实例
+                    elif len(adapters) > 1 and group_id:
+                        for p_id, adp in adapters.items():
+                            try:
+                                if hasattr(
+                                    adp, "get_group_info"
+                                ) and await adp.get_group_info(str(group_id)):
+                                    target_platform = (
+                                        bot_mgr.get_adapter_platform_id(adp)
+                                        if hasattr(bot_mgr, "get_adapter_platform_id")
+                                        else str(p_id)
+                                    ) or str(p_id)
+                                    break
+                            except Exception:
+                                continue
+
                 result = await self.analysis_service.resume_analysis(
                     trace_id=trace_id,
                     group_id=group_id,
-                    platform_id=platform
-                    if platform and platform not in ("all", "auto", "default")
-                    else None,
+                    platform_id=target_platform,
                     template_name=template_name,
                 )
                 if result and result.get("success"):
+                    if result.get("fallback_to_fresh_run"):
+                        trace_ctx.metadata["fallback_to_fresh_run"] = True
+                        trace_ctx.metadata["fallback_reason"] = str(
+                            result.get(
+                                "fallback_reason",
+                                "checkpoint_missing_auto_refetched",
+                            )
+                        )
+                        trace_ctx.metadata["resumed_from"] = str(
+                            result.get("resumed_from", "fresh_run_fallback")
+                        )
                     analysis_result = result.get("analysis_result")
                     adapter = result.get("adapter")
                     bot_mgr = getattr(self.analysis_service, "bot_manager", None)
@@ -577,17 +791,14 @@ class PluginPageWebUIBridge:
                             else ""
                         )
                         or getattr(adapter, "platform_id", "")
-                        or (
-                            platform
-                            if platform and platform not in ("all", "auto", "default")
-                            else ""
-                        )
+                        or target_platform
+                        or ""
                     )
                     trace_ctx.platform = str(dispatch_platform_id)
                     if self.report_dispatcher and analysis_result:
                         try:
                             with trace_ctx.span(
-                                "DISPATCH_REPORT",
+                                AnalysisStage.DISPATCH_REPORT,
                                 {
                                     "platform": dispatch_platform_id or "auto",
                                     "group_id": group_id,
@@ -628,6 +839,7 @@ class PluginPageWebUIBridge:
             offset = int(request.query.get("offset", 0))
             group_id = request.query.get("group_id")
             status = request.query.get("status")
+            trigger_type = request.query.get("trigger_type")
             search = request.query.get("search")
             start_time_raw = request.query.get("start_time")
             end_time_raw = request.query.get("end_time")
@@ -642,6 +854,7 @@ class PluginPageWebUIBridge:
                 offset=offset,
                 group_id=group_id,
                 status=status,
+                trigger_type=trigger_type,
                 search=search,
                 start_time=start_time,
                 end_time=end_time,
@@ -898,7 +1111,7 @@ class PluginPageWebUIBridge:
                     else (
                         task_info.get("current_stage", "")
                         if task_info
-                        else "FETCH_MESSAGES"
+                        else AnalysisStage.FETCH_MESSAGES.value
                     )
                 )
                 spans = list(active_trace._spans) if active_trace else []
@@ -1229,6 +1442,11 @@ class PluginPageWebUIBridge:
         group_id = str(body.get("group_id", "")).strip()
         date_str = str(body.get("date_str", "")).strip()
         template_name = str(body.get("template_name", "default")).strip()
+        # 模板名安全校验：拒绝路径分隔符/穿越（渲染入口防线）
+        try:
+            template_name = validate_template_name(template_name)
+        except TemplateInstallError:
+            return error_response("模板名包含非法字符。", status_code=400)
         render_format = str(body.get("render_format", "image")).strip()
         platform_id = body.get("platform_id")
         trace_id = str(body.get("trace_id", "")).strip()
@@ -1288,6 +1506,145 @@ class PluginPageWebUIBridge:
         except Exception as e:
             logger.error(f"获取模板列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
+
+    async def api_get_template_preview(self) -> Any:
+        """获取自定义模板的预览图（base64 data URL，供 WebUI 画廊等展示）"""
+        try:
+            template_name = (
+                str(request.query.get("template_name") or "").strip()
+                if hasattr(request, "query") and request.query
+                else ""
+            )
+            if not template_name:
+                return error_response("缺少模板名 (template_name)", status_code=400)
+            try:
+                template_name = validate_template_name(template_name)
+            except TemplateInstallError as e:
+                return error_response(str(e), status_code=400)
+
+            # 防路径穿越：确认解析后的目标路径仍位于自定义模板根目录内
+            store = default_template_store_dir().resolve()
+            custom_dir = store / template_name
+            if not is_path_within(custom_dir, store):
+                return error_response("模板名非法", status_code=400)
+
+            # 候选文件拒绝符号链接并确认解析后仍在模板目录内（防 symlink 读取任意文件）
+            for candidate in preview_candidate_files(custom_dir):
+                content = await asyncio.to_thread(candidate.read_bytes)
+                mime = (
+                    "image/png" if candidate.suffix.lower() == ".png" else "image/jpeg"
+                )
+                data_url = (
+                    f"data:{mime};base64,{base64.b64encode(content).decode('ascii')}"
+                )
+                return json_response({"status": "ok", "data": {"data_url": data_url}})
+            return error_response("该模板没有预览图", status_code=404)
+        except Exception as e:
+            logger.error(f"获取模板预览图异常: {e}", exc_info=True)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("读取模板预览图失败。", status_code=500)
+
+    async def api_install_template_from_url(self) -> Any:
+        """从 GitHub 仓库链接安装自定义报告视觉模板"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            repo_url = str(body.get("repo_url") or "")
+            name = str(body.get("name") or "").strip() or None
+            if not repo_url:
+                return error_response(
+                    "缺少 GitHub 仓库链接 (repo_url)", status_code=400
+                )
+
+            result = await install_template_from_github_url(repo_url, name=name)
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"从 URL 安装模板异常: {e}", exc_info=True)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("安装模板失败，请查看服务器日志。", status_code=500)
+
+    async def api_install_template_from_file(self) -> Any:
+        """从上传的 zip 压缩包安装自定义报告视觉模板（JSON Base64 编码）"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            file_data = body.get("file_data") or body.get("base64")
+            name = str(body.get("name") or "").strip() or None
+            if not file_data or not isinstance(file_data, str):
+                return error_response("未检测到压缩包数据 (file_data)", status_code=400)
+
+            if file_data.startswith("data:"):
+                _, b64_payload = file_data.split(",", 1)
+            else:
+                b64_payload = file_data
+
+            if len(b64_payload) > MAX_ZIP_B64_SIZE:
+                return error_response("压缩包数据超出大小限制", status_code=400)
+            try:
+                zip_bytes = base64.b64decode(b64_payload)
+            except Exception:
+                return error_response("压缩包数据不是有效的 Base64", status_code=400)
+
+            result = await asyncio.to_thread(
+                install_template_from_zip, zip_bytes, None, name
+            )
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"从压缩包安装模板异常: {e}", exc_info=True)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("安装模板失败，请查看服务器日志。", status_code=500)
+
+    async def api_uninstall_template(self) -> Any:
+        """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
+        try:
+            body: dict[str, Any] = {}
+            if hasattr(request, "json"):
+                try:
+                    parsed_body = await request.json(default={})
+                    if isinstance(parsed_body, dict):
+                        body = parsed_body
+                except Exception:
+                    body = {}
+
+            name = str(body.get("name") or "").strip()
+            if not name:
+                return error_response("缺少模板名 (name)", status_code=400)
+
+            result = await asyncio.to_thread(uninstall_template, name)
+
+            # 卸载成功后使该主题的 Jinja2 环境缓存失效，防止残留目录句柄/缓存
+            generator = getattr(
+                self.analysis_service, "report_generator", None
+            ) or getattr(self.report_dispatcher, "report_generator", None)
+            html_tpls = getattr(generator, "html_templates", None)
+            if html_tpls and hasattr(html_tpls, "invalidate_env"):
+                html_tpls.invalidate_env(name)
+
+            return json_response({"status": "ok", "data": result})
+        except TemplateInstallError as e:
+            return error_response(str(e), status_code=400)
+        except Exception as e:
+            logger.error(f"卸载模板异常: {e}", exc_info=True)
+            # 不透传 str(e)：避免把服务器本地路径等细节泄露给客户端
+            return error_response("卸载模板失败，请查看服务器日志。", status_code=500)
 
     async def api_stream_events(self) -> Any:
         """SSE 实时推送任务生命周期事件"""
@@ -1725,4 +2082,520 @@ class PluginPageWebUIBridge:
             )
         except Exception as e:
             logger.error(f"获取配置文件内容异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    # ------------------------------------------------------------------
+    # 8. 插件数据管理
+    # ------------------------------------------------------------------
+
+    def _get_plugin_data_dir(self) -> Path | None:
+        """获取 AstrBot 标准 plugin_data 目录（StarTools.get_data_dir）"""
+        try:
+            from astrbot.api.star import StarTools
+
+            return StarTools.get_data_dir(PLUGIN_NAME)
+        except Exception:
+            return None
+
+    def _dir_stats(self, directory: Path) -> dict:
+        """统计目录下文件数量与总字节数，目录不存在时返回零值。"""
+        if not directory.exists():
+            return {"count": 0, "size_bytes": 0}
+        count = 0
+        total = 0
+        for p in directory.rglob("*"):
+            if p.is_file():
+                count += 1
+                try:
+                    total += p.stat().st_size
+                except OSError:
+                    pass
+        return {"count": count, "size_bytes": total}
+
+    async def api_get_plugin_data_overview(self) -> Any:
+        """返回各数据分区的文件数量与字节大小概览"""
+        try:
+            data_dir = self._get_plugin_data_dir()
+
+            # 头像缓存
+            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            avatar_stats = (
+                self._dir_stats(avatar_dir)
+                if avatar_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 自定义报告模板
+            custom_tmpl_dir = data_dir / "custom_t2i_templates" if data_dir else None
+            custom_tmpl_stats = (
+                self._dir_stats(custom_tmpl_dir)
+                if custom_tmpl_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 上传的配置参考图
+            config_files_dir = data_dir / "files" if data_dir else None
+            config_files_stats = (
+                self._dir_stats(config_files_dir)
+                if config_files_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 配置自动备份
+            config_backups_dir = data_dir / "config_backups" if data_dir else None
+            config_backups_stats = (
+                self._dir_stats(config_backups_dir)
+                if config_backups_dir
+                else {"count": 0, "size_bytes": 0}
+            )
+
+            # 历史报告
+            report_stats: dict = {"count": 0, "size_bytes": 0}
+            if self.report_output_dir and Path(self.report_output_dir).exists():
+                report_stats = self._dir_stats(Path(self.report_output_dir))
+
+            # 临时文件（AstrBot 全局 temp 目录下本插件生成的图片）
+            temp_stats: dict = {"count": 0, "size_bytes": 0}
+            try:
+                from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+                temp_dir = Path(get_astrbot_temp_path())
+                if temp_dir.exists():
+                    count = 0
+                    size = 0
+                    for f in temp_dir.iterdir():
+                        if f.is_file() and f.name.startswith("io_temp_img_"):
+                            count += 1
+                            try:
+                                size += f.stat().st_size
+                            except OSError:
+                                pass
+                    temp_stats = {"count": count, "size_bytes": size}
+            except Exception:
+                pass
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "avatars": avatar_stats,
+                        "custom_templates": custom_tmpl_stats,
+                        "config_files": config_files_stats,
+                        "config_backups": config_backups_stats,
+                        "reports": report_stats,
+                        "temp_files": temp_stats,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取插件数据概览异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_avatar_cache(self) -> Any:
+        """清空头像缓存目录"""
+        try:
+            data_dir = self._get_plugin_data_dir()
+            avatar_dir = data_dir / "cache" / "avatars" if data_dir else None
+            if not avatar_dir or not avatar_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in avatar_dir.iterdir():
+                if f.is_file():
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空头像缓存，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空头像缓存异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_reports(self) -> Any:
+        """清空历史报告目录（图片与 HTML 文件）"""
+        try:
+            if not self.report_output_dir:
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            report_dir = Path(self.report_output_dir)
+            if not report_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in report_dir.iterdir():
+                if f.is_file() and f.suffix.lower() in {
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".webp",
+                    ".html",
+                }:
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空历史报告，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空历史报告异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_temp_files(self) -> Any:
+        """清空由本插件产生的临时图片文件（io_temp_img_* 前缀）"""
+        try:
+            from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+            temp_dir = Path(get_astrbot_temp_path())
+            if not temp_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            deleted = 0
+            for f in temp_dir.iterdir():
+                if f.is_file() and f.name.startswith("io_temp_img_"):
+                    try:
+                        f.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            logger.info(f"[plugin-data] 已清空临时文件，删除 {deleted} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": deleted}})
+        except Exception as e:
+            logger.error(f"清空临时文件异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_custom_templates(self) -> Any:
+        """清空用户自定义报告模板目录"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            custom_tmpl_dir = data_dir / "custom_t2i_templates" if data_dir else None
+            if not custom_tmpl_dir or not custom_tmpl_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in custom_tmpl_dir.rglob("*") if p.is_file())
+            shutil.rmtree(custom_tmpl_dir, ignore_errors=True)
+            custom_tmpl_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空自定义报告模板，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空自定义报告模板异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_config_files(self) -> Any:
+        """清空上传的配置参考图文件"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            files_dir = data_dir / "files" if data_dir else None
+            if not files_dir or not files_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in files_dir.rglob("*") if p.is_file())
+            shutil.rmtree(files_dir, ignore_errors=True)
+            files_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空配置参考图，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空配置参考图异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_clear_config_backups(self) -> Any:
+        """清空配置自动备份历史文件"""
+        try:
+            import shutil
+
+            data_dir = self._get_plugin_data_dir()
+            backups_dir = data_dir / "config_backups" if data_dir else None
+            if not backups_dir or not backups_dir.exists():
+                return json_response({"status": "ok", "data": {"deleted": 0}})
+            count = sum(1 for p in backups_dir.rglob("*") if p.is_file())
+            shutil.rmtree(backups_dir, ignore_errors=True)
+            backups_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"[plugin-data] 已清空配置历史自动备份，删除 {count} 个文件")
+            return json_response({"status": "ok", "data": {"deleted": count}})
+        except Exception as e:
+            logger.error(f"清空配置历史自动备份异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    # ================================================================
+    # 增量批次与 Checkpoint 快照管理 API
+    # ================================================================
+
+    @property
+    def _incremental_store(self) -> Any:
+        return getattr(self.analysis_service, "incremental_store", None)
+
+    @property
+    def _checkpoint_store(self) -> Any:
+        return getattr(self.analysis_service, "checkpoint_store", None)
+
+    async def api_get_incremental_groups(self) -> Any:
+        """获取所有拥有增量批次或游标记录的群号列表"""
+        try:
+            store = self._incremental_store
+            tracked: set[str] = set()
+            if store and hasattr(store, "get_tracked_groups"):
+                tracked.update(await store.get_tracked_groups())
+
+            # 补充包含历史记录的群聊
+            if self.trace_store:
+                for g in self.trace_store.get_distinct_groups():
+                    gid = str(g.get("group_id", "")).strip()
+                    if gid:
+                        tracked.add(gid)
+
+            sorted_groups = sorted(tracked)
+            return json_response({"status": "ok", "data": {"groups": sorted_groups}})
+        except Exception as e:
+            logger.error(f"获取增量群聊列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_incremental_batches(self) -> Any:
+        """获取指定群聊的增量批次列表与当前游标状态"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            if not group_id:
+                return error_response("Missing group_id parameter", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            batches = await store.get_all_batches_with_details(group_id)
+            cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(group_id)
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "group_id": group_id,
+                        "batches": batches,
+                        "cursor": {
+                            "timestamp": cursor_ts,
+                            "tracked_message_ids_count": len(cursor_msg_ids),
+                        },
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"获取增量批次列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_incremental_batch_detail(self) -> Any:
+        """获取单条增量批次完整结构化数据"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            batch_id = request.query.get("batch_id", "").strip()
+            if not group_id or not batch_id:
+                return error_response("Missing group_id or batch_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            batch = await store.get_batch_detail(group_id, batch_id)
+            if not batch:
+                return error_response(
+                    f"Batch {batch_id} not found for group {group_id}", status_code=404
+                )
+
+            return json_response({"status": "ok", "data": batch.to_dict()})
+        except Exception as e:
+            logger.error(f"获取增量批次详情异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_delete_incremental_batch(self) -> Any:
+        """删除指定群的单个增量批次"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            batch_id = str(
+                payload.get("batch_id") or request.query.get("batch_id") or ""
+            ).strip()
+
+            if not group_id or not batch_id:
+                return error_response("Missing group_id or batch_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            deleted = await store.delete_batch(group_id, batch_id)
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "deleted": deleted,
+                        "group_id": group_id,
+                        "batch_id": batch_id,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"删除增量批次异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_reset_incremental_group(self) -> Any:
+        """一键清空指定群全部增量批次并将游标归零"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            if not group_id:
+                return error_response("Missing group_id", status_code=400)
+
+            store = self._incremental_store
+            if not store:
+                return error_response(
+                    "IncrementalStore not initialized", status_code=503
+                )
+
+            deleted_count = await store.reset_group(group_id)
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "group_id": group_id,
+                        "deleted_batches": deleted_count,
+                        "message": f"Successfully reset incremental state for group {group_id}",
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"重置增量状态异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_list_checkpoints(self) -> Any:
+        """分页条件查询 Checkpoint 列表"""
+        try:
+            limit = int(request.query.get("limit", 50))
+            offset = int(request.query.get("offset", 0))
+            group_id = request.query.get("group_id") or None
+            date_str = request.query.get("date_str") or None
+            stage_name = request.query.get("stage_name") or None
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            items, total = store.list_all_checkpoints(
+                limit=limit,
+                offset=offset,
+                group_id=group_id,
+                date_str=date_str,
+                stage_name=stage_name,
+            )
+            return json_response(
+                {"status": "ok", "data": {"items": items, "total": total}}
+            )
+        except Exception as e:
+            logger.error(f"查询 Checkpoint 列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_checkpoint_groups(self) -> Any:
+        """获取所有拥有有效 Checkpoint 的群号列表"""
+        try:
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+            groups = store.get_distinct_checkpoint_groups()
+            return json_response({"status": "ok", "data": {"groups": groups}})
+        except Exception as e:
+            logger.error(f"获取 Checkpoint 群号列表异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_get_checkpoint_detail(self) -> Any:
+        """获取单条 Checkpoint 产物 JSON 与元数据"""
+        try:
+            group_id = request.query.get("group_id", "").strip()
+            date_str = request.query.get("date_str", "").strip()
+            stage_name = request.query.get("stage_name", "").strip()
+
+            if not group_id or not date_str or not stage_name:
+                return error_response(
+                    "group_id, date_str, stage_name are all required", status_code=400
+                )
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            detail = store.get_checkpoint_detail(group_id, date_str, stage_name)
+            if not detail:
+                return error_response(
+                    "Checkpoint not found or expired", status_code=404
+                )
+
+            return json_response({"status": "ok", "detail": detail, "data": detail})
+        except Exception as e:
+            logger.error(f"获取 Checkpoint 详情异常: {e}", exc_info=True)
+            return error_response(str(e), status_code=500)
+
+    async def api_delete_checkpoint(self) -> Any:
+        """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
+        try:
+            payload_raw = await request.json(default={})
+            payload: dict[str, Any] = (
+                payload_raw if isinstance(payload_raw, dict) else {}
+            )
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
+            date_str = str(
+                payload.get("date_str") or request.query.get("date_str") or ""
+            ).strip()
+            stage_name = str(
+                payload.get("stage_name") or request.query.get("stage_name") or ""
+            ).strip()
+
+            if not group_id or not date_str:
+                return error_response(
+                    "group_id and date_str are required", status_code=400
+                )
+
+            store = self._checkpoint_store
+            if not store:
+                return error_response(
+                    "CheckpointStore not initialized", status_code=503
+                )
+
+            if stage_name:
+                deleted = store.delete_checkpoint(group_id, date_str, stage_name)
+            else:
+                store.clear_checkpoints(group_id, date_str)
+                deleted = True
+
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "deleted": deleted,
+                        "group_id": group_id,
+                        "date_str": date_str,
+                        "stage_name": stage_name or None,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"删除 Checkpoint 异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

@@ -295,7 +295,6 @@ ${messages_text}
         self,
         batch_reviews: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """
         汇总多个增量批次的质量报告，生成最终的每日全天总评。
@@ -449,7 +448,6 @@ ${messages_text}
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
@@ -600,14 +598,12 @@ ${messages_text}
         self,
         data: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
         persona_id: str | None = None,
         prompt_override: str | None = None,
     ) -> tuple[list[QualityReview], TokenUsage]:
         review, usage = await self.analyze_quality(
             data,
             umo,
-            session_id,
             persona_id=persona_id,
             prompt_override=prompt_override,
         )

@@ -28,6 +28,7 @@ from .src.application.services.analysis_application_service import (
     DuplicateGroupTaskError,
 )
 from .src.application.services.comic_application_service import ComicApplicationService
+from .src.application.services.crash_recovery_service import CrashRecoveryService
 from .src.application.services.message_processing_service import (
     MessageProcessingService,
 )
@@ -55,7 +56,7 @@ from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
 from .src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
-from .src.shared.constants import PLUGIN_NAME
+from .src.shared.constants import PLUGIN_NAME, AnalysisStage
 from .src.shared.trace_context import TraceContext
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
@@ -111,6 +112,9 @@ class GroupDailyAnalysis(Star):
         # 1.1 Trace & Checkpoint 基础设施 (持久化)
         self.trace_store = TraceSQLiteStore(plugin_data_dir / "traces.db")
         TraceContext.set_global_store(self.trace_store)
+        TraceContext.set_metrics_enabled(
+            self.config_manager.get_enable_runtime_metrics()
+        )
         self.checkpoint_store = CheckpointStore(plugin_data_dir / "traces.db")
 
         # 2. 领域层
@@ -182,7 +186,8 @@ class GroupDailyAnalysis(Star):
 
         # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
         self.active_task_manager = ActiveTaskManager(trace_store=self.trace_store)
-        self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=600)
+        TraceContext.set_active_task_manager(self.active_task_manager)
+        self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=180)
         self.webui_bridge = PluginPageWebUIBridge(
             context=context,
             trace_store=self.trace_store,
@@ -192,6 +197,14 @@ class GroupDailyAnalysis(Star):
             report_output_dir=plugin_data_dir / "reports",
         )
         self.webui_bridge.register_routes()
+
+        # 开机崩溃对账与自愈恢复服务
+        self.crash_recovery_service = CrashRecoveryService(
+            trace_store=self.trace_store,
+            checkpoint_store=self.checkpoint_store,
+            analysis_service=self.analysis_service,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
+        )
 
         # 同步全局限流并进行初始化配置
         GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
@@ -294,6 +307,21 @@ class GroupDailyAnalysis(Star):
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
                     await self.auto_scheduler.start_incremental_trigger()
+
+                # 异步启动开机崩溃任务对账与自愈恢复
+                crash_recovery = getattr(self, "crash_recovery_service", None)
+                if crash_recovery:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        recovery_task = loop.create_task(
+                            crash_recovery.recover_crashed_tasks()
+                        )
+                        bg_tasks = getattr(self, "_background_tasks", None)
+                        if isinstance(bg_tasks, set):
+                            bg_tasks.add(recovery_task)
+                            recovery_task.add_done_callback(bg_tasks.discard)
+                    except RuntimeError:
+                        pass
 
                 self._initialized = True
                 self._discovery_run = True
@@ -469,6 +497,7 @@ class GroupDailyAnalysis(Star):
                 and hasattr(event.platform_meta, "id")
             ):
                 return event.platform_meta.id
+            # 注意: 此处回退 "default" 仅用于兼容未提供平台元数据的历史 AstrBot 初始默认命名实例，并不代表业务上的全局默认平台
             return "default"
 
     # ================================================================
@@ -714,7 +743,7 @@ class GroupDailyAnalysis(Star):
                     group_name=group_name,
                     platform=platform_id or "",
                     trigger_type="manual",
-                    current_stage="FETCH_MESSAGES",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
                     asyncio_task=current_task,
                 )
 
@@ -878,7 +907,7 @@ class GroupDailyAnalysis(Star):
                     group_name=group_name or group_id,
                     platform=platform_id or "",
                     trigger_type="comic_manual",
-                    current_stage="FETCH_MESSAGES",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
                     asyncio_task=current_task,
                 )
 
@@ -1027,10 +1056,20 @@ class GroupDailyAnalysis(Star):
             return None
 
         trace = TraceContext.current()
+        override_theme = trace.metadata.get("override_template_name") if trace else None
+        template_theme = (
+            override_theme
+            or getattr(
+                self.config_manager, "get_report_template", lambda: "scrapbook"
+            )()
+        )
 
         if output_format == "image":
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "image"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "image", "template": template_theme},
+                ):
                     (
                         image_url,
                         html_content,
@@ -1042,6 +1081,7 @@ class GroupDailyAnalysis(Star):
                         nickname_getter=nickname_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
+                        template_theme=template_theme,
                     )
             else:
                 (
@@ -1055,6 +1095,7 @@ class GroupDailyAnalysis(Star):
                     nickname_getter=nickname_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=is_qq_official,
+                    template_theme=template_theme,
                 )
 
             if image_url:
@@ -1079,7 +1120,10 @@ class GroupDailyAnalysis(Star):
         elif output_format == "html":
             cur_trace_id = trace.trace_id if trace else None
             if trace:
-                with trace.span("RENDER_REPORT", {"format": "html"}):
+                with trace.span(
+                    "RENDER_REPORT",
+                    {"format": "html", "template": template_theme},
+                ):
                     (
                         html_path,
                         json_path,
@@ -1090,6 +1134,7 @@ class GroupDailyAnalysis(Star):
                         nickname_getter=nickname_getter,
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
+                        template_theme=template_theme,
                         trace_id=cur_trace_id,
                     )
             else:
@@ -1100,6 +1145,7 @@ class GroupDailyAnalysis(Star):
                     nickname_getter=nickname_getter,
                     avatar_cache_namespace=platform_id,
                     allow_alphanumeric_user_ids=is_qq_official,
+                    template_theme=template_theme,
                     trace_id=cur_trace_id,
                 )
             if html_path:

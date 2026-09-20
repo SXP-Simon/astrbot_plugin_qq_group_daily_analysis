@@ -24,7 +24,6 @@ class IAnalysisProvider(ABC):
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[SummaryTopic], TokenUsage]:
         """分析话题"""
         pass
@@ -36,7 +35,6 @@ class IAnalysisProvider(ABC):
         user_activity: dict,
         umo: str | None = None,
         top_users: list[dict] | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[UserTitle], TokenUsage]:
         """分析用户称号"""
         pass
@@ -46,7 +44,6 @@ class IAnalysisProvider(ABC):
         self,
         messages: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[list[GoldenQuote], TokenUsage]:
         """分析金句"""
         pass
@@ -91,7 +88,6 @@ class IAnalysisProvider(ABC):
         self,
         batch_reviews: list[dict],
         umo: str | None = None,
-        session_id: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个聊天质量报告（增量模式使用）"""
         pass

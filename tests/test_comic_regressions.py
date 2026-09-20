@@ -157,7 +157,6 @@ def load_config_manager_class(plugin_data_dir: Path):
         "_migrate_daily_comic_characters",
         "_migrate_daily_comic_character_prompts",
         "_protect_upgrade_data",
-        "_protect_custom_t2i_templates",
         "_read_upgrade_protection_state",
         "_save_upgrade_protection_state",
         "_write_upgrade_config_backup",
@@ -654,90 +653,32 @@ def test_t2i_viewport_fallback_only_fills_missing_meta_dimension():
     assert description == "模板width=980，兜底height=900"
 
 
-def test_custom_t2i_template_is_copied_after_user_edit(tmp_path: Path):
-    """模板哈希变化时应保留用户修改的副本。"""
-    config_manager_class = load_config_manager_class(tmp_path)
-    plugin_root = tmp_path / "plugin"
-    template_path = (
-        plugin_root
-        / "src"
-        / "infrastructure"
-        / "reporting"
-        / "templates"
-        / "simple"
-        / "image_template.html"
-    )
-    template_path.parent.mkdir(parents=True)
-    template_path.write_text("官方模板", encoding="utf-8")
-    (plugin_root / "metadata.yaml").write_text("version: v1.0.0\n", encoding="utf-8")
-    (plugin_root / "_conf_schema.json").write_text("{}", encoding="utf-8")
-    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
-
-    class Config(dict):
-        save_config = Mock()
-
-    config_manager_class(Config())
-    template_path.write_text("用户修改模板", encoding="utf-8")
-    config_manager_class(Config())
-
-    protected_template = (
-        tmp_path
-        / "custom_t2i_templates"
-        / "reporting_templates"
-        / "simple"
-        / "image_template.html"
-    )
-    assert protected_template.read_text(encoding="utf-8") == "用户修改模板"
-
-
-def test_standalone_t2i_template_is_copied_on_first_start(tmp_path: Path):
-    """插件目录中的独立 T2I 模板首次启动即应归档。"""
-    config_manager_class = load_config_manager_class(tmp_path)
-    plugin_root = tmp_path / "plugin"
-    standalone_template = plugin_root / "data" / "t2i_templates" / "custom.html"
-    standalone_template.parent.mkdir(parents=True)
-    standalone_template.write_text("独立自定义模板", encoding="utf-8")
-    (plugin_root / "metadata.yaml").write_text("version: v1.0.0\n", encoding="utf-8")
-    (plugin_root / "_conf_schema.json").write_text("{}", encoding="utf-8")
-    config_manager_class._get_plugin_root = staticmethod(lambda: plugin_root)
-
-    class Config(dict):
-        save_config = Mock()
-
-    config_manager_class(Config())
-
-    protected_template = (
-        tmp_path / "custom_t2i_templates" / "standalone_templates" / "custom.html"
-    )
-    assert protected_template.read_text(encoding="utf-8") == "独立自定义模板"
-
-
-def test_custom_report_template_overrides_only_matching_file(tmp_path: Path):
-    """用户模板副本应优先加载，缺失文件仍回退到内置模板。"""
-    builtin_template_dir = tmp_path / "builtin" / "simple"
-    custom_template_dir = tmp_path / "custom" / "simple"
-    builtin_template_dir.mkdir(parents=True)
+def test_custom_report_template_falls_back_to_scrapbook_for_missing_components(tmp_path: Path):
+    """自定义报告模板若未提供局部组件，自动回退到内置默认手账模板（scrapbook）。"""
+    scrapbook_dir = tmp_path / "builtin" / "scrapbook"
+    custom_template_dir = tmp_path / "custom" / "my_custom_theme"
+    scrapbook_dir.mkdir(parents=True)
     custom_template_dir.mkdir(parents=True)
-    (builtin_template_dir / "image_template.html").write_text(
-        "内置图片模板", encoding="utf-8"
+    (scrapbook_dir / "image_template.html").write_text(
+        "默认手账图片模板", encoding="utf-8"
     )
-    (builtin_template_dir / "topic_item.html").write_text(
-        "内置话题模板", encoding="utf-8"
+    (scrapbook_dir / "topic_item.html").write_text(
+        "默认手账话题模板", encoding="utf-8"
     )
     (custom_template_dir / "image_template.html").write_text(
-        "用户图片模板", encoding="utf-8"
+        "自定义主题图片模板", encoding="utf-8"
     )
     templates = HTMLTemplates(
         SimpleNamespace(
-            get_report_template=Mock(return_value="simple"),
+            get_report_template=Mock(return_value="my_custom_theme"),
             get_custom_report_template_dir=Mock(return_value=custom_template_dir),
         )
     )
     templates.base_dir = str(tmp_path / "builtin")
     environment = templates._get_env_sync()
 
-    assert environment.get_template("image_template.html").render() == "用户图片模板"
-    assert environment.get_template("topic_item.html").render() == "内置话题模板"
+    assert environment.get_template("image_template.html").render() == "自定义主题图片模板"
+    assert environment.get_template("topic_item.html").render() == "默认手账话题模板"
 
 
 def test_comic_is_skipped_without_valid_topics():

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
@@ -122,7 +123,7 @@ class ReportDispatcher:
 
             if trace:
                 with trace.span(
-                    "RENDER_REPORT",
+                    AnalysisStage.RENDER_REPORT,
                     {"format": "image", "template": template_theme},
                 ):
                     (
@@ -160,7 +161,7 @@ class ReportDispatcher:
         if image_url:
             with (
                 trace_ctx.span(
-                    "DISPATCH_REPORT",
+                    AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
                         "group_id": group_id,
@@ -220,12 +221,34 @@ class ReportDispatcher:
                     if self.config_manager.get_show_report_caption()
                     else ""
                 )
+                is_b64 = image_url.startswith("base64://")
+                raw_image_kb = 0.0
+                base64_payload_kb = 0.0
+                bloat_ratio = None
+                if is_b64:
+                    b64_str = image_url[9:]
+                    b64_len = len(b64_str)
+                    base64_payload_kb = round(b64_len / 1024, 2)
+                    padding = b64_str.count("=", max(0, b64_len - 2))
+                    raw_bytes_len = max(0, (b64_len * 3 // 4) - padding)
+                    raw_image_kb = round(raw_bytes_len / 1024, 2)
+                    bloat_pct = round(
+                        ((b64_len - raw_bytes_len) / max(raw_bytes_len, 1)) * 100, 1
+                    )
+                    bloat_ratio = f"+{bloat_pct}%"
+                elif os.path.exists(image_url):
+                    raw_image_kb = round(os.path.getsize(image_url) / 1024, 2)
+
+                dispatch_start_ts = time.perf_counter()
                 try:
                     sent = await self.message_sender.send_image_smart(
                         group_id, image_url, caption, platform_id
                     )
                 except Exception as e:
                     logger.error(f"[{trace_id}] 图片报告发送异常: {e}", exc_info=True)
+                dispatch_api_ms = round(
+                    (time.perf_counter() - dispatch_start_ts) * 1000, 2
+                )
 
                 # 5. 尝试上传到群文件/群相册（静默处理）
                 try:
@@ -241,6 +264,11 @@ class ReportDispatcher:
                             "platform": platform_id or "auto",
                             "formats": ["image"],
                             "format": "image",
+                            "transmission_mode": "base64" if is_b64 else "file_path",
+                            "raw_image_kb": raw_image_kb,
+                            "base64_payload_kb": base64_payload_kb,
+                            "bloat_ratio": bloat_ratio,
+                            "dispatch_api_ms": dispatch_api_ms,
                             "success": bool(sent),
                             "image_sent": bool(sent),
                             "report_file": dest_filename,
@@ -293,7 +321,7 @@ class ReportDispatcher:
 
             if trace:
                 with trace.span(
-                    "RENDER_REPORT",
+                    AnalysisStage.RENDER_REPORT,
                     {"format": "html", "template": template_theme},
                 ):
                     (
@@ -326,7 +354,7 @@ class ReportDispatcher:
         if html_path:
             with (
                 trace_ctx.span(
-                    "DISPATCH_REPORT",
+                    AnalysisStage.DISPATCH_REPORT,
                     {
                         "platform": platform_id or "auto",
                         "group_id": group_id,
@@ -460,7 +488,7 @@ class ReportDispatcher:
 
         with (
             trace_ctx.span(
-                "DISPATCH_REPORT",
+                AnalysisStage.DISPATCH_REPORT,
                 {
                     "platform": platform_id or "auto",
                     "group_id": group_id,

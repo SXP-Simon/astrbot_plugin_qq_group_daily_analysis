@@ -82,7 +82,8 @@ export function useLogsViewModel() {
               search.trim() &&
               !entry.message.toLowerCase().includes(search.trim().toLowerCase()) &&
               !(entry.trace_id || "").toLowerCase().includes(search.trim().toLowerCase()) &&
-              !entry.logger_name.toLowerCase().includes(search.trim().toLowerCase())
+              !entry.logger_name.toLowerCase().includes(search.trim().toLowerCase()) &&
+              !(entry.location || "").toLowerCase().includes(search.trim().toLowerCase())
             ) {
               return;
             }
@@ -139,6 +140,6 @@ export function useLogsViewModel() {
     autoRefresh,
     setAutoRefresh,
     clearLogs: handleClearLogs,
-    refresh: () => loadLogs(false),
+    refresh: (silent = false) => loadLogs(silent),
   };
 }

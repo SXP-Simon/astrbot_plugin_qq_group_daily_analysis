@@ -32,7 +32,7 @@ cd astrbot_plugin_qq_group_daily_analysis
 
 # 安装开发依赖与测试工具
 uv venv
-uv pip install -e ".[dev]" pytest pytest-asyncio pytest-cov ruff pre-commit
+uv pip install -r requirements-dev.txt
 
 # 安装 git pre-commit 钩子
 pre-commit install

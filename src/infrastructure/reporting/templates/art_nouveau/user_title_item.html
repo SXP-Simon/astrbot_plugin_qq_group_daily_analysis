@@ -1,0 +1,70 @@
+{% if titles %}
+<section class="an-section an-portraits-section avoid-break">
+    <div class="an-section-header">
+        <div class="an-header-flourish-left">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+        <div class="an-section-title-wrap">
+            <h2 class="an-section-title">群芳雅鉴 · Portraits & Personas</h2>
+            <span class="an-section-subtitle">THE GALLERY OF MEMBER PERSONAS</span>
+        </div>
+        <div class="an-header-flourish-right">
+            <svg viewBox="0 0 100 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C20 12 30 2 50 12C70 22 80 12 100 12" stroke="#c9a227" stroke-width="1.5"/>
+                <circle cx="50" cy="12" r="3.5" fill="#c9a227"/>
+                <path d="M42 12C45 8 48 8 50 12C52 8 55 8 58 12" stroke="#2d5016" stroke-width="1.2"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="an-portraits-grid">
+        {% for title in titles %}
+        <div class="an-portrait-card avoid-break" style="position: relative; overflow: hidden;">
+            <div class="an-card-corner an-corner-tl"></div>
+            <div class="an-card-corner an-corner-tr"></div>
+            <div class="an-card-corner an-corner-bl"></div>
+            <div class="an-card-corner an-corner-br"></div>
+
+            <div class="an-portrait-head">
+                <div class="an-cameo-frame">
+                    <div class="an-cameo-border">
+                        {% if title.avatar_data %}
+                        <img src="{{ title.avatar_data }}" alt="头像" class="an-avatar-img">
+                        {% else %}
+                        <div class="an-avatar-placeholder">
+                            <svg viewBox="0 0 24 24" width="26" height="26" style="width: 26px; height: 26px;" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="8" r="4"/>
+                                <path d="M4 20C4 16 7.5 14 12 14C16.5 14 20 16 20 20"/>
+                            </svg>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="an-portrait-info">
+                    <div class="an-portrait-name">{{ title.name }}</div>
+                    <div class="an-portrait-badges">
+                        <span class="an-badge-title">{{ title.title }}</span>
+                        {% if title.profile_display or title.mbti %}
+                        <span class="an-badge-mbti">{{ title.profile_display or title.mbti }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="an-portrait-vignette">
+                <p class="an-vignette-text">{{ title.reason }}</p>
+            </div>
+
+            {% if title.profile_image %}
+            <img src="{{ title.profile_image }}" alt="" class="an-portrait-watermark" style="position: absolute; right: 8px; bottom: 8px; width: 36%; max-height: 75%; object-fit: {{ title.profile_image_size_mode or 'contain' }}; opacity: {{ title.profile_image_opacity or 0.12 }}; pointer-events: none; z-index: 1;">
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ...shared.constants import AnalysisStage
+
 
 class TraceSQLiteStore:
     """基于 SQLite 的 Trace 链路持久化仓储"""
@@ -80,12 +82,36 @@ class TraceSQLiteStore:
                     FOREIGN KEY (trace_id) REFERENCES analysis_traces(trace_id) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS performance_metrics (
+                    trace_id TEXT PRIMARY KEY,
+                    init_memory_mb REAL DEFAULT 0.0,
+                    peak_memory_mb REAL DEFAULT 0.0,
+                    final_memory_mb REAL DEFAULT 0.0,
+                    delta_memory_mb REAL DEFAULT 0.0,
+                    metrics_json TEXT DEFAULT '{}',
+                    FOREIGN KEY (trace_id) REFERENCES analysis_traces(trace_id) ON DELETE CASCADE
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_traces_started_at ON analysis_traces(started_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_traces_group_id ON analysis_traces(group_id);
                 CREATE INDEX IF NOT EXISTS idx_traces_status ON analysis_traces(status);
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
                 """
             )
+            # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
+            try:
+                cols = [
+                    row[1]
+                    for row in conn.execute(
+                        "PRAGMA table_info(performance_metrics)"
+                    ).fetchall()
+                ]
+                if cols and "metrics_json" not in cols:
+                    conn.execute(
+                        "ALTER TABLE performance_metrics ADD COLUMN metrics_json TEXT DEFAULT '{}';"
+                    )
+            except Exception:
+                pass
 
     def save_trace(self, trace_dict: dict[str, Any]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
@@ -151,6 +177,7 @@ class TraceSQLiteStore:
                     group_id=CASE WHEN excluded.group_id != '' THEN excluded.group_id ELSE analysis_traces.group_id END,
                     group_name=CASE WHEN excluded.group_name != '' AND excluded.group_name != '未知群' THEN excluded.group_name ELSE analysis_traces.group_name END,
                     platform=CASE WHEN excluded.platform != '' AND excluded.platform NOT IN ('auto', 'default', 'all') THEN excluded.platform ELSE analysis_traces.platform END,
+                    trigger_type=CASE WHEN excluded.trigger_type != '' THEN excluded.trigger_type ELSE analysis_traces.trigger_type END,
                     status=excluded.status,
                     completed_at=excluded.completed_at,
                     duration_ms=excluded.duration_ms,
@@ -254,8 +281,35 @@ class TraceSQLiteStore:
                     ),
                 )
 
+            # 5. 写入 Performance Metrics
+            perf_metrics = trace_dict.get("performance_metrics")
+            if perf_metrics and isinstance(perf_metrics, dict):
+                conn.execute(
+                    """
+                    INSERT INTO performance_metrics (
+                        trace_id, init_memory_mb, peak_memory_mb, final_memory_mb, delta_memory_mb, metrics_json
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(trace_id) DO UPDATE SET
+                        init_memory_mb=excluded.init_memory_mb,
+                        peak_memory_mb=excluded.peak_memory_mb,
+                        final_memory_mb=excluded.final_memory_mb,
+                        delta_memory_mb=excluded.delta_memory_mb,
+                        metrics_json=excluded.metrics_json;
+                    """,
+                    (
+                        trace_id,
+                        float(perf_metrics.get("init_memory_mb", 0.0)),
+                        float(perf_metrics.get("peak_memory_mb", 0.0)),
+                        float(perf_metrics.get("final_memory_mb", 0.0)),
+                        float(perf_metrics.get("delta_memory_mb", 0.0)),
+                        json.dumps(
+                            perf_metrics.get("metrics_extra", {}), ensure_ascii=False
+                        ),
+                    ),
+                )
+
     def get_trace(self, trace_id: str) -> dict[str, Any] | None:
-        """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage）"""
+        """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
         with self._get_connection() as conn:
             trace_row = conn.execute(
                 "SELECT * FROM analysis_traces WHERE trace_id = ?", (trace_id,)
@@ -283,7 +337,7 @@ class TraceSQLiteStore:
                     s["payload"] = json.loads(s.pop("stage_payload_json") or "{}")
                 except Exception:
                     s["payload"] = {}
-                if s.get("stage_name") == "LLM_ANALYSIS":
+                if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
                     if extra_prompts and not s["payload"].get("prompts"):
                         s["payload"]["prompts"] = extra_prompts
                     if extra_attempts and not s["payload"].get("llm_attempts"):
@@ -312,6 +366,22 @@ class TraceSQLiteStore:
                 trace_data["token_usage"] = t_data
             else:
                 trace_data["token_usage"] = None
+
+            # 查询 Performance Metrics
+            perf_row = conn.execute(
+                "SELECT * FROM performance_metrics WHERE trace_id = ?", (trace_id,)
+            ).fetchone()
+            if perf_row:
+                p_data = dict(perf_row)
+                try:
+                    p_data["metrics_extra"] = json.loads(
+                        p_data.pop("metrics_json") or "{}"
+                    )
+                except Exception:
+                    p_data["metrics_extra"] = {}
+                trace_data["performance_metrics"] = p_data
+            else:
+                trace_data["performance_metrics"] = None
 
             raw_rfiles = trace_data.get("extra", {}).get("report_files", [])
             seen_rfiles = set()
@@ -378,6 +448,28 @@ class TraceSQLiteStore:
                     pass
         return mapping
 
+    def get_crashed_traces_on_startup(self) -> list[dict[str, Any]]:
+        """获取开机前因系统异常终止而遗留的 running 任务列表。"""
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT trace_id, group_id, group_name, platform, trigger_type,
+                       started_at, extra_json
+                FROM analysis_traces
+                WHERE status = 'running'
+                ORDER BY started_at ASC
+                """
+            ).fetchall()
+            result = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["extra"] = json.loads(item.pop("extra_json") or "{}")
+                except Exception:
+                    item["extra"] = {}
+                result.append(item)
+            return result
+
     def reconcile_crashed_traces_on_startup(self) -> int:
         """开机对账扫描：将上次因系统异常终止/重启而未正常收尾的 running 任务标记为 aborted。"""
         with self._get_connection() as conn:
@@ -437,13 +529,14 @@ class TraceSQLiteStore:
         offset: int = 0,
         group_id: str | None = None,
         status: str | None = None,
+        trigger_type: str | None = None,
         search: str | None = None,
         start_time: float | None = None,
         end_time: float | None = None,
         sort_by: str = "started_at",
         sort_order: str = "desc",
     ) -> tuple[list[dict[str, Any]], int]:
-        """分页筛选查询 Trace 列表（支持按群组、状态、关键词、时间范围筛选与排序）"""
+        """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
         conditions = []
         params: list[Any] = []
 
@@ -453,6 +546,9 @@ class TraceSQLiteStore:
         if status:
             conditions.append("t.status = ?")
             params.append(status)
+        if trigger_type:
+            conditions.append("t.trigger_type = ?")
+            params.append(trigger_type)
         if start_time is not None:
             conditions.append("t.started_at >= ?")
             params.append(float(start_time))
@@ -505,7 +601,13 @@ class TraceSQLiteStore:
             for r in rows:
                 item = dict(r)
                 try:
-                    item["extra"] = json.loads(item.pop("extra_json") or "{}")
+                    extra = json.loads(item.pop("extra_json") or "{}")
+                    if isinstance(extra, dict):
+                        # 列表接口剔除大体积 Payload，极大降低传输流量
+                        extra.pop("llm_prompts", None)
+                        extra.pop("llm_attempts", None)
+                        extra.pop("checkpoint_summary", None)
+                    item["extra"] = extra if isinstance(extra, dict) else {}
                 except Exception:
                     item["extra"] = {}
                 traces.append(item)
@@ -900,3 +1002,17 @@ class TraceSQLiteStore:
                 deleted_count += excess
 
         return deleted_count
+
+    def delete_trace(self, trace_id: str) -> bool:
+        """删除指定 Trace 记录及其所有关联数据 (级联外键已开启)"""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+            )
+            return cursor.rowcount > 0
+
+    def clear_all_traces(self) -> int:
+        """清空所有 Trace 历史记录"""
+        with self._get_connection() as conn:
+            cursor = conn.execute("DELETE FROM analysis_traces")
+            return cursor.rowcount

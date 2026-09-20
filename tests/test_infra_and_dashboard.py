@@ -240,6 +240,44 @@ async def test_active_task_manager_and_reaper(temp_db: Path):
 
 
 @pytest.mark.asyncio
+async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
+    """测试 Task Reaper 扫描协程能自动回收超过 timeout_seconds 的超时任务。"""
+    store = TraceSQLiteStore(temp_db)
+    manager = ActiveTaskManager(trace_store=store)
+
+    async def hung_job():
+        await asyncio.sleep(100)
+
+    hung_task = asyncio.create_task(hung_job())
+    await manager.register_task(
+        task_id="timeout_001",
+        group_id="999",
+        group_name="超时群",
+        current_stage="LLM_ANALYSIS",
+        asyncio_task=hung_task,
+    )
+
+    # 模拟心跳过期 (200秒前，超过默认 180s 阈值)
+    manager._tasks["timeout_001"].last_heartbeat = time.time() - 200
+
+    # 启动 reaper (极短 interval 用于测试)
+    manager.start_reaper(interval_seconds=0.01, timeout_seconds=180)
+    await asyncio.sleep(0.05)
+    manager.stop_reaper()
+
+    # 验证活跃列表已清理
+    assert len(manager.get_active_tasks()) == 0
+    # 验证底层 asyncio task 已被强制取消
+    assert hung_task.cancelled()
+
+    # 验证持久化状态被标记为 failed 并记录 Reaped
+    reaped_trace = store.get_trace("timeout_001")
+    assert reaped_trace is not None
+    assert reaped_trace["status"] == "failed"
+    assert "Reaped" in reaped_trace["error_message"]
+
+
+@pytest.mark.asyncio
 async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     from unittest.mock import AsyncMock, MagicMock
     from src.application.services.analysis_application_service import AnalysisApplicationService
@@ -514,6 +552,44 @@ async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path, tmp_path:
     assert call_kwargs["golden_quote_enabled"] is True
 
 
+@pytest.mark.asyncio
+async def test_resume_analysis_falls_back_to_fresh_run_when_checkpoint_missing(
+    temp_db: Path,
+):
+    """验证当缺少前置清洗快照时，续跑自动降级为全量重新分析并标记 fallback 元数据。"""
+    chk_store = CheckpointStore(temp_db)
+    mock_service = AnalysisApplicationService(
+        config_manager=MagicMock(),
+        bot_manager=MagicMock(),
+        history_manager=MagicMock(get_analysis=AsyncMock(return_value=None)),
+        report_generator=MagicMock(),
+        llm_analyzer=MagicMock(),
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        checkpoint_store=chk_store,
+    )
+
+    # Mock execute_daily_analysis
+    mock_service.execute_daily_analysis = AsyncMock(
+        return_value={"success": True, "analysis_result": {"topics": []}}
+    )
+
+    with TraceContext(trace_id="trace_fallback_test_001") as trace:
+        res = await mock_service.resume_analysis(
+            trace_id="trace_fallback_test_001",
+            group_id="77777",
+            date_str="2026-08-26",
+        )
+
+        assert res["success"] is True
+        assert res["fallback_to_fresh_run"] is True
+        assert res["fallback_reason"] == "checkpoint_missing_auto_refetched"
+        assert res["resumed_from"] == "fresh_run_fallback"
+        assert trace.metadata.get("fallback_to_fresh_run") is True
+        assert trace.metadata.get("resumed_from") == "fresh_run_fallback"
+        assert mock_service.execute_daily_analysis.called
+
+
 def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(temp_db: Path):
     """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
     from src.infrastructure.visualization.activity_charts import ActivityVisualizer
@@ -646,7 +722,7 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     templates_mgr = HTMLTemplates(mock_config)
     templates = templates_mgr.get_available_templates()
 
-    # 验证内置模板被正确识别
+    # 验证内置模板被正确识别（绝不被同名自定义文件夹污染为修改版）
     template_ids = [t["id"] for t in templates]
     assert "scrapbook" in template_ids
     assert "ATRI" in template_ids
@@ -657,21 +733,19 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     # 验证自定义模板被正确识别并优雅处理名称
     assert "third_party_cyber" in template_ids
 
-    # 真正修改过的 ATRI 会被标记为自定义修改版
+    # 官方内置模板始终保持官方版本属性
     atri_meta = next(t for t in templates if t["id"] == "ATRI")
-    assert atri_meta["is_custom"] is True
-    assert "自定义修改版" in atri_meta["label"]
+    assert atri_meta["is_custom"] is False
+    assert atri_meta["can_uninstall"] is False
 
-    # 未做修改的 simple 不会被误判为修改版
     simple_meta = next(t for t in templates if t["id"] == "simple")
     assert simple_meta["is_custom"] is False
-    assert "自定义修改版" not in simple_meta["label"]
+    assert simple_meta["can_uninstall"] is False
 
-    # 全新第三方模板标记为自定义本地模板
+    # 全新第三方模板标记为自定义主题
     cyber_meta = next(t for t in templates if t["id"] == "third_party_cyber")
     assert cyber_meta["is_custom"] is True
     assert "third_party_cyber" in cyber_meta["label"]
-    assert "自定义本地模板" in cyber_meta["label"]
 
 
 @pytest.mark.asyncio
@@ -771,6 +845,105 @@ async def test_plugin_config_api(tmp_path: Path):
         assert save_res is not None
 
 
+@pytest.mark.asyncio
+async def test_template_command_service_list_and_exists():
+    """测试 TemplateCommandService 能够正确识别 html_template.html / image_template.html 并列出可用模板。"""
+    from src.application.commands.template_command_service import (
+        TemplateCommandService,
+    )
+
+    service = TemplateCommandService(str(PLUGIN_ROOT))
+    templates = service.list_available_templates()
+
+    # 1. 验证内置模板均被正确扫描到
+    assert len(templates) >= 6
+    assert "scrapbook" in templates
+    assert "retro_futurism" in templates
+    assert "ATRI" in templates
+    assert "format" not in templates
+
+    # 2. 验证 template_exists 正确性
+    assert await service.template_exists("scrapbook") is True
+    assert await service.template_exists("non_existent_template_xyz") is False
+
+    # 3. 验证 parse_template_input 序号与名称解析
+    parsed_by_num, err = service.parse_template_input("1", templates)
+    assert err is None
+    assert parsed_by_num == templates[0]
+
+    parsed_by_name, err = service.parse_template_input("scrapbook", templates)
+    assert err is None
+    assert parsed_by_name == "scrapbook"
 
 
+@pytest.mark.asyncio
+async def test_render_report_span_reports_correct_template_theme(tmp_path: Path):
+    """测试当指定或配置了自定义/内置模板时，RENDER_REPORT span 上报准确的主题名称而非默认 scrapbook。"""
+    from types import SimpleNamespace
+    from src.infrastructure.reporting.generators import ReportGenerator
+
+    trace = TraceContext.set(
+        trace_id="test_render_span_custom_theme",
+        group_id="123456",
+        trigger_type="manual",
+    )
+
+    mock_config = MagicMock()
+    mock_config.get_report_template = MagicMock(return_value="miku")
+    mock_config.get_t2i_max_concurrent = MagicMock(return_value=2)
+    mock_config.get_t2i_rendering_strategies = MagicMock(return_value=[{"type": "jpeg", "full_page": True, "device_scale_factor_level": 2, "timeout": 30}])
+    mock_config.get_profile_mapping = MagicMock(return_value="{}")
+    mock_config.get_html_output_dir = MagicMock(return_value=str(tmp_path / "html"))
+    mock_config.get_html_filename_format = MagicMock(return_value="report_{group_id}_{date}")
+
+    mock_tpl = MagicMock()
+    mock_tpl.render_template = MagicMock(return_value="<html>miku</html>")
+
+    generator = ReportGenerator(
+        config_manager=mock_config,
+        data_dir=tmp_path,
+    )
+    generator.html_templates = mock_tpl
+
+    dummy_analysis = {
+        "topics": [],
+        "user_titles": [],
+        "statistics": GroupStatistics(
+            message_count=10,
+            total_characters=100,
+            participant_count=5,
+            most_active_period="12:00",
+            golden_quotes=[],
+            emoji_count={},
+        ),
+    }
+
+    # 1. 验证 generate_image_report 在 template_theme 未传时自动继承 config 中的 "miku" 并上报
+    with trace.span("RENDER_REPORT", {"format": "image"}):
+        async def dummy_render(html, data, return_url, options):
+            return b"\xff\xd8\xff\xe0" + b"fake_jpeg_content"
+
+        await generator.generate_image_report(
+            analysis_result=dummy_analysis,
+            group_id="123456",
+            html_render_func=dummy_render,
+            template_theme=None,
+        )
+
+    image_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "image"]
+    assert len(image_spans) == 1
+    assert image_spans[0]["payload"]["template"] == "miku"
+
+    # 2. 验证 override_template_name 显式覆盖生效
+    trace.metadata["override_template_name"] = "gda_miku_dream"
+    with trace.span("RENDER_REPORT", {"format": "html"}):
+        await generator.generate_html_report(
+            analysis_result=dummy_analysis,
+            group_id="123456",
+            template_theme=None,
+        )
+
+    html_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "html"]
+    assert len(html_spans) == 1
+    assert html_spans[0]["payload"]["template"] == "gda_miku_dream"
 

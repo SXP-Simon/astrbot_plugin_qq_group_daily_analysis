@@ -254,7 +254,7 @@ def test_call_provider_with_retry_releases_global_slot_on_provider_error():
     asyncio.run(scenario())
 
 
-def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog):
+def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog, capsys):
     """慢 Provider 调用应持续输出阶段、业务区域和具体阻塞点。"""
 
     class FakeConfig:
@@ -302,11 +302,13 @@ def test_call_provider_with_retry_logs_stage_area_and_slow_block_point(caplog):
             llm_utils._circuit_breakers.clear()
 
     asyncio.run(scenario())
-    messages = caplog.text
+    out, err = capsys.readouterr()
+    messages = f"{caplog.text} {out} {err}"
     assert "group=group-1" in messages
     assert "stage=full_manual" in messages
     assert "area=话题" in messages
-    assert "Provider 请求仍在运行超过" in messages
+    assert "provider=provider-a" in messages
+    assert "LLM 阻塞诊断" in messages
     assert "block_point=context.llm_generate" in messages
 
 
@@ -664,9 +666,6 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
         def get_llm_provider_id(self):
             return "test_provider"
 
-        def get_debug_mode(self):
-            return False
-
         def get_bot_self_ids(self):
             return []
 
@@ -736,5 +735,109 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
             assert "高考交流" in prompts["话题"]["completion"]
 
     asyncio.run(scenario())
+
+
+def test_diagnose_llm_task_block_scenarios():
+    """测试不同协程栈特征下的 LLM 阻塞点智能诊断。"""
+    from src.infrastructure.analysis.utils.llm_utils import diagnose_llm_task_block
+
+    # 1. 任务为空时的兜底处理
+    d_none = diagnose_llm_task_block(None, 60.0)
+    assert not d_none.is_known
+    assert d_none.state == "UNKNOWN"
+
+    # 2. 无关普通协程（单纯 sleep，无 LLM/重试栈）应回退到 UNKNOWN 而非误判
+    async def arbitrary_sleep_task():
+        await asyncio.sleep(10)
+
+    async def run_arbitrary_test():
+        task = asyncio.create_task(arbitrary_sleep_task())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 45.0)
+        assert not diag.is_known
+        assert diag.state == "UNKNOWN"
+        assert "45s" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_arbitrary_test())
+
+    # 3. 包含 llm_generate / text_chat 栈的生成中等待 (WAITING_UPSTREAM_RESPONSE)
+    async def mock_llm_generate():
+        await asyncio.sleep(10)
+
+    async def run_generating_test():
+        task = asyncio.create_task(mock_llm_generate())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 120.0)
+        assert diag.is_known
+        assert diag.state == "WAITING_UPSTREAM_RESPONSE"
+        assert "正在等待大模型服务端生成返回数据" in diag.status_title
+        assert "120s" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_generating_test())
+
+    # 4. 包含 request_retry / asyncretrying 的重试退避 (SDK_RETRY_BACKOFF)
+    async def mock_request_retry_backoff():
+        await asyncio.sleep(10)
+
+    async def run_retry_test():
+        task = asyncio.create_task(mock_request_retry_backoff())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 30.0)
+        assert diag.is_known
+        assert diag.state == "SDK_RETRY_BACKOFF"
+        assert "正在执行自动重试等待" in diag.status_title
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_retry_test())
+
+    # 5. 包含 do_handshake 的网络连接建立 (CONNECTING_NETWORK)
+    async def mock_do_handshake():
+        # 无 aread / response body
+        await asyncio.Future()
+
+    async def run_connecting_test():
+        task = asyncio.create_task(mock_do_handshake())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 15.0)
+        assert diag.is_known
+        assert diag.state == "CONNECTING_NETWORK"
+        assert "正在尝试与大模型 API 服务端建立网络连接" in diag.status_title
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_connecting_test())
+
+
+def test_plugin_log_buffer_strips_duplicate_trace_id_in_message():
+    """验证日志内存缓冲自动剔除 message 中的重复 trace_id 前缀。"""
+    from src.infrastructure.logging.plugin_log_buffer import PluginLogBuffer
+
+    buf = PluginLogBuffer()
+    entry = buf.record_log(
+        level="WARN",
+        msg="[test-trace-123] [群分析插件] [LLM 阻塞诊断] 正在等待上游响应",
+        trace_id="test-trace-123",
+    )
+    assert entry.trace_id == "test-trace-123"
+    assert entry.message == "[群分析插件] [LLM 阻塞诊断] 正在等待上游响应"
+    assert not entry.message.startswith("[test-trace-123]")
+
 
 

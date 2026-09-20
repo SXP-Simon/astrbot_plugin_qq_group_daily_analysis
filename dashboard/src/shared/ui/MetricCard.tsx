@@ -61,7 +61,9 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             valueStyle={{
               fontSize: 18,
               fontWeight: 600,
-              fontFamily: "monospace",
+              fontFamily:
+                "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+              fontVariantNumeric: "tabular-nums",
               lineHeight: "24px",
               ...valueStyle,
             }}

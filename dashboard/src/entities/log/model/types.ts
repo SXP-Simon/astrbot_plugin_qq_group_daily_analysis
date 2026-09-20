@@ -9,6 +9,7 @@ export interface PluginLogItem {
   tag: string;
   message: string;
   raw: string;
+  location?: string | null;
 }
 
 export interface AvailableTag {

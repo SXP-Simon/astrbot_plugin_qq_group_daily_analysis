@@ -23,6 +23,8 @@ export const TracesPage: React.FC<TracesPageProps> = ({
     setSearch,
     statusFilter,
     setStatusFilter,
+    triggerTypeFilter,
+    setTriggerTypeFilter,
     selectedGroup,
     setSelectedGroup,
     setDateRange,
@@ -38,11 +40,13 @@ export const TracesPage: React.FC<TracesPageProps> = ({
         search={search}
         selectedGroup={selectedGroup}
         statusFilter={statusFilter}
+        triggerTypeFilter={triggerTypeFilter}
         groups={groups}
         loading={loading}
         onSearchChange={setSearch}
         onGroupChange={setSelectedGroup}
         onStatusChange={setStatusFilter}
+        onTriggerTypeChange={setTriggerTypeFilter}
         onDateRangeChange={setDateRange}
         onRefresh={refresh}
       />

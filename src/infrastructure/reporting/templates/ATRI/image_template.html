@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
 
 <head>
@@ -1785,6 +1785,7 @@
                 <div class="html-slot">{{ hourly_chart_html | safe }}</div>
             </section>
 
+            {% if topics_html %}
             <section class="glass-card section topic-section">
                 <div class="section-header">
                     <div class="section-title-wrap">
@@ -1804,7 +1805,9 @@
                 </div>
                 <div class="html-slot">{{ topics_html | safe }}</div>
             </section>
+            {% endif %}
 
+            {% if titles_html %}
             <section class="glass-card section title-section">
                 <div class="section-header">
                     <div class="section-title-wrap">
@@ -1824,7 +1827,9 @@
                 </div>
                 <div class="html-slot title-grid">{{ titles_html | safe }}</div>
             </section>
+            {% endif %}
 
+            {% if quotes_html %}
             <section class="glass-card section quote-section">
                 <div class="section-header">
                     <div class="section-title-wrap">
@@ -1844,6 +1849,7 @@
                 </div>
                 <div class="html-slot">{{ quotes_html | safe }}</div>
             </section>
+            {% endif %}
 
             {% if chat_quality_html %}
             <section class="glass-card section review-section">

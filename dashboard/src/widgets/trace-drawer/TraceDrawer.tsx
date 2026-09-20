@@ -26,6 +26,7 @@ import { StatusTag } from "../../shared/ui/StatusTag";
 import { SpanTimeline } from "../../entities/trace/ui/SpanTimeline";
 import { formatStageName } from "../../shared/lib/formatters";
 import { ResumeTaskModal } from "../../features/resume-task/ui/ResumeTaskModal";
+import { TraceMetricsChart } from "../../entities/trace/ui/TraceMetricsChart";
 import { TraceLogViewer } from "./ui/TraceLogViewer";
 import { TraceSummaryCard } from "./ui/TraceSummaryCard";
 
@@ -301,7 +302,7 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
                       loading={resuming}
                       onClick={() => setResumeModalOpen(true)}
                     >
-                      🔄 从 Checkpoint 幂等续跑此任务
+                      从 Checkpoint 幂等续跑此任务
                     </Button>
                   </div>
                   {trace.stack_trace && (
@@ -347,6 +348,9 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             onPreviewFile={handlePreviewFile}
             onDownloadFile={handleDownloadFile}
           />
+
+          {/* 全链路性能指标与运行期资源观测图表 */}
+          <TraceMetricsChart trace={trace} />
 
           {/* 执行阶段时间线 */}
           <div style={{ marginTop: 8 }}>
