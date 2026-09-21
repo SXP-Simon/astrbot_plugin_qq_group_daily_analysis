@@ -2,6 +2,8 @@ import asyncio
 
 from src.infrastructure.platform.adapters.onebot_adapter import OneBotAdapter
 
+REMOTE_AVATAR = "https://wx.qlogo.cn/mmhead/ver_1/demo/0"
+
 
 class FakeOneBot:
     """记录动作调用并按动作名返回预设结果的 OneBot 测试替身。"""
@@ -69,6 +71,41 @@ def test_negative_cache_skips_failed_protocol_after_timeout():
     assert url == "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100"
     assert repeated == url
     assert bot.actions == ["get_stranger_info", "get_user_info"]
+
+
+def test_concurrent_calls_share_inflight_task():
+    class SlowBot(FakeOneBot):
+        async def call_action(self, action: str, **params):
+            self.actions.append(action)
+            await asyncio.sleep(0.05)
+            return {"user_id": 10001, "avatar_url": REMOTE_AVATAR}
+
+    bot = SlowBot({})
+    adapter = make_adapter(bot)
+
+    async def gather_urls():
+        return await asyncio.gather(
+            *(adapter.get_user_avatar_url("10001") for _ in range(3))
+        )
+
+    urls = asyncio.run(gather_urls())
+
+    assert urls == [REMOTE_AVATAR] * 3
+    assert bot.actions == ["get_stranger_info"]
+
+
+def test_positive_cache_expires_and_refetches():
+    bot = FakeOneBot(
+        {"get_stranger_info": {"user_id": 10001, "avatar_url": REMOTE_AVATAR}}
+    )
+    adapter = make_adapter(bot)
+    # 已过期的缓存条目（expires_at 落在过去）
+    adapter._avatar_url_cache["10001"] = ("https://stale.example/avatar.jpg", 0.0)
+
+    url = asyncio.run(adapter.get_user_avatar_url("10001"))
+
+    assert url == REMOTE_AVATAR
+    assert bot.actions == ["get_stranger_info"]
 
 
 def test_empty_user_id_returns_none():

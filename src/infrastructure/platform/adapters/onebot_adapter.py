@@ -52,6 +52,10 @@ class OneBotAdapter(PlatformAdapter):
 
     # OneBot 服务支持的头像尺寸像素
     AVAILABLE_SIZES = (40, 100, 140, 160, 640)
+    # 协议端头像获取：单请求超时、成功缓存与失败负缓存的存活时间（秒）
+    AVATAR_FETCH_TIMEOUT = 1.5
+    AVATAR_URL_TTL = 3600.0
+    AVATAR_NEGATIVE_TTL = 600.0
 
     def __init__(self, bot_instance: Any, config: dict | None = None):
         """
@@ -80,9 +84,11 @@ class OneBotAdapter(PlatformAdapter):
         self._muted_groups_cache = {}
         # 群角色缓存 (group_id -> (role, timestamp))，用于 get_group_member_info 超时降级
         self._group_role_cache: dict[str, tuple[str, float]] = {}
-        # 协议端头像 URL 缓存；值为 None 表示近期获取失败（负缓存）
-        self._avatar_url_cache: dict[str, str | None] = {}
+        # 协议端头像缓存 (uid -> (url, expires_at))；负缓存 (uid -> expires_at)
+        self._avatar_url_cache: dict[str, tuple[str, float]] = {}
         self._avatar_url_negative_cache: dict[str, float] = {}
+        # 并发去重 (uid -> in-flight Task)，同一用户并发请求只触发一次协议调用
+        self._avatar_inflight_tasks: dict[str, asyncio.Task[str | None]] = {}
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -922,7 +928,7 @@ class OneBotAdapter(PlatformAdapter):
             try:
                 result = await asyncio.wait_for(
                     self.bot.call_action(action_name, user_id=uid_param),
-                    timeout=1.5,
+                    timeout=self.AVATAR_FETCH_TIMEOUT,
                 )
             except Exception as exc:
                 logger.debug(
@@ -934,6 +940,25 @@ class OneBotAdapter(PlatformAdapter):
                 return url
         return None
 
+    async def _fetch_avatar_url_shared(self, user_id: str) -> str | None:
+        """获取协议端头像 URL；同一用户的并发请求共享同一个 in-flight 任务。"""
+        task = self._avatar_inflight_tasks.get(user_id)
+        if task is None:
+            task = asyncio.create_task(self._fetch_avatar_url_from_protocol(user_id))
+            self._avatar_inflight_tasks[user_id] = task
+        try:
+            return await task
+        finally:
+            if self._avatar_inflight_tasks.get(user_id) is task:
+                self._avatar_inflight_tasks.pop(user_id, None)
+
+    def _build_cdn_avatar_url(self, user_id: str, size: int) -> str:
+        actual_size = self._get_nearest_size(size)
+        # 640 使用 HD 接口更清晰
+        if actual_size >= 640:
+            return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
+        return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
+
     async def get_user_avatar_url(
         self,
         user_id: str,
@@ -942,8 +967,9 @@ class OneBotAdapter(PlatformAdapter):
         """
         获取用户头像 URL。
 
-        优先使用协议端返回的真实头像，失败时回退 QQ 官方 CDN 地址。
-        纯 QQ 场景下协议端返回的即官方地址，行为与原实现一致。
+        优先使用协议端返回的真实头像（成功缓存 1 小时），失败时回退
+        QQ 官方 CDN 地址。纯 QQ 场景下协议端返回的即官方地址，行为与
+        原实现一致。
 
         Args:
             user_id (str): QQ 号
@@ -958,22 +984,26 @@ class OneBotAdapter(PlatformAdapter):
 
         cached = self._avatar_url_cache.get(uid)
         if cached:
-            return cached
+            url, expires_at = cached
+            if time.monotonic() < expires_at:
+                return url
+            self._avatar_url_cache.pop(uid, None)
         negative_until = self._avatar_url_negative_cache.get(uid, 0.0)
         if time.monotonic() >= negative_until:
-            protocol_url = await self._fetch_avatar_url_from_protocol(uid)
+            protocol_url = await self._fetch_avatar_url_shared(uid)
             if protocol_url:
-                self._avatar_url_cache[uid] = protocol_url
+                self._avatar_url_cache[uid] = (
+                    protocol_url,
+                    time.monotonic() + self.AVATAR_URL_TTL,
+                )
                 self._avatar_url_negative_cache.pop(uid, None)
                 return protocol_url
             # 负缓存 10 分钟，避免协议端不支持资料接口时反复超时
-            self._avatar_url_negative_cache[uid] = time.monotonic() + 600.0
+            self._avatar_url_negative_cache[uid] = (
+                time.monotonic() + self.AVATAR_NEGATIVE_TTL
+            )
 
-        actual_size = self._get_nearest_size(size)
-        # 640 使用 HD 接口更清晰
-        if actual_size >= 640:
-            return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
-        return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
+        return self._build_cdn_avatar_url(uid, size)
 
     async def get_user_avatar_data(
         self,
