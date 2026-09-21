@@ -80,6 +80,9 @@ class OneBotAdapter(PlatformAdapter):
         self._muted_groups_cache = {}
         # 群角色缓存 (group_id -> (role, timestamp))，用于 get_group_member_info 超时降级
         self._group_role_cache: dict[str, tuple[str, float]] = {}
+        # 协议端头像 URL 缓存；值为 None 表示近期获取失败（负缓存）
+        self._avatar_url_cache: dict[str, str | None] = {}
+        self._avatar_url_negative_cache: dict[str, float] = {}
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -891,13 +894,56 @@ class OneBotAdapter(PlatformAdapter):
 
     # ==================== IAvatarRepository 实现 ====================
 
+    @staticmethod
+    def _extract_protocol_avatar_url(payload: Any) -> str | None:
+        """从协议端用户资料响应中提取头像 URL。"""
+        if not isinstance(payload, dict):
+            return None
+        for key in ("avatar_url", "avatar", "headimgurl", "head_img", "user_avatar"):
+            value = payload.get(key)
+            if not isinstance(value, str):
+                continue
+            text = value.strip()
+            if text.startswith(("http://", "https://")):
+                return text
+        return None
+
+    async def _fetch_avatar_url_from_protocol(self, user_id: str) -> str | None:
+        """
+        通过协议端资料接口获取真实头像 URL。
+
+        部分 OneBot 实现（桥接、映射 ID 场景）的用户 ID 不是真实 QQ 号，
+        官方 CDN 地址只会返回默认头像；此类实现通常会在
+        get_stranger_info / get_user_info 响应中携带真实头像。
+        """
+        uid_text = str(user_id).strip()
+        uid_param: int | str = int(uid_text) if uid_text.isdigit() else uid_text
+        for action_name in ("get_stranger_info", "get_user_info"):
+            try:
+                result = await asyncio.wait_for(
+                    self.bot.call_action(action_name, user_id=uid_param),
+                    timeout=1.5,
+                )
+            except Exception as exc:
+                logger.debug(
+                    f"[OneBot] {action_name} 获取头像失败 user_id={user_id}: {exc}"
+                )
+                continue
+            url = self._extract_protocol_avatar_url(result)
+            if url:
+                return url
+        return None
+
     async def get_user_avatar_url(
         self,
         user_id: str,
         size: int = 100,
     ) -> str | None:
         """
-        拼凑 QQ 官方服务地址获取用户头像。
+        获取用户头像 URL。
+
+        优先使用协议端返回的真实头像，失败时回退 QQ 官方 CDN 地址。
+        纯 QQ 场景下协议端返回的即官方地址，行为与原实现一致。
 
         Args:
             user_id (str): QQ 号
@@ -906,6 +952,23 @@ class OneBotAdapter(PlatformAdapter):
         Returns:
             str: 格式化后的 URL
         """
+        uid = str(user_id).strip()
+        if not uid:
+            return None
+
+        cached = self._avatar_url_cache.get(uid)
+        if cached:
+            return cached
+        negative_until = self._avatar_url_negative_cache.get(uid, 0.0)
+        if time.monotonic() >= negative_until:
+            protocol_url = await self._fetch_avatar_url_from_protocol(uid)
+            if protocol_url:
+                self._avatar_url_cache[uid] = protocol_url
+                self._avatar_url_negative_cache.pop(uid, None)
+                return protocol_url
+            # 负缓存 10 分钟，避免协议端不支持资料接口时反复超时
+            self._avatar_url_negative_cache[uid] = time.monotonic() + 600.0
+
         actual_size = self._get_nearest_size(size)
         # 640 使用 HD 接口更清晰
         if actual_size >= 640:
