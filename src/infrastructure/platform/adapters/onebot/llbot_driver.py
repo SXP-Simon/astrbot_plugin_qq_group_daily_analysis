@@ -67,17 +67,29 @@ class LLOneBotDriver(StandardOneBotDriver):
         """
         try:
             res = await bot.call_action("get_group_album_list", group_id=int(group_id))
-            if isinstance(res, dict):
-                data = res.get("data")
-                if isinstance(data, dict):
-                    album_list = data.get("album_list") or data.get("albumList")
-                    if isinstance(album_list, list):
-                        return [item for item in album_list if isinstance(item, dict)]
-                album_list = res.get("album_list") or res.get("albumList")
-                if isinstance(album_list, list):
-                    return [item for item in album_list if isinstance(item, dict)]
             if isinstance(res, list):
                 return [item for item in res if isinstance(item, dict)]
+            if isinstance(res, dict):
+                data = res.get("data")
+                if isinstance(data, list):
+                    return [item for item in data if isinstance(item, dict)]
+                if isinstance(data, dict):
+                    album_list = (
+                        data.get("album_list")
+                        or data.get("albumList")
+                        or data.get("list")
+                        or data.get("albums")
+                    )
+                    if isinstance(album_list, list):
+                        return [item for item in album_list if isinstance(item, dict)]
+                album_list = (
+                    res.get("album_list")
+                    or res.get("albumList")
+                    or res.get("list")
+                    or res.get("albums")
+                )
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
         except Exception as exc:
             logger.debug(
                 f"[OneBot:{self.name}] get_group_album_list 失败: {exc}，尝试通用回退..."

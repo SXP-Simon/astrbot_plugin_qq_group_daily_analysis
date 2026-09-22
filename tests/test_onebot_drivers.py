@@ -343,6 +343,49 @@ def test_llonebot_driver_get_group_album_list():
     assert bot.action_calls[0][0] == "get_group_album_list"
 
 
+def test_llonebot_driver_get_group_album_list_array_data():
+    # LLOneBot ntGroupApi 映射直接将数组置于 data 字段中: { status: "ok", data: [ { album_id: "...", name: "群分析" } ] }
+    bot = MockBot(
+        {
+            "get_group_album_list": {
+                "status": "ok",
+                "retcode": 0,
+                "data": [
+                    {"album_id": "alb_999", "name": "群分析", "desc": "每日分析"}
+                ],
+            }
+        }
+    )
+    driver = LLOneBotDriver()
+    albums = asyncio.run(driver.get_group_album_list(bot, "2167050964"))
+    assert len(albums) == 1
+    assert albums[0]["album_id"] == "alb_999"
+    assert albums[0]["name"] == "群分析"
+
+
+def test_adapter_find_album_id_matches_name():
+    bot = MockBot(
+        {
+            "get_group_album_list": {
+                "status": "ok",
+                "data": [
+                    {"album_id": "alb_other", "name": "其他相册"},
+                    {"album_id": "alb_target", "name": "群分析"},
+                ],
+            }
+        }
+    )
+    adapter = OneBotAdapter(bot)
+    adapter._driver = LLOneBotDriver()
+    adapter._driver_detected = True
+
+    found_id = asyncio.run(adapter.find_album_id("2167050964", "群分析"))
+    assert found_id == "alb_target"
+
+    not_found = asyncio.run(adapter.find_album_id("2167050964", "不存在的相册"))
+    assert not_found is None
+
+
 # ==========================================
 # 7. Adapter 端到端与驱动协同测试
 # ==========================================

@@ -1324,7 +1324,11 @@ class OneBotAdapter(PlatformAdapter):
         album_name: str | None = None,
         strict_mode: bool = False,
     ) -> bool:
-        """上传图片到群相册（NapCat 扩展 API）。"""
+        """上传图片到群相册（OneBot 扩展 API）。"""
+        # 如果未显式传入 album_id 但指定了 album_name，先尝试定位相册 ID
+        if not album_id and album_name:
+            album_id = await self.find_album_id(group_id, album_name)
+
         # 严格模式：指定了相册名但未解析到 album_id 时，禁止上传
         if strict_mode and album_name and not album_id:
             logger.info(
@@ -1332,17 +1336,16 @@ class OneBotAdapter(PlatformAdapter):
             )
             return False
 
-        # 兜底查询
+        # 非严格模式下的兜底查询
         if not album_id:
             albums = await self.get_group_album_list(group_id)
-            album_id = self._find_item_in_list(
-                albums, album_name, ["album_id"], ["name", "album_name"]
-            )
-            # 如果仍没确定相册：
-            # - 没有指定相册名（纯兜底）→ 取第一个
-            # - 指定了名字但找不到且非严格模式 → 也取第一个（回退到默认相册）
-            if not album_id and albums and (not album_name or not strict_mode):
-                album_id = albums[0].get("album_id") or albums[0].get("id")
+            if albums:
+                first = albums[0]
+                album_id = (
+                    first.get("album_id")
+                    or first.get("id")
+                    or first.get("albumId")
+                )
                 if album_name:
                     logger.info(
                         f"[群分析相册] 未找到相册 '{album_name}'，回退到默认相册 (群 {group_id})"
@@ -1396,28 +1399,33 @@ class OneBotAdapter(PlatformAdapter):
         if not album_name:
             return None
 
+        target_name = str(album_name).strip()
         logger.debug(
-            f"[群分析相册] 正在群 {group_id} 中查找名为 '{album_name}' 的相册..."
+            f"[群分析相册] 正在群 {group_id} 中查找名为 '{target_name}' 的相册..."
         )
         albums = await self.get_group_album_list(group_id)
         for album in albums:
-            name = album.get("name") or album.get("album_name")
-            logger.debug(
-                f"[群分析相册] 正在匹配相册: 目标='{album_name}', 当前相册名称='{name}', 原始数据={album}"
+            name = (
+                album.get("name")
+                or album.get("album_name")
+                or album.get("albumName")
+                or album.get("title")
             )
-            if name == album_name:
-                aid = album.get("album_id")
-                if aid:
+            aid = album.get("album_id") or album.get("id") or album.get("albumId")
+            logger.debug(
+                f"[群分析相册] 正在匹配相册: 目标='{target_name}', 当前相册名称='{name}', 原始数据={album}"
+            )
+            if name and str(name).strip() == target_name:
+                if aid is not None:
                     logger.info(
-                        f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}"
+                        f"[群分析相册] 成功定位相册: '{target_name}' -> ID: {aid}"
                     )
                     return str(aid)
-                else:
-                    logger.debug(
-                        f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
-                    )
+                logger.debug(
+                    f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
+                )
 
-        logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
+        logger.info(f"[群分析相册] 未能找到名为 '{target_name}' 的相册 (群 {group_id})")
         return None
 
     async def set_reaction(
