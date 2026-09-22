@@ -450,16 +450,24 @@ class TraceContext:
 
     @staticmethod
     def generate(prefix: str = "", group_name: str = "") -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        """生成全局唯一且具备高可读性的 TraceID。
+
+        格式: {prefix}_{group_name}_{YYYYMMDD_HHMMSS}_{entropy}
+        包含精确时间与足够强度的随机熵，彻底杜绝同秒或高并发场景下的 ID 碰撞。
+        """
+        now = datetime.now()
+        timestamp = now.strftime("%Y%m%d_%H%M%S")
+        entropy = uuid.uuid4().hex[:12]
         parts: list[str] = []
         if prefix:
             parts.append(prefix)
         if group_name:
-            safe_name = re.sub(r'[\s\n\r\t/\\:*?"<>|\[\]{}]', "", group_name)
+            safe_name = re.sub(r'[\s\n\r\t/\\:*?"<>|\[\]{}]', "", str(group_name))
             safe_name = safe_name[:_MAX_GROUP_NAME_LEN]
             if safe_name:
                 parts.append(safe_name)
         parts.append(timestamp)
+        parts.append(entropy)
         return "_".join(parts)
 
     @staticmethod

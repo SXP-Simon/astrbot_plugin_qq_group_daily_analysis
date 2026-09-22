@@ -172,11 +172,13 @@ class PipelineContext:
                         if serializer is not None
                         else step_obj.output
                     )
+                    cur_trace_id = self.trace.trace_id if self.trace else ""
                     self.checkpoint_store.save_checkpoint(
                         group_id=self.group_id,
                         date_str=self.date_str,
                         stage_name=stage_name,
                         data=data_to_save,
+                        trace_id=cur_trace_id,
                         ttl_seconds=ttl_seconds,
                     )
                     step_obj.set_payload(checkpoint_saved=True)

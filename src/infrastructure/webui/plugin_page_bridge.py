@@ -462,6 +462,15 @@ class PluginPageWebUIBridge:
             if not group_id:
                 return error_response("group_id is required", status_code=400)
 
+            # 防重入即时拦截：若该群已有分析任务正在执行，直接拒绝重复触发并返回友好提示
+            if hasattr(
+                self.analysis_service, "is_group_running"
+            ) and self.analysis_service.is_group_running(group_id, "daily"):
+                return error_response(
+                    f"群 {group_id} 的日常分析任务正在执行中，请勿重复触发",
+                    status_code=409,
+                )
+
             group_name = str(payload.get("group_name", f"群 {group_id}"))
             platform = str(payload.get("platform", "qq"))
 
@@ -2487,6 +2496,7 @@ class PluginPageWebUIBridge:
             group_id = request.query.get("group_id") or None
             date_str = request.query.get("date_str") or None
             stage_name = request.query.get("stage_name") or None
+            trace_id = request.query.get("trace_id") or None
 
             store = self._checkpoint_store
             if not store:
@@ -2500,6 +2510,7 @@ class PluginPageWebUIBridge:
                 group_id=group_id,
                 date_str=date_str,
                 stage_name=stage_name,
+                trace_id=trace_id,
             )
             return json_response(
                 {"status": "ok", "data": {"items": items, "total": total}}
@@ -2528,6 +2539,7 @@ class PluginPageWebUIBridge:
             group_id = request.query.get("group_id", "").strip()
             date_str = request.query.get("date_str", "").strip()
             stage_name = request.query.get("stage_name", "").strip()
+            trace_id = request.query.get("trace_id", "").strip()
 
             if not group_id or not date_str or not stage_name:
                 return error_response(
@@ -2540,7 +2552,9 @@ class PluginPageWebUIBridge:
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            detail = store.get_checkpoint_detail(group_id, date_str, stage_name)
+            detail = store.get_checkpoint_detail(
+                group_id, date_str, stage_name, trace_id=trace_id
+            )
             if not detail:
                 return error_response(
                     "Checkpoint not found or expired", status_code=404
@@ -2567,6 +2581,9 @@ class PluginPageWebUIBridge:
             stage_name = str(
                 payload.get("stage_name") or request.query.get("stage_name") or ""
             ).strip()
+            trace_id = str(
+                payload.get("trace_id") or request.query.get("trace_id") or ""
+            ).strip()
 
             if not group_id or not date_str:
                 return error_response(
@@ -2580,7 +2597,9 @@ class PluginPageWebUIBridge:
                 )
 
             if stage_name:
-                deleted = store.delete_checkpoint(group_id, date_str, stage_name)
+                deleted = store.delete_checkpoint(
+                    group_id, date_str, stage_name, trace_id=trace_id
+                )
             else:
                 store.clear_checkpoints(group_id, date_str)
                 deleted = True
@@ -2593,6 +2612,7 @@ class PluginPageWebUIBridge:
                         "group_id": group_id,
                         "date_str": date_str,
                         "stage_name": stage_name or None,
+                        "trace_id": trace_id or None,
                     },
                 }
             )
