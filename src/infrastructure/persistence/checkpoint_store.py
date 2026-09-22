@@ -136,12 +136,20 @@ class CheckpointStore:
                         (str(trace_id), stage_name, now),
                     ).fetchone()
 
-            # 3. 回退查找通用快照或该群该日期最新的该阶段快照
+            # 3. 回退查找通用快照：
+            # 若调用方显式指定了 trace_id，仅允许回退到老格式（trace_id = ''）的快照，严禁跨任务脏读其他 trace_id；
+            # 若调用方未指定 trace_id，则允许获取该群该日期最新的该阶段快照。
             if not row:
-                row = conn.execute(
-                    "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
-                    (str(group_id), str(date_str), stage_name, now),
-                ).fetchone()
+                if trace_id:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND (trace_id = '' OR trace_id IS NULL) AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), stage_name, now),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), stage_name, now),
+                    ).fetchone()
 
             if not row:
                 return None
@@ -222,8 +230,14 @@ class CheckpointStore:
             if trace_id:
                 scoped_id = f"{group_id}_{date_str}_{stage_name}_{trace_id}"
                 cursor = conn.execute(
-                    "DELETE FROM stage_checkpoints WHERE checkpoint_id = ? OR (trace_id = ? AND stage_name = ?)",
-                    (scoped_id, str(trace_id), stage_name),
+                    "DELETE FROM stage_checkpoints WHERE checkpoint_id = ? OR (group_id = ? AND date_str = ? AND stage_name = ? AND trace_id = ?)",
+                    (
+                        scoped_id,
+                        str(group_id),
+                        str(date_str),
+                        stage_name,
+                        str(trace_id),
+                    ),
                 )
                 if cursor.rowcount > 0:
                     return True

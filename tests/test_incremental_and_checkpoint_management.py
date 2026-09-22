@@ -428,7 +428,7 @@ def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
         date_str="2026-09-10",
         stage_name="LLM_ANALYSIS",
         data={"legacy": True},
-        trace_id="",  # 老格式
+        trace_id="",  # 老格式 (trace_id为空)
     )
     # 无 trace_id 读取
     assert store.get_checkpoint("legacy_grp", "2026-09-10", "LLM_ANALYSIS") == {
@@ -441,3 +441,22 @@ def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
         "LLM_ANALYSIS",
         trace_id="non_exist_trace_id",
     ) == {"legacy": True}
+
+    # 4. 严防跨任务脏读：若存在 Task A 快照，Task B 查找缺失快照时绝不能脏读 Task A 的快照
+    store.save_checkpoint(
+        group_id="isolated_grp",
+        date_str="2026-09-10",
+        stage_name="LLM_ANALYSIS",
+        data={"task": "task_A"},
+        trace_id="trace_task_A",
+    )
+    # Task B 查询不存在的快照时必须返回 None，不能回退捞取 Task A 的数据
+    assert (
+        store.get_checkpoint(
+            "isolated_grp",
+            "2026-09-10",
+            "LLM_ANALYSIS",
+            trace_id="trace_task_B",
+        )
+        is None
+    )

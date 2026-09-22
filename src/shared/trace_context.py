@@ -453,11 +453,11 @@ class TraceContext:
         """生成全局唯一且具备高可读性的 TraceID。
 
         格式: {prefix}_{group_name}_{YYYYMMDD_HHMMSS}_{entropy}
-        包含精确时间与随机熵，彻底杜绝同秒或高并发场景下的 ID 碰撞。
+        包含精确时间与足够强度的随机熵，彻底杜绝同秒或高并发场景下的 ID 碰撞。
         """
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
-        entropy = uuid.uuid4().hex[:8]
+        entropy = uuid.uuid4().hex[:12]
         parts: list[str] = []
         if prefix:
             parts.append(prefix)

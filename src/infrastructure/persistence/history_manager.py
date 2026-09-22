@@ -85,6 +85,23 @@ class HistoryManager:
             logger.error(f"保存历史分析记录失败: {e}", exc_info=True)
             return False
 
+    async def get_analysis(
+        self, group_id: str, date_str: str, time_str: str | None = None
+    ) -> dict[str, Any] | None:
+        """根据群组和日期获取分析数据。
+
+        如果指定了 time_str 则按精确 key 读取，否则检索该日期的分析记录。
+        """
+        if time_str:
+            return await self.get_history(group_id, date_str, time_str)
+
+        # 尝试常见或最新的 time_str 归档，若无具体时间点则尝试默认前缀 key
+        key_default = f"analysis_{group_id}_{date_str}"
+        res = await self.plugin.get_kv_data(key_default, None)
+        if res:
+            return res
+        return None
+
     async def get_history(
         self, group_id: str, date_str: str, time_str: str
     ) -> dict[str, Any] | None:
