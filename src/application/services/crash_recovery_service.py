@@ -79,14 +79,20 @@ class CrashRecoveryService:
 
             has_clean_cp = (
                 self.checkpoint_store.get_checkpoint(
-                    group_id, task_date_str, AnalysisStage.CLEAN_MESSAGES.value
+                    group_id,
+                    task_date_str,
+                    AnalysisStage.CLEAN_MESSAGES.value,
+                    trace_id=trace_id,
                 )
                 if self.checkpoint_store
                 else None
             )
             has_llm_cp = (
                 self.checkpoint_store.get_checkpoint(
-                    group_id, task_date_str, AnalysisStage.LLM_ANALYSIS.value
+                    group_id,
+                    task_date_str,
+                    AnalysisStage.LLM_ANALYSIS.value,
+                    trace_id=trace_id,
                 )
                 if self.checkpoint_store
                 else None

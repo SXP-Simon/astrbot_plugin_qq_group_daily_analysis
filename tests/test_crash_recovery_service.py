@@ -73,10 +73,12 @@ async def test_recover_crashed_tasks_same_day_dispatches(
         }
     ]
 
-    mock_checkpoint_store.get_checkpoint.side_effect = lambda g, d, stage: (
-        {"statistics": {}, "unified_messages": []}
-        if stage == AnalysisStage.CLEAN_MESSAGES.value
-        else None
+    mock_checkpoint_store.get_checkpoint.side_effect = (
+        lambda g, d, stage, **kwargs: (
+            {"statistics": {}, "unified_messages": []}
+            if stage == AnalysisStage.CLEAN_MESSAGES.value
+            else None
+        )
     )
 
     mock_analysis_service.resume_analysis.return_value = {
@@ -120,10 +122,12 @@ async def test_recover_crashed_tasks_cross_day_silently_archives(
         }
     ]
 
-    mock_checkpoint_store.get_checkpoint.side_effect = lambda g, d, stage: (
-        {"statistics": {}, "unified_messages": []}
-        if stage == AnalysisStage.CLEAN_MESSAGES.value
-        else None
+    mock_checkpoint_store.get_checkpoint.side_effect = (
+        lambda g, d, stage, **kwargs: (
+            {"statistics": {}, "unified_messages": []}
+            if stage == AnalysisStage.CLEAN_MESSAGES.value
+            else None
+        )
     )
 
     mock_analysis_service.resume_analysis.return_value = {

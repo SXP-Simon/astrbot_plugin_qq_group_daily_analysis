@@ -203,7 +203,33 @@ def test_checkpoint_store_crud_and_filtering(temp_db: Path):
     # 另一个阶段快照仍然完好
     assert store.get_checkpoint("group_A", "2026-09-10", "LLM_ANALYSIS") is not None
 
-    # 6. 清除群当天的所有快照
+    # 6. 任务级隔离验证 (trace_id scoped)
+    store.save_checkpoint(
+        group_id="group_A",
+        date_str="2026-09-10",
+        stage_name="LLM_ANALYSIS",
+        data={"topics": ["任务1独有话题"]},
+        trace_id="trace_task_001",
+    )
+    store.save_checkpoint(
+        group_id="group_A",
+        date_str="2026-09-10",
+        stage_name="LLM_ANALYSIS",
+        data={"topics": ["任务2独有话题"]},
+        trace_id="trace_task_002",
+    )
+
+    # 验证两个同日同群同阶段的任务快照互不覆盖
+    t1_data = store.get_checkpoint(
+        "group_A", "2026-09-10", "LLM_ANALYSIS", trace_id="trace_task_001"
+    )
+    t2_data = store.get_checkpoint(
+        "group_A", "2026-09-10", "LLM_ANALYSIS", trace_id="trace_task_002"
+    )
+    assert t1_data["topics"] == ["任务1独有话题"]
+    assert t2_data["topics"] == ["任务2独有话题"]
+
+    # 7. 清除群当天的所有快照
     store.clear_checkpoints("group_A", "2026-09-10")
     assert store.get_checkpoint("group_A", "2026-09-10", "LLM_ANALYSIS") is None
 
