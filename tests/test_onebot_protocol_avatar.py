@@ -22,7 +22,7 @@ class FakeOneBot:
 
 def make_adapter(bot: FakeOneBot) -> OneBotAdapter:
     adapter = OneBotAdapter(bot, {"filter_bot_messages": False})
-    adapter._snowluma_checked = True
+    adapter._driver_detected = True
     return adapter
 
 
