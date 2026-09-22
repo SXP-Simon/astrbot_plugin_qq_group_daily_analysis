@@ -26,7 +26,11 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
-from ..napcat_stream import upload_file_stream
+from .onebot import (
+    OneBotDriver,
+    OneBotDriverFactory,
+    StandardOneBotDriver,
+)
 
 
 class OneBotAdapter(PlatformAdapter):
@@ -43,15 +47,6 @@ class OneBotAdapter(PlatformAdapter):
 
     platform_name = "onebot"
 
-    # QQ 头像服务 URL 模板
-    USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
-    USER_AVATAR_HD_TEMPLATE = (
-        "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
-    )
-    GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
-
-    # OneBot 服务支持的头像尺寸像素
-    AVAILABLE_SIZES = (40, 100, 140, 160, 640)
     # 协议端头像获取：单请求超时、成功缓存与失败负缓存的存活时间（秒）
     AVATAR_FETCH_TIMEOUT = 1.5
     AVATAR_URL_TTL = 3600.0
@@ -72,13 +67,10 @@ class OneBotAdapter(PlatformAdapter):
             config.get("filter_bot_messages", True) if config else True
         )
 
-        # LLBot 探测标志
-        self._is_llbot = False
-        self._llbot_checked = False
-
-        # SnowLuma 探测标志
-        self._is_snowluma = False
-        self._snowluma_checked = False
+        # 协议端方言驱动（默认使用标准驱动，首次调用时通过 _ensure_driver 自动探测）
+        self._driver: OneBotDriver = StandardOneBotDriver()
+        self._driver_detected = False
+        self._driver_detection_lock = asyncio.Lock()
 
         # 禁言状态缓存 (group_id -> timestamp)
         self._muted_groups_cache = {}
@@ -94,45 +86,14 @@ class OneBotAdapter(PlatformAdapter):
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
 
-    async def _detect_llbot(self):
-        """探测是否为 LLBot"""
-        if self._llbot_checked:
-            return
-        try:
-            # 避免在一些不支持 get_version_info 的老版本上卡死
-            result = await self.bot.call_action("get_version_info")
-            if isinstance(result, dict):
-                app_name = result.get("app_name", "")
-                self._is_llbot = app_name == "LLOneBot"
-                if self._is_llbot:
-                    logger.info("[OneBot] 探测到当前协议端为 LLBot")
-        except Exception:
-            self._is_llbot = False
-        self._llbot_checked = True
-
-    async def _detect_snowluma(self):
-        """探测是否为 SnowLuma"""
-        if self._snowluma_checked:
-            return
-        try:
-            result = await self.bot.call_action("get_version_info")
-            if isinstance(result, dict):
-                app_name = result.get("app_name", "")
-                self._is_snowluma = app_name.lower() == "snowluma"
-                if self._is_snowluma:
-                    logger.info("[OneBot] 探测到当前协议端为 SnowLuma")
-        except Exception as exc:
-            logger.debug(
-                "[OneBot] 探测 SnowLuma 失败，将按非 SnowLuma 处理: %s",
-                exc,
-                exc_info=True,
-            )
-            self._is_snowluma = False
-        self._snowluma_checked = True
-
-    def _get_nearest_size(self, requested_size: int) -> int:
-        """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
-        return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
+    async def _ensure_driver(self) -> OneBotDriver:
+        """确保并返回已探测适配的协议端方言驱动（带并发锁保护）。"""
+        if not self._driver_detected:
+            async with self._driver_detection_lock:
+                if not self._driver_detected:
+                    self._driver = await OneBotDriverFactory.detect_driver(self.bot)
+                    self._driver_detected = True
+        return self._driver
 
     # ==================== IMessageRepository 实现 ====================
 
@@ -161,7 +122,7 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return []
 
-        await self._detect_snowluma()
+        driver = await self._ensure_driver()
 
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
@@ -180,25 +141,21 @@ class OneBotAdapter(PlatformAdapter):
             current_anchor_id = before_id
 
             logger.info(
-                f"OneBot 开始分页回溯消息: 群 {group_id}, "
+                f"OneBot 开始分页回溯消息 (驱动: {driver.name}): 群 {group_id}, "
                 f"起始时间 {datetime.fromtimestamp(start_timestamp).strftime('%Y-%m-%d %H:%M:%S')}, "
                 f"上限 {max_count} 条"
             )
 
             while len(all_raw_messages) < max_count:
                 fetch_count = min(chunk_size, max_count - len(all_raw_messages))
-
-                params: dict[str, int | str | bool | None] = {
-                    "group_id": int(group_id),
-                    "count": fetch_count,
-                }
-                if self._is_snowluma:
-                    if current_anchor_id:
-                        params["message_id"] = current_anchor_id
-                else:
-                    params["reverseOrder"] = True
-                    if current_anchor_id:
-                        params["message_seq"] = current_anchor_id
+                params = driver.build_history_params(
+                    group_id=group_id,
+                    count=fetch_count,
+                    anchor_id=current_anchor_id,
+                )
+                logger.debug(
+                    f"OneBot 分页请求 (驱动: {driver.name}): group_id={group_id}, params={params}"
+                )
 
                 result = None
                 fetch_error = None
@@ -274,22 +231,8 @@ class OneBotAdapter(PlatformAdapter):
                         all_raw_messages.append(raw_msg)
                         seen_raw_ids.add(msg_id)
 
-                # 提取锚点。
-                # SnowLuma 仅支持 message_id 作为分页锚点。
-                # 其他 OneBot 实现优先级: message_seq > real_id > seq > message_id
-                # 注意：为了兼容 NapCat (NTQQ) 这种 Message ID 非连续的情况，
-                # 以及 LLBot 这种 Sequence 模式，我们统一不进行 -1 偏移。
-                # 分页产生的重叠消息将由上方的去重逻辑 (all_raw_messages 循环对比) 自动处理。
-                if self._is_snowluma:
-                    new_anchor_id = chunk_earliest_msg.get("message_id")
-                else:
-                    seq_val = (
-                        chunk_earliest_msg.get("message_seq")
-                        or chunk_earliest_msg.get("real_id")
-                        or chunk_earliest_msg.get("seq")
-                    )
-                    mid_val = chunk_earliest_msg.get("message_id")
-                    new_anchor_id = seq_val if seq_val is not None else mid_val
+                # 由当前驱动提取回溯锚点
+                new_anchor_id = driver.extract_history_anchor(chunk_earliest_msg)
 
                 # 如果消息时间已到达起始点，或者锚点无法继续往前位移，则停止
                 if chunk_earliest_time <= start_timestamp:
@@ -720,13 +663,15 @@ class OneBotAdapter(PlatformAdapter):
         ):
             return False
 
+        driver = await self._ensure_driver()
+        uploaded_path = await driver.upload_stream_file(self.bot, path)
+        if not uploaded_path:
+            return False
+
         logger.warning(
             "[OneBot] 常规图片发送失败: %s，准备通过 NapCat Stream API 重试",
             path.name,
         )
-        uploaded_path = await upload_file_stream(self.bot, path)
-        if not uploaded_path:
-            return False
         try:
             await do_send(uploaded_path, "NapCat 流式上传重试")
             return True
@@ -805,23 +750,44 @@ class OneBotAdapter(PlatformAdapter):
             if not result:
                 return None
 
+            info = result
+            if isinstance(result, dict) and isinstance(result.get("data"), dict):
+                info = result["data"]
+
             return UnifiedGroup(
-                group_id=str(result.get("group_id", group_id)),
-                group_name=result.get("group_name", ""),
-                member_count=result.get("member_count", 0),
-                owner_id=str(result.get("owner_id", "")) or None,
-                create_time=result.get("group_create_time"),
+                group_id=str(info.get("group_id", group_id)),
+                group_name=info.get("group_name", ""),
+                member_count=info.get("member_count", 0),
+                owner_id=str(info.get("owner_id", "")) or None,
+                create_time=info.get("group_create_time"),
                 platform="onebot",
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[OneBot] 获取群 {group_id} 信息失败: {e}")
             return None
 
     async def get_group_list(self) -> list[str]:
         """获取当前机器人已加入的所有群组 ID 列表。"""
         try:
             result = await self.bot.call_action("get_group_list")
-            return [str(g.get("group_id", "")) for g in result or []]
-        except Exception:
+            groups: list[dict] = []
+            if isinstance(result, list):
+                groups = [g for g in result if isinstance(g, dict)]
+            elif isinstance(result, dict):
+                data = result.get("data")
+                if isinstance(data, list):
+                    groups = [g for g in data if isinstance(g, dict)]
+                elif isinstance(data, dict):
+                    raw = data.get("group_list") or data.get("list")
+                    if isinstance(raw, list):
+                        groups = [g for g in raw if isinstance(g, dict)]
+                if not groups:
+                    raw = result.get("group_list") or result.get("list")
+                    if isinstance(raw, list):
+                        groups = [g for g in raw if isinstance(g, dict)]
+            return [str(g.get("group_id", "")) for g in groups if g.get("group_id")]
+        except Exception as e:
+            logger.debug(f"[OneBot] 获取群列表失败: {e}")
             return []
 
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
@@ -832,8 +798,32 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
             )
 
+            raw_members: list[dict] = []
+            if isinstance(result, list):
+                raw_members = [m for m in result if isinstance(m, dict)]
+            elif isinstance(result, dict):
+                data = result.get("data")
+                if isinstance(data, list):
+                    raw_members = [m for m in data if isinstance(m, dict)]
+                elif isinstance(data, dict):
+                    raw = (
+                        data.get("member_list")
+                        or data.get("members")
+                        or data.get("list")
+                    )
+                    if isinstance(raw, list):
+                        raw_members = [m for m in raw if isinstance(m, dict)]
+                if not raw_members:
+                    raw = (
+                        result.get("member_list")
+                        or result.get("members")
+                        or result.get("list")
+                    )
+                    if isinstance(raw, list):
+                        raw_members = [m for m in raw if isinstance(m, dict)]
+
             members = []
-            for m in result or []:
+            for m in raw_members:
                 members.append(
                     UnifiedMember(
                         user_id=str(m.get("user_id", "")),
@@ -844,7 +834,8 @@ class OneBotAdapter(PlatformAdapter):
                     )
                 )
             return members
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[OneBot] 获取群 {group_id} 成员列表失败: {e}")
             return []
 
     async def get_member_info(
@@ -863,14 +854,19 @@ class OneBotAdapter(PlatformAdapter):
             if not result:
                 return None
 
+            info = result
+            if isinstance(result, dict) and isinstance(result.get("data"), dict):
+                info = result["data"]
+
             return UnifiedMember(
-                user_id=str(result.get("user_id", user_id)),
-                nickname=result.get("nickname", ""),
-                card=result.get("card", "") or None,
-                role=result.get("role", "member"),
-                join_time=result.get("join_time"),
+                user_id=str(info.get("user_id", user_id)),
+                nickname=info.get("nickname", ""),
+                card=info.get("card", "") or None,
+                role=info.get("role", "member"),
+                join_time=info.get("join_time"),
             )
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[OneBot] 获取群 {group_id} 成员 {user_id} 信息失败: {e}")
             return None
 
     async def _get_base64_from_file(self, file_path: str) -> str | None:
@@ -959,11 +955,7 @@ class OneBotAdapter(PlatformAdapter):
                 self._avatar_inflight_tasks.pop(user_id, None)
 
     def _build_cdn_avatar_url(self, user_id: str, size: int) -> str:
-        actual_size = self._get_nearest_size(size)
-        # 640 使用 HD 接口更清晰
-        if actual_size >= 640:
-            return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
-        return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
+        return self._driver.build_user_avatar_cdn_url(user_id, size)
 
     async def get_user_avatar_url(
         self,
@@ -1057,8 +1049,7 @@ class OneBotAdapter(PlatformAdapter):
         size: int = 100,
     ) -> str | None:
         """获取 QQ 群头像地址。"""
-        actual_size = self._get_nearest_size(size)
-        return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
+        return self._driver.build_group_avatar_cdn_url(group_id, size)
 
     async def batch_get_avatar_urls(
         self,
@@ -1088,6 +1079,9 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return False
 
+        # 确保方言驱动已探测并绑定
+        await self._ensure_driver()
+
         # 2. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
         bot_user_id = None
         if self.bot_self_ids:
@@ -1109,9 +1103,16 @@ class OneBotAdapter(PlatformAdapter):
                 login_info = await asyncio.wait_for(
                     self.bot.call_action("get_login_info"), timeout=5.0
                 )
-                if login_info and "user_id" in login_info:
-                    bot_user_id = str(login_info["user_id"])
-                    self.bot_self_ids = [bot_user_id]
+                if login_info:
+                    info = (
+                        login_info.get("data")
+                        if isinstance(login_info, dict)
+                        and isinstance(login_info.get("data"), dict)
+                        else login_info
+                    )
+                    if isinstance(info, dict) and "user_id" in info:
+                        bot_user_id = str(info["user_id"])
+                        self.bot_self_ids = [bot_user_id]
             except Exception as e:
                 if self._is_mute_exception(e):
                     self._record_mute_status(group_id, True)
@@ -1136,18 +1137,25 @@ class OneBotAdapter(PlatformAdapter):
                     timeout=5.0,
                 )
                 if member_info:
-                    role = member_info.get("role", "member")
-                    # 缓存角色信息，用于 get_group_member_info 超时时降级使用
-                    self._group_role_cache[group_id_str] = (role, time.time())
-                    shut_up_time = member_info.get("shut_up_time", 0)
-                    if shut_up_time > 0:
-                        # 如果 shut_up_time 是 Unix 时间戳
-                        if shut_up_time > 1000000000:
-                            if shut_up_time > time.time():
+                    info = (
+                        member_info.get("data")
+                        if isinstance(member_info, dict)
+                        and isinstance(member_info.get("data"), dict)
+                        else member_info
+                    )
+                    if isinstance(info, dict):
+                        role = info.get("role", "member")
+                        # 缓存角色信息，用于 get_group_member_info 超时时降级使用
+                        self._group_role_cache[group_id_str] = (role, time.time())
+                        shut_up_time = info.get("shut_up_time", 0)
+                        if shut_up_time > 0:
+                            # 如果 shut_up_time 是 Unix 时间戳
+                            if shut_up_time > 1000000000:
+                                if shut_up_time > time.time():
+                                    is_individually_muted = True
+                            else:
+                                # 否则认为是相对禁言剩余时间（秒）
                                 is_individually_muted = True
-                        else:
-                            # 否则认为是相对禁言剩余时间（秒）
-                            is_individually_muted = True
             except TimeoutError:
                 # 超时降级：优先使用缓存的角色（角色几乎不会变）
                 cached_role = self._group_role_cache.get(group_id_str)
@@ -1189,21 +1197,20 @@ class OneBotAdapter(PlatformAdapter):
                     timeout=5.0,
                 )
                 if group_info:
-                    # 兼容 LLOneBot, Lagrange, NapCat/SnowLuma 以及标准 OneBot 各种全群禁言状态字段
-                    is_whole_ban = (
-                        group_info.get("group_all_shut")
-                        or group_info.get("shutup_all")
-                        or group_info.get("is_whole_ban")
-                        or group_info.get("whole_ban")
-                        or group_info.get("shutup")
-                        or group_info.get("shut_up")
+                    info = (
+                        group_info.get("data")
+                        if isinstance(group_info, dict)
+                        and isinstance(group_info.get("data"), dict)
+                        else group_info
                     )
-                    if is_whole_ban:
-                        self._record_mute_status(group_id, True)
-                        logger.info(
-                            f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
-                        )
-                        return True
+                    if isinstance(info, dict):
+                        driver = await self._ensure_driver()
+                        if driver.is_whole_ban(info):
+                            self._record_mute_status(group_id, True)
+                            logger.info(
+                                f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
+                            )
+                            return True
             except TimeoutError:
                 logger.warning(f"[OneBot] 获取群信息超时 (group_id={group_id})")
             except Exception as e:
@@ -1219,44 +1226,8 @@ class OneBotAdapter(PlatformAdapter):
         return False
 
     def _is_mute_exception(self, e: Exception) -> bool:
-        if not e:
-            return False
-        err_str = str(e)
-
-        mute_keywords = ("禁言", "操作失败", "下游群鉴权")
-
-        # --- 方法一：根据 retcode 检测 ---
-        # NapCat/LLOneBot 被禁言时返回 retcode=1200（INTERNAL_ERROR）
-        # SnowLuma/OIDB 操作被拒时返回 retcode=100（ACTION_FAILED）+ wording 含错误描述
-        # SnowLuma 发送消息被拒时返回 result=120
-        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
-            if any(kw in err_str for kw in mute_keywords):
-                return True
-
-        # --- 方法二：检查 exception 的 message/wording 属性 ---
-        # 适配不同协议端对错误信息的字段命名差异
-        for attr in ("message", "wording"):
-            val = getattr(e, attr, "") or ""
-            if any(kw in val for kw in mute_keywords):
-                return True
-            if "shut up" in val.lower():
-                return True
-
-        # --- 方法三：检测 SnowLuma 发消息被拒的特定模式 ---
-        # SnowLuma 在群内发消息失败时返回：
-        #   retcode=100, wording="send group message rejected: result=120 err="
-        err_lower = err_str.lower()
-        if "rejected" in err_lower and (
-            "result=120" in err_lower or "muted" in err_lower
-        ):
-            return True
-
-        # --- 方法四：兜底 --- 直接从 err_str 匹配禁言关键词 ---
-        # 即使 getattr 获取不到 wording 属性，str(e) 本身仍包含关键词文本
-        if any(kw in err_str for kw in mute_keywords):
-            return True
-
-        return False
+        """判断是否为禁言异常（委派给当前绑定的协议端驱动）。"""
+        return self._driver.is_mute_exception(e)
 
     def _record_mute_status(self, group_id: Any, is_muted: bool):
         group_id_str = str(group_id)
@@ -1294,17 +1265,23 @@ class OneBotAdapter(PlatformAdapter):
         folder_id: str | None = None,
     ) -> bool:
         """上传文件到群文件目录的指定子文件夹。"""
+        target_filename = filename or os.path.basename(file_path)
+        logger.debug(
+            f"[OneBot] 正在上传群文件 (群 {group_id}): 文件='{file_path}', 目标文件名='{target_filename}', 目标文件夹 ID='{folder_id}'"
+        )
 
         async def do_upload(content: str, label: str):
             params = {
                 "group_id": int(group_id),
                 "file": content,
-                "name": filename or os.path.basename(file_path),
+                "name": target_filename,
             }
             if folder_id:
                 params["folder"] = folder_id
             await self.bot.call_action("upload_group_file", **params)
-            logger.debug(f"[OneBot] 群文件发送成功 ({label}): {params['name']}")
+            logger.info(
+                f"[OneBot] 群文件发送成功 ({label}): {params['name']} (群 {group_id})"
+            )
 
         return await self._execute_transmission_strategy(
             file_path, do_upload, "OneBot 群文件"
@@ -1326,28 +1303,46 @@ class OneBotAdapter(PlatformAdapter):
             str | None: 创建成功时返回 folder_id，失败返回 None
         """
         try:
+            logger.debug(
+                f"[OneBot] 正在群 {group_id} 中创建群文件夹 '{folder_name}'..."
+            )
             result = await self.bot.call_action(
                 "create_group_file_folder",
                 group_id=int(group_id),
                 name=folder_name,
                 parent_id="/",
             )
-            # go-cqhttp 等实现可能不返回 folder_id
+            # go-cqhttp, NapCat, LLOneBot 等实现可能返回顶层或嵌套在 data 里的 folder_id
             folder_id = None
             if isinstance(result, dict):
-                folder_id = result.get("folder_id") or result.get("id")
+                data = result.get("data")
+                if isinstance(data, dict):
+                    folder_id = (
+                        data.get("folder_id") or data.get("id") or data.get("folderId")
+                    )
+                elif isinstance(data, str) and data:
+                    folder_id = data
+                if not folder_id:
+                    folder_id = (
+                        result.get("folder_id")
+                        or result.get("id")
+                        or result.get("folderId")
+                    )
+            elif isinstance(result, str) and result:
+                folder_id = result
+
             logger.info(
-                f"OneBot 群文件夹创建成功: {folder_name} (群 {group_id})"
+                f"[OneBot] 群文件夹创建成功: '{folder_name}' (群 {group_id})"
                 + (f" [ID: {folder_id}]" if folder_id else "")
             )
-            return folder_id
+            return str(folder_id) if folder_id is not None else None
         except Exception as e:
             error_msg = str(e).lower()
             # 文件夹已存在的情况不视为错误
             if "exist" in error_msg or "已存在" in error_msg:
-                logger.info(f"OneBot 群文件夹已存在: {folder_name} (群 {group_id})")
+                logger.info(f"[OneBot] 群文件夹已存在: '{folder_name}' (群 {group_id})")
                 return None  # 需要通过 get_group_file_root_folders 获取 ID
-            logger.error(f"OneBot 群文件夹创建失败: {e}")
+            logger.error(f"[OneBot] 群文件夹创建失败: {e}")
             return None
 
     async def get_group_file_root_folders(
@@ -1357,6 +1352,8 @@ class OneBotAdapter(PlatformAdapter):
         """
         获取群文件根目录下的文件夹列表。
 
+        兼容顶层 folders、data.folders 及直接返回列表等多种 OneBot 实现规范。
+
         Args:
             group_id: 目标群号
 
@@ -1365,15 +1362,43 @@ class OneBotAdapter(PlatformAdapter):
                         API 不可用时返回空列表。
         """
         try:
+            logger.debug(f"[OneBot] 正在获取群 {group_id} 的根目录文件夹列表...")
             result = await self.bot.call_action(
                 "get_group_root_files",
                 group_id=int(group_id),
             )
-            if isinstance(result, dict):
-                return result.get("folders", []) or []
-            return []
+            folders: list[dict] = []
+            if isinstance(result, list):
+                folders = [f for f in result if isinstance(f, dict)]
+            elif isinstance(result, dict):
+                data = result.get("data")
+                if isinstance(data, list):
+                    folders = [f for f in data if isinstance(f, dict)]
+                elif isinstance(data, dict):
+                    raw_folders = (
+                        data.get("folders")
+                        or data.get("folder_list")
+                        or data.get("folderList")
+                        or data.get("list")
+                    )
+                    if isinstance(raw_folders, list):
+                        folders = [f for f in raw_folders if isinstance(f, dict)]
+                if not folders:
+                    raw_folders = (
+                        result.get("folders")
+                        or result.get("folder_list")
+                        or result.get("folderList")
+                        or result.get("list")
+                    )
+                    if isinstance(raw_folders, list):
+                        folders = [f for f in raw_folders if isinstance(f, dict)]
+
+            logger.debug(
+                f"[OneBot] 获取群文件夹列表成功 (群 {group_id}): 提取到 {len(folders)} 个文件夹, 原始响应={result}"
+            )
+            return folders
         except Exception as e:
-            logger.debug(f"OneBot 获取群文件夹列表失败: {e}")
+            logger.debug(f"[OneBot] 获取群文件夹列表失败 (群 {group_id}): {e}")
             return []
 
     async def find_or_create_folder(
@@ -1391,35 +1416,69 @@ class OneBotAdapter(PlatformAdapter):
             group_id: 目标群号
             folder_name: 文件夹名称
 
+        Returns:
+            str | None: 匹配或新创建的 folder_id，若均失败返回 None
         """
         if not folder_name:
             return None
 
+        target_name = str(folder_name).strip()
+        logger.debug(
+            f"[OneBot] 正在群 {group_id} 中查找或创建文件夹: '{target_name}'..."
+        )
+
         # 1. 先尝试查找已有文件夹
         folders = await self.get_group_file_root_folders(group_id)
         for folder in folders:
-            name = folder.get("folder_name") or folder.get("name", "")
-            fid = folder.get("folder_id") or folder.get("id", "")
-            if name == folder_name and fid:
-                logger.debug(f"找到已有群文件夹: {folder_name} [ID: {fid}]")
-                return fid
+            name = (
+                folder.get("folder_name")
+                or folder.get("name")
+                or folder.get("folderName")
+                or ""
+            )
+            fid = (
+                folder.get("folder_id")
+                or folder.get("id")
+                or folder.get("folderId")
+                or ""
+            )
+            if str(name).strip() == target_name and fid:
+                logger.debug(
+                    f"[OneBot] 匹配到已有群文件夹: '{target_name}' [ID: {fid}] (群 {group_id})"
+                )
+                return str(fid)
 
         # 2. 未找到，尝试创建
-        created_id = await self.create_group_file_folder(group_id, folder_name)
+        created_id = await self.create_group_file_folder(group_id, target_name)
         if created_id:
-            return created_id
+            logger.info(
+                f"[OneBot] 成功创建并获取到群文件夹 ID: '{target_name}' [ID: {created_id}] (群 {group_id})"
+            )
+            return str(created_id)
 
         # 3. 创建后再次查找（某些实现创建时不返回 ID）
         folders = await self.get_group_file_root_folders(group_id)
         for folder in folders:
-            name = folder.get("folder_name") or folder.get("name", "")
-            fid = folder.get("folder_id") or folder.get("id", "")
-            if name == folder_name and fid:
-                logger.debug(f"创建后找到群文件夹: {folder_name} [ID: {fid}]")
-                return fid
+            name = (
+                folder.get("folder_name")
+                or folder.get("name")
+                or folder.get("folderName")
+                or ""
+            )
+            fid = (
+                folder.get("folder_id")
+                or folder.get("id")
+                or folder.get("folderId")
+                or ""
+            )
+            if str(name).strip() == target_name and fid:
+                logger.debug(
+                    f"[OneBot] 创建后二次查询匹配到群文件夹: '{target_name}' [ID: {fid}] (群 {group_id})"
+                )
+                return str(fid)
 
         logger.warning(
-            f"无法获取群文件夹 ID: {folder_name} (群 {group_id})，将上传到根目录"
+            f"[OneBot] 无法获取群文件夹 ID: '{target_name}' (群 {group_id})，将上传到根目录"
         )
         return None
 
@@ -1431,7 +1490,11 @@ class OneBotAdapter(PlatformAdapter):
         album_name: str | None = None,
         strict_mode: bool = False,
     ) -> bool:
-        """上传图片到群相册（NapCat 扩展 API）。"""
+        """上传图片到群相册（OneBot 扩展 API）。"""
+        # 如果未显式传入 album_id 但指定了 album_name，先尝试定位相册 ID
+        if not album_id and album_name:
+            album_id = await self.find_album_id(group_id, album_name)
+
         # 严格模式：指定了相册名但未解析到 album_id 时，禁止上传
         if strict_mode and album_name and not album_id:
             logger.info(
@@ -1439,17 +1502,14 @@ class OneBotAdapter(PlatformAdapter):
             )
             return False
 
-        # 兜底查询
+        # 非严格模式下的兜底查询
         if not album_id:
             albums = await self.get_group_album_list(group_id)
-            album_id = self._find_item_in_list(
-                albums, album_name, ["album_id"], ["name", "album_name"]
-            )
-            # 如果仍没确定相册：
-            # - 没有指定相册名（纯兜底）→ 取第一个
-            # - 指定了名字但找不到且非严格模式 → 也取第一个（回退到默认相册）
-            if not album_id and albums and (not album_name or not strict_mode):
-                album_id = albums[0].get("album_id") or albums[0].get("id")
+            if albums:
+                first = albums[0]
+                album_id = (
+                    first.get("album_id") or first.get("id") or first.get("albumId")
+                )
                 if album_name:
                     logger.info(
                         f"[群分析相册] 未找到相册 '{album_name}'，回退到默认相册 (群 {group_id})"
@@ -1462,49 +1522,14 @@ class OneBotAdapter(PlatformAdapter):
             return False
 
         async def do_upload(content: str, label: str):
-            await self._detect_llbot()
-
-            if self._is_llbot:
-                # LLBot 模式：使用 files 参数 (列表)
-                # LLBot 的 upload_group_album 接收 files 作为数组
-                llbot_params = {
-                    "group_id": int(group_id),
-                    "album_id": str(album_id),
-                    "files": [content],
-                }
-                try:
-                    await self.bot.call_action("upload_group_album", **llbot_params)
-                    logger.debug(
-                        f"[群分析相册] 上传成功 (LLBot, {label}): 群 {group_id}"
-                    )
-                    return
-                except Exception as e:
-                    logger.warning(
-                        f"[群分析相册] LLBot 上传接口调用失败: {e}，尝试 NapCat 模式..."
-                    )
-
-            params = {
-                "group_id": int(group_id),
-                "file": content,
-                "album_id": str(album_id),
-            }
-            if album_name:
-                params["album_name"] = album_name
-
-            for action in [
-                "upload_image_to_qun_album",
-                "upload_group_album",
-                "upload_qun_album",
-            ]:
-                try:
-                    await self.bot.call_action(action, **params)
-                    logger.debug(
-                        f"[群分析相册] 上传成功 ({label}, {action}): 群 {group_id}"
-                    )
-                    return
-                except Exception:
-                    continue
-            raise RuntimeError("所有相册上传 API 均调用失败")
+            driver = await self._ensure_driver()
+            await driver.upload_group_album(
+                bot=self.bot,
+                group_id=group_id,
+                album_id=str(album_id),
+                album_name=album_name,
+                file_content=content,
+            )
 
         return await self._execute_transmission_strategy(
             image_path, do_upload, "OneBot 相册"
@@ -1517,61 +1542,8 @@ class OneBotAdapter(PlatformAdapter):
         """
         获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
-
-        def extract_list(payload: Any) -> list[dict]:
-            """从不同结构的响应中提取相册列表：直接列表、嵌套在 data 中、或直接在根字段中。"""
-            if isinstance(payload, list):
-                return [item for item in payload if isinstance(item, dict)]
-            if not isinstance(payload, dict):
-                logger.debug(
-                    f"[群分析相册] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
-                )
-                return []
-
-            data = payload.get("data")
-            if isinstance(data, dict):
-                album_list = data.get("album_list") or data.get("list")
-                if isinstance(album_list, list):
-                    return [item for item in album_list if isinstance(item, dict)]
-                else:
-                    logger.debug(f"[群分析相册] 在 data 字段中未找到列表: data={data}")
-
-            album_list = payload.get("album_list") or payload.get("list")
-            if isinstance(album_list, list):
-                return [item for item in album_list if isinstance(item, dict)]
-
-            logger.debug(f"[群分析相册] 无法从响应中提取相册列表: payload={payload}")
-            return []
-
-        # 候选 API 名称
-        actions = [
-            "get_qun_album_list",
-            "get_group_album_list",
-            "get_group_albums",
-            "get_group_root_album_list",
-        ]
-
-        for action in actions:
-            try:
-                logger.debug(
-                    f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})..."
-                )
-                result = await self.bot.call_action(
-                    action,
-                    group_id=int(group_id),
-                )
-                logger.debug(f"[群分析相册] 接口 {action} 原始响应内容: {result}")
-                if result:
-                    albums = extract_list(result)
-                    if albums:
-                        logger.debug(
-                            f"[群分析相册] {action} 成功获取并提取到 {len(albums)} 个相册对象"
-                        )
-                        return albums
-            except Exception as e:
-                logger.debug(f"[群分析相册] 接口 {action} 尝试失败: {e}")
-
-        return []
+        driver = await self._ensure_driver()
+        return await driver.get_group_album_list(self.bot, group_id)
 
     async def find_album_id(
         self,
@@ -1591,28 +1563,33 @@ class OneBotAdapter(PlatformAdapter):
         if not album_name:
             return None
 
+        target_name = str(album_name).strip()
         logger.debug(
-            f"[群分析相册] 正在群 {group_id} 中查找名为 '{album_name}' 的相册..."
+            f"[群分析相册] 正在群 {group_id} 中查找名为 '{target_name}' 的相册..."
         )
         albums = await self.get_group_album_list(group_id)
         for album in albums:
-            name = album.get("name") or album.get("album_name")
-            logger.debug(
-                f"[群分析相册] 正在匹配相册: 目标='{album_name}', 当前相册名称='{name}', 原始数据={album}"
+            name = (
+                album.get("name")
+                or album.get("album_name")
+                or album.get("albumName")
+                or album.get("title")
             )
-            if name == album_name:
-                aid = album.get("album_id")
-                if aid:
+            aid = album.get("album_id") or album.get("id") or album.get("albumId")
+            logger.debug(
+                f"[群分析相册] 正在匹配相册: 目标='{target_name}', 当前相册名称='{name}', 原始数据={album}"
+            )
+            if name and str(name).strip() == target_name:
+                if aid is not None:
                     logger.info(
-                        f"[群分析相册] 成功定位相册: '{album_name}' -> ID: {aid}"
+                        f"[群分析相册] 成功定位相册: '{target_name}' -> ID: {aid}"
                     )
                     return str(aid)
-                else:
-                    logger.debug(
-                        f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
-                    )
+                logger.debug(
+                    f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
+                )
 
-        logger.info(f"[群分析相册] 未能找到名为 '{album_name}' 的相册 (群 {group_id})")
+        logger.info(f"[群分析相册] 未能找到名为 '{target_name}' 的相册 (群 {group_id})")
         return None
 
     async def set_reaction(
@@ -1631,6 +1608,9 @@ class OneBotAdapter(PlatformAdapter):
                 "📊": "124",
             }.get(reaction_key, reaction_key)
 
+            logger.debug(
+                f"[OneBot] 正在设置表情回应: 群={group_id}, 消息ID={message_id}, emoji={emoji} (解析ID={emoji_id}, is_add={is_add})"
+            )
             await self.bot.call_action(
                 "set_msg_emoji_like",
                 message_id=int(message_id),
@@ -1639,11 +1619,16 @@ class OneBotAdapter(PlatformAdapter):
                 set=is_add,
             )
             self._record_mute_status(group_id, False)
+            logger.debug(
+                f"[OneBot] 表情回应设置成功: 群={group_id}, 消息ID={message_id}, emoji_id={emoji_id}"
+            )
             return True
         except Exception as e:
             if self._is_mute_exception(e):
                 self._record_mute_status(group_id, True)
-            logger.debug(f"OneBot set_reaction 失败 (API 可能不支持): {e}")
+            logger.debug(
+                f"[OneBot] set_reaction 失败 (群 {group_id}, 消息 {message_id}, API 可能不支持): {e}"
+            )
             return False
 
     def _get_use_base64(self) -> bool:
