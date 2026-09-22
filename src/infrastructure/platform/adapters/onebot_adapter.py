@@ -26,7 +26,11 @@ from ....domain.value_objects.unified_message import (
 )
 from ....utils.logger import logger
 from ..base import PlatformAdapter
-from ..napcat_stream import upload_file_stream
+from .onebot import (
+    OneBotDriver,
+    OneBotDriverFactory,
+    StandardOneBotDriver,
+)
 
 
 class OneBotAdapter(PlatformAdapter):
@@ -72,13 +76,9 @@ class OneBotAdapter(PlatformAdapter):
             config.get("filter_bot_messages", True) if config else True
         )
 
-        # LLBot 探测标志
-        self._is_llbot = False
-        self._llbot_checked = False
-
-        # SnowLuma 探测标志
-        self._is_snowluma = False
-        self._snowluma_checked = False
+        # 协议端方言驱动（默认使用标准驱动，首次调用时通过 _ensure_driver 自动探测）
+        self._driver: OneBotDriver = StandardOneBotDriver()
+        self._driver_detected = False
 
         # 禁言状态缓存 (group_id -> timestamp)
         self._muted_groups_cache = {}
@@ -94,41 +94,12 @@ class OneBotAdapter(PlatformAdapter):
         """返回预定义的 OneBot v11 能力集。"""
         return ONEBOT_V11_CAPABILITIES
 
-    async def _detect_llbot(self):
-        """探测是否为 LLBot"""
-        if self._llbot_checked:
-            return
-        try:
-            # 避免在一些不支持 get_version_info 的老版本上卡死
-            result = await self.bot.call_action("get_version_info")
-            if isinstance(result, dict):
-                app_name = result.get("app_name", "")
-                self._is_llbot = app_name == "LLOneBot"
-                if self._is_llbot:
-                    logger.info("[OneBot] 探测到当前协议端为 LLBot")
-        except Exception:
-            self._is_llbot = False
-        self._llbot_checked = True
-
-    async def _detect_snowluma(self):
-        """探测是否为 SnowLuma"""
-        if self._snowluma_checked:
-            return
-        try:
-            result = await self.bot.call_action("get_version_info")
-            if isinstance(result, dict):
-                app_name = result.get("app_name", "")
-                self._is_snowluma = app_name.lower() == "snowluma"
-                if self._is_snowluma:
-                    logger.info("[OneBot] 探测到当前协议端为 SnowLuma")
-        except Exception as exc:
-            logger.debug(
-                "[OneBot] 探测 SnowLuma 失败，将按非 SnowLuma 处理: %s",
-                exc,
-                exc_info=True,
-            )
-            self._is_snowluma = False
-        self._snowluma_checked = True
+    async def _ensure_driver(self) -> OneBotDriver:
+        """确保并返回已探测适配的协议端方言驱动。"""
+        if not self._driver_detected:
+            self._driver = await OneBotDriverFactory.detect_driver(self.bot)
+            self._driver_detected = True
+        return self._driver
 
     def _get_nearest_size(self, requested_size: int) -> int:
         """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
@@ -161,7 +132,7 @@ class OneBotAdapter(PlatformAdapter):
         if not hasattr(self.bot, "call_action"):
             return []
 
-        await self._detect_snowluma()
+        driver = await self._ensure_driver()
 
         try:
             chunk_size = 100  # 每次拉取 100 条，较为稳健
@@ -180,25 +151,21 @@ class OneBotAdapter(PlatformAdapter):
             current_anchor_id = before_id
 
             logger.info(
-                f"OneBot 开始分页回溯消息: 群 {group_id}, "
+                f"OneBot 开始分页回溯消息 (驱动: {driver.name}): 群 {group_id}, "
                 f"起始时间 {datetime.fromtimestamp(start_timestamp).strftime('%Y-%m-%d %H:%M:%S')}, "
                 f"上限 {max_count} 条"
             )
 
             while len(all_raw_messages) < max_count:
                 fetch_count = min(chunk_size, max_count - len(all_raw_messages))
-
-                params: dict[str, int | str | bool | None] = {
-                    "group_id": int(group_id),
-                    "count": fetch_count,
-                }
-                if self._is_snowluma:
-                    if current_anchor_id:
-                        params["message_id"] = current_anchor_id
-                else:
-                    params["reverseOrder"] = True
-                    if current_anchor_id:
-                        params["message_seq"] = current_anchor_id
+                params = driver.build_history_params(
+                    group_id=group_id,
+                    count=fetch_count,
+                    anchor_id=current_anchor_id,
+                )
+                logger.debug(
+                    f"OneBot 分页请求 (驱动: {driver.name}): group_id={group_id}, params={params}"
+                )
 
                 result = None
                 fetch_error = None
@@ -274,22 +241,8 @@ class OneBotAdapter(PlatformAdapter):
                         all_raw_messages.append(raw_msg)
                         seen_raw_ids.add(msg_id)
 
-                # 提取锚点。
-                # SnowLuma 仅支持 message_id 作为分页锚点。
-                # 其他 OneBot 实现优先级: message_seq > real_id > seq > message_id
-                # 注意：为了兼容 NapCat (NTQQ) 这种 Message ID 非连续的情况，
-                # 以及 LLBot 这种 Sequence 模式，我们统一不进行 -1 偏移。
-                # 分页产生的重叠消息将由上方的去重逻辑 (all_raw_messages 循环对比) 自动处理。
-                if self._is_snowluma:
-                    new_anchor_id = chunk_earliest_msg.get("message_id")
-                else:
-                    seq_val = (
-                        chunk_earliest_msg.get("message_seq")
-                        or chunk_earliest_msg.get("real_id")
-                        or chunk_earliest_msg.get("seq")
-                    )
-                    mid_val = chunk_earliest_msg.get("message_id")
-                    new_anchor_id = seq_val if seq_val is not None else mid_val
+                # 由当前驱动提取回溯锚点
+                new_anchor_id = driver.extract_history_anchor(chunk_earliest_msg)
 
                 # 如果消息时间已到达起始点，或者锚点无法继续往前位移，则停止
                 if chunk_earliest_time <= start_timestamp:
@@ -720,13 +673,15 @@ class OneBotAdapter(PlatformAdapter):
         ):
             return False
 
+        driver = await self._ensure_driver()
+        uploaded_path = await driver.upload_stream_file(self.bot, path)
+        if not uploaded_path:
+            return False
+
         logger.warning(
             "[OneBot] 常规图片发送失败: %s，准备通过 NapCat Stream API 重试",
             path.name,
         )
-        uploaded_path = await upload_file_stream(self.bot, path)
-        if not uploaded_path:
-            return False
         try:
             await do_send(uploaded_path, "NapCat 流式上传重试")
             return True
@@ -1189,16 +1144,8 @@ class OneBotAdapter(PlatformAdapter):
                     timeout=5.0,
                 )
                 if group_info:
-                    # 兼容 LLOneBot, Lagrange, NapCat/SnowLuma 以及标准 OneBot 各种全群禁言状态字段
-                    is_whole_ban = (
-                        group_info.get("group_all_shut")
-                        or group_info.get("shutup_all")
-                        or group_info.get("is_whole_ban")
-                        or group_info.get("whole_ban")
-                        or group_info.get("shutup")
-                        or group_info.get("shut_up")
-                    )
-                    if is_whole_ban:
+                    driver = await self._ensure_driver()
+                    if driver.is_whole_ban(group_info):
                         self._record_mute_status(group_id, True)
                         logger.info(
                             f"[OneBot] 检测到群 {group_id} 开启了全群禁言，且 Bot 为普通成员"
@@ -1219,44 +1166,8 @@ class OneBotAdapter(PlatformAdapter):
         return False
 
     def _is_mute_exception(self, e: Exception) -> bool:
-        if not e:
-            return False
-        err_str = str(e)
-
-        mute_keywords = ("禁言", "操作失败", "下游群鉴权")
-
-        # --- 方法一：根据 retcode 检测 ---
-        # NapCat/LLOneBot 被禁言时返回 retcode=1200（INTERNAL_ERROR）
-        # SnowLuma/OIDB 操作被拒时返回 retcode=100（ACTION_FAILED）+ wording 含错误描述
-        # SnowLuma 发送消息被拒时返回 result=120
-        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
-            if any(kw in err_str for kw in mute_keywords):
-                return True
-
-        # --- 方法二：检查 exception 的 message/wording 属性 ---
-        # 适配不同协议端对错误信息的字段命名差异
-        for attr in ("message", "wording"):
-            val = getattr(e, attr, "") or ""
-            if any(kw in val for kw in mute_keywords):
-                return True
-            if "shut up" in val.lower():
-                return True
-
-        # --- 方法三：检测 SnowLuma 发消息被拒的特定模式 ---
-        # SnowLuma 在群内发消息失败时返回：
-        #   retcode=100, wording="send group message rejected: result=120 err="
-        err_lower = err_str.lower()
-        if "rejected" in err_lower and (
-            "result=120" in err_lower or "muted" in err_lower
-        ):
-            return True
-
-        # --- 方法四：兜底 --- 直接从 err_str 匹配禁言关键词 ---
-        # 即使 getattr 获取不到 wording 属性，str(e) 本身仍包含关键词文本
-        if any(kw in err_str for kw in mute_keywords):
-            return True
-
-        return False
+        """判断是否为禁言异常（委派给当前绑定的协议端驱动）。"""
+        return self._driver.is_mute_exception(e)
 
     def _record_mute_status(self, group_id: Any, is_muted: bool):
         group_id_str = str(group_id)
@@ -1462,49 +1373,14 @@ class OneBotAdapter(PlatformAdapter):
             return False
 
         async def do_upload(content: str, label: str):
-            await self._detect_llbot()
-
-            if self._is_llbot:
-                # LLBot 模式：使用 files 参数 (列表)
-                # LLBot 的 upload_group_album 接收 files 作为数组
-                llbot_params = {
-                    "group_id": int(group_id),
-                    "album_id": str(album_id),
-                    "files": [content],
-                }
-                try:
-                    await self.bot.call_action("upload_group_album", **llbot_params)
-                    logger.debug(
-                        f"[群分析相册] 上传成功 (LLBot, {label}): 群 {group_id}"
-                    )
-                    return
-                except Exception as e:
-                    logger.warning(
-                        f"[群分析相册] LLBot 上传接口调用失败: {e}，尝试 NapCat 模式..."
-                    )
-
-            params = {
-                "group_id": int(group_id),
-                "file": content,
-                "album_id": str(album_id),
-            }
-            if album_name:
-                params["album_name"] = album_name
-
-            for action in [
-                "upload_image_to_qun_album",
-                "upload_group_album",
-                "upload_qun_album",
-            ]:
-                try:
-                    await self.bot.call_action(action, **params)
-                    logger.debug(
-                        f"[群分析相册] 上传成功 ({label}, {action}): 群 {group_id}"
-                    )
-                    return
-                except Exception:
-                    continue
-            raise RuntimeError("所有相册上传 API 均调用失败")
+            driver = await self._ensure_driver()
+            await driver.upload_group_album(
+                bot=self.bot,
+                group_id=group_id,
+                album_id=str(album_id),
+                album_name=album_name,
+                file_content=content,
+            )
 
         return await self._execute_transmission_strategy(
             image_path, do_upload, "OneBot 相册"
