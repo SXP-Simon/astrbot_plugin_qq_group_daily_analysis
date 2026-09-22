@@ -901,13 +901,23 @@ class OneBotAdapter(PlatformAdapter):
         """从协议端用户资料响应中提取头像 URL。"""
         if not isinstance(payload, dict):
             return None
-        for key in ("avatar_url", "avatar", "headimgurl", "head_img", "user_avatar"):
-            value = payload.get(key)
-            if not isinstance(value, str):
-                continue
-            text = value.strip()
-            if text.startswith(("http://", "https://")):
-                return text
+        targets: list[dict[str, Any]] = [payload]
+        if isinstance(payload.get("data"), dict):
+            targets.append(payload["data"])
+        for target in targets:
+            for key in (
+                "avatar_url",
+                "avatar",
+                "headimgurl",
+                "head_img",
+                "user_avatar",
+            ):
+                value = target.get(key)
+                if not isinstance(value, str):
+                    continue
+                text = value.strip()
+                if text.startswith(("http://", "https://")):
+                    return text
         return None
 
     async def _fetch_avatar_url_from_protocol(self, user_id: str) -> str | None:
