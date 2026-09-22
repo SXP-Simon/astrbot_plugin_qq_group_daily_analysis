@@ -21,6 +21,7 @@ from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.incremental_store import IncrementalStore
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
+from src.shared.trace_context import TraceContext
 
 
 class DummyPluginKV:
@@ -353,3 +354,90 @@ async def test_plugin_webui_bridge_incremental_and_checkpoint_apis(
         chk_del_res = await bridge.api_delete_checkpoint()
         assert chk_del_res["status_code"] == 200
         assert _unpack(chk_del_res)["deleted"] is True
+
+
+def test_trace_id_generation_anti_collision_and_special_chars():
+    """极端情况 1：高并发同毫秒调用 TraceContext.generate 必须绝对唯一，且特殊群名正确清洗"""
+    # 1. 模拟同毫秒高频生成 1000 次，必须全部唯一，零碰撞
+    trace_ids = {
+        TraceContext.generate(prefix="manual", group_name="测试群_A")
+        for _ in range(1000)
+    }
+    assert len(trace_ids) == 1000
+
+    # 2. 极端群名包含各种特殊字符、换行、反斜杠、Unicode 特殊符号
+    evil_group_name = "【超级/测试\\群: *?<>|\n\r\t】🔥"
+    trace_id_special = TraceContext.generate(prefix="auto", group_name=evil_group_name)
+    assert "/" not in trace_id_special
+    assert "\\" not in trace_id_special
+    assert ":" not in trace_id_special
+    assert "\n" not in trace_id_special
+    assert trace_id_special.startswith("auto_")
+
+
+def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
+    """极端情况 2：TTL 到期自愈、坏数据/损坏 JSON 容错、老表平滑升级与回退检索"""
+    store = CheckpointStore(temp_db)
+
+    # 1. 过期快照 (TTL = 0s) 自动失效
+    store.save_checkpoint(
+        group_id="exp_group",
+        date_str="2026-09-10",
+        stage_name="CLEAN_MESSAGES",
+        data={"msgs": [1, 2, 3]},
+        trace_id="trace_expired_1",
+        ttl_seconds=-10,  # 已过期
+    )
+    assert (
+        store.get_checkpoint(
+            "exp_group",
+            "2026-09-10",
+            "CLEAN_MESSAGES",
+            trace_id="trace_expired_1",
+        )
+        is None
+    )
+
+    # 2. 坏 JSON 字符串容错返回 None 不抛崩溃异常
+    with store._get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO stage_checkpoints (
+                checkpoint_id, group_id, date_str, stage_name, data_json, created_at, expire_at, trace_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "corrupt_id",
+                "corrupt_grp",
+                "2026-09-10",
+                "LLM_ANALYSIS",
+                "{corrupt: invalid json string",
+                time.time(),
+                time.time() + 1000,
+                "trace_corrupt",
+            ),
+        )
+    corrupted = store.get_checkpoint(
+        "corrupt_grp", "2026-09-10", "LLM_ANALYSIS", trace_id="trace_corrupt"
+    )
+    assert corrupted is None
+
+    # 3. 兼容历史无 trace_id 的老数据平滑回退读取
+    store.save_checkpoint(
+        group_id="legacy_grp",
+        date_str="2026-09-10",
+        stage_name="LLM_ANALYSIS",
+        data={"legacy": True},
+        trace_id="",  # 老格式
+    )
+    # 无 trace_id 读取
+    assert store.get_checkpoint("legacy_grp", "2026-09-10", "LLM_ANALYSIS") == {
+        "legacy": True
+    }
+    # 传入新 trace_id 读取也能平滑回退到老格式
+    assert store.get_checkpoint(
+        "legacy_grp",
+        "2026-09-10",
+        "LLM_ANALYSIS",
+        trace_id="non_exist_trace_id",
+    ) == {"legacy": True}

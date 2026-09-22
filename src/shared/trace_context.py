@@ -457,7 +457,7 @@ class TraceContext:
         """
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
-        entropy = uuid.uuid4().hex[:4]
+        entropy = uuid.uuid4().hex[:8]
         parts: list[str] = []
         if prefix:
             parts.append(prefix)
