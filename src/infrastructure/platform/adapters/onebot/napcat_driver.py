@@ -32,14 +32,19 @@ class NapCatDriver(StandardOneBotDriver):
             list[dict[str, Any]]: 相册列表
         """
         try:
+            logger.debug(
+                f"[OneBot:{self.name}] 正在通过 get_qun_album_list 获取列表 (群: {group_id})..."
+            )
             res = await bot.call_action("get_qun_album_list", group_id=str(group_id))
+            logger.debug(f"[OneBot:{self.name}] 接口 get_qun_album_list 原始响应内容: {res}")
+            albums: list[dict[str, Any]] = []
             if isinstance(res, list):
-                return [item for item in res if isinstance(item, dict)]
-            if isinstance(res, dict):
+                albums = [item for item in res if isinstance(item, dict)]
+            elif isinstance(res, dict):
                 data = res.get("data")
                 if isinstance(data, list):
-                    return [item for item in data if isinstance(item, dict)]
-                if isinstance(data, dict):
+                    albums = [item for item in data if isinstance(item, dict)]
+                elif isinstance(data, dict):
                     album_list = (
                         data.get("album_list")
                         or data.get("album")
@@ -48,19 +53,28 @@ class NapCatDriver(StandardOneBotDriver):
                         or data.get("albums")
                     )
                     if isinstance(album_list, list):
-                        return [item for item in album_list if isinstance(item, dict)]
-                album_list = (
-                    res.get("album_list")
-                    or res.get("album")
-                    or res.get("albumList")
-                    or res.get("list")
-                    or res.get("albums")
+                        albums = [item for item in album_list if isinstance(item, dict)]
+                if not albums:
+                    album_list = (
+                        res.get("album_list")
+                        or res.get("album")
+                        or res.get("albumList")
+                        or res.get("list")
+                        or res.get("albums")
+                    )
+                    if isinstance(album_list, list):
+                        albums = [item for item in album_list if isinstance(item, dict)]
+            if albums:
+                logger.debug(
+                    f"[OneBot:{self.name}] get_qun_album_list 成功获取并提取到 {len(albums)} 个相册对象"
                 )
-                if isinstance(album_list, list):
-                    return [item for item in album_list if isinstance(item, dict)]
+                return albums
+            logger.debug(
+                f"[OneBot:{self.name}] get_qun_album_list 无法从响应中提取到相册列表: payload={res}"
+            )
         except Exception as exc:
             logger.debug(
-                f"[OneBot:{self.name}] get_qun_album_list 失败: {exc}，尝试通用回退..."
+                f"[OneBot:{self.name}] get_qun_album_list 尝试失败: {exc}，尝试通用回退..."
             )
         return await super().get_group_album_list(bot, group_id)
 
