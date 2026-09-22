@@ -102,7 +102,9 @@ class StandardOneBotDriver(OneBotDriver):
                 )
                 if isinstance(album_list, list):
                     return [item for item in album_list if isinstance(item, dict)]
-                logger.debug(f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}")
+                logger.debug(
+                    f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}"
+                )
 
             album_list = (
                 payload.get("album_list")
@@ -114,7 +116,9 @@ class StandardOneBotDriver(OneBotDriver):
             if isinstance(album_list, list):
                 return [item for item in album_list if isinstance(item, dict)]
 
-            logger.debug(f"[OneBot:{self.name}] 无法从响应中提取相册列表: payload={payload}")
+            logger.debug(
+                f"[OneBot:{self.name}] 无法从响应中提取相册列表: payload={payload}"
+            )
             return []
 
         actions = [

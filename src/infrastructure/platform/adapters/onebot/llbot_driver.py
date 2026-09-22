@@ -70,7 +70,9 @@ class LLOneBotDriver(StandardOneBotDriver):
                 f"[OneBot:{self.name}] 正在通过 get_group_album_list 获取列表 (群: {group_id})..."
             )
             res = await bot.call_action("get_group_album_list", group_id=int(group_id))
-            logger.debug(f"[OneBot:{self.name}] 接口 get_group_album_list 原始响应内容: {res}")
+            logger.debug(
+                f"[OneBot:{self.name}] 接口 get_group_album_list 原始响应内容: {res}"
+            )
             albums: list[dict[str, Any]] = []
             if isinstance(res, list):
                 albums = [item for item in res if isinstance(item, dict)]

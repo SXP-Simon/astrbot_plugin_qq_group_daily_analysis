@@ -1312,9 +1312,7 @@ class OneBotAdapter(PlatformAdapter):
                 data = result.get("data")
                 if isinstance(data, dict):
                     folder_id = (
-                        data.get("folder_id")
-                        or data.get("id")
-                        or data.get("folderId")
+                        data.get("folder_id") or data.get("id") or data.get("folderId")
                     )
                 elif isinstance(data, str) and data:
                     folder_id = data
@@ -1504,9 +1502,7 @@ class OneBotAdapter(PlatformAdapter):
             if albums:
                 first = albums[0]
                 album_id = (
-                    first.get("album_id")
-                    or first.get("id")
-                    or first.get("albumId")
+                    first.get("album_id") or first.get("id") or first.get("albumId")
                 )
                 if album_name:
                     logger.info(
