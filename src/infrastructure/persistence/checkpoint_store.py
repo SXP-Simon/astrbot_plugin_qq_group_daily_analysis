@@ -36,12 +36,27 @@ class CheckpointStore:
                     stage_name TEXT NOT NULL,
                     data_json TEXT NOT NULL,
                     created_at REAL NOT NULL,
-                    expire_at REAL NOT NULL
+                    expire_at REAL NOT NULL,
+                    trace_id TEXT DEFAULT ''
                 );
                 """
             )
+            # 增量升级：如果历史旧表缺少 trace_id 字段则自动追加
+            cursor = conn.execute("PRAGMA table_info(stage_checkpoints);")
+            columns = [row["name"] for row in cursor.fetchall()]
+            if "trace_id" not in columns:
+                try:
+                    conn.execute(
+                        "ALTER TABLE stage_checkpoints ADD COLUMN trace_id TEXT DEFAULT '';"
+                    )
+                except Exception:
+                    pass
+
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_chk_group_date ON stage_checkpoints(group_id, date_str);"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chk_trace_stage ON stage_checkpoints(trace_id, stage_name);"
             )
 
     def save_checkpoint(
@@ -50,10 +65,19 @@ class CheckpointStore:
         date_str: str,
         stage_name: str,
         data: Any,
+        trace_id: str = "",
         ttl_seconds: int = 86400 * 30,
     ) -> None:
-        """保存阶段产物快照（默认与 Trace 保留期对齐，保留 30 天）"""
-        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
+        """保存阶段产物快照（默认保留 30 天）。
+
+        支持通过 trace_id 进行任务级精准隔离；若未传入 trace_id 则兼容按天回退。
+        """
+        # 若指定了 trace_id，则快照主键绑定任务实例（绝不与同天其他任务发生碰撞或覆盖）
+        if trace_id:
+            checkpoint_id = f"{group_id}_{date_str}_{stage_name}_{trace_id}"
+        else:
+            checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
+
         now = time.time()
         expire_at = now + ttl_seconds
 
@@ -61,12 +85,13 @@ class CheckpointStore:
             conn.execute(
                 """
                 INSERT INTO stage_checkpoints (
-                    checkpoint_id, group_id, date_str, stage_name, data_json, created_at, expire_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    checkpoint_id, group_id, date_str, stage_name, data_json, created_at, expire_at, trace_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(checkpoint_id) DO UPDATE SET
                     data_json=excluded.data_json,
                     created_at=excluded.created_at,
-                    expire_at=excluded.expire_at;
+                    expire_at=excluded.expire_at,
+                    trace_id=excluded.trace_id;
                 """,
                 (
                     checkpoint_id,
@@ -76,29 +101,57 @@ class CheckpointStore:
                     json.dumps(data, ensure_ascii=False),
                     now,
                     expire_at,
+                    str(trace_id or ""),
                 ),
             )
 
     def get_checkpoint(
-        self, group_id: str, date_str: str, stage_name: str
+        self,
+        group_id: str,
+        date_str: str,
+        stage_name: str,
+        trace_id: str = "",
     ) -> Any | None:
-        """读取有效的阶段产物快照（若已过期则返回 None 并删除）"""
-        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
+        """读取有效的阶段产物快照。
+
+        若指定 trace_id 则优先匹配该任务的专属快照，杜绝跨任务脏读；
+        若未指定或专属快照未命中，可回退匹配按天快照。
+        """
         now = time.time()
 
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ?",
-                (checkpoint_id,),
-            ).fetchone()
-            if not row:
-                return None
+            row = None
+            if trace_id:
+                # 1. 优先按专属 task checkpoint_id 查找
+                scoped_id = f"{group_id}_{date_str}_{stage_name}_{trace_id}"
+                row = conn.execute(
+                    "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ? AND expire_at >= ?",
+                    (scoped_id, now),
+                ).fetchone()
 
-            if row["expire_at"] < now:
-                conn.execute(
-                    "DELETE FROM stage_checkpoints WHERE checkpoint_id = ?",
-                    (checkpoint_id,),
-                )
+                # 2. 如果 scoped_id 没找到，尝试按 (trace_id, stage_name) 查找
+                if not row:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(trace_id), stage_name, now),
+                    ).fetchone()
+
+            # 3. 回退查找通用快照：
+            # 若调用方显式指定了 trace_id，仅允许回退到老格式（trace_id = ''）的快照，严禁跨任务脏读其他 trace_id；
+            # 若调用方未指定 trace_id，则允许获取该群该日期最新的该阶段快照。
+            if not row:
+                if trace_id:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND (trace_id = '' OR trace_id IS NULL) AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), stage_name, now),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE group_id = ? AND date_str = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(group_id), str(date_str), stage_name, now),
+                    ).fetchone()
+
+            if not row:
                 return None
 
             try:
@@ -155,22 +208,44 @@ class CheckpointStore:
                 for row in rows
             ]
 
-    def delete_checkpoint(self, group_id: str, date_str: str, stage_name: str) -> bool:
-        """单点删除指定群在指定日期的特定阶段 Checkpoint。
+    def delete_checkpoint(
+        self,
+        group_id: str,
+        date_str: str,
+        stage_name: str,
+        trace_id: str = "",
+    ) -> bool:
+        """单点删除指定阶段 Checkpoint。
 
         Args:
             group_id: 群号。
             date_str: 日期字符串（YYYY-MM-DD）。
             stage_name: 阶段名称。
+            trace_id: 可选任务ID。
 
         Returns:
             bool: 是否成功删除。
         """
-        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
         with self._get_connection() as conn:
+            if trace_id:
+                scoped_id = f"{group_id}_{date_str}_{stage_name}_{trace_id}"
+                cursor = conn.execute(
+                    "DELETE FROM stage_checkpoints WHERE checkpoint_id = ? OR (group_id = ? AND date_str = ? AND stage_name = ? AND trace_id = ?)",
+                    (
+                        scoped_id,
+                        str(group_id),
+                        str(date_str),
+                        stage_name,
+                        str(trace_id),
+                    ),
+                )
+                if cursor.rowcount > 0:
+                    return True
+
+            legacy_id = f"{group_id}_{date_str}_{stage_name}"
             cursor = conn.execute(
                 "DELETE FROM stage_checkpoints WHERE checkpoint_id = ?",
-                (checkpoint_id,),
+                (legacy_id,),
             )
             return cursor.rowcount > 0
 
@@ -181,6 +256,7 @@ class CheckpointStore:
         group_id: str | None = None,
         date_str: str | None = None,
         stage_name: str | None = None,
+        trace_id: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """多维条件分页查询有效 Checkpoint 列表。
 
@@ -190,6 +266,7 @@ class CheckpointStore:
             group_id: 可选群号筛选。
             date_str: 可选日期筛选。
             stage_name: 可选阶段筛选。
+            trace_id: 可选 TraceID 筛选。
 
         Returns:
             tuple[list[dict[str, Any]], int]: Checkpoint 列表与总数。
@@ -207,6 +284,9 @@ class CheckpointStore:
         if stage_name:
             conditions.append("stage_name = ?")
             params.append(str(stage_name))
+        if trace_id:
+            conditions.append("trace_id = ?")
+            params.append(str(trace_id))
 
         where_clause = " AND ".join(conditions)
 
@@ -218,7 +298,7 @@ class CheckpointStore:
             total = count_row["total"] if count_row else 0
 
             query_sql = f"""
-                SELECT checkpoint_id, group_id, date_str, stage_name, created_at, expire_at, LENGTH(data_json) as data_size
+                SELECT checkpoint_id, group_id, date_str, stage_name, created_at, expire_at, trace_id, LENGTH(data_json) as data_size
                 FROM stage_checkpoints
                 WHERE {where_clause}
                 ORDER BY created_at DESC
@@ -231,6 +311,7 @@ class CheckpointStore:
                     "group_id": row["group_id"],
                     "date_str": row["date_str"],
                     "stage_name": row["stage_name"],
+                    "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
                     "created_at": row["created_at"],
                     "created_at_formatted": time.strftime(
                         "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
@@ -244,7 +325,11 @@ class CheckpointStore:
             return items, total
 
     def get_checkpoint_detail(
-        self, group_id: str, date_str: str, stage_name: str
+        self,
+        group_id: str,
+        date_str: str,
+        stage_name: str,
+        trace_id: str = "",
     ) -> dict[str, Any] | None:
         """获取单个 Checkpoint 的元数据及反序列化后的产物 JSON。
 
@@ -252,17 +337,33 @@ class CheckpointStore:
             group_id: 群号。
             date_str: 日期字符串。
             stage_name: 阶段名称。
+            trace_id: 可选任务 TraceID。
 
         Returns:
             dict[str, Any] | None: 包含 metadata 和 data 的字典，不存在或过期返回 None。
         """
-        checkpoint_id = f"{group_id}_{date_str}_{stage_name}"
         now = time.time()
         with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ?",
-                (checkpoint_id,),
-            ).fetchone()
+            row = None
+            if trace_id:
+                scoped_id = f"{group_id}_{date_str}_{stage_name}_{trace_id}"
+                row = conn.execute(
+                    "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ? AND expire_at >= ?",
+                    (scoped_id, now),
+                ).fetchone()
+                if not row:
+                    row = conn.execute(
+                        "SELECT * FROM stage_checkpoints WHERE trace_id = ? AND stage_name = ? AND expire_at >= ? ORDER BY created_at DESC LIMIT 1",
+                        (str(trace_id), stage_name, now),
+                    ).fetchone()
+
+            if not row:
+                legacy_id = f"{group_id}_{date_str}_{stage_name}"
+                row = conn.execute(
+                    "SELECT * FROM stage_checkpoints WHERE checkpoint_id = ?",
+                    (legacy_id,),
+                ).fetchone()
+
             if not row or row["expire_at"] < now:
                 return None
             try:
@@ -275,6 +376,7 @@ class CheckpointStore:
                 "group_id": row["group_id"],
                 "date_str": row["date_str"],
                 "stage_name": row["stage_name"],
+                "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
                 "created_at": row["created_at"],
                 "created_at_formatted": time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])

@@ -175,3 +175,41 @@ async def test_api_data_management_cleanup(bridge_setup, tmp_path: Path):
     data = res["data"] if isinstance(res, dict) and "data" in res else res
     assert data.get("status") == "ok"
     assert not test_report.exists()
+
+
+@pytest.mark.asyncio
+async def test_api_trigger_task_duplicate_rejection(bridge_setup):
+    """验证 WebUI 手动触发任务时，若目标群任务正在执行中，立即返回 409 拒绝触发"""
+    bridge = bridge_setup.bridge
+    analysis_svc = bridge_setup.analysis_svc
+
+    # 1. 模拟该群任务正在运行
+    analysis_svc.is_group_running = Mock(return_value=True)
+
+    with patch(
+        "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge.request",
+        create=True,
+    ) as mock_req:
+        mock_req.json = AsyncMock(return_value={"group_id": "123456"})
+        mock_req.query = {}
+
+        res = await bridge.api_trigger_task()
+        assert res["status_code"] == 409
+        err_msg = res.get("message") or (res.get("data") or {}).get("error", "")
+        assert "正在执行中" in err_msg
+
+    # 2. 模拟该群空闲，允许触发
+    analysis_svc.is_group_running = Mock(return_value=False)
+    analysis_svc.execute_daily_analysis = AsyncMock(return_value={"success": True})
+
+    with patch(
+        "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge.request",
+        create=True,
+    ) as mock_req:
+        mock_req.json = AsyncMock(return_value={"group_id": "123456"})
+        mock_req.query = {}
+
+        res = await bridge.api_trigger_task()
+        assert res["status_code"] == 200
+        data = res["data"] if isinstance(res, dict) and "data" in res else res
+        assert data.get("status") == "ok"

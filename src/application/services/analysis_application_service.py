@@ -82,6 +82,19 @@ class AnalysisApplicationService:
         # 用于追踪当前正在执行的任务，实现原子的“检查并设置”逻辑，避免 locked() 竞态
         self._active_tasks = set()
 
+    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+        """检查指定群的特定任务是否正在执行中。
+
+        Args:
+            group_id: 群号。
+            task_type: 任务类型（默认为 "daily" 分析任务）。
+
+        Returns:
+            bool: 是否正在运行。
+        """
+        lock_key = f"{task_type}:{group_id}"
+        return lock_key in self._active_tasks
+
     @asynccontextmanager
     async def group_lock(self, group_id: str, task_type: str = "analysis"):
         """
@@ -727,20 +740,29 @@ class AnalysisApplicationService:
         render_format: str = "image",
         trace_id: str | None = None,
     ) -> dict[str, Any]:
-        """使用指定的模板对历史分析产物免 Token 重新渲染。"""
-        if not self.checkpoint_store:
-            return {"success": False, "reason": "未配置 Checkpoint 存储器"}
+        # 优先从历史持久化仓储 (HistoryStore) 读取当日完整分析报告，与中途临时快照解耦
+        analysis_result = None
+        if self.history_manager:
+            try:
+                hist_data = await self.history_manager.get_analysis(group_id, date_str)
+                if hist_data and isinstance(hist_data, dict):
+                    analysis_result = hist_data
+            except Exception as e:
+                logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
-        cached_data = self.checkpoint_store.get_checkpoint(
-            group_id, date_str, "LLM_ANALYSIS"
-        )
-        if not cached_data:
+        # 若未命中历史记录，回退尝试 CheckpointStore
+        if not analysis_result and self.checkpoint_store:
+            cached_data = self.checkpoint_store.get_checkpoint(
+                group_id, date_str, "LLM_ANALYSIS", trace_id=trace_id or ""
+            )
+            if cached_data:
+                analysis_result = self._deserialize_analysis_result(cached_data)
+
+        if not analysis_result:
             return {
                 "success": False,
-                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物快照",
+                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物记录",
             }
-
-        analysis_result = self._deserialize_analysis_result(cached_data)
 
         reports_dir = (
             getattr(self.report_generator, "data_dir", None)
@@ -923,7 +945,10 @@ class AnalysisApplicationService:
 
         cached_llm = (
             self.checkpoint_store.get_checkpoint(
-                group_id, date_str, AnalysisStage.LLM_ANALYSIS.value
+                group_id,
+                date_str,
+                AnalysisStage.LLM_ANALYSIS.value,
+                trace_id=trace_id or "",
             )
             if self.checkpoint_store
             else None
@@ -985,7 +1010,10 @@ class AnalysisApplicationService:
         # 2. 检查是否有前置清洗 Checkpoint
         clean_checkpoint = (
             self.checkpoint_store.get_checkpoint(
-                group_id, date_str, AnalysisStage.CLEAN_MESSAGES.value
+                group_id,
+                date_str,
+                AnalysisStage.CLEAN_MESSAGES.value,
+                trace_id=trace_id or "",
             )
             if self.checkpoint_store
             else None
