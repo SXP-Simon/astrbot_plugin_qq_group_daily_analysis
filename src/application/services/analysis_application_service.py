@@ -437,6 +437,7 @@ class AnalysisApplicationService:
             # 保存前置清洗与基础统计 Checkpoint，用于后续一键断点续跑 (Resume)
             if self.checkpoint_store:
                 try:
+                    cur_trace_id = trace.trace_id if trace else ""
                     self.checkpoint_store.save_checkpoint(
                         group_id=group_id,
                         date_str=date_str,
@@ -452,6 +453,7 @@ class AnalysisApplicationService:
                                 self._to_json_friendly(m) for m in unified_messages
                             ],
                         },
+                        trace_id=cur_trace_id,
                     )
                 except Exception as e:
                     logger.warning(f"保存前置 Checkpoint 失败: {e}")
@@ -572,11 +574,13 @@ class AnalysisApplicationService:
                 await self.history_manager.save_analysis(group_id, analysis_result)
                 if self.checkpoint_store:
                     try:
+                        cur_trace_id = trace.trace_id if trace else ""
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
                             stage_name=AnalysisStage.LLM_ANALYSIS.value,
                             data=self._serialize_analysis_result(analysis_result),
+                            trace_id=cur_trace_id,
                         )
                     except Exception as e:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
@@ -1198,11 +1202,13 @@ class AnalysisApplicationService:
                 await self.history_manager.save_analysis(group_id, analysis_result)
                 if self.checkpoint_store:
                     try:
+                        cur_trace_id = trace.trace_id if trace else ""
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
                             stage_name=AnalysisStage.LLM_ANALYSIS.value,
                             data=self._serialize_analysis_result(analysis_result),
+                            trace_id=cur_trace_id,
                         )
                     except Exception as e:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
@@ -1739,11 +1745,13 @@ class AnalysisApplicationService:
 
             if self.checkpoint_store:
                 try:
+                    cur_trace_id = trace.trace_id if trace else ""
                     self.checkpoint_store.save_checkpoint(
                         group_id=group_id,
                         date_str=date_str,
                         stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
                         data=batch.to_dict(),
+                        trace_id=cur_trace_id,
                     )
                 except Exception as e:
                     logger.warning(f"保存增量批次 Checkpoint 失败: {e}")

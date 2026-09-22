@@ -534,14 +534,14 @@ export const PluginDataPage: React.FC = () => {
       title: "群聊号码",
       dataIndex: "group_id",
       key: "group_id",
-      width: 140,
+      width: 130,
       render: (gid: string) => <Text strong style={{ fontSize: 13 }}>{gid}</Text>,
     },
     {
       title: "分析归属日期",
       dataIndex: "date_str",
       key: "date_str",
-      width: 130,
+      width: 120,
       render: (d: string) => (
         <Tag color="cyan" style={{ fontSize: 12, ...SANS_NUM_STYLE }}>
           {d}
@@ -552,7 +552,7 @@ export const PluginDataPage: React.FC = () => {
       title: "流水线阶段 (Stage)",
       dataIndex: "stage_name",
       key: "stage_name",
-      width: 220,
+      width: 200,
       render: (stage: string) => {
         const meta = getStageMeta(stage);
         return (
@@ -565,9 +565,33 @@ export const PluginDataPage: React.FC = () => {
       },
     },
     {
+      title: "任务 Trace ID",
+      dataIndex: "trace_id",
+      key: "trace_id",
+      width: 160,
+      render: (tid: string) => {
+        if (!tid) {
+          return (
+            <Tooltip title="历史通用快照 (未关联特定任务 ID)">
+              <Tag color="default" style={{ fontSize: 11 }}>
+                Legacy (按天快照)
+              </Tag>
+            </Tooltip>
+          );
+        }
+        return (
+          <Tooltip title={`完整任务 Trace ID: ${tid}`}>
+            <Tag color="geekblue" style={{ fontSize: 11, ...SANS_NUM_STYLE }}>
+              {tid.length > 14 ? `${tid.slice(0, 14)}...` : tid}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: "快照大小",
       key: "data_size",
-      width: 110,
+      width: 100,
       align: "right" as const,
       render: (_: unknown, row: CheckpointItem) => {
         const bytes = row.data_size_bytes ?? row.data_size ?? 0;
@@ -577,7 +601,7 @@ export const PluginDataPage: React.FC = () => {
     {
       title: "快照写入时间",
       key: "created_at",
-      width: 170,
+      width: 160,
       render: (_: unknown, row: CheckpointItem) => {
         if (row.created_at_formatted) {
           return (
@@ -627,7 +651,8 @@ export const PluginDataPage: React.FC = () => {
               vm.handleDeleteCheckpoint(
                 item.group_id,
                 item.date_str,
-                item.stage_name
+                item.stage_name,
+                item.trace_id
               )
             }
           >
@@ -1065,7 +1090,10 @@ export const PluginDataPage: React.FC = () => {
             }
           >
             <Table<CheckpointItem>
-              rowKey={(r) => `${r.group_id}_${r.date_str}_${r.stage_name}`}
+              rowKey={(r) =>
+                r.checkpoint_id ||
+                `${r.group_id}_${r.date_str}_${r.stage_name}_${r.trace_id || ""}`
+              }
               columns={ckptColumns}
               dataSource={checkpoints}
               loading={loadingCheckpoints}
@@ -1227,19 +1255,31 @@ export const PluginDataPage: React.FC = () => {
         ) : selectedCkptDetail ? (
           <Space direction="vertical" size="middle" style={{ width: "100%" }}>
             <Row gutter={[8, 8]}>
-              <Col span={8}>
+              <Col span={6}>
                 <Text type="secondary">群号: </Text>
                 <Text strong>{selectedCkptDetail.group_id || "-"}</Text>
               </Col>
-              <Col span={8}>
+              <Col span={6}>
                 <Text type="secondary">日期: </Text>
                 <Tag color="cyan">{selectedCkptDetail.date_str || "-"}</Tag>
               </Col>
-              <Col span={8}>
+              <Col span={6}>
                 <Text type="secondary">阶段: </Text>
                 <Tag color={getStageMeta(selectedCkptDetail.stage_name || "").color}>
                   {formatStageName(selectedCkptDetail.stage_name)} ({selectedCkptDetail.stage_name || "-"})
                 </Tag>
+              </Col>
+              <Col span={6}>
+                <Text type="secondary">Trace ID: </Text>
+                {selectedCkptDetail.trace_id ? (
+                  <Tag color="geekblue" style={{ fontSize: 11, ...SANS_NUM_STYLE }}>
+                    {selectedCkptDetail.trace_id}
+                  </Tag>
+                ) : (
+                  <Tag color="default" style={{ fontSize: 11 }}>
+                    Legacy
+                  </Tag>
+                )}
               </Col>
             </Row>
 
