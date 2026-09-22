@@ -937,7 +937,13 @@ class OneBotAdapter(PlatformAdapter):
                 continue
             url = self._extract_protocol_avatar_url(result)
             if url:
+                logger.debug(
+                    f"[OneBot] {action_name} 成功获取到真实头像 URL: user_id={user_id}, url={url}"
+                )
                 return url
+            logger.debug(
+                f"[OneBot] {action_name} 响应中未包含可用头像字段 (user_id={user_id})"
+            )
         return None
 
     async def _fetch_avatar_url_shared(self, user_id: str) -> str | None:
@@ -986,24 +992,38 @@ class OneBotAdapter(PlatformAdapter):
         if cached:
             url, expires_at = cached
             if time.monotonic() < expires_at:
+                logger.debug(f"[OneBot] 用户 {uid} 命中头像正缓存: {url}")
                 return url
+            logger.debug(f"[OneBot] 用户 {uid} 头像正缓存已过期，准备重新获取")
             self._avatar_url_cache.pop(uid, None)
-        negative_until = self._avatar_url_negative_cache.get(uid, 0.0)
-        if time.monotonic() >= negative_until:
-            protocol_url = await self._fetch_avatar_url_shared(uid)
-            if protocol_url:
-                self._avatar_url_cache[uid] = (
-                    protocol_url,
-                    time.monotonic() + self.AVATAR_URL_TTL,
-                )
-                self._avatar_url_negative_cache.pop(uid, None)
-                return protocol_url
-            # 负缓存 10 分钟，避免协议端不支持资料接口时反复超时
-            self._avatar_url_negative_cache[uid] = (
-                time.monotonic() + self.AVATAR_NEGATIVE_TTL
-            )
 
-        return self._build_cdn_avatar_url(uid, size)
+        negative_until = self._avatar_url_negative_cache.get(uid, 0.0)
+        if time.monotonic() < negative_until:
+            cdn_url = self._build_cdn_avatar_url(uid, size)
+            logger.debug(
+                f"[OneBot] 用户 {uid} 处于负缓存期内 (剩余 {negative_until - time.monotonic():.1f}s)，"
+                f"跳过协议端查询直接回退 QQ CDN: {cdn_url}"
+            )
+            return cdn_url
+
+        protocol_url = await self._fetch_avatar_url_shared(uid)
+        if protocol_url:
+            self._avatar_url_cache[uid] = (
+                protocol_url,
+                time.monotonic() + self.AVATAR_URL_TTL,
+            )
+            self._avatar_url_negative_cache.pop(uid, None)
+            return protocol_url
+
+        # 负缓存 10 分钟，避免协议端不支持资料接口时反复超时
+        self._avatar_url_negative_cache[uid] = (
+            time.monotonic() + self.AVATAR_NEGATIVE_TTL
+        )
+        cdn_url = self._build_cdn_avatar_url(uid, size)
+        logger.debug(
+            f"[OneBot] 用户 {uid} 协议端未提供头像，写入负缓存({self.AVATAR_NEGATIVE_TTL}s)，回退 QQ CDN: {cdn_url}"
+        )
+        return cdn_url
 
     async def get_user_avatar_data(
         self,
