@@ -401,3 +401,156 @@ def test_adapter_auto_detects_and_binds_driver():
     _ = asyncio.run(run_fetch())
     assert isinstance(adapter._driver, SnowLumaDriver)
     assert adapter._driver.name == "snowluma"
+
+
+# ==========================================
+# 8. 群文件管理与结构解包测试
+# ==========================================
+
+
+def test_adapter_group_file_root_folders_unpacking():
+    # 1. 结构被包裹在 data.folders 中 (如 NapCat/LLOneBot 标准响应)
+    bot1 = MockBot(
+        {
+            "get_group_root_files": {
+                "status": "ok",
+                "retcode": 0,
+                "data": {
+                    "folders": [
+                        {"folder_id": "f_1", "folder_name": "日报归档"},
+                        {"folder_id": "f_2", "folder_name": "群相册备份"},
+                    ],
+                    "files": [],
+                },
+            }
+        }
+    )
+    adapter1 = OneBotAdapter(bot1)
+    folders1 = asyncio.run(adapter1.get_group_file_root_folders("123456"))
+    assert len(folders1) == 2
+    assert folders1[0]["folder_id"] == "f_1"
+
+    # 2. 顶层包含 folders 字段
+    bot2 = MockBot(
+        {
+            "get_group_root_files": {
+                "folders": [{"id": "f_3", "name": "图片"}],
+            }
+        }
+    )
+    adapter2 = OneBotAdapter(bot2)
+    folders2 = asyncio.run(adapter2.get_group_file_root_folders("123456"))
+    assert len(folders2) == 1
+    assert folders2[0]["id"] == "f_3"
+
+
+def test_adapter_create_group_file_folder_and_find():
+    # 1. 创建群文件夹并从 data.folder_id 返回 ID
+    bot = MockBot(
+        {
+            "create_group_file_folder": {
+                "status": "ok",
+                "data": {"folder_id": "f_created_123"},
+            },
+            "get_group_root_files": {
+                "data": {
+                    "folders": [{"folder_id": "f_created_123", "folder_name": "新建归档"}]
+                }
+            },
+        }
+    )
+    adapter = OneBotAdapter(bot)
+    fid = asyncio.run(adapter.create_group_file_folder("123456", "新建归档"))
+    assert fid == "f_created_123"
+
+    # 2. find_or_create_folder 能够直接找到已有文件夹
+    matched_id = asyncio.run(adapter.find_or_create_folder("123456", "新建归档"))
+    assert matched_id == "f_created_123"
+
+
+# ==========================================
+# 9. 群信息与成员列表 data 结构解包测试
+# ==========================================
+
+
+def test_adapter_group_and_member_info_data_unboxing():
+    bot = MockBot(
+        {
+            "get_group_info": {
+                "status": "ok",
+                "data": {
+                    "group_id": 987654,
+                    "group_name": "测试群聊",
+                    "member_count": 42,
+                },
+            },
+            "get_group_list": {
+                "status": "ok",
+                "data": [
+                    {"group_id": 111, "group_name": "群1"},
+                    {"group_id": 222, "group_name": "群2"},
+                ],
+            },
+            "get_group_member_list": {
+                "status": "ok",
+                "data": [
+                    {"user_id": 1001, "nickname": "Alice", "role": "admin"},
+                    {"user_id": 1002, "nickname": "Bob", "role": "member"},
+                ],
+            },
+            "get_group_member_info": {
+                "status": "ok",
+                "data": {
+                    "user_id": 1001,
+                    "nickname": "Alice",
+                    "card": "管理员Alice",
+                    "role": "admin",
+                },
+            },
+        }
+    )
+    adapter = OneBotAdapter(bot)
+
+    group_info = asyncio.run(adapter.get_group_info("987654"))
+    assert group_info is not None
+    assert group_info.group_name == "测试群聊"
+    assert group_info.member_count == 42
+
+    groups = asyncio.run(adapter.get_group_list())
+    assert groups == ["111", "222"]
+
+    members = asyncio.run(adapter.get_member_list("987654"))
+    assert len(members) == 2
+    assert members[0].user_id == "1001"
+    assert members[0].nickname == "Alice"
+
+    member_info = asyncio.run(adapter.get_member_info("987654", "1001"))
+    assert member_info is not None
+    assert member_info.card == "管理员Alice"
+
+
+# ==========================================
+# 10. 表情回应与禁言状态测试
+# ==========================================
+
+
+def test_adapter_set_reaction_success_and_mapping():
+    bot = MockBot({"set_msg_emoji_like": {"status": "ok"}})
+    adapter = OneBotAdapter(bot)
+
+    ok = asyncio.run(
+        adapter.set_reaction(
+            group_id="123456",
+            message_id="778899",
+            emoji="analysis_started",
+            is_add=True,
+        )
+    )
+    assert ok is True
+    assert len(bot.action_calls) == 1
+    action, params = bot.action_calls[0]
+    assert action == "set_msg_emoji_like"
+    assert params["message_id"] == 778899
+    assert params["emoji_id"] == "289"
+    assert params["set"] is True
+
