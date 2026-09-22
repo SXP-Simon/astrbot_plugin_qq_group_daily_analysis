@@ -19,6 +19,7 @@ import {
   message,
   Empty,
   Badge,
+  Descriptions,
   theme,
 } from "antd";
 import {
@@ -552,12 +553,12 @@ export const PluginDataPage: React.FC = () => {
       title: "流水线阶段 (Stage)",
       dataIndex: "stage_name",
       key: "stage_name",
-      width: 200,
+      width: 240,
       render: (stage: string) => {
         const meta = getStageMeta(stage);
         return (
           <Tooltip title={`底层阶段标识: ${stage}`}>
-            <Tag color={meta.color} style={{ fontSize: 12 }}>
+            <Tag color={meta.color} style={{ fontSize: 12, margin: 0 }}>
               {meta.label} ({stage})
             </Tag>
           </Tooltip>
@@ -568,12 +569,12 @@ export const PluginDataPage: React.FC = () => {
       title: "任务 Trace ID",
       dataIndex: "trace_id",
       key: "trace_id",
-      width: 160,
+      width: 180,
       render: (tid: string) => {
         if (!tid) {
           return (
             <Tooltip title="历史通用快照 (未关联特定任务 ID)">
-              <Tag color="default" style={{ fontSize: 11 }}>
+              <Tag color="default" style={{ fontSize: 11, margin: 0 }}>
                 Legacy (按天快照)
               </Tag>
             </Tooltip>
@@ -581,7 +582,10 @@ export const PluginDataPage: React.FC = () => {
         }
         return (
           <Tooltip title={`完整任务 Trace ID: ${tid}`}>
-            <Tag color="geekblue" style={{ fontSize: 11, ...SANS_NUM_STYLE }}>
+            <Tag
+              color="geekblue"
+              style={{ fontSize: 11, margin: 0, ...SANS_NUM_STYLE }}
+            >
               {tid.length > 14 ? `${tid.slice(0, 14)}...` : tid}
             </Tag>
           </Tooltip>
@@ -601,7 +605,7 @@ export const PluginDataPage: React.FC = () => {
     {
       title: "快照写入时间",
       key: "created_at",
-      width: 160,
+      width: 170,
       render: (_: unknown, row: CheckpointItem) => {
         if (row.created_at_formatted) {
           return (
@@ -1098,7 +1102,7 @@ export const PluginDataPage: React.FC = () => {
               dataSource={checkpoints}
               loading={loadingCheckpoints}
               size="small"
-              scroll={{ x: 850 }}
+              scroll={{ x: 1050 }}
               pagination={{
                 current: checkpointsPage,
                 pageSize: checkpointsPageSize,
@@ -1126,17 +1130,11 @@ export const PluginDataPage: React.FC = () => {
 
       {/* 底部说明 */}
       <Alert
-        message="存储健康与观测说明"
-        description={
-          <div style={{ fontSize: 12, lineHeight: "1.6" }}>
-            <strong>增量分析批次</strong>：记录了各群聊多次增量扫描所生成的话题、金句与发言统计中间态，日报生成完毕后将自动聚合；如发现某时段分析不符合预期，可精准剔除单个批次或重置游标重新扫描。
-            <br />
-            <strong>阶段产物快照 (Checkpoints)</strong>：流水线各阶段的产物持久化快照，用于任务中断后的断点续跑以及零 Token 主题报告重绘。
-          </div>
-        }
         type="info"
         showIcon
-        style={{ fontSize: 12 }}
+        message="数据管理安全提示"
+        description="此处展示插件生成的所有离线中间物料与报告数据。清理缓存仅释放本地磁盘占用，已持久化到历史记录数据库的分析摘要与活跃度指标不受影响。"
+        style={{ marginTop: 8 }}
       />
 
       {/* 单批次详情 Modal */}
@@ -1163,28 +1161,50 @@ export const PluginDataPage: React.FC = () => {
             关闭
           </Button>,
         ]}
-        width={750}
+        width={800}
       >
         {loadingBatchDetail ? (
           <div style={{ textAlign: "center", padding: "30px 0" }}>
             <Text type="secondary">加载批次明细数据中...</Text>
           </div>
         ) : selectedBatchDetail ? (
-          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-            <Row gutter={[8, 8]}>
-              <Col span={8}>
-                <Text type="secondary">群号: </Text>
-                <Text strong>{selectedBatchDetail.group_id}</Text>
-              </Col>
-              <Col span={8}>
-                <Text type="secondary">生成时间: </Text>
-                <Text>{formatTimestamp(selectedBatchDetail.timestamp)}</Text>
-              </Col>
-              <Col span={8}>
-                <Text type="secondary">消息量: </Text>
-                <Text strong>{selectedBatchDetail.messages_count} 条 ({(selectedBatchDetail.characters_count || 0).toLocaleString()} 字)</Text>
-              </Col>
-            </Row>
+          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+            <Descriptions
+              size="small"
+              bordered
+              column={{ xs: 1, sm: 2, md: 3 }}
+              style={{ marginBottom: 4 }}
+              items={[
+                {
+                  key: "group",
+                  label: "目标群聊",
+                  children: (
+                    <Text strong style={SANS_NUM_STYLE}>
+                      {selectedBatchDetail.group_id}
+                    </Text>
+                  ),
+                },
+                {
+                  key: "time",
+                  label: "批次生成时间",
+                  children: (
+                    <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                      {formatTimestamp(selectedBatchDetail.timestamp)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "count",
+                  label: "消息与字符量",
+                  children: (
+                    <span style={SANS_NUM_STYLE}>
+                      {selectedBatchDetail.messages_count} 条 (
+                      {(selectedBatchDetail.characters_count || 0).toLocaleString()} 字)
+                    </span>
+                  ),
+                },
+              ]}
+            />
 
             {selectedBatchDetail.chat_quality_review && (
               <Card size="small" title="聊天质量与氛围评价">
@@ -1246,42 +1266,96 @@ export const PluginDataPage: React.FC = () => {
             关闭
           </Button>,
         ]}
-        width={800}
+        width={850}
       >
         {loadingCkptDetail ? (
           <div style={{ textAlign: "center", padding: "30px 0" }}>
             <Text type="secondary">加载快照产物数据中...</Text>
           </div>
         ) : selectedCkptDetail ? (
-          <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-            <Row gutter={[8, 8]}>
-              <Col span={6}>
-                <Text type="secondary">群号: </Text>
-                <Text strong>{selectedCkptDetail.group_id || "-"}</Text>
-              </Col>
-              <Col span={6}>
-                <Text type="secondary">日期: </Text>
-                <Tag color="cyan">{selectedCkptDetail.date_str || "-"}</Tag>
-              </Col>
-              <Col span={6}>
-                <Text type="secondary">阶段: </Text>
-                <Tag color={getStageMeta(selectedCkptDetail.stage_name || "").color}>
-                  {formatStageName(selectedCkptDetail.stage_name)} ({selectedCkptDetail.stage_name || "-"})
-                </Tag>
-              </Col>
-              <Col span={6}>
-                <Text type="secondary">Trace ID: </Text>
-                {selectedCkptDetail.trace_id ? (
-                  <Tag color="geekblue" style={{ fontSize: 11, ...SANS_NUM_STYLE }}>
-                    {selectedCkptDetail.trace_id}
-                  </Tag>
-                ) : (
-                  <Tag color="default" style={{ fontSize: 11 }}>
-                    Legacy
-                  </Tag>
-                )}
-              </Col>
-            </Row>
+          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+            <Descriptions
+              size="small"
+              bordered
+              column={{ xs: 1, sm: 2, md: 2 }}
+              style={{ marginBottom: 4 }}
+              items={[
+                {
+                  key: "group",
+                  label: "群聊号码",
+                  children: (
+                    <Text strong style={SANS_NUM_STYLE}>
+                      {selectedCkptDetail.group_id || "-"}
+                    </Text>
+                  ),
+                },
+                {
+                  key: "date",
+                  label: "分析归属日期",
+                  children: (
+                    <Tag color="cyan" style={SANS_NUM_STYLE}>
+                      {selectedCkptDetail.date_str || "-"}
+                    </Tag>
+                  ),
+                },
+                {
+                  key: "stage",
+                  label: "流水线阶段",
+                  children: (
+                    <Tag
+                      color={getStageMeta(selectedCkptDetail.stage_name || "").color}
+                      style={{ fontSize: 12, margin: 0 }}
+                    >
+                      {formatStageName(selectedCkptDetail.stage_name)} ({selectedCkptDetail.stage_name || "-"})
+                    </Tag>
+                  ),
+                },
+                {
+                  key: "size",
+                  label: "快照产物大小",
+                  children: (
+                    <span style={SANS_NUM_STYLE}>
+                      {formatBytes(
+                        selectedCkptDetail.data_size_bytes ??
+                          selectedCkptDetail.data_size ??
+                          0
+                      )}
+                    </span>
+                  ),
+                },
+                {
+                  key: "trace_id",
+                  label: "任务 Trace ID",
+                  span: 2,
+                  children: selectedCkptDetail.trace_id ? (
+                    <Space size={8} wrap align="center">
+                      <Tag
+                        color="geekblue"
+                        style={{ fontSize: 12, margin: 0, ...SANS_NUM_STYLE }}
+                      >
+                        {selectedCkptDetail.trace_id}
+                      </Tag>
+                      <Button
+                        size="small"
+                        type="dashed"
+                        icon={<CopyOutlined />}
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            selectedCkptDetail.trace_id || ""
+                          );
+                          message.success("已复制 Trace ID 到剪贴板");
+                        }}
+                        style={{ fontSize: 11, height: 22, padding: "0 6px" }}
+                      >
+                        复制
+                      </Button>
+                    </Space>
+                  ) : (
+                    <Tag color="default">Legacy (按天快照，未关联 Trace ID)</Tag>
+                  ),
+                },
+              ]}
+            />
 
             <div>
               <Text strong style={{ fontSize: 12, marginBottom: 4, display: "block" }}>
