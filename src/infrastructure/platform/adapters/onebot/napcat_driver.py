@@ -17,6 +17,34 @@ class NapCatDriver(StandardOneBotDriver):
 
     name: str = "napcat"
 
+    async def get_group_album_list(
+        self,
+        bot: Any,
+        group_id: str,
+    ) -> list[dict[str, Any]]:
+        """调用 NapCat 特有的 get_qun_album_list 获取群相册列表。
+
+        Args:
+            bot: 机器人实例
+            group_id: 目标群号
+
+        Returns:
+            list[dict[str, Any]]: 相册列表
+        """
+        try:
+            res = await bot.call_action("get_qun_album_list", group_id=str(group_id))
+            if isinstance(res, dict):
+                album_list = res.get("album_list")
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
+            if isinstance(res, list):
+                return [item for item in res if isinstance(item, dict)]
+        except Exception as exc:
+            logger.debug(
+                f"[OneBot:{self.name}] get_qun_album_list 失败: {exc}，尝试通用回退..."
+            )
+        return await super().get_group_album_list(bot, group_id)
+
     async def upload_stream_file(
         self,
         bot: Any,

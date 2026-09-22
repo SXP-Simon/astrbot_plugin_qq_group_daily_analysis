@@ -50,3 +50,36 @@ class LLOneBotDriver(StandardOneBotDriver):
             await super().upload_group_album(
                 bot, group_id, album_id, album_name, file_content
             )
+
+    async def get_group_album_list(
+        self,
+        bot: Any,
+        group_id: str,
+    ) -> list[dict[str, Any]]:
+        """调用 LLOneBot 特有的 get_group_album_list 获取群相册列表。
+
+        Args:
+            bot: 机器人实例
+            group_id: 目标群号
+
+        Returns:
+            list[dict[str, Any]]: 相册列表
+        """
+        try:
+            res = await bot.call_action("get_group_album_list", group_id=int(group_id))
+            if isinstance(res, dict):
+                data = res.get("data")
+                if isinstance(data, dict):
+                    album_list = data.get("album_list") or data.get("albumList")
+                    if isinstance(album_list, list):
+                        return [item for item in album_list if isinstance(item, dict)]
+                album_list = res.get("album_list") or res.get("albumList")
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
+            if isinstance(res, list):
+                return [item for item in res if isinstance(item, dict)]
+        except Exception as exc:
+            logger.debug(
+                f"[OneBot:{self.name}] get_group_album_list 失败: {exc}，尝试通用回退..."
+            )
+        return await super().get_group_album_list(bot, group_id)

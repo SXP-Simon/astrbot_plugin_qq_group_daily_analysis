@@ -302,6 +302,47 @@ def test_standard_driver_get_group_album_list():
     assert albums2[0]["album_id"] == "alb_3"
 
 
+def test_napcat_driver_get_group_album_list():
+    # NapCat 优先调用 get_qun_album_list 且返回顶层 album_list 结构
+    bot = MockBot(
+        {
+            "get_qun_album_list": {
+                "album_list": [
+                    {"album_id": "napcat_alb_1", "album_name": "NapCat相册"}
+                ],
+                "attach_info": "",
+                "has_more": False,
+            }
+        }
+    )
+    driver = NapCatDriver()
+    albums = asyncio.run(driver.get_group_album_list(bot, "123456"))
+    assert len(albums) == 1
+    assert albums[0]["album_id"] == "napcat_alb_1"
+    assert bot.action_calls[0][0] == "get_qun_album_list"
+
+
+def test_llonebot_driver_get_group_album_list():
+    # LLOneBot 优先调用 get_group_album_list 且返回 data.album_list 结构
+    bot = MockBot(
+        {
+            "get_group_album_list": {
+                "status": "ok",
+                "data": {
+                    "album_list": [
+                        {"album_id": "llbot_alb_1", "album_name": "LLOneBot相册"}
+                    ]
+                },
+            }
+        }
+    )
+    driver = LLOneBotDriver()
+    albums = asyncio.run(driver.get_group_album_list(bot, "123456"))
+    assert len(albums) == 1
+    assert albums[0]["album_id"] == "llbot_alb_1"
+    assert bot.action_calls[0][0] == "get_group_album_list"
+
+
 # ==========================================
 # 7. Adapter 端到端与驱动协同测试
 # ==========================================
