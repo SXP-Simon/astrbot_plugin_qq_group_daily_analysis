@@ -238,6 +238,7 @@ export function usePluginDataViewModel() {
       group_id: item.group_id,
       date_str: item.date_str,
       stage_name: item.stage_name,
+      trace_id: item.trace_id,
       created_at: item.created_at,
       created_at_formatted: item.created_at_formatted,
       data_size_bytes: item.data_size_bytes ?? item.data_size,
@@ -248,7 +249,8 @@ export function usePluginDataViewModel() {
       const detail = await fetchCheckpointDetail(
         item.group_id,
         item.date_str,
-        item.stage_name
+        item.stage_name,
+        item.trace_id
       );
       if (detail) {
         const payloadData =
@@ -262,6 +264,7 @@ export function usePluginDataViewModel() {
           group_id: detail.group_id || item.group_id,
           date_str: detail.date_str || item.date_str,
           stage_name: detail.stage_name || item.stage_name,
+          trace_id: detail.trace_id || item.trace_id,
           created_at: detail.created_at ?? item.created_at,
           created_at_formatted:
             detail.created_at_formatted || item.created_at_formatted,
@@ -288,10 +291,11 @@ export function usePluginDataViewModel() {
   const handleDeleteCheckpoint = async (
     groupId: string,
     dateStr: string,
-    stageName?: string
+    stageName?: string,
+    traceId?: string
   ) => {
     try {
-      const ok = await deleteCheckpoint(groupId, dateStr, stageName);
+      const ok = await deleteCheckpoint(groupId, dateStr, stageName, traceId);
       if (ok) {
         message.success(
           stageName

@@ -124,6 +124,7 @@ export async function fetchCheckpointsList(params?: {
   group_id?: string;
   date_str?: string;
   stage_name?: string;
+  trace_id?: string;
 }): Promise<CheckpointsListResponse> {
   const res = await apiGet<CheckpointsListResponse>("data/checkpoints", {
     ...(params ?? {}),
@@ -135,7 +136,8 @@ export async function fetchCheckpointsList(params?: {
 export async function fetchCheckpointDetail(
   groupId: string,
   dateStr: string,
-  stageName: string
+  stageName: string,
+  traceId?: string
 ): Promise<CheckpointDetail | null> {
   const res = await apiGet<CheckpointDetail | { detail?: CheckpointDetail }>(
     "data/checkpoint/detail",
@@ -143,6 +145,7 @@ export async function fetchCheckpointDetail(
       group_id: groupId,
       date_str: dateStr,
       stage_name: stageName,
+      trace_id: traceId || "",
     }
   );
   if (!res) return null;
@@ -162,12 +165,14 @@ export async function fetchCheckpointDetail(
 export async function deleteCheckpoint(
   groupId: string,
   dateStr: string,
-  stageName?: string
+  stageName?: string,
+  traceId?: string
 ): Promise<boolean> {
   const res = await apiPost<{ deleted: boolean }>("data/checkpoint", {
     group_id: groupId,
     date_str: dateStr,
     stage_name: stageName || "",
+    trace_id: traceId || "",
   });
   return extractData<{ deleted: boolean }>(res)?.deleted ?? false;
 }

@@ -63,6 +63,7 @@ export interface CheckpointItem {
   group_id: string;
   date_str: string;
   stage_name: string;
+  trace_id?: string;
   data_size_bytes?: number;
   data_size?: number;
   created_at?: number | string;
@@ -82,6 +83,7 @@ export interface CheckpointDetail {
   group_id: string;
   date_str: string;
   stage_name: string;
+  trace_id?: string;
   data?: unknown;
   checkpoint_data?: unknown;
   data_size_bytes?: number;
