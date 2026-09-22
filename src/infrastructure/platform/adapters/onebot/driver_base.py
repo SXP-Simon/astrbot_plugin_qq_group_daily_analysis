@@ -77,6 +77,49 @@ class OneBotDriver(ABC):
         return None
 
     @abstractmethod
+    def build_user_avatar_cdn_url(self, user_id: str, size: int) -> str:
+        """根据用户 ID 和期望尺寸构建 CDN 头像回退 URL。
+
+        Args:
+            user_id: 用户唯一标识（QQ号等）
+            size: 期望像素大小
+
+        Returns:
+            str: 格式化的 CDN 头像 URL
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def build_group_avatar_cdn_url(self, group_id: str, size: int) -> str:
+        """根据群聊 ID 和期望尺寸构建 CDN 群头像 URL。
+
+        Args:
+            group_id: 群聊唯一标识
+            size: 期望像素大小
+
+        Returns:
+            str: 格式化的 CDN 群头像 URL
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_group_album_list(
+        self,
+        bot: Any,
+        group_id: str,
+    ) -> list[dict[str, Any]]:
+        """获取群相册列表。
+
+        Args:
+            bot: 机器人 SDK 实例
+            group_id: 目标群号
+
+        Returns:
+            list[dict[str, Any]]: 相册信息字典列表
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def is_mute_exception(self, exc: Exception) -> bool:
         """判断异常是否属于被禁言/拒绝发言导致的错误。
 

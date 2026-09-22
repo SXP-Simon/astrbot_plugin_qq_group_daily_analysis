@@ -245,7 +245,65 @@ def test_standard_whole_ban_detection():
 
 
 # ==========================================
-# 6. Adapter 端到端与驱动协同测试
+# 6. Avatar CDN 与相册列表行为测试
+# ==========================================
+
+
+def test_standard_driver_avatar_cdn_url_building():
+    driver = StandardOneBotDriver()
+    # 1. 用户头像尺寸匹配（<=160 使用 q1.qlogo.cn，640 使用 q.qlogo.cn HD 模板）
+    url_100 = driver.build_user_avatar_cdn_url("10001", size=100)
+    assert url_100 == "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100"
+
+    url_640 = driver.build_user_avatar_cdn_url("10001", size=640)
+    assert url_640 == "https://q.qlogo.cn/headimg_dl?dst_uin=10001&spec=640&img_type=jpg"
+
+    url_nearest = driver.build_user_avatar_cdn_url("10001", size=120)
+    assert url_nearest in (
+        "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100",
+        "https://q1.qlogo.cn/g?b=qq&nk=10001&s=140",
+    )
+
+    # 2. 群头像 CDN URL
+    group_url = driver.build_group_avatar_cdn_url("123456", size=100)
+    assert group_url == "https://p.qlogo.cn/gh/123456/123456/100/"
+
+
+def test_standard_driver_get_group_album_list():
+    # 1. 测试从 data.album_list 中提取
+    bot1 = MockBot(
+        {
+            "get_qun_album_list": {
+                "data": {
+                    "album_list": [
+                        {"album_id": "alb_1", "name": "相册1"},
+                        {"album_id": "alb_2", "name": "相册2"},
+                    ]
+                }
+            }
+        }
+    )
+    driver = StandardOneBotDriver()
+    albums = asyncio.run(driver.get_group_album_list(bot1, "123456"))
+    assert len(albums) == 2
+    assert albums[0]["album_id"] == "alb_1"
+
+    # 2. 测试从顶层 list 中提取（当 get_qun_album_list 失败，get_group_album_list 成功）
+    bot2 = MockBot(
+        {
+            "get_qun_album_list": Exception("Not found"),
+            "get_group_album_list": [
+                {"album_id": "alb_3", "name": "相册3"}
+            ],
+        }
+    )
+    albums2 = asyncio.run(driver.get_group_album_list(bot2, "123456"))
+    assert len(albums2) == 1
+    assert albums2[0]["album_id"] == "alb_3"
+
+
+# ==========================================
+# 7. Adapter 端到端与驱动协同测试
 # ==========================================
 
 

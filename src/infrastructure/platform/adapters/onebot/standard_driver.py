@@ -17,6 +17,127 @@ class StandardOneBotDriver(OneBotDriver):
 
     MUTE_KEYWORDS = ("禁言", "操作失败", "下游群鉴权")
 
+    # QQ 头像服务 URL 模板与可用尺寸
+    USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
+    USER_AVATAR_HD_TEMPLATE = (
+        "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
+    )
+    GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
+    AVAILABLE_SIZES = (40, 100, 140, 160, 640)
+
+    @classmethod
+    def get_nearest_size(cls, target_size: int) -> int:
+        """从支持的尺寸中找到最接近的值。
+
+        Args:
+            target_size: 目标尺寸
+
+        Returns:
+            int: 最接近的支持尺寸
+        """
+        return min(cls.AVAILABLE_SIZES, key=lambda s: abs(s - target_size))
+
+    def build_user_avatar_cdn_url(self, user_id: str, size: int) -> str:
+        """根据 QQ 号和期望尺寸构建 QQ 官方 CDN 头像回退 URL。
+
+        Args:
+            user_id: QQ 号
+            size: 期望像素大小
+
+        Returns:
+            str: 格式化的 QQ 头像 CDN URL
+        """
+        actual_size = self.get_nearest_size(size)
+        if actual_size >= 640:
+            return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
+        return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
+
+    def build_group_avatar_cdn_url(self, group_id: str, size: int) -> str:
+        """根据群号和期望尺寸构建 QQ 官方 CDN 群头像 URL。
+
+        Args:
+            group_id: QQ 群号
+            size: 期望像素大小
+
+        Returns:
+            str: 格式化的 QQ 群头像 CDN URL
+        """
+        actual_size = self.get_nearest_size(size)
+        return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
+
+    async def get_group_album_list(
+        self,
+        bot: Any,
+        group_id: str,
+    ) -> list[dict[str, Any]]:
+        """获取群相册列表（兼容多种 OneBot 扩展实现及返回结构）。
+
+        Args:
+            bot: 机器人实例
+            group_id: 目标群号
+
+        Returns:
+            list[dict[str, Any]]: 提取出的相册列表
+        """
+
+        def extract_list(payload: Any) -> list[dict[str, Any]]:
+            if isinstance(payload, list):
+                return [item for item in payload if isinstance(item, dict)]
+            if not isinstance(payload, dict):
+                logger.debug(
+                    f"[OneBot:{self.name}] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
+                )
+                return []
+
+            data = payload.get("data")
+            if isinstance(data, dict):
+                album_list = data.get("album_list") or data.get("list")
+                if isinstance(album_list, list):
+                    return [item for item in album_list if isinstance(item, dict)]
+                logger.debug(
+                    f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}"
+                )
+
+            album_list = payload.get("album_list") or payload.get("list")
+            if isinstance(album_list, list):
+                return [item for item in album_list if isinstance(item, dict)]
+
+            logger.debug(
+                f"[OneBot:{self.name}] 无法从响应中提取相册列表: payload={payload}"
+            )
+            return []
+
+        actions = [
+            "get_qun_album_list",
+            "get_group_album_list",
+            "get_group_albums",
+            "get_group_root_album_list",
+        ]
+
+        for action in actions:
+            try:
+                logger.debug(
+                    f"[OneBot:{self.name}] 正在通过 {action} 获取列表 (群: {group_id})..."
+                )
+                result = await bot.call_action(
+                    action,
+                    group_id=int(group_id),
+                )
+                logger.debug(
+                    f"[OneBot:{self.name}] 接口 {action} 原始响应内容: {result}"
+                )
+                if result:
+                    albums = extract_list(result)
+                    if albums:
+                        logger.debug(
+                            f"[OneBot:{self.name}] {action} 成功获取并提取到 {len(albums)} 个相册对象"
+                        )
+                        return albums
+            except Exception as e:
+                logger.debug(f"[OneBot:{self.name}] 接口 {action} 尝试失败: {e}")
+
+        return []
+
     def build_history_params(
         self,
         group_id: str,

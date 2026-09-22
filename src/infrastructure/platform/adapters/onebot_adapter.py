@@ -47,15 +47,6 @@ class OneBotAdapter(PlatformAdapter):
 
     platform_name = "onebot"
 
-    # QQ 头像服务 URL 模板
-    USER_AVATAR_TEMPLATE = "https://q1.qlogo.cn/g?b=qq&nk={user_id}&s={size}"
-    USER_AVATAR_HD_TEMPLATE = (
-        "https://q.qlogo.cn/headimg_dl?dst_uin={user_id}&spec={size}&img_type=jpg"
-    )
-    GROUP_AVATAR_TEMPLATE = "https://p.qlogo.cn/gh/{group_id}/{group_id}/{size}/"
-
-    # OneBot 服务支持的头像尺寸像素
-    AVAILABLE_SIZES = (40, 100, 140, 160, 640)
     # 协议端头像获取：单请求超时、成功缓存与失败负缓存的存活时间（秒）
     AVATAR_FETCH_TIMEOUT = 1.5
     AVATAR_URL_TTL = 3600.0
@@ -100,10 +91,6 @@ class OneBotAdapter(PlatformAdapter):
             self._driver = await OneBotDriverFactory.detect_driver(self.bot)
             self._driver_detected = True
         return self._driver
-
-    def _get_nearest_size(self, requested_size: int) -> int:
-        """从支持的尺寸列表中找到最接近请求尺寸的一个。"""
-        return min(self.AVAILABLE_SIZES, key=lambda x: abs(x - requested_size))
 
     # ==================== IMessageRepository 实现 ====================
 
@@ -914,11 +901,7 @@ class OneBotAdapter(PlatformAdapter):
                 self._avatar_inflight_tasks.pop(user_id, None)
 
     def _build_cdn_avatar_url(self, user_id: str, size: int) -> str:
-        actual_size = self._get_nearest_size(size)
-        # 640 使用 HD 接口更清晰
-        if actual_size >= 640:
-            return self.USER_AVATAR_HD_TEMPLATE.format(user_id=user_id, size=640)
-        return self.USER_AVATAR_TEMPLATE.format(user_id=user_id, size=actual_size)
+        return self._driver.build_user_avatar_cdn_url(user_id, size)
 
     async def get_user_avatar_url(
         self,
@@ -1012,8 +995,7 @@ class OneBotAdapter(PlatformAdapter):
         size: int = 100,
     ) -> str | None:
         """获取 QQ 群头像地址。"""
-        actual_size = self._get_nearest_size(size)
-        return self.GROUP_AVATAR_TEMPLATE.format(group_id=group_id, size=actual_size)
+        return self._driver.build_group_avatar_cdn_url(group_id, size)
 
     async def batch_get_avatar_urls(
         self,
@@ -1393,61 +1375,8 @@ class OneBotAdapter(PlatformAdapter):
         """
         获取群分析相册列表（兼容多种 OneBot 扩展实现）。
         """
-
-        def extract_list(payload: Any) -> list[dict]:
-            """从不同结构的响应中提取相册列表：直接列表、嵌套在 data 中、或直接在根字段中。"""
-            if isinstance(payload, list):
-                return [item for item in payload if isinstance(item, dict)]
-            if not isinstance(payload, dict):
-                logger.debug(
-                    f"[群分析相册] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
-                )
-                return []
-
-            data = payload.get("data")
-            if isinstance(data, dict):
-                album_list = data.get("album_list") or data.get("list")
-                if isinstance(album_list, list):
-                    return [item for item in album_list if isinstance(item, dict)]
-                else:
-                    logger.debug(f"[群分析相册] 在 data 字段中未找到列表: data={data}")
-
-            album_list = payload.get("album_list") or payload.get("list")
-            if isinstance(album_list, list):
-                return [item for item in album_list if isinstance(item, dict)]
-
-            logger.debug(f"[群分析相册] 无法从响应中提取相册列表: payload={payload}")
-            return []
-
-        # 候选 API 名称
-        actions = [
-            "get_qun_album_list",
-            "get_group_album_list",
-            "get_group_albums",
-            "get_group_root_album_list",
-        ]
-
-        for action in actions:
-            try:
-                logger.debug(
-                    f"[群分析相册] 正在通过 {action} 获取列表 (群: {group_id})..."
-                )
-                result = await self.bot.call_action(
-                    action,
-                    group_id=int(group_id),
-                )
-                logger.debug(f"[群分析相册] 接口 {action} 原始响应内容: {result}")
-                if result:
-                    albums = extract_list(result)
-                    if albums:
-                        logger.debug(
-                            f"[群分析相册] {action} 成功获取并提取到 {len(albums)} 个相册对象"
-                        )
-                        return albums
-            except Exception as e:
-                logger.debug(f"[群分析相册] 接口 {action} 尝试失败: {e}")
-
-        return []
+        driver = await self._ensure_driver()
+        return await driver.get_group_album_list(self.bot, group_id)
 
     async def find_album_id(
         self,
