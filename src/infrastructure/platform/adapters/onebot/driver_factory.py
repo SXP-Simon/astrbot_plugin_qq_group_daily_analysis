@@ -53,9 +53,19 @@ class OneBotDriverFactory:
         try:
             result = await bot.call_action("get_version_info")
             if isinstance(result, dict):
-                app_name = (
-                    result.get("app_name") or result.get("name") or result.get("impl")
+                # 兼容顶层直接返回或包装在 data 字典中的响应格式
+                data = (
+                    result.get("data")
+                    if isinstance(result.get("data"), dict)
+                    else result
                 )
+                app_name = data.get("app_name") or data.get("name") or data.get("impl")
+                if not app_name and isinstance(result.get("data"), dict):
+                    app_name = (
+                        result.get("app_name")
+                        or result.get("name")
+                        or result.get("impl")
+                    )
                 if app_name:
                     return cls.create_driver_by_app_name(str(app_name))
                 logger.debug(
@@ -70,11 +80,22 @@ class OneBotDriverFactory:
         try:
             result_v12 = await bot.call_action("get_version")
             if isinstance(result_v12, dict):
-                app_name = (
-                    result_v12.get("impl")
-                    or result_v12.get("app_name")
-                    or result_v12.get("name")
+                data_v12 = (
+                    result_v12.get("data")
+                    if isinstance(result_v12.get("data"), dict)
+                    else result_v12
                 )
+                app_name = (
+                    data_v12.get("impl")
+                    or data_v12.get("app_name")
+                    or data_v12.get("name")
+                )
+                if not app_name and isinstance(result_v12.get("data"), dict):
+                    app_name = (
+                        result_v12.get("impl")
+                        or result_v12.get("app_name")
+                        or result_v12.get("name")
+                    )
                 if app_name:
                     logger.debug(
                         f"[OneBot] 通过 OneBot v12 get_version 识别到实现: {app_name}"

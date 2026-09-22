@@ -256,9 +256,12 @@ class StandardOneBotDriver(OneBotDriver):
             return False
         err_str = str(exc)
 
-        # 检查常见错误码
-        if any(rc in err_str for rc in ("1200", "retcode=100")):
-            if any(kw in err_str for kw in self.MUTE_KEYWORDS):
+        # 检查常见错误码与模式（兼容标准与各类方言如 SnowLuma 的 result=120）
+        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
+            if (
+                any(kw in err_str for kw in self.MUTE_KEYWORDS)
+                or "result=120" in err_str
+            ):
                 return True
 
         for attr in ("message", "wording"):

@@ -70,6 +70,7 @@ class OneBotAdapter(PlatformAdapter):
         # 协议端方言驱动（默认使用标准驱动，首次调用时通过 _ensure_driver 自动探测）
         self._driver: OneBotDriver = StandardOneBotDriver()
         self._driver_detected = False
+        self._driver_detection_lock = asyncio.Lock()
 
         # 禁言状态缓存 (group_id -> timestamp)
         self._muted_groups_cache = {}
@@ -86,10 +87,12 @@ class OneBotAdapter(PlatformAdapter):
         return ONEBOT_V11_CAPABILITIES
 
     async def _ensure_driver(self) -> OneBotDriver:
-        """确保并返回已探测适配的协议端方言驱动。"""
+        """确保并返回已探测适配的协议端方言驱动（带并发锁保护）。"""
         if not self._driver_detected:
-            self._driver = await OneBotDriverFactory.detect_driver(self.bot)
-            self._driver_detected = True
+            async with self._driver_detection_lock:
+                if not self._driver_detected:
+                    self._driver = await OneBotDriverFactory.detect_driver(self.bot)
+                    self._driver_detected = True
         return self._driver
 
     # ==================== IMessageRepository 实现 ====================
@@ -1075,6 +1078,9 @@ class OneBotAdapter(PlatformAdapter):
 
         if not hasattr(self.bot, "call_action"):
             return False
+
+        # 确保方言驱动已探测并绑定
+        await self._ensure_driver()
 
         # 2. 获取 Bot 自身的 QQ 号，并过滤掉非法的字符串（如 functools.partial 或含字母/特殊字符的异常值）
         bot_user_id = None

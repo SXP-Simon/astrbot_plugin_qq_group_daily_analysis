@@ -72,6 +72,20 @@ def test_driver_factory_detect_driver_with_mock_bot():
     driver_napcat = asyncio.run(OneBotDriverFactory.detect_driver(bot_napcat))
     assert isinstance(driver_napcat, NapCatDriver)
 
+    # 1.1 兼容包装在 data 字典中的响应形态
+    bot_wrapped = MockBot({"get_version_info": {"status": "ok", "retcode": 0, "data": {"app_name": "NapCat.Onebot"}}})
+    driver_wrapped = asyncio.run(OneBotDriverFactory.detect_driver(bot_wrapped))
+    assert isinstance(driver_wrapped, NapCatDriver)
+
+    bot_v12_wrapped = MockBot(
+        {
+            "get_version_info": Exception("Action not found"),
+            "get_version": {"status": "ok", "data": {"impl": "SnowLuma"}},
+        }
+    )
+    driver_v12_wrapped = asyncio.run(OneBotDriverFactory.detect_driver(bot_v12_wrapped))
+    assert isinstance(driver_v12_wrapped, SnowLumaDriver)
+
     # 2. OneBot v12 异步通过 get_version + impl 字段探测
     bot_v12 = MockBot(
         {
@@ -553,4 +567,33 @@ def test_adapter_set_reaction_success_and_mapping():
     assert params["message_id"] == 778899
     assert params["emoji_id"] == "289"
     assert params["set"] is True
+
+
+def test_adapter_concurrent_ensure_driver_deduplication():
+    bot = MockBot({"get_version_info": {"app_name": "NapCat.Onebot"}})
+    adapter = OneBotAdapter(bot)
+
+    async def run_concurrent():
+        drivers = await asyncio.gather(
+            adapter._ensure_driver(),
+            adapter._ensure_driver(),
+            adapter._ensure_driver(),
+            adapter._ensure_driver(),
+        )
+        return drivers
+
+    drivers = asyncio.run(run_concurrent())
+    assert len(drivers) == 4
+    for d in drivers:
+        assert isinstance(d, NapCatDriver)
+    # 确保并发调用只触发了一次 get_version_info 调用
+    version_calls = [c for c in bot.action_calls if c[0] == "get_version_info"]
+    assert len(version_calls) == 1
+
+
+def test_adapter_cold_start_mute_exception_recognition():
+    # 验证标准驱动与 cold-start 下对 SnowLuma result=120 / rejected 异常识别
+    adapter = OneBotAdapter(MockBot())
+    exc_snowluma = RuntimeError("send group message rejected: result=120 err=")
+    assert adapter._is_mute_exception(exc_snowluma) is True
 
