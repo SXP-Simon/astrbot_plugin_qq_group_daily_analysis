@@ -707,11 +707,16 @@ class GroupDailyAnalysis(Star):
                 check_target = f"{platform_id}:GroupMessage:{group_id}"
 
             if not self.config_manager.is_group_allowed(check_target):
-                # Fallback checks (simple ID) are handled inside is_group_allowed logic if list item has no colon
-                # But if list item HAS colon, we need precise match.
-                # If prompt fails, try simple ID as fallback for permissive cases?
-                # No, config_manager.is_group_allowed already handles simple ID matching if whitelist item is simple ID.
                 yield event.plain_result("❌ 此群未启用日常分析功能")
+                return
+
+            # 防重入即时拦截：若该群已有分析任务在运行中，直接拒绝重复触发
+            if (
+                hasattr(self, "analysis_service")
+                and self.analysis_service
+                and self.analysis_service.is_group_running(group_id, "daily")
+            ):
+                yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
                 return
 
             # 获取群名以生成语义化的 TraceID

@@ -82,6 +82,19 @@ class AnalysisApplicationService:
         # 用于追踪当前正在执行的任务，实现原子的“检查并设置”逻辑，避免 locked() 竞态
         self._active_tasks = set()
 
+    def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
+        """检查指定群的特定任务是否正在执行中。
+
+        Args:
+            group_id: 群号。
+            task_type: 任务类型（默认为 "daily" 分析任务）。
+
+        Returns:
+            bool: 是否正在运行。
+        """
+        lock_key = f"{task_type}:{group_id}"
+        return lock_key in self._active_tasks
+
     @asynccontextmanager
     async def group_lock(self, group_id: str, task_type: str = "analysis"):
         """
