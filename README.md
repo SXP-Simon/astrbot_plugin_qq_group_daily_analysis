@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/当前版本-v5.5.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Plugin Version](https://img.shields.io/badge/当前版本-v5.6.0-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
@@ -361,17 +361,24 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 
 ## 平台支持与要求
 
-| 平台              | 适配器类型                         | 特殊要求/说明                                                                                                                                                        |
-| ----------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **QQ**            | OneBot v11                         | 建议使用 NapCat/Lagrange。需注意消息分页拉取限制。                                                                                                                   |
-| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。                                      |
-| **Discord**       | Discord                            | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。                                                                                                       |
-| **Telegram**      | Telegram Bot API                   | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
+| 平台              | 适配器类型                         | 驱动与方言支持                                                                                                                   | 特殊要求/说明                                                                                                                                                        |
+| ----------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **QQ (OneBot)**   | OneBot v11 / v12                   | **方言驱动架构**：内置 NapCat、LLOneBot (LuckyLilliaBot)、SnowLuma、Standard (go-cqhttp / Lagrange / onebots / WeChatBridge) 驱动 | 插件通过 `get_version_info` / `get_version` 自动探测并动态绑定最佳方言驱动；支持多端群相册、群文件多级解包、协议端真实头像与全链路观测日志。                       |
+| **QQ 官方机器人** | QQ Bot API v2（WebSocket/Webhook） | 官方统一 API                                                                                                                     | 需开启群全量消息；只分析启用后实时缓存的消息；图片/HTML 优先显示事件昵称，缺失时使用群内稳定匿名名；Markdown 文本使用成员艾特。                                      |
+| **Discord**       | Discord                            | Discord Gateway                                                                                                                  | **必须** 拥有 `Read Message History` (查看消息历史记录) 权限。                                                                                                       |
+| **Telegram**      | Telegram Bot API                   | Telegram Bot API                                                                                                                 | 若机器人不是群管理员，入群前需先在 BotFather 关闭隐私模式 (`/setprivacy` -> `Disable`)。若机器人已在群内且非管理员，关闭后需要先移出机器人再重新拉入，设置才会生效。 |
 
-> [!warning]
-> **实验性开发中**：
+> [!TIP]
+> **OneBot 协议端方言驱动架构特性**：
 >
-> - 多平台支持功能尚在开发中，当前仅支持 OneBot (NapCat, LLOneBot, Snowluma), QQ 官方机器人, Discord, Telegram。
+> 插件采用了开放闭合原则 (OCP) 的**方言驱动解耦架构**，在连接时自动探测后端实现并无缝自适应：
+> 1. **NapCat.Onebot**：支持标准逆序分页、独有的 `upload_file_stream` 分块流式上传大图/兜底、`get_qun_album_list` 群相册列表与协议端真实头像解析。
+> 2. **LLOneBot (LuckyLilliaBot)**：支持相册上传专属 `files` 列表参数、相册列表 `data: list` 数组解包与多层嵌套兼容。
+> 3. **SnowLuma**：支持专属 `message_id` 锚点分页拉取群历史（不传 `reverseOrder`）、精准识别 `result=120` / `rejected` 发送拒绝与禁言错误。
+> 4. **Standard (go-cqhttp / Lagrange / onebots / 微信桥接 WeChatBridge)**：
+>    - **真实用户头像**：针对微信/企业微信接入等映射数字 ID 场景，优先通过 `get_stranger_info` / `get_user_info` 获取真实头像 URL（带 1 小时正缓存与并发去重），失败时自动回退官方 CDN 并进入 10 分钟负缓存，杜绝重复无效请求。
+>    - **群文件与相册多级解包**：自动兼容 `data.folders`、`data.album_list`、顶层列表等不同协议端返回格式，确保文件夹自动创建与归档不回退。
+>    - **全链路可观测日志**：动作发起、参数目标、原始响应 Payload 与解析降级流转全景上报，方便快速诊断排障。
 
 > [!IMPORTANT]
 > **QQ 官方机器人用户注意**：
