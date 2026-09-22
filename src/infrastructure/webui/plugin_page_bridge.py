@@ -462,6 +462,15 @@ class PluginPageWebUIBridge:
             if not group_id:
                 return error_response("group_id is required", status_code=400)
 
+            # 防重入即时拦截：若该群已有分析任务正在执行，直接拒绝重复触发并返回友好提示
+            if hasattr(
+                self.analysis_service, "is_group_running"
+            ) and self.analysis_service.is_group_running(group_id, "daily"):
+                return error_response(
+                    f"群 {group_id} 的日常分析任务正在执行中，请勿重复触发",
+                    status_code=409,
+                )
+
             group_name = str(payload.get("group_name", f"群 {group_id}"))
             platform = str(payload.get("platform", "qq"))
 
