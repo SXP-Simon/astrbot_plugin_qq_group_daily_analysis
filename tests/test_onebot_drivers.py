@@ -63,7 +63,7 @@ def test_driver_factory_detection():
 
 
 def test_driver_factory_detect_driver_with_mock_bot():
-    # 异步通过 get_version_info 探测
+    # 1. OneBot v11 异步通过 get_version_info 探测
     bot_snow = MockBot({"get_version_info": {"app_name": "SnowLuma"}})
     driver_snow = asyncio.run(OneBotDriverFactory.detect_driver(bot_snow))
     assert isinstance(driver_snow, SnowLumaDriver)
@@ -72,7 +72,18 @@ def test_driver_factory_detect_driver_with_mock_bot():
     driver_napcat = asyncio.run(OneBotDriverFactory.detect_driver(bot_napcat))
     assert isinstance(driver_napcat, NapCatDriver)
 
-    bot_fail = MockBot({"get_version_info": TimeoutError("Timeout")})
+    # 2. OneBot v12 异步通过 get_version + impl 字段探测
+    bot_v12 = MockBot(
+        {
+            "get_version_info": Exception("Action not found"),
+            "get_version": {"impl": "SnowLuma", "version": "1.0", "onebot_version": "12"},
+        }
+    )
+    driver_v12 = asyncio.run(OneBotDriverFactory.detect_driver(bot_v12))
+    assert isinstance(driver_v12, SnowLumaDriver)
+
+    # 3. 失败/超时回退标准驱动
+    bot_fail = MockBot({"get_version_info": TimeoutError("Timeout"), "get_version": TimeoutError("Timeout")})
     driver_fail = asyncio.run(OneBotDriverFactory.detect_driver(bot_fail))
     assert isinstance(driver_fail, StandardOneBotDriver)
 
