@@ -682,9 +682,10 @@ class ConfigManager:
         return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
 
     def get_t2i_atri_font_mirror(self) -> str:
-        """获取 ATRI 主题字体镜像地址 (目前保持不变，如有需要可后续添加 Mainland/Overseas 配置)"""
+        """获取 ATRI 主题字体与静态资源镜像地址"""
         return self._get_group("t2i_rendering").get(
-            "t2i_atri_font_mirror", "https://raw.githubusercontent.com/oculr/astrbot_plugin_qq_group_daily_analysis/ATRI_assets/assets/ATRI"
+            "t2i_atri_font_mirror",
+            "https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI",
         )
 
     def get_llm_provider_id(self) -> str:
