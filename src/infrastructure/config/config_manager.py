@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
-from ...shared.constants import PLUGIN_NAME
+from ...shared.constants import DEFAULT_ATRI_ASSETS_CDN_URL, PLUGIN_NAME
 from ...utils.logger import logger
 from ..utils.template_utils import upgrade_str_format_template
 
@@ -685,7 +685,7 @@ class ConfigManager:
         """获取 ATRI 主题字体与静态资源镜像地址"""
         return self._get_group("t2i_rendering").get(
             "t2i_atri_font_mirror",
-            "https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI",
+            DEFAULT_ATRI_ASSETS_CDN_URL,
         )
 
     def get_llm_provider_id(self) -> str:

@@ -14,6 +14,8 @@ from astrbot.api.message_components import (
     Plain,
 )
 
+from ...shared.constants import DEFAULT_ASSETS_CDN_URL
+
 
 class TemplateCommandService:
     """封装模板命令的文件系统与消息构建逻辑。"""
@@ -229,7 +231,7 @@ class TemplateCommandService:
                 # 仅内置模板在本地 assets 缺失时尝试从官方 GitHub CDN 加载；
                 # 自定义模板若未提供本地预览图，避免拼接 404 的 CDN 链接
                 if template_name in builtin_template_names():
-                    cdn_url = f"https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/{template_name}-demo.jpg"
+                    cdn_url = f"{DEFAULT_ASSETS_CDN_URL}/{template_name}-demo.jpg"
                     node_content = [
                         Plain(f"{num_label} {template_name}{current_mark}"),
                         Image.fromURL(cdn_url),

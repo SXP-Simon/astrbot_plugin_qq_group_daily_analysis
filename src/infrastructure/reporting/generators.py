@@ -27,7 +27,12 @@ from markupsafe import Markup
 from PIL import Image, UnidentifiedImageError
 
 from ...domain.repositories.report_repository import IReportGenerator
-from ...shared.constants import AnalysisStage
+from ...shared.constants import (
+    DEFAULT_ASSETS_CDN_URL,
+    DEFAULT_MIKU_ASSETS_CDN_URL,
+    DEFAULT_NPM_CDN_URL,
+    AnalysisStage,
+)
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..utils.template_utils import render_template
@@ -1216,6 +1221,9 @@ class ReportGenerator(IReportGenerator):
             "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
             "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
             "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
+            "t2i_miku_assets_mirror": DEFAULT_MIKU_ASSETS_CDN_URL,
+            "t2i_npm_mirror": DEFAULT_NPM_CDN_URL,
+            "cdn_assets_base": DEFAULT_ASSETS_CDN_URL,
         }
 
         topics_html = (
@@ -1420,6 +1428,9 @@ class ReportGenerator(IReportGenerator):
             "t2i_google_fonts_mirror": self.config_manager.get_t2i_google_fonts_mirror(),
             "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
             "t2i_atri_font_mirror": self.config_manager.get_t2i_atri_font_mirror(),
+            "t2i_miku_assets_mirror": DEFAULT_MIKU_ASSETS_CDN_URL,
+            "t2i_npm_mirror": DEFAULT_NPM_CDN_URL,
+            "cdn_assets_base": DEFAULT_ASSETS_CDN_URL,
             "current_date": datetime.now().strftime("%Y年%m月%d日"),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,
