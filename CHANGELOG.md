@@ -92,7 +92,7 @@
     *   **复古艺术美学设计**：以 19 世纪末新艺术运动与穆夏（Alphonse Mucha）装饰艺术为灵感，采用温润羊皮纸底色、流动藤蔓花纹与古典金边装饰，将群聊数据装帧为古典画报。
     *   **双色交错和谐排版**：核心数据、热议话题、群芳雅鉴与金句回响采用森林绿与复古金双色交替排版，层次分明、典雅克制。
 
-<a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
 
 
 *   **🪄 【体验优化】模版分析区域智能隐藏（告别未开启功能的空白标题）**：
@@ -376,7 +376,7 @@
 <table align="center" width="100%">
   <tr>
     <td align="center" width="100%" valign="top">
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
+      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
       <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
     </td>
   </tr>
@@ -499,7 +499,7 @@
 ## [v4.9.13] - feat(ATRI): ATRI 模板 (@Liangyu-G)
 *   **✨ 新模板 ATRI**: 感谢 @Liangyu-G 的贡献，新增了一个名为 ATRI 的模板，灵感来源于 ATRI 的可爱风格，适合喜欢二次元风格的用户使用。（“她太可爱了，就是太可爱了，那个剧情也特别好，但她真的太可爱了。在聊天的过程中，Soulter不止一次和我强调了亚托莉可爱这一点，甚至一度说不出其他话了”
 ）
-<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
+<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI" width="100%">
 
 ## [v4.9.12] - 移除无效的重试器
 
@@ -516,7 +516,7 @@
 ## [v4.9.8] - feat(HatsuneMiku): 新增了一个名为 HatsuneMiku 的模板 (#134 @Shiitin)
 *   **🐛 黑白名单修复**: 分析名单准入并修复 AstrBot 内置白名单绕过问题 （情况如 #133 所述）
 *   **✨ 新模板 HatsuneMiku**: 感谢 @Shiitin 的贡献，新增了一个名为 HatsuneMiku 的模板，灵感来源于初音未来的可爱风格，适合喜欢二次元风格的用户使用。      
-<img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
+<img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku" width="100%">
 
 ## [v4.9.7] - feat(分析配置细粒度化): 引入三层黑白名单机制（基础群分析开关、定时分析、增量分析），支持更细粒度的群级分析控制；修复自动分析生命周期管理情况避免任务被静默跳过
 *   **🐛 自动分析调度修复**: 修复自动分析任务生命周期检查链路，重置 `schedule_jobs` 后 `_terminating` 状态，避免任务被静默跳过；增量分析任务生命周期行为与定时分析保持一致。(#130 @Dongmayyys)

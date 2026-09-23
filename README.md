@@ -11,10 +11,10 @@
 <table align="center" style="border: none;">
   <tr>
     <td style="border: none;" align="center">
-      <a href="https://qm.qq.com/q/oTzIrdDBIc"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/QQ.png" width="300" alt="QQ Group"></a>
+      <a href="https://qm.qq.com/q/oTzIrdDBIc"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/QQ.png" width="300" alt="QQ Group"></a>
     </td>
     <td style="border: none;" align="center">
-      <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/TG.png" width="300" alt="Telegram Group"></a>
+      <a href="https://t.me/AstrBotPluginGroupDailyAnalysis"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/TG.png" width="300" alt="Telegram Group"></a>
     </td>
   </tr>
   <tr>
@@ -47,29 +47,29 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>Scrapbook (默认)</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>Retro Futurism</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="Retro Futurism 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="Retro Futurism 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>HatsuneMiku</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku 示例" height="520"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="33.3%" valign="top">
       <p><b>Hack</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="Hack 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/hack-demo.jpg" alt="Hack 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>ATRI</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>art_nouveau</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
     </td>
   </tr>
 </table>
@@ -79,7 +79,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 <table align="center" width="100%">
   <tr>
     <td align="center" width="100%" valign="top">
-      <img src="https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
+      <img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/comic-demo.jpg" alt="群每日漫画功能" width="60%">
       <p><b>参考 Atri 人格的群每日漫画 Demo</b></p>
     </td>
   </tr>
@@ -110,41 +110,41 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>运行总览</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png" alt="运行总览" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/overview.png" alt="运行总览" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
       <p><b>配置中心</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png" alt="配置中心" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/conf.png" alt="配置中心" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>分析记录</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session_history.png" alt="分析记录" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
       <p><b>历史报告列表</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/history_report.png" alt="历史报告列表" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>任务执行详情与断点续跑</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/resume.png" alt="任务执行详情与断点续跑" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
       <p><b>任务执行详情（子模块状态与异常诊断）</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/session.png" alt="子模块状态与异常诊断" width="100%"></a>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%" valign="top">
       <p><b>统计与消耗</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png" alt="统计与消耗" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/analysis.png" alt="统计与消耗" width="100%"></a>
     </td>
     <td align="center" width="50%" valign="top">
       <p><b>运行日志</b></p>
-      <a href="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png"><img src="https://fastly.jsdelivr.net/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png" alt="运行日志" width="100%"></a>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/profile_assets@main/plugin/webui/runtime_logger.png" alt="运行日志" width="100%"></a>
     </td>
   </tr>
 </table>
