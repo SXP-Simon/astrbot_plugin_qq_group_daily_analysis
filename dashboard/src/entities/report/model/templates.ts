@@ -99,7 +99,7 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
 ];
 
 export function getTemplateCdnUrl(templateKey: string): string {
-  return `https://fastly.jsdelivr.net/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/${templateKey}-demo.jpg`;
+  return `https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/${templateKey}-demo.jpg`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
