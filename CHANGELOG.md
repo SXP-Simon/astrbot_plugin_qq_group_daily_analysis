@@ -1,5 +1,18 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.6.1] - T2I 渲染可观测性诊断优化、国内 CDN 极速镜像加速与排障指引升级
+
+*   **🌐 【静态资源加速】初音未来等报告模板全面切换国内极速 CDN 镜像 (jsdmirror)**：
+    *   **国内访问极速连通**：将模板与配置中引用的 GitHub 静态资源（徽章、装饰贴纸、头像预设等）由境外容易发生 SSL 握手超时的 `fastly.jsdelivr.net` / `cdn.jsdelivr.net` 全面升级迁移至国内高速镜像 `cdn.jsdmirror.com`。
+    *   **全链路组件同步更新**：同步更新 `template_command_service.py`、`manifest.json`、WebUI 模板预设及 5 个 HTML 渲染模板。
+
+*   **🔍 【可观测性与异常诊断】T2I 渲染异常智能多态诊断与人机友好日志**：
+    *   **告别晦涩 Hex 报错**：新增 `_diagnose_non_image_payload` 智能诊断引擎。针对原日志中晦涩的十六进制文本（如 `496e7465726e616c2053` 即 ASCII `"Internal S"`），自动解码并精准映射为明确的 HTTP 500 状态与中文根因分析。
+    *   **多类型响应深度提取**：自动解构 FastAPI/T2I 服务的 JSON 错误堆栈、HTML 错误页核心标题（如 `502 Bad Gateway`）及 Playwright 超时提示；对未知二进制流保留长度及十六进制特征，清晰指引用户定位容器日志或提交反馈。
+
+*   **📖 【文档与排障指引】README.md 常见问题 (FAQ) 深度补充**：
+    *   **T2I 渲染超时/失败全景排查手册**：结合 Linux / Rootless Podman / Docker 等不同部署环境，详细拆解外链 CDN 阻塞（IPv4 优先配置）、容器数据卷共享挂载缺失（`-v /path/to/astrbot_data:/app/data`）、容器 Chromium 共享内存与沙箱限制（`--shm-size=1g` / `-e PLAYWRIGHT_CHROMIUM_SANDBOX=0`）等 4 大典型根因。
+
 ## [v5.6.0] - OneBot 方言驱动架构重构、Trace 任务级 Checkpoint 隔离防覆盖与控制台防重入控制
 
 *   **🧩 【架构重构】OneBot 平台适配器方言驱动架构 (Dialect-Driven Architecture) (#241)**：
