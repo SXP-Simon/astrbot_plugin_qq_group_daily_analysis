@@ -494,34 +494,25 @@ class ReportGenerator(IReportGenerator):
                                 ) or actual_data_head.startswith(b"\x89PNG"):
                                     is_valid = True
                                 else:
-                                    # 尝试解析 HTML 错误（如 502 Bad Gateway）
-                                    html_error = None
+                                    # 提取非图片数据的多维错误诊断与可读排查指引
+                                    raw_sample = b""
                                     if isinstance(image_data, bytes):
-                                        html_error = self._extract_html_error_summary(
-                                            image_data
-                                        )
+                                        raw_sample = image_data[:4096]
                                     elif isinstance(image_data, str) and os.path.exists(
                                         image_data
                                     ):
                                         try:
                                             with open(image_data, "rb") as f:
-                                                # 读取前 4KB 即可识别 HTML 错误
-                                                html_error = (
-                                                    self._extract_html_error_summary(
-                                                        f.read(4096)
-                                                    )
-                                                )
+                                                raw_sample = f.read(4096)
                                         except Exception:
                                             pass
 
-                                    if html_error:
-                                        logger.warning(
-                                            f"[T2I] 渲染引擎返回了错误页面而非图片: {html_error}"
-                                        )
-                                    else:
-                                        logger.warning(
-                                            f"渲染结果似乎不是有效的图片数据 (头部: {actual_data_head.hex()})"
-                                        )
+                                    diag_info = self._diagnose_non_image_payload(
+                                        raw_sample or actual_data_head
+                                    )
+                                    logger.warning(
+                                        f"[T2I] 渲染引擎返回了非图片数据: {diag_info}"
+                                    )
 
                             if is_valid:
                                 image_size = (
@@ -2027,27 +2018,95 @@ class ReportGenerator(IReportGenerator):
         except Exception as e:
             logger.warning(f"关闭头像缓存失败: {e}")
 
-    def _extract_html_error_summary(self, data: bytes) -> str | None:
-        """从返回的字节流中尝试提取 HTML 错误信息（如 <title>）"""
-        try:
-            content = data.decode("utf-8", errors="ignore")
-            content_lower = content.lower()
-            if "<html" in content_lower or "<!doctype html" in content_lower:
-                # 尝试提取标题
+    def _diagnose_non_image_payload(self, data: bytes) -> str:
+        """从非图片响应（文本/HTML/JSON/错误流/未知二进制）中提取人机友好的诊断分析与排查指引。
+
+        Args:
+            data: T2I 服务返回的原始响应前置或全量字节流。
+
+        Returns:
+            str: 格式化的人类可读错误描述与排查指引。
+        """
+        if not data:
+            return "返回数据为空 (0 字节)"
+
+        # 尝试将前置数据解码为可读文本
+        text = ""
+        for encoding in ("utf-8", "gbk", "latin-1"):
+            try:
+                text = data.decode(encoding).strip()
+                break
+            except Exception:
+                continue
+
+        # 1. 成功解码为可读文本
+        if text:
+            # 1.1 JSON 格式错误处理 (如 FastAPI {"detail": "..."})
+            if (text.startswith("{") and text.endswith("}")) or (
+                text.startswith("[") and text.endswith("]")
+            ):
+                try:
+                    payload = json.loads(text)
+                    if isinstance(payload, dict):
+                        detail = (
+                            payload.get("detail")
+                            or payload.get("error")
+                            or payload.get("message")
+                            or str(payload)
+                        )
+                        if isinstance(detail, str):
+                            if "Timeout" in detail or "timeout" in detail:
+                                return (
+                                    f"T2I 渲染超时 (JSON 错误: {detail}) - "
+                                    f"通常因外链 CDN 资源/大字体包下载过慢引起，建议在配置中切换访问环境为 Overseas 或调大渲染超时 (ms)"
+                                )
+                            return f"T2I 接口返回 JSON 错误: {detail}"
+                except Exception:
+                    pass
+
+            # 1.2 HTML 页面错误处理 (提取 <title> 或 <h1>)
+            text_lower = text.lower()
+            if "<html" in text_lower or "<!doctype html" in text_lower:
                 title_match = re.search(
-                    r"<title>(.*?)</title>", content, re.IGNORECASE | re.DOTALL
+                    r"<title>(.*?)</title>", text, re.IGNORECASE | re.DOTALL
                 )
-                if title_match:
-                    return f"HTML 错误页: {title_match.group(1).strip()}"
-
-                # 尝试提取 h1
-                h1_match = re.search(
-                    r"<h1>(.*?)</h1>", content, re.IGNORECASE | re.DOTALL
+                h1_match = re.search(r"<h1>(.*?)</h1>", text, re.IGNORECASE | re.DOTALL)
+                title = (
+                    title_match.group(1).strip()
+                    if title_match
+                    else (h1_match.group(1).strip() if h1_match else "")
                 )
-                if h1_match:
-                    return f"HTML 错误页: {h1_match.group(1).strip()}"
+                if title:
+                    return (
+                        f"HTML 错误页:「{title}」(T2I 渲染端点返回了网页响应而非图片)"
+                    )
+                clean_snippet = re.sub(r"\s+", " ", text[:120]).strip()
+                return f"HTML 响应内容: {clean_snippet}..."
 
-                return f"HTML 响应 (前100字): {content[:100].strip()}..."
-        except Exception:
-            pass
-        return None
+            # 1.3 常见纯文本错误模式识别
+            if "Internal Server Error" in text:
+                return (
+                    f"HTTP 500 (Internal Server Error) - T2I 服务内部发生异常。"
+                    f"常见根因: Playwright 页面超时（外部大字体包/图片 CDN 握手丢包）、"
+                    f"数据卷未挂载共享（找不到 /app/data/*.html）或容器 Chromium 沙箱/内存不足崩溃。"
+                    f"原始返回:「{text[:100].strip()}」"
+                )
+            if "Bad Gateway" in text:
+                return "HTTP 502 (Bad Gateway) - T2I 反向代理网关未收到上游服务响应"
+            if "Gateway Timeout" in text:
+                return "HTTP 504 (Gateway Timeout) - T2I 服务网关请求超时"
+            if "Timeout" in text or "TimeoutError" in text:
+                return (
+                    f"T2I 页面加载超时 (Playwright Timeout): {text[:150].strip()} - "
+                    f"建议检查外链 CDN 连通性、配置 IPv4 优先或放宽超时时间"
+                )
+
+            clean_text = re.sub(r"\s+", " ", text[:150]).strip()
+            return f"纯文本响应 (非图片):「{clean_text}」"
+
+        # 2. 无法解码为文本的未知二进制数据
+        head_hex = data[:16].hex()
+        return (
+            f"未知二进制数据 (大小: {len(data)} 字节, 头部 Hex: {head_hex}) - "
+            f"如持续出现，建议检查 T2I 容器日志 (podman/docker logs) 或向社区提交反馈并附带该 Hex 头部"
+        )
