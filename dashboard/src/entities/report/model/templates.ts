@@ -98,8 +98,14 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
   },
 ];
 
+export const DEFAULT_CDN_HOST = "https://cdn.jsdmirror.com";
+export const GITHUB_REPO_OWNER = "SXP-Simon";
+export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
+export const GITHUB_REPO_BRANCH = "main";
+export const ASSETS_CDN_BASE = `${DEFAULT_CDN_HOST}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets`;
+
 export function getTemplateCdnUrl(templateKey: string): string {
-  return `https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/${templateKey}-demo.jpg`;
+  return `${ASSETS_CDN_BASE}/${templateKey}-demo.jpg`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [

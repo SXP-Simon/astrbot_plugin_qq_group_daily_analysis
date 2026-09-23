@@ -87,8 +87,23 @@ class ReportFormat(str, Enum):
     HTML = "html"
 
 
-# 插件元数据
+# 插件元数据与仓库配置
 PLUGIN_NAME = "astrbot_plugin_qq_group_daily_analysis"
+GITHUB_REPO_OWNER = "SXP-Simon"
+GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis"
+GITHUB_REPO_BRANCH = "main"
+
+# ==========================================
+# 静态资源与 CDN 配置常量
+# ==========================================
+DEFAULT_CDN_HOST = "https://cdn.jsdmirror.com"
+DEFAULT_GITHUB_REPO_CDN = (
+    f"{DEFAULT_CDN_HOST}/gh/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}"
+)
+DEFAULT_ASSETS_CDN_URL = f"{DEFAULT_GITHUB_REPO_CDN}/assets"
+DEFAULT_ATRI_ASSETS_CDN_URL = f"{DEFAULT_ASSETS_CDN_URL}/ATRI"
+DEFAULT_MIKU_ASSETS_CDN_URL = f"{DEFAULT_ASSETS_CDN_URL}/HatsuneMiku"
+DEFAULT_NPM_CDN_URL = f"{DEFAULT_CDN_HOST}/npm"
 
 # 平台标识符
 SUPPORTED_PLATFORMS = [
