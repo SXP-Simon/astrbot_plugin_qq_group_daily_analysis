@@ -1,11 +1,10 @@
 """
-数据模型定义（向后兼容层）
+领域模型模块（向后兼容层）
 
-所有分析结果数据结构已在 DDD 架构治理中归位至 `src.domain.value_objects.analysis_results`。
-本模块作为别名兼容层保留，确保历史调用代码与外部依赖完全兼容。
+所有分析结果模型已按 DDD 规范归入 `src.domain.value_objects`。
 """
 
-from ..value_objects.analysis_results import (
+from .data_models import (
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
