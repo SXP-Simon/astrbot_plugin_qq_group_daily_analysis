@@ -201,6 +201,29 @@ class ActiveTaskManager:
             except Exception:
                 self._subscribers.discard(q)
 
+    def publish_log_sync(
+        self, trace_id: str, stage: str, message: str, level: str = "INFO"
+    ) -> None:
+        """同步向 SSE 推送单条日志事件"""
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                self._broadcast_event(
+                    {
+                        "event": "log_emitted",
+                        "data": {
+                            "trace_id": trace_id,
+                            "stage": stage,
+                            "message": message,
+                            "level": level,
+                            "time": time.time(),
+                        },
+                    }
+                )
+            )
+        except RuntimeError:
+            pass
+
     # ── Task Reaper 守护线程 ──
 
     def start_reaper(
