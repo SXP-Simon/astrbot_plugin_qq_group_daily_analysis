@@ -10,10 +10,7 @@ import asyncio
 import datetime as dt
 import hashlib
 import time as time_mod
-import weakref
-from collections import defaultdict
 from collections.abc import Mapping
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -39,16 +36,14 @@ from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .analysis_serializer import AnalysisResultSerializer
+from .incremental_batch_builder import (
+    compute_hourly_counts,
+    convert_user_activity_for_merge,
+)
 from .pipeline_context import PipelineContext
+from .task_guard import DuplicateGroupTaskError, TaskGuard
 
-_LLM_SEMAPHORE_INFO_SECONDS = 1.0
-_LLM_SEMAPHORE_WARN_SECONDS = 15.0
-
-
-class DuplicateGroupTaskError(Exception):
-    """当同一个群组在同一时间尝试启动相同类型的重复分析任务时抛出。"""
-
-    pass
+__all__ = ["AnalysisApplicationService", "DuplicateGroupTaskError"]
 
 
 class AnalysisApplicationService:
@@ -79,139 +74,40 @@ class AnalysisApplicationService:
         self.incremental_merge_service = incremental_merge_service
         self.checkpoint_store = checkpoint_store
         self.html_render = html_render
-        self._locks = weakref.WeakValueDictionary()
-        # 全局 LLM 分析信号量，控制对外 API 的并发压力
-        # 使用专用的 LLM 并发配置项
+
         max_concurrent = max(1, int(self.config_manager.get_llm_max_concurrent()))
-        self._llm_max_concurrent = max_concurrent
-        self.llm_semaphore = asyncio.Semaphore(max_concurrent)
-        # 用于追踪当前正在执行的任务，实现原子的“检查并设置”逻辑，避免 locked() 竞态
-        self._active_tasks = set()
+        self._task_guard = TaskGuard(max_concurrent)
+        self.llm_semaphore = self._task_guard.llm_semaphore
+
+    @property
+    def _active_tasks(self):
+        """兼容层：活跃任务集合。"""
+        return self._task_guard._active_tasks
+
+    @property
+    def _locks(self):
+        """兼容层：任务锁字典。"""
+        return self._task_guard._locks
 
     def is_group_running(self, group_id: str, task_type: str = "daily") -> bool:
         """检查指定群的特定任务是否正在执行中。
 
         Args:
             group_id: 群号。
-            task_type: 任务类型（默认为 "daily" 分析任务）。
+            task_type: 任务类型（默认为 'daily' 分析任务）。
 
         Returns:
             bool: 是否正在运行。
         """
-        lock_key = f"{task_type}:{group_id}"
-        return lock_key in self._active_tasks
+        return self._task_guard.is_group_running(group_id, task_type)
 
-    @asynccontextmanager
-    async def group_lock(self, group_id: str, task_type: str = "analysis"):
-        """
-        同一时间、同一个群、同一种任务只能有一个在执行
-        锁将在退出上下文时自动释放。
-        """
-        lock_key = f"{task_type}:{group_id}"
+    def group_lock(self, group_id: str, task_type: str = "analysis"):
+        """获取群组排他锁上下文管理器。"""
+        return self._task_guard.group_lock(group_id, task_type)
 
-        # 获取或创建该群组特有的锁（保留锁作为第二道资源限流防线）
-        lock = self._locks.get(lock_key)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._locks[lock_key] = lock
-
-        # 使用同步集合实现原子化的“运行中”检查
-        # 在 asyncio 的单线程循环中，同步代码段不会被中断，因此这是原子操作
-        if lock_key in self._active_tasks:
-            logger.warning(f"群 {group_id} 的 {task_type} 任务已在运行，跳过本次请求")
-            raise DuplicateGroupTaskError(f"Duplicate task for {lock_key}")
-
-        # 占位：标记任务开始
-        self._active_tasks.add(lock_key)
-
-        try:
-            async with lock:
-                logger.debug(f"[Lock] 已获取群 {group_id} 的 {task_type} 排他锁")
-                yield
-        finally:
-            # 释放：标记任务结束
-            self._active_tasks.discard(lock_key)
-            logger.debug(f"[Lock] 已释放群 {group_id} 的 {task_type} 排他锁")
-
-    @asynccontextmanager
-    async def _llm_slot(self, group_id: str, stage: str):
-        """观察并占用一次 LLM 分析槽位。
-
-        Args:
-            group_id: 当前分析任务所属群号。
-            stage: 分析阶段名称，用于区分全量、增量、最终报告等入口。
-
-        Yields:
-            None: 成功进入 LLM 分析槽位后交还给调用方执行实际分析。
-
-        Raises:
-            asyncio.CancelledError: 调用方任务被取消时原样抛出。
-        """
-        trace = TraceContext.current()
-        missing_marker = object()
-        previous_stage = missing_marker
-        previous_group_id = missing_marker
-        if trace:
-            # 将外层分析阶段写入 Trace 元数据，供更底层的 Provider 调用日志读取。
-            previous_stage = trace.metadata.get("llm_stage", missing_marker)
-            previous_group_id = trace.metadata.get("llm_group_id", missing_marker)
-            trace.metadata["llm_stage"] = stage
-            trace.metadata["llm_group_id"] = group_id
-
-        wait_started_at = time_mod.monotonic()
-        logger.debug(
-            f"[LLM 队列观测] 等待分析槽位: group={group_id}, stage={stage}, "
-            f"available={getattr(self.llm_semaphore, '_value', None)}/"
-            f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
-        )
-        while True:
-            try:
-                await asyncio.wait_for(
-                    self.llm_semaphore.acquire(), timeout=_LLM_SEMAPHORE_WARN_SECONDS
-                )
-                break
-            except TimeoutError:
-                logger.warning(
-                    f"[LLM 队列观测] 等待分析槽位超过 "
-                    f"{time_mod.monotonic() - wait_started_at:.0f}s: "
-                    f"group={group_id}, stage={stage}, "
-                    f"available={getattr(self.llm_semaphore, '_value', None)}/"
-                    f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
-                )
-
-        waited_seconds = time_mod.monotonic() - wait_started_at
-        log_method = (
-            logger.info
-            if waited_seconds >= _LLM_SEMAPHORE_INFO_SECONDS
-            else logger.debug
-        )
-        log_method(
-            f"[LLM 队列观测] 已进入分析槽位: group={group_id}, stage={stage}, "
-            f"wait={waited_seconds:.2f}s, "
-            f"available={getattr(self.llm_semaphore, '_value', None)}/"
-            f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
-        )
-        run_started_at = time_mod.monotonic()
-        try:
-            yield
-        finally:
-            self.llm_semaphore.release()
-            logger.debug(
-                f"[LLM 队列观测] 已释放分析槽位: group={group_id}, stage={stage}, "
-                f"duration={time_mod.monotonic() - run_started_at:.2f}s, "
-                f"available={getattr(self.llm_semaphore, '_value', None)}/"
-                f"{self._llm_max_concurrent}, active={len(self._active_tasks)}"
-            )
-            if trace:
-                # 恢复原有 Trace 元数据，避免嵌套或后续任务误读上一段分析阶段。
-                if previous_stage is missing_marker:
-                    trace.metadata.pop("llm_stage", None)
-                else:
-                    trace.metadata["llm_stage"] = previous_stage
-                if previous_group_id is missing_marker:
-                    trace.metadata.pop("llm_group_id", None)
-                else:
-                    trace.metadata["llm_group_id"] = previous_group_id
+    def _llm_slot(self, group_id: str, stage: str):
+        """观察并占用一次 LLM 分析槽位。"""
+        return self._task_guard.llm_slot(group_id, stage)
 
     async def execute_daily_analysis(
         self,
@@ -1903,73 +1799,17 @@ class AnalysisApplicationService:
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
-    # ----------------------------------------------------------------
-    # 辅助方法
-    # ----------------------------------------------------------------
-
     @staticmethod
     def _compute_hourly_counts(
         messages: list[UnifiedMessage],
     ) -> tuple[dict[int, int], dict[int, int]]:
-        """
-        从消息列表计算按小时的消息数和字符数分布。
-
-        Args:
-            messages: 统一格式的消息列表
-
-        Returns:
-            tuple: (每小时消息计数, 每小时字符计数)
-        """
-        hourly_msg: dict[int, int] = defaultdict(int)
-        hourly_char: dict[int, int] = defaultdict(int)
-
-        for msg in messages:
-            hour = dt.datetime.fromtimestamp(msg.timestamp).hour
-            hourly_msg[hour] += 1
-            hourly_char[hour] += msg.get_text_length()
-
-        return dict(hourly_msg), dict(hourly_char)
+        """从消息列表计算按小时的消息数和字符数分布。"""
+        return compute_hourly_counts(messages)
 
     @staticmethod
     def _convert_user_activity_for_merge(
         user_activity: Mapping[str, UserActivityStats],
         messages: list[UnifiedMessage],
     ) -> dict[str, dict]:
-        """
-        将 AnalysisDomainService.analyze_user_activity() 的返回格式
-        转换为 IncrementalBatch 所需的 user_stats 格式。
-
-        转换映射：
-        - nickname -> name
-        - hours (defaultdict) -> active_hours (list)
-        - 新增 last_message_time（从消息时间戳中提取）
-
-        Args:
-            user_activity: AnalysisDomainService 返回的用户活跃数据
-            messages: 本批次的消息列表（用于提取每个用户的最后发言时间）
-
-        Returns:
-            dict: IncrementalBatch 所需的 user_stats 格式
-        """
-        # 预先计算每个用户的最后消息时间戳
-        user_last_time: dict[str, int] = {}
-        for msg in messages:
-            current = user_last_time.get(msg.sender_id, 0)
-            if msg.timestamp > current:
-                user_last_time[msg.sender_id] = msg.timestamp
-
-        result: dict[str, dict] = {}
-        for user_id, stats in user_activity.items():
-            result[user_id] = {
-                "nickname": stats.get("nickname", user_id),
-                "message_count": stats.get("message_count", 0),
-                "char_count": stats.get("char_count", 0),
-                "emoji_count": stats.get("emoji_count", 0),
-                "reply_count": stats.get("reply_count", 0),
-                "hours": dict(
-                    stats.get("hours", {})
-                ),  # 这里的 hours 是 defaultdict(int)，转为 dict
-                "last_message_time": user_last_time.get(user_id, 0),
-            }
-
-        return result
+        """将用户活跃数据转换为 IncrementalBatch 所需的格式。"""
+        return convert_user_activity_for_merge(user_activity, messages)
