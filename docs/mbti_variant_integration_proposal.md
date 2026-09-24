@@ -113,7 +113,7 @@ Issue #167 提出的核心诉求不是“把 MBTI 算得更准”，而是让群
 
 当前插件本身已经有比较成熟的 HTML 报告模板体系，不是从零开始：
 
-- [`src/infrastructure/reporting/generators.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/generators.py) 会在 `_prepare_render_data` 里生成 `titles_html`
+- [`src/infrastructure/reporting/render_data_preparer.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/render_data_preparer.py) 会在 `prepare_render_data` 里生成 `titles_html`
 - [`src/infrastructure/reporting/templates.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/templates.py) 会按当前模板目录加载 Jinja2 模板
 - 各模板目录下已经有独立的 `user_title_item.html` 片段，适合承载人格卡片
 
