@@ -6,7 +6,6 @@
 from collections import defaultdict
 from datetime import datetime
 
-from ...infrastructure.visualization.activity_charts import ActivityVisualizer
 from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
 from ..repositories.visualization_repository import IActivityVisualizer
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
@@ -15,12 +14,13 @@ from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 class StatisticsService:
     """统计服务 - 处理群聊数据的聚合统计"""
 
-    def __init__(self, activity_visualizer: IActivityVisualizer | None = None):
-        if activity_visualizer is None:
-            # Fallback: keep backward compatibility
-            self.activity_visualizer: IActivityVisualizer = ActivityVisualizer()
-        else:
-            self.activity_visualizer = activity_visualizer
+    def __init__(self, activity_visualizer: IActivityVisualizer):
+        """初始化统计领域服务。
+
+        Args:
+            activity_visualizer: 活跃度图表可视化生成器实现。
+        """
+        self.activity_visualizer = activity_visualizer
 
     def calculate_group_statistics(
         self, messages: list[UnifiedMessage]
