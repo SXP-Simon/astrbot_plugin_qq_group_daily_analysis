@@ -460,3 +460,353 @@ def test_checkpoint_store_corner_cases_expiration_and_fallback(temp_db: Path):
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_run_incremental_analysis_enforces_days_lookback_boundary(
+    dummy_plugin_kv: DummyPluginKV, temp_db: Path
+):
+    """测试增量分析全链路：当旧游标停留在数天前 (例如周一)，配置为 1 天时，严格受 days 边界约束，绝不过界拉取和分析历史消息。"""
+    from src.application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from src.domain.value_objects.unified_message import (
+        MessageContent,
+        MessageContentType,
+        UnifiedMessage,
+    )
+
+    now_ts = int(time.time())
+    three_days_ago_ts = now_ts - 3 * 86400  # 周一 (3天前)
+    two_days_ago_ts = now_ts - 2 * 86400  # 周二 (2天前)
+    one_hour_ago_ts = now_ts - 3600  # 周三/今天 (1小时前)
+
+    # 1. 模拟 IncrementalStore 游标停留在 3 天前
+    inc_store = IncrementalStore(dummy_plugin_kv)
+    await inc_store.update_last_analyzed_cursor(
+        "group_999", three_days_ago_ts, ["msg_old_1"]
+    )
+
+    mock_config = MagicMock()
+    mock_config.get_analysis_days = MagicMock(return_value=1)  # 仅分析 1 天
+    mock_config.get_incremental_min_messages = MagicMock(return_value=1)
+    mock_config.get_max_messages = MagicMock(return_value=500)
+    mock_config.get_filter_bot_messages = MagicMock(return_value=False)
+    mock_config.get_bot_self_ids = MagicMock(return_value=[])
+    mock_config.get_user_title_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_golden_quote_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_chat_quality_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_topic_analysis_enabled = MagicMock(return_value=True)
+    mock_config.get_incremental_topics_per_batch = MagicMock(return_value=3)
+    mock_config.get_incremental_quotes_per_batch = MagicMock(return_value=3)
+    mock_config.get_group_platform_id = MagicMock(return_value="onebot_test")
+    mock_config.get_llm_max_concurrent = MagicMock(return_value=2)
+    mock_config.get_llm_queue_timeout = MagicMock(return_value=60)
+
+    # 3. 模拟 Adapter
+    mock_adapter = AsyncMock()
+    mock_adapter.is_group_muted = AsyncMock(return_value=False)
+    fetched_messages = [
+        UnifiedMessage(
+            message_id="msg_mon",
+            sender_id="u1",
+            sender_name="User1",
+            group_id="group_999",
+            timestamp=three_days_ago_ts + 10,
+            text_content="周一的话题消息",
+            contents=(
+                MessageContent(
+                    type=MessageContentType.TEXT, text="周一的话题消息"
+                ),
+            ),
+        ),
+        UnifiedMessage(
+            message_id="msg_tue",
+            sender_id="u2",
+            sender_name="User2",
+            group_id="group_999",
+            timestamp=two_days_ago_ts,
+            text_content="周二的话题消息",
+            contents=(
+                MessageContent(
+                    type=MessageContentType.TEXT, text="周二的话题消息"
+                ),
+            ),
+        ),
+        UnifiedMessage(
+            message_id="msg_wed",
+            sender_id="u3",
+            sender_name="User3",
+            group_id="group_999",
+            timestamp=one_hour_ago_ts,
+            text_content="周三今天的话题消息",
+            contents=(
+                MessageContent(
+                    type=MessageContentType.TEXT, text="周三今天的话题消息"
+                ),
+            ),
+        ),
+    ]
+    mock_adapter.fetch_messages = AsyncMock(return_value=fetched_messages)
+
+    mock_bot_manager = MagicMock()
+    mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+
+    # 4. 模拟 LLM Analyzer 与 StatisticsService
+    mock_llm_analyzer = AsyncMock()
+    analyzed_topics = [
+        SummaryTopic(
+            topic="周三今天的新鲜话题",
+            detail="讨论了周三的事情",
+            contributors=["User3"],
+        )
+    ]
+    mock_llm_analyzer.analyze_incremental_concurrent = AsyncMock(
+        return_value=(
+            analyzed_topics,
+            [],
+            TokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+            None,
+        )
+    )
+
+    mock_stat_service = MagicMock()
+    mock_stat_service.calculate_group_statistics = MagicMock(
+        return_value=GroupStatistics(
+            message_count=1,
+            total_characters=10,
+            participant_count=1,
+            most_active_period="12:00-13:00",
+            golden_quotes=[],
+            emoji_count=0,
+        )
+    )
+    mock_stat_service._convert_to_legacy_dict = MagicMock(
+        side_effect=lambda msgs: [
+            {"id": m.message_id, "text": m.text_content} for m in msgs
+        ]
+    )
+
+    mock_domain_service = MagicMock()
+    mock_domain_service.analyze_user_activity = MagicMock(return_value={})
+
+    chk_store = CheckpointStore(temp_db)
+    service = AnalysisApplicationService(
+        config_manager=mock_config,
+        bot_manager=mock_bot_manager,
+        history_manager=MagicMock(),
+        report_generator=MagicMock(),
+        llm_analyzer=mock_llm_analyzer,
+        statistics_service=mock_stat_service,
+        analysis_domain_service=mock_domain_service,
+        checkpoint_store=chk_store,
+        incremental_store=inc_store,
+    )
+
+    # 5. 执行增量分析
+    result = await service.execute_incremental_analysis(
+        group_id="group_999",
+        platform_id="onebot_test",
+    )
+
+    # 6. 验证
+    assert result["success"] is True
+    # 验证 adapter.fetch_messages 的 since_ts 参数被约束在 1 天内
+    fetch_call_args = mock_adapter.fetch_messages.call_args
+    assert fetch_call_args is not None
+    assert (
+        fetch_call_args.kwargs["since_ts"] >= now_ts - 86400 - 5
+    )  # 允许 5s 运行误差
+
+    # 验证传入统计与转换的消息只有周三的消息 (msg_wed)，周一与周二的消息被严格过滤
+    legacy_msgs_passed = (
+        mock_stat_service._convert_to_legacy_dict.call_args[0][0]
+    )
+    assert len(legacy_msgs_passed) == 1
+    assert legacy_msgs_passed[0].message_id == "msg_wed"
+    assert legacy_msgs_passed[0].text_content == "周三今天的话题消息"
+
+
+@pytest.mark.asyncio
+async def test_incremental_store_query_batches_and_cleanup_cross_days(
+    dummy_plugin_kv: DummyPluginKV,
+):
+    """验证 IncrementalStore 跨天查询与保留期清理：严格按时间窗口检索，清理超出保留期的陈旧批次。"""
+    store = IncrementalStore(dummy_plugin_kv)
+    now = time.time()
+    three_days_ago = now - 3 * 86400  # 周一 (3天前)
+    two_days_ago = now - 2 * 86400  # 周二 (2天前)
+    one_hour_ago = now - 3600  # 周三/今天 (1小时前)
+
+    # 1. 插入三个不同日期的批次
+    batch_mon = IncrementalBatch(
+        batch_id="batch_monday",
+        group_id="group_multiday",
+        timestamp=three_days_ago,
+        messages_count=100,
+        characters_count=1000,
+        topics=[
+            {
+                "topic": "周一旧话题",
+                "detail": "周一内容",
+                "contributors": ["Alice"],
+            }
+        ],
+    )
+    batch_tue = IncrementalBatch(
+        batch_id="batch_tuesday",
+        group_id="group_multiday",
+        timestamp=two_days_ago,
+        messages_count=80,
+        characters_count=800,
+        topics=[
+            {
+                "topic": "周二旧话题",
+                "detail": "周二内容",
+                "contributors": ["Bob"],
+            }
+        ],
+    )
+    batch_wed = IncrementalBatch(
+        batch_id="batch_wednesday",
+        group_id="group_multiday",
+        timestamp=one_hour_ago,
+        messages_count=50,
+        characters_count=500,
+        topics=[
+            {
+                "topic": "周三今天话题",
+                "detail": "周三内容",
+                "contributors": ["Charlie"],
+            }
+        ],
+    )
+
+    await store.save_batch(batch_mon)
+    await store.save_batch(batch_tue)
+    await store.save_batch(batch_wed)
+    assert await store.get_batch_count("group_multiday") == 3
+
+    # 2. 查询 1 天时间窗口 [now - 86400, now] -> 必须只返回周三当天的批次
+    window_start = now - 86400
+    window_end = now
+    window_batches = await store.query_batches(
+        "group_multiday", window_start, window_end
+    )
+    assert len(window_batches) == 1
+    assert window_batches[0].batch_id == "batch_wednesday"
+    assert window_batches[0].topics[0]["topic"] == "周三今天话题"
+
+    # 3. 执行过期清理 (清理 2 天前的批次) -> 周一(3天前)批次被清理，周二与周三批次保留
+    deleted_count = await store.cleanup_old_batches(
+        "group_multiday", before_timestamp=now - 2.5 * 86400
+    )
+    assert deleted_count == 1
+    assert await store.get_batch_count("group_multiday") == 2
+    assert await store.get_batch_detail("group_multiday", "batch_monday") is None
+    assert (
+        await store.get_batch_detail("group_multiday", "batch_tuesday")
+        is not None
+    )
+    assert (
+        await store.get_batch_detail("group_multiday", "batch_wednesday")
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+async def test_incremental_final_report_aggregates_only_in_window_batches(
+    dummy_plugin_kv: DummyPluginKV,
+):
+    """验证最终报告生成阶段：即使存储中残留有历史旧批次，也仅聚合滑动窗口内批次，彻底杜绝历史话题泄漏。"""
+    from src.application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from src.domain.services.incremental_merge_service import (
+        IncrementalMergeService,
+    )
+
+    store = IncrementalStore(dummy_plugin_kv)
+    now = time.time()
+
+    # 1. 存储中存在 3 天前的旧批次与 2 小时前的新批次
+    batch_old = IncrementalBatch(
+        batch_id="batch_old_mon",
+        group_id="grp_final_test",
+        timestamp=now - 3 * 86400,
+        messages_count=100,
+        characters_count=1000,
+        topics=[
+            {
+                "topic": "周一已结题旧话题",
+                "detail": "旧详情",
+                "contributors": ["OldUser"],
+            }
+        ],
+    )
+    batch_new = IncrementalBatch(
+        batch_id="batch_new_wed",
+        group_id="grp_final_test",
+        timestamp=now - 7200,
+        messages_count=40,
+        characters_count=400,
+        topics=[
+            {
+                "topic": "周三今日新鲜事",
+                "detail": "新详情",
+                "contributors": ["NewUser"],
+            }
+        ],
+    )
+    await store.save_batch(batch_old)
+    await store.save_batch(batch_new)
+
+    # 2. Mock 配置
+    mock_config = MagicMock()
+    mock_config.get_analysis_days = MagicMock(return_value=1)  # 仅汇总 1 天
+    mock_config.get_user_title_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_golden_quote_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_chat_quality_analysis_enabled = MagicMock(return_value=False)
+    mock_config.get_llm_max_concurrent = MagicMock(return_value=2)
+    mock_config.get_llm_queue_timeout = MagicMock(return_value=60)
+    mock_config.get_max_user_titles = MagicMock(return_value=5)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.is_group_muted = AsyncMock(return_value=False)
+    mock_bot_manager = MagicMock()
+    mock_bot_manager.get_adapter = MagicMock(return_value=mock_adapter)
+
+    mock_history = AsyncMock()
+
+    merge_service = IncrementalMergeService()
+
+    service = AnalysisApplicationService(
+        config_manager=mock_config,
+        bot_manager=mock_bot_manager,
+        history_manager=mock_history,
+        report_generator=MagicMock(),
+        llm_analyzer=AsyncMock(),
+        statistics_service=MagicMock(),
+        analysis_domain_service=MagicMock(),
+        incremental_store=store,
+        incremental_merge_service=merge_service,
+    )
+
+    # 3. 执行最终报告生成流程
+    result = await service.execute_incremental_final_report(
+        group_id="grp_final_test", platform_id="onebot"
+    )
+
+    # 4. 验证
+    assert result["success"] is True
+    analysis_result = result["analysis_result"]
+    # 验证话题列表中仅包含周三今日新鲜事，完全不包含周一旧话题
+    topic_titles = [t.topic for t in analysis_result["topics"]]
+    assert "周三今日新鲜事" in topic_titles
+    assert "周一已结题旧话题" not in topic_titles
+    # 验证消息量仅为周三当天的 40 条
+    assert analysis_result["statistics"].message_count == 40
+
+
+
+

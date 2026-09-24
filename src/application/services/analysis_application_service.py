@@ -1449,6 +1449,14 @@ class AnalysisApplicationService:
                 last_analyzed_message_ids,
             ) = await self.incremental_store.get_last_analyzed_cursor(group_id)
             days = self.config_manager.get_analysis_days()
+            days_lookback_ts = int(
+                (dt.datetime.now() - dt.timedelta(days=days)).timestamp()
+            )
+            effective_since_ts = (
+                max(last_analyzed_ts, days_lookback_ts)
+                if last_analyzed_ts > 0
+                else days_lookback_ts
+            )
             # 复用基础拉取上限，同时保证至少能拉取一个完整增量批次。
             min_messages = self.config_manager.get_incremental_min_messages()
             max_count = max(self.config_manager.get_max_messages(), min_messages)
@@ -1461,7 +1469,7 @@ class AnalysisApplicationService:
                 date_str=date_str,
             )
 
-            # 3. 拉取消息（优先从上次进度点开始回溯，确保不遗漏高活跃期间的 Gap）
+            # 3. 拉取消息（优先从上次进度点开始回溯，严格约束在 days 时间窗口内）
             fetch_started_at = time_mod.monotonic()
             async with pipeline.step(
                 AnalysisStage.FETCH_MESSAGES,
@@ -1471,7 +1479,7 @@ class AnalysisApplicationService:
                     group_id=group_id,
                     days=days,
                     max_count=max_count,
-                    since_ts=last_analyzed_ts,
+                    since_ts=effective_since_ts,
                 )
                 step.set_payload(
                     raw_count=len(raw_messages),
@@ -1515,17 +1523,20 @@ class AnalysisApplicationService:
                     incremental_batches=1,
                 )
 
-            # 5. 复合游标去重，避免同一秒内分批时遗漏消息。
-            if last_analyzed_ts > 0:
-                unified_messages = [
-                    msg
-                    for msg in unified_messages
-                    if msg.timestamp > last_analyzed_ts
+            # 5. 复合游标去重与时间窗口门禁，确保绝不回溯超过 days 配置的历史消息。
+            unified_messages = [
+                msg
+                for msg in unified_messages
+                if msg.timestamp >= days_lookback_ts
+                and (
+                    last_analyzed_ts <= 0
+                    or msg.timestamp > last_analyzed_ts
                     or (
                         msg.timestamp == last_analyzed_ts
                         and msg.message_id not in last_analyzed_message_ids
                     )
-                ]
+                )
+            ]
 
             eligible_count = len(unified_messages)
             logger.debug(

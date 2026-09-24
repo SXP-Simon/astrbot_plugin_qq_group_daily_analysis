@@ -8,7 +8,7 @@ import asyncio
 import base64
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -129,13 +129,10 @@ class OneBotAdapter(PlatformAdapter):
             all_raw_messages = []
             seen_raw_ids: set[str] = set()
 
-            # 确定回溯的起始时间点
-            if since_ts and since_ts > 0:
-                start_timestamp = since_ts
-            else:
-                end_time_dt = datetime.now()
-                start_time_dt = end_time_dt - timedelta(days=days)
-                start_timestamp = int(start_time_dt.timestamp())
+            # 确定回溯的起始时间点（以配置的 days 作为最远回溯边界，避免 since_ts 跨天/长期停机时越界拉取）
+            start_timestamp = self.calculate_effective_start_timestamp(
+                days=days, since_ts=since_ts
+            )
 
             # 使用 message_seq 或 message_id 进行分页回溯拉取
             current_anchor_id = before_id

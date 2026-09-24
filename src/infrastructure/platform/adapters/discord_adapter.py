@@ -8,7 +8,6 @@ Discord 平台适配器
 具体实现取决于 AstrBot 的 Discord 集成方式。
 """
 
-from datetime import datetime, timedelta
 from typing import Any
 
 from ....utils.logger import logger
@@ -144,11 +143,9 @@ class DiscordAdapter(PlatformAdapter):
                 logger.warning(f"频道 {group_id} 不支持历史消息访问。")
                 return []
 
-            if since_ts and since_ts > 0:
-                start_time = datetime.fromtimestamp(since_ts)
-            else:
-                end_time = datetime.now()
-                start_time = end_time - timedelta(days=days)
+            start_time = self.calculate_effective_cutoff_datetime(
+                days=days, since_ts=since_ts, tz=None
+            )
 
             logger.debug(
                 "Discord 消息拉取开始: group=%s, max_count=%s, since_ts=%s, before_id=%s",

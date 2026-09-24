@@ -10,7 +10,7 @@ import base64
 import os
 import time
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -201,11 +201,9 @@ class TelegramAdapter(PlatformAdapter):
                 except (TypeError, ValueError):
                     logger.warning(f"[Telegram] before_id invalid: {before_id}")
 
-            if since_ts and since_ts > 0:
-                # 统一使用 UTC 以兼容数据库记录的时间存储
-                cutoff_time = datetime.fromtimestamp(since_ts, UTC)
-            else:
-                cutoff_time = datetime.now(UTC) - timedelta(days=days)
+            cutoff_time = self.calculate_effective_cutoff_datetime(
+                days=days, since_ts=since_ts, tz=UTC
+            )
             target_count = max(1, int(max_count))
             page_size = target_count
             current_page = 1

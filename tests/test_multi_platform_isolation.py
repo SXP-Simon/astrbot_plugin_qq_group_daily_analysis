@@ -337,3 +337,57 @@ async def test_analysis_service_rejects_unmatched_platform():
     with pytest.raises(ValueError, match="未找到平台 lark_main 的适配器"):
         await service.execute_daily_analysis("10001", platform_id="lark_main")
 
+
+def test_platform_adapter_time_window_calculation_boundaries():
+    """Verify PlatformAdapter base calculation methods enforce strict [now - days, now] bounds."""
+    from datetime import datetime, timezone
+    from src.infrastructure.platform.base import PlatformAdapter
+
+    base_now = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc)
+    base_ts = int(base_now.timestamp())
+    one_day_ago_ts = base_ts - 86400
+    three_days_ago_ts = base_ts - 86400 * 3
+    six_hours_ago_ts = base_ts - 3600 * 6
+
+    # 1. No since_ts: returns exactly 1 day ago
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=1, since_ts=None, now=base_now
+    ) == one_day_ago_ts
+
+    # 2. since_ts is 0 or negative: ignored, returns 1 day ago
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=1, since_ts=0, now=base_now
+    ) == one_day_ago_ts
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=1, since_ts=-100, now=base_now
+    ) == one_day_ago_ts
+
+    # 3. since_ts is 3 days ago (stale cursor): clamped to 1 day ago
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=1, since_ts=three_days_ago_ts, now=base_now
+    ) == one_day_ago_ts
+
+    # 4. since_ts is 6 hours ago (fresh cursor): respected
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=1, since_ts=six_hours_ago_ts, now=base_now
+    ) == six_hours_ago_ts
+
+    # 5. Multi-day window (days=3): stale cursor of 3 days ago is respected
+    assert PlatformAdapter.calculate_effective_start_timestamp(
+        days=3, since_ts=three_days_ago_ts, now=base_now
+    ) == three_days_ago_ts
+
+    # 6. calculate_effective_cutoff_datetime with UTC and naive
+    dt_utc = PlatformAdapter.calculate_effective_cutoff_datetime(
+        days=1, since_ts=six_hours_ago_ts, tz=timezone.utc, now=base_now
+    )
+    assert dt_utc.tzinfo == timezone.utc
+    assert int(dt_utc.timestamp()) == six_hours_ago_ts
+
+    dt_naive = PlatformAdapter.calculate_effective_cutoff_datetime(
+        days=1, since_ts=three_days_ago_ts, tz=None, now=base_now
+    )
+    assert dt_naive.tzinfo is None
+    assert int(dt_naive.timestamp()) == one_day_ago_ts
+
+
