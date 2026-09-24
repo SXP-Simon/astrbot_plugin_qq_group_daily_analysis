@@ -20,9 +20,6 @@ from astrbot.api.star import Context, Star, StarTools
 # File is only available via astrbot.core (internal API — may change).
 from astrbot.core.message.components import File
 
-from .src.application.commands.template_command_service import (
-    TemplateCommandService,
-)
 from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
     DuplicateGroupTaskError,
@@ -31,6 +28,9 @@ from .src.application.services.comic_application_service import ComicApplication
 from .src.application.services.crash_recovery_service import CrashRecoveryService
 from .src.application.services.message_processing_service import (
     MessageProcessingService,
+)
+from .src.application.services.template_command_service import (
+    TemplateCommandService,
 )
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
 from .src.domain.services.incremental_merge_service import IncrementalMergeService

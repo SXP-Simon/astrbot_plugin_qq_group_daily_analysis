@@ -22,7 +22,9 @@ if TYPE_CHECKING:
     from telegram.error import BadRequest
     from telegram.ext import CallbackQueryHandler, ContextTypes
 
-    from ....application.commands.template_command_service import TemplateCommandService
+    from ....application.services.template_command_service import (
+        TemplateCommandService,
+    )
     from ...config.config_manager import ConfigManager
 
 try:

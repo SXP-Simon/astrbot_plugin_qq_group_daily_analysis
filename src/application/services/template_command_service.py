@@ -1,4 +1,4 @@
-"""模板管理相关命令服务。"""
+"""模板管理相关应用服务。"""
 
 from __future__ import annotations
 

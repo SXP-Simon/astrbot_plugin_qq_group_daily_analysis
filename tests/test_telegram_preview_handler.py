@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from astrbot_plugin_qq_group_daily_analysis.src.application.commands.template_command_service import (
+from astrbot_plugin_qq_group_daily_analysis.src.application.services.template_command_service import (
     TemplateCommandService,
 )
 from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.config.config_manager import (

@@ -848,7 +848,7 @@ async def test_plugin_config_api(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_template_command_service_list_and_exists():
     """测试 TemplateCommandService 能够正确识别 html_template.html / image_template.html 并列出可用模板。"""
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
 

@@ -388,7 +388,7 @@ def test_template_exists_rejects_path_traversal():
     """template_exists 拒绝路径穿越类模板名。"""
     import asyncio
 
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
 
@@ -510,7 +510,7 @@ def test_available_templates_meta_fields(tmp_path):
 
 def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
     """/查看模板 的可用列表包含自定义模板目录。"""
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
     from src.infrastructure.reporting import template_installer
@@ -531,7 +531,7 @@ def test_list_available_templates_includes_custom(tmp_path, monkeypatch):
 
 def test_resolve_template_preview_path_prefers_template_dir(tmp_path, monkeypatch):
     """模板目录内预览图优先于插件仓库 assets 目录。"""
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
     from src.infrastructure.reporting import template_installer
@@ -595,7 +595,7 @@ def _make_theme_store(tmp_path):
     """创建带模板的 store 与指向外部的 symlink 模板目录（Windows 无权限时返回 None）。"""
     from unittest.mock import MagicMock
 
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
     from src.infrastructure.reporting import template_installer
@@ -667,7 +667,7 @@ def test_symlinked_template_file_rejected(tmp_path, monkeypatch):
     """目录内的主模板文件为符号链接时：列表/校验/渲染均拒绝（文件级 symlink）。"""
     from unittest.mock import MagicMock
 
-    from src.application.commands.template_command_service import (
+    from src.application.services.template_command_service import (
         TemplateCommandService,
     )
     from src.infrastructure.reporting import template_installer
