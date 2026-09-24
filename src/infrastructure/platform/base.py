@@ -4,6 +4,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
@@ -49,6 +50,60 @@ class PlatformAdapter(
         self._platform_id: str = str(self.config.get("platform_id", "")).strip()
         self.bot_self_ids: list[str] = []
         self._capabilities: PlatformCapabilities | None = None
+
+    @staticmethod
+    def calculate_effective_start_timestamp(
+        days: int = 1,
+        since_ts: int | float | None = None,
+        now: datetime | None = None,
+    ) -> int:
+        """统一计算历史消息拉取的生效起始时间戳（Unix epoch 秒）。
+
+        确保无论传入的增量游标 since_ts 为何值（即使因停机多天严重过期），
+        起始时间点始终严格约束在 [now - days, now] 窗口之内，避免跨天历史数据污染。
+
+        Args:
+            days: 历史拉取天数窗口（如 1 天）。
+            since_ts: 可选的上次分析游标时间戳。
+            now: 可选的基准当前时间（便于测试注入）。
+
+        Returns:
+            int: 严格约束后的最远历史起始 Unix 时间戳。
+        """
+        now_dt = now if now is not None else datetime.now(timezone.utc)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+        days_start_ts = max(
+            0, int((now_dt - timedelta(days=max(1, int(days)))).timestamp())
+        )
+        if since_ts and since_ts > 0:
+            return max(int(since_ts), days_start_ts)
+        return days_start_ts
+
+    @staticmethod
+    def calculate_effective_cutoff_datetime(
+        days: int = 1,
+        since_ts: int | float | None = None,
+        tz: timezone | None = timezone.utc,
+        now: datetime | None = None,
+    ) -> datetime:
+        """统一计算历史消息拉取的生效起始 datetime 对象。
+
+        Args:
+            days: 历史拉取天数窗口。
+            since_ts: 可选的上次分析游标时间戳。
+            tz: 目标时区（如 UTC 或 None）。
+            now: 可选的基准当前时间。
+
+        Returns:
+            datetime: 严格约束后的最远历史起始 datetime 对象。
+        """
+        ts = PlatformAdapter.calculate_effective_start_timestamp(
+            days=days, since_ts=since_ts, now=now
+        )
+        if tz is None:
+            return datetime.fromtimestamp(ts)
+        return datetime.fromtimestamp(ts, tz=tz)
 
     @property
     def platform_id(self) -> str:

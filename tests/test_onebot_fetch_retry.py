@@ -144,3 +144,68 @@ def test_fetch_messages_deduplicates_overlapping_pages(monkeypatch):
         "第二条",
         "第三条",
     ]
+
+
+def test_fetch_messages_clamps_stale_since_ts_to_days_window(monkeypatch):
+    """测试当 since_ts 早于 days (例如停机多天或游标过旧) 时，自动将起始时间截断至 days 窗口内，绝不过界拉取。"""
+    now = int(datetime.now().timestamp())
+    stale_since_ts = now - 5 * 86400  # 5 天前的旧游标
+    within_window_ts = now - 1800  # 30 分钟前
+    out_of_window_ts = now - 2 * 86400  # 2 天前 (超过 days=1)
+
+    bot = FakeOneBot(
+        [
+            {
+                "messages": [
+                    make_message("402", within_window_ts, "窗口内消息"),
+                    make_message("401", out_of_window_ts, "窗口外消息 (2天前)"),
+                ]
+            },
+        ]
+    )
+    adapter = make_adapter(bot)
+
+    async def skip_sleep(delay: float):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", skip_sleep)
+    # days=1, since_ts=5天前，应当只拉取 1 天内的消息
+    messages = asyncio.run(
+        adapter.fetch_messages("123456", days=1, max_count=10, since_ts=stale_since_ts)
+    )
+
+    # 401 (2天前) 超出 days=1 窗口，被过滤；只保留 402
+    assert [message.message_id for message in messages] == ["402"]
+    assert [message.text_content for message in messages] == ["窗口内消息"]
+
+
+def test_fetch_messages_with_recent_since_ts_honors_cursor(monkeypatch):
+    """测试当 since_ts 在 days 窗口内时，以 since_ts 为起始点。"""
+    now = int(datetime.now().timestamp())
+    recent_since_ts = now - 3600  # 1 小时前
+    msg_after_cursor = now - 1800  # 30 分钟前
+    msg_before_cursor = now - 7200  # 2 小时前
+
+    bot = FakeOneBot(
+        [
+            {
+                "messages": [
+                    make_message("502", msg_after_cursor, "游标后新消息"),
+                    make_message("501", msg_before_cursor, "游标前旧消息"),
+                ]
+            },
+        ]
+    )
+    adapter = make_adapter(bot)
+
+    async def skip_sleep(delay: float):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", skip_sleep)
+    messages = asyncio.run(
+        adapter.fetch_messages("123456", days=1, max_count=10, since_ts=recent_since_ts)
+    )
+
+    assert [message.message_id for message in messages] == ["502"]
+    assert [message.text_content for message in messages] == ["游标后新消息"]
+

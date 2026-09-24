@@ -252,3 +252,34 @@ def test_markdown_split_does_not_break_mentions():
     assert all(len(chunk) <= 20 for chunk in chunks)
     assert "".join(chunks) == "x" * 17 + "<@A_OPENID>" + "tail"
     assert any("<@A_OPENID>" in chunk for chunk in chunks)
+
+
+def test_qq_official_fetch_messages_clamps_stale_since_ts_to_days():
+    """验证 QQ 官方适配器在 since_ts 滞后数天时，将时间窗口截断至配置的 days 内，不拉取超期消息。"""
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    stale_since_ts = now_ts - 5 * 86400  # 5 天前游标
+    msg_within = now_ts - 1800  # 30 分钟前 (在 days=1 内)
+    msg_out_of_window = now_ts - 2 * 86400  # 2 天前 (超出 days=1)
+
+    adapter = make_adapter()
+    adapter.set_context(
+        SimpleNamespace(
+            message_history_manager=FakeHistoryManager(
+                {
+                    1: [
+                        make_record(101, "MSG-101", "A_OPENID", msg_within, "窗口内消息"),
+                        make_record(102, "MSG-102", "B_OPENID", msg_out_of_window, "窗口外消息 (2天前)"),
+                    ]
+                }
+            )
+        )
+    )
+
+    messages = asyncio.run(
+        adapter.fetch_messages("GROUP_OPENID", days=1, max_count=10, since_ts=stale_since_ts)
+    )
+
+    assert len(messages) == 1
+    assert messages[0].message_id == "MSG-101"
+    assert messages[0].text_content == "窗口内消息"
+
