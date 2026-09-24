@@ -15,8 +15,33 @@ export interface PluginDataOverview {
 export interface IncrementalBatchTopic {
   title?: string;
   summary?: string;
+  description?: string;
   heat_score?: number;
+  category?: string;
   keywords?: string[];
+  [key: string]: unknown;
+}
+
+export interface ChatQualityDimension {
+  name?: string;
+  percentage?: number;
+  comment?: string;
+  color?: string;
+}
+
+export interface ChatQualityReviewObject {
+  title?: string;
+  subtitle?: string;
+  dimensions?: ChatQualityDimension[];
+  summary?: string;
+}
+
+export interface IncrementalBatchGoldenQuote {
+  content?: string;
+  text?: string;
+  sender_nickname?: string;
+  sender_name?: string;
+  author?: string;
   [key: string]: unknown;
 }
 
@@ -30,7 +55,7 @@ export interface IncrementalBatchItem {
   topics_count: number;
   topics?: IncrementalBatchTopic[];
   golden_quotes_count?: number;
-  golden_quotes?: unknown[];
+  golden_quotes?: IncrementalBatchGoldenQuote[];
   hourly_msg_counts?: Record<string, number>;
   hourly_char_counts?: Record<string, number>;
   token_usage?: {
@@ -39,7 +64,7 @@ export interface IncrementalBatchItem {
     total_tokens?: number;
     [key: string]: unknown;
   };
-  chat_quality_review?: string;
+  chat_quality_review?: string | ChatQualityReviewObject | Record<string, unknown>;
   last_message_timestamp?: number;
   participant_ids?: string[];
   [key: string]: unknown;
