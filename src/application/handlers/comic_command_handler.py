@@ -83,7 +83,14 @@ class ComicCommandHandler:
 
     @staticmethod
     def detect_image_ext(data: bytes) -> str:
-        """从图片字节嗅探扩展名，无法识别时回退 .png。"""
+        """从图片字节嗅探扩展名，无法识别时回退 .png。
+
+        Args:
+            data: 图片二进制字节。
+
+        Returns:
+            str: 匹配的文件后缀扩展名（如 .png, .jpg, .webp, .gif, .avif）。
+        """
         if data.startswith(b"\x89PNG\r\n\x1a\n"):
             return ".png"
         if data.startswith(b"\xff\xd8\xff"):
@@ -103,7 +110,15 @@ class ComicCommandHandler:
     async def handle_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
     ) -> AsyncGenerator[Any, None]:
-        """处理 /群漫画 核心指令流程。"""
+        """处理 /群漫画 核心指令流程。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            days: 分析回溯天数（可选）。
+
+        Returns:
+            AsyncGenerator[Any, None]: 指令响应消息生成器。
+        """
         if self.terminating:
             return
 
@@ -285,7 +300,18 @@ class ComicCommandHandler:
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,
     ) -> str:
-        """尝试触发后台漫画生成"""
+        """尝试触发后台漫画生成。
+
+        Args:
+            group_id: 目标群号。
+            platform_id: 平台标识。
+            analysis_result: 分析结果字典（包含 topics 字段）。
+            require_auto_enabled: 是否要求开启自动生成配置（手动指令触发时为 False）。
+            trace: 当前执行链路追踪上下文。
+
+        Returns:
+            str: 触发状态 ("started", "duplicate", "blocked", "no_topics", "disabled", "auto_disabled", "terminating")。
+        """
         if self.terminating:
             return "terminating"
         enable_comic_fn = (

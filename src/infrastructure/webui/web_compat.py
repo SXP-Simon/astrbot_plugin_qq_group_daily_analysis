@@ -1,5 +1,6 @@
 """
 Web API 兼容层 (Web Compatibility Layer)
+
 封装 AstrBot 核心 Web 接口导入与单测环境回退实现，并提供动态测试 Mock 代理。
 """
 
@@ -21,14 +22,12 @@ else:
             pass
 
 
-_real_context: Any = None
 _real_json_response: Any = None
 _real_error_response: Any = None
 _real_request: Any = None
 _real_stream_response: Any = None
 
 try:
-    from astrbot.api.star import Context as _CoreContext
     from astrbot.api.web import (
         error_response as _core_error_response,
     )
@@ -42,7 +41,6 @@ try:
         stream_response as _core_stream_response,
     )
 
-    _real_context = _CoreContext
     _real_json_response = _core_json_response
     _real_error_response = _core_error_response
     _real_request = _core_request
@@ -55,6 +53,11 @@ class _RequestProxy:
     """动态 Request 代理对象，自动路由至真实环境或测试 Mock 目标。"""
 
     def _get_target(self) -> Any:
+        """获取当前活跃的底层请求对象。
+
+        Returns:
+            若定位到测试 Mock 或核心请求对象则返回其实例，否则返回 None。
+        """
         for mod_name, mod in list(sys.modules.items()):
             if mod and "infrastructure.webui" in mod_name:
                 req = getattr(mod, "request", None)
@@ -68,6 +71,17 @@ class _RequestProxy:
         return None
 
     def __getattr__(self, name: str) -> Any:
+        """拦截并代理请求对象的属性访问。
+
+        Args:
+            name: 属性名。
+
+        Returns:
+            底层请求对象对应的属性值。
+
+        Raises:
+            AttributeError: 当属性名以私有前缀开头或底层目标不存在时抛出。
+        """
         if name.startswith("_"):
             raise AttributeError(name)
         target = self._get_target()
@@ -76,6 +90,11 @@ class _RequestProxy:
         return getattr(target, name)
 
     def __bool__(self) -> bool:
+        """判定当前代理是否已绑定有效请求目标。
+
+        Returns:
+            若目标存在则为 True，否则为 False。
+        """
         return bool(self._get_target())
 
 
@@ -88,7 +107,16 @@ def json_response(
     status_code: int = 200,
     headers: dict[str, str] | None = None,
 ) -> Any:
-    """构造 JSON HTTP 响应"""
+    """构造 JSON HTTP 响应。
+
+    Args:
+        data: 响应数据载荷。
+        status_code: HTTP 状态码。
+        headers: 附加 HTTP 响应标头字典。
+
+    Returns:
+        AstrBot Web 响应对象或兼容字典结构。
+    """
     if _real_json_response is not None:
         try:
             return _real_json_response(data, status_code=status_code, headers=headers)
@@ -104,7 +132,17 @@ def error_response(
     data: Any = None,
     headers: dict[str, str] | None = None,
 ) -> Any:
-    """构造 Error HTTP 响应"""
+    """构造 Error HTTP 响应。
+
+    Args:
+        message: 错误描述文本。
+        status_code: HTTP 错误状态码。
+        data: 可选的附加错误载荷。
+        headers: 附加 HTTP 响应标头字典。
+
+    Returns:
+        AstrBot Web 错误响应对象或兼容字典结构。
+    """
     if _real_error_response is not None:
         try:
             return _real_error_response(
@@ -122,7 +160,17 @@ def stream_response(
     status_code: int = 200,
     headers: dict[str, str] | None = None,
 ) -> Any:
-    """构造流式 HTTP 响应"""
+    """构造流式 HTTP 响应（如 SSE 事件流）。
+
+    Args:
+        content: 异步生成器或流式迭代数据源。
+        content_type: MIME 类型，默认为 text/event-stream。
+        status_code: HTTP 状态码。
+        headers: 附加 HTTP 响应标头字典。
+
+    Returns:
+        AstrBot Web 流式响应对象或原始数据源。
+    """
     if _real_stream_response is not None:
         try:
             return _real_stream_response(

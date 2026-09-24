@@ -1,10 +1,10 @@
 """
-Web 控制台请求与响应数据传输对象 (Rest DTOs)
+应用层数据传输对象 (Application DTOs)
 
-本模块向后兼容导出应用层 DTO 契约。
+定义用例出入参契约与 Web 控制台数据通信模型。
 """
 
-from ...application.dto import (
+from .webui_dto import (
     ApiResponseDTO,
     MetricsSummaryDTO,
     RerenderReportRequestDTO,

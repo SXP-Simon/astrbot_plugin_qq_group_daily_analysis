@@ -91,7 +91,15 @@ class AnalysisCommandHandler:
     async def handle_daily_analysis(
         self, event: AstrMessageEvent, days: int | None = None
     ) -> AsyncGenerator[Any, None]:
-        """处理 /群分析 核心指令流程。"""
+        """处理 /群分析 核心指令流程。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            days: 分析回溯天数（可选）。
+
+        Returns:
+            AsyncGenerator[Any, None]: 指令响应消息生成器。
+        """
         if self.terminating:
             return
 
@@ -244,7 +252,15 @@ class AnalysisCommandHandler:
     async def send_analysis_report(
         self, event: AstrMessageEvent, result: dict[str, Any]
     ) -> AsyncGenerator[Any, None]:
-        """处理分析结果的渲染和发送"""
+        """处理分析结果的渲染和发送。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            result: 分析服务产出的结果字典。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         if self.terminating or not self.config_manager:
             logger.warning("插件正在关闭，停止发送报告")
             return
@@ -474,7 +490,14 @@ class AnalysisCommandHandler:
         is_qq_official: bool,
         adapter: Any,
     ) -> None:
-        """发送纯文本分析报告"""
+        """发送纯文本分析报告。
+
+        Args:
+            group_id: 目标群号。
+            analysis_result: 分析结果字典。
+            is_qq_official: 是否为 QQ 官方平台。
+            adapter: 平台适配器。
+        """
         try:
             if is_qq_official and hasattr(
                 self.report_generator, "generate_qq_official_markdown_report"
@@ -503,7 +526,12 @@ class AnalysisCommandHandler:
             logger.error(f"发送纯文本报告失败 (群 {group_id}): {e}", exc_info=True)
 
     def _save_report_to_history(self, image_url: str, group_id: str) -> None:
-        """将生成的图片报告副本保存到持久化 reports 目录"""
+        """将生成的图片报告副本保存到持久化 reports 目录。
+
+        Args:
+            image_url: 图片本地路径或 base64 URI。
+            group_id: 目标群号。
+        """
         try:
             reports_dir = self.plugin_data_dir / "reports"
             reports_dir.mkdir(parents=True, exist_ok=True)
@@ -526,7 +554,14 @@ class AnalysisCommandHandler:
         platform_id: str | None,
         is_comic: bool = False,
     ) -> None:
-        """尝试将图片报告上传到群文件和/或群相册（静默处理）"""
+        """尝试将图片报告上传到群文件和/或群相册。
+
+        Args:
+            group_id: 目标群号。
+            image_url: 图片本地路径或 base64 URI。
+            platform_id: 当前平台标识。
+            is_comic: 是否为漫画图片。
+        """
         enable_file = (
             self.config_manager.get_enable_group_file_upload()
             if not is_comic

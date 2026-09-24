@@ -47,7 +47,15 @@ class SettingsCommandHandler:
     async def handle_set_output_format(
         self, event: AstrMessageEvent, format_input: str = ""
     ) -> AsyncGenerator[Any, None]:
-        """处理 /设置格式 命令。"""
+        """处理 /设置格式 命令。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            format_input: 用户输入的格式名称或序号。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         event.should_call_llm(True)
 
         available_formats = ["image", "text", "html"]
@@ -109,7 +117,15 @@ class SettingsCommandHandler:
     async def handle_set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
     ) -> AsyncGenerator[Any, None]:
-        """处理 /设置模板 命令。"""
+        """处理 /设置模板 命令。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            template_input: 用户输入的模板名称或序号。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         event.should_call_llm(True)
 
         available_templates = self.template_command_service.list_available_templates()
@@ -149,7 +165,15 @@ class SettingsCommandHandler:
     async def handle_view_templates(
         self, event: AstrMessageEvent, platform_id: str
     ) -> AsyncGenerator[Any, None]:
-        """处理 /查看模板 命令。"""
+        """处理 /查看模板 命令。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            platform_id: 当前平台标识。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         event.should_call_llm(True)
 
         available_templates = self.template_command_service.list_available_templates()
@@ -188,7 +212,17 @@ class SettingsCommandHandler:
         group_id: str,
         platform_id: str,
     ) -> AsyncGenerator[Any, None]:
-        """处理 /分析设置 命令。"""
+        """处理 /分析设置 命令。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            action: 操作动作子指令 (enable, disable, reload, test, incremental_debug, filter_bot, status 等)。
+            group_id: 当前群聊 ID。
+            platform_id: 当前平台标识。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
@@ -307,7 +341,15 @@ class SettingsCommandHandler:
     async def handle_incremental_status(
         self, event: AstrMessageEvent, group_id: str
     ) -> AsyncGenerator[Any, None]:
-        """处理 /增量状态 命令。"""
+        """处理 /增量状态 命令。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            group_id: 目标群号。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
             return
@@ -354,7 +396,15 @@ class SettingsCommandHandler:
     async def _handle_settings_enable(
         self, event: AstrMessageEvent, group_id: str
     ) -> AsyncGenerator[Any, None]:
-        """处理启用设置的分支逻辑。"""
+        """处理启用设置的分支逻辑。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            group_id: 当前群聊 ID。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         mode = self.config_manager.get_group_list_mode()
         target_id = event.unified_msg_origin or group_id
 
@@ -393,7 +443,15 @@ class SettingsCommandHandler:
     async def _handle_settings_disable(
         self, event: AstrMessageEvent, group_id: str
     ) -> AsyncGenerator[Any, None]:
-        """处理禁用设置的分支逻辑。"""
+        """处理禁用设置的分支逻辑。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            group_id: 当前群聊 ID。
+
+        Returns:
+            AsyncGenerator[Any, None]: 结果消息生成器。
+        """
         mode = self.config_manager.get_group_list_mode()
         target_id = event.unified_msg_origin or group_id
 

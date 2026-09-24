@@ -26,10 +26,16 @@ class AnalysisDomainService:
         messages: list[UnifiedMessage],
         bot_self_ids: list[str] | None = None,
     ) -> dict[str, UserActivityStats]:
-        """
-        分析用户活跃度。
+        """分析用户活跃度。
 
         基于 UnifiedMessage 计算每个用户的发言数、字数、表情数等。
+
+        Args:
+            messages: 统一消息对象列表。
+            bot_self_ids: 机器人自身 ID 列表，用于排除自身发言。
+
+        Returns:
+            dict[str, UserActivityStats]: 用户 ID 到活跃度统计字典的映射。
         """
         user_stats: dict[str, UserActivityStats] = {}
 
@@ -81,7 +87,14 @@ class AnalysisDomainService:
 
     @staticmethod
     def _is_emoji_like_image(raw_data: object) -> bool:
-        """判断 IMAGE 段是否应按表情计数。"""
+        """判断 IMAGE 段是否应按表情计数。
+
+        Args:
+            raw_data: 消息段原始 payload。
+
+        Returns:
+            bool: 是否属于表情包形态图片。
+        """
         if isinstance(raw_data, dict):
             sub_type = raw_data.get("sub_type")
             if sub_type is not None:
@@ -98,7 +111,15 @@ class AnalysisDomainService:
     def get_top_users(
         self, user_activity: dict[str, UserActivityStats], limit: int = 10
     ) -> list[dict]:
-        """获取最活跃的用户列表"""
+        """获取最活跃的用户列表。
+
+        Args:
+            user_activity: 用户活跃度聚合数据字典。
+            limit: 返回的用户数量上限。
+
+        Returns:
+            list[dict]: 排序后的前 N 名活跃用户列表。
+        """
         users = []
         for user_id, stats in user_activity.items():
             users.append(
@@ -119,7 +140,15 @@ class AnalysisDomainService:
     def get_user_activity_pattern(
         self, user_activity: dict[str, UserActivityStats], user_id: str
     ) -> dict:
-        """获取并识别指定用户的活动模式"""
+        """获取并识别指定用户的活动模式。
+
+        Args:
+            user_activity: 用户活跃度聚合数据字典。
+            user_id: 目标用户 ID。
+
+        Returns:
+            dict: 用户活动模式字典（包含峰值时段、夜间发言比例、小时分布等）。
+        """
         if user_id not in user_activity:
             return {}
 

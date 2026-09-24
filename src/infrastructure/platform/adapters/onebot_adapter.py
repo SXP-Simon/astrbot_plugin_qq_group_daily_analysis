@@ -401,16 +401,13 @@ class OneBotAdapter(PlatformAdapter):
             return None
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """
-        将统一格式转换回 OneBot v11 原生字典格式。
-
-        使现有业务逻辑逻辑无需重构即可使用新流水。
+        """将统一格式转换回 OneBot v11 原生字典格式。
 
         Args:
-            messages (list[UnifiedMessage]): 统一消息列表
+            messages: 统一消息列表。
 
         Returns:
-            list[dict]: OneBot 格式的消息字典列表
+            list[dict]: OneBot 格式的消息字典列表。
         """
         raw_messages = []
         for msg in messages:
