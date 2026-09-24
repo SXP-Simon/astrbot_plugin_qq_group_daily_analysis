@@ -77,3 +77,39 @@ class IConfigProvider(Protocol):
     def get_max_user_titles(self) -> int:
         """获取最多生成的用户称号数量"""
         ...
+
+    def get_enable_daily_comic(self) -> bool:
+        """是否启用每日群漫画"""
+        ...
+
+    def get_selected_comic_character(self) -> dict | None:
+        """获取当前选中的漫画角色配置"""
+        ...
+
+    def get_comic_character_persona_id(self, character: dict | None) -> str:
+        """获取漫画角色绑定的人格ID"""
+        ...
+
+    def get_comic_character_storyboard_prompt(self, character: dict | None) -> str:
+        """获取漫画角色专属分镜提示词"""
+        ...
+
+    def get_drawing_reference_images(self) -> list[str]:
+        """获取当前漫画角色的所有参考图路径列表"""
+        ...
+
+    def get_drawing_backend(self) -> str:
+        """获取绘图后端类型"""
+        ...
+
+    def get_drawing_external_fallback(self) -> bool:
+        """是否启用外部生图失败回退机制"""
+        ...
+
+    def get_drawing_provider_configs(self) -> list[dict]:
+        """获取已启用的漫画生图供应商配置列表"""
+        ...
+
+    def get_drawing_output_exception_retry_keywords(self) -> list[str]:
+        """获取生图异常重试触发关键词列表"""
+        ...

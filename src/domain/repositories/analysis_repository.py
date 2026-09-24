@@ -91,3 +91,21 @@ class IAnalysisProvider(ABC):
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个聊天质量报告（增量模式使用）"""
         pass
+
+    @abstractmethod
+    async def analyze_comic_storyboards(
+        self,
+        topics: list[dict],
+        umo: str | None = None,
+        persona_id: str | None = None,
+        prompt_template: str | None = None,
+    ) -> tuple[list[dict], TokenUsage]:
+        """分析并生成漫画分镜提示词"""
+        pass
+
+    @abstractmethod
+    async def analyze_retry_prompt(
+        self, original_prompt: str, last_error: str, umo: str | None
+    ) -> str | None:
+        """分析画图 API 报错并智能脱敏改写 Prompt"""
+        pass

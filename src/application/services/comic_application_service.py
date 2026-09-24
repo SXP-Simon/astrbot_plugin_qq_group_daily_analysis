@@ -5,8 +5,8 @@ from typing import Any
 
 from astrbot.api.star import Context
 
-from ...infrastructure.analysis.llm_analyzer import LLMAnalyzer
-from ...infrastructure.config.config_manager import ConfigManager
+from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.repositories.config_repository import IConfigProvider
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
@@ -26,9 +26,9 @@ class ComicApplicationService:
 
     def __init__(
         self,
-        llm_analyzer: LLMAnalyzer,
+        llm_analyzer: IAnalysisProvider,
         drawing_client: DrawingClient,
-        config_manager: ConfigManager,
+        config_manager: IConfigProvider,
         plugin_data_dir: Path,
         context: Context | None = None,
     ):
