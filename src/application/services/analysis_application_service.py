@@ -18,9 +18,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+from astrbot.api.star import StarTools
+
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.repositories.config_repository import IConfigProvider
 from ...domain.repositories.persistence_repository import (
     ICheckpointStore,
     IIncrementalStore,
@@ -33,7 +36,7 @@ from ...domain.services.analysis_domain_service import (
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
-from ...shared.constants import AnalysisStage
+from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .pipeline_context import PipelineContext
@@ -53,7 +56,7 @@ class AnalysisApplicationService:
 
     def __init__(
         self,
-        config_manager: Any,
+        config_manager: IConfigProvider,
         bot_manager: Any,
         history_manager: Any,
         report_generator: IReportGenerator,
@@ -787,7 +790,7 @@ class AnalysisApplicationService:
 
         reports_dir = (
             getattr(self.report_generator, "data_dir", None)
-            or self.config_manager.get_data_dir()
+            or StarTools.get_data_dir(PLUGIN_NAME)
         ) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")

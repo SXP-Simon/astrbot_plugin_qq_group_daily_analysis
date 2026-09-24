@@ -1,6 +1,7 @@
 # 仓储接口
 from .analysis_repository import IAnalysisProvider
 from .avatar_repository import IAvatarRepository
+from .config_repository import IConfigProvider
 from .message_repository import (
     IGroupInfoRepository,
     IMessageRepository,
@@ -20,4 +21,5 @@ __all__ = [
     "IReportGenerator",
     "IIncrementalStore",
     "ICheckpointStore",
+    "IConfigProvider",
 ]
