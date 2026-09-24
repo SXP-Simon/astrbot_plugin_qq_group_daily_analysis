@@ -44,7 +44,7 @@ export interface TraceRecord {
   group_name: string;
   platform: string;
   trigger_type: string;
-  status: "running" | "succeeded" | "warning" | "failed" | "aborted";
+  status: "running" | "succeeded" | "warning" | "failed" | "aborted" | "skipped";
   started_at: number;
   completed_at?: number;
   duration_ms?: number;

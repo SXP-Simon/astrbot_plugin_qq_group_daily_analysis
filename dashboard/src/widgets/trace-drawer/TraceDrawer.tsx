@@ -274,6 +274,23 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             />
           )}
 
+          {/* 跳过提示 */}
+          {trace.status === "skipped" && (
+            <Alert
+              type="info"
+              showIcon
+              message="定时/增量分析已安全跳过"
+              description={
+                <Paragraph
+                  ellipsis={{ rows: 2, expandable: true, symbol: "展开详情" }}
+                  style={{ marginBottom: 0, fontSize: 13 }}
+                >
+                  {trace.error_message || "未达到分析触发阈值或未满足执行条件，本次调度已安全跳过，未消耗任何 Token。"}
+                </Paragraph>
+              }
+            />
+          )}
+
           {/* 错误警告与快速重试 */}
           {trace.status === "failed" && (
             <Alert

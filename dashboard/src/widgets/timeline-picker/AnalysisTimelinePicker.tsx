@@ -257,6 +257,7 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
             const isSucceeded = trace.status === "succeeded";
             const isWarning = trace.status === "warning";
             const isFailed = trace.status === "failed";
+            const isSkipped = trace.status === "skipped";
             const isRunning = trace.status === "running";
 
             const rawTime = formatTimestamp(trace.started_at);
@@ -302,6 +303,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                         ? "#d97706"
                         : isFailed
                         ? "#dc2626"
+                        : isSkipped
+                        ? "#0891b2"
                         : "#2563eb",
                       fontWeight: 600,
                     }}
@@ -312,6 +315,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
                       ? "部分成功 (警告)"
                       : isFailed
                       ? "执行失败"
+                      : isSkipped
+                      ? "已安全跳过"
                       : "分析中"}
                   </span>
                 </div>
@@ -340,6 +345,8 @@ export const AnalysisTimelinePicker: React.FC<AnalysisTimelinePickerProps> = ({
               dotColor = "#fa8c16";
             } else if (isFailed) {
               dotColor = "#dc2626";
+            } else if (isSkipped) {
+              dotColor = "#06b6d4";
             } else if (isRunning) {
               dotColor = "#2563eb";
             }

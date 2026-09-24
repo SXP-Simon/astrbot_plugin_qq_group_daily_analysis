@@ -105,6 +105,7 @@ export const TraceFilterBar: React.FC<TraceFilterBarProps> = ({
             { label: "执行成功", value: "succeeded" },
             { label: "部分成功 / 警告", value: "warning" },
             { label: "执行失败", value: "failed" },
+            { label: "已安全跳过", value: "skipped" },
             { label: "正在运行", value: "running" },
             { label: "已手动中止", value: "aborted" },
           ]}
