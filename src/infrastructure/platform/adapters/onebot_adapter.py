@@ -20,8 +20,6 @@ from ....domain.value_objects.platform_capabilities import (
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
 from ....domain.value_objects.unified_message import (
-    MessageContent,
-    MessageContentType,
     UnifiedMessage,
 )
 from ....utils.logger import logger
@@ -29,6 +27,8 @@ from ..base import PlatformAdapter
 from .onebot import (
     OneBotDriver,
     OneBotDriverFactory,
+    OneBotGroupFileManager,
+    OneBotMessageConverter,
     StandardOneBotDriver,
 )
 
@@ -81,6 +81,13 @@ class OneBotAdapter(PlatformAdapter):
         self._avatar_url_negative_cache: dict[str, float] = {}
         # 并发去重 (uid -> in-flight Task)，同一用户并发请求只触发一次协议调用
         self._avatar_inflight_tasks: dict[str, asyncio.Task[str | None]] = {}
+
+        # 独立群文件与群相册管理器
+        self._file_manager = OneBotGroupFileManager(
+            bot=self.bot,
+            driver_getter=self._ensure_driver,
+            transmission_executor=self._execute_transmission_strategy,
+        )
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 OneBot v11 能力集。"""
@@ -278,130 +285,19 @@ class OneBotAdapter(PlatformAdapter):
             return []
 
     def _convert_message(self, raw_msg: dict, group_id: str) -> UnifiedMessage | None:
-        """内部方法：将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象。"""
-        try:
-            sender = raw_msg.get("sender", {})
-            message_chain = raw_msg.get("message", [])
+        """将 OneBot 原生原始消息字典转换为 UnifiedMessage 值对象（委托 OneBotMessageConverter）。
 
-            # 兼容性处理：如果是字符串格式的 message，转换为列表格式
-            if isinstance(message_chain, str):
-                message_chain = [{"type": "text", "data": {"text": message_chain}}]
+        Args:
+            raw_msg: OneBot API 返回的原始消息字典。
+            group_id: 当前群聊 ID。
 
-            contents = []
-            text_parts = []
-
-            for seg in message_chain:
-                seg_type = seg.get("type", "")
-                seg_data = seg.get("data", {})
-
-                if seg_type == "text":
-                    text = seg_data.get("text", "")
-                    text_parts.append(text)
-                    contents.append(
-                        MessageContent(type=MessageContentType.TEXT, text=text)
-                    )
-
-                elif seg_type == "image":
-                    # QQ 平台: subType=1 表示表情包，通过 raw_data 传递给下游统计
-                    sub_type = seg_data.get("subType", seg_data.get("sub_type"))
-                    # 安全地转换为整数，防止非数字值导致异常
-                    try:
-                        is_sticker = int(sub_type) == 1
-                    except (TypeError, ValueError):
-                        is_sticker = False
-                    # 只在 sub_type 有效时包含在 raw_data 中
-                    raw_data: dict[str, Any] = {"summary": seg_data.get("summary", "")}
-                    if sub_type is not None:
-                        raw_data["sub_type"] = int(sub_type)
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.EMOJI
-                            if is_sticker
-                            else MessageContentType.IMAGE,
-                            url=seg_data.get("url", seg_data.get("file", "")),
-                            raw_data=raw_data,
-                        )
-                    )
-
-                elif seg_type == "at":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.AT,
-                            at_user_id=str(seg_data.get("qq", "")),
-                        )
-                    )
-
-                elif seg_type in ("face", "mface", "bface", "sface"):
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.EMOJI,
-                            emoji_id=str(seg_data.get("id", "")),
-                            raw_data={"face_type": seg_type},
-                        )
-                    )
-
-                elif seg_type == "reply":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.REPLY,
-                            raw_data={"reply_id": seg_data.get("id", "")},
-                        )
-                    )
-
-                elif seg_type == "forward":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.FORWARD, raw_data=seg_data
-                        )
-                    )
-
-                elif seg_type == "record":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.VOICE,
-                            url=seg_data.get("url", seg_data.get("file", "")),
-                        )
-                    )
-
-                elif seg_type == "video":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.VIDEO,
-                            url=seg_data.get("url", seg_data.get("file", "")),
-                        )
-                    )
-
-                else:
-                    contents.append(
-                        MessageContent(type=MessageContentType.UNKNOWN, raw_data=seg)
-                    )
-
-            # 提取回复 ID
-            reply_to = None
-            for c in contents:
-                if c.type == MessageContentType.REPLY and c.raw_data:
-                    reply_to = str(c.raw_data.get("reply_id", ""))
-                    break
-
-            return UnifiedMessage(
-                message_id=str(raw_msg.get("message_id", "")),
-                sender_id=str(sender.get("user_id", "")),
-                sender_name=sender.get("nickname", ""),
-                sender_card=sender.get("card", "") or None,
-                group_id=group_id,
-                text_content="".join(text_parts),
-                contents=tuple(contents),
-                timestamp=raw_msg.get("time", 0),
-                platform="onebot",
-                reply_to_id=reply_to,
-            )
-
-        except Exception as e:
-            logger.debug(f"OneBot _convert_message 错误: {e}")
-            return None
+        Returns:
+            UnifiedMessage | None: 统一领域消息对象。
+        """
+        return OneBotMessageConverter.to_unified_message(raw_msg, group_id)
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """将统一格式转换回 OneBot v11 原生字典格式。
+        """将统一格式转换回 OneBot v11 原生字典格式（委托 OneBotMessageConverter）。
 
         Args:
             messages: 统一消息列表。
@@ -409,67 +305,7 @@ class OneBotAdapter(PlatformAdapter):
         Returns:
             list[dict]: OneBot 格式的消息字典列表。
         """
-        raw_messages = []
-        for msg in messages:
-            message_chain = []
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    message_chain.append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    message_chain.append(
-                        {"type": "image", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.AT:
-                    message_chain.append(
-                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
-                    )
-                elif content.type == MessageContentType.EMOJI:
-                    face_type = (
-                        content.raw_data.get("face_type", "face")
-                        if content.raw_data
-                        else "face"
-                    )
-                    message_chain.append(
-                        {"type": face_type, "data": {"id": content.emoji_id or ""}}
-                    )
-                elif content.type == MessageContentType.REPLY:
-                    reply_id = (
-                        content.raw_data.get("reply_id", "") if content.raw_data else ""
-                    )
-                    message_chain.append({"type": "reply", "data": {"id": reply_id}})
-                elif content.type == MessageContentType.FORWARD:
-                    message_chain.append(
-                        {"type": "forward", "data": content.raw_data or {}}
-                    )
-                elif content.type == MessageContentType.VOICE:
-                    message_chain.append(
-                        {"type": "record", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.VIDEO:
-                    message_chain.append(
-                        {"type": "video", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.UNKNOWN and content.raw_data:
-                    message_chain.append(content.raw_data)
-
-            raw_msg = {
-                "message_id": msg.message_id,
-                "time": msg.timestamp,
-                "sender": {
-                    "user_id": msg.sender_id,
-                    "nickname": msg.sender_name,
-                    "card": msg.sender_card or "",
-                },
-                "message": message_chain,
-                "group_id": msg.group_id,
-                "raw_message": msg.text_content,
-                "user_id": msg.sender_id,
-            }
-            raw_messages.append(raw_msg)
-
-        return raw_messages
+        return OneBotMessageConverter.to_raw_messages(messages)
 
     # ==================== IMessageSender 实现 ====================
 
@@ -1258,7 +1094,7 @@ class OneBotAdapter(PlatformAdapter):
             self._muted_groups_cache.pop(group_id_str, None)
 
     # ================================================================
-    # 群文件 / 群相册上传
+    # 群文件 / 群相册上传（委托 OneBotGroupFileManager）
     # ================================================================
 
     async def upload_group_file_to_folder(
@@ -1268,27 +1104,12 @@ class OneBotAdapter(PlatformAdapter):
         filename: str | None = None,
         folder_id: str | None = None,
     ) -> bool:
-        """上传文件到群文件目录的指定子文件夹。"""
-        target_filename = filename or os.path.basename(file_path)
-        logger.debug(
-            f"[OneBot] 正在上传群文件 (群 {group_id}): 文件='{file_path}', 目标文件名='{target_filename}', 目标文件夹 ID='{folder_id}'"
-        )
-
-        async def do_upload(content: str, label: str):
-            params = {
-                "group_id": int(group_id),
-                "file": content,
-                "name": target_filename,
-            }
-            if folder_id:
-                params["folder"] = folder_id
-            await self.bot.call_action("upload_group_file", **params)
-            logger.info(
-                f"[OneBot] 群文件发送成功 ({label}): {params['name']} (群 {group_id})"
-            )
-
-        return await self._execute_transmission_strategy(
-            file_path, do_upload, "OneBot 群文件"
+        """上传文件到群文件目录的指定子文件夹（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.upload_group_file_to_folder(
+            group_id=group_id,
+            file_path=file_path,
+            filename=filename,
+            folder_id=folder_id,
         )
 
     async def create_group_file_folder(
@@ -1296,195 +1117,29 @@ class OneBotAdapter(PlatformAdapter):
         group_id: str,
         folder_name: str,
     ) -> str | None:
-        """
-        在群文件根目录下创建子文件夹。
-
-        Args:
-            group_id: 目标群号
-            folder_name: 文件夹名称
-
-        Returns:
-            str | None: 创建成功时返回 folder_id，失败返回 None
-        """
-        try:
-            logger.debug(
-                f"[OneBot] 正在群 {group_id} 中创建群文件夹 '{folder_name}'..."
-            )
-            result = await self.bot.call_action(
-                "create_group_file_folder",
-                group_id=int(group_id),
-                name=folder_name,
-                parent_id="/",
-            )
-            # go-cqhttp, NapCat, LLOneBot 等实现可能返回顶层或嵌套在 data 里的 folder_id
-            folder_id = None
-            if isinstance(result, dict):
-                data = result.get("data")
-                if isinstance(data, dict):
-                    folder_id = (
-                        data.get("folder_id") or data.get("id") or data.get("folderId")
-                    )
-                elif isinstance(data, str) and data:
-                    folder_id = data
-                if not folder_id:
-                    folder_id = (
-                        result.get("folder_id")
-                        or result.get("id")
-                        or result.get("folderId")
-                    )
-            elif isinstance(result, str) and result:
-                folder_id = result
-
-            logger.info(
-                f"[OneBot] 群文件夹创建成功: '{folder_name}' (群 {group_id})"
-                + (f" [ID: {folder_id}]" if folder_id else "")
-            )
-            return str(folder_id) if folder_id is not None else None
-        except Exception as e:
-            error_msg = str(e).lower()
-            # 文件夹已存在的情况不视为错误
-            if "exist" in error_msg or "已存在" in error_msg:
-                logger.info(f"[OneBot] 群文件夹已存在: '{folder_name}' (群 {group_id})")
-                return None  # 需要通过 get_group_file_root_folders 获取 ID
-            logger.error(f"[OneBot] 群文件夹创建失败: {e}")
-            return None
+        """在群文件根目录下创建子文件夹（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.create_group_file_folder(
+            group_id=group_id,
+            folder_name=folder_name,
+        )
 
     async def get_group_file_root_folders(
         self,
         group_id: str,
     ) -> list[dict]:
-        """
-        获取群文件根目录下的文件夹列表。
-
-        兼容顶层 folders、data.folders 及直接返回列表等多种 OneBot 实现规范。
-
-        Args:
-            group_id: 目标群号
-
-        Returns:
-            list[dict]: 文件夹列表，每项包含 folder_id/name 等字段。
-                        API 不可用时返回空列表。
-        """
-        try:
-            logger.debug(f"[OneBot] 正在获取群 {group_id} 的根目录文件夹列表...")
-            result = await self.bot.call_action(
-                "get_group_root_files",
-                group_id=int(group_id),
-            )
-            folders: list[dict] = []
-            if isinstance(result, list):
-                folders = [f for f in result if isinstance(f, dict)]
-            elif isinstance(result, dict):
-                data = result.get("data")
-                if isinstance(data, list):
-                    folders = [f for f in data if isinstance(f, dict)]
-                elif isinstance(data, dict):
-                    raw_folders = (
-                        data.get("folders")
-                        or data.get("folder_list")
-                        or data.get("folderList")
-                        or data.get("list")
-                    )
-                    if isinstance(raw_folders, list):
-                        folders = [f for f in raw_folders if isinstance(f, dict)]
-                if not folders:
-                    raw_folders = (
-                        result.get("folders")
-                        or result.get("folder_list")
-                        or result.get("folderList")
-                        or result.get("list")
-                    )
-                    if isinstance(raw_folders, list):
-                        folders = [f for f in raw_folders if isinstance(f, dict)]
-
-            logger.debug(
-                f"[OneBot] 获取群文件夹列表成功 (群 {group_id}): 提取到 {len(folders)} 个文件夹, 原始响应={result}"
-            )
-            return folders
-        except Exception as e:
-            logger.debug(f"[OneBot] 获取群文件夹列表失败 (群 {group_id}): {e}")
-            return []
+        """获取群文件根目录下的文件夹列表（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.get_group_file_root_folders(group_id=group_id)
 
     async def find_or_create_folder(
         self,
         group_id: str,
         folder_name: str,
     ) -> str | None:
-        """
-        查找或创建指定名称的群文件子文件夹，返回 folder_id。
-
-        先尝试在现有根目录文件夹中查找匹配名称的文件夹，
-        找不到则创建新文件夹。
-
-        Args:
-            group_id: 目标群号
-            folder_name: 文件夹名称
-
-        Returns:
-            str | None: 匹配或新创建的 folder_id，若均失败返回 None
-        """
-        if not folder_name:
-            return None
-
-        target_name = str(folder_name).strip()
-        logger.debug(
-            f"[OneBot] 正在群 {group_id} 中查找或创建文件夹: '{target_name}'..."
+        """查找或创建指定名称的群文件子文件夹（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.find_or_create_folder(
+            group_id=group_id,
+            folder_name=folder_name,
         )
-
-        # 1. 先尝试查找已有文件夹
-        folders = await self.get_group_file_root_folders(group_id)
-        for folder in folders:
-            name = (
-                folder.get("folder_name")
-                or folder.get("name")
-                or folder.get("folderName")
-                or ""
-            )
-            fid = (
-                folder.get("folder_id")
-                or folder.get("id")
-                or folder.get("folderId")
-                or ""
-            )
-            if str(name).strip() == target_name and fid:
-                logger.debug(
-                    f"[OneBot] 匹配到已有群文件夹: '{target_name}' [ID: {fid}] (群 {group_id})"
-                )
-                return str(fid)
-
-        # 2. 未找到，尝试创建
-        created_id = await self.create_group_file_folder(group_id, target_name)
-        if created_id:
-            logger.info(
-                f"[OneBot] 成功创建并获取到群文件夹 ID: '{target_name}' [ID: {created_id}] (群 {group_id})"
-            )
-            return str(created_id)
-
-        # 3. 创建后再次查找（某些实现创建时不返回 ID）
-        folders = await self.get_group_file_root_folders(group_id)
-        for folder in folders:
-            name = (
-                folder.get("folder_name")
-                or folder.get("name")
-                or folder.get("folderName")
-                or ""
-            )
-            fid = (
-                folder.get("folder_id")
-                or folder.get("id")
-                or folder.get("folderId")
-                or ""
-            )
-            if str(name).strip() == target_name and fid:
-                logger.debug(
-                    f"[OneBot] 创建后二次查询匹配到群文件夹: '{target_name}' [ID: {fid}] (群 {group_id})"
-                )
-                return str(fid)
-
-        logger.warning(
-            f"[OneBot] 无法获取群文件夹 ID: '{target_name}' (群 {group_id})，将上传到根目录"
-        )
-        return None
 
     async def upload_group_album(
         self,
@@ -1494,107 +1149,32 @@ class OneBotAdapter(PlatformAdapter):
         album_name: str | None = None,
         strict_mode: bool = False,
     ) -> bool:
-        """上传图片到群相册（OneBot 扩展 API）。"""
-        # 如果未显式传入 album_id 但指定了 album_name，先尝试定位相册 ID
-        if not album_id and album_name:
-            album_id = await self.find_album_id(group_id, album_name)
-
-        # 严格模式：指定了相册名但未解析到 album_id 时，禁止上传
-        if strict_mode and album_name and not album_id:
-            logger.info(
-                f"[群分析相册] 严格模式开启：未找到相册 '{album_name}' (群 {group_id})，停止上传。"
-            )
-            return False
-
-        # 非严格模式下的兜底查询
-        if not album_id:
-            albums = await self.get_group_album_list(group_id)
-            if albums:
-                first = albums[0]
-                album_id = (
-                    first.get("album_id") or first.get("id") or first.get("albumId")
-                )
-                if album_name:
-                    logger.info(
-                        f"[群分析相册] 未找到相册 '{album_name}'，回退到默认相册 (群 {group_id})"
-                    )
-
-        if not album_id:
-            logger.info(
-                f"[群分析相册] 未能确定目标相册 (群 {group_id})，跳过相册上传。"
-            )
-            return False
-
-        async def do_upload(content: str, label: str):
-            driver = await self._ensure_driver()
-            await driver.upload_group_album(
-                bot=self.bot,
-                group_id=group_id,
-                album_id=str(album_id),
-                album_name=album_name,
-                file_content=content,
-            )
-
-        return await self._execute_transmission_strategy(
-            image_path, do_upload, "OneBot 相册"
+        """上传图片到群相册（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.upload_group_album(
+            group_id=group_id,
+            image_path=image_path,
+            album_id=album_id,
+            album_name=album_name,
+            strict_mode=strict_mode,
         )
 
     async def get_group_album_list(
         self,
         group_id: str,
     ) -> list[dict]:
-        """
-        获取群分析相册列表（兼容多种 OneBot 扩展实现）。
-        """
-        driver = await self._ensure_driver()
-        return await driver.get_group_album_list(self.bot, group_id)
+        """获取群相册列表（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.get_group_album_list(group_id=group_id)
 
     async def find_album_id(
         self,
         group_id: str,
         album_name: str,
     ) -> str | None:
-        """
-        根据相册名称查找 album_id。找不到返回 None（将回退到默认相册）。
-
-        Args:
-            group_id: 目标群号
-            album_name: 目标相册名称
-
-        Returns:
-            str | None: 匹配的 album_id，未找到返回 None
-        """
-        if not album_name:
-            return None
-
-        target_name = str(album_name).strip()
-        logger.debug(
-            f"[群分析相册] 正在群 {group_id} 中查找名为 '{target_name}' 的相册..."
+        """根据相册名称查找 album_id（委托 OneBotGroupFileManager）。"""
+        return await self._file_manager.find_album_id(
+            group_id=group_id,
+            album_name=album_name,
         )
-        albums = await self.get_group_album_list(group_id)
-        for album in albums:
-            name = (
-                album.get("name")
-                or album.get("album_name")
-                or album.get("albumName")
-                or album.get("title")
-            )
-            aid = album.get("album_id") or album.get("id") or album.get("albumId")
-            logger.debug(
-                f"[群分析相册] 正在匹配相册: 目标='{target_name}', 当前相册名称='{name}', 原始数据={album}"
-            )
-            if name and str(name).strip() == target_name:
-                if aid is not None:
-                    logger.info(
-                        f"[群分析相册] 成功定位相册: '{target_name}' -> ID: {aid}"
-                    )
-                    return str(aid)
-                logger.debug(
-                    f"[群分析相册] 相册 '{name}' 名称匹配，但未找到有效的 album_id"
-                )
-
-        logger.info(f"[群分析相册] 未能找到名为 '{target_name}' 的相册 (群 {group_id})")
-        return None
 
     async def set_reaction(
         self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True
