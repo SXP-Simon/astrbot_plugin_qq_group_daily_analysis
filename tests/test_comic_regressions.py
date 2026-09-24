@@ -302,6 +302,10 @@ def load_config_manager_class(plugin_data_dir: Path):
         "re": re,
         "shutil": shutil,
         "logger": Mock(),
+        "ConfigMigrator": __import__(
+            "src.infrastructure.config.config_migrator",
+            fromlist=["ConfigMigrator"],
+        ).ConfigMigrator,
     }
     exec(compile(isolated_module, str(config_path), "exec"), namespace)
     return namespace["ConfigManagerHarness"]
