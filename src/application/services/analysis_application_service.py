@@ -21,6 +21,10 @@ from typing import Any
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.repositories.persistence_repository import (
+    ICheckpointStore,
+    IIncrementalStore,
+)
 from ...domain.repositories.report_repository import IReportGenerator
 from ...domain.services.analysis_domain_service import (
     AnalysisDomainService,
@@ -29,7 +33,6 @@ from ...domain.services.analysis_domain_service import (
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
-from ...infrastructure.persistence.incremental_store import IncrementalStore
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -57,9 +60,9 @@ class AnalysisApplicationService:
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
         analysis_domain_service: AnalysisDomainService,
-        incremental_store: IncrementalStore | None = None,
+        incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
-        checkpoint_store: Any | None = None,
+        checkpoint_store: ICheckpointStore | None = None,
         html_render: Any | None = None,
     ):
         self.config_manager = config_manager

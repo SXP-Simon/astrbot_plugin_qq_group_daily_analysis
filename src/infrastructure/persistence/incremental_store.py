@@ -16,10 +16,11 @@ KV 键设计：
 from typing import Any
 
 from ...domain.entities.incremental_state import IncrementalBatch
+from ...domain.repositories.persistence_repository import IIncrementalStore
 from ...utils.logger import logger
 
 
-class IncrementalStore:
+class IncrementalStore(IIncrementalStore):
     """
     增量分析批次持久化仓储
 

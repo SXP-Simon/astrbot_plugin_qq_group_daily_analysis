@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...infrastructure.persistence.checkpoint_store import CheckpointStore
+from ...domain.repositories.persistence_repository import ICheckpointStore
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -84,7 +84,7 @@ class PipelineContext:
     def __init__(
         self,
         trace: TraceContext | None,
-        checkpoint_store: CheckpointStore | None,
+        checkpoint_store: ICheckpointStore | None,
         group_id: str,
         date_str: str,
     ) -> None:

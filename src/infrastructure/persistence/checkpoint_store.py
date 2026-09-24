@@ -10,8 +10,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ...domain.repositories.persistence_repository import ICheckpointStore
 
-class CheckpointStore:
+
+class CheckpointStore(ICheckpointStore):
     """阶段 Checkpoint 存储器，用于在子阶段失败时实现秒级局部重试并节省 Token"""
 
     def __init__(self, db_path: Path):
