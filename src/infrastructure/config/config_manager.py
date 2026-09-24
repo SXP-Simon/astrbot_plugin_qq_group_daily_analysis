@@ -18,7 +18,7 @@ from astrbot.api.star import StarTools
 
 from ...shared.constants import DEFAULT_ATRI_ASSETS_CDN_URL, PLUGIN_NAME
 from ...utils.logger import logger
-from ..utils.template_utils import upgrade_str_format_template
+from ...utils.template_utils import upgrade_str_format_template
 
 
 class ConfigManager:

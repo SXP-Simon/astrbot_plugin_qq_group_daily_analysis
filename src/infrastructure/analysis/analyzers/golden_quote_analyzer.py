@@ -7,7 +7,7 @@ from datetime import datetime
 
 from ....domain.models.data_models import GoldenQuote, TokenUsage
 from ....utils.logger import logger
-from ...utils.template_utils import render_template
+from ....utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_golden_quotes_with_regex
 from ..utils.response_validation import validate_golden_quote_items

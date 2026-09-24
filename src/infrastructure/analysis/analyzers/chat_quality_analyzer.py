@@ -8,7 +8,7 @@ from datetime import datetime
 from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
-from ...utils.template_utils import render_template
+from ....utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
 from ..utils.llm_utils import (

@@ -35,7 +35,7 @@ from ...shared.constants import (
 )
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
-from ..utils.template_utils import render_template
+from ...utils.template_utils import render_template
 from ..visualization.activity_charts import ActivityVisualizer
 from .qq_official_markdown import QQOfficialMarkdownReportGenerator
 from .templates import HTMLTemplates

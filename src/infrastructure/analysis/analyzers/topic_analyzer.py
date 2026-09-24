@@ -8,7 +8,7 @@ from datetime import datetime
 
 from ....domain.models.data_models import SummaryTopic, TokenUsage
 from ....utils.logger import logger
-from ...utils.template_utils import render_template
+from ....utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_topics_with_regex
 from ..utils.response_validation import validate_topic_items
