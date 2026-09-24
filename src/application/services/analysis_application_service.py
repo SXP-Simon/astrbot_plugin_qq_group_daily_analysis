@@ -1,22 +1,16 @@
-"""
-分析应用服务 - 应用层
-实现"每日群聊分析并生成报告"及"增量分析"核心用例。
-负责协调领域服务、基础设施适配器及持久化层。
+"""分析应用服务 - 应用层
+
+实现"每日群聊分析并生成报告"及"增量分析"核心用例，协调领域服务、基础设施适配器及持久化层。
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import hashlib
 import time as time_mod
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
-from astrbot.api.star import StarTools
-
-from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.repositories.config_repository import IConfigProvider
@@ -30,12 +24,15 @@ from ...domain.services.analysis_domain_service import (
     UserActivityStats,
 )
 from ...domain.services.incremental_merge_service import IncrementalMergeService
+from ...domain.services.message_cleaner_service import MessageCleanerService
 from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects.unified_message import UnifiedMessage
-from ...shared.constants import PLUGIN_NAME, AnalysisStage
+from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .analysis_recovery_service import AnalysisRecoveryService
 from .analysis_serializer import AnalysisResultSerializer
+from .incremental_analysis_service import IncrementalAnalysisService
 from .incremental_batch_builder import (
     compute_hourly_counts,
     convert_user_activity_for_merge,
@@ -47,7 +44,7 @@ __all__ = ["AnalysisApplicationService", "DuplicateGroupTaskError"]
 
 
 class AnalysisApplicationService:
-    """分析应用服务 - 协调业务流程（每日分析 + 增量分析）"""
+    """分析应用服务 - 协调业务流程（每日分析 + 增量分析 + 断点续跑）。"""
 
     def __init__(
         self,
@@ -63,6 +60,21 @@ class AnalysisApplicationService:
         checkpoint_store: ICheckpointStore | None = None,
         html_render: Any | None = None,
     ):
+        """初始化分析应用服务。
+
+        Args:
+            config_manager: 配置提供者。
+            bot_manager: 平台适配器管理器。
+            history_manager: 历史持久化管理器。
+            report_generator: 报表生成器。
+            llm_analyzer: LLM 语义分析提供者。
+            statistics_service: 统计领域服务。
+            analysis_domain_service: 分析领域服务。
+            incremental_store: 增量存储仓储。
+            incremental_merge_service: 增量合并领域服务。
+            checkpoint_store: 检查点持久化仓储。
+            html_render: HTML 渲染函数。
+        """
         self.config_manager = config_manager
         self.bot_manager = bot_manager
         self.history_manager = history_manager
@@ -78,6 +90,31 @@ class AnalysisApplicationService:
         max_concurrent = max(1, int(self.config_manager.get_llm_max_concurrent()))
         self._task_guard = TaskGuard(max_concurrent)
         self.llm_semaphore = self._task_guard.llm_semaphore
+
+        self._incremental_service = IncrementalAnalysisService(
+            config_manager=self.config_manager,
+            bot_manager=self.bot_manager,
+            history_manager=self.history_manager,
+            llm_analyzer=self.llm_analyzer,
+            statistics_service=self.statistics_service,
+            analysis_domain_service=self.analysis_domain_service,
+            task_guard=self._task_guard,
+            incremental_store=self.incremental_store,
+            incremental_merge_service=self.incremental_merge_service,
+            checkpoint_store=self.checkpoint_store,
+        )
+
+        self._recovery_service = AnalysisRecoveryService(
+            config_manager=self.config_manager,
+            bot_manager=self.bot_manager,
+            history_manager=self.history_manager,
+            report_generator=self.report_generator,
+            llm_analyzer=self.llm_analyzer,
+            statistics_service=self.statistics_service,
+            task_guard=self._task_guard,
+            checkpoint_store=self.checkpoint_store,
+            html_render=self.html_render,
+        )
 
     @property
     def _active_tasks(self):
@@ -116,20 +153,20 @@ class AnalysisApplicationService:
         manual: bool = False,
         days: int | None = None,
     ) -> dict[str, Any]:
-        """
-        执行每日分析用例。
+        """执行每日全量分析核心用例。
 
-        流程：
-        1. 获取适配器
-        2. 拉取消息 (Infrastructure)
-        3. 基础统计 (Domain Service)
-        4. 用户分析 (Domain Service)
-        5. LLM 语义分析 (Infrastructure/Analysis Bridge)
-        6. 生成报告 (Visualization/Infrastructure)
-        7. 持久化摘要 (Persistence)
-        8. 返回结果
-        """
+        Args:
+            group_id: 群组 ID。
+            platform_id: 平台实例标识。
+            manual: 是否为手动触发。
+            days: 分析回溯天数。
 
+        Returns:
+            包含执行状态与 analysis_result 产物的字典。
+
+        Raises:
+            ValueError: 未找到平台适配器时抛出。
+        """
         trace = TraceContext.current()
         if not trace:
             trace = TraceContext.get_or_create(
@@ -150,14 +187,10 @@ class AnalysisApplicationService:
                 f"开始执行分析用例: 群 {group_id}, platform_id={platform_id or '默认'}, days={days or '默认'}"
             )
 
-            # 1. 获取适配器
             adapter = self.bot_manager.get_adapter(platform_id)
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            # 确立并回填实际运行的真实平台标识 (Real Platform Identity: 优先使用具体平台实例 ID 如 nuits)
-            # 【架构说明】：'default' 仅为 AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）。
-            # 系统优先使用适配器实际注册的实例标识，若无则使用 adapter 属性或传入的 platform_id。
             actual_platform = (
                 (
                     self.bot_manager.get_adapter_platform_id(adapter)
@@ -171,7 +204,6 @@ class AnalysisApplicationService:
             if trace and actual_platform:
                 trace.platform = str(actual_platform)
 
-            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
             if hasattr(adapter, "is_group_muted"):
                 try:
                     if await adapter.is_group_muted(group_id):
@@ -190,7 +222,6 @@ class AnalysisApplicationService:
                 date_str=date_str,
             )
 
-            # 2. 拉取消息
             if days is None:
                 days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
@@ -240,9 +271,6 @@ class AnalysisApplicationService:
                     "message": skip_msg,
                 }
 
-            # 3. 清理消息 (Filter commands, bot messages, noise)
-            from ...domain.services.message_cleaner_service import MessageCleanerService
-
             cleaner = MessageCleanerService()
             bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
             if hasattr(adapter, "bot_self_ids") and adapter.bot_self_ids:
@@ -257,7 +285,6 @@ class AnalysisApplicationService:
                 bot_self_ids,
             )
 
-            # 对于自动任务，强制过滤指令；对于手动任务，也建议过滤以保持报告纯净
             async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
                 clean_start_ts = time_mod.perf_counter()
                 unified_messages = cleaner.clean_messages(
@@ -306,7 +333,6 @@ class AnalysisApplicationService:
                 max(len(raw_messages) - len(unified_messages), 0),
             )
 
-            # 4. 检查最小消息阈值 (在清理后进行)
             threshold = self.config_manager.get_min_messages_threshold()
             if len(unified_messages) < threshold and not manual:
                 skip_msg = f"群聊有效发言数（{len(unified_messages)} 条）未达到设定的自动分析阈值（{threshold} 条），已安全跳过本次日报生成"
@@ -322,7 +348,6 @@ class AnalysisApplicationService:
                     "threshold": threshold,
                 }
 
-            # 5. 基础统计 (Domain Service)
             async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
                 statistics = await asyncio.to_thread(
                     self.statistics_service.calculate_group_statistics, unified_messages
@@ -350,7 +375,6 @@ class AnalysisApplicationService:
                 user_activity, limit=max_user_titles
             )
 
-            # 保存前置清洗与基础统计 Checkpoint，用于后续一键断点续跑 (Resume)
             if self.checkpoint_store:
                 try:
                     cur_trace_id = trace.trace_id if trace else ""
@@ -374,7 +398,6 @@ class AnalysisApplicationService:
                 except Exception as e:
                     logger.warning(f"保存前置 Checkpoint 失败: {e}")
 
-            # 5. LLM 语义分析 (为了保持兼容，目前直接传 UnifiedMessage，后续如需传 raw dict 再加转换)
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
             golden_quote_enabled = (
@@ -428,7 +451,6 @@ class AnalysisApplicationService:
                             chat_quality_enabled=chat_quality_enabled,
                         )
 
-                    # 细粒度子任务状态判定：开启的子任务产出情况
                     enabled_count = sum(
                         [
                             bool(topic_enabled),
@@ -469,7 +491,6 @@ class AnalysisApplicationService:
                         if trace:
                             trace.metadata["has_warnings"] = True
 
-            # 回填结果
             statistics.golden_quotes = golden_quotes
             statistics.token_usage = total_token_usage
 
@@ -481,7 +502,6 @@ class AnalysisApplicationService:
                 "chat_quality_review": chat_quality_review,
             }
 
-            # 6. 持久化摘要 (Persistence)
             async with pipeline.step(
                 AnalysisStage.SAVE_SUMMARY,
                 save_checkpoint=True,
@@ -507,8 +527,6 @@ class AnalysisApplicationService:
                     checkpoint_saved=bool(self.checkpoint_store),
                 )
 
-            # 7. 生成报告并发送 (应用层编排发送动作)
-            # 这里由调用方处理发送，本服务只返回分析结果和可能的视觉产物
             return {
                 "success": True,
                 "analysis_result": analysis_result,
@@ -517,20 +535,6 @@ class AnalysisApplicationService:
                 "group_id": group_id,
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
-
-    def _to_json_friendly(self, obj: Any) -> Any:
-        """递归将领域模型、dataclass、Enum、datetime 等转换为标准 JSON 原生数据结构。"""
-        return AnalysisResultSerializer.to_json_friendly(obj)
-
-    def _serialize_analysis_result(
-        self, analysis_result: dict[str, Any]
-    ) -> dict[str, Any]:
-        """将包含领域对象的 analysis_result 序列化为 JSON 友好的 dict 快照。"""
-        return AnalysisResultSerializer.serialize(analysis_result)
-
-    def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
-        """将持久化的 JSON 快照还原为包含领域数据模型的 analysis_result。"""
-        return AnalysisResultSerializer.deserialize(data)
 
     async def rerender_report(
         self,
@@ -541,168 +545,15 @@ class AnalysisApplicationService:
         render_format: str = "image",
         trace_id: str | None = None,
     ) -> dict[str, Any]:
-        # 优先从历史持久化仓储 (HistoryStore) 读取当日完整分析报告，与中途临时快照解耦
-        analysis_result = None
-        if self.history_manager:
-            try:
-                hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data and isinstance(hist_data, dict):
-                    analysis_result = hist_data
-            except Exception as e:
-                logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
-
-        # 若未命中历史记录，回退尝试 CheckpointStore
-        if not analysis_result and self.checkpoint_store:
-            cached_data = self.checkpoint_store.get_checkpoint(
-                group_id, date_str, "LLM_ANALYSIS", trace_id=trace_id or ""
-            )
-            if cached_data:
-                analysis_result = self._deserialize_analysis_result(cached_data)
-
-        if not analysis_result:
-            return {
-                "success": False,
-                "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物记录",
-            }
-
-        reports_dir = (
-            getattr(self.report_generator, "data_dir", None)
-            or StarTools.get_data_dir(PLUGIN_NAME)
-        ) / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
-        ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # 渲染长图或 HTML
-        if render_format == "html":
-            filename = (
-                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.html"
-                if trace_id
-                else f"report_{group_id}_{ts_str}_{template_name}.html"
-            )
-            dest = reports_dir / filename
-            html_path, _ = await self.report_generator.generate_html_report(
-                analysis_result=analysis_result,
-                group_id=group_id,
-                template_theme=template_name,
-                custom_filename=filename,
-                trace_id=trace_id,
-            )
-            if not html_path or not Path(html_path).exists():
-                prep_func = getattr(self.report_generator, "_prepare_render_data", None)
-                if callable(prep_func):
-                    prep_res = prep_func(analysis_result)
-                    render_data = (
-                        await prep_res if asyncio.iscoroutine(prep_res) else prep_res
-                    )
-                else:
-                    render_data = analysis_result
-                html_tpls = getattr(self.report_generator, "html_templates", None)
-                if html_tpls and hasattr(html_tpls, "render_template"):
-                    render_kwargs: dict[str, Any] = (
-                        dict(render_data) if isinstance(render_data, Mapping) else {}
-                    )
-                    html_content = html_tpls.render_template(
-                        "html_template.html",
-                        template_theme=template_name,
-                        **render_kwargs,
-                    )
-                    dest.write_text(html_content, encoding="utf-8")
-
-            if trace_id:
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        trace_data = _global_trace_store.get_trace(trace_id)
-                        if trace_data:
-                            extra = trace_data.get("extra") or {}
-                            rfiles = extra.setdefault("report_files", [])
-                            if not any(rf.get("filename") == filename for rf in rfiles):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "html",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
-                    except Exception:
-                        pass
-
-            return {
-                "success": True,
-                "filename": filename,
-                "report_path": str(dest),
-                "is_html": True,
-                "from_checkpoint": True,
-                "trace_id": trace_id,
-            }
-        else:
-            image_res = await self.report_generator.generate_image_report(
-                analysis_result=analysis_result,
-                group_id=group_id,
-                html_render_func=self.html_render,
-                template_theme=template_name,
-            )
-            image_url = image_res[0] if isinstance(image_res, tuple) else image_res
-            filename = (
-                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
-                if trace_id
-                else f"report_{group_id}_{ts_str}_{template_name}.jpg"
-            )
-            dest = reports_dir / filename
-            if image_url and Path(image_url).exists():
-                import shutil
-
-                shutil.copy2(image_url, dest)
-            elif image_url and image_url.startswith("base64://"):
-                import base64
-
-                data = base64.b64decode(image_url[9:])
-                dest.write_bytes(data)
-
-            if trace_id:
-                from ...shared.trace_context import _global_trace_store
-
-                if _global_trace_store is not None:
-                    try:
-                        trace_data = _global_trace_store.get_trace(trace_id)
-                        if trace_data:
-                            extra = trace_data.get("extra") or {}
-                            rfiles = extra.setdefault("report_files", [])
-                            if not any(rf.get("filename") == filename for rf in rfiles):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "image",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
-                    except Exception:
-                        pass
-
-            return {
-                "success": True,
-                "filename": filename,
-                "report_path": str(dest),
-                "image_url": image_url,
-                "is_html": False,
-                "from_checkpoint": True,
-                "trace_id": trace_id,
-            }
+        """重新渲染历史报告（委托 AnalysisRecoveryService）。"""
+        return await self._recovery_service.rerender_report(
+            group_id=group_id,
+            date_str=date_str,
+            template_name=template_name,
+            platform_id=platform_id,
+            render_format=render_format,
+            trace_id=trace_id,
+        )
 
     async def resume_analysis(
         self,
@@ -712,316 +563,15 @@ class AnalysisApplicationService:
         date_str: str | None = None,
         template_name: str | None = None,
     ) -> dict[str, Any]:
-        """从上一次 Checkpoint 执行幂等断点续跑"""
-        from ...domain.models.data_models import TokenUsage
-        from ...shared.trace_context import TraceContext
-
-        if not date_str:
-            date_str = dt.datetime.now().strftime("%Y-%m-%d")
-
-        trace = TraceContext.current()
-        if not trace:
-            trace = TraceContext.get_or_create(
-                trace_id=trace_id,
-                group_id=str(group_id),
-                platform=platform_id or "",
-                trigger_type="resume",
-                auto_bind=True,
-            )
-        if template_name and template_name != "auto":
-            trace.metadata["override_template_name"] = str(template_name)
-
-        topic_enabled = self.config_manager.get_topic_analysis_enabled()
-        user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
-        golden_quote_enabled = self.config_manager.get_golden_quote_analysis_enabled()
-        chat_quality_enabled = self.config_manager.get_chat_quality_analysis_enabled()
-
-        # 1. 优先检查是否有已完成的 LLM_ANALYSIS Checkpoint 或历史分析记录
-        pipeline = PipelineContext(
-            trace=trace,
-            checkpoint_store=self.checkpoint_store,
+        """从上一次 Checkpoint 检查点执行幂等断点续跑（委托 AnalysisRecoveryService）。"""
+        return await self._recovery_service.resume_analysis(
+            trace_id=trace_id,
             group_id=group_id,
+            platform_id=platform_id,
             date_str=date_str,
+            template_name=template_name,
+            fallback_daily_func=self.execute_daily_analysis,
         )
-
-        cached_llm = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.LLM_ANALYSIS.value,
-                trace_id=trace_id or "",
-            )
-            if self.checkpoint_store
-            else None
-        )
-        if not cached_llm:
-            try:
-                hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data and isinstance(hist_data, dict):
-                    cached_llm = self._serialize_analysis_result(hist_data)
-            except Exception:
-                cached_llm = None
-
-        if cached_llm:
-            cached_result = self._deserialize_analysis_result(cached_llm)
-            cached_topics = cached_result.get("topics", [])
-            cached_titles = cached_result.get("user_titles", [])
-            cached_stats = cached_result.get("statistics")
-            cached_quotes = (
-                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
-            )
-            cached_quality = cached_result.get("chat_quality_review")
-
-            has_required_topics = not topic_enabled or bool(cached_topics)
-            has_required_titles = not user_title_enabled or bool(cached_titles)
-            has_required_quotes = not golden_quote_enabled or bool(cached_quotes)
-            has_required_quality = not chat_quality_enabled or bool(cached_quality)
-
-            # 若全部启用的分析结果均已具备（例如仅排版制图或发送失败），直接跳过 LLM 和拉取消息，0 Token 成本直接出图与分发
-            if (
-                has_required_topics
-                and has_required_titles
-                and has_required_quotes
-                and has_required_quality
-            ):
-                logger.info(
-                    f"群 {group_id} 命中完整的 LLM 分析产物快照，跳过消息拉取与 LLM 分析，直接进入报告排版与分发"
-                )
-                async with self.group_lock(group_id, "daily"):
-                    adapter = self.bot_manager.get_adapter(platform_id)
-                    pipeline.restore_checkpoint_span(
-                        AnalysisStage.LLM_ANALYSIS,
-                        {"direct_render": True},
-                    )
-                    return {
-                        "success": True,
-                        "analysis_result": cached_result,
-                        "messages_count": (
-                            getattr(cached_stats, "message_count", 0)
-                            if cached_stats
-                            else 0
-                        ),
-                        "adapter": adapter,
-                        "group_id": group_id,
-                        "platform_id": getattr(adapter, "platform_id", platform_id),
-                        "resumed_from": AnalysisStage.LLM_ANALYSIS.value,
-                        "trace_id": trace_id,
-                    }
-
-        # 2. 检查是否有前置清洗 Checkpoint
-        clean_checkpoint = (
-            self.checkpoint_store.get_checkpoint(
-                group_id,
-                date_str,
-                AnalysisStage.CLEAN_MESSAGES.value,
-                trace_id=trace_id or "",
-            )
-            if self.checkpoint_store
-            else None
-        )
-
-        if not clean_checkpoint:
-            logger.info(f"未找到群 {group_id} 的前置清洗快照，回退到全量重新分析")
-            if trace:
-                trace.metadata["fallback_to_fresh_run"] = True
-                trace.metadata["fallback_reason"] = "checkpoint_missing_auto_refetched"
-                trace.metadata["resumed_from"] = "fresh_run_fallback"
-            result = await self.execute_daily_analysis(
-                group_id=group_id,
-                platform_id=platform_id,
-                manual=True,
-            )
-            if isinstance(result, dict):
-                result["fallback_to_fresh_run"] = True
-                result["fallback_reason"] = "checkpoint_missing_auto_refetched"
-                result["resumed_from"] = "fresh_run_fallback"
-            return result
-
-        logger.info(
-            f"群 {group_id} 命中 Checkpoint 快照，跳过消息拉取与清洗，直接进入 LLM 幂等续跑"
-        )
-        async with self.group_lock(group_id, "daily"):
-            adapter = self.bot_manager.get_adapter(platform_id)
-            if not adapter:
-                raise ValueError(f"未找到平台 {platform_id} 的适配器")
-
-            stats_data = clean_checkpoint.get("statistics", {})
-            deserialized = self._deserialize_analysis_result(
-                {
-                    "statistics": stats_data,
-                    "user_analysis": clean_checkpoint.get("user_activity", {}),
-                    "user_titles": clean_checkpoint.get("top_users", []),
-                }
-            )
-            statistics = deserialized["statistics"]
-            user_activity = deserialized.get("user_analysis", {})
-            top_users = deserialized.get("user_titles", [])
-            unified_messages = clean_checkpoint.get("unified_messages", [])
-
-            pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
-
-            cached_result = (
-                self._deserialize_analysis_result(cached_llm) if cached_llm else {}
-            )
-
-            topics = cached_result.get("topics", [])
-            user_titles = cached_result.get("user_titles", [])
-            cached_stats = cached_result.get("statistics")
-            golden_quotes = (
-                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
-            )
-            chat_quality_review = cached_result.get("chat_quality_review")
-            total_token_usage = (
-                getattr(cached_stats, "token_usage", TokenUsage())
-                if cached_stats
-                else TokenUsage()
-            )
-
-            # 决定哪些子任务需要重新调用 LLM：已有成功非空产物的子任务直接复用，避免消耗重复 Token
-            run_topic = topic_enabled and not bool(topics)
-            run_user_title = user_title_enabled and not bool(user_titles)
-            run_golden_quote = golden_quote_enabled and not bool(golden_quotes)
-            run_chat_quality = chat_quality_enabled and not bool(chat_quality_review)
-
-            reused_tasks = []
-            if topic_enabled and topics:
-                reused_tasks.append(f"话题({len(topics)}个)")
-            if user_title_enabled and user_titles:
-                reused_tasks.append(f"称号({len(user_titles)}个)")
-            if golden_quote_enabled and golden_quotes:
-                reused_tasks.append(f"金句({len(golden_quotes)}条)")
-            if chat_quality_enabled and chat_quality_review:
-                reused_tasks.append("质量锐评")
-
-            if reused_tasks:
-                logger.info(
-                    f"群 {group_id} 续跑命中已有 LLM 产物: {', '.join(reused_tasks)}，直接复用，无需消耗 Token 重跑"
-                )
-
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            if run_topic or run_user_title or run_golden_quote or run_chat_quality:
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self._llm_slot(group_id, "resume"):
-                        (
-                            new_topics,
-                            new_user_titles,
-                            new_golden_quotes,
-                            new_tokens,
-                            new_chat_quality,
-                        ) = await self.llm_analyzer.analyze_all_concurrent(
-                            legacy_messages,
-                            user_activity,
-                            umo=unified_msg_origin,
-                            top_users=top_users,
-                            topic_enabled=run_topic,
-                            user_title_enabled=run_user_title,
-                            golden_quote_enabled=run_golden_quote,
-                            chat_quality_enabled=run_chat_quality,
-                        )
-                        if run_topic:
-                            topics = new_topics
-                        if run_user_title:
-                            user_titles = new_user_titles
-                        if run_golden_quote:
-                            golden_quotes = new_golden_quotes
-                        if run_chat_quality:
-                            chat_quality_review = new_chat_quality
-
-                        total_token_usage = TokenUsage(
-                            prompt_tokens=total_token_usage.prompt_tokens
-                            + new_tokens.prompt_tokens,
-                            completion_tokens=total_token_usage.completion_tokens
-                            + new_tokens.completion_tokens,
-                            total_tokens=total_token_usage.total_tokens
-                            + new_tokens.total_tokens,
-                        )
-
-                    enabled_count = sum(
-                        [
-                            bool(run_topic),
-                            bool(run_user_title),
-                            bool(run_golden_quote),
-                            bool(run_chat_quality),
-                        ]
-                    )
-                    success_count = sum(
-                        [
-                            bool(new_topics) if run_topic else False,
-                            bool(new_user_titles) if run_user_title else False,
-                            bool(new_golden_quotes) if run_golden_quote else False,
-                            bool(new_chat_quality) if run_chat_quality else False,
-                        ]
-                    )
-
-                    if enabled_count > 0 and success_count == 0:
-                        step.mark_failed(
-                            "续跑大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = (
-                                AnalysisStage.LLM_ANALYSIS.value
-                            )
-                        return {
-                            "success": False,
-                            "reason": "llm_analysis_failed",
-                            "error": "大模型文本分析全部子任务失败，已中止续跑",
-                        }
-                    elif enabled_count > 0 and success_count < enabled_count:
-                        step.mark_warning(
-                            f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = True
-
-            statistics.golden_quotes = golden_quotes
-            statistics.token_usage = total_token_usage
-
-            analysis_result = {
-                "statistics": statistics,
-                "topics": topics,
-                "user_titles": user_titles,
-                "user_analysis": user_activity,
-                "chat_quality_review": chat_quality_review,
-            }
-
-            async with pipeline.step(
-                AnalysisStage.SAVE_SUMMARY,
-                save_checkpoint=True,
-                serializer=self._serialize_analysis_result,
-            ) as step:
-                await self.history_manager.save_analysis(group_id, analysis_result)
-                if self.checkpoint_store:
-                    try:
-                        cur_trace_id = trace.trace_id if trace else ""
-                        self.checkpoint_store.save_checkpoint(
-                            group_id=group_id,
-                            date_str=date_str,
-                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
-                            data=self._serialize_analysis_result(analysis_result),
-                            trace_id=cur_trace_id,
-                        )
-                    except Exception as e:
-                        logger.warning(f"保存分析 Checkpoint 失败: {e}")
-                step.set_payload(
-                    date=date_str,
-                    topics_persisted=len(topics),
-                    titles_persisted=len(user_titles),
-                    checkpoint_saved=bool(self.checkpoint_store),
-                )
-
-            return {
-                "success": True,
-                "analysis_result": analysis_result,
-                "adapter": adapter,
-                "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
-            }
 
     async def execute_comic_topic_analysis(
         self,
@@ -1074,32 +624,9 @@ class AnalysisApplicationService:
                 days = self.config_manager.get_analysis_days()
             max_count = self.config_manager.get_max_messages()
 
-            trace = TraceContext.current()
-
-            pipeline = PipelineContext(
-                trace=trace,
-                checkpoint_store=self.checkpoint_store,
-                group_id=group_id,
-                date_str=dt.datetime.now().strftime("%Y-%m-%d"),
+            raw_messages = await adapter.fetch_messages(
+                group_id=group_id, days=days, max_count=max_count
             )
-
-            async with pipeline.step(
-                AnalysisStage.FETCH_MESSAGES,
-                initial_payload={
-                    "days": days,
-                    "max_count": max_count,
-                    "platform": platform_id or "default",
-                },
-            ) as step:
-                raw_messages = await adapter.fetch_messages(
-                    group_id=group_id, days=days, max_count=max_count
-                )
-                step.set_payload(
-                    raw_count=len(raw_messages),
-                    days=days,
-                    max_count=max_count,
-                    platform=platform_id or "default",
-                )
             logger.info(
                 "手动漫画消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -1111,24 +638,13 @@ class AnalysisApplicationService:
             if not raw_messages:
                 return {"success": False, "reason": "no_messages"}
 
-            from ...domain.services.message_cleaner_service import MessageCleanerService
-
             cleaner = MessageCleanerService()
             bot_self_ids = self.config_manager.get_bot_self_ids()
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
-            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
-                unified_messages = cleaner.clean_messages(
-                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
-                )
-                dropped_count = max(len(raw_messages) - len(unified_messages), 0)
-                step.set_payload(
-                    cleaned_count=len(unified_messages),
-                    dropped_count=dropped_count,
-                    filter_bot_messages=bool(
-                        self.config_manager.get_filter_bot_messages()
-                    ),
-                )
+            unified_messages = cleaner.clean_messages(
+                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            )
             logger.info(
                 "手动漫画消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
                 group_id,
@@ -1146,16 +662,9 @@ class AnalysisApplicationService:
                 f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
             )
 
-            async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                async with self._llm_slot(group_id, "comic_manual"):
-                    topics, token_usage = await self.llm_analyzer.analyze_topics(
-                        legacy_messages, unified_msg_origin
-                    )
-                step.set_payload(
-                    topics_count=len(topics) if topics else 0,
-                    prompt_tokens=getattr(token_usage, "prompt_tokens", 0),
-                    completion_tokens=getattr(token_usage, "completion_tokens", 0),
-                    total_tokens=getattr(token_usage, "total_tokens", 0),
+            async with self._llm_slot(group_id, "comic_manual"):
+                topics, token_usage = await self.llm_analyzer.analyze_topics(
+                    legacy_messages, unified_msg_origin
                 )
 
             if not topics:
@@ -1171,639 +680,45 @@ class AnalysisApplicationService:
                 "platform_id": getattr(adapter, "platform_id", platform_id),
             }
 
-    # ----------------------------------------------------------------
-    # 增量分析用例
-    # ----------------------------------------------------------------
-
     async def execute_incremental_analysis(
         self,
         group_id: str,
         platform_id: str | None = None,
     ) -> dict[str, Any]:
-        """
-        执行一次增量分析用例（滑动窗口批次架构）。
-
-        与每日分析不同，增量分析每次仅处理消息阈值规定的固定批次，
-        提取少量话题和金句，将结果作为独立批次存储到 KV。
-        不生成用户称号（留到最终报告时再做），不生成报告。
-
-        流程：
-        1. 获取适配器
-        2. 拉取消息（使用增量配置的 max_messages）
-        3. 清理消息
-        4. 按时间戳和消息 ID 去重：过滤已分析过的消息
-        5. 检查最小消息阈值
-        6. 计算基础统计（小时分布、用户活跃、表情）
-        7. LLM 增量分析（仅话题 + 金句）
-        8. 构建 IncrementalBatch 并保存
-        9. 更新最后分析消息时间戳
-        10. 返回批次结果
-
-        Args:
-            group_id: 群组 ID
-            platform_id: 平台标识，缺省为默认
-
-        Returns:
-            dict: 包含 success、batch_summary 等信息
-        """
-        trace = TraceContext.current()
-        if not trace:
-            trace = TraceContext.get_or_create(
-                group_id=str(group_id),
-                platform=platform_id or "",
-                trigger_type="incremental",
-                auto_bind=True,
-            )
-
-        async with self.group_lock(group_id, "incremental"):
-            analysis_started_at = time_mod.monotonic()
-            if not self.incremental_store:
-                raise RuntimeError("增量分析未初始化：缺少 IncrementalStore")
-
-            logger.debug(
-                f"开始增量分析用例: 群 {group_id}, 平台 {platform_id or '默认'}"
-            )
-
-            # 1. 获取适配器
-            adapter = self.bot_manager.get_adapter(platform_id)
-            if not adapter:
-                raise ValueError(f"未找到平台 {platform_id} 的适配器")
-
-            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.debug(
-                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量群分析"
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
-
-            # 2. 拉取消息，获取进度并确定拉取量
-            (
-                last_analyzed_ts,
-                last_analyzed_message_ids,
-            ) = await self.incremental_store.get_last_analyzed_cursor(group_id)
-            days = self.config_manager.get_analysis_days()
-            days_lookback_ts = int(
-                (dt.datetime.now() - dt.timedelta(days=days)).timestamp()
-            )
-            effective_since_ts = (
-                max(last_analyzed_ts, days_lookback_ts)
-                if last_analyzed_ts > 0
-                else days_lookback_ts
-            )
-            # 复用基础拉取上限，同时保证至少能拉取一个完整增量批次。
-            min_messages = self.config_manager.get_incremental_min_messages()
-            max_count = max(self.config_manager.get_max_messages(), min_messages)
-
-            date_str = dt.datetime.now().strftime("%Y-%m-%d")
-            pipeline = PipelineContext(
-                trace=trace,
-                checkpoint_store=self.checkpoint_store,
-                group_id=group_id,
-                date_str=date_str,
-            )
-
-            # 3. 拉取消息（优先从上次进度点开始回溯，严格约束在 days 时间窗口内）
-            fetch_started_at = time_mod.monotonic()
-            async with pipeline.step(
-                AnalysisStage.FETCH_MESSAGES,
-                initial_payload={"days": days, "max_count": max_count},
-            ) as step:
-                raw_messages = await adapter.fetch_messages(
-                    group_id=group_id,
-                    days=days,
-                    max_count=max_count,
-                    since_ts=effective_since_ts,
-                )
-                step.set_payload(
-                    raw_count=len(raw_messages),
-                    days=days,
-                    max_count=max_count,
-                )
-            raw_count = len(raw_messages)
-            fetch_duration = time_mod.monotonic() - fetch_started_at
-
-            if not raw_messages:
-                logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
-                return {"success": False, "reason": "no_messages", "messages_count": 0}
-
-            # 3. 清理消息
-            from ...domain.services.message_cleaner_service import MessageCleanerService
-
-            cleaner = MessageCleanerService()
-            bot_self_ids = self.config_manager.get_bot_self_ids()
-            if not self.config_manager.get_filter_bot_messages():
-                bot_self_ids = []
-            logger.debug(
-                "增量消息清洗配置: group=%s, filter_bot_messages=%s, bot_self_id_count=%s",
-                group_id,
-                self.config_manager.get_filter_bot_messages(),
-                len(bot_self_ids),
-            )
-            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
-                unified_messages = cleaner.clean_messages(
-                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
-                )
-                step.set_payload(
-                    raw_count=raw_count,
-                    cleaned_count=len(unified_messages),
-                    dropped_count=max(raw_count - len(unified_messages), 0),
-                )
-            cleaned_count = len(unified_messages)
-            if trace:
-                trace.set_context_metrics(
-                    raw_message_count=raw_count,
-                    cleaned_message_count=cleaned_count,
-                    incremental_batches=1,
-                )
-
-            # 5. 复合游标去重与时间窗口门禁，确保绝不回溯超过 days 配置的历史消息。
-            unified_messages = [
-                msg
-                for msg in unified_messages
-                if msg.timestamp >= days_lookback_ts
-                and (
-                    last_analyzed_ts <= 0
-                    or msg.timestamp > last_analyzed_ts
-                    or (
-                        msg.timestamp == last_analyzed_ts
-                        and msg.message_id not in last_analyzed_message_ids
-                    )
-                )
-            ]
-
-            eligible_count = len(unified_messages)
-            logger.debug(
-                "增量消息筛选完成: platform=%s, group=%s, raw=%s, cleaned=%s, "
-                "eligible=%s, threshold=%s, fetch_limit=%s, fetch_limit_reached=%s, "
-                "fetch_duration=%.2fs, cursor_ts=%s, cursor_ids=%s",
-                platform_id or "default",
-                group_id,
-                raw_count,
-                cleaned_count,
-                eligible_count,
-                min_messages,
-                max_count,
-                raw_count >= max_count,
-                fetch_duration,
-                last_analyzed_ts,
-                len(last_analyzed_message_ids),
-            )
-
-            # 固定每批消息规模，待处理消息达到多个批次时连续处理，避免 LLM 负载波动。
-            if len(unified_messages) < min_messages:
-                logger.debug(
-                    f"群 {group_id} 增量分析：新消息数 ({len(unified_messages)}) "
-                    f"未达到阈值 ({min_messages})，跳过本次分析"
-                )
-                return {
-                    "success": False,
-                    "reason": "below_threshold",
-                    "messages_count": len(unified_messages),
-                }
-            unified_messages.sort(key=lambda msg: (msg.timestamp, msg.message_id))
-            if len(unified_messages) > min_messages:
-                unified_messages = unified_messages[:min_messages]
-            logger.debug(
-                "增量批次已选定: platform=%s, group=%s, eligible=%s, selected=%s",
-                platform_id or "default",
-                group_id,
-                eligible_count,
-                len(unified_messages),
-            )
-
-            # 6. 计算基础统计
-            async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
-                statistics = await asyncio.to_thread(
-                    self.statistics_service.calculate_group_statistics, unified_messages
-                )
-                user_activity = await asyncio.to_thread(
-                    self.analysis_domain_service.analyze_user_activity,
-                    unified_messages,
-                    bot_self_ids,
-                )
-                step.set_payload(
-                    messages_analyzed=len(unified_messages),
-                    participants=len(user_activity) if user_activity else 0,
-                )
-
-            # 计算本批次的小时分布
-            hourly_msg_counts, hourly_char_counts = self._compute_hourly_counts(
-                unified_messages
-            )
-
-            # 7. LLM 增量分析（仅话题 + 金句）
-            topics_per_batch = self.config_manager.get_incremental_topics_per_batch()
-            quotes_per_batch = self.config_manager.get_incremental_quotes_per_batch()
-
-            # 获取功能开关状态
-            topic_enabled = self.config_manager.get_topic_analysis_enabled()
-            golden_quote_enabled = (
-                self.config_manager.get_golden_quote_analysis_enabled()
-            )
-            chat_quality_enabled = (
-                self.config_manager.get_chat_quality_analysis_enabled()
-            )
-
-            # 需要将 UnifiedMessage 转换为 legacy 格式供 LLM 分析器使用
-            legacy_messages = self.statistics_service._convert_to_legacy_dict(
-                unified_messages
-            )
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            topics = []
-            golden_quotes = []
-            token_usage = TokenUsage()
-            chat_quality_review = None
-
-            if topic_enabled or golden_quote_enabled or chat_quality_enabled:
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self._llm_slot(group_id, "incremental"):
-                        logger.debug(f"[LLM] 已进入增量分析队列 (群: {group_id})")
-                        (
-                            topics,
-                            golden_quotes,
-                            token_usage,
-                            chat_quality_review,
-                        ) = await self.llm_analyzer.analyze_incremental_concurrent(
-                            legacy_messages,
-                            umo=unified_msg_origin,
-                            topics_per_batch=topics_per_batch,
-                            quotes_per_batch=quotes_per_batch,
-                            topic_enabled=topic_enabled,
-                            golden_quote_enabled=golden_quote_enabled,
-                            chat_quality_enabled=chat_quality_enabled,
-                        )
-                    step.set_payload(
-                        topics_count=len(topics),
-                        quotes_count=len(golden_quotes),
-                        prompt_tokens=getattr(token_usage, "prompt_tokens", 0),
-                        completion_tokens=getattr(token_usage, "completion_tokens", 0),
-                        total_tokens=getattr(token_usage, "total_tokens", 0),
-                    )
-
-            # 8. 构建 IncrementalBatch
-            # 8a. 转换话题: SummaryTopic -> dict
-            new_topics = [
-                {
-                    "topic": t.topic,
-                    "contributors": t.contributors,
-                    "detail": t.detail,
-                    "contributor_ids": t.contributor_ids,
-                }
-                for t in topics
-            ]
-
-            # 8b. 转换金句: GoldenQuote -> dict
-            new_quotes = [
-                {
-                    "content": q.content,
-                    "sender": q.sender,
-                    "reason": q.reason,
-                    "user_id": q.user_id,
-                }
-                for q in golden_quotes
-            ]
-
-            # 8c. 转换 token 消耗: TokenUsage -> dict
-            token_usage_dict = {
-                "prompt_tokens": token_usage.prompt_tokens,
-                "completion_tokens": token_usage.completion_tokens,
-                "total_tokens": token_usage.total_tokens,
-            }
-
-            # 8d. 转换用户统计: AnalysisDomainService 格式 -> IncrementalBatch 格式
-            user_stats = self._convert_user_activity_for_merge(
-                user_activity, unified_messages
-            )
-
-            # 8e. 转换表情统计: EmojiStatistics -> dict
-            emoji_stats = {
-                "face_count": statistics.emoji_statistics.face_count,
-                "mface_count": statistics.emoji_statistics.mface_count,
-                "bface_count": statistics.emoji_statistics.bface_count,
-                "sface_count": statistics.emoji_statistics.sface_count,
-                "other_emoji_count": statistics.emoji_statistics.other_emoji_count,
-                "face_details": statistics.emoji_statistics.face_details,
-            }
-
-            # 8f. 转换聊天质量锐评: QualityReview -> dict
-            chat_quality_dict = None
-            if chat_quality_review:
-                chat_quality_dict = {
-                    "title": chat_quality_review.title,
-                    "subtitle": chat_quality_review.subtitle,
-                    "dimensions": [
-                        {
-                            "name": d.name,
-                            "percentage": d.percentage,
-                            "comment": d.comment,
-                            "color": d.color,
-                        }
-                        for d in chat_quality_review.dimensions
-                    ],
-                    "summary": chat_quality_review.summary,
-                }
-
-            # 8g. 获取参与者 ID 和最后消息时间戳
-            participant_ids = list({msg.sender_id for msg in unified_messages})
-            last_message_timestamp = max(
-                (msg.timestamp for msg in unified_messages), default=0
-            )
-
-            # 8g. 计算本批次总字符数
-            characters_count = sum(msg.get_text_length() for msg in unified_messages)
-
-            # 构建批次对象
-            batch_identity = "\n".join(
-                f"{msg.timestamp}:{msg.message_id}" for msg in unified_messages
-            )
-            batch = IncrementalBatch(
-                group_id=group_id,
-                batch_id=hashlib.sha256(
-                    f"{platform_id or 'default'}:{group_id}:{batch_identity}".encode()
-                ).hexdigest(),
-                timestamp=time_mod.time(),
-                messages_count=len(unified_messages),
-                characters_count=characters_count,
-                hourly_msg_counts={str(k): v for k, v in hourly_msg_counts.items()},
-                hourly_char_counts={str(k): v for k, v in hourly_char_counts.items()},
-                user_stats=user_stats,
-                emoji_stats=emoji_stats,
-                topics=new_topics,
-                golden_quotes=new_quotes,
-                token_usage=token_usage_dict,
-                chat_quality_review=chat_quality_dict,
-                last_message_timestamp=last_message_timestamp,
-                participant_ids=participant_ids,
-            )
-
-            # 9. 保存批次并更新最后分析时间戳
-            if not await self.incremental_store.save_batch(batch):
-                return {
-                    "success": False,
-                    "reason": "batch_persistence_failed",
-                    "messages_count": 0,
-                }
-
-            if self.checkpoint_store:
-                try:
-                    cur_trace_id = trace.trace_id if trace else ""
-                    self.checkpoint_store.save_checkpoint(
-                        group_id=group_id,
-                        date_str=date_str,
-                        stage_name=f"INCREMENTAL_BATCH_{batch.batch_id[:8]}",
-                        data=batch.to_dict(),
-                        trace_id=cur_trace_id,
-                    )
-                except Exception as e:
-                    logger.warning(f"保存增量批次 Checkpoint 失败: {e}")
-
-            # 安全更新水位线：取消息最大时间戳，但不能超过当前时间+1分钟，防止未来时间戳毒化导致后续分析死锁
-            import time
-
-            safe_now = int(time.time()) + 60
-            safe_ts = min(last_message_timestamp, safe_now)
-
-            analyzed_ids_at_boundary = {
-                msg.message_id
-                for msg in unified_messages
-                if msg.timestamp == last_message_timestamp and msg.message_id
-            }
-            if last_message_timestamp == last_analyzed_ts:
-                analyzed_ids_at_boundary.update(last_analyzed_message_ids)
-            if safe_ts != last_message_timestamp:
-                analyzed_ids_at_boundary.clear()
-
-            await self.incremental_store.update_last_analyzed_cursor(
-                group_id,
-                safe_ts,
-                analyzed_ids_at_boundary,
-            )
-
-            logger.debug(
-                f"群 {group_id} 增量批次完成: "
-                f"platform={getattr(adapter, 'platform_id', platform_id) or 'default'}, "
-                f"batch={batch.batch_id[:8]}, 消息={len(unified_messages)}, "
-                f"raw={raw_count}, cleaned={cleaned_count}, eligible={eligible_count}, "
-                f"cursor={last_analyzed_ts}->{safe_ts}, "
-                f"新话题={len(new_topics)}, 新金句={len(new_quotes)}, "
-                f"tokens={token_usage.total_tokens}, "
-                f"duration={time_mod.monotonic() - analysis_started_at:.2f}s"
-            )
-
-            return {
-                "success": True,
-                "batch_summary": batch.get_summary(),
-                "messages_count": len(unified_messages),
-                "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
-            }
+        """执行单次增量分析（委托 IncrementalAnalysisService）。"""
+        return await self._incremental_service.execute_incremental_analysis(
+            group_id=group_id,
+            platform_id=platform_id,
+        )
 
     async def execute_incremental_final_report(
         self, group_id: str, platform_id: str | None = None
     ) -> dict[str, Any]:
-        """
-        基于滑动窗口内的增量批次生成最终报告。
+        """合并增量批次生成最终报告（委托 IncrementalAnalysisService）。"""
+        return await self._incremental_service.execute_incremental_final_report(
+            group_id=group_id,
+            platform_id=platform_id,
+        )
 
-        按 analysis_days × 24h 的时间窗口查询所有批次，
-        合并为 IncrementalState，额外执行用户称号分析，
-        然后生成与传统每日分析格式完全一致的 analysis_result。
+    def _to_json_friendly(self, obj: Any) -> Any:
+        """递归将领域模型转换为 JSON 兼容结构。"""
+        return AnalysisResultSerializer.to_json_friendly(obj)
 
-        流程：
-        1. 计算滑动窗口范围
-        2. 查询窗口内的所有批次
-        3. 检查批次有效性
-        4. 合并批次为 IncrementalState
-        5. 执行用户称号 LLM 分析（基于合并后的累积数据）
-        6. 使用 IncrementalMergeService 构建 analysis_result
-        7. 持久化到 history_manager
-        8. 返回结果
+    def _serialize_analysis_result(
+        self, analysis_result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """序列化领域模型字典为 JSON 友好结构。"""
+        return AnalysisResultSerializer.serialize(analysis_result)
 
-        Args:
-            group_id: 群组 ID
-            platform_id: 平台标识，缺省为默认
-
-        Returns:
-            dict: 包含 success、analysis_result、adapter 等信息
-        """
-        async with self.group_lock(group_id, "final"):
-            if not self.incremental_store or not self.incremental_merge_service:
-                raise RuntimeError(
-                    "增量分析未初始化：缺少 IncrementalStore 或 IncrementalMergeService"
-                )
-
-            logger.info(
-                f"开始增量最终报告: 群 {group_id}, 平台 {platform_id or '默认'}"
-            )
-
-            # 1. 计算滑动窗口范围
-            analysis_days = self.config_manager.get_analysis_days()
-            window_end = time_mod.time()
-            window_start = window_end - (analysis_days * 24 * 3600)
-
-            # 2. 查询窗口内的所有批次
-            batches = await self.incremental_store.query_batches(
-                group_id, window_start, window_end
-            )
-
-            # 3. 检查批次有效性
-            if not batches:
-                logger.warning(
-                    f"群 {group_id} 滑动窗口内无增量分析数据，无法生成最终报告"
-                )
-                return {"success": False, "reason": "no_incremental_data"}
-
-            # 4. 合并批次为 IncrementalState
-            state = self.incremental_merge_service.merge_batches(
-                batches, window_start, window_end
-            )
-
-            # 5. 获取适配器（报告发送需要）
-            adapter = self.bot_manager.get_adapter(platform_id)
-            if not adapter:
-                raise ValueError(f"未找到平台 {platform_id} 的适配器")
-
-            # 检查群聊是否被禁言（包括全体禁言或对 Bot 自身禁言）
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.info(
-                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量最终报告生成"
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
-
-            # 6. 执行分析相关的变量准备
-            user_titles = []
-            user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
-            unified_msg_origin = (
-                f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-            )
-
-            if user_title_enabled and state.user_activities:
-                max_user_titles = self.config_manager.get_max_user_titles()
-                # 从合并后的 user_activities 中取出 top 用户
-                top_users = state.get_user_activity_ranking(max_user_titles)
-
-                try:
-                    async with self._llm_slot(group_id, "incremental_final_title"):
-                        logger.debug(f"[LLM] 已进入称号分析队列 (群: {group_id})")
-                        (
-                            user_titles_result,
-                            title_token_usage,
-                        ) = await self.llm_analyzer.analyze_user_titles(
-                            messages=[],  # 增量模式下不传原始消息
-                            user_activity=state.user_activities,
-                            umo=unified_msg_origin,
-                            top_users=top_users,
-                        )
-                    user_titles = user_titles_result
-
-                    # 将称号分析的 token 消耗追加到状态中
-                    state.total_token_usage["prompt_tokens"] = (
-                        state.total_token_usage.get("prompt_tokens", 0)
-                        + title_token_usage.prompt_tokens
-                    )
-                    state.total_token_usage["completion_tokens"] = (
-                        state.total_token_usage.get("completion_tokens", 0)
-                        + title_token_usage.completion_tokens
-                    )
-                    state.total_token_usage["total_tokens"] = (
-                        state.total_token_usage.get("total_tokens", 0)
-                        + title_token_usage.total_tokens
-                    )
-                except Exception as e:
-                    logger.error(f"增量最终报告用户称号分析失败: {e}", exc_info=True)
-
-            # 6.5 执行聊天质量汇总分析 (如果有多个批次的质量报告)
-            if (
-                self.config_manager.get_chat_quality_analysis_enabled()
-                and state.all_quality_reviews
-            ):
-                try:
-                    async with self._llm_slot(group_id, "incremental_final_quality"):
-                        logger.debug(
-                            f"[LLM] 已进入聊天质量汇总分析队列 (群: {group_id})"
-                        )
-                        (
-                            summarized_review,
-                            quality_token_usage,
-                        ) = await self.llm_analyzer.summarize_quality_reviews(
-                            batch_reviews=state.all_quality_reviews,
-                            umo=unified_msg_origin,
-                        )
-                    if summarized_review:
-                        # 更新 state 中的 review 为汇总后的结果
-                        # 这里我们需要将 QualityReview 对象存回 dict 或直接在后续处理中使用
-                        # build_analysis_result 会使用 state.chat_quality_review
-                        state.chat_quality_review = {
-                            "title": summarized_review.title,
-                            "subtitle": summarized_review.subtitle,
-                            "dimensions": [
-                                {
-                                    "name": d.name,
-                                    "percentage": d.percentage,
-                                    "comment": d.comment,
-                                    "color": d.color,
-                                }
-                                for d in summarized_review.dimensions
-                            ],
-                            "summary": summarized_review.summary,
-                        }
-
-                        # 累加 Token
-                        state.total_token_usage["prompt_tokens"] = (
-                            state.total_token_usage.get("prompt_tokens", 0)
-                            + quality_token_usage.prompt_tokens
-                        )
-                        state.total_token_usage["completion_tokens"] = (
-                            state.total_token_usage.get("completion_tokens", 0)
-                            + quality_token_usage.completion_tokens
-                        )
-                        state.total_token_usage["total_tokens"] = (
-                            state.total_token_usage.get("total_tokens", 0)
-                            + quality_token_usage.total_tokens
-                        )
-                except Exception as e:
-                    logger.error(f"增量最终报告聊天质量汇总失败: {e}", exc_info=True)
-
-            # 7. 构建 analysis_result
-            analysis_result = self.incremental_merge_service.build_analysis_result(
-                state, user_titles
-            )
-
-            # 8. 持久化到 history_manager
-            await self.history_manager.save_analysis(group_id, analysis_result)
-
-            logger.info(
-                f"群 {group_id} 增量最终报告内容生成并保存完成，等待发送: "
-                f"窗口={state.get_window_date_str()}, "
-                f"累计消息={state.total_message_count}, "
-                f"话题={len(state.topics)}, 金句={len(state.golden_quotes)}, "
-                f"批次={state.total_analysis_count}"
-            )
-
-            return {
-                "success": True,
-                "analysis_result": analysis_result,
-                "messages_count": state.total_message_count,
-                "adapter": adapter,
-                "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
-            }
+    def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
+        """反序列化 JSON 结构为领域模型字典。"""
+        return AnalysisResultSerializer.deserialize(data)
 
     @staticmethod
     def _compute_hourly_counts(
         messages: list[UnifiedMessage],
     ) -> tuple[dict[int, int], dict[int, int]]:
-        """从消息列表计算按小时的消息数和字符数分布。"""
+        """计算小时分布统计。"""
         return compute_hourly_counts(messages)
 
     @staticmethod
@@ -1811,5 +726,5 @@ class AnalysisApplicationService:
         user_activity: Mapping[str, UserActivityStats],
         messages: list[UnifiedMessage],
     ) -> dict[str, dict]:
-        """将用户活跃数据转换为 IncrementalBatch 所需的格式。"""
+        """转换用户活跃数据为增量批次结构。"""
         return convert_user_activity_for_merge(user_activity, messages)
