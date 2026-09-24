@@ -329,8 +329,14 @@ class AnalysisApplicationService:
             )
 
             if not raw_messages:
+                skip_msg = f"在最近 {days} 天的时间窗口内未拉取到群聊聊天记录，已安全跳过本次分析"
                 logger.warning(f"群 {group_id} 在最近 {days} 天内无消息或无法获取")
-                return {"success": False, "reason": "no_messages"}
+                return {
+                    "success": False,
+                    "reason": "no_messages",
+                    "error": skip_msg,
+                    "message": skip_msg,
+                }
 
             # 3. 清理消息 (Filter commands, bot messages, noise)
             from ...domain.services.message_cleaner_service import MessageCleanerService
@@ -401,10 +407,18 @@ class AnalysisApplicationService:
             # 4. 检查最小消息阈值 (在清理后进行)
             threshold = self.config_manager.get_min_messages_threshold()
             if len(unified_messages) < threshold and not manual:
+                skip_msg = f"群聊有效发言数（{len(unified_messages)} 条）未达到设定的自动分析阈值（{threshold} 条），已安全跳过本次日报生成"
                 logger.info(
                     f"群 {group_id} 有效消息数 ({len(unified_messages)}) 未达到自动分析阈值 ({threshold})"
                 )
-                return {"success": False, "reason": "below_threshold"}
+                return {
+                    "success": False,
+                    "reason": "below_threshold",
+                    "error": skip_msg,
+                    "message": skip_msg,
+                    "cleaned_count": len(unified_messages),
+                    "threshold": threshold,
+                }
 
             # 5. 基础统计 (Domain Service)
             async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:

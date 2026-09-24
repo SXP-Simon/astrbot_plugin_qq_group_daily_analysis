@@ -43,6 +43,12 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
           已中止
         </Tag>
       );
+    case "skipped":
+      return (
+        <Tag color="cyan" className="text-xs font-semibold">
+          已跳过
+        </Tag>
+      );
     default:
       return (
         <Tag className="text-xs">

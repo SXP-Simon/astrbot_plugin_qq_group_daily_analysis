@@ -20,6 +20,17 @@ from .incremental_trigger import IncrementalTriggerCoordinator
 _SCHEDULED_DISPATCH_INFO_SECONDS = 1.0
 _SCHEDULED_DISPATCH_WARN_SECONDS = 15.0
 
+AUTO_ANALYSIS_SKIP_REASONS: dict[str, str] = {
+    "below_threshold": "群聊有效发言数未达到设定的自动分析阈值，已安全跳过本次分析",
+    "no_messages": "指定时间窗口内未获取到有效聊天记录，跳过本次分析",
+    "no_incremental_data": "未检测到新的增量批次数据，无需生成分析报告",
+    "target_removed": "群聊已移出定时分析名单，自动跳过",
+    "bot_not_ready": "机器人实例未就绪或未完成连接初始化，跳过本次执行",
+    "muted": "检测到群聊处于禁言状态，自动跳过",
+    "already_running": "群聊分析任务已在执行中（并发锁拦截），本次调度跳过",
+    "terminating": "系统正在停止中，跳过调度任务",
+}
+
 
 class AutoScheduler:
     """自动调度器，支持传统模式和增量模式"""
@@ -538,6 +549,11 @@ class AutoScheduler:
             # 检查平台状态 (BotManager 为基础设施层，用于获取平台就绪状态)
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="skipped",
+                        error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
+                    )
                 return {
                     "success": False,
                     "analysis_success": False,
@@ -552,13 +568,24 @@ class AutoScheduler:
             )
 
             if not result.get("success"):
-                reason = result.get("reason")
+                reason = str(result.get("reason", "unknown"))
+                skip_msg = result.get("error") or result.get("message")
+                is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
-                    trace.finish(
-                        status="failed",
-                        error_message=result.get("error")
-                        or f"Auto analysis skipped: {reason}",
-                    )
+                    if is_skip:
+                        trace.finish(
+                            status="skipped",
+                            error_message=skip_msg
+                            or AUTO_ANALYSIS_SKIP_REASONS.get(
+                                reason, f"自动分析已跳过 ({reason})"
+                            ),
+                        )
+                    else:
+                        trace.finish(
+                            status="failed",
+                            error_message=result.get("error")
+                            or f"自动分析执行失败: {reason}",
+                        )
                 logger.info(
                     f"群 {group_id} 自动分析未完成: {reason} - {result.get('error', '')}"
                 )
@@ -820,6 +847,11 @@ class AutoScheduler:
             # 检查平台状态
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 增量分析跳过：bot管理器未就绪")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="skipped",
+                        error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
+                    )
                 return {"success": False, "reason": "bot_not_ready"}
 
             # 委派给应用层服务执行增量分析用例
@@ -830,11 +862,24 @@ class AutoScheduler:
             )
 
             if not result.get("success"):
-                reason = result.get("reason", "unknown")
+                reason = str(result.get("reason", "unknown"))
+                skip_msg = result.get("error") or result.get("message")
+                is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
-                    trace.finish(
-                        status="failed", error_message=f"Incremental skipped: {reason}"
-                    )
+                    if is_skip:
+                        trace.finish(
+                            status="skipped",
+                            error_message=skip_msg
+                            or AUTO_ANALYSIS_SKIP_REASONS.get(
+                                reason, f"增量分析已跳过 ({reason})"
+                            ),
+                        )
+                    else:
+                        trace.finish(
+                            status="failed",
+                            error_message=result.get("error")
+                            or f"增量分析失败: {reason}",
+                        )
                 logger.debug(f"群 {group_id} 增量分析未完成: reason={reason}")
                 return result
 
@@ -1002,6 +1047,11 @@ class AutoScheduler:
                 )
             ):
                 logger.info(f"群 {group_id} 已移出增量名单，跳过最终报告")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="skipped",
+                        error_message=AUTO_ANALYSIS_SKIP_REASONS["target_removed"],
+                    )
                 return {
                     "success": False,
                     "analysis_success": False,
@@ -1017,6 +1067,11 @@ class AutoScheduler:
             # 检查平台状态
             if not self.bot_manager.is_ready_for_auto_analysis():
                 logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
+                if trace and trace.status == "running":
+                    trace.finish(
+                        status="skipped",
+                        error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
+                    )
                 return {
                     "success": False,
                     "analysis_success": False,
@@ -1031,11 +1086,24 @@ class AutoScheduler:
             )
 
             if not result.get("success"):
-                reason = result.get("reason", "unknown")
+                reason = str(result.get("reason", "unknown"))
+                skip_msg = result.get("error") or result.get("message")
+                is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
-                    trace.finish(
-                        status="failed", error_message=f"Final report skipped: {reason}"
-                    )
+                    if is_skip:
+                        trace.finish(
+                            status="skipped",
+                            error_message=skip_msg
+                            or AUTO_ANALYSIS_SKIP_REASONS.get(
+                                reason, f"增量最终报告已跳过 ({reason})"
+                            ),
+                        )
+                    else:
+                        trace.finish(
+                            status="failed",
+                            error_message=result.get("error")
+                            or f"增量最终报告失败: {reason}",
+                        )
                 logger.info(f"群 {group_id} 最终报告跳过: {reason}")
                 result["analysis_success"] = False
                 result["report_sent"] = False
