@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import datetime as dt
 import hashlib
 import time as time_mod
@@ -39,6 +38,7 @@ from ...domain.value_objects.unified_message import UnifiedMessage
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .analysis_serializer import AnalysisResultSerializer
 from .pipeline_context import PipelineContext
 
 _LLM_SEMAPHORE_INFO_SECONDS = 1.0
@@ -624,136 +624,17 @@ class AnalysisApplicationService:
 
     def _to_json_friendly(self, obj: Any) -> Any:
         """递归将领域模型、dataclass、Enum、datetime 等转换为标准 JSON 原生数据结构。"""
-        import enum
-        from datetime import date, datetime, time
-
-        if obj is None:
-            return None
-        if isinstance(obj, enum.Enum):
-            return obj.value
-        if isinstance(obj, (datetime, date, time)):
-            return obj.isoformat()
-        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            return self._to_json_friendly(dataclasses.asdict(obj))
-        if isinstance(obj, (set, tuple)):
-            return [self._to_json_friendly(item) for item in obj]
-        if isinstance(obj, list):
-            return [self._to_json_friendly(item) for item in obj]
-        if isinstance(obj, dict):
-            return {str(k): self._to_json_friendly(v) for k, v in obj.items()}
-        to_dict_fn = getattr(obj, "to_dict", None)
-        if callable(to_dict_fn):
-            try:
-                return self._to_json_friendly(to_dict_fn())
-            except Exception:
-                pass
-        return obj
+        return AnalysisResultSerializer.to_json_friendly(obj)
 
     def _serialize_analysis_result(
         self, analysis_result: dict[str, Any]
     ) -> dict[str, Any]:
         """将包含领域对象的 analysis_result 序列化为 JSON 友好的 dict 快照。"""
-        return {
-            "statistics": self._to_json_friendly(analysis_result.get("statistics")),
-            "topics": self._to_json_friendly(analysis_result.get("topics", [])),
-            "user_titles": self._to_json_friendly(
-                analysis_result.get("user_titles", [])
-            ),
-            "user_analysis": self._to_json_friendly(
-                analysis_result.get("user_analysis", {})
-            ),
-            "chat_quality_review": self._to_json_friendly(
-                analysis_result.get("chat_quality_review")
-            ),
-        }
+        return AnalysisResultSerializer.serialize(analysis_result)
 
     def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
         """将持久化的 JSON 快照还原为包含领域数据模型的 analysis_result。"""
-        from ...domain.models.data_models import (
-            ActivityVisualization,
-            EmojiStatistics,
-            GoldenQuote,
-            GroupStatistics,
-            QualityDimension,
-            QualityReview,
-            SummaryTopic,
-            TokenUsage,
-            UserTitle,
-        )
-
-        stats_raw = data.get("statistics", {})
-        golden_quotes = [
-            GoldenQuote(**g) if isinstance(g, dict) else g
-            for g in stats_raw.get("golden_quotes", [])
-        ]
-        emoji_stats_raw = stats_raw.get("emoji_statistics", {})
-        emoji_stats = (
-            EmojiStatistics(**emoji_stats_raw)
-            if isinstance(emoji_stats_raw, dict)
-            else EmojiStatistics()
-        )
-        act_viz_raw = stats_raw.get("activity_visualization", {})
-        if isinstance(act_viz_raw, dict):
-            hourly_act = act_viz_raw.get("hourly_activity")
-            if isinstance(hourly_act, dict):
-                act_viz_raw["hourly_activity"] = {
-                    int(k) if str(k).isdigit() else k: v for k, v in hourly_act.items()
-                }
-            act_viz = ActivityVisualization(**act_viz_raw)
-        else:
-            act_viz = ActivityVisualization()
-        token_usage_raw = stats_raw.get("token_usage", {})
-        token_usage = (
-            TokenUsage(**token_usage_raw)
-            if isinstance(token_usage_raw, dict)
-            else TokenUsage()
-        )
-
-        quality_raw = data.get("chat_quality_review") or stats_raw.get(
-            "chat_quality_review"
-        )
-        quality_review = None
-        if isinstance(quality_raw, dict):
-            dims = [
-                QualityDimension(**d) if isinstance(d, dict) else d
-                for d in quality_raw.get("dimensions", [])
-            ]
-            quality_review = QualityReview(
-                title=str(quality_raw.get("title", "群聊质量锐评")),
-                subtitle=str(quality_raw.get("subtitle", "")),
-                dimensions=dims,
-                summary=str(quality_raw.get("summary", "")),
-            )
-
-        stats = GroupStatistics(
-            message_count=int(stats_raw.get("message_count", 0)),
-            total_characters=int(stats_raw.get("total_characters", 0)),
-            participant_count=int(stats_raw.get("participant_count", 0)),
-            most_active_period=str(stats_raw.get("most_active_period", "")),
-            golden_quotes=golden_quotes,
-            emoji_count=int(stats_raw.get("emoji_count", 0)),
-            emoji_statistics=emoji_stats,
-            activity_visualization=act_viz,
-            token_usage=token_usage,
-            chat_quality_review=quality_review,
-        )
-
-        topics = [
-            SummaryTopic(**t) if isinstance(t, dict) else t
-            for t in data.get("topics", [])
-        ]
-        user_titles = [
-            UserTitle(**t) if isinstance(t, dict) else t
-            for t in data.get("user_titles", [])
-        ]
-
-        return {
-            "statistics": stats,
-            "topics": topics,
-            "user_titles": user_titles,
-            "user_analysis": data.get("user_analysis", {}),
-            "chat_quality_review": quality_review,
-        }
+        return AnalysisResultSerializer.deserialize(data)
 
     async def rerender_report(
         self,
