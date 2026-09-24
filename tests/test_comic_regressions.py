@@ -50,12 +50,36 @@ def load_main_method(name: str):
         ast.Module(body=[isolated_class], type_ignores=[])
     )
     from datetime import datetime
+
+    from src.application.handlers.settings_command_handler import (
+        SettingsCommandHandler,
+    )
     from src.shared.trace_context import TraceContext
 
     namespace = {
         "AsyncGenerator": object,
         "AstrMessageEvent": object,
         "DuplicateGroupTaskError": RuntimeError,
+        "SettingsCommandHandler": SettingsCommandHandler,
+        "_resolve_settings_handler": lambda plugin: (
+            getattr(plugin, "settings_command_handler", None)
+            or SettingsCommandHandler(
+                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+                template_command_service=getattr(
+                    plugin, "template_command_service", None
+                ),  # type: ignore
+                template_preview_router=getattr(
+                    plugin, "template_preview_router", None
+                ),
+                auto_scheduler=getattr(plugin, "auto_scheduler", None),
+                incremental_store=getattr(plugin, "incremental_store", None),
+                incremental_merge_service=getattr(
+                    plugin, "incremental_merge_service", None
+                ),
+                bot_manager=getattr(plugin, "bot_manager", None),
+                context=getattr(plugin, "context", None),
+            )
+        ),
         "asyncio": asyncio,
         "datetime": datetime,
         "logger": Mock(),

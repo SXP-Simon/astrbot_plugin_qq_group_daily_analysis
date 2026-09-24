@@ -113,3 +113,47 @@ class IConfigProvider(Protocol):
     def get_drawing_output_exception_retry_keywords(self) -> list[str]:
         """获取生图异常重试触发关键词列表"""
         ...
+
+    def set_output_format(self, format_types: str | list[str]) -> None:
+        """设置分析报告输出格式"""
+        ...
+
+    def set_report_template(self, template_name: str) -> None:
+        """设置报告模板名称"""
+        ...
+
+    def get_group_list_mode(self) -> str:
+        """获取群名单模式 (whitelist, blacklist, none)"""
+        ...
+
+    def get_group_list(self) -> list[str]:
+        """获取群名单列表"""
+        ...
+
+    def set_group_list(self, groups: list[str]) -> None:
+        """设置群名单列表"""
+        ...
+
+    def is_auto_analysis_enabled(self) -> bool:
+        """是否启用自动定时分析"""
+        ...
+
+    def get_auto_analysis_time(self) -> list[str]:
+        """获取自动定时分析时间列表"""
+        ...
+
+    def get_incremental_enabled(self) -> bool:
+        """是否启用增量分析模式"""
+        ...
+
+    def get_incremental_report_immediately(self) -> bool:
+        """是否在增量分析完成后立即发送报告"""
+        ...
+
+    def set_incremental_report_immediately(self, enabled: bool) -> None:
+        """设置是否在增量分析完成后立即发送报告"""
+        ...
+
+    def set_filter_bot_messages(self, enabled: bool) -> None:
+        """设置是否过滤机器人消息"""
+        ...
