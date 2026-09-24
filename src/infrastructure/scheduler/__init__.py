@@ -4,5 +4,11 @@
 """
 
 from .auto_scheduler import AutoScheduler
+from .incremental_trigger import IncrementalTriggerCoordinator
+from .target_resolver import ScheduledTargetResolver
 
-__all__ = ["AutoScheduler"]
+__all__ = [
+    "AutoScheduler",
+    "ScheduledTargetResolver",
+    "IncrementalTriggerCoordinator",
+]
