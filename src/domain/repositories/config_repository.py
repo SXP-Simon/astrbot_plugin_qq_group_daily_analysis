@@ -123,15 +123,53 @@ class IConfigProvider(Protocol):
         ...
 
     def get_group_list_mode(self) -> str:
-        """获取群名单模式 (whitelist, blacklist, none)"""
+        """获取基础群名单模式 (whitelist, blacklist, none)"""
         ...
 
     def get_group_list(self) -> list[str]:
-        """获取群名单列表"""
+        """获取基础群名单列表"""
         ...
 
     def set_group_list(self, groups: list[str]) -> None:
-        """设置群名单列表"""
+        """设置基础群名单列表"""
+        ...
+
+    def get_scheduled_group_list_mode(self) -> str:
+        """获取定时分析名单模式 (inherit, whitelist, blacklist)"""
+        ...
+
+    def get_scheduled_group_list(self) -> list[str]:
+        """获取定时分析目标群列表"""
+        ...
+
+    def is_scheduled_group_allowed(self, group_umo_or_id: str) -> bool:
+        """判断当前群是否允许参与定时分析（需同时通过基础群权限和定时名单）"""
+        ...
+
+    def get_incremental_group_list_mode(self) -> str:
+        """获取增量分析名单模式 (inherit, whitelist, blacklist)"""
+        ...
+
+    def get_incremental_group_list(self) -> list[str]:
+        """获取增量分析群列表"""
+        ...
+
+    def is_incremental_group_allowed(self, group_umo_or_id: str) -> bool:
+        """判断当前群是否允许使用增量分析（需通过基础、定时和增量三级名单）"""
+        ...
+
+    def get_comic_group_list_mode(self) -> str:
+        """获取漫画生成名单模式 (inherit, whitelist, blacklist)"""
+        ...
+
+    def get_comic_group_list(self) -> list[str]:
+        """获取漫画生成群列表"""
+        ...
+
+    def is_comic_group_allowed(
+        self, group_umo_or_id: str, inherit_allowed: bool | None = None
+    ) -> bool:
+        """判断当前群是否允许生成漫画"""
         ...
 
     def is_auto_analysis_enabled(self) -> bool:
