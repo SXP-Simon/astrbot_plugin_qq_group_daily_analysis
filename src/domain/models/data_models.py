@@ -18,6 +18,19 @@ class SummaryTopic:
         default_factory=list
     )  # 贡献者ID列表 (用于显示头像)
 
+    def is_valid(self) -> bool:
+        """检查话题模型是否有效"""
+        return bool(self.topic and self.topic.strip())
+
+    def add_contributor(self, name: str, user_id: str = "") -> None:
+        """安全添加贡献者并去重"""
+        name = name.strip()
+        if name and name not in self.contributors:
+            self.contributors.append(name)
+        user_id = str(user_id).strip()
+        if user_id and user_id not in self.contributor_ids:
+            self.contributor_ids.append(user_id)
+
 
 @dataclass
 class UserTitle:
@@ -29,6 +42,10 @@ class UserTitle:
     mbti: str
     reason: str
 
+    def is_valid(self) -> bool:
+        """检查用户称号模型是否有效"""
+        return bool(self.user_id and self.name and self.title)
+
 
 @dataclass
 class GoldenQuote:
@@ -38,6 +55,10 @@ class GoldenQuote:
     sender: str
     reason: str
     user_id: str = ""  # 原 qq 字段
+
+    def is_valid(self) -> bool:
+        """检查金句是否有效"""
+        return bool(self.content and self.content.strip())
 
 
 @dataclass
@@ -49,6 +70,10 @@ class QualityDimension:
     comment: str  # 犀利点评
     color: str = "#607d8b"  # 颜色
 
+    def is_valid(self) -> bool:
+        """检查维度是否有效"""
+        return bool(self.name and 0.0 <= self.percentage <= 100.0)
+
 
 @dataclass
 class QualityReview:
@@ -58,6 +83,17 @@ class QualityReview:
     subtitle: str
     dimensions: list[QualityDimension]
     summary: str
+
+    def is_valid(self) -> bool:
+        """检查锐评整体是否合法"""
+        return bool(self.title and self.dimensions)
+
+    def normalize(self) -> None:
+        """将各维度占比归一化到 100% 范围之内"""
+        total = sum(d.percentage for d in self.dimensions)
+        if total > 0 and abs(total - 100.0) > 0.01:
+            for d in self.dimensions:
+                d.percentage = round((d.percentage / total) * 100.0, 1)
 
 
 @dataclass
