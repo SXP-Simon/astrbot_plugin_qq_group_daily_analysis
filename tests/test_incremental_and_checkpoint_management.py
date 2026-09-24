@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.domain.entities.incremental_state import IncrementalBatch
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     GroupStatistics,
     SummaryTopic,
     TokenUsage,

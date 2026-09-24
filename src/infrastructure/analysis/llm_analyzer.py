@@ -5,14 +5,14 @@ LLM分析器模块
 
 import asyncio
 
-from ...domain.models.data_models import (
+from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.value_objects import (
     GoldenQuote,
     QualityReview,
     SummaryTopic,
     TokenUsage,
     UserTitle,
 )
-from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger

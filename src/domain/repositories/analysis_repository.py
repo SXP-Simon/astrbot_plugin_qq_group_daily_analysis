@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..models.data_models import (
+from ..value_objects import (
     GoldenQuote,
     QualityReview,
     SummaryTopic,

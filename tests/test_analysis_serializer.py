@@ -3,7 +3,7 @@
 """
 
 from src.application.services.analysis_serializer import AnalysisResultSerializer
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,

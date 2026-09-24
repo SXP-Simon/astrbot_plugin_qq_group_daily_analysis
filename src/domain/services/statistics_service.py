@@ -6,8 +6,8 @@
 from collections import defaultdict
 from datetime import datetime
 
-from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
 from ..repositories.visualization_repository import IActivityVisualizer
+from ..value_objects import EmojiStatistics, GroupStatistics, TokenUsage
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 
 

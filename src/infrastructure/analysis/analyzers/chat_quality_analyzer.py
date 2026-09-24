@@ -5,7 +5,7 @@
 
 from datetime import datetime
 
-from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
+from ....domain.value_objects import QualityDimension, QualityReview, TokenUsage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.template_utils import render_template

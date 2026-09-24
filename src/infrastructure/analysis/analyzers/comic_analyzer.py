@@ -1,6 +1,6 @@
 import re
 
-from ....domain.models.data_models import TokenUsage
+from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
 from ..utils.structured_output_schema import JSONObject
 from .base_analyzer import BaseAnalyzer

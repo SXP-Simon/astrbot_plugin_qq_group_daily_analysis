@@ -1,11 +1,11 @@
 """
-领域模型 (Domain Models) 单元测试
-覆盖充血模型的自校验、不变性维护与业务行为。
+领域值对象 (Domain Value Objects) 单元测试
+覆盖分析结果值对象的自校验、不变性维护与业务行为。
 """
 
 import pytest
 
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     GoldenQuote,
     QualityDimension,
     QualityReview,

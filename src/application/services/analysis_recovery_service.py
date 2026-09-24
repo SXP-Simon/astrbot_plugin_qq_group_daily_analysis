@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.api.star import StarTools
 
-from ...domain.models.data_models import TokenUsage
+from ...domain.value_objects import TokenUsage
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger

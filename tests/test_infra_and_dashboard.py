@@ -14,7 +14,7 @@ import pytest
 from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     GoldenQuote,
     GroupStatistics,
     SummaryTopic,
@@ -281,7 +281,7 @@ async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
 async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     from unittest.mock import AsyncMock, MagicMock
     from src.application.services.analysis_application_service import AnalysisApplicationService
-    from src.domain.models.data_models import GroupStatistics, SummaryTopic, UserTitle, TokenUsage
+    from src.domain.value_objects import GroupStatistics, SummaryTopic, UserTitle, TokenUsage
 
     chk_store = CheckpointStore(temp_db)
 
@@ -593,7 +593,7 @@ async def test_resume_analysis_falls_back_to_fresh_run_when_checkpoint_missing(
 def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(temp_db: Path):
     """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
     from src.infrastructure.visualization.activity_charts import ActivityVisualizer
-    from src.domain.models.data_models import ActivityVisualization, GroupStatistics
+    from src.domain.value_objects import ActivityVisualization, GroupStatistics
 
     viz = ActivityVisualizer()
 

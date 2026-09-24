@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import aiohttp
 from PIL import Image
 
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     ActivityVisualization,
     GoldenQuote,
     GroupStatistics,

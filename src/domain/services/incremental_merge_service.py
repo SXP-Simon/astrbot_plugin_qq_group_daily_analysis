@@ -14,8 +14,9 @@
 
 import time
 
-from ...domain.entities.incremental_state import IncrementalBatch, IncrementalState
-from ...domain.models.data_models import (
+from ...utils.logger import logger
+from ..entities.incremental_state import IncrementalBatch, IncrementalState
+from ..value_objects import (
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
@@ -25,7 +26,6 @@ from ...domain.models.data_models import (
     SummaryTopic,
     TokenUsage,
 )
-from ...utils.logger import logger
 
 
 class IncrementalMergeService:

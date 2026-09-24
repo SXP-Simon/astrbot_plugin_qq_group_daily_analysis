@@ -32,7 +32,7 @@ Issue #167 提出的核心诉求不是“把 MBTI 算得更准”，而是让群
 
 - [`_conf_schema.json`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/_conf_schema.json) 默认的 `user_title_prompt` 已要求模型返回 `title + mbti + reason`
 - [`src/infrastructure/analysis/analyzers/user_title_analyzer.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/analyzers/user_title_analyzer.py) 会把活跃用户统计整理成 prompt 输入
-- [`src/domain/models/data_models.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/domain/models/data_models.py) 的 `UserTitle` 数据结构已经有 `mbti` 字段
+- [`src/domain/value_objects/analysis_results.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/domain/value_objects/analysis_results.py) 的 `UserTitle` 数据结构已经有 `mbti` 字段
 - [`src/infrastructure/analysis/utils/structured_output_schema.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/utils/structured_output_schema.py) 和 [`src/infrastructure/analysis/utils/response_validation.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/utils/response_validation.py) 已经把 `mbti` 当成结构化输出字段进行校验
 
 ### 当前约束

@@ -7,8 +7,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import TypedDict
 
-from ...domain.models.data_models import ActivityVisualization
 from ...domain.repositories.visualization_repository import IActivityVisualizer
+from ...domain.value_objects import ActivityVisualization
 
 
 class UserActivityData(TypedDict):

@@ -7,7 +7,7 @@ from astrbot.api.provider import LLMResponse
 from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
-from src.domain.models.data_models import TokenUsage
+from src.domain.value_objects import TokenUsage
 from src.domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,

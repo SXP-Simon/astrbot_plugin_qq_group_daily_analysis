@@ -11,7 +11,7 @@ import enum
 from datetime import date, datetime, time
 from typing import Any
 
-from ...domain.models.data_models import (
+from ...domain.value_objects import (
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,

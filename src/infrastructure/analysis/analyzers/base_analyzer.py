@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sized
 from typing import Generic, TypeVar
 
-from ....domain.models.data_models import TokenUsage
+from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (

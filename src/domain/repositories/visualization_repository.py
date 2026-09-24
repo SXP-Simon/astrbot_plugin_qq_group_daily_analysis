@@ -5,7 +5,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..models.data_models import ActivityVisualization
+from ..value_objects import ActivityVisualization
 
 
 class IActivityVisualizer(ABC):

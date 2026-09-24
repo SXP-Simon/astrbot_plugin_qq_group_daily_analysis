@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 import pytest
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     SummaryTopic,
     UserTitle,
     GoldenQuote,

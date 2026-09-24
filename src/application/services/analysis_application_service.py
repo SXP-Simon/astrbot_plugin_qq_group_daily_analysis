@@ -11,7 +11,6 @@ import time as time_mod
 from collections.abc import Mapping
 from typing import Any
 
-from ...domain.models.data_models import TokenUsage
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.repositories.config_repository import IConfigProvider
 from ...domain.repositories.persistence_repository import (
@@ -26,6 +25,7 @@ from ...domain.services.analysis_domain_service import (
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.message_cleaner_service import MessageCleanerService
 from ...domain.services.statistics_service import StatisticsService
+from ...domain.value_objects import TokenUsage
 from ...domain.value_objects.unified_message import UnifiedMessage
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext

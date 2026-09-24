@@ -6,7 +6,7 @@
 import re
 from datetime import datetime
 
-from ....domain.models.data_models import SummaryTopic, TokenUsage
+from ....domain.value_objects import SummaryTopic, TokenUsage
 from ....utils.logger import logger
 from ....utils.template_utils import render_template
 from ..utils import InfoUtils

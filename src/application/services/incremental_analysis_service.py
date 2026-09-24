@@ -12,8 +12,8 @@ import time as time_mod
 from typing import TYPE_CHECKING, Any
 
 from ...domain.entities.incremental_state import IncrementalBatch
-from ...domain.models.data_models import TokenUsage
 from ...domain.services.message_cleaner_service import MessageCleanerService
+from ...domain.value_objects import TokenUsage
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
