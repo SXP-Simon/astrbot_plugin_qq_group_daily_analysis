@@ -195,3 +195,55 @@ class IConfigProvider(Protocol):
     def set_filter_bot_messages(self, enabled: bool) -> None:
         """设置是否过滤机器人消息"""
         ...
+
+    def get_enable_analysis_reply(self) -> bool:
+        """获取是否在群分析完成后发送文本回复"""
+        ...
+
+    def get_show_report_caption(self) -> bool:
+        """获取是否发送报告前缀文字"""
+        ...
+
+    def get_html_only_url(self) -> bool:
+        """获取是否只发送 HTML 网页链接"""
+        ...
+
+    def get_html_base_url(self) -> str:
+        """获取 HTML 外部访问基础 URL"""
+        ...
+
+    def get_html_output_dir(self) -> str:
+        """获取 HTML 输出目录路径"""
+        ...
+
+    def get_enable_group_file_upload(self) -> bool:
+        """获取是否启用群文件上传"""
+        ...
+
+    def get_group_file_folder(self) -> str:
+        """获取群文件上传目录名"""
+        ...
+
+    def get_enable_group_album_upload(self) -> bool:
+        """获取是否启用群相册上传"""
+        ...
+
+    def get_group_album_name(self) -> str:
+        """获取目标群相册名称"""
+        ...
+
+    def get_group_album_strict_mode(self) -> bool:
+        """获取群相册上传严格模式开关"""
+        ...
+
+    def get_enable_comic_album_upload(self) -> bool:
+        """获取是否启用漫画群相册上传"""
+        ...
+
+    def get_comic_album_name(self) -> str:
+        """获取漫画群相册名称"""
+        ...
+
+    def get_t2i_max_concurrent(self) -> int:
+        """获取 T2I 渲染最大并发度"""
+        ...

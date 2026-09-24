@@ -2,31 +2,31 @@
 群日常分析插件
 基于群聊记录生成精美的日常分析报告，包含话题总结、用户画像、统计数据等
 
-重构版本 - 使用模块化架构，支持跨平台
+重构版本 - 遵循整洁架构与领域驱动设计 (DDD)，支持跨平台与 WebUI 控制台。
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
 
-# File is only available via astrbot.core (internal API — may change).
-from astrbot.core.message.components import File
-
+from .src.application.handlers.analysis_command_handler import (
+    AnalysisCommandHandler,
+)
+from .src.application.handlers.comic_command_handler import ComicCommandHandler
 from .src.application.handlers.settings_command_handler import (
     SettingsCommandHandler,
 )
 from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
-    DuplicateGroupTaskError,
 )
 from .src.application.services.comic_application_service import ComicApplicationService
 from .src.application.services.crash_recovery_service import CrashRecoveryService
@@ -60,7 +60,7 @@ from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
 from .src.infrastructure.webui.plugin_page_bridge import PluginPageWebUIBridge
-from .src.shared.constants import PLUGIN_NAME, AnalysisStage
+from .src.shared.constants import PLUGIN_NAME
 from .src.shared.trace_context import TraceContext
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
@@ -79,6 +79,46 @@ def _resolve_settings_handler(plugin: Any) -> SettingsCommandHandler:
         incremental_merge_service=getattr(plugin, "incremental_merge_service", None),
         bot_manager=getattr(plugin, "bot_manager", None),
         context=getattr(plugin, "context", None),
+    )
+
+
+def _resolve_comic_handler(plugin: Any) -> ComicCommandHandler:
+    handler = getattr(plugin, "comic_command_handler", None)
+    if handler is not None:
+        return handler
+    return ComicCommandHandler(
+        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
+        comic_service=getattr(plugin, "comic_service", None),  # type: ignore
+        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+        active_task_manager=getattr(plugin, "active_task_manager", None),
+        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+        plugin_instance=plugin,
+    )
+
+
+def _resolve_analysis_handler(plugin: Any) -> AnalysisCommandHandler:
+    handler = getattr(plugin, "analysis_command_handler", None)
+    if handler is not None:
+        return handler
+    plugin_data_dir = getattr(plugin, "plugin_data_dir", None)
+    if plugin_data_dir is None:
+        try:
+            plugin_data_dir = StarTools.get_data_dir(PLUGIN_NAME)
+        except Exception:
+            plugin_data_dir = Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
+    return AnalysisCommandHandler(
+        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
+        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+        report_generator=getattr(plugin, "report_generator", None),  # type: ignore
+        html_render=getattr(plugin, "html_render", None),  # type: ignore
+        active_task_manager=getattr(plugin, "active_task_manager", None),
+        trace_store=getattr(plugin, "trace_store", None),
+        message_sender=getattr(plugin, "message_sender", None),
+        comic_handler=_resolve_comic_handler(plugin),
+        plugin_data_dir=plugin_data_dir,
+        plugin_instance=plugin,
     )
 
 
@@ -110,6 +150,8 @@ class GroupDailyAnalysis(Star):
     active_task_manager: ActiveTaskManager
     webui_bridge: PluginPageWebUIBridge
     settings_command_handler: SettingsCommandHandler
+    comic_command_handler: ComicCommandHandler
+    analysis_command_handler: AnalysisCommandHandler
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -178,11 +220,6 @@ class GroupDailyAnalysis(Star):
             context, self.platform_group_registry
         )
 
-        # 漫画生成并发与同群任务去重。
-        self._comic_semaphore = asyncio.Semaphore(
-            max(1, self.config_manager.get_t2i_max_concurrent())
-        )
-        self._comic_group_tasks: dict[str, asyncio.Task] = {}
         self.template_command_service = TemplateCommandService(
             plugin_root=os.path.dirname(__file__)
         )
@@ -203,17 +240,6 @@ class GroupDailyAnalysis(Star):
             self.report_generator,
             self.html_render,
             plugin_instance=self,
-        )
-
-        self.settings_command_handler = SettingsCommandHandler(
-            config_manager=self.config_manager,
-            template_command_service=self.template_command_service,
-            template_preview_router=self.template_preview_router,
-            auto_scheduler=self.auto_scheduler,
-            incremental_store=self.incremental_store,
-            incremental_merge_service=self.incremental_merge_service,
-            bot_manager=self.bot_manager,
-            context=context,
         )
 
         # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
@@ -238,11 +264,45 @@ class GroupDailyAnalysis(Star):
             report_dispatcher=self.auto_scheduler.report_dispatcher,
         )
 
+        # 指令处理器
+        self.settings_command_handler = SettingsCommandHandler(
+            config_manager=self.config_manager,
+            template_command_service=self.template_command_service,
+            template_preview_router=self.template_preview_router,
+            auto_scheduler=self.auto_scheduler,
+            incremental_store=self.incremental_store,
+            incremental_merge_service=self.incremental_merge_service,
+            bot_manager=self.bot_manager,
+            context=context,
+        )
+        self.comic_command_handler = ComicCommandHandler(
+            config_manager=self.config_manager,
+            bot_manager=self.bot_manager,
+            comic_service=self.comic_service,
+            analysis_service=self.analysis_service,
+            active_task_manager=self.active_task_manager,
+            plugin_data_dir=plugin_data_dir,
+            plugin_instance=self,
+        )
+        self.analysis_command_handler = AnalysisCommandHandler(
+            config_manager=self.config_manager,
+            bot_manager=self.bot_manager,
+            analysis_service=self.analysis_service,
+            report_generator=self.report_generator,
+            html_render=self.html_render,
+            active_task_manager=self.active_task_manager,
+            trace_store=self.trace_store,
+            message_sender=self.message_sender,
+            comic_handler=self.comic_command_handler,
+            plugin_data_dir=plugin_data_dir,
+            plugin_instance=self,
+        )
+
         # 同步全局限流并进行初始化配置
         GlobalRateLimiter.get_instance(self.config_manager.get_llm_max_concurrent())
 
         self._initialized = False
-        self._terminating = False  # 生命周期标志
+        self._terminating = False
         self._init_lock = asyncio.Lock()
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -257,28 +317,19 @@ class GroupDailyAnalysis(Star):
         except RuntimeError:
             self._init_task = None
 
-    # orchestrators 缓存已移至 应用层逻辑 (分析服务) 或 暂时移除以简化。
-    # 如果需要高性能缓存，后续可由 AnalysisApplicationService 内部维护。
-
     @filter.on_platform_loaded()
     async def on_platform_loaded(self):
         """平台加载完成后初始化"""
         await self._run_initialization("Platform Loaded")
 
     async def initialize(self):
-        """在 AstrBot 插件生命周期中确认初始化已经完成。
-
-        Returns:
-            None: 初始化任务完成或恢复初始化完成后返回。
-        """
+        """在 AstrBot 插件生命周期中确认初始化已经完成。"""
         init_task = getattr(self, "_init_task", None)
         if init_task is None:
             await self._run_initialization("Plugin Lifecycle")
             return
 
         try:
-            # 构造函数中的任务负责避免阻塞 AstrBot 启动；生命周期入口负责等待
-            # 它完成，确保插件重载不会在平台刷新之前被判定为加载成功。
             await asyncio.shield(init_task)
         except asyncio.CancelledError:
             if self._terminating:
@@ -291,24 +342,15 @@ class GroupDailyAnalysis(Star):
             await self._run_initialization("Plugin Lifecycle Recovery")
 
     async def _run_initialization(self, source: str):
-        """执行插件初始化，避免阻塞平台启动流程。
-
-        Args:
-            source: 触发本次初始化的来源标识。
-
-        Returns:
-            None: 就地完成插件状态初始化或刷新。
-        """
+        """执行插件初始化，避免阻塞平台启动流程。"""
         async with self._init_lock:
             if self._terminating or not self.bot_manager:
                 return
 
             try:
-                # 核心配置迁移和定时任务只执行一次。
                 if not self._initialized:
                     logger.info(f"开始初始化插件（来源：{source}）...")
 
-                    # 升级旧版 prompt 模板并回写迁移后的配置。
                     try:
                         self.config_manager.upgrade_prompt_templates()
                     except Exception as e:
@@ -319,11 +361,8 @@ class GroupDailyAnalysis(Star):
                     except Exception as e:
                         logger.warning(f"迁移旧版配置失败：{e}")
 
-                # AstrBot 会为每个平台调用一次此回调。平台发现只检查已创建的
-                # 平台对象，可以安全重复执行；这样后加载的平台也不会被遗漏。
                 await self.bot_manager.initialize_from_config()
 
-                # 模板预览处理器依赖平台实例，因此每个平台加载时都要刷新。
                 if self.template_preview_router:
                     await self.template_preview_router.ensure_handlers_registered(
                         self.context
@@ -335,12 +374,10 @@ class GroupDailyAnalysis(Star):
                     )
                     return
 
-                # 插件基础设施准备完成后注册定时任务。
                 if self.auto_scheduler:
                     self.auto_scheduler.schedule_jobs(self.context)
                     await self.auto_scheduler.start_incremental_trigger()
 
-                # 异步启动开机崩溃任务对账与自愈恢复
                 crash_recovery = getattr(self, "crash_recovery_service", None)
                 if crash_recovery:
                     try:
@@ -368,24 +405,26 @@ class GroupDailyAnalysis(Star):
             return
         self._terminating = True
 
+        if hasattr(self, "analysis_command_handler"):
+            self.analysis_command_handler.set_terminating(True)
+        if hasattr(self, "comic_command_handler"):
+            self.comic_command_handler.set_terminating(True)
+
         try:
             logger.info("开始清理群日常分析插件资源...")
 
-            # 1. 停止所有后台任务
             if self._background_tasks:
                 logger.info(f"正在取消 {len(self._background_tasks)} 个运行中的任务...")
                 for task in self._background_tasks:
                     if not task.done():
                         task.cancel()
 
-                # 等待任务结束，给予 3 秒宽限期
                 try:
                     await asyncio.wait(list(self._background_tasks), timeout=3.0)
                 except Exception:
                     pass
                 self._background_tasks.clear()
 
-            # 2. 停止各个组件 (顺序：先调度器，后底层服务)
             if self.auto_scheduler:
                 logger.debug("正在停止自动调度器...")
                 await self.auto_scheduler.shutdown(self.context)
@@ -396,11 +435,6 @@ class GroupDailyAnalysis(Star):
             if self.report_generator:
                 await self.report_generator.close()
 
-            # 3. [关键修复] 只有在任务全部清理后，才清理引用。
-            # 实际上，在 terminate 结束后，self 本身就会被 GC 释放，
-            # 这里的显式 None 更多是为了协助循环引用清理，但由于异步任务存在竞态，
-            # 我们可以通过 check _terminating 标志位来保护。
-            # 为了彻底解决 #125，我们保留引用，让 GC 自然回收。
             logger.info("群日常分析插件资源清理完成")
 
         except Exception as e:
@@ -413,15 +447,7 @@ class GroupDailyAnalysis(Star):
         priority=100,
     )
     async def count_incremental_group_message(self, event: AstrMessageEvent):
-        """记录目标群消息，达到配置阈值后触发增量分析。
-
-        Args:
-            event: AstrBot 群消息事件。
-
-        Returns:
-            None: 计数完成后继续消息流水线。
-        """
-        # QQ 官方和 Telegram 会在各自的持久化钩子成功后计数，避免任务先于入库启动。
+        """记录目标群消息，达到配置阈值后触发增量分析。"""
         if str(event.get_platform_name() or "").strip().lower() in {
             "qq_official",
             "qq_official_webhook",
@@ -434,11 +460,7 @@ class GroupDailyAnalysis(Star):
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
     async def intercept_telegram_messages(self, event: AstrMessageEvent):
-        """
-        拦截 Telegram 群消息并存储到数据库
-
-        委托给 MessageProcessingService 处理
-        """
+        """拦截 Telegram 群消息并存储到数据库"""
         try:
             stored = await self.message_processing_service.process_message(event)
             if stored and self.auto_scheduler:
@@ -454,7 +476,7 @@ class GroupDailyAnalysis(Star):
         | filter.PlatformAdapterType.QQOFFICIAL_WEBHOOK
     )
     async def intercept_qq_official_messages(self, event: AstrMessageEvent):
-        """缓存 QQ 官方机器人群消息；频道消息不在本插件适配范围内。"""
+        """缓存 QQ 官方机器人群消息"""
         raw_message = getattr(getattr(event, "message_obj", None), "raw_message", None)
         if isinstance(raw_message, dict):
             author = raw_message.get("author") or {}
@@ -500,16 +522,12 @@ class GroupDailyAnalysis(Star):
     async def get_telegram_seen_group_ids(
         self, platform_id: str | None = None
     ) -> list[str]:
-        """读取 Telegram 已见群/话题列表（给调度器回退使用）。"""
         return await self.platform_group_registry.get_all_group_ids(platform_id)
 
     async def get_seen_group_ids(self, platform_id: str | None = None) -> list[str]:
-        """读取任意事件驱动平台已经见过的群组。"""
         return await self.platform_group_registry.get_all_group_ids(platform_id)
 
     def _get_group_id_from_event(self, event: AstrMessageEvent) -> str | None:
-        """从消息事件中安全获取群组 ID"""
-        # 保留此辅助方法，因为在其他 command 中仍被频繁使用
         try:
             group_id = event.get_group_id()
             return group_id if group_id else None
@@ -517,1000 +535,38 @@ class GroupDailyAnalysis(Star):
             return None
 
     def _get_platform_id_from_event(self, event: AstrMessageEvent) -> str:
-        """从消息事件中获取平台唯一 ID"""
-        # 保留此辅助方法，因为在其他 command 中仍被频繁使用
         try:
             return event.get_platform_id()
         except Exception:
-            # 后备方案：从元数据获取
             if (
                 hasattr(event, "platform_meta")
                 and event.platform_meta
                 and hasattr(event.platform_meta, "id")
             ):
                 return event.platform_meta.id
-            # 注意: 此处回退 "default" 仅用于兼容未提供平台元数据的历史 AstrBot 初始默认命名实例，并不代表业务上的全局默认平台
             return "default"
 
-    # ================================================================
-    # 图片报告上传到群文件 / 群相册（仅 QQ 平台 image 格式）
-    # ================================================================
-
-    async def _try_upload_image(
-        self,
-        group_id: str,
-        image_url: str,
-        platform_id: str | None,
-        is_comic: bool = False,
-    ):
-        """
-        尝试将图片报告上传到群文件和/或群相册（静默处理，失败仅日志提示）。
-        """
-        import base64
-        import re
-        import tempfile
-        from datetime import datetime
-
-        if is_comic:
-            enable_file = False  # 我们通常不把漫画作为文件上传，或者可以复用 enable_group_file_upload
-            enable_album = self.config_manager.get_enable_comic_album_upload()
-        else:
-            enable_file = self.config_manager.get_enable_group_file_upload()
-            enable_album = self.config_manager.get_enable_group_album_upload()
-
-        if not enable_file and not enable_album:
-            return
-
-        adapter = self.bot_manager.get_adapter(platform_id)
-        if not adapter:
-            return
-        if enable_file and not hasattr(adapter, "upload_group_file_to_folder"):
-            logger.warning(f"群 {group_id} 的适配器不支持群文件上传。")
-            enable_file = False
-        if enable_album and not hasattr(adapter, "upload_group_album"):
-            logger.warning(f"群 {group_id} 的适配器不支持群相册上传。")
-            enable_album = False
-        if not enable_file and not enable_album:
-            return
-
-        # 1. 记录文件名的公共部分。漫画真实格式必须在读取图片字节后决定，
-        # 不能依据已经删除的全局输出格式，也不能盲信外部后端返回的文件后缀。
-        now = datetime.now()
-        timestamp = now.strftime("%H%M")
-        date_str = now.strftime("%Y-%m-%d")
-        filename_stem = f"群分析报告_{group_id}_{date_str}_{timestamp}"
-        try:
-            # 尝试通过适配器获取群名称，使文件名更具辨识度
-            group_info = await adapter.get_group_info(group_id)
-            if group_info and group_info.group_name:
-                # 过滤非法文件名字符：\ / : * ? " < > |
-                safe_name = re.sub(r'[\\/:*?"<>|]', "", group_info.group_name).strip()
-                if safe_name:
-                    filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
-        except Exception:
-            pass
-
-        # 2. 将内容准备为文件或数据
-        image_file = None
-        created_temp = False
-        MAX_PAYLOAD_SIZE = 20 * 1024 * 1024  # 20MB 限制
-
-        try:
-            data = None
-            if image_url.startswith("base64://"):
-                base64_str = image_url[len("base64://") :]
-                if len(base64_str) * 3 / 4 > MAX_PAYLOAD_SIZE:
-                    logger.warning("图片上传失败：Base64 负载过大")
-                    return
-                data = base64.b64decode(base64_str)
-            elif image_url.startswith("data:"):
-                parts = image_url.split(",", 1)
-                if len(parts) == 2:
-                    if len(parts[1]) * 3 / 4 > MAX_PAYLOAD_SIZE:
-                        logger.warning("图片上传失败：Data URI 负载过大")
-                        return
-                    data = base64.b64decode(parts[1])
-            elif os.path.isfile(image_url):
-                image_file = os.path.abspath(image_url)
-
-            if is_comic:
-                # 缓存文件通常已有正确后缀，但上传入口也允许接收 Base64/Data URI。
-                # 对本地文件读取少量头部字节即可，不需要把大图完整载入内存。
-                image_header = data
-                if image_header is None and image_file:
-                    with open(image_file, "rb") as image_stream:
-                        image_header = image_stream.read(32)
-                ext = self._detect_image_ext(image_header or b"")
-            else:
-                ext = (
-                    ".jpg"
-                    if (".jpg" in image_url.lower() or ".jpeg" in image_url.lower())
-                    else ".png"
-                )
-            nice_filename = f"{filename_stem}{ext}"
-
-            if data and not image_file:
-                # 使用 tempfile 生成唯一后缀，防止并发冲突
-                fd, image_file = tempfile.mkstemp(suffix=ext, prefix="group_report_")
-                try:
-                    with os.fdopen(fd, "wb") as f:
-                        f.write(data)
-                    created_temp = True
-                except Exception:
-                    os.close(fd)
-                    raise
-
-            if not image_file:
-                return
-
-            # 3. 执行上传：群文件
-            if enable_file:
-                try:
-                    folder_name = self.config_manager.get_group_file_folder()
-                    folder_id = None
-                    if folder_name:
-                        folder_id = await adapter.find_or_create_folder(  # type: ignore[attr-defined]
-                            group_id, folder_name
-                        )
-                    await adapter.upload_group_file_to_folder(  # type: ignore[attr-defined]
-                        group_id=group_id,
-                        file_path=image_file,
-                        folder_id=folder_id,
-                        filename=nice_filename,  # 显式传递漂亮的文件名
-                    )
-                except Exception as e:
-                    logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
-
-            if enable_album:
-                try:
-                    if is_comic:
-                        album_name = self.config_manager.get_comic_album_name()
-                        # 漫画相册与报告相册共用同一个 strict_mode 配置，
-                        # 若日后需要独立控制，可为漫画单独添加配置项。
-                        strict_mode = self.config_manager.get_group_album_strict_mode()
-                    else:
-                        album_name = self.config_manager.get_group_album_name()
-                        strict_mode = self.config_manager.get_group_album_strict_mode()
-
-                    upload_label = "漫画相册" if is_comic else "群相册"
-                    # 严格模式下，名称为空时提前拦截，不再依赖适配器判断
-                    if strict_mode and not album_name:
-                        logger.info(
-                            f"{upload_label}严格模式开启：未设置目标相册名称，停止上传以防止操作群 {group_id} 的默认相册。"
-                        )
-                    elif hasattr(adapter, "upload_group_album"):
-                        # 查找和兜底逻辑统一由适配器处理：
-                        #   - strict_mode=True + 找不到相册 → 适配器会拒绝上传
-                        #   - strict_mode=False + 找不到相册 → 适配器会回退到默认相册
-                        await adapter.upload_group_album(  # type: ignore[attr-defined]
-                            group_id,
-                            image_file,
-                            album_id=None,
-                            album_name=album_name,
-                            strict_mode=strict_mode,
-                        )
-                    else:
-                        logger.warning(f"群 {group_id} 的适配器不支持群相册上传。")
-                except Exception as e:
-                    logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
-        except Exception as e:
-            logger.warning(f"图片上传处理异常: {e}")
-        finally:
-            if created_temp and image_file and os.path.exists(image_file):
-                try:
-                    os.remove(image_file)
-                except OSError:
-                    pass
+    # ==================== 指令注册与分发 ====================
 
     @filter.command("群分析", alias={"group_analysis"})
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
         self, event: AstrMessageEvent, days: int | None = None
-    ):
-        """
-        分析群聊日常活动（跨平台支持）
-        用法: /群分析 [天数]
-        """
-        if self._terminating:
-            return
-
-        current_task = asyncio.current_task()
-        if current_task:
-            self._background_tasks.add(current_task)
-
-        trace = None
-        trace_id = ""
-
-        try:
-            event.should_call_llm(True)  # 阻止默认 LLM 解析
-            group_id = self._get_group_id_from_event(event)
-            platform_id = self._get_platform_id_from_event(event)
-
-            if not group_id:
-                yield event.plain_result("❌ 请在群聊中使用此命令")
-                return
-
-            # 更新bot实例
-            self.bot_manager.update_from_event(event)
-
-            # 优先使用 UMO 进行权限检查 (兼容白名单 UMO 格式)
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
-
-            if not self.config_manager.is_group_allowed(check_target):
-                yield event.plain_result("❌ 此群未启用日常分析功能")
-                return
-
-            # 防重入即时拦截：若该群已有分析任务在运行中，直接拒绝重复触发
-            if (
-                hasattr(self, "analysis_service")
-                and self.analysis_service
-                and self.analysis_service.is_group_running(group_id, "daily")
-            ):
-                yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
-                return
-
-            # 获取群名以生成语义化的 TraceID
-            group_name = ""
-            try:
-                adapter = self.bot_manager.get_adapter(platform_id)
-                if adapter:
-                    info = await adapter.get_group_info(group_id)
-                    if info and info.group_name:
-                        group_name = info.group_name
-            except Exception:
-                pass
-
-            # 设置 TraceID (语义化格式: manual_群名_HHmm)
-            trace_id = TraceContext.generate(
-                prefix="manual", group_name=group_name or group_id
-            )
-            trace = TraceContext.set(
-                trace_id=trace_id,
-                group_id=group_id,
-                group_name=group_name,
-                platform=platform_id or "",
-                trigger_type="manual",
-            )
-            if self.active_task_manager:
-                await self.active_task_manager.register_task(
-                    task_id=trace_id,
-                    group_id=group_id,
-                    group_name=group_name,
-                    platform=platform_id or "",
-                    trigger_type="manual",
-                    current_stage=AnalysisStage.FETCH_MESSAGES,
-                    asyncio_task=current_task,
-                )
-
-            # 表情回应 或 文本提示（二选一，由配置开关控制）
-            adapter = self.bot_manager.get_adapter(platform_id)
-            orig_msg_id = getattr(event.message_obj, "message_id", None)
-            adapter_platform_name = (
-                (adapter.get_platform_name() if adapter else "").strip().lower()
-            )
-            # QQ 官方机器人 API v2 不支持本插件使用的表情回应接口，
-            # 因此始终沿用原有的文字进度提示，避免触发无效的 reaction 请求。
-            use_text_reply = (
-                adapter_platform_name in {"qq_official", "qq_official_webhook"}
-                or self.config_manager.get_enable_analysis_reply()
-            )
-
-            if use_text_reply:
-                yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
-            elif adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_started"
-                )
-
-            # 调用 DDD 应用级服务
-            result = await self.analysis_service.execute_daily_analysis(
-                group_id=group_id, platform_id=platform_id, manual=True, days=days
-            )
-
-            if not result.get("success"):
-                reason = result.get("reason")
-                if trace and trace.status == "running":
-                    trace.finish(
-                        status="failed",
-                        error_message=result.get("error")
-                        or f"Analysis skipped/failed: {reason}",
-                    )
-                if reason == "no_messages":
-                    yield event.plain_result("❌ 未找到足够的群聊记录")
-                elif reason == "llm_analysis_failed":
-                    yield event.plain_result(
-                        "❌ 大模型文本分析失败：所有已开启的分析模块均调用失败或重试耗尽（请检查大模型 API Key 及服务商连通性）"
-                    )
-                elif reason == "muted":
-                    logger.warning(
-                        f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过回复以防抛出发送异常"
-                    )
-                else:
-                    yield event.plain_result(
-                        f"❌ 分析失败: {result.get('error', '原因未知')}"
-                    )
-                return
-
-            if not use_text_reply and adapter and orig_msg_id:
-                await adapter.set_reaction(
-                    event.get_group_id(), orig_msg_id, "analysis_done"
-                )
-
-            if self.active_task_manager:
-                await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
-
-            async for res in self._send_analysis_report(event, result):
-                yield res
-
-            if trace and trace.status == "running":
-                trace.finish(status="succeeded")
-
-        except DuplicateGroupTaskError:
-            if trace and trace.status == "running":
-                trace.finish(
-                    status="aborted", error_message="Task already running in group"
-                )
-            yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
-        except asyncio.CancelledError:
-            if trace and trace.status == "running":
-                trace.finish(status="aborted", error_message="Task cancelled by system")
-            logger.info("群分析任务被取消 (插件重载或卸载)")
-        except Exception as e:
-            if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
-            logger.error(f"群分析失败: {e}", exc_info=True)
-            yield event.plain_result(
-                f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
-            )
-        finally:
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
-            if current_task:
-                self._background_tasks.discard(current_task)
+    ) -> AsyncGenerator[Any, None]:
+        """分析群聊日常活动（跨平台支持）"""
+        handler = _resolve_analysis_handler(self)
+        async for result in handler.handle_daily_analysis(event, days):
+            yield result
 
     @filter.command("群漫画", alias={"group_comic", "daily_comic"})
     @filter.permission_type(PermissionType.ADMIN)
     async def generate_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ):
-        """
-        生成群聊趣味漫画（跨平台支持）
-        用法: /群漫画 [天数]
-        """
-        if self._terminating:
-            return
-
-        trace = None
-        trace_id = None
-        current_task = asyncio.current_task()
-        if current_task:
-            self._background_tasks.add(current_task)
-
-        try:
-            event.should_call_llm(True)
-            group_id = self._get_group_id_from_event(event)
-            platform_id = self._get_platform_id_from_event(event)
-
-            if not group_id:
-                yield event.plain_result("❌ 请在群聊中使用此命令")
-                return
-
-            self.bot_manager.update_from_event(event)
-
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
-
-            if not self.config_manager.get_enable_daily_comic():
-                yield event.plain_result("❌ 漫画生成功能未启用")
-                return
-
-            if not self.config_manager.is_comic_group_allowed(check_target):
-                yield event.plain_result("❌ 此群未启用漫画生成功能")
-                return
-
-            task_key = f"{platform_id or 'default'}:{group_id}"
-            existing_task = self._comic_group_tasks.get(task_key)
-            if existing_task and not existing_task.done():
-                yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
-                return
-
-            group_name = None
-            adapter = self.bot_manager.get_adapter(platform_id)
-            if adapter and hasattr(adapter, "get_group_info"):
-                try:
-                    info = await adapter.get_group_info(group_id)
-                    if info and hasattr(info, "group_name") and info.group_name:
-                        group_name = info.group_name
-                except Exception:
-                    pass
-
-            trace_id = TraceContext.generate(
-                prefix="comic", group_name=group_name or group_id
-            )
-            trace = TraceContext.set(
-                trace_id=trace_id,
-                group_id=group_id,
-                group_name=group_name or group_id,
-                platform=platform_id or "",
-                trigger_type="comic_manual",
-            )
-            if self.active_task_manager:
-                await self.active_task_manager.register_task(
-                    task_id=trace_id,
-                    group_id=group_id,
-                    group_name=group_name or group_id,
-                    platform=platform_id or "",
-                    trigger_type="comic_manual",
-                    current_stage=AnalysisStage.FETCH_MESSAGES,
-                    asyncio_task=current_task,
-                )
-
-            yield event.plain_result("🎨 正在提取群聊话题并生成漫画...")
-
-            result = await self.analysis_service.execute_comic_topic_analysis(
-                group_id=group_id, platform_id=platform_id, days=days
-            )
-            if not result.get("success"):
-                reason = result.get("reason")
-                if trace and trace.status == "running":
-                    trace.finish(
-                        status="failed", error_message=f"提取漫画话题失败: {reason}"
-                    )
-                if trace_id and self.active_task_manager:
-                    await self.active_task_manager.finish_task(trace_id)
-                if reason == "no_messages":
-                    yield event.plain_result("❌ 未找到可用于生成漫画的群聊记录")
-                elif reason == "no_topics":
-                    yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
-                elif reason == "muted":
-                    logger.warning(
-                        "群 %s 开启了禁言，跳过手动漫画回复",
-                        group_id,
-                    )
-                else:
-                    yield event.plain_result("❌ 漫画话题提取失败，原因未知")
-                return
-
-            status = self._try_trigger_comic_generation(
-                group_id,
-                platform_id,
-                {"topics": result.get("topics", [])},
-                require_auto_enabled=False,
-                trace=trace,
-            )
-            if status == "started":
-                yield event.plain_result("✅ 漫画生成任务已启动，完成后会发送到群里")
-            elif status == "duplicate":
-                if trace and trace.status == "running":
-                    trace.finish(
-                        status="warning", error_message="该群已有漫画任务正在执行"
-                    )
-                if trace_id and self.active_task_manager:
-                    await self.active_task_manager.finish_task(trace_id)
-                yield event.plain_result("🎨 该群已有漫画任务正在执行，请稍后再试哦~")
-            elif status == "blocked":
-                if trace and trace.status == "running":
-                    trace.finish(
-                        status="warning", error_message="此群未启用漫画生成功能"
-                    )
-                if trace_id and self.active_task_manager:
-                    await self.active_task_manager.finish_task(trace_id)
-                yield event.plain_result("❌ 此群未启用漫画生成功能")
-            elif status == "no_topics":
-                if trace and trace.status == "running":
-                    trace.finish(
-                        status="warning", error_message="未提取到可用于生成漫画的话题"
-                    )
-                if trace_id and self.active_task_manager:
-                    await self.active_task_manager.finish_task(trace_id)
-                yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
-            else:
-                if trace and trace.status == "running":
-                    trace.finish(status="failed", error_message="漫画生成任务未启动")
-                if trace_id and self.active_task_manager:
-                    await self.active_task_manager.finish_task(trace_id)
-                yield event.plain_result("⚠️ 漫画生成任务未启动，请查看插件日志")
-
-        except DuplicateGroupTaskError:
-            if trace and trace.status == "running":
-                trace.finish(
-                    status="failed", error_message="该群的漫画话题提取任务正在执行"
-                )
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
-            yield event.plain_result("🎨 该群的漫画话题提取任务正在执行，请稍后再试哦~")
-        except asyncio.CancelledError:
-            if trace and trace.status == "running":
-                trace.finish(status="aborted", error_message="Task cancelled by system")
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
-            logger.info("手动漫画任务被取消（插件正在关闭或重载）")
-        except Exception as e:
-            if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
-            logger.error("手动漫画生成失败: %s", e, exc_info=True)
-            yield event.plain_result(
-                f"❌ 漫画生成失败: {str(e)}。请检查消息获取、LLM 和绘图配置"
-            )
-        finally:
-            if current_task:
-                self._background_tasks.discard(current_task)
-
-    def _save_report_to_history(self, image_url: str, group_id: str) -> None:
-        """将生成的图片报告副本保存到持久化 reports 目录以供 WebUI 历史报告查阅"""
-        try:
-            reports_dir = self.plugin_data_dir / "reports"
-            reports_dir.mkdir(parents=True, exist_ok=True)
-            ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dest = reports_dir / f"report_{group_id}_{ts_str}.jpg"
-            if Path(image_url).exists():
-                import shutil
-
-                shutil.copy2(image_url, dest)
-            elif image_url.startswith("base64://"):
-                import base64
-
-                data = base64.b64decode(image_url[9:])
-                dest.write_bytes(data)
-        except Exception as e:
-            logger.warning(f"保存历史报告副本失败: {e}")
-
-    async def _send_analysis_report(
-        self, event: AstrMessageEvent, result: dict
-    ) -> AsyncGenerator:
-        """处理分析结果的渲染和发送"""
-        if self._terminating or not self.config_manager:
-            logger.warning("插件正在关闭，停止发送报告")
-            return
-
-        group_id = result["group_id"]
-        platform_id = result["platform_id"]
-        analysis_result = result["analysis_result"]
-        adapter = result["adapter"]
-        self._try_trigger_comic_generation(group_id, platform_id, analysis_result)
-        output_format = self.config_manager.get_output_format()[0]
-        is_qq_official = adapter.get_platform_name() in {
-            "qq_official",
-            "qq_official_webhook",
-        }
-
-        # 定义获取回调
-        async def avatar_url_getter(user_id: str) -> str | None:
-            return await adapter.get_user_avatar_url(user_id)
-
-        async def nickname_getter(user_id: str) -> str | None:
-            try:
-                member = await adapter.get_member_info(group_id, user_id)
-                if member:
-                    return member.card or member.nickname
-            except Exception:
-                pass
-            return None
-
-        trace = TraceContext.current()
-        override_theme = trace.metadata.get("override_template_name") if trace else None
-        template_theme = (
-            override_theme
-            or getattr(
-                self.config_manager, "get_report_template", lambda: "scrapbook"
-            )()
-        )
-
-        if output_format == "image":
-            if trace:
-                with trace.span(
-                    "RENDER_REPORT",
-                    {"format": "image", "template": template_theme},
-                ):
-                    (
-                        image_url,
-                        html_content,
-                    ) = await self.report_generator.generate_image_report(
-                        analysis_result,
-                        group_id,
-                        self.html_render,
-                        avatar_url_getter=avatar_url_getter,
-                        nickname_getter=nickname_getter,
-                        avatar_cache_namespace=platform_id,
-                        allow_alphanumeric_user_ids=is_qq_official,
-                        template_theme=template_theme,
-                    )
-            else:
-                (
-                    image_url,
-                    html_content,
-                ) = await self.report_generator.generate_image_report(
-                    analysis_result,
-                    group_id,
-                    self.html_render,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
-                )
-
-            if image_url:
-                self._save_report_to_history(image_url, group_id)
-                caption = (
-                    TraceContext.make_report_caption()
-                    if self.config_manager.get_show_report_caption()
-                    else ""
-                )
-                sent = await adapter.send_image(group_id, image_url, caption=caption)
-                if sent:
-                    await self._try_upload_image(group_id, image_url, platform_id)
-                    return  # 成功发送
-
-            # 如果图片生成或发送失败，直接回退到文本
-            logger.warning(f"图片报告发送失败，正在发送文本回退报告。群: {group_id}")
-            await self._send_text_reports(
-                group_id, analysis_result, is_qq_official, adapter
-            )
-            return
-
-        elif output_format == "html":
-            cur_trace_id = trace.trace_id if trace else None
-            if trace:
-                with trace.span(
-                    "RENDER_REPORT",
-                    {"format": "html", "template": template_theme},
-                ):
-                    (
-                        html_path,
-                        json_path,
-                    ) = await self.report_generator.generate_html_report(
-                        analysis_result,
-                        group_id,
-                        avatar_url_getter=avatar_url_getter,
-                        nickname_getter=nickname_getter,
-                        avatar_cache_namespace=platform_id,
-                        allow_alphanumeric_user_ids=is_qq_official,
-                        template_theme=template_theme,
-                        trace_id=cur_trace_id,
-                    )
-            else:
-                html_path, json_path = await self.report_generator.generate_html_report(
-                    analysis_result,
-                    group_id,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
-                    trace_id=cur_trace_id,
-                )
-            if html_path:
-                is_only_url = self.config_manager.get_html_only_url()
-                base_url = self.config_manager.get_html_base_url()
-
-                should_send_file = True
-
-                if is_only_url:
-                    if base_url and base_url.strip():
-                        # 获取配置中的输出目录
-                        html_output_dir = self.config_manager.get_html_output_dir()
-
-                        # 若用户配置为空，使用默认目录
-                        if not html_output_dir:
-                            html_output_dir = os.path.join(
-                                StarTools.get_data_dir(PLUGIN_NAME),
-                                "self_hosted_html_reports",
-                            )
-
-                        # 计算相对路径并转换为URL
-                        rel_path = os.path.relpath(html_path, html_output_dir)
-                        url_path = rel_path.replace(os.sep, "/")
-                        encoded_url_path = quote(url_path.lstrip("/"), safe="/")
-                        report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
-
-                        yield event.plain_result(
-                            f"📊 今日群聊分析报告已生成：\n{report_url}"
-                        )
-                        should_send_file = False  # 拦截成功，不再发文件
-                    else:
-                        logger.warning(
-                            f"手动触发群 {group_id} 开启了仅发送外链，但未配置 html_base_url，回退至发送文件。"
-                        )
-
-                if should_send_file:
-                    caption = self.report_generator.build_html_caption(html_path)
-
-                    # 发送 HTML 文件
-                    sender = getattr(self, "message_sender", None)
-                    if sender:
-                        sent = await sender.send_file(
-                            group_id,
-                            html_path,
-                            caption=caption,
-                            platform_id=platform_id,
-                        )
-                    else:
-                        sent = await adapter.send_file(group_id, html_path)
-                        if sent and caption:
-                            await adapter.send_text(group_id, caption)
-
-                    if not sent:
-                        yield event.chain_result(
-                            [File(name=Path(html_path).name, file=html_path)]
-                        )
-                        if caption:
-                            yield event.plain_result(caption)
-            else:
-                yield event.plain_result("⚠️ HTML 生成失败。")
-
-        else:
-            await self._send_text_reports(
-                group_id, analysis_result, is_qq_official, adapter
-            )
-
-    def _try_trigger_comic_generation(
-        self,
-        group_id: str,
-        platform_id: str | None,
-        analysis_result: dict,
-        *,
-        require_auto_enabled: bool = True,
-        trace: TraceContext | None = None,
-    ) -> str:
-        if self._terminating:
-            return "terminating"
-        if not self.config_manager.get_enable_daily_comic():
-            return "disabled"
-        auto_comic_enabled = getattr(
-            self.config_manager, "get_enable_auto_daily_comic", None
-        )
-        if (
-            require_auto_enabled
-            and callable(auto_comic_enabled)
-            and not auto_comic_enabled()
-        ):
-            return "auto_disabled"
-
-        umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-        comic_allowed = getattr(self.config_manager, "is_comic_group_allowed", None)
-        inherit_allowed = True if require_auto_enabled else None
-        if callable(comic_allowed) and not comic_allowed(umo, inherit_allowed):
-            logger.info(
-                "群 %s 未通过漫画名单判定，跳过漫画生成。platform=%s",
-                group_id,
-                platform_id or "default",
-            )
-            return "blocked"
-
-        topics = analysis_result.get("topics", [])
-        statistics = analysis_result.get("statistics")
-        if not topics and statistics:
-            topics = getattr(statistics, "topics", [])
-
-        comic_topics = []
-        for topic in topics if isinstance(topics, list) else []:
-            title = (
-                topic.get("topic", "")
-                if isinstance(topic, dict)
-                else getattr(topic, "topic", "")
-            )
-            detail = (
-                topic.get("detail", "")
-                if isinstance(topic, dict)
-                else getattr(topic, "detail", "")
-            )
-            if str(title).strip():
-                comic_topics.append(
-                    {"topic": str(title).strip(), "detail": str(detail).strip()}
-                )
-        if not comic_topics:
-            logger.warning(f"群 {group_id} 没有有效话题，跳过漫画生成。")
-            return "no_topics"
-
-        task_key = f"{platform_id or 'default'}:{group_id}"
-        existing_task = self._comic_group_tasks.get(task_key)
-        if existing_task and not existing_task.done():
-            logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过重复任务。")
-            return "duplicate"
-
-        task = asyncio.create_task(
-            self._trigger_comic_generation(
-                comic_topics, group_id, platform_id, umo, trace=trace
-            )
-        )
-        self._comic_group_tasks[task_key] = task
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
-        task.add_done_callback(
-            lambda completed_task: (
-                self._comic_group_tasks.pop(task_key, None)
-                if self._comic_group_tasks.get(task_key) is completed_task
-                else None
-            )
-        )
-        return "started"
-
-    @staticmethod
-    def _detect_image_ext(data: bytes) -> str:
-        """从图片字节嗅探扩展名，无法识别时回退 .png。"""
-        if data.startswith(b"\x89PNG\r\n\x1a\n"):
-            return ".png"
-        if data.startswith(b"\xff\xd8\xff"):
-            return ".jpg"
-        if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-            return ".webp"
-        if data.startswith((b"GIF87a", b"GIF89a")):
-            return ".gif"
-        if (
-            len(data) >= 12
-            and data[4:8] == b"ftyp"
-            and data[8:12] in {b"avif", b"avis"}
-        ):
-            return ".avif"
-        return ".png"
-
-    async def _trigger_comic_generation(
-        self,
-        topics: list[dict],
-        group_id: str,
-        platform_id: str | None,
-        umo: str,
-        trace: TraceContext | None = None,
-    ):
-        """后台生成并上传漫画，通过信号量控制并发"""
-        cur_trace = trace or TraceContext.current()
-        if cur_trace:
-            from .src.shared.trace_context import _current_trace
-
-            _current_trace.set(cur_trace)
-
-        async with self._comic_semaphore:
-            if self._terminating:
-                return
-            try:
-                if cur_trace and self.active_task_manager:
-                    await self.active_task_manager.update_stage(
-                        cur_trace.trace_id, "COMIC_STORYBOARD"
-                    )
-
-                comic_bytes, fallback_url = await self.comic_service.generate_comic(
-                    topics, group_id, umo
-                )
-                if comic_bytes:
-                    logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
-                    ext = self._detect_image_ext(comic_bytes)
-                    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    trace_suffix = f"_{cur_trace.trace_id}" if cur_trace else ""
-                    filename = f"comic_{group_id}_{ts_str}{trace_suffix}{ext}"
-
-                    reports_dir = (
-                        getattr(self, "plugin_data_dir", None)
-                        or StarTools.get_data_dir(PLUGIN_NAME)
-                    ) / "reports"
-                    reports_dir.mkdir(parents=True, exist_ok=True)
-                    comic_file_path = reports_dir / filename
-                    comic_file_path.write_bytes(comic_bytes)
-
-                    if cur_trace:
-                        rfiles = cur_trace.metadata.setdefault("report_files", [])
-                        rfiles.append(
-                            {
-                                "filename": filename,
-                                "format": "image",
-                                "report_type": "comic",
-                                "path": str(comic_file_path.resolve()),
-                            }
-                        )
-
-                    try:
-                        if self._terminating:
-                            return
-
-                        if cur_trace:
-                            with cur_trace.span(
-                                "DISPATCH_REPORT", {"format": "image", "type": "comic"}
-                            ):
-                                # 发送图片到群聊
-                                adapter = self.bot_manager.get_adapter(platform_id)
-                                if adapter and hasattr(adapter, "send_image"):
-                                    await adapter.send_image(
-                                        group_id,
-                                        str(comic_file_path),
-                                        caption="✨ 今日群聊趣味漫画已生成！",
-                                    )
-
-                                # 上传到相册/群文件
-                                await self._try_upload_image(
-                                    group_id,
-                                    str(comic_file_path),
-                                    platform_id,
-                                    is_comic=True,
-                                )
-                        else:
-                            adapter = self.bot_manager.get_adapter(platform_id)
-                            if adapter and hasattr(adapter, "send_image"):
-                                await adapter.send_image(
-                                    group_id,
-                                    str(comic_file_path),
-                                    caption="✨ 今日群聊趣味漫画已生成！",
-                                )
-                            await self._try_upload_image(
-                                group_id,
-                                str(comic_file_path),
-                                platform_id,
-                                is_comic=True,
-                            )
-                    except Exception as e:
-                        logger.warning(f"投递群 {group_id} 漫画失败: {e}")
-
-                    if cur_trace and cur_trace.trigger_type == "comic_manual":
-                        cur_trace.finish(status="success")
-                        if self.active_task_manager:
-                            await self.active_task_manager.finish_task(
-                                cur_trace.trace_id
-                            )
-
-                elif fallback_url:
-                    # 图片 API 返回了 URL 但下载失败，把链接发到群里作为兜底
-                    logger.warning(
-                        f"群 {group_id} 漫画下载失败，发送 fallback URL 到群中: {fallback_url}"
-                    )
-                    adapter = self.bot_manager.get_adapter(platform_id)
-                    if adapter and hasattr(adapter, "send_text"):
-                        await adapter.send_text(
-                            group_id,
-                            f"✨ 今日群聊趣味漫画已生成，但图片下载失败，请点击链接查看：\n{fallback_url}",
-                        )
-                    if cur_trace and cur_trace.trigger_type == "comic_manual":
-                        cur_trace.finish(
-                            status="warning",
-                            error_message="Comic download failed, fallback url sent",
-                        )
-                        if self.active_task_manager:
-                            await self.active_task_manager.finish_task(
-                                cur_trace.trace_id
-                            )
-                else:
-                    if cur_trace and cur_trace.trigger_type == "comic_manual":
-                        cur_trace.finish(status="failed", error_message="未能生成漫画")
-                        if self.active_task_manager:
-                            await self.active_task_manager.finish_task(
-                                cur_trace.trace_id
-                            )
-            except Exception as e:
-                logger.error(
-                    f"群 {group_id} 生成/上传漫画时发生错误: {e}", exc_info=True
-                )
-                if cur_trace and cur_trace.trigger_type == "comic_manual":
-                    cur_trace.finish(status="failed", error_message=str(e))
-                    if self.active_task_manager:
-                        await self.active_task_manager.finish_task(cur_trace.trace_id)
-
-    async def _generate_text_reports(
-        self, analysis_result: dict, use_qq_official_markdown: bool
-    ) -> tuple[str, str | None]:
-        """Generate text or QQ-official-markdown reports."""
-        if use_qq_official_markdown:
-            return await self.report_generator.generate_qq_official_markdown_report(
-                analysis_result, self.html_render
-            )
-        return self.report_generator.generate_text_report(analysis_result), None
-
-    async def _send_text_reports(
-        self,
-        group_id: str,
-        analysis_result: dict,
-        use_qq_official_markdown: bool,
-        adapter,
-    ) -> bool:
-        """Send text reports via platform adapter."""
-        tr, fr = await self._generate_text_reports(
-            analysis_result, use_qq_official_markdown
-        )
-        if use_qq_official_markdown:
-            return await adapter.send_text_report(group_id, tr, fallback_content=fr)
-        return await adapter.send_text_report(group_id, tr)
+    ) -> AsyncGenerator[Any, None]:
+        """生成群聊趣味漫画（跨平台支持）"""
+        handler = _resolve_comic_handler(self)
+        async for result in handler.handle_group_comic(event, days):
+            yield result
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
@@ -1576,3 +632,83 @@ class GroupDailyAnalysis(Star):
         """在插件内修改名单后立即同步增量状态。"""
         handler = _resolve_settings_handler(self)
         await handler._refresh_incremental_target_states()
+
+    # ==================== 兼容性私有方法代理转发 ====================
+
+    async def _send_analysis_report(
+        self, event: AstrMessageEvent, result: dict[str, Any]
+    ) -> AsyncGenerator[Any, None]:
+        handler = _resolve_analysis_handler(self)
+        async for res in handler.send_analysis_report(event, result):
+            yield res
+
+    async def _try_upload_image(
+        self,
+        group_id: str,
+        image_url: str,
+        platform_id: str | None,
+        is_comic: bool = False,
+    ) -> None:
+        handler = _resolve_analysis_handler(self)
+        await handler._try_upload_image(
+            group_id, image_url, platform_id, is_comic=is_comic
+        )
+
+    def _save_report_to_history(self, image_url: str, group_id: str) -> None:
+        handler = _resolve_analysis_handler(self)
+        handler._save_report_to_history(image_url, group_id)
+
+    async def _send_text_reports(
+        self,
+        group_id: str,
+        analysis_result: dict[str, Any],
+        is_qq_official: bool,
+        adapter: Any,
+    ) -> None:
+        handler = _resolve_analysis_handler(self)
+        await handler._send_text_reports(
+            group_id, analysis_result, is_qq_official, adapter
+        )
+
+    def _try_trigger_comic_generation(
+        self,
+        group_id: str,
+        platform_id: str | None,
+        analysis_result: dict[str, Any],
+        *,
+        require_auto_enabled: bool = True,
+        trace: TraceContext | None = None,
+    ) -> str:
+        handler = _resolve_comic_handler(self)
+        return handler.try_trigger_comic_generation(
+            group_id,
+            platform_id,
+            analysis_result,
+            require_auto_enabled=require_auto_enabled,
+            trace=trace,
+        )
+
+    async def _trigger_comic_generation(
+        self,
+        topics: list[dict[str, Any]],
+        group_id: str,
+        platform_id: str | None,
+        umo: str,
+        trace: TraceContext | None = None,
+    ) -> None:
+        handler = _resolve_comic_handler(self)
+        await handler._trigger_comic_generation(
+            topics, group_id, platform_id, umo, trace=trace
+        )
+
+    @property
+    def _comic_group_tasks(self) -> dict[str, asyncio.Task]:
+        return _resolve_comic_handler(self)._comic_group_tasks
+
+    @_comic_group_tasks.setter
+    def _comic_group_tasks(self, val: dict[str, asyncio.Task]) -> None:
+        _resolve_comic_handler(self)._comic_group_tasks = val
+
+    @staticmethod
+    def _detect_image_ext(data: bytes) -> str:
+        return ComicCommandHandler.detect_image_ext(data)

@@ -49,18 +49,26 @@ def load_main_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
+    from collections.abc import AsyncGenerator
     from datetime import datetime
 
+    from src.application.handlers.analysis_command_handler import (
+        AnalysisCommandHandler,
+    )
+    from src.application.handlers.comic_command_handler import ComicCommandHandler
     from src.application.handlers.settings_command_handler import (
         SettingsCommandHandler,
     )
     from src.shared.trace_context import TraceContext
 
     namespace = {
-        "AsyncGenerator": object,
+        "Any": Any,
+        "AsyncGenerator": AsyncGenerator,
         "AstrMessageEvent": object,
         "DuplicateGroupTaskError": RuntimeError,
         "SettingsCommandHandler": SettingsCommandHandler,
+        "ComicCommandHandler": ComicCommandHandler,
+        "AnalysisCommandHandler": AnalysisCommandHandler,
         "_resolve_settings_handler": lambda plugin: (
             getattr(plugin, "settings_command_handler", None)
             or SettingsCommandHandler(
@@ -78,6 +86,45 @@ def load_main_method(name: str):
                 ),
                 bot_manager=getattr(plugin, "bot_manager", None),
                 context=getattr(plugin, "context", None),
+            )
+        ),
+        "_resolve_comic_handler": lambda plugin: (
+            getattr(plugin, "comic_command_handler", None)
+            or ComicCommandHandler(
+                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+                bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
+                comic_service=getattr(plugin, "comic_service", None),  # type: ignore
+                analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+                active_task_manager=getattr(plugin, "active_task_manager", None),
+                plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+                plugin_instance=plugin,
+            )
+        ),
+        "_resolve_analysis_handler": lambda plugin: (
+            getattr(plugin, "analysis_command_handler", None)
+            or AnalysisCommandHandler(
+                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+                bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
+                analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+                report_generator=getattr(plugin, "report_generator", None),  # type: ignore
+                html_render=getattr(plugin, "html_render", None),  # type: ignore
+                active_task_manager=getattr(plugin, "active_task_manager", None),
+                trace_store=getattr(plugin, "trace_store", None),
+                message_sender=getattr(plugin, "message_sender", None),
+                comic_handler=(
+                    getattr(plugin, "comic_command_handler", None)
+                    or ComicCommandHandler(
+                        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+                        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
+                        comic_service=getattr(plugin, "comic_service", None),  # type: ignore
+                        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+                        active_task_manager=getattr(plugin, "active_task_manager", None),
+                        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+                        plugin_instance=plugin,
+                    )
+                ),
+                plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+                plugin_instance=plugin,
             )
         ),
         "asyncio": asyncio,
@@ -782,18 +829,26 @@ def test_auto_comic_switch_skips_report_trigger():
 
 def test_standalone_comic_command_is_decoupled_from_analysis_permission():
     """手动漫画命令不应直接检查分析名单，避免只开漫画时被分析权限拦住。"""
-    main_path = Path(__file__).parents[1] / "main.py"
-    module = ast.parse(main_path.read_text(encoding="utf-8"), filename=str(main_path))
-    plugin_class = next(
+    handler_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "application"
+        / "handlers"
+        / "comic_command_handler.py"
+    )
+    module = ast.parse(
+        handler_path.read_text(encoding="utf-8"), filename=str(handler_path)
+    )
+    handler_class = next(
         node
         for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "GroupDailyAnalysis"
+        if isinstance(node, ast.ClassDef) and node.name == "ComicCommandHandler"
     )
     method = next(
         node
-        for node in plugin_class.body
+        for node in handler_class.body
         if isinstance(node, ast.AsyncFunctionDef)
-        and node.name == "generate_group_comic"
+        and node.name == "handle_group_comic"
     )
     attribute_names = {
         node.attr for node in ast.walk(method) if isinstance(node, ast.Attribute)
