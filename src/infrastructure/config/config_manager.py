@@ -3,11 +3,9 @@
 负责处理插件配置
 """
 
-import hashlib
 import json
 import os
 import random
-import re
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -38,125 +36,42 @@ class ConfigManager:
     def __init__(self, config: AstrBotConfig):
         self.config = config
         self._migrator = ConfigMigrator(self, star_tools=StarTools)
-        self._migrate_daily_comic_characters()
-        self._migrate_daily_comic_character_prompts()
-        self._migrate_legacy_comic_storyboard_prompts()
-        self._protect_upgrade_data()
+        self._migrator.run_all_migrations()
 
     def _protect_upgrade_data(self) -> None:
-        """在插件升级且配置结构发生变更时备份旧配置。"""
-        plugin_root = self._get_plugin_root()
-        current_version = self._get_plugin_version(plugin_root)
-        current_schema_fingerprint = self._get_schema_fingerprint(plugin_root)
-        state_path = (
-            StarTools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
+        """在插件升级且配置结构发生变更时备份旧配置（委托 ConfigMigrator）。"""
+        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
+            self, star_tools=getattr(self, "StarTools", StarTools)
         )
-        previous_state = self._read_upgrade_protection_state(state_path)
-        previous_version = str(previous_state.get("version", "")).strip()
-
-        if not previous_state:
-            logger.debug("升级保护基线已建立，后续配置结构变化时可备份本次快照。")
-
-        if previous_state.get(
-            "schema_fingerprint"
-        ) != current_schema_fingerprint and isinstance(
-            previous_state.get("config"), dict
-        ):
-            if not self._write_upgrade_config_backup(
-                previous_state["config"], previous_version
-            ):
-                logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
-                return
-
-        self._save_upgrade_protection_state(
-            state_path,
-            {
-                "version": current_version,
-                "schema_fingerprint": current_schema_fingerprint,
-                "config": dict(self.config),
-            },
-        )
+        migrator.protect_upgrade_data()
 
     @staticmethod
     def _get_plugin_root() -> Path:
-        """获取插件根目录。"""
-        return Path(__file__).resolve().parents[3]
+        """获取插件根目录（委托 ConfigMigrator）。"""
+        return ConfigMigrator.get_plugin_root()
 
     @staticmethod
     def _get_plugin_version(plugin_root: Path) -> str:
-        """从 metadata.yaml 读取当前插件版本。"""
-        try:
-            metadata = (plugin_root / "metadata.yaml").read_text(encoding="utf-8")
-            match = re.search(r"^version:\s*([^\s#]+)", metadata, re.MULTILINE)
-            if match:
-                return match.group(1)
-        except OSError as exc:
-            logger.warning(f"读取插件版本失败，将使用未知版本标识: {exc}")
-        return "unknown"
+        """从 metadata.yaml 读取当前插件版本（委托 ConfigMigrator）。"""
+        return ConfigMigrator.get_plugin_version(plugin_root)
 
     @staticmethod
     def _get_schema_fingerprint(plugin_root: Path) -> str:
-        """计算配置结构指纹，忽略描述等纯界面字段。"""
-        try:
-            schema = json.loads(
-                (plugin_root / "_conf_schema.json").read_text(encoding="utf-8-sig")
-            )
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning(f"读取插件配置结构失败: {exc}")
-            return ""
-
-        def extract_shape(items: dict) -> dict:
-            shape = {}
-            for key, item in items.items():
-                if not isinstance(item, dict):
-                    continue
-                entry = {"type": item.get("type")}
-                for property_name in ("default", "options", "file_types"):
-                    if property_name in item:
-                        entry[property_name] = item[property_name]
-                if isinstance(item.get("items"), dict):
-                    entry["items"] = extract_shape(item["items"])
-                if isinstance(item.get("templates"), dict):
-                    entry["templates"] = {
-                        template_key: extract_shape(template.get("items", {}))
-                        for template_key, template in item["templates"].items()
-                        if isinstance(template, dict)
-                    }
-                shape[key] = entry
-            return shape
-
-        serialized_shape = json.dumps(
-            extract_shape(schema),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        return hashlib.sha256(serialized_shape.encode("utf-8")).hexdigest()
+        """计算配置结构指纹（委托 ConfigMigrator）。"""
+        return ConfigMigrator.get_schema_fingerprint(plugin_root)
 
     @staticmethod
     def _read_upgrade_protection_state(state_path: Path) -> dict:
-        """读取上一次正常启动记录的升级保护状态。"""
-        try:
-            state = json.loads(state_path.read_text(encoding="utf-8"))
-            return state if isinstance(state, dict) else {}
-        except (OSError, json.JSONDecodeError):
-            return {}
+        """读取上一次正常启动记录的升级保护状态（委托 ConfigMigrator）。"""
+        return ConfigMigrator.read_upgrade_protection_state(state_path)
 
     @staticmethod
     def _save_upgrade_protection_state(state_path: Path, state: dict) -> None:
-        """原子保存升级保护状态。"""
-        try:
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary_path = state_path.with_suffix(".tmp")
-            temporary_path.write_text(
-                json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            temporary_path.replace(state_path)
-        except OSError as exc:
-            logger.warning(f"保存插件升级保护状态失败: {exc}")
+        """原子保存升级保护状态（委托 ConfigMigrator）。"""
+        ConfigMigrator.save_upgrade_protection_state(state_path, state)
 
     def _write_upgrade_config_backup(self, config: dict, version: str) -> bool:
-        """保存旧版本配置快照，并最多保留二十份。
+        """保存旧版本配置快照（委托 ConfigMigrator）。
 
         Args:
             config: 上一次正常加载时记录的插件配置快照。
@@ -165,39 +80,10 @@ class ConfigManager:
         Returns:
             备份写入并完成轮换时返回 True，否则返回 False。
         """
-        try:
-            backup_dir = StarTools.get_data_dir(PLUGIN_NAME) / "config_backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            safe_version = re.sub(r"[^A-Za-z0-9._-]", "_", version) or "unknown"
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            backup_path = backup_dir / f"plugin_config_{safe_version}_{timestamp}.json"
-            backup_path.write_text(
-                json.dumps(
-                    {
-                        "backed_up_at": datetime.now().isoformat(),
-                        "plugin_version": version,
-                        "config": config,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            backups = sorted(
-                backup_dir.glob("plugin_config_*.json"),
-                key=lambda path: (path.stat().st_mtime, path.name),
-            )
-            for expired_backup in backups[:-20]:
-                expired_backup.unlink()
-            logger.info(
-                "检测到插件配置结构变化，已备份上一次正常启动保存的配置快照："
-                f"旧版本={version}，文件={backup_path.name}，路径={backup_path.resolve()}，"
-                f"当前保留={min(len(backups), 20)} 份。"
-            )
-            return True
-        except OSError as exc:
-            logger.warning(f"备份插件旧配置失败: {exc}")
-            return False
+        tools = getattr(self, "StarTools", StarTools)
+        return ConfigMigrator.write_upgrade_config_backup_data(
+            config, version, star_tools=tools
+        )
 
     def get_custom_report_template_dir(self, template_name: str) -> Path | None:
         """获取指定报告模板的用户自定义模板目录。"""
@@ -210,11 +96,17 @@ class ConfigManager:
 
     def _migrate_daily_comic_characters(self) -> None:
         """迁移旧版漫画参考图配置（委托 ConfigMigrator）。"""
-        self._migrator.migrate_daily_comic_character_references()
+        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
+            self, star_tools=getattr(self, "StarTools", StarTools)
+        )
+        migrator.migrate_daily_comic_character_references()
 
     def _migrate_daily_comic_character_prompts(self) -> None:
         """将旧版全局分镜提示词复制到既有角色方案（委托 ConfigMigrator）。"""
-        self._migrator.migrate_daily_comic_character_prompts()
+        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
+            self, star_tools=getattr(self, "StarTools", StarTools)
+        )
+        migrator.migrate_daily_comic_character_prompts()
 
     def _is_legacy_default_comic_prompt(self, prompt: object) -> bool:
         """判断是否为旧版默认漫画分镜提示词（委托 ConfigMigrator）。"""
@@ -222,7 +114,10 @@ class ConfigManager:
 
     def _migrate_legacy_comic_storyboard_prompts(self) -> None:
         """自动将旧版默认漫画分镜提示词升级（委托 ConfigMigrator）。"""
-        self._migrator.migrate_legacy_comic_storyboard_prompts()
+        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
+            self, star_tools=getattr(self, "StarTools", StarTools)
+        )
+        migrator.migrate_legacy_comic_storyboard_prompts()
 
     def _write_comic_config_backup(self, data: dict) -> bool:
         """写入漫画配置迁移备份（委托 ConfigMigrator）。

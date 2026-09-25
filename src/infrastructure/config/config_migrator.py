@@ -5,11 +5,14 @@
 - 提示词模板从旧版 `str.format` 到 `string.Template`（`$VAR`）的自动检测与无损升级
 - 旧版输出格式 `output_format` 从字符串到列表的兼容转换
 - 漫画角色方案、全局参考图迁移、备份保护与默认提示词正反例升级
+- 配置结构指纹比对与跨版本升级配置自动快照保护
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -43,12 +46,13 @@ class ConfigMigrator:
         self.star_tools = star_tools or StarTools
 
     def run_all_migrations(self) -> None:
-        """执行所有版本升级与迁移检查。"""
+        """执行所有版本升级、数据结构迁移与结构保护检查。"""
         self.migrate_legacy_configs()
         self.upgrade_prompt_templates()
         self.migrate_daily_comic_character_references()
         self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
+        self.protect_upgrade_data()
 
     def migrate_legacy_configs(self) -> bool:
         """升级旧版配置项的类型与数据结构，确保兼容新 Schema。
@@ -111,42 +115,49 @@ class ConfigMigrator:
             bool: 是否升级了任何模板。
         """
         modified = False
-        modified |= self.upgrade_config_item(
-            "quality_analysis_prompts",
-            "quality_v2_prompt",
-            self.cm.set_quality_analysis_prompt,
-        )
-        modified |= self.upgrade_config_item(
-            "quality_analysis_prompts",
-            "quality_summary_prompt",
-            self.cm.set_quality_summary_prompt,
-        )
-        modified |= self.upgrade_config_item(
-            "topic_analysis_prompts",
-            "topic_prompt",
-            self.cm.set_topic_analysis_prompt,
-        )
-        modified |= self.upgrade_config_item(
-            "user_title_analysis_prompts",
-            "user_title_prompt",
-            self.cm.set_user_title_analysis_prompt,
-        )
-        modified |= self.upgrade_config_item(
-            "golden_quote_analysis_prompts",
-            "golden_quote_v2_prompt",
-            self.cm.set_golden_quote_analysis_prompt,
-        )
-        modified |= self.upgrade_config_item(
-            "comic_analysis_prompts",
-            "comic_storyboard_prompt",
-            self.cm.set_comic_storyboard_prompt,
-        )
+        if hasattr(self.cm, "set_quality_analysis_prompt"):
+            modified |= self.upgrade_config_item(
+                "quality_analysis_prompts",
+                "quality_v2_prompt",
+                self.cm.set_quality_analysis_prompt,
+            )
+        if hasattr(self.cm, "set_quality_summary_prompt"):
+            modified |= self.upgrade_config_item(
+                "quality_analysis_prompts",
+                "quality_summary_prompt",
+                self.cm.set_quality_summary_prompt,
+            )
+        if hasattr(self.cm, "set_topic_analysis_prompt"):
+            modified |= self.upgrade_config_item(
+                "topic_analysis_prompts",
+                "topic_prompt",
+                self.cm.set_topic_analysis_prompt,
+            )
+        if hasattr(self.cm, "set_user_title_analysis_prompt"):
+            modified |= self.upgrade_config_item(
+                "user_title_analysis_prompts",
+                "user_title_prompt",
+                self.cm.set_user_title_analysis_prompt,
+            )
+        if hasattr(self.cm, "set_golden_quote_analysis_prompt"):
+            modified |= self.upgrade_config_item(
+                "golden_quote_analysis_prompts",
+                "golden_quote_v2_prompt",
+                self.cm.set_golden_quote_analysis_prompt,
+            )
+        if hasattr(self.cm, "set_comic_storyboard_prompt"):
+            modified |= self.upgrade_config_item(
+                "comic_analysis_prompts",
+                "comic_storyboard_prompt",
+                self.cm.set_comic_storyboard_prompt,
+            )
 
-        modified |= self.upgrade_config_item(
-            "html",
-            "html_filename_format",
-            self.cm.set_html_filename_format,
-        )
+        if hasattr(self.cm, "set_html_filename_format"):
+            modified |= self.upgrade_config_item(
+                "html",
+                "html_filename_format",
+                self.cm.set_html_filename_format,
+            )
 
         if modified:
             logger.info(
@@ -172,7 +183,10 @@ class ConfigMigrator:
         if isinstance(old_references, str):
             # 早期版本允许 URL 或任意本地路径，原生文件控件不能安全地继续使用它们。
             backup_data = {"drawing_reference_image": old_references}
-            if not self.cm._write_comic_config_backup(backup_data):
+            backup_func = getattr(
+                self.cm, "_write_comic_config_backup", self.write_comic_config_backup
+            )
+            if not backup_func(backup_data):
                 logger.warning(
                     "旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。"
                 )
@@ -200,7 +214,13 @@ class ConfigMigrator:
         specific_persona_id = ""
         if self.cm.get_use_plugin_specific_persona():
             specific_persona_id = self.cm.get_plugin_specific_persona_id().strip()
-        migrated_references = self.cm._copy_legacy_comic_reference_images(references)
+
+        copy_func = getattr(
+            self.cm,
+            "_copy_legacy_comic_reference_images",
+            self.copy_legacy_comic_reference_images,
+        )
+        migrated_references = copy_func(references)
         if len(migrated_references) != len(references):
             logger.warning(
                 "旧版漫画参考图尚未完整迁移，将保留原配置并在下次重载时重试。"
@@ -211,7 +231,10 @@ class ConfigMigrator:
             "use_plugin_specific_persona": (self.cm.get_use_plugin_specific_persona()),
             "plugin_specific_persona_id": specific_persona_id,
         }
-        if not self.cm._write_comic_config_backup(backup_data):
+        backup_func = getattr(
+            self.cm, "_write_comic_config_backup", self.write_comic_config_backup
+        )
+        if not backup_func(backup_data):
             logger.warning("旧版漫画参考图备份失败，将保留原配置并在下次重载时重试。")
             return
         daily_comic["comic_characters"] = [
@@ -302,6 +325,233 @@ class ConfigMigrator:
                 )
             except Exception as exc:
                 logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
+
+    def protect_upgrade_data(self) -> None:
+        """在插件升级且配置结构发生变更时备份旧配置。"""
+        plugin_root = self._get_plugin_root()
+        current_version = self.get_plugin_version(plugin_root)
+        current_schema_fingerprint = self.get_schema_fingerprint(plugin_root)
+        state_path = (
+            self.star_tools.get_data_dir(PLUGIN_NAME) / "upgrade_protection_state.json"
+        )
+        previous_state = self.read_upgrade_protection_state(state_path)
+        previous_version = str(previous_state.get("version", "")).strip()
+
+        if not previous_state:
+            logger.debug("升级保护基线已建立，后续配置结构变化时可备份本次快照。")
+
+        if previous_state.get(
+            "schema_fingerprint"
+        ) != current_schema_fingerprint and isinstance(
+            previous_state.get("config"), dict
+        ):
+            backup_func = getattr(
+                self.cm,
+                "_write_upgrade_config_backup",
+                self.write_upgrade_config_backup,
+            )
+            if not backup_func(previous_state["config"], previous_version):
+                logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
+                return
+
+        config_data = (
+            dict(self.cm.config)
+            if hasattr(self.cm, "config") and isinstance(self.cm.config, dict)
+            else {}
+        )
+        self.save_upgrade_protection_state(
+            state_path,
+            {
+                "version": current_version,
+                "schema_fingerprint": current_schema_fingerprint,
+                "config": config_data,
+            },
+        )
+
+    def _get_plugin_root(self) -> Path:
+        """获取插件根目录（支持测试替身覆盖 cm._get_plugin_root）。
+
+        Returns:
+            Path: 插件根目录路径。
+        """
+        if hasattr(self.cm, "_get_plugin_root") and callable(
+            getattr(self.cm, "_get_plugin_root")
+        ):
+            return self.cm._get_plugin_root()
+        return self.get_plugin_root()
+
+    @staticmethod
+    def get_plugin_root() -> Path:
+        """获取插件根目录。
+
+        Returns:
+            Path: 插件根目录绝对路径。
+        """
+        return Path(__file__).resolve().parents[3]
+
+    @staticmethod
+    def get_plugin_version(plugin_root: Path) -> str:
+        """从 metadata.yaml 读取当前插件版本。
+
+        Args:
+            plugin_root: 插件根目录路径。
+
+        Returns:
+            str: 版本号字符串，读取失败时返回 'unknown'。
+        """
+        try:
+            metadata = (plugin_root / "metadata.yaml").read_text(encoding="utf-8")
+            match = re.search(r"^version:\s*([^\s#]+)", metadata, re.MULTILINE)
+            if match:
+                return match.group(1)
+        except OSError as exc:
+            logger.warning(f"读取插件版本失败，将使用未知版本标识: {exc}")
+        return "unknown"
+
+    @staticmethod
+    def get_schema_fingerprint(plugin_root: Path) -> str:
+        """计算配置结构指纹，忽略描述等纯界面字段。
+
+        Args:
+            plugin_root: 插件根目录路径。
+
+        Returns:
+            str: 配置结构 SHA256 指纹。
+        """
+        try:
+            schema = json.loads(
+                (plugin_root / "_conf_schema.json").read_text(encoding="utf-8-sig")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(f"读取插件配置结构失败: {exc}")
+            return ""
+
+        def extract_shape(items: dict) -> dict:
+            shape = {}
+            for key, item in items.items():
+                if not isinstance(item, dict):
+                    continue
+                entry = {"type": item.get("type")}
+                for property_name in ("default", "options", "file_types"):
+                    if property_name in item:
+                        entry[property_name] = item[property_name]
+                if isinstance(item.get("items"), dict):
+                    entry["items"] = extract_shape(item["items"])
+                if isinstance(item.get("templates"), dict):
+                    entry["templates"] = {
+                        template_key: extract_shape(template.get("items", {}))
+                        for template_key, template in item["templates"].items()
+                        if isinstance(template, dict)
+                    }
+                shape[key] = entry
+            return shape
+
+        serialized_shape = json.dumps(
+            extract_shape(schema),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized_shape.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def read_upgrade_protection_state(state_path: Path) -> dict:
+        """读取上一次正常启动记录的升级保护状态。
+
+        Args:
+            state_path: 升级状态记录文件路径。
+
+        Returns:
+            dict: 升级保护状态字典。
+        """
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            return state if isinstance(state, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    @staticmethod
+    def save_upgrade_protection_state(state_path: Path, state: dict) -> None:
+        """原子保存升级保护状态。
+
+        Args:
+            state_path: 升级状态记录文件路径。
+            state: 待写入的状态字典。
+        """
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = state_path.with_suffix(".tmp")
+            temporary_path.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            temporary_path.replace(state_path)
+        except OSError as exc:
+            logger.warning(f"保存插件升级保护状态失败: {exc}")
+
+    @staticmethod
+    def write_upgrade_config_backup_data(
+        config: dict, version: str, star_tools: Any = None
+    ) -> bool:
+        """保存旧版本配置快照，并最多保留二十份。
+
+        Args:
+            config: 上一次正常加载时记录的插件配置快照。
+            version: 该配置快照对应的旧插件版本。
+            star_tools: Star 工具类替身或模块。
+
+        Returns:
+            bool: 备份写入并完成轮换时返回 True，否则返回 False。
+        """
+        try:
+            tools = star_tools or StarTools
+            backup_dir = tools.get_data_dir(PLUGIN_NAME) / "config_backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            safe_version = re.sub(r"[^A-Za-z0-9._-]", "_", version) or "unknown"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            backup_path = backup_dir / f"plugin_config_{safe_version}_{timestamp}.json"
+            backup_path.write_text(
+                json.dumps(
+                    {
+                        "backed_up_at": datetime.now().isoformat(),
+                        "plugin_version": version,
+                        "config": config,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            backups = sorted(
+                backup_dir.glob("plugin_config_*.json"),
+                key=lambda path: (path.stat().st_mtime, path.name),
+            )
+            for expired_backup in backups[:-20]:
+                expired_backup.unlink()
+            logger.info(
+                "检测到插件配置结构变化，已备份上一次正常启动保存的配置快照："
+                f"旧版本={version}，文件={backup_path.name}，路径={backup_path.resolve()}，"
+                f"当前保留={min(len(backups), 20)} 份。"
+            )
+            return True
+        except OSError as exc:
+            logger.warning(f"备份插件旧配置失败: {exc}")
+            return False
+
+    def write_upgrade_config_backup(
+        self, config: dict, version: str, star_tools: Any = None
+    ) -> bool:
+        """保存旧版本配置快照。
+
+        Args:
+            config: 上一次正常加载时记录的插件配置快照。
+            version: 该配置快照对应的旧插件版本。
+            star_tools: Star 工具类替身或模块。
+
+        Returns:
+            bool: 备份写入并完成轮换时返回 True，否则返回 False。
+        """
+        tools = star_tools or self.star_tools
+        return self.write_upgrade_config_backup_data(config, version, star_tools=tools)
 
     @staticmethod
     def is_legacy_default_comic_prompt(prompt: object) -> bool:
