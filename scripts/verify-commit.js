@@ -25,15 +25,14 @@ const nonWhitespaceCount = fullText.replace(/\s+/g, '').length;
 const header = cleanLines[0] || '';
 const headerMatch = header.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\(([^)]+)\))?:\s*(.+)/);
 
-// 1. DDD 架构分层、业务子领域与前端 WebUI Scope 结构化分类定义
+// 1. DDD 架构分层、业务子领域与前端 FSD 架构 Scope 结构化分类定义
 const SCOPE_CATEGORIES = {
-  '🏛️ 架构分层 (DDD Architectural Layers)': {
+  '🏛️ 后端 DDD 架构分层 (Backend DDD Architectural Layers)': {
     domain: '领域层核心 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
     app: '应用层 (用例编排, Application Services, Handlers, DTO)',
     application: '应用层完整别名 (同 app)',
     infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
     infrastructure: '基础设施层完整别名 (同 infra)',
-    webui: '展现层/WebUI 全栈 (前端页面组件, RESTful API 路由, 控制台交互)',
   },
   '🎯 后端业务子领域 (Backend Sub-domains)': {
     analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
@@ -44,19 +43,25 @@ const SCOPE_CATEGORIES = {
     scheduler: '调度与恢复子域 (Cron 任务, 增量分析, 熔断恢复, TaskGuard)',
     config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
   },
-  '🎨 前端 WebUI 子领域 (Frontend WebUI Modules)': {
-    'webui/dashboard': 'WebUI 仪表盘与概览视图 (指标大盘, 快捷操作)',
-    'webui/tasks': 'WebUI 任务管理面板 (队列监控, 执行日志, 手动触发)',
-    'webui/charts': 'WebUI 图表看板 (ECharts 趋势图, 词云图, 活跃度统计)',
-    'webui/settings': 'WebUI 配置表单 (参数设置, Schema 动态表单, 客户端校验)',
-    'webui/templates': 'WebUI 报告模板管理 (主题列表, 样式调试, 预览沙箱)',
-    'webui/components': 'WebUI 通用组件与工具库 (通用 Modal, Layout, Hooks)',
+  '🎨 前端 FSD 架构分层与切片 (Frontend Feature-Sliced Design)': {
+    webui: '展现层/WebUI 全栈 (前端整体改动或跨切片集成)',
+    'webui/app': 'FSD App 层 (应用根入口, Providers, 全局主题与样式)',
+    'webui/pages': 'FSD 页面层 (Overview, Traces, Reports, Config, Logs 等整页编排)',
+    'webui/widgets': 'FSD 小部件层 (ActiveTaskBoard, TrendCharts, TraceDrawer, ConfigForm 等)',
+    'webui/features': 'FSD 特征交互层 (TriggerTask, CancelTask, RerenderReport, InstallTemplate 等)',
+    'webui/entities': 'FSD 业务实体层 (Task, Trace, Report, Config, Group 状态与数据模型)',
+    'webui/shared': 'FSD 共享基建层 (UI 基础组件 StatusTag/MetricCard, API Client, Hooks, 工具库)',
+    'webui/tasks': 'FSD 任务业务切片 (对应 entities/task, features/trigger-task, widgets/active-task-board)',
+    'webui/traces': 'FSD 追踪业务切片 (对应 entities/trace, widgets/trace-table, widgets/trace-drawer)',
+    'webui/reports': 'FSD 报告业务切片 (对应 entities/report, features/rerender-report, widgets/report-preview-modal)',
+    'webui/charts': 'FSD 图表业务切片 (对应 widgets/trend-charts, widgets/token-chart-widget)',
+    'webui/config': 'FSD 配置业务切片 (对应 entities/config, widgets/config-form, features/install-template)',
   },
   '🛠️ 工程与基建 (Engineering & Infrastructure)': {
     test: '测试 (单元测试, 集成测试, Mock 桩代码)',
     tests: '测试别名 (同 test)',
     ci: '持续集成与门禁 (Git hooks, GitHub Actions, Linter 脚本)',
-    deps: '依赖管理 (第三方库版本升级, uv/pip 依赖锁)',
+    deps: '依赖管理 (第三方库版本升级, uv/pip/pnpm 依赖锁)',
     docs: '文档 (架构设计, 接口文档, 开发者指南)',
     core: '核心协议与规范 (基础常量, 全局上下文, 通用基建)',
     spec: '设计规范与契约定义',
@@ -66,11 +71,12 @@ const SCOPE_CATEGORIES = {
 // 扁平化所有明确注册的合法 Scope
 const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
 
-// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic）
+// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets）
 const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui'];
 const ALLOWED_SUBDOMAINS = [
   'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config',
-  'dashboard', 'tasks', 'charts', 'settings', 'templates', 'components', 'common'
+  'app', 'pages', 'widgets', 'features', 'entities', 'shared',
+  'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common'
 ];
 
 function isScopeValid(scope) {
@@ -89,20 +95,20 @@ function isScopeValid(scope) {
 const errors = [];
 
 if (!headerMatch) {
-  errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain): 增强值对象类型约束');
+  errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain/analysis): 增强分析值对象类型约束');
 } else {
   const scope = headerMatch[2];
   if (!scope) {
-    errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ...');
+    errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ... 或 feat(webui/widgets): ...');
   } else if (!isScopeValid(scope)) {
-    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或 WebUI 对应的 Scope：\n`;
+    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或前端 FSD 对应的 Scope：\n`;
     for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
       scopeHelp += `\n     ${catName}:\n`;
       for (const [sKey, sDesc] of Object.entries(scopes)) {
         scopeHelp += `       • ${sKey.padEnd(18)} -> ${sDesc}\n`;
       }
     }
-    scopeHelp += `\n     💡 也支持层级+子域复合表达，例如: domain/analysis, infra/platform, app/comic, webui/charts`;
+    scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, webui/features`;
     errors.push(scopeHelp.trimEnd());
   }
 }
@@ -115,7 +121,7 @@ try {
     const scope = headerMatch ? headerMatch[2] : null;
 
     if (scope && stagedFiles.length > 0) {
-      // 路径匹配规则集
+      // 路径匹配规则集（精确对齐 DDD 与 FSD 物理目录）
       const SCOPE_PATH_RULES = [
         {
           matchScope: (s) => s === 'domain' || s.startsWith('domain/'),
@@ -131,6 +137,61 @@ try {
           matchScope: (s) => s === 'platform' || s === 'infra/platform',
           matchFile: (f) => f.startsWith('src/infrastructure/platform/'),
           name: 'platform 平台通信子域 (src/infrastructure/platform/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/pages',
+          matchFile: (f) => f.startsWith('dashboard/src/pages/'),
+          name: 'webui/pages 页面层 (dashboard/src/pages/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/widgets',
+          matchFile: (f) => f.startsWith('dashboard/src/widgets/'),
+          name: 'webui/widgets 小部件层 (dashboard/src/widgets/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/features',
+          matchFile: (f) => f.startsWith('dashboard/src/features/'),
+          name: 'webui/features 特征交互层 (dashboard/src/features/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/entities',
+          matchFile: (f) => f.startsWith('dashboard/src/entities/'),
+          name: 'webui/entities 业务实体层 (dashboard/src/entities/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/shared',
+          matchFile: (f) => f.startsWith('dashboard/src/shared/'),
+          name: 'webui/shared 共享基建层 (dashboard/src/shared/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/app',
+          matchFile: (f) => f.startsWith('dashboard/src/app/'),
+          name: 'webui/app 应用入口层 (dashboard/src/app/)',
+        },
+        {
+          matchScope: (s) => s === 'webui/tasks',
+          matchFile: (f) => f.includes('task') && f.startsWith('dashboard/'),
+          name: 'webui/tasks 任务业务切片 (dashboard/src/**/task*)',
+        },
+        {
+          matchScope: (s) => s === 'webui/traces',
+          matchFile: (f) => f.includes('trace') && f.startsWith('dashboard/'),
+          name: 'webui/traces 追踪业务切片 (dashboard/src/**/trace*)',
+        },
+        {
+          matchScope: (s) => s === 'webui/reports',
+          matchFile: (f) => f.includes('report') && f.startsWith('dashboard/'),
+          name: 'webui/reports 报告业务切片 (dashboard/src/**/report*)',
+        },
+        {
+          matchScope: (s) => s === 'webui/charts',
+          matchFile: (f) => (f.includes('chart') || f.includes('trend')) && f.startsWith('dashboard/'),
+          name: 'webui/charts 图表业务切片 (dashboard/src/**/trend-charts*, token-chart*)',
+        },
+        {
+          matchScope: (s) => s === 'webui/config',
+          matchFile: (f) => f.includes('config') && f.startsWith('dashboard/'),
+          name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
         },
         {
           matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard',
@@ -261,8 +322,8 @@ if (errors.length > 0) {
   console.error('解决措施：建立 GroupAnalysisAggregate 聚合根并引入不可变增量快照状态机，结合 Checkpoint 防腐隔离重试逻辑与领域状态。');
   console.error('效果：消除并发读写冲突，内存峰值下降 45%，异常断点恢复成功率达 100%，Pyright 严格类型检查 0 报错。');
   console.error('');
-  console.error('【示例 2 - 展现层/WebUI 性能优化】');
-  console.error('perf(webui/charts): 重构历史词云与趋势看板，引入虚拟列表与分片渲染');
+  console.error('【示例 2 - 前端 FSD 小部件/性能优化】');
+  console.error('perf(webui/widgets): 重构 TrendCharts 趋势看板，引入 Web Worker 与分片渲染');
   console.error('');
   console.error('问题：单群历史消息超 50,000 条时，控制台全量挂载 ECharts 与交互表格造成主线程阻塞超 1.8s，低端设备频繁卡顿掉帧。');
   console.error('解决措施：基于 Web Worker 异步计算词频权重，看板图表采用 requestAnimationFrame 分片渲染，并对历史数据表接入虚拟滚动。');
