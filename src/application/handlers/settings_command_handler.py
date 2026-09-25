@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import time as time_mod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.event import AstrMessageEvent, MessageEventResult
     from astrbot.api.star import Context
 
     from ...domain.repositories.persistence_repository import IIncrementalStore
@@ -61,7 +61,7 @@ class SettingsCommandHandler:
 
     async def handle_set_output_format(
         self, event: AstrMessageEvent, format_input: str = ""
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /设置格式 命令。
 
         Args:
@@ -131,7 +131,7 @@ class SettingsCommandHandler:
 
     async def handle_set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /设置模板 命令。
 
         Args:
@@ -179,7 +179,7 @@ class SettingsCommandHandler:
 
     async def handle_view_templates(
         self, event: AstrMessageEvent, platform_id: str
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /查看模板 命令。
 
         Args:
@@ -226,7 +226,7 @@ class SettingsCommandHandler:
         action: str,
         group_id: str,
         platform_id: str,
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /分析设置 命令。
 
         Args:
@@ -257,9 +257,9 @@ class SettingsCommandHandler:
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
             return
         elif action == "test":
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
+            check_target = (
+                event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            )
 
             if not self.config_manager.is_group_allowed(check_target):
                 yield event.plain_result("❌ 请先启用当前群的分析功能")
@@ -303,9 +303,9 @@ class SettingsCommandHandler:
             yield event.plain_result(f"✅ 过滤机器人消息: {status_text}")
             return
         else:  # status
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
+            check_target = (
+                event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            )
 
             is_allowed = self.config_manager.is_group_allowed(check_target)
             status = "已启用" if is_allowed else "未启用"
@@ -347,7 +347,7 @@ class SettingsCommandHandler:
 
     async def handle_incremental_status(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /增量状态 命令。
 
         Args:
@@ -402,7 +402,7 @@ class SettingsCommandHandler:
 
     async def _handle_settings_enable(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理启用设置的分支逻辑。
 
         Args:
@@ -449,7 +449,7 @@ class SettingsCommandHandler:
 
     async def _handle_settings_disable(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理禁用设置的分支逻辑。
 
         Args:
