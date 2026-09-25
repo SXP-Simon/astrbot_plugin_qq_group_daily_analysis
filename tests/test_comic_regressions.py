@@ -59,6 +59,8 @@ def load_main_method(name: str):
     from src.application.handlers.settings_command_handler import (
         SettingsCommandHandler,
     )
+    from src.domain.repositories import PlatformAdapterProtocol
+    from src.domain.value_objects import AnalysisResultPayload
     from src.shared.trace_context import TraceContext
 
     namespace = {
@@ -70,6 +72,8 @@ def load_main_method(name: str):
         "SettingsCommandHandler": SettingsCommandHandler,
         "ComicCommandHandler": ComicCommandHandler,
         "AnalysisCommandHandler": AnalysisCommandHandler,
+        "PlatformAdapterProtocol": PlatformAdapterProtocol,
+        "AnalysisResultPayload": AnalysisResultPayload,
         "asyncio": asyncio,
         "datetime": datetime,
         "logger": Mock(),
@@ -205,7 +209,9 @@ def load_comic_service_method(name: str):
     isolated_module = ast.fix_missing_locations(
         ast.Module(body=[isolated_class], type_ignores=[])
     )
+    from collections.abc import Sequence
     from contextlib import nullcontext
+    from src.domain.value_objects import ComicStoryboard, SummaryTopic
     from src.shared.trace_context import TraceContext
 
     namespace = {
@@ -213,6 +219,9 @@ def load_comic_service_method(name: str):
         "mimetypes": mimetypes,
         "logger": Mock(),
         "Any": Any,
+        "Sequence": Sequence,
+        "SummaryTopic": SummaryTopic,
+        "ComicStoryboard": ComicStoryboard,
         "TraceContext": TraceContext,
         "nullcontext": nullcontext,
     }
@@ -372,13 +381,16 @@ def test_qq_official_webhook_uses_official_report_capabilities():
         adapter = SimpleNamespace(
             get_platform_name=Mock(return_value="qq_official_webhook")
         )
+        mock_comic_trigger = Mock()
         plugin = SimpleNamespace(
             _terminating=False,
             config_manager=SimpleNamespace(
                 get_output_format=Mock(return_value=["text"])
             ),
             _send_text_reports=AsyncMock(return_value=True),
-            _try_trigger_comic_generation=Mock(),
+            comic_command_handler=SimpleNamespace(
+                try_trigger_comic_generation=mock_comic_trigger
+            ),
         )
         result = {
             "group_id": "123456",
@@ -391,9 +403,7 @@ def test_qq_official_webhook_uses_official_report_capabilities():
             pass
 
         assert plugin._send_text_reports.await_args.args[2] is True
-        plugin._try_trigger_comic_generation.assert_called_once_with(
-            "123456", "qq-official-main", {}
-        )
+        mock_comic_trigger.assert_called_once_with("123456", "qq-official-main", {})
 
     asyncio.run(scenario())
 

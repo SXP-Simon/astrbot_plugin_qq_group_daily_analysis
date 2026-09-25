@@ -11,12 +11,13 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ...shared.constants import AnalysisStage, TaskStatus
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from ...domain.value_objects import AnalysisResultPayload
     from ...infrastructure.persistence.checkpoint_store import CheckpointStore
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
     from ...infrastructure.reporting.dispatcher import ReportDispatcher
@@ -148,7 +149,9 @@ class CrashRecoveryService:
                             and isinstance(analysis_result, dict)
                         ):
                             await self.report_dispatcher.dispatch(
-                                group_id, analysis_result, actual_platform_id
+                                group_id,
+                                cast("AnalysisResultPayload", analysis_result),
+                                actual_platform_id,
                             )
                             logger.info(
                                 f"[CrashRecovery] 任务 {trace_id} (群 {group_id}) 当天自愈恢复成功并已投递群聊"

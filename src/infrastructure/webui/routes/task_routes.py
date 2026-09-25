@@ -6,7 +6,7 @@ WebUI 任务管理路由 (Task Routes)
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
+    from ....domain.value_objects import AnalysisResultPayload
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
     from ...reporting.dispatcher import ReportDispatcher
     from ..active_task_manager import ActiveTaskManager
@@ -218,7 +219,7 @@ class TaskRoutes:
                         ):
                             await self.report_dispatcher.dispatch(
                                 group_id,
-                                analysis_result,
+                                cast("AnalysisResultPayload", analysis_result),
                                 dispatch_platform_id,
                             )
                     except Exception as dispatch_err:
@@ -396,7 +397,7 @@ class TaskRoutes:
                         ):
                             await self.report_dispatcher.dispatch(
                                 group_id,
-                                analysis_result,
+                                cast("AnalysisResultPayload", analysis_result),
                                 dispatch_platform_id,
                             )
                     except Exception as dispatch_err:

@@ -32,6 +32,7 @@ from .profile_mappings import resolve_profile_info
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
     from ..visualization.activity_charts import ActivityVisualizer
     from .avatar_service import AvatarService
@@ -83,7 +84,7 @@ class RenderDataPreparer:
         return {}
 
     def sanitize_analysis_result_for_export(
-        self, analysis_result: dict
+        self, analysis_result: AnalysisResultPayload
     ) -> dict[str, object]:
         """导出 HTML Sidecar JSON 前脱敏敏感身份信息。
 
@@ -153,7 +154,7 @@ class RenderDataPreparer:
         return value
 
     def sanitize_export_identity_text(
-        self, value: object, analysis_result: dict
+        self, value: object, analysis_result: AnalysisResultPayload
     ) -> object:
         """从导出的文本字段中去除用户名称与 ID。
 
@@ -180,7 +181,7 @@ class RenderDataPreparer:
 
     async def prepare_render_data(
         self,
-        analysis_result: dict,
+        analysis_result: AnalysisResultPayload,
         template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
         avatar_url_getter: Callable | None = None,
@@ -188,7 +189,7 @@ class RenderDataPreparer:
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
-    ) -> dict:
+    ) -> dict[str, object]:
         """组装模板引擎所需的完整数据字典。
 
         Args:
@@ -224,11 +225,11 @@ class RenderDataPreparer:
         max_user_titles = self.config_manager.get_max_user_titles()
         max_golden_quotes = self.config_manager.get_max_golden_quotes()
         for title in user_titles[:max_user_titles]:
-            user_id = str(getattr(title, "user_id", "") or "").strip()
+            user_id = str(title.user_id or "").strip()
             if user_id:
                 avatar_user_ids.add(user_id)
         for golden_quote in stats.golden_quotes[:max_golden_quotes]:
-            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
+            user_id = str(golden_quote.user_id or "").strip()
             if user_id:
                 avatar_user_ids.add(user_id)
         mention_sources = []
@@ -236,18 +237,17 @@ class RenderDataPreparer:
             if hide_user_names:
                 avatar_user_ids.update(
                     str(user_id).strip()
-                    for user_id in (getattr(topic, "contributor_ids", []) or [])
+                    for user_id in (topic.contributor_ids or [])
                     if str(user_id).strip()
                 )
-            mention_sources.append(str(getattr(topic, "detail", "") or ""))
+            mention_sources.append(str(topic.detail or ""))
         mention_sources.extend(
-            str(getattr(golden_quote, "reason", "") or "")
+            str(golden_quote.reason or "")
             for golden_quote in stats.golden_quotes[:max_golden_quotes]
         )
         if hide_user_names:
             mention_sources.extend(
-                str(getattr(title, "reason", "") or "")
-                for title in user_titles[:max_user_titles]
+                str(title.reason or "") for title in user_titles[:max_user_titles]
             )
         for source in mention_sources:
             avatar_user_ids.update(
@@ -279,7 +279,7 @@ class RenderDataPreparer:
             )
             if hide_user_names:
                 contributors = await self.render_avatar_only_ids(
-                    getattr(topic, "contributor_ids", []) or [],
+                    topic.contributor_ids or [],
                     avatar_url_getter,
                     avatar_cache_namespace,
                     avatar_reuse_registry,
@@ -751,7 +751,7 @@ class RenderDataPreparer:
 
     @staticmethod
     def sanitize_identity_text(
-        text: str, analysis_result: dict, hide_user_names: bool
+        text: str, analysis_result: AnalysisResultPayload, hide_user_names: bool
     ) -> str:
         """从字符串中消除用户标识。
 

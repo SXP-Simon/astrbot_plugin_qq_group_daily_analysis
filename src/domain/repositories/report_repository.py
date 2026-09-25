@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from ...infrastructure.reporting.templates import HTMLTemplates
+    from ..value_objects import AnalysisResultPayload
 
 
 class IReportGenerator(ABC):
@@ -22,7 +23,7 @@ class IReportGenerator(ABC):
     @abstractmethod
     async def generate_image_report(
         self,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         group_id: str,
         html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
         avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
@@ -38,7 +39,7 @@ class IReportGenerator(ABC):
     @abstractmethod
     async def generate_html_report(
         self,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         group_id: str,
         avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
         | None = None,
@@ -53,7 +54,7 @@ class IReportGenerator(ABC):
         """生成 HTML 报告。"""
 
     @abstractmethod
-    def generate_text_report(self, analysis_result: dict[str, object]) -> str:
+    def generate_text_report(self, analysis_result: AnalysisResultPayload) -> str:
         """生成文本报告。"""
 
     @abstractmethod

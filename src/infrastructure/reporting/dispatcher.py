@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         GroupAlbumSupportProtocol,
         GroupFileSupportProtocol,
     )
+    from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
     from ..messaging.message_sender import MessageSender
     from ..platform.adapters.onebot_adapter import OneBotAdapter
@@ -63,7 +64,7 @@ class ReportDispatcher:
     async def dispatch(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         platform_id: str | None = None,
     ) -> bool:
         """分发分析报告，并返回至少一种格式是否实际发送成功。"""
@@ -111,7 +112,7 @@ class ReportDispatcher:
     async def _dispatch_image(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         platform_id: str | None,
     ) -> bool:
         trace_id = TraceContext.get()
@@ -331,7 +332,7 @@ class ReportDispatcher:
     async def _dispatch_html(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         platform_id: str | None,
     ) -> bool:
         trace_id = TraceContext.get()
@@ -523,7 +524,7 @@ class ReportDispatcher:
     async def _dispatch_text(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         platform_id: str | None,
     ) -> bool:
         """分发文本报告"""

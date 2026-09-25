@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
+    from ...domain.value_objects import AnalysisResultPayload
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -229,19 +230,7 @@ class ComicCommandHandler:
                     yield event.plain_result("❌ 漫画话题提取失败，原因未知")
                 return
 
-            trigger_fn = self.try_trigger_comic_generation
-            if self.plugin_instance:
-                inst_fn = getattr(
-                    self.plugin_instance, "_try_trigger_comic_generation", None
-                )
-                if inst_fn is not None and (
-                    hasattr(inst_fn, "assert_called")
-                    or hasattr(inst_fn, "_mock_name")
-                    or type(inst_fn).__name__ in ("Mock", "MagicMock", "AsyncMock")
-                ):
-                    trigger_fn = inst_fn
-
-            status = trigger_fn(
+            status = self.try_trigger_comic_generation(
                 group_id,
                 platform_id,
                 {"topics": result.get("topics", [])},
@@ -312,7 +301,7 @@ class ComicCommandHandler:
         self,
         group_id: str,
         platform_id: str | None,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload | dict[str, object],
         *,
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,

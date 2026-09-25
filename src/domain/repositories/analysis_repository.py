@@ -9,7 +9,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from ..value_objects import (
+        ComicStoryboard,
         GoldenQuote,
         QualityReview,
         SummaryTopic,
@@ -85,7 +88,7 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def summarize_quality_reviews(
         self,
-        batch_reviews: list[dict],
+        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个聊天质量报告（增量模式使用）"""
@@ -93,11 +96,11 @@ class IAnalysisProvider(ABC):
     @abstractmethod
     async def analyze_comic_storyboards(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
-    ) -> tuple[list[dict], TokenUsage]:
+    ) -> tuple[list[ComicStoryboard] | list[dict[str, str]], TokenUsage]:
         """分析并生成漫画分镜提示词"""
 
     @abstractmethod

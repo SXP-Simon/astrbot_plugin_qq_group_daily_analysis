@@ -54,6 +54,9 @@ class MockConfigManager:
     def get_t2i_max_concurrent(self):
         return 2
 
+    def get_custom_report_template_dir(self, template_name: str | None = None):
+        return None
+
 
 async def fake_avatar(uid, ns=None):
     return None

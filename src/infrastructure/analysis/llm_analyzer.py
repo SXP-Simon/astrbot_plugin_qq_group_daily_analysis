@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
+    ComicStoryboard,
     GoldenQuote,
     QualityReview,
     SummaryTopic,
@@ -28,6 +29,9 @@ from .utils.json_utils import fix_json
 from .utils.llm_utils import call_provider_with_retry
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from astrbot.api.provider import LLMResponse
     from astrbot.api.star import Context
 
     from ..config.config_manager import ConfigManager
@@ -143,11 +147,11 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_comic_storyboards(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
-    ) -> tuple[list[dict], TokenUsage]:
+    ) -> tuple[list[ComicStoryboard] | list[dict[str, str]], TokenUsage]:
         """使用 LLM 分析并生成漫画分镜和绘画提示词。
 
         Args:
@@ -184,7 +188,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def summarize_quality_reviews(
         self,
-        batch_reviews: list[dict],
+        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个质量分析报告（增量模式使用）"""
@@ -614,17 +618,15 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def _call_provider_with_retry(
         self,
-        provider: object,
+        _provider: object | None,
         prompt: str,
         umo: str | None = None,
         provider_id_key: str | None = None,
-    ) -> object:
-        """
-        向后兼容的LLM调用方法
-        现在委托给llm_utils模块处理
+    ) -> LLMResponse | None:
+        """向后兼容的LLM调用方法，现在委托给llm_utils模块处理。
 
         Args:
-            provider: LLM服务商实例或None（已弃用，现在使用 provider_id_key）
+            _provider: LLM服务商实例或None（已弃用，现在使用 provider_id_key）
             prompt: 输入的提示语
             umo: 指定使用的模型唯一标识符
             provider_id_key: 配置中的 provider_id 键名（可选）

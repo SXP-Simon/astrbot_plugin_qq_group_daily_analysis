@@ -11,7 +11,7 @@ import time as time_mod
 from typing import TYPE_CHECKING
 
 from ...domain.services.message_cleaner_service import MessageCleanerService
-from ...domain.value_objects import TokenUsage
+from ...domain.value_objects import AnalysisResultPayload, TokenUsage
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -737,7 +737,7 @@ class AnalysisApplicationService:
 
     def _deserialize_analysis_result(
         self, data: dict[str, object]
-    ) -> dict[str, object]:
+    ) -> AnalysisResultPayload:
         """反序列化 JSON 结构为领域模型字典。"""
         return AnalysisResultSerializer.deserialize(data)
 

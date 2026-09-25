@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ...domain.value_objects import ComicStoryboard
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
@@ -14,9 +15,12 @@ from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from astrbot.api.star import Context
 
     from ...domain.repositories.analysis_repository import IAnalysisProvider
+    from ...domain.value_objects import SummaryTopic
     from ...infrastructure.config.config_manager import ConfigManager
 
 
@@ -50,7 +54,7 @@ class ComicApplicationService:
 
     async def generate_comic(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         group_id: str,
         umo: str | None = None,
     ) -> tuple[bytes | None, str | None]:
@@ -99,13 +103,21 @@ class ComicApplicationService:
                         if "comic" in str(k) or str(k) == "comic_storyboards":
                             sb_prompts[str(k)] = p
                 if not sb_prompts and storyboards:
+                    first_sb = storyboards[0] if storyboards else None
+                    first_scene = (
+                        (
+                            first_sb.scene
+                            if isinstance(first_sb, ComicStoryboard)
+                            else first_sb.get("scene", "")
+                        )
+                        if first_sb
+                        else ""
+                    )
                     sb_prompts["comic_storyboards"] = {
                         "prompt": prompt_template
                         or "自动从群聊话题中提取漫画多格分镜与生图提示词",
                         "system_prompt": f"漫画分镜师 | 人格: {persona_id or character_name}",
-                        "completion": storyboards[0].get("scene", "")
-                        if storyboards
-                        else "",
+                        "completion": first_scene,
                         "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
                         "completion_tokens": getattr(
                             storyboard_usage, "completion_tokens", 0
@@ -137,7 +149,12 @@ class ComicApplicationService:
         logger.info("[Comic] 成功提取到全景分镜提示词，开始调用绘画 API...")
 
         # 2. 直接生成一张图片
-        scene_prompt = storyboards[0].get("scene", "")
+        first_sb = storyboards[0]
+        scene_prompt = (
+            first_sb.scene
+            if isinstance(first_sb, ComicStoryboard)
+            else first_sb.get("scene", "")
+        )
         if not scene_prompt:
             logger.error("[Comic] 提取到的场景提示词为空，取消漫画生成。")
             return None, None

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
 from ..platform.factory import PlatformAdapterFactory
@@ -167,7 +167,7 @@ class ScheduledTargetResolver:
             except Exception as e:
                 logger.warning(f"[AutoScheduler] 周期性扫描中的平台发现失败: {e}")
 
-        bot_instances: dict[str, Any] = getattr(self.bot_manager, "_bot_instances", {})
+        bot_instances = self.bot_manager.get_all_bot_instances()
         bot_ids = list(bot_instances.keys())
 
         if not bot_ids:

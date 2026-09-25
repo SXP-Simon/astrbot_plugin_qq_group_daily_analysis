@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from diskcache import Cache
     from markupsafe import Markup
 
+    from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
 
 
@@ -187,7 +188,7 @@ class ReportGenerator(IReportGenerator):
 
     async def generate_image_report(
         self,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         group_id: str,
         html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
         avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
@@ -244,10 +245,12 @@ class ReportGenerator(IReportGenerator):
             html_content = self.html_templates.render_template(
                 "image_template.html", template_theme=template_theme, **render_payload
             )
+            avatar_registry = render_payload.get("avatar_reuse_registry")
+            avatar_aliases = render_payload.get("avatar_reuse_aliases")
             html_content = self._reuse_avatars_in_final_html(
                 html_content,
-                render_payload.get("avatar_reuse_registry", {}),
-                render_payload.get("avatar_reuse_aliases", {}),
+                avatar_registry if isinstance(avatar_registry, dict) else None,
+                avatar_aliases if isinstance(avatar_aliases, dict) else None,
             )
             template_render_ms = round(
                 (time.perf_counter() - tpl_render_start_ts) * 1000, 2
@@ -376,19 +379,17 @@ class ReportGenerator(IReportGenerator):
                                             == AnalysisStage.RENDER_REPORT.value
                                         ):
                                             payload = s.setdefault("payload", {})
-                                            topics_raw = analysis_result.get("topics")
-                                            titles_raw = analysis_result.get(
-                                                "user_titles"
+                                            topics_raw = (
+                                                analysis_result.get("topics") or []
+                                            )
+                                            titles_raw = (
+                                                analysis_result.get("user_titles") or []
                                             )
                                             stats_raw = analysis_result.get(
                                                 "statistics"
                                             )
                                             golden_quotes_raw = (
-                                                getattr(
-                                                    stats_raw,
-                                                    "golden_quotes",
-                                                    [],
-                                                )
+                                                stats_raw.golden_quotes
                                                 if stats_raw
                                                 else []
                                             )
@@ -409,27 +410,24 @@ class ReportGenerator(IReportGenerator):
                                                     "template_render_ms": template_render_ms,
                                                     "html_size_kb": html_size_kb,
                                                     "t2i_render_ms": t2i_render_ms,
-                                                    "topics_rendered": len(topics_raw)
-                                                    if isinstance(
-                                                        topics_raw, (list, tuple)
-                                                    )
-                                                    else 0,
-                                                    "titles_rendered": len(titles_raw)
-                                                    if isinstance(
-                                                        titles_raw, (list, tuple)
-                                                    )
-                                                    else 0,
+                                                    "topics_rendered": len(topics_raw),
+                                                    "titles_rendered": len(titles_raw),
                                                     "quotes_rendered": len(
                                                         golden_quotes_raw
-                                                    )
-                                                    if isinstance(
-                                                        golden_quotes_raw, (list, tuple)
-                                                    )
-                                                    else 0,
-                                                    "avatars_processed": len(
-                                                        render_payload.get(
-                                                            "avatar_reuse_registry", {}
+                                                    ),
+                                                    "avatars_processed": (
+                                                        len(
+                                                            render_payload[
+                                                                "avatar_reuse_registry"
+                                                            ]  # type: ignore[arg-type]
                                                         )
+                                                        if isinstance(
+                                                            render_payload.get(
+                                                                "avatar_reuse_registry"
+                                                            ),
+                                                            (dict, list, set),
+                                                        )
+                                                        else 0
                                                     ),
                                                     "html_chars": len(html_content)
                                                     if html_content
@@ -540,7 +538,7 @@ class ReportGenerator(IReportGenerator):
 
     async def generate_html_report(
         self,
-        analysis_result: dict,
+        analysis_result: AnalysisResultPayload,
         group_id: str,
         avatar_url_getter: Callable | None = None,
         nickname_getter: Callable | None = None,
@@ -623,15 +621,18 @@ class ReportGenerator(IReportGenerator):
             )
             logger.debug(f"HTML 渲染数据准备完成，包含 {len(render_data)} 个字段")
 
-            html_content = None
+            avatar_registry = render_data.get("avatar_reuse_registry")
+            avatar_aliases = render_data.get("avatar_reuse_aliases")
+            reg_dict = avatar_registry if isinstance(avatar_registry, dict) else None
+            alias_dict = avatar_aliases if isinstance(avatar_aliases, dict) else None
             try:
                 html_content = self.html_templates.render_template(
                     "html_template.html", template_theme=template_theme, **render_data
                 )
                 html_content = self._reuse_avatars_in_final_html(
                     html_content,
-                    render_data.get("avatar_reuse_registry", {}),
-                    render_data.get("avatar_reuse_aliases", {}),
+                    reg_dict,
+                    alias_dict,
                 )
                 logger.debug("使用 html_template.html 渲染成功")
             except Exception as e:
@@ -643,8 +644,8 @@ class ReportGenerator(IReportGenerator):
                 )
                 html_content = self._reuse_avatars_in_final_html(
                     html_content,
-                    render_data.get("avatar_reuse_registry", {}),
-                    render_data.get("avatar_reuse_aliases", {}),
+                    reg_dict,
+                    alias_dict,
                 )
                 logger.debug("使用 image_template.html 渲染成功")
 
@@ -700,29 +701,28 @@ class ReportGenerator(IReportGenerator):
             if trace_ctx:
                 for s in reversed(trace_ctx._spans):
                     if s.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
-                        topics_rendered = analysis_result.get("topics")
-                        titles_rendered = analysis_result.get("user_titles")
+                        topics_rendered = analysis_result.get("topics") or []
+                        titles_rendered = analysis_result.get("user_titles") or []
                         stats_obj = analysis_result.get("statistics")
-                        golden_quotes = (
-                            getattr(stats_obj, "golden_quotes", []) if stats_obj else []
-                        )
+                        golden_quotes = stats_obj.golden_quotes if stats_obj else []
                         s.setdefault("payload", {}).update(
                             {
                                 "format": "html",
                                 "template": template_theme or "scrapbook",
                                 "html_chars": len(html_content) if html_content else 0,
                                 "html_file": html_path.name,
-                                "topics_rendered": len(topics_rendered)
-                                if isinstance(topics_rendered, (list, tuple))
-                                else 0,
-                                "titles_rendered": len(titles_rendered)
-                                if isinstance(titles_rendered, (list, tuple))
-                                else 0,
-                                "quotes_rendered": len(golden_quotes)
-                                if isinstance(golden_quotes, (list, tuple))
-                                else 0,
-                                "avatars_processed": len(
-                                    render_data.get("avatar_reuse_registry", {})
+                                "topics_rendered": len(topics_rendered),
+                                "titles_rendered": len(titles_rendered),
+                                "quotes_rendered": len(golden_quotes),
+                                "avatars_processed": (
+                                    len(
+                                        render_data["avatar_reuse_registry"]  # type: ignore[arg-type]
+                                    )
+                                    if isinstance(
+                                        render_data.get("avatar_reuse_registry"),
+                                        (dict, list, set),
+                                    )
+                                    else 0
                                 ),
                                 "hide_user_names": bool(hide_user_names),
                             }
@@ -787,7 +787,7 @@ class ReportGenerator(IReportGenerator):
         encoded_relative_url = quote(relative_url, safe="/")
         return caption + f"\n{base_url.rstrip('/')}/{encoded_relative_url}"
 
-    def generate_text_report(self, analysis_result: dict) -> str:
+    def generate_text_report(self, analysis_result: AnalysisResultPayload) -> str:
         """生成纯文本格式的分析报告。
 
         Args:
@@ -835,7 +835,9 @@ class ReportGenerator(IReportGenerator):
         return report
 
     async def generate_qq_official_markdown_report(
-        self, analysis_result: dict, html_render_func: Callable | None = None
+        self,
+        analysis_result: AnalysisResultPayload,
+        html_render_func: Callable | None = None,
     ) -> tuple[str, str]:
         """委托 QQ 官方机器人专属生成器构建 Markdown 报告。
 
@@ -926,7 +928,7 @@ class ReportGenerator(IReportGenerator):
         self._preparer = val
 
     def _sanitize_analysis_result_for_export(
-        self, analysis_result: dict
+        self, analysis_result: AnalysisResultPayload
     ) -> dict[str, object]:
         """导出 HTML Sidecar JSON 前脱敏敏感身份信息。"""
         return self._preparer_service.sanitize_analysis_result_for_export(
@@ -939,7 +941,7 @@ class ReportGenerator(IReportGenerator):
         return RenderDataPreparer.to_plain_export_data(value)
 
     def _sanitize_export_identity_text(
-        self, value: object, analysis_result: dict
+        self, value: object, analysis_result: AnalysisResultPayload
     ) -> object:
         """从导出的文本字段中去除用户名称与 ID。"""
         return self._preparer_service.sanitize_export_identity_text(
@@ -948,7 +950,7 @@ class ReportGenerator(IReportGenerator):
 
     async def _prepare_render_data(
         self,
-        analysis_result: dict,
+        analysis_result: AnalysisResultPayload,
         template_theme: str | None = None,
         chart_template: str = "activity_chart.html",
         avatar_url_getter: Callable | None = None,
@@ -956,7 +958,7 @@ class ReportGenerator(IReportGenerator):
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
-    ) -> dict:
+    ) -> dict[str, object]:
         """组装模板引擎所需的完整数据字典。"""
         return await self._preparer_service.prepare_render_data(
             analysis_result=analysis_result,
@@ -1013,7 +1015,7 @@ class ReportGenerator(IReportGenerator):
 
     @staticmethod
     def _sanitize_identity_text(
-        text: str, analysis_result: dict, hide_user_names: bool
+        text: str, analysis_result: AnalysisResultPayload, hide_user_names: bool
     ) -> str:
         """从字符串中消除用户标识。"""
         return RenderDataPreparer.sanitize_identity_text(

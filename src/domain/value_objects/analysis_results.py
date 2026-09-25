@@ -162,6 +162,25 @@ class QualityReview:
 
 
 @dataclass
+class ComicStoryboard:
+    """漫画分镜场景值对象。
+
+    Attributes:
+        scene: 分镜画面生图提示词/场景描述。
+    """
+
+    scene: str
+
+    def is_valid(self) -> bool:
+        """检查分镜场景是否有效。
+
+        Returns:
+            bool: 场景描述非空时返回 True。
+        """
+        return bool(self.scene and self.scene.strip())
+
+
+@dataclass
 class TokenUsage:
     """LLM Token 消耗统计值对象。
 
@@ -284,14 +303,14 @@ class ComicTopic:
         }
 
 
-class AnalysisResultPayload(TypedDict, total=False):
+class AnalysisResultPayload(TypedDict):
     """领域分析结果字典快照契约"""
 
-    statistics: object
-    topics: list[object]
-    user_titles: list[object]
+    statistics: GroupStatistics
+    topics: list[SummaryTopic]
+    user_titles: list[UserTitle]
     user_analysis: dict[str, object]
-    chat_quality_review: object | None
+    chat_quality_review: QualityReview | None
 
 
 class GroupHistoryTopicPayload(TypedDict):
@@ -431,7 +450,7 @@ class DailyAnalysisExecutionResult(TypedDict, total=False):
     success: bool
     reason: str
     error: str
-    analysis_result: dict[str, object]
+    analysis_result: AnalysisResultPayload
     messages_count: int
     adapter: PlatformAdapterProtocol
     group_id: str

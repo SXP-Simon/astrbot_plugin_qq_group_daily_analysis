@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from astrbot.api.event import MessageEventResult
 
     from .src.domain.repositories import PlatformAdapterProtocol
+    from .src.domain.value_objects import AnalysisResultPayload
 
 
 class GroupDailyAnalysis(Star):
@@ -613,7 +614,7 @@ class GroupDailyAnalysis(Star):
     async def _send_text_reports(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         is_qq_official: bool,
         adapter: PlatformAdapterProtocol,
     ) -> None:
@@ -625,7 +626,7 @@ class GroupDailyAnalysis(Star):
         self,
         group_id: str,
         platform_id: str | None,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         *,
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,

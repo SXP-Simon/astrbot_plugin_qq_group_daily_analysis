@@ -12,6 +12,7 @@ from datetime import date, datetime, time
 
 from ...domain.value_objects import (
     ActivityVisualization,
+    AnalysisResultPayload,
     EmojiStatistics,
     GoldenQuote,
     GroupStatistics,
@@ -84,7 +85,7 @@ class AnalysisResultSerializer:
         }
 
     @classmethod
-    def deserialize(cls, data: dict[str, object]) -> dict[str, object]:
+    def deserialize(cls, data: dict[str, object]) -> AnalysisResultPayload:
         """将持久化的 JSON 快照还原为包含领域数据模型的 analysis_result。
 
         Args:
@@ -166,10 +167,15 @@ class AnalysisResultSerializer:
             if isinstance(t, (dict, UserTitle))
         ]
 
+        raw_user_analysis = data.get("user_analysis")
+        user_analysis: dict[str, object] = (
+            raw_user_analysis if isinstance(raw_user_analysis, dict) else {}
+        )
+
         return {
             "statistics": stats,
             "topics": topics,
             "user_titles": user_titles,
-            "user_analysis": data.get("user_analysis", {}),
+            "user_analysis": user_analysis,
             "chat_quality_review": quality_review,
         }

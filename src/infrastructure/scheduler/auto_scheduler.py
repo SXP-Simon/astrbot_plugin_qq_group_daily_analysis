@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time as time_mod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
+    from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
     from ..platform.bot_manager import BotManager
     from ..reporting.generators import ReportGenerator
@@ -518,8 +519,9 @@ class AutoScheduler:
 
             # 获取分析结果及适配器
             raw_analysis = result.get("analysis_result")
-            analysis_result: dict[str, object] = (
-                raw_analysis if isinstance(raw_analysis, dict) else {}
+            analysis_result = cast(
+                "AnalysisResultPayload",
+                raw_analysis if isinstance(raw_analysis, dict) else {},
             )
             adapter = result.get("adapter")
             dispatch_platform_id = (
@@ -529,14 +531,11 @@ class AutoScheduler:
             )
 
             # 调度导出并发送报告
-            comic_trigger = getattr(
-                self.plugin_instance,
-                "_try_trigger_comic_generation",
-                None,
-            )
-            if callable(comic_trigger):
+            if self.plugin_instance is not None:
                 try:
-                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                    self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
+                        group_id, dispatch_platform_id, analysis_result
+                    )
                 except Exception as exc:
                     logger.error(
                         f"群 {group_id} 触发定时报告漫画失败: {exc}", exc_info=True
@@ -1023,8 +1022,9 @@ class AutoScheduler:
 
             # 获取分析结果及适配器，分发报告
             raw_analysis = result.get("analysis_result")
-            analysis_result: dict[str, object] = (
-                raw_analysis if isinstance(raw_analysis, dict) else {}
+            analysis_result = cast(
+                "AnalysisResultPayload",
+                raw_analysis if isinstance(raw_analysis, dict) else {},
             )
             adapter = result.get("adapter")
             dispatch_platform_id = (

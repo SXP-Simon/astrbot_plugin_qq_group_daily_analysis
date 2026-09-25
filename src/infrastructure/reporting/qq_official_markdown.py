@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import asyncio
     from collections.abc import Awaitable, Callable
 
+    from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
     from .templates import HTMLTemplates
 
@@ -31,7 +32,7 @@ class QQOfficialMarkdownReportGenerator:
 
     async def generate(
         self,
-        analysis_result: dict,
+        analysis_result: AnalysisResultPayload,
         html_render_func: Callable[..., Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
         """Generate QQ Markdown and a URL-free Markdown fallback report."""
@@ -54,7 +55,7 @@ class QQOfficialMarkdownReportGenerator:
 
     async def _generate_summary_dashboard_url(
         self,
-        analysis_result: dict,
+        analysis_result: AnalysisResultPayload,
         html_render_func: Callable[..., Awaitable[str | None]],
     ) -> str | None:
         if not self.html_templates:
@@ -125,7 +126,9 @@ class QQOfficialMarkdownReportGenerator:
             return None
 
     def _generate_markdown_report(
-        self, analysis_result: dict, summary_dashboard_url: str | None = None
+        self,
+        analysis_result: AnalysisResultPayload,
+        summary_dashboard_url: str | None = None,
     ) -> str:
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -279,7 +282,9 @@ class QQOfficialMarkdownReportGenerator:
         return " ".join(cls.mention(user_id) for user_id in unique_ids)
 
     @classmethod
-    def render_identity_text(cls, text: object, analysis_result: dict) -> str:
+    def render_identity_text(
+        cls, text: object, analysis_result: AnalysisResultPayload
+    ) -> str:
         """Replace known IDs and display names with QQ mention syntax."""
         source = str(text or "")
         user_analysis = analysis_result.get("user_analysis") or {}
@@ -298,21 +303,22 @@ class QQOfficialMarkdownReportGenerator:
             id_to_names[normalized_id] = names
 
         for title in analysis_result.get("user_titles", []) or []:
-            user_id = str(getattr(title, "user_id", "") or "").strip()
-            name = str(getattr(title, "name", "") or "").strip()
+            user_id = str(title.user_id or "").strip()
+            name = str(title.name or "").strip()
             if user_id:
                 id_to_names.setdefault(user_id, set())
                 if name and name != user_id:
                     id_to_names[user_id].add(name)
 
         stats = analysis_result.get("statistics")
-        for golden_quote in getattr(stats, "golden_quotes", []) or []:
-            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
-            name = str(getattr(golden_quote, "sender", "") or "").strip()
-            if user_id:
-                id_to_names.setdefault(user_id, set())
-                if name and name != user_id:
-                    id_to_names[user_id].add(name)
+        if stats:
+            for golden_quote in stats.golden_quotes or []:
+                user_id = str(golden_quote.user_id or "").strip()
+                name = str(golden_quote.sender or "").strip()
+                if user_id:
+                    id_to_names.setdefault(user_id, set())
+                    if name and name != user_id:
+                        id_to_names[user_id].add(name)
 
         placeholders: dict[str, str] = {}
 

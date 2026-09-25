@@ -413,7 +413,9 @@ async def test_generate_group_comic_success_trigger(plugin):
     )
 
     with patch.object(
-        plugin, "_try_trigger_comic_generation", return_value="started"
+        plugin.comic_command_handler,
+        "try_trigger_comic_generation",
+        return_value="started",
     ) as mock_trigger:
         results = []
         async for res in plugin.generate_group_comic(event):

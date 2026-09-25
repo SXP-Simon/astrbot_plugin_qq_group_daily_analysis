@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING
 
 from astrbot.api.star import StarTools
 
-from ...domain.value_objects import GroupStatistics, TokenUsage
+from ...domain.value_objects import (
+    AnalysisResultPayload,
+    GroupStatistics,
+    TokenUsage,
+)
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -103,12 +107,17 @@ class AnalysisRecoveryService:
         Returns:
             包含渲染结果与生成文件路径的字典。
         """
-        analysis_result = None
+        analysis_result: AnalysisResultPayload | None = None
         if self.history_manager:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data:
-                    analysis_result = hist_data
+                if isinstance(hist_data, dict):
+                    analysis_result = (
+                        hist_data  # type: ignore[assignment]
+                        if "statistics" in hist_data
+                        and isinstance(hist_data["statistics"], GroupStatistics)
+                        else AnalysisResultSerializer.deserialize(hist_data)
+                    )
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
 
@@ -343,12 +352,9 @@ class AnalysisRecoveryService:
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
-            if isinstance(cached_stats, GroupStatistics):
+            if cached_stats:
                 cached_quotes = cached_stats.golden_quotes
                 cached_msg_count = cached_stats.message_count
-            elif isinstance(cached_stats, dict):
-                cached_quotes = cached_stats.get("golden_quotes", [])
-                cached_msg_count = cached_stats.get("message_count", 0)
             else:
                 cached_quotes = []
                 cached_msg_count = 0
@@ -433,11 +439,8 @@ class AnalysisRecoveryService:
                 }
             )
             statistics = deserialized["statistics"]
-            user_activity_raw = deserialized.get("user_analysis")
-            user_activity: dict[str, object] = (
-                user_activity_raw if isinstance(user_activity_raw, dict) else {}
-            )
-            top_users_raw = deserialized.get("user_titles")
+            user_activity = deserialized.get("user_analysis") or {}
+            top_users_raw = clean_checkpoint.get("top_users")
             top_users: list[dict[str, object]] | None = (
                 top_users_raw if isinstance(top_users_raw, list) else None
             )
@@ -557,9 +560,8 @@ class AnalysisRecoveryService:
                         if trace:
                             trace.metadata["has_warnings"] = True
 
-            if isinstance(statistics, GroupStatistics):
-                statistics.golden_quotes = golden_quotes
-                statistics.token_usage = total_token_usage
+            statistics.golden_quotes = golden_quotes
+            statistics.token_usage = total_token_usage
 
             analysis_result = {
                 "statistics": statistics,

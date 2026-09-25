@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
+    from ...domain.value_objects import AnalysisResultPayload
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.messaging.message_sender import MessageSender
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
@@ -290,8 +291,9 @@ class AnalysisCommandHandler:
         group_id = str(result.get("group_id", ""))
         platform_id = str(result["platform_id"]) if result.get("platform_id") else None
         raw_analysis = result.get("analysis_result")
-        analysis_result: dict[str, object] = (
-            raw_analysis if isinstance(raw_analysis, dict) else {}
+        analysis_result = cast(
+            "AnalysisResultPayload",
+            raw_analysis if isinstance(raw_analysis, dict) else {},
         )
         raw_adapter = result.get("adapter")
         adapter = cast("PlatformAdapterProtocol | None", raw_adapter)
@@ -300,13 +302,12 @@ class AnalysisCommandHandler:
             logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
             return
 
-        comic_trigger = getattr(
-            self.plugin_instance, "_try_trigger_comic_generation", None
-        )
-        if callable(comic_trigger):
-            comic_trigger(group_id, platform_id, analysis_result)
-        elif self.comic_handler:
+        if self.comic_handler:
             self.comic_handler.try_trigger_comic_generation(
+                group_id, platform_id, analysis_result
+            )
+        elif self.plugin_instance and self.plugin_instance.comic_command_handler:
+            self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
                 group_id, platform_id, analysis_result
             )
 
@@ -514,7 +515,7 @@ class AnalysisCommandHandler:
     async def _send_text_reports(
         self,
         group_id: str,
-        analysis_result: dict[str, object],
+        analysis_result: AnalysisResultPayload,
         is_qq_official: bool,
         adapter: PlatformAdapterProtocol,
     ) -> None:

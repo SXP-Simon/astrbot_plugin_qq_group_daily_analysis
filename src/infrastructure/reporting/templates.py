@@ -73,13 +73,8 @@ class HTMLTemplates:
         clean_name = validate_template_name(template_name)
 
         template_dir = os.path.join(self.base_dir, clean_name)
-        get_custom_template_dir = getattr(
-            self.config_manager, "get_custom_report_template_dir", None
-        )
-        custom_template_res = (
-            get_custom_template_dir(clean_name)
-            if callable(get_custom_template_dir)
-            else None
+        custom_template_res = self.config_manager.get_custom_report_template_dir(
+            clean_name
         )
         custom_template_dir = (
             Path(str(custom_template_res)) if custom_template_res else None
@@ -159,15 +154,11 @@ class HTMLTemplates:
                         }
 
         # 2. 扫描用户自定义模板目录（仅登记非官方内置的独立自定义主题）
-        get_custom_dir = getattr(
-            self.config_manager, "get_custom_report_template_dir", None
-        )
+        sample_res = self.config_manager.get_custom_report_template_dir("")
         custom_base: Path | None = None
-        if callable(get_custom_dir):
-            sample_res = get_custom_dir("")
-            if sample_res:
-                p_sample = Path(str(sample_res))
-                custom_base = p_sample if p_sample.is_dir() else p_sample.parent
+        if sample_res:
+            p_sample = Path(str(sample_res))
+            custom_base = p_sample if p_sample.is_dir() else p_sample.parent
 
         if custom_base and custom_base.is_dir():
             for p in sorted(custom_base.iterdir()):
