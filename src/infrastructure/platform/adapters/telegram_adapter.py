@@ -9,7 +9,6 @@ import asyncio
 import base64
 import os
 import time
-from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
@@ -19,13 +18,10 @@ from ....domain.value_objects.platform_capabilities import (
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
-from ....domain.value_objects.unified_message import (
-    MessageContent,
-    MessageContentType,
-    UnifiedMessage,
-)
+from ....domain.value_objects.unified_message import UnifiedMessage
 from ....utils.logger import logger
 from ..base import PlatformAdapter
+from .telegram_message_converter import TelegramMessageConverter
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
@@ -231,10 +227,11 @@ class TelegramAdapter(PlatformAdapter):
                 total_records_loaded += len(history_records)
 
                 # 先用当前页已有的有效昵称预热缓存，减少额外 API 请求
+                # 先用当前页已有的有效昵称预热缓存，减少额外 API 请求
                 for record in history_records:
                     sender_id = str(getattr(record, "sender_id", "") or "").strip()
                     sender_name = str(getattr(record, "sender_name", "") or "").strip()
-                    if sender_id and not self._is_placeholder_sender_name(
+                    if sender_id and not TelegramMessageConverter.is_placeholder_sender_name(
                         sender_name, sender_id
                     ):
                         sender_name_cache[sender_id] = sender_name
@@ -259,7 +256,7 @@ class TelegramAdapter(PlatformAdapter):
                     if record_time < cutoff_time:
                         continue
 
-                    msg = self._convert_history_record(record, group_id)
+                    msg = TelegramMessageConverter.to_unified_message(record, group_id)
                     if not msg:
                         continue
 
@@ -269,8 +266,8 @@ class TelegramAdapter(PlatformAdapter):
                     if msg.sender_id in self.bot_self_ids:
                         continue
 
-                    msg = await self._fix_sender_name_if_needed(
-                        group_id, msg, sender_name_cache
+                    msg = await TelegramMessageConverter.fix_sender_name_if_needed(
+                        group_id, msg, sender_name_cache, self.get_member_info
                     )
                     if msg.message_id in seen_message_ids:
                         continue
@@ -324,17 +321,8 @@ class TelegramAdapter(PlatformAdapter):
 
     @staticmethod
     def _is_placeholder_sender_name(name: str | None, sender_id: str | None) -> bool:
-        """判断 sender_name 是否属于占位值。"""
-        if not name:
-            return True
-        normalized = str(name).strip()
-        if not normalized:
-            return True
-        if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
-            return True
-        if sender_id and normalized == str(sender_id).strip():
-            return True
-        return False
+        """判断 sender_name 是否属于占位值（委托 TelegramMessageConverter）。"""
+        return TelegramMessageConverter.is_placeholder_sender_name(name, sender_id)
 
     async def _fix_sender_name_if_needed(
         self,
@@ -342,156 +330,23 @@ class TelegramAdapter(PlatformAdapter):
         msg: UnifiedMessage,
         sender_name_cache: dict[str, str],
     ) -> UnifiedMessage:
-        """
-        如果 sender_name 是占位值，尝试通过 get_member_info 修复。
-
-        说明：
-        - 兼容历史脏数据（sender_name 写成 user_id / Unknown）
-        - 使用 sender_id 级缓存，避免重复请求 Telegram API
-        """
-        if not self._is_placeholder_sender_name(msg.sender_name, msg.sender_id):
-            return msg
-
-        sender_id = str(msg.sender_id)
-        if sender_id in sender_name_cache:
-            cached_name = sender_name_cache[sender_id]
-            if cached_name == msg.sender_name:
-                return msg
-            return replace(msg, sender_name=cached_name)
-
-        resolved_name = msg.sender_name
-        try:
-            member = await self.get_member_info(group_id, sender_id)
-            if member:
-                candidate = str(member.nickname or "").strip()
-                if self._is_placeholder_sender_name(candidate, sender_id):
-                    candidate = str(member.card or "").strip()
-                if not self._is_placeholder_sender_name(candidate, sender_id):
-                    resolved_name = candidate
-        except Exception as e:
-            logger.debug(f"[Telegram] 修复 sender_name 失败 (uid={sender_id}): {e}")
-
-        sender_name_cache[sender_id] = resolved_name
-        if resolved_name == msg.sender_name:
-            return msg
-        return replace(msg, sender_name=resolved_name)
+        """若 sender_name 是占位值，尝试通过 get_member_info 修复（委托 TelegramMessageConverter）。"""
+        return await TelegramMessageConverter.fix_sender_name_if_needed(
+            group_id, msg, sender_name_cache, self.get_member_info
+        )
 
     def _convert_history_record(
         self, record: Any, group_id: str
     ) -> UnifiedMessage | None:
-        """
-        将数据库记录转换为 UnifiedMessage
-        """
-        try:
-            content = record.content
-            if not content:
-                return None
-
-            # 提取消息内容
-            message_parts = content.get("message", [])
-            text_content = ""
-            contents = []
-
-            for part in message_parts:
-                if isinstance(part, dict):
-                    part_type = part.get("type", "")
-                    if part_type == "plain" or part_type == "text":
-                        text = part.get("text", "")
-                        text_content += text
-                        contents.append(
-                            MessageContent(
-                                type=MessageContentType.TEXT,
-                                text=text,
-                            )
-                        )
-                    elif part_type == "image":
-                        contents.append(
-                            MessageContent(
-                                type=MessageContentType.IMAGE,
-                                url=part.get("url", "")
-                                or part.get("attachment_id", ""),
-                            )
-                        )
-                    elif part_type == "at":
-                        target_id = (
-                            part.get("target_id", "")
-                            or part.get("qq", "")
-                            or part.get("at_user_id", "")
-                        )
-                        contents.append(
-                            MessageContent(
-                                type=MessageContentType.AT,
-                                at_user_id=str(target_id),
-                            )
-                        )
-
-            if not contents:
-                contents.append(
-                    MessageContent(
-                        type=MessageContentType.TEXT,
-                        text=text_content,
-                    )
-                )
-
-            sender_id = str(record.sender_id or "")
-            sender_name = str(record.sender_name or "").strip() or "Unknown"
-
-            return UnifiedMessage(
-                message_id=str(record.id),
-                sender_id=sender_id,
-                sender_name=sender_name,
-                sender_card=None,
-                group_id=group_id,
-                text_content=text_content,
-                contents=tuple(contents),
-                timestamp=int(record.created_at.timestamp()),
-                platform="telegram",
-                reply_to_id=None,
-            )
-
-        except Exception as e:
-            logger.debug(f"[Telegram] 转换历史记录失败: {e}")
-            return None
+        """将数据库记录转换为 UnifiedMessage（委托 TelegramMessageConverter）。"""
+        return TelegramMessageConverter.to_unified_message(record, group_id)
 
     def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """
-        将统一消息格式转换为 OneBot 兼容格式
+        """将统一消息格式转换为 OneBot 兼容格式（委托 TelegramMessageConverter）。
 
         用于向后兼容现有分析逻辑。
         """
-        result = []
-        for msg in messages:
-            raw = {
-                "message_id": msg.message_id,
-                "group_id": msg.group_id,
-                "time": msg.timestamp,
-                "sender": {
-                    "user_id": msg.sender_id,
-                    "nickname": msg.sender_name,
-                    "card": msg.sender_card or "",
-                },
-                "message": [],
-                "user_id": msg.sender_id,
-            }
-
-            # 转换消息内容
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    raw["message"].append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    raw["message"].append(
-                        {"type": "image", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.AT:
-                    raw["message"].append(
-                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
-                    )
-
-            result.append(raw)
-
-        return result
+        return TelegramMessageConverter.to_raw_format(messages)
 
     # ==================== IMessageSender ====================
 
@@ -670,29 +525,14 @@ class TelegramAdapter(PlatformAdapter):
             return False
 
     async def send_forward_msg(self, group_id: str, nodes: list[dict]) -> bool:
-        """
-        发送合并转发消息
+        """发送合并转发消息。
 
         Telegram 不支持原生转发消息链，转换为格式化文本发送。
         """
         if not nodes:
             return True
 
-        lines = ["📊 **分析报告**\n"]
-        for node in nodes:
-            data = node.get("data", node)
-            name = data.get("name", "AstrBot")
-            content = data.get("content", "")
-            if isinstance(content, list):
-                # 消息链
-                text_parts = []
-                for seg in content:
-                    if isinstance(seg, dict) and seg.get("type") == "text":
-                        text_parts.append(seg.get("data", {}).get("text", ""))
-                content = "".join(text_parts)
-            lines.append(f"**[{name}]**\n{content}\n")
-
-        full_text = "\n".join(lines)
+        full_text = TelegramMessageConverter.format_forward_nodes_to_text(nodes)
 
         # 分段发送（Telegram 限制 4096 字符）
         max_len = 4000
@@ -1090,16 +930,13 @@ class TelegramAdapter(PlatformAdapter):
 
     # ==================== 辅助方法 ====================
 
-    def _parse_group_id(self, group_id: str) -> tuple[str, str | None]:
-        """
-        解析群组 ID
+    @staticmethod
+    def _parse_group_id(group_id: str) -> tuple[str, str | None]:
+        """解析群组 ID（委托 TelegramMessageConverter）。
 
-        Telegram 话题群的 ID 格式为: "chat_id#thread_id"
+        Telegram 话题群的 ID 格式为: "chat_id#thread_id"。
 
         Returns:
             tuple[str, str | None]: (chat_id, message_thread_id)
         """
-        if "#" in group_id:
-            parts = group_id.split("#", 1)
-            return parts[0], parts[1]
-        return group_id, None
+        return TelegramMessageConverter.parse_group_id(group_id)
