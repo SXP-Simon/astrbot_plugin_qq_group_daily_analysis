@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -22,6 +22,9 @@ from ..web_compat import (
 )
 
 if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
     from ..active_task_manager import ActiveTaskManager
 
@@ -34,7 +37,7 @@ class TraceRoutes:
         context: Context,
         trace_store: TraceSQLiteStore,
         active_task_manager: ActiveTaskManager,
-        analysis_service: Any,
+        analysis_service: AnalysisApplicationService | None = None,
     ) -> None:
         self.context = context
         self.trace_store = trace_store
@@ -89,7 +92,7 @@ class TraceRoutes:
     async def api_get_platforms(self) -> WebApiResponse:
         """获取当前 AstrBot 中已注册并就绪的所有聊天平台列表（基于 AstrBot 原生 PlatformMetadata）"""
         try:
-            platforms: list[dict[str, Any]] = []
+            platforms: list[dict[str, object]] = []
             seen_ids = set()
             type_display_map = {
                 "aiocqhttp": "OneBot v11",
@@ -190,7 +193,7 @@ class TraceRoutes:
     async def api_get_providers(self) -> WebApiResponse:
         """获取当前 AstrBot 中已就绪的所有 LLM Provider 列表"""
         try:
-            providers: list[dict[str, Any]] = []
+            providers: list[dict[str, object]] = []
             seen_ids = set()
             provider_getter = getattr(self.context, "get_all_providers", None)
             if not callable(provider_getter):
@@ -199,12 +202,13 @@ class TraceRoutes:
 
             if callable(provider_getter):
                 raw_list = provider_getter()
-                provider_list: list[Any] = (
+                provider_list: list[object] = (
                     list(raw_list) if isinstance(raw_list, Iterable) else []
                 )
                 for p in provider_list:
                     try:
-                        meta = p.meta() if callable(getattr(p, "meta", None)) else None
+                        meta_getter = getattr(p, "meta", None)
+                        meta = meta_getter() if callable(meta_getter) else None
                         p_id = (
                             getattr(meta, "id", None)
                             or (
@@ -244,7 +248,7 @@ class TraceRoutes:
     async def api_get_personas(self) -> WebApiResponse:
         """获取当前 AstrBot 中配置的所有人格 (Persona) 列表"""
         try:
-            personas: list[dict[str, Any]] = []
+            personas: list[dict[str, object]] = []
             seen_ids = set()
             pm = getattr(self.context, "persona_manager", None)
             if pm:

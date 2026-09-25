@@ -6,7 +6,7 @@ AstrBot 插件 Pages 后端 Web API 桥接服务
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
@@ -23,6 +23,7 @@ from .routes import (
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
 from .web_compat import (
     Context,
+    WebApiResponse,
     error_response,
     json_response,
     request,
@@ -32,7 +33,11 @@ from .web_compat import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from ...application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
     from ..persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..reporting.dispatcher import ReportDispatcher
     from .active_task_manager import ActiveTaskManager
 
 __all__ = [
@@ -55,8 +60,8 @@ class PluginPageWebUIBridge:
         context: Context,
         trace_store: TraceSQLiteStore,
         active_task_manager: ActiveTaskManager,
-        analysis_service: Any,
-        report_dispatcher: Any = None,
+        analysis_service: AnalysisApplicationService | None = None,
+        report_dispatcher: ReportDispatcher | None = None,
         report_output_dir: Path | None = None,
     ):
         self.context = context
@@ -404,134 +409,134 @@ class PluginPageWebUIBridge:
     # 兼容性直接代理转发 (Backward Compatibility Forwarders)
     # ================================================================
 
-    async def api_get_active_tasks(self) -> Any:
+    async def api_get_active_tasks(self) -> WebApiResponse:
         return await self.task_routes.api_get_active_tasks()
 
-    async def api_cancel_task(self) -> Any:
+    async def api_cancel_task(self) -> WebApiResponse:
         return await self.task_routes.api_cancel_task()
 
-    async def api_trigger_task(self) -> Any:
+    async def api_trigger_task(self) -> WebApiResponse:
         return await self.task_routes.api_trigger_task()
 
-    async def api_resume_task(self, trace_id: str) -> Any:
+    async def api_resume_task(self, trace_id: str) -> WebApiResponse:
         return await self.task_routes.api_resume_task(trace_id)
 
-    async def api_list_traces(self) -> Any:
+    async def api_list_traces(self) -> WebApiResponse:
         return await self.trace_routes.api_list_traces()
 
-    async def api_get_distinct_groups(self) -> Any:
+    async def api_get_distinct_groups(self) -> WebApiResponse:
         return await self.trace_routes.api_get_distinct_groups()
 
-    async def api_get_platforms(self) -> Any:
+    async def api_get_platforms(self) -> WebApiResponse:
         return await self.trace_routes.api_get_platforms()
 
-    async def api_get_providers(self) -> Any:
+    async def api_get_providers(self) -> WebApiResponse:
         return await self.trace_routes.api_get_providers()
 
-    async def api_get_personas(self) -> Any:
+    async def api_get_personas(self) -> WebApiResponse:
         return await self.trace_routes.api_get_personas()
 
-    async def api_get_trace_detail(self, trace_id: str) -> Any:
+    async def api_get_trace_detail(self, trace_id: str) -> WebApiResponse:
         return await self.trace_routes.api_get_trace_detail(trace_id)
 
-    async def api_get_metrics_summary(self) -> Any:
+    async def api_get_metrics_summary(self) -> WebApiResponse:
         return await self.trace_routes.api_get_metrics_summary()
 
-    async def api_get_analytics_trends(self) -> Any:
+    async def api_get_analytics_trends(self) -> WebApiResponse:
         return await self.trace_routes.api_get_analytics_trends()
 
-    async def api_get_report_history(self) -> Any:
+    async def api_get_report_history(self) -> WebApiResponse:
         return await self.report_routes.api_get_report_history()
 
-    async def api_get_report_content(self) -> Any:
+    async def api_get_report_content(self) -> WebApiResponse:
         return await self.report_routes.api_get_report_content()
 
-    async def api_rerender_report(self) -> Any:
+    async def api_rerender_report(self) -> WebApiResponse:
         return await self.report_routes.api_rerender_report()
 
-    async def api_get_report_templates(self) -> Any:
+    async def api_get_report_templates(self) -> WebApiResponse:
         return await self.template_routes.api_get_report_templates()
 
-    async def api_get_template_preview(self) -> Any:
+    async def api_get_template_preview(self) -> WebApiResponse:
         return await self.template_routes.api_get_template_preview()
 
-    async def api_install_template_from_url(self) -> Any:
+    async def api_install_template_from_url(self) -> WebApiResponse:
         return await self.template_routes.api_install_template_from_url()
 
-    async def api_install_template_from_file(self) -> Any:
+    async def api_install_template_from_file(self) -> WebApiResponse:
         return await self.template_routes.api_install_template_from_file()
 
-    async def api_uninstall_template(self) -> Any:
+    async def api_uninstall_template(self) -> WebApiResponse:
         return await self.template_routes.api_uninstall_template()
 
-    async def api_stream_events(self) -> Any:
+    async def api_stream_events(self) -> WebApiResponse:
         return await self.log_routes.api_stream_events()
 
-    async def api_get_plugin_logs(self) -> Any:
+    async def api_get_plugin_logs(self) -> WebApiResponse:
         return await self.log_routes.api_get_plugin_logs()
 
-    async def api_get_trace_logs(self, trace_id: str) -> Any:
+    async def api_get_trace_logs(self, trace_id: str) -> WebApiResponse:
         return await self.log_routes.api_get_trace_logs(trace_id)
 
-    async def api_clear_plugin_logs(self) -> Any:
+    async def api_clear_plugin_logs(self) -> WebApiResponse:
         return await self.log_routes.api_clear_plugin_logs()
 
-    async def api_get_config(self) -> Any:
+    async def api_get_config(self) -> WebApiResponse:
         return await self.config_routes.api_get_config()
 
-    async def api_save_config(self) -> Any:
+    async def api_save_config(self) -> WebApiResponse:
         return await self.config_routes.api_save_config()
 
-    async def api_upload_config_file(self) -> Any:
+    async def api_upload_config_file(self) -> WebApiResponse:
         return await self.config_routes.api_upload_config_file()
 
-    async def api_get_config_file_content(self) -> Any:
+    async def api_get_config_file_content(self) -> WebApiResponse:
         return await self.config_routes.api_get_config_file_content()
 
-    async def api_get_plugin_data_overview(self) -> Any:
+    async def api_get_plugin_data_overview(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_plugin_data_overview()
 
-    async def api_clear_avatar_cache(self) -> Any:
+    async def api_clear_avatar_cache(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_avatar_cache()
 
-    async def api_clear_reports(self) -> Any:
+    async def api_clear_reports(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_reports()
 
-    async def api_clear_temp_files(self) -> Any:
+    async def api_clear_temp_files(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_temp_files()
 
-    async def api_clear_custom_templates(self) -> Any:
+    async def api_clear_custom_templates(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_custom_templates()
 
-    async def api_clear_config_files(self) -> Any:
+    async def api_clear_config_files(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_config_files()
 
-    async def api_clear_config_backups(self) -> Any:
+    async def api_clear_config_backups(self) -> WebApiResponse:
         return await self.data_management_routes.api_clear_config_backups()
 
-    async def api_get_incremental_groups(self) -> Any:
+    async def api_get_incremental_groups(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_incremental_groups()
 
-    async def api_get_incremental_batches(self) -> Any:
+    async def api_get_incremental_batches(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_incremental_batches()
 
-    async def api_get_incremental_batch_detail(self) -> Any:
+    async def api_get_incremental_batch_detail(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_incremental_batch_detail()
 
-    async def api_delete_incremental_batch(self) -> Any:
+    async def api_delete_incremental_batch(self) -> WebApiResponse:
         return await self.data_management_routes.api_delete_incremental_batch()
 
-    async def api_reset_incremental_group(self) -> Any:
+    async def api_reset_incremental_group(self) -> WebApiResponse:
         return await self.data_management_routes.api_reset_incremental_group()
 
-    async def api_list_checkpoints(self) -> Any:
+    async def api_list_checkpoints(self) -> WebApiResponse:
         return await self.data_management_routes.api_list_checkpoints()
 
-    async def api_get_checkpoint_groups(self) -> Any:
+    async def api_get_checkpoint_groups(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_checkpoint_groups()
 
-    async def api_get_checkpoint_detail(self) -> Any:
+    async def api_get_checkpoint_detail(self) -> WebApiResponse:
         return await self.data_management_routes.api_get_checkpoint_detail()
 
-    async def api_delete_checkpoint(self) -> Any:
+    async def api_delete_checkpoint(self) -> WebApiResponse:
         return await self.data_management_routes.api_delete_checkpoint()

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from string import Template
-from typing import Any
 
 from .logger import logger
 
@@ -84,7 +83,9 @@ def upgrade_str_format_template(template: str | None) -> tuple[str, bool]:
     return safe_template, True
 
 
-def render_template(template: str | None, strict: bool = False, **kwargs: Any) -> str:
+def render_template(
+    template: str | None, strict: bool = False, **kwargs: object
+) -> str:
     """安全渲染 string.Template 模板。
 
     Args:

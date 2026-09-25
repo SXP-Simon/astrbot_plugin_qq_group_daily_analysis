@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any
 
 from astrbot.api import logger as astrbot_logger
 
@@ -80,47 +79,59 @@ class PluginLogger:
         except Exception:
             pass
 
-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def info(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("INFO", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.info(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.info(formatted_msg, *args, **kwargs_dict)
 
-    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def error(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("ERROR", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.error(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.error(formatted_msg, *args, **kwargs_dict)
 
-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def warning(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("WARNING", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.warning(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.warning(formatted_msg, *args, **kwargs_dict)
 
-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def debug(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("DEBUG", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.debug(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.debug(formatted_msg, *args, **kwargs_dict)
 
-    def critical(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def critical(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("CRITICAL", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.critical(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.critical(formatted_msg, *args, **kwargs_dict)
 
-    def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
+    def exception(self, msg: str, *args: object, **kwargs: object) -> None:
         formatted_msg, trace_id = self._format_msg(msg)
-        req_stack = kwargs.get("stacklevel", 1)
+        val = kwargs.get("stacklevel")
+        req_stack = val if isinstance(val, int) else 1
         self._record("ERROR", formatted_msg, trace_id, args, stacklevel=req_stack)
-        kwargs["stacklevel"] = req_stack + 1
-        astrbot_logger.exception(formatted_msg, *args, **kwargs)
+        kwargs_dict = dict(kwargs)
+        kwargs_dict["stacklevel"] = req_stack + 1
+        astrbot_logger.exception(formatted_msg, *args, **kwargs_dict)
 
 
 # 导出带前缀与缓冲支持的插件统一 logger

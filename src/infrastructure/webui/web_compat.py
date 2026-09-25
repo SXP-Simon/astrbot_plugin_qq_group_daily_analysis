@@ -14,9 +14,9 @@ if TYPE_CHECKING:
     from fastapi.responses import FileResponse, JSONResponse
     from starlette.responses import StreamingResponse
 
-    WebApiResponse = JSONResponse | StreamingResponse | FileResponse | dict[str, Any]
+    WebApiResponse = JSONResponse | StreamingResponse | FileResponse | dict[str, object]
 else:
-    WebApiResponse = Any
+    WebApiResponse = object
 
     try:
         from astrbot.api.star import Context

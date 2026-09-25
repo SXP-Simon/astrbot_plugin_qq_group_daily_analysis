@@ -7,13 +7,18 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...persistence.checkpoint_store import CheckpointStore
+    from ...persistence.incremental_store import IncrementalStore
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
 
 
@@ -23,7 +28,7 @@ class DataManagementRoutes:
     def __init__(
         self,
         trace_store: TraceSQLiteStore,
-        analysis_service: Any,
+        analysis_service: AnalysisApplicationService | None = None,
         report_output_dir: Path | None = None,
     ) -> None:
         self.trace_store = trace_store
@@ -31,11 +36,11 @@ class DataManagementRoutes:
         self.report_output_dir = report_output_dir
 
     @property
-    def _incremental_store(self) -> Any:
+    def _incremental_store(self) -> IncrementalStore | None:
         return getattr(self.analysis_service, "incremental_store", None)
 
     @property
-    def _checkpoint_store(self) -> Any:
+    def _checkpoint_store(self) -> CheckpointStore | None:
         return getattr(self.analysis_service, "checkpoint_store", None)
 
     def _get_plugin_data_dir(self) -> Path | None:
@@ -342,7 +347,7 @@ class DataManagementRoutes:
         """删除指定群的单个增量批次"""
         try:
             payload_raw = await request.json(default={})
-            payload: dict[str, Any] = (
+            payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )
             group_id = str(
@@ -380,7 +385,7 @@ class DataManagementRoutes:
         """一键清空指定群全部增量批次并将游标归零"""
         try:
             payload_raw = await request.json(default={})
-            payload: dict[str, Any] = (
+            payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )
             group_id = str(
@@ -491,7 +496,7 @@ class DataManagementRoutes:
         """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
         try:
             payload_raw = await request.json(default={})
-            payload: dict[str, Any] = (
+            payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )
             group_id = str(
