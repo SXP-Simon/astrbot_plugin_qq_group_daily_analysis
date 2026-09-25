@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 const msgPath = process.argv[2];
 if (!msgPath) {
@@ -24,17 +25,17 @@ const nonWhitespaceCount = fullText.replace(/\s+/g, '').length;
 const header = cleanLines[0] || '';
 const headerMatch = header.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\(([^)]+)\))?:\s*(.+)/);
 
-// 1. DDD 架构分层与业务子领域 Scope 规范定义
+// 1. DDD 架构分层、业务子领域与前端 WebUI Scope 结构化分类定义
 const SCOPE_CATEGORIES = {
   '🏛️ 架构分层 (DDD Architectural Layers)': {
-    domain: '领域层 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
+    domain: '领域层核心 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
     app: '应用层 (用例编排, Application Services, Handlers, DTO)',
     application: '应用层完整别名 (同 app)',
     infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
     infrastructure: '基础设施层完整别名 (同 infra)',
-    webui: '展现层/WebUI (前端页面组件, RESTful API 路由, 控制台交互)',
+    webui: '展现层/WebUI 全栈 (前端页面组件, RESTful API 路由, 控制台交互)',
   },
-  '🎯 业务子领域 (Core Sub-domains)': {
+  '🎯 后端业务子领域 (Backend Sub-domains)': {
     analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
     comic: '漫画子域 (分镜解析, 提示词引擎, 图像生成与相册流转)',
     reporting: '报告渲染子域 (HTML/Image 渲染引擎, 主题模板, 排版系统)',
@@ -42,6 +43,14 @@ const SCOPE_CATEGORIES = {
     platform: '多平台通信子域 (OneBot, QQOfficial, Telegram, Discord 适配)',
     scheduler: '调度与恢复子域 (Cron 任务, 增量分析, 熔断恢复, TaskGuard)',
     config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
+  },
+  '🎨 前端 WebUI 子领域 (Frontend WebUI Modules)': {
+    'webui/dashboard': 'WebUI 仪表盘与概览视图 (指标大盘, 快捷操作)',
+    'webui/tasks': 'WebUI 任务管理面板 (队列监控, 执行日志, 手动触发)',
+    'webui/charts': 'WebUI 图表看板 (ECharts 趋势图, 词云图, 活跃度统计)',
+    'webui/settings': 'WebUI 配置表单 (参数设置, Schema 动态表单, 客户端校验)',
+    'webui/templates': 'WebUI 报告模板管理 (主题列表, 样式调试, 预览沙箱)',
+    'webui/components': 'WebUI 通用组件与工具库 (通用 Modal, Layout, Hooks)',
   },
   '🛠️ 工程与基建 (Engineering & Infrastructure)': {
     test: '测试 (单元测试, 集成测试, Mock 桩代码)',
@@ -54,8 +63,28 @@ const SCOPE_CATEGORIES = {
   },
 };
 
-// 扁平化所有合法 Scope
+// 扁平化所有明确注册的合法 Scope
 const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
+
+// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic）
+const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui'];
+const ALLOWED_SUBDOMAINS = [
+  'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config',
+  'dashboard', 'tasks', 'charts', 'settings', 'templates', 'components', 'common'
+];
+
+function isScopeValid(scope) {
+  if (!scope) return false;
+  if (ALLOWED_SCOPES.includes(scope)) return true;
+  // 支持复合形式：<layer>/<subdomain>
+  if (scope.includes('/')) {
+    const [layer, sub] = scope.split('/');
+    if (ALLOWED_LAYER_PREFIXES.includes(layer) && ALLOWED_SUBDOMAINS.includes(sub)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const errors = [];
 
@@ -65,19 +94,127 @@ if (!headerMatch) {
   const scope = headerMatch[2];
   if (!scope) {
     errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ...');
-  } else if (!ALLOWED_SCOPES.includes(scope)) {
-    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层及子域对应的 Scope：\n`;
+  } else if (!isScopeValid(scope)) {
+    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或 WebUI 对应的 Scope：\n`;
     for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
       scopeHelp += `\n     ${catName}:\n`;
       for (const [sKey, sDesc] of Object.entries(scopes)) {
-        scopeHelp += `       • ${sKey.padEnd(14)} -> ${sDesc}\n`;
+        scopeHelp += `       • ${sKey.padEnd(18)} -> ${sDesc}\n`;
       }
     }
+    scopeHelp += `\n     💡 也支持层级+子域复合表达，例如: domain/analysis, infra/platform, app/comic, webui/charts`;
     errors.push(scopeHelp.trimEnd());
   }
 }
 
-// 2. 检查三点论关键词
+// 2. 真实暂存区文件路径与 Scope 一致性校验
+try {
+  const stagedFilesRaw = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+  if (stagedFilesRaw) {
+    const stagedFiles = stagedFilesRaw.split(/\r?\n/).map((f) => f.trim().replace(/\\/g, '/')).filter(Boolean);
+    const scope = headerMatch ? headerMatch[2] : null;
+
+    if (scope && stagedFiles.length > 0) {
+      // 路径匹配规则集
+      const SCOPE_PATH_RULES = [
+        {
+          matchScope: (s) => s === 'domain' || s.startsWith('domain/'),
+          matchFile: (f) => f.startsWith('src/domain/'),
+          name: 'domain 领域层 (src/domain/)',
+        },
+        {
+          matchScope: (s) => s === 'app' || s === 'application' || s.startsWith('app/') || s.startsWith('application/'),
+          matchFile: (f) => f.startsWith('src/application/'),
+          name: 'app 应用层 (src/application/)',
+        },
+        {
+          matchScope: (s) => s === 'platform' || s === 'infra/platform',
+          matchFile: (f) => f.startsWith('src/infrastructure/platform/'),
+          name: 'platform 平台通信子域 (src/infrastructure/platform/)',
+        },
+        {
+          matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard',
+          matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/') || f.startsWith('src/infrastructure/webui/'),
+          name: 'webui 展现层 (dashboard/, pages/, src/infrastructure/webui/)',
+        },
+        {
+          matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
+          matchFile: (f) => f.startsWith('src/infrastructure/'),
+          name: 'infra 基础设施层 (src/infrastructure/)',
+        },
+        {
+          matchScope: (s) => s === 'analysis' || s.endsWith('/analysis'),
+          matchFile: (f) => f.includes('analysis') || f.startsWith('src/domain/value_objects/analysis_results.py'),
+          name: 'analysis 分析子域',
+        },
+        {
+          matchScope: (s) => s === 'comic' || s.endsWith('/comic'),
+          matchFile: (f) => f.includes('comic'),
+          name: 'comic 漫画子域',
+        },
+        {
+          matchScope: (s) => s === 'reporting' || s === 'render' || s.endsWith('/reporting') || s.endsWith('/render'),
+          matchFile: (f) => f.startsWith('src/infrastructure/reporting/'),
+          name: 'reporting/render 渲染子域 (src/infrastructure/reporting/)',
+        },
+        {
+          matchScope: (s) => s === 'scheduler' || s.endsWith('/scheduler'),
+          matchFile: (f) => f.startsWith('src/infrastructure/scheduler/'),
+          name: 'scheduler 调度子域 (src/infrastructure/scheduler/)',
+        },
+        {
+          matchScope: (s) => s === 'config' || s.endsWith('/config'),
+          matchFile: (f) => f.startsWith('src/infrastructure/config/') || f === '_conf_schema.json',
+          name: 'config 配置子域',
+        },
+        {
+          matchScope: (s) => s === 'test' || s === 'tests',
+          matchFile: (f) => f.startsWith('tests/'),
+          name: 'test 测试套件 (tests/)',
+        },
+        {
+          matchScope: (s) => s === 'ci',
+          matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml',
+          name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml)',
+        },
+        {
+          matchScope: (s) => s === 'deps',
+          matchFile: (f) => f === 'pyproject.toml' || f === 'pnpm-lock.yaml' || f === 'package.json' || f === 'uv.lock' || f.endsWith('package.json'),
+          name: 'deps 依赖文件',
+        },
+        {
+          matchScope: (s) => s === 'docs',
+          matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md'),
+          name: 'docs 文档 (docs/, *.md)',
+        },
+        {
+          matchScope: (s) => s === 'core' || s === 'spec',
+          matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml',
+          name: 'core/spec 核心协议与基建',
+        },
+      ];
+
+      // 寻找与当前 scope 对应的规则
+      const matchedRule = SCOPE_PATH_RULES.find((r) => r.matchScope(scope));
+      if (matchedRule) {
+        const hasMatchingFile = stagedFiles.some((file) => matchedRule.matchFile(file));
+        if (!hasMatchingFile) {
+          errors.push(
+            `【Scope 与暂存文件路径不匹配】\n` +
+            `     您声明的 Scope 为 "${scope}"（预期涉及: ${matchedRule.name}），\n` +
+            `     但本次暂存的文件全部属于其他路径：\n` +
+            `     -> ${stagedFiles.slice(0, 5).join(', ')}${stagedFiles.length > 5 ? ' 等' : ''}\n` +
+            `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
+          );
+        }
+      }
+    }
+  }
+} catch (e) {
+  // Git 暂存区检查异常时不阻断流程
+}
+
+// 3. 检查三点论关键词
 const hasProblem = /(?:^|\n)\s*问题[：:]\s*\S+/.test(fullText);
 const hasSolution = /(?:^|\n)\s*解决措施[：:]\s*\S+/.test(fullText);
 const hasEffect = /(?:^|\n)\s*效果[：:]\s*\S+/.test(fullText);
@@ -99,7 +236,7 @@ if (nonWhitespaceCount < 40) {
 }
 
 if (errors.length > 0) {
-  console.error('\n' + '='.repeat(70));
+  console.error('\n' + '='.repeat(72));
   console.error('\x1b[31;1m[FAIL] Git Commit 门禁校验未通过，已阻止本次提交：\x1b[0m');
   errors.forEach((err, idx) => {
     console.error(`  \x1b[33m${idx + 1}. ${err}\x1b[0m`);
@@ -118,21 +255,21 @@ if (errors.length > 0) {
   console.error('\x1b[32;1m📚 高质量提交范例（供参考与代入）：\x1b[0m');
   console.error('\x1b[32m');
   console.error('【示例 1 - 领域层/后端架构】');
-  console.error('feat(domain): 重塑群分析聚合根与增量快照状态机');
+  console.error('feat(domain/analysis): 重塑群分析聚合根与增量快照状态机');
   console.error('');
   console.error('问题：高并发分析场景下，无状态的散装字典导致历史游标与聚合统计产生脏读，且 LLM 重试时发生状态污染与内存无序膨胀。');
   console.error('解决措施：建立 GroupAnalysisAggregate 聚合根并引入不可变增量快照状态机，结合 Checkpoint 防腐隔离重试逻辑与领域状态。');
   console.error('效果：消除并发读写冲突，内存峰值下降 45%，异常断点恢复成功率达 100%，Pyright 严格类型检查 0 报错。');
   console.error('');
   console.error('【示例 2 - 展现层/WebUI 性能优化】');
-  console.error('perf(webui): 重构历史词云与趋势看板，引入虚拟列表与分片渲染');
+  console.error('perf(webui/charts): 重构历史词云与趋势看板，引入虚拟列表与分片渲染');
   console.error('');
   console.error('问题：单群历史消息超 50,000 条时，控制台全量挂载 ECharts 与交互表格造成主线程阻塞超 1.8s，低端设备频繁卡顿掉帧。');
   console.error('解决措施：基于 Web Worker 异步计算词频权重，看板图表采用 requestAnimationFrame 分片渲染，并对历史数据表接入虚拟滚动。');
   console.error('效果：页面首次可交互时间 (TTI) 由 2.1s 缩短至 280ms (提升 86%)，滚动 FPS 稳定在 60 帧，前端编译与打包全绿。');
   console.error('');
   console.error('【示例 3 - 平台适配/网络容灾】');
-  console.error('fix(platform): 统一跨平台头像拉取重试熔断与 Negative Cache 机制');
+  console.error('fix(infra/platform): 统一跨平台头像拉取重试熔断与 Negative Cache 机制');
   console.error('');
   console.error('问题：三方平台 CDN 在弱网或限流下频繁抛出 429 与连接超时，导致主分析链路被级联阻塞长达 30 秒以上。');
   console.error('解决措施：在 PlatformAdapter 抽象层引入指数退避并发限流器，并对失败 OpenID 建立 10 分钟负缓存 (Negative Cache) 实施熔断。');
@@ -142,5 +279,5 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log('\x1b[32;1m[PASS] Git 提交规范校验通过（原子化 Scope + 中文三点论 + 40字门禁已达标）\x1b[0m');
+console.log('\x1b[32;1m[PASS] Git 提交规范校验通过（原子化 Scope + 路径一致性 + 中文三点论 + 40字门禁已达标）\x1b[0m');
 process.exit(0);
