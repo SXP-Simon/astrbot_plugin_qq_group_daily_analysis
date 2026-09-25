@@ -220,7 +220,7 @@ class BotManager:
                 self.set_bot_instance(bot_client, platform_id, platform_name)
                 logger.info(f"已刷新/发现平台 {platform_id} 的 bot 实例 (变动或懒加载)")
 
-    def get_all_bot_instances(self) -> dict:
+    def get_all_bot_instances(self) -> dict[str, object]:
         """获取所有已加载的bot实例 {platform_id: bot_instance}"""
         return self._bot_instances.copy()
 
@@ -372,7 +372,7 @@ class BotManager:
         # 3. 兜底读取 platform_name
         return str(getattr(adapter, "platform_name", "") or "")
 
-    def get_all_adapters(self) -> dict:
+    def get_all_adapters(self) -> dict[str, PlatformAdapter]:
         """获取所有 PlatformAdapter 实例 {platform_id: adapter}"""
         return self._adapters.copy()
 
