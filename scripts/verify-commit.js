@@ -24,38 +24,56 @@ const nonWhitespaceCount = fullText.replace(/\s+/g, '').length;
 const header = cleanLines[0] || '';
 const headerMatch = header.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\(([^)]+)\))?:\s*(.+)/);
 
-const ALLOWED_SCOPES = [
-  'domain',
-  'app',
-  'application',
-  'infra',
-  'infrastructure',
-  'platform',
-  'reporting',
-  'scheduler',
-  'webui',
-  'config',
-  'comic',
-  'analysis',
-  'tests',
-  'ci',
-  'deps',
-  'docs',
-  'core',
-  'render',
-  'spec'
-];
+// 1. DDD 架构分层与业务子领域 Scope 规范定义
+const SCOPE_CATEGORIES = {
+  '🏛️ 架构分层 (DDD Architectural Layers)': {
+    domain: '领域层 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
+    app: '应用层 (用例编排, Application Services, Handlers, DTO)',
+    application: '应用层完整别名 (同 app)',
+    infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
+    infrastructure: '基础设施层完整别名 (同 infra)',
+    webui: '展现层/WebUI (前端页面组件, RESTful API 路由, 控制台交互)',
+  },
+  '🎯 业务子领域 (Core Sub-domains)': {
+    analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
+    comic: '漫画子域 (分镜解析, 提示词引擎, 图像生成与相册流转)',
+    reporting: '报告渲染子域 (HTML/Image 渲染引擎, 主题模板, 排版系统)',
+    render: '渲染引擎别名 (同 reporting)',
+    platform: '多平台通信子域 (OneBot, QQOfficial, Telegram, Discord 适配)',
+    scheduler: '调度与恢复子域 (Cron 任务, 增量分析, 熔断恢复, TaskGuard)',
+    config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
+  },
+  '🛠️ 工程与基建 (Engineering & Infrastructure)': {
+    test: '测试 (单元测试, 集成测试, Mock 桩代码)',
+    tests: '测试别名 (同 test)',
+    ci: '持续集成与门禁 (Git hooks, GitHub Actions, Linter 脚本)',
+    deps: '依赖管理 (第三方库版本升级, uv/pip 依赖锁)',
+    docs: '文档 (架构设计, 接口文档, 开发者指南)',
+    core: '核心协议与规范 (基础常量, 全局上下文, 通用基建)',
+    spec: '设计规范与契约定义',
+  },
+};
+
+// 扁平化所有合法 Scope
+const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
 
 const errors = [];
 
 if (!headerMatch) {
-  errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(reporting): 优化官方 Markdown 卡片渲染');
+  errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain): 增强值对象类型约束');
 } else {
   const scope = headerMatch[2];
   if (!scope) {
     errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ...');
   } else if (!ALLOWED_SCOPES.includes(scope)) {
-    errors.push(`【Scope 超出允许范围】"${scope}" 不属于合法模块。允许的 Scope 列表:\n     -> ${ALLOWED_SCOPES.join(', ')}`);
+    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层及子域对应的 Scope：\n`;
+    for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
+      scopeHelp += `\n     ${catName}:\n`;
+      for (const [sKey, sDesc] of Object.entries(scopes)) {
+        scopeHelp += `       • ${sKey.padEnd(14)} -> ${sDesc}\n`;
+      }
+    }
+    errors.push(scopeHelp.trimEnd());
   }
 }
 
