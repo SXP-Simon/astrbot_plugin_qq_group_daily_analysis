@@ -105,24 +105,40 @@ if (errors.length > 0) {
     console.error(`  \x1b[33m${idx + 1}. ${err}\x1b[0m`);
   });
 
-  console.error('\n' + '-'.repeat(70));
-  console.error('\x1b[36;1m[GUIDE] 标准原子化三点论提交模板（供参考）：\x1b[0m');
+  console.error('\n' + '-'.repeat(72));
+  console.error('\x1b[36;1m💡【STAR 原则与问题导向提交指南 (Problem-Oriented Commit Guide)】\x1b[0m');
+  console.error('\x1b[90m  提交信息应清晰回答：为什么改(痛点根因) -> 怎么改(设计手段) -> 带来什么价值(量化收益)。\x1b[0m');
+  console.error('\x1b[90m  避免无信息量的流水账（如“修改了某文件”），应注重技术决策与实际工程影响。\x1b[0m\n');
+
+  console.error('\x1b[33;1m📐 编写结构要点：\x1b[0m');
+  console.error('  \x1b[33m• 问题：\x1b[0m阐明业务/架构痛点、触发场景与根本原因（如并发竞态、内存膨胀、类型黑洞、阻塞延迟等）。');
+  console.error('  \x1b[33m• 解决措施：\x1b[0m阐述架构设计意图、核心技术方案与防腐隔离手段（说明为什么选该方案，如何根治）。');
+  console.error('  \x1b[33m• 效果：\x1b[0m提供量化的工程/业务指标、性能提升幅度或确定性收益（如耗时下降、内存优化、覆盖率、0报错等）。\n');
+
+  console.error('\x1b[32;1m📚 高质量提交范例（供参考与代入）：\x1b[0m');
   console.error('\x1b[32m');
-  console.error('【后端示例】:');
-  console.error('feat(domain): 强化每日分析领域值对象与仓储契约');
+  console.error('【示例 1 - 领域层/后端架构】');
+  console.error('feat(domain): 重塑群分析聚合根与增量快照状态机');
   console.error('');
-  console.error('问题：历史代码中大量使用散装字典 dict[str, object]，导致 IDE 无法进行 F12 跳转和属性推导，存在类型安全盲区。');
-  console.error('解决措施：引入 AnalysisResultPayload、ComicStoryboard 等领域值对象，并在仓储接口与应用服务全链路打通强类型流转。');
-  console.error('效果：实现 100% IDE 智能感知与 F12 准确跳转，消除所有 getattr 反射调用，静态检查 0 错误且全量单测通过。');
+  console.error('问题：高并发分析场景下，无状态的散装字典导致历史游标与聚合统计产生脏读，且 LLM 重试时发生状态污染与内存无序膨胀。');
+  console.error('解决措施：建立 GroupAnalysisAggregate 聚合根并引入不可变增量快照状态机，结合 Checkpoint 防腐隔离重试逻辑与领域状态。');
+  console.error('效果：消除并发读写冲突，内存峰值下降 45%，异常断点恢复成功率达 100%，Pyright 严格类型检查 0 报错。');
   console.error('');
-  console.error('【WebUI / 前端示例】:');
-  console.error('feat(webui): 优化任务面板实时状态轮询与图表挂载生命周期');
+  console.error('【示例 2 - 展现层/WebUI 性能优化】');
+  console.error('perf(webui): 重构历史词云与趋势看板，引入虚拟列表与分片渲染');
   console.error('');
-  console.error('问题：控制台任务列表存在状态刷新不及时与 ECharts 多次重绘抖动问题，且配置表单缺少客户端 Schema 校验。');
-  console.error('解决措施：在 dashboard 模块引入自适应轮询机制与 ECharts 防抖渲染，并使用 Zod 补全表单校验与 TypeScript 类型。');
-  console.error('效果：消除页面卡顿与无效请求，前端 tsc/eslint 0 报错，vite 生产打包构建正常且样式响应灵敏。');
+  console.error('问题：单群历史消息超 50,000 条时，控制台全量挂载 ECharts 与交互表格造成主线程阻塞超 1.8s，低端设备频繁卡顿掉帧。');
+  console.error('解决措施：基于 Web Worker 异步计算词频权重，看板图表采用 requestAnimationFrame 分片渲染，并对历史数据表接入虚拟滚动。');
+  console.error('效果：页面首次可交互时间 (TTI) 由 2.1s 缩短至 280ms (提升 86%)，滚动 FPS 稳定在 60 帧，前端编译与打包全绿。');
+  console.error('');
+  console.error('【示例 3 - 平台适配/网络容灾】');
+  console.error('fix(platform): 统一跨平台头像拉取重试熔断与 Negative Cache 机制');
+  console.error('');
+  console.error('问题：三方平台 CDN 在弱网或限流下频繁抛出 429 与连接超时，导致主分析链路被级联阻塞长达 30 秒以上。');
+  console.error('解决措施：在 PlatformAdapter 抽象层引入指数退避并发限流器，并对失败 OpenID 建立 10 分钟负缓存 (Negative Cache) 实施熔断。');
+  console.error('效果：彻底切断外部抖动对核心链路的阻塞传播，单次报告生成 P99 耗时从 35s 下降至 6.2s，网络异常率下降 98%。');
   console.error('\x1b[0m');
-  console.error('='.repeat(70) + '\n');
+  console.error('='.repeat(72) + '\n');
   process.exit(1);
 }
 
