@@ -124,7 +124,7 @@ class SettingsCommandHandler:
             return
 
         try:
-            self.config_manager.set_output_format(target_format)  # type: ignore[arg-type]
+            self.config_manager.set_output_format(target_format)
             yield event.plain_result(f"✅ 输出格式已设置为: {target_format}")
         except Exception as e:
             yield event.plain_result(f"❌ 设置失败: {e}")

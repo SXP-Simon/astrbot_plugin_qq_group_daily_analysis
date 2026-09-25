@@ -381,7 +381,7 @@ class PluginPageWebUIBridge:
 
         for path, handler, methods, desc in routes:
             try:
-                self.context.register_web_api(path, handler, methods, desc)  # type: ignore
+                self.context.register_web_api(path, handler, methods, desc)
             except Exception as e:
                 logger.error(f"注册 Web API 路由 {path} 失败: {e}")
 

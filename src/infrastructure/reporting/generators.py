@@ -1049,14 +1049,15 @@ class ReportGenerator(IReportGenerator):
             self._avatar_service._avatar_failure_cache = self._avatar_failure_cache
 
         if "_get_user_avatar_bytes" in self.__dict__:
-            orig = self._avatar_service.get_user_avatar_bytes
-            self._avatar_service.get_user_avatar_bytes = self._get_user_avatar_bytes  # type: ignore
+            orig = getattr(self._avatar_service, "get_user_avatar_bytes", None)
+            self._avatar_service.get_user_avatar_bytes = self._get_user_avatar_bytes
             try:
                 return await self._avatar_service.get_user_avatar(
                     avatar_id, avatar_url_getter, avatar_cache_namespace
                 )
             finally:
-                self._avatar_service.get_user_avatar_bytes = orig  # type: ignore
+                if orig is not None:
+                    self._avatar_service.get_user_avatar_bytes = orig
 
         return await self._avatar_service.get_user_avatar(
             avatar_id, avatar_url_getter, avatar_cache_namespace

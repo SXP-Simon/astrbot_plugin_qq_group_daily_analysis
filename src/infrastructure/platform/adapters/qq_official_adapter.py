@@ -8,6 +8,7 @@ import hashlib
 import os
 import random
 import re
+from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
@@ -379,7 +380,7 @@ class QQOfficialAdapter(PlatformAdapter):
 
     async def _send_markdown_chunk(self, group_id: str, content: str) -> bool:
         api = getattr(self.bot, "api", None)
-        post_group_message = getattr(api, "post_group_message", None)
+        post_group_message: Any = getattr(api, "post_group_message", None)
         if not callable(post_group_message):
             return False
 
@@ -397,12 +398,16 @@ class QQOfficialAdapter(PlatformAdapter):
             # AstrBot in production.
             markdown = {"content": content}
 
-        result = await post_group_message(  # type: ignore[arg-type]
+        call_result = post_group_message(
             group_openid=str(group_id),
             msg_type=2,
             markdown=markdown,
             msg_seq=self._next_markdown_msg_seq(),
         )
+        if isinstance(call_result, Awaitable):
+            result = await call_result
+        else:
+            result = call_result
         return result is not None
 
     def _next_markdown_msg_seq(self) -> int:

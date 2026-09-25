@@ -70,13 +70,13 @@ if TYPE_CHECKING:
 
 def _resolve_settings_handler(plugin: Any) -> SettingsCommandHandler:
     handler = getattr(plugin, "settings_command_handler", None)
-    if handler is not None:
+    if isinstance(handler, SettingsCommandHandler):
         return handler
     return SettingsCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-        template_command_service=getattr(plugin, "template_command_service", None),  # type: ignore
-        template_preview_router=getattr(plugin, "template_preview_router", None),
-        auto_scheduler=getattr(plugin, "auto_scheduler", None),
+        config_manager=plugin.config_manager,
+        template_command_service=plugin.template_command_service,
+        template_preview_router=plugin.template_preview_router,
+        auto_scheduler=plugin.auto_scheduler,
         incremental_store=getattr(plugin, "incremental_store", None),
         incremental_merge_service=getattr(plugin, "incremental_merge_service", None),
         bot_manager=getattr(plugin, "bot_manager", None),
@@ -86,13 +86,13 @@ def _resolve_settings_handler(plugin: Any) -> SettingsCommandHandler:
 
 def _resolve_comic_handler(plugin: Any) -> ComicCommandHandler:
     handler = getattr(plugin, "comic_command_handler", None)
-    if handler is not None:
+    if isinstance(handler, ComicCommandHandler):
         return handler
     return ComicCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
-        comic_service=getattr(plugin, "comic_service", None),  # type: ignore
-        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+        config_manager=plugin.config_manager,
+        bot_manager=plugin.bot_manager,
+        comic_service=plugin.comic_service,
+        analysis_service=plugin.analysis_service,
         active_task_manager=getattr(plugin, "active_task_manager", None),
         plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
         plugin_instance=plugin,
@@ -101,7 +101,7 @@ def _resolve_comic_handler(plugin: Any) -> ComicCommandHandler:
 
 def _resolve_analysis_handler(plugin: Any) -> AnalysisCommandHandler:
     handler = getattr(plugin, "analysis_command_handler", None)
-    if handler is not None:
+    if isinstance(handler, AnalysisCommandHandler):
         return handler
     plugin_data_dir = getattr(plugin, "plugin_data_dir", None)
     if plugin_data_dir is None:
@@ -110,11 +110,11 @@ def _resolve_analysis_handler(plugin: Any) -> AnalysisCommandHandler:
         except Exception:
             plugin_data_dir = Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
     return AnalysisCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
-        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
-        report_generator=getattr(plugin, "report_generator", None),  # type: ignore
-        html_render=getattr(plugin, "html_render", None),  # type: ignore
+        config_manager=plugin.config_manager,
+        bot_manager=plugin.bot_manager,
+        analysis_service=plugin.analysis_service,
+        report_generator=plugin.report_generator,
+        html_render=plugin.html_render,
         active_task_manager=getattr(plugin, "active_task_manager", None),
         trace_store=getattr(plugin, "trace_store", None),
         message_sender=getattr(plugin, "message_sender", None),

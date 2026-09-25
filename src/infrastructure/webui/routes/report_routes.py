@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from ....utils.logger import logger
 from ...reporting.template_installer import TemplateInstallError, validate_template_name
-from ..web_compat import error_response, json_response, request
+from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
@@ -42,7 +42,7 @@ class ReportRoutes:
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
 
-    async def api_get_report_history(self) -> Any:
+    async def api_get_report_history(self) -> WebApiResponse:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
             reports: list[dict[str, Any]] = []
@@ -187,7 +187,7 @@ class ReportRoutes:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_report_content(self) -> Any:
+    async def api_get_report_content(self) -> WebApiResponse:
         """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
         try:
             filename = (
@@ -268,7 +268,7 @@ class ReportRoutes:
             logger.error(f"读取历史报告内容异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_rerender_report(self) -> Any:
+    async def api_rerender_report(self) -> WebApiResponse:
         """免 Token 切换模板重新渲染历史分析报告"""
         try:
             body_raw = await request.json() if hasattr(request, "json") else {}

@@ -13,7 +13,13 @@ from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ...platform.factory import PlatformAdapterFactory
-from ..web_compat import Context, error_response, json_response, request
+from ..web_compat import (
+    Context,
+    WebApiResponse,
+    error_response,
+    json_response,
+    request,
+)
 
 if TYPE_CHECKING:
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
@@ -35,7 +41,7 @@ class TraceRoutes:
         self.active_task_manager = active_task_manager
         self.analysis_service = analysis_service
 
-    async def api_list_traces(self) -> Any:
+    async def api_list_traces(self) -> WebApiResponse:
         """分页与条件筛选 Trace 列表"""
         try:
             limit = int(request.query.get("limit", 20))
@@ -71,7 +77,7 @@ class TraceRoutes:
             logger.error(f"查询 Trace 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_distinct_groups(self) -> Any:
+    async def api_get_distinct_groups(self) -> WebApiResponse:
         """获取所有有历史分析记录的群组列表（用于下拉快速筛选）"""
         try:
             groups = self.trace_store.get_distinct_groups()
@@ -80,7 +86,7 @@ class TraceRoutes:
             logger.error(f"查询群组列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_platforms(self) -> Any:
+    async def api_get_platforms(self) -> WebApiResponse:
         """获取当前 AstrBot 中已注册并就绪的所有聊天平台列表（基于 AstrBot 原生 PlatformMetadata）"""
         try:
             platforms: list[dict[str, Any]] = []
@@ -181,7 +187,7 @@ class TraceRoutes:
             logger.error(f"获取平台列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_providers(self) -> Any:
+    async def api_get_providers(self) -> WebApiResponse:
         """获取当前 AstrBot 中已就绪的所有 LLM Provider 列表"""
         try:
             providers: list[dict[str, Any]] = []
@@ -235,7 +241,7 @@ class TraceRoutes:
             logger.error(f"获取 Provider 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_personas(self) -> Any:
+    async def api_get_personas(self) -> WebApiResponse:
         """获取当前 AstrBot 中配置的所有人格 (Persona) 列表"""
         try:
             personas: list[dict[str, Any]] = []
@@ -276,7 +282,7 @@ class TraceRoutes:
             logger.error(f"获取 Persona 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_trace_detail(self, trace_id: str) -> Any:
+    async def api_get_trace_detail(self, trace_id: str) -> WebApiResponse:
         """获取单个 Trace 的完整 Span 树与上下文指标"""
         try:
             trace = self.trace_store.get_trace(trace_id)
@@ -362,7 +368,7 @@ class TraceRoutes:
             logger.error(f"查询 Trace 详情异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_metrics_summary(self) -> Any:
+    async def api_get_metrics_summary(self) -> WebApiResponse:
         """获取顶部 KPI 与 Token 统计概览"""
         try:
             summary = self.trace_store.get_metrics_summary()
@@ -371,7 +377,7 @@ class TraceRoutes:
             logger.error(f"获取指标概览异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_analytics_trends(self) -> Any:
+    async def api_get_analytics_trends(self) -> WebApiResponse:
         """获取时序趋势统计（支持按小时或按天细粒度切换，并包含服务商与模型统计）"""
         try:
             granularity = (

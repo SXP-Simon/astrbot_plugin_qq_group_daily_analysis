@@ -116,13 +116,10 @@ class RenderDataPreparer:
             if isinstance(activity_visualization, dict):
                 activity_visualization["user_activity_ranking"] = []
 
-        for golden_quote in sanitized.get("golden_quotes", []) or []:
-            if not isinstance(golden_quote, dict):
-                continue
-            golden_quote["sender"] = ""
-            golden_quote["user_id"] = ""
-
-        return self.sanitize_export_identity_text(sanitized, analysis_result)  # type: ignore[return-type]
+        sanitized_data = self.sanitize_export_identity_text(sanitized, analysis_result)
+        if isinstance(sanitized_data, dict):
+            return sanitized_data
+        return sanitized
 
     @classmethod
     def to_plain_export_data(cls, value: Any) -> Any:

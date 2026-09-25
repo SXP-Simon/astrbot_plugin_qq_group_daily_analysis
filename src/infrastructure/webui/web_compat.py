@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
+    from fastapi.responses import FileResponse, JSONResponse
+    from starlette.responses import StreamingResponse
+
+    WebApiResponse = JSONResponse | StreamingResponse | FileResponse | dict[str, Any]
 else:
+    WebApiResponse = Any
+
     try:
         from astrbot.api.star import Context
     except (ImportError, AttributeError):
@@ -184,6 +190,7 @@ def stream_response(
 
 __all__ = [
     "Context",
+    "WebApiResponse",
     "error_response",
     "json_response",
     "request",

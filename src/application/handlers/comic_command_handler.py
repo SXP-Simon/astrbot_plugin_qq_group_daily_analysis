@@ -154,7 +154,7 @@ class ComicCommandHandler:
                 return
 
             if hasattr(self.bot_manager, "update_from_event"):
-                self.bot_manager.update_from_event(event)  # type: ignore[union-attr]
+                self.bot_manager.update_from_event(event)
 
             check_target = getattr(event, "unified_msg_origin", None)
             if not check_target:

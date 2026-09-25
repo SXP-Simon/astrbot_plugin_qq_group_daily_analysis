@@ -317,9 +317,10 @@ class TelegramAdapter(PlatformAdapter):
                 return config_platform_id
 
         # 尝试从 bot 实例获取
-        if hasattr(self.bot, "meta") and callable(self.bot.meta):
+        meta_func = getattr(self.bot, "meta", None)
+        if callable(meta_func):
             try:
-                meta = self.bot.meta()  # type: ignore
+                meta = meta_func()
                 if hasattr(meta, "id"):
                     return str(getattr(meta, "id", "telegram"))
             except Exception:

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
-from ..web_compat import error_response, json_response, request
+from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
@@ -54,7 +54,7 @@ class ConfigRoutes:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
 
-    async def api_get_config(self) -> Any:
+    async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
         try:
             cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
@@ -101,7 +101,7 @@ class ConfigRoutes:
             logger.error(f"获取配置信息异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_save_config(self) -> Any:
+    async def api_save_config(self) -> WebApiResponse:
         """保存并更新插件配置"""
         try:
             body = await request.json() if hasattr(request, "json") else {}
@@ -193,7 +193,7 @@ class ConfigRoutes:
             logger.error(f"保存配置异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_upload_config_file(self) -> Any:
+    async def api_upload_config_file(self) -> WebApiResponse:
         """上传插件配置所需的文件/参考图，并存入合规的 files/{folder}/ 物理路径"""
         try:
             body: dict[str, Any] = {}
@@ -302,7 +302,7 @@ class ConfigRoutes:
             logger.error(f"上传配置文件异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_config_file_content(self) -> Any:
+    async def api_get_config_file_content(self) -> WebApiResponse:
         """获取配置中的文件（如角色参考图）内容用于 WebUI 在线缩略图展示"""
         try:
             rel_path = ""

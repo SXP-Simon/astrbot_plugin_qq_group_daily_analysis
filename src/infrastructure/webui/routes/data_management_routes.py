@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
-from ..web_compat import error_response, json_response, request
+from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
@@ -62,7 +62,7 @@ class DataManagementRoutes:
                     pass
         return {"count": count, "size_bytes": total}
 
-    async def api_get_plugin_data_overview(self) -> Any:
+    async def api_get_plugin_data_overview(self) -> WebApiResponse:
         """返回各数据分区的文件数量与字节大小概览"""
         try:
             data_dir = self._get_plugin_data_dir()
@@ -141,7 +141,7 @@ class DataManagementRoutes:
             logger.error(f"获取插件数据概览异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_avatar_cache(self) -> Any:
+    async def api_clear_avatar_cache(self) -> WebApiResponse:
         """清空头像缓存目录"""
         try:
             data_dir = self._get_plugin_data_dir()
@@ -162,7 +162,7 @@ class DataManagementRoutes:
             logger.error(f"清空头像缓存异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_reports(self) -> Any:
+    async def api_clear_reports(self) -> WebApiResponse:
         """清空历史报告目录（图片与 HTML 文件）"""
         try:
             if not self.report_output_dir:
@@ -190,7 +190,7 @@ class DataManagementRoutes:
             logger.error(f"清空历史报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_temp_files(self) -> Any:
+    async def api_clear_temp_files(self) -> WebApiResponse:
         """清空由本插件产生的临时图片文件（io_temp_img_* 前缀）"""
         try:
             from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
@@ -212,7 +212,7 @@ class DataManagementRoutes:
             logger.error(f"清空临时文件异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_custom_templates(self) -> Any:
+    async def api_clear_custom_templates(self) -> WebApiResponse:
         """清空用户自定义报告模板目录"""
         try:
             data_dir = self._get_plugin_data_dir()
@@ -228,7 +228,7 @@ class DataManagementRoutes:
             logger.error(f"清空自定义报告模板异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_config_files(self) -> Any:
+    async def api_clear_config_files(self) -> WebApiResponse:
         """清空上传的配置参考图文件"""
         try:
             data_dir = self._get_plugin_data_dir()
@@ -244,7 +244,7 @@ class DataManagementRoutes:
             logger.error(f"清空配置参考图异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_config_backups(self) -> Any:
+    async def api_clear_config_backups(self) -> WebApiResponse:
         """清空配置自动备份历史文件"""
         try:
             data_dir = self._get_plugin_data_dir()
@@ -260,7 +260,7 @@ class DataManagementRoutes:
             logger.error(f"清空配置历史自动备份异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_incremental_groups(self) -> Any:
+    async def api_get_incremental_groups(self) -> WebApiResponse:
         """获取所有拥有增量批次或游标记录的群号列表"""
         try:
             store = self._incremental_store
@@ -280,7 +280,7 @@ class DataManagementRoutes:
             logger.error(f"获取增量群聊列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_incremental_batches(self) -> Any:
+    async def api_get_incremental_batches(self) -> WebApiResponse:
         """获取指定群聊的增量批次列表与当前游标状态"""
         try:
             group_id = request.query.get("group_id", "").strip()
@@ -313,7 +313,7 @@ class DataManagementRoutes:
             logger.error(f"获取增量批次列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_incremental_batch_detail(self) -> Any:
+    async def api_get_incremental_batch_detail(self) -> WebApiResponse:
         """获取单条增量批次完整结构化数据"""
         try:
             group_id = request.query.get("group_id", "").strip()
@@ -338,7 +338,7 @@ class DataManagementRoutes:
             logger.error(f"获取增量批次详情异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_delete_incremental_batch(self) -> Any:
+    async def api_delete_incremental_batch(self) -> WebApiResponse:
         """删除指定群的单个增量批次"""
         try:
             payload_raw = await request.json(default={})
@@ -376,7 +376,7 @@ class DataManagementRoutes:
             logger.error(f"删除增量批次异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_reset_incremental_group(self) -> Any:
+    async def api_reset_incremental_group(self) -> WebApiResponse:
         """一键清空指定群全部增量批次并将游标归零"""
         try:
             payload_raw = await request.json(default={})
@@ -410,7 +410,7 @@ class DataManagementRoutes:
             logger.error(f"重置增量状态异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_list_checkpoints(self) -> Any:
+    async def api_list_checkpoints(self) -> WebApiResponse:
         """分页条件查询 Checkpoint 列表"""
         try:
             limit = int(request.query.get("limit", 50))
@@ -441,7 +441,7 @@ class DataManagementRoutes:
             logger.error(f"查询 Checkpoint 列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_checkpoint_groups(self) -> Any:
+    async def api_get_checkpoint_groups(self) -> WebApiResponse:
         """获取所有拥有有效 Checkpoint 的群号列表"""
         try:
             store = self._checkpoint_store
@@ -455,7 +455,7 @@ class DataManagementRoutes:
             logger.error(f"获取 Checkpoint 群号列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_checkpoint_detail(self) -> Any:
+    async def api_get_checkpoint_detail(self) -> WebApiResponse:
         """获取单条 Checkpoint 产物 JSON 与元数据"""
         try:
             group_id = request.query.get("group_id", "").strip()
@@ -487,7 +487,7 @@ class DataManagementRoutes:
             logger.error(f"获取 Checkpoint 详情异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_delete_checkpoint(self) -> Any:
+    async def api_delete_checkpoint(self) -> WebApiResponse:
         """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
         try:
             payload_raw = await request.json(default={})

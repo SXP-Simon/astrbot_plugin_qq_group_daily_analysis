@@ -135,8 +135,10 @@ def test_install_rejects_control_char_filename():
         def infolist(self):
             return [FakeMember("ok.html"), FakeMember("bad\x00name.html")]
 
+    from typing import Any, cast
+
     with pytest.raises(TemplateInstallError, match="控制字符"):
-        _validate_archive_members(FakeZip())  # type: ignore[arg-type]
+        _validate_archive_members(cast(Any, FakeZip()))
 
 
 def test_uninstall_rejects_symlink_target(tmp_path):

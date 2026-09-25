@@ -21,7 +21,7 @@ from ...reporting.template_installer import (
     uninstall_template,
     validate_template_name,
 )
-from ..web_compat import error_response, json_response, request
+from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
@@ -44,7 +44,7 @@ class TemplateRoutes:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
 
-    async def api_get_report_templates(self) -> Any:
+    async def api_get_report_templates(self) -> WebApiResponse:
         """获取系统内置及用户自定义的所有可用报告视觉模板"""
         try:
             generator = getattr(
@@ -68,7 +68,7 @@ class TemplateRoutes:
             logger.error(f"获取模板列表异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_template_preview(self) -> Any:
+    async def api_get_template_preview(self) -> WebApiResponse:
         """获取自定义模板的预览图（base64 data URL，供 WebUI 画廊等展示）"""
         try:
             template_name = (
@@ -104,7 +104,7 @@ class TemplateRoutes:
             logger.error(f"获取模板预览图异常: {e}", exc_info=True)
             return error_response("读取模板预览图失败。", status_code=500)
 
-    async def api_install_template_from_url(self) -> Any:
+    async def api_install_template_from_url(self) -> WebApiResponse:
         """从 GitHub 仓库链接安装自定义报告视觉模板"""
         try:
             body: dict[str, Any] = {}
@@ -131,7 +131,7 @@ class TemplateRoutes:
             logger.error(f"从 URL 安装模板异常: {e}", exc_info=True)
             return error_response("安装模板失败，请查看服务器日志。", status_code=500)
 
-    async def api_install_template_from_file(self) -> Any:
+    async def api_install_template_from_file(self) -> WebApiResponse:
         """从上传的 zip 压缩包安装自定义报告视觉模板（JSON Base64 编码）"""
         try:
             body: dict[str, Any] = {}
@@ -170,7 +170,7 @@ class TemplateRoutes:
             logger.error(f"从压缩包安装模板异常: {e}", exc_info=True)
             return error_response("安装模板失败，请查看服务器日志。", status_code=500)
 
-    async def api_uninstall_template(self) -> Any:
+    async def api_uninstall_template(self) -> WebApiResponse:
         """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
         try:
             body: dict[str, Any] = {}

@@ -72,10 +72,10 @@ def load_main_method(name: str):
         "_resolve_settings_handler": lambda plugin: (
             getattr(plugin, "settings_command_handler", None)
             or SettingsCommandHandler(
-                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
+                config_manager=getattr(plugin, "config_manager", None),
                 template_command_service=getattr(
                     plugin, "template_command_service", None
-                ),  # type: ignore
+                ),
                 template_preview_router=getattr(
                     plugin, "template_preview_router", None
                 ),
@@ -91,10 +91,10 @@ def load_main_method(name: str):
         "_resolve_comic_handler": lambda plugin: (
             getattr(plugin, "comic_command_handler", None)
             or ComicCommandHandler(
-                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-                bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
-                comic_service=getattr(plugin, "comic_service", None),  # type: ignore
-                analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+                config_manager=getattr(plugin, "config_manager", None),
+                bot_manager=getattr(plugin, "bot_manager", None),
+                comic_service=getattr(plugin, "comic_service", None),
+                analysis_service=getattr(plugin, "analysis_service", None),
                 active_task_manager=getattr(plugin, "active_task_manager", None),
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
                 plugin_instance=plugin,
@@ -103,21 +103,21 @@ def load_main_method(name: str):
         "_resolve_analysis_handler": lambda plugin: (
             getattr(plugin, "analysis_command_handler", None)
             or AnalysisCommandHandler(
-                config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-                bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
-                analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
-                report_generator=getattr(plugin, "report_generator", None),  # type: ignore
-                html_render=getattr(plugin, "html_render", None),  # type: ignore
+                config_manager=getattr(plugin, "config_manager", None),
+                bot_manager=getattr(plugin, "bot_manager", None),
+                analysis_service=getattr(plugin, "analysis_service", None),
+                report_generator=getattr(plugin, "report_generator", None),
+                html_render=getattr(plugin, "html_render", None),
                 active_task_manager=getattr(plugin, "active_task_manager", None),
                 trace_store=getattr(plugin, "trace_store", None),
                 message_sender=getattr(plugin, "message_sender", None),
                 comic_handler=(
                     getattr(plugin, "comic_command_handler", None)
                     or ComicCommandHandler(
-                        config_manager=getattr(plugin, "config_manager", None),  # type: ignore
-                        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore
-                        comic_service=getattr(plugin, "comic_service", None),  # type: ignore
-                        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore
+                        config_manager=getattr(plugin, "config_manager", None),
+                        bot_manager=getattr(plugin, "bot_manager", None),
+                        comic_service=getattr(plugin, "comic_service", None),
+                        analysis_service=getattr(plugin, "analysis_service", None),
                         active_task_manager=getattr(plugin, "active_task_manager", None),
                         plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
                         plugin_instance=plugin,

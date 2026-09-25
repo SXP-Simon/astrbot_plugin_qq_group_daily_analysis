@@ -7,11 +7,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
 from ...logging.plugin_log_buffer import global_log_buffer
-from ..web_compat import error_response, json_response, request, stream_response
+from ..web_compat import (
+    WebApiResponse,
+    error_response,
+    json_response,
+    request,
+    stream_response,
+)
 
 if TYPE_CHECKING:
     from ..active_task_manager import ActiveTaskManager
@@ -23,7 +29,7 @@ class LogRoutes:
     def __init__(self, active_task_manager: ActiveTaskManager) -> None:
         self.active_task_manager = active_task_manager
 
-    async def api_stream_events(self) -> Any:
+    async def api_stream_events(self) -> WebApiResponse:
         """SSE 实时推送任务生命周期事件"""
         q = self.active_task_manager.subscribe()
 
@@ -45,7 +51,7 @@ class LogRoutes:
 
         return stream_response(sse_generator())
 
-    async def api_get_plugin_logs(self) -> Any:
+    async def api_get_plugin_logs(self) -> WebApiResponse:
         """获取群分析专属日志列表"""
         try:
             limit = (
@@ -104,7 +110,7 @@ class LogRoutes:
             logger.error(f"查询插件日志异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_get_trace_logs(self, trace_id: str) -> Any:
+    async def api_get_trace_logs(self, trace_id: str) -> WebApiResponse:
         """获取指定 TraceID 的专属执行日志"""
         try:
             logs = global_log_buffer.get_trace_logs(trace_id)
@@ -113,7 +119,7 @@ class LogRoutes:
             logger.error(f"查询 Trace 日志异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_clear_plugin_logs(self) -> Any:
+    async def api_clear_plugin_logs(self) -> WebApiResponse:
         """清空内存中的插件日志"""
         try:
             global_log_buffer.clear()

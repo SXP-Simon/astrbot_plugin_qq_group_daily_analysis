@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
-from ..web_compat import error_response, json_response, request
+from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
@@ -42,12 +42,12 @@ class TaskRoutes:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
 
-    async def api_get_active_tasks(self) -> Any:
+    async def api_get_active_tasks(self) -> WebApiResponse:
         """获取当前正在执行的任务列表"""
         tasks = self.active_task_manager.get_active_tasks()
         return json_response({"status": "ok", "data": tasks})
 
-    async def api_cancel_task(self) -> Any:
+    async def api_cancel_task(self) -> WebApiResponse:
         """手动取消正在执行的任务"""
         try:
             payload_raw = await request.json(default={})
@@ -70,7 +70,7 @@ class TaskRoutes:
             logger.error(f"取消任务异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
-    async def api_trigger_task(self) -> Any:
+    async def api_trigger_task(self) -> WebApiResponse:
         """从 Web 界面手动触发群分析任务"""
         if not self.analysis_service:
             return error_response("分析服务未初始化", status_code=500)
@@ -260,7 +260,7 @@ class TaskRoutes:
         finally:
             await self.active_task_manager.finish_task(trace_id)
 
-    async def api_resume_task(self, trace_id: str) -> Any:
+    async def api_resume_task(self, trace_id: str) -> WebApiResponse:
         """从 Checkpoint 幂等恢复并重试任务"""
         if not self.analysis_service:
             return error_response("分析服务未初始化", status_code=500)

@@ -27,26 +27,29 @@ if TYPE_CHECKING:
     )
     from ...config.config_manager import ConfigManager
 
-try:
-    from telegram import (
-        InlineKeyboardButton,
-        InlineKeyboardMarkup,
-        InputMediaDocument,
-        InputMediaPhoto,
-    )
-    from telegram.error import BadRequest
-    from telegram.ext import CallbackQueryHandler, ContextTypes
+if not TYPE_CHECKING:
+    try:
+        from telegram import (
+            InlineKeyboardButton,
+            InlineKeyboardMarkup,
+            InputMediaDocument,
+            InputMediaPhoto,
+        )
+        from telegram.error import BadRequest
+        from telegram.ext import CallbackQueryHandler, ContextTypes
 
+        TELEGRAM_RUNTIME_AVAILABLE = True
+    except Exception:
+        TELEGRAM_RUNTIME_AVAILABLE = False
+        InlineKeyboardButton = None
+        InlineKeyboardMarkup = None
+        InputMediaPhoto = None
+        InputMediaDocument = None
+        BadRequest = Exception
+        CallbackQueryHandler = None
+        ContextTypes = None
+else:
     TELEGRAM_RUNTIME_AVAILABLE = True
-except Exception:
-    TELEGRAM_RUNTIME_AVAILABLE = False
-    InlineKeyboardButton = None  # type: ignore[assignment]
-    InlineKeyboardMarkup = None  # type: ignore[assignment]
-    InputMediaPhoto = None  # type: ignore[assignment]
-    InputMediaDocument = None  # type: ignore[assignment]
-    BadRequest = Exception  # type: ignore[assignment,misc]
-    CallbackQueryHandler = None  # type: ignore[assignment]
-    ContextTypes = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -145,7 +148,7 @@ class TelegramTemplatePreviewHandler:
                 self._handlers.pop(platform_id, None)
                 self._registered_platform_ids.discard(platform_id)
 
-            if not TELEGRAM_RUNTIME_AVAILABLE or CallbackQueryHandler is None:
+            if not TELEGRAM_RUNTIME_AVAILABLE:
                 return
 
             try:
@@ -495,11 +498,7 @@ class TelegramTemplatePreviewHandler:
             return
 
         try:
-            if (
-                not TELEGRAM_RUNTIME_AVAILABLE
-                or InputMediaPhoto is None
-                or InputMediaDocument is None
-            ):
+            if not TELEGRAM_RUNTIME_AVAILABLE:
                 return
 
             with open(image_path, "rb") as image_file:
@@ -517,8 +516,6 @@ class TelegramTemplatePreviewHandler:
                 return
             if self._is_photo_dimension_error(e):
                 try:
-                    if InputMediaDocument is None:
-                        return
                     with open(image_path, "rb") as image_file:
                         media = InputMediaDocument(media=image_file, caption=caption)
                         await query.edit_message_media(
@@ -537,11 +534,7 @@ class TelegramTemplatePreviewHandler:
             raise
 
     def _build_keyboard(self, token: str) -> Any:
-        if (
-            not TELEGRAM_RUNTIME_AVAILABLE
-            or InlineKeyboardMarkup is None
-            or InlineKeyboardButton is None
-        ):
+        if not TELEGRAM_RUNTIME_AVAILABLE:
             return None
         return InlineKeyboardMarkup(
             [
