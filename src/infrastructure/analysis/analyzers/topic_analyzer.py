@@ -3,6 +3,8 @@
 专门处理群聊话题分析
 """
 
+from __future__ import annotations
+
 import re
 from datetime import datetime
 

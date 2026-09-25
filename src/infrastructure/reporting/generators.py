@@ -16,7 +16,7 @@ from datetime import date, datetime
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from markupsafe import Markup
@@ -48,11 +48,25 @@ from .render_diagnostics import (
 )
 from .templates import HTMLTemplates
 
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
+
 
 class ReportGenerator(IReportGenerator):
     """报告生成器 - 负责全格式群聊分析报告的数据装配与渲染。"""
 
-    def __init__(self, config_manager: Any, data_dir: Path):
+    config_manager: ConfigManager | Any
+    data_dir: Path
+    activity_visualizer: ActivityVisualizer
+    html_templates: HTMLTemplates
+    _render_semaphore: asyncio.Semaphore
+    _qq_official_markdown_generator: QQOfficialMarkdownReportGenerator
+    _avatar_service: AvatarService
+    _avatar_cache: Any
+    _profile_asset_manifest: dict[str, dict]
+    _preparer: RenderDataPreparer
+
+    def __init__(self, config_manager: ConfigManager | Any, data_dir: Path) -> None:
         """初始化报告生成器。
 
         Args:

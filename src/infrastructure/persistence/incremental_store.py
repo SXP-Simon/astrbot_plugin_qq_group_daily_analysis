@@ -13,6 +13,8 @@ KV 键设计：
   值: {"timestamp": 1234567890, "message_ids": ["..."]}
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from ...domain.entities.incremental_state import IncrementalBatch
@@ -38,7 +40,9 @@ class IncrementalStore(IIncrementalStore):
     LAST_TS_PREFIX = "incr_last_ts"
     GROUPS_REGISTRY_KEY = "incr_tracked_groups"
 
-    def __init__(self, star_instance: Any):
+    plugin: Any
+
+    def __init__(self, star_instance: Any) -> None:
         """
         初始化批次持久化仓储。
 

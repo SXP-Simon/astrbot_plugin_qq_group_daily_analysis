@@ -4,6 +4,8 @@
 适用于遵循 OneBot v11 标准扩展（go-cqhttp, onebots 等）及通用默认实现的协议端。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from .....utils.logger import logger

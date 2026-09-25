@@ -3,6 +3,8 @@
 定义活跃度可视化的抽象契约。
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from ..value_objects import ActivityVisualization

@@ -3,6 +3,8 @@
 负责处理插件配置
 """
 
+from __future__ import annotations
+
 import json
 import os
 import random
@@ -32,8 +34,10 @@ class ConfigManager:
     """
 
     StarTools = StarTools
+    config: AstrBotConfig
+    _migrator: ConfigMigrator
 
-    def __init__(self, config: AstrBotConfig):
+    def __init__(self, config: AstrBotConfig) -> None:
         self.config = config
         self._migrator = ConfigMigrator(self, star_tools=StarTools)
         self._migrator.run_all_migrations()

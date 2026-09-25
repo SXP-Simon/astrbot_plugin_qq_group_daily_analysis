@@ -38,7 +38,9 @@ class TemplateCommandService:
             return chr(0x32B1 + num - 36)
         return f"[{num}]"
 
-    def __init__(self, plugin_root: str):
+    plugin_root: str
+
+    def __init__(self, plugin_root: str) -> None:
         self.plugin_root = plugin_root
 
     def resolve_template_base_dir(self) -> str:

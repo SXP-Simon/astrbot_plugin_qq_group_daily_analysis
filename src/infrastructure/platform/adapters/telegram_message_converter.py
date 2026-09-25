@@ -68,9 +68,7 @@ class TelegramMessageConverter:
         group_id: str,
         msg: UnifiedMessage,
         sender_name_cache: dict[str, str],
-        member_fetcher: Callable[
-            [str, str], Coroutine[Any, Any, UnifiedMember | None]
-        ],
+        member_fetcher: Callable[[str, str], Coroutine[Any, Any, UnifiedMember | None]],
     ) -> UnifiedMessage:
         """若发送者昵称为占位值，尝试通过成员查询回调自愈修复。
 

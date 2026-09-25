@@ -13,6 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.star import Context
+
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.platform.bot_manager import BotManager
+    from ...infrastructure.platform.template_preview import TemplatePreviewRouter
+    from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
 
 from ...domain.repositories.config_repository import IConfigProvider
 from ...domain.repositories.persistence_repository import IIncrementalStore
@@ -24,16 +30,25 @@ from ..services.template_command_service import TemplateCommandService
 class SettingsCommandHandler:
     """管理设置、模板切换与状态查询的命令处理器。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    template_command_service: TemplateCommandService
+    template_preview_router: TemplatePreviewRouter | Any
+    auto_scheduler: AutoScheduler | Any
+    incremental_store: IIncrementalStore | None
+    incremental_merge_service: IncrementalMergeService | None
+    bot_manager: BotManager | Any | None
+    context: Context | Any | None
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
+        config_manager: IConfigProvider | ConfigManager | Any,
         template_command_service: TemplateCommandService,
-        template_preview_router: Any,
-        auto_scheduler: Any,
+        template_preview_router: TemplatePreviewRouter | Any,
+        auto_scheduler: AutoScheduler | Any,
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
-        bot_manager: Any | None = None,
-        context: Any | None = None,
+        bot_manager: BotManager | Any | None = None,
+        context: Context | Any | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.template_command_service = template_command_service

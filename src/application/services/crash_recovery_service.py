@@ -23,6 +23,11 @@ from .analysis_application_service import AnalysisApplicationService
 class CrashRecoveryService:
     """开机崩溃任务对账与自愈恢复服务"""
 
+    trace_store: TraceSQLiteStore | None
+    checkpoint_store: CheckpointStore | None
+    analysis_service: AnalysisApplicationService | None
+    report_dispatcher: ReportDispatcher | None
+
     def __init__(
         self,
         trace_store: TraceSQLiteStore | None,

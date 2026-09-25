@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import mimetypes
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api.star import Context
 
@@ -15,6 +17,9 @@ from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
+if TYPE_CHECKING:
+    from ...infrastructure.config.config_manager import ConfigManager
+
 
 class ComicApplicationService:
     """
@@ -24,14 +29,20 @@ class ComicApplicationService:
     3. 返回图片数据供外部上传。
     """
 
+    llm_analyzer: IAnalysisProvider
+    drawing_client: DrawingClient
+    config_manager: IConfigProvider | ConfigManager | Any
+    plugin_data_dir: Path
+    context: Context | None
+
     def __init__(
         self,
         llm_analyzer: IAnalysisProvider,
         drawing_client: DrawingClient,
-        config_manager: IConfigProvider,
+        config_manager: IConfigProvider | ConfigManager | Any,
         plugin_data_dir: Path,
         context: Context | None = None,
-    ):
+    ) -> None:
         self.llm_analyzer = llm_analyzer
         self.drawing_client = drawing_client
         self.config_manager = config_manager

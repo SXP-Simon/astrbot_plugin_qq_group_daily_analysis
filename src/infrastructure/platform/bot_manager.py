@@ -6,10 +6,15 @@ Bot实例管理模块 - 基础设施层
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
+
+if TYPE_CHECKING:
+    from astrbot.api.all import Context
+
+    from ..config.config_manager import ConfigManager
 
 
 class BotManager:
@@ -20,7 +25,17 @@ class BotManager:
     实现跨平台支持。
     """
 
-    def __init__(self, config_manager):
+    config_manager: ConfigManager | Any
+    _bot_instances: dict[str, object]
+    _adapters: dict[str, PlatformAdapter]
+    _platforms: dict[str, object]
+    _bot_self_ids: list[str]
+    _context: Context | object | None
+    _is_initialized: bool
+    _default_platform: str
+    _plugin_instance: object | None
+
+    def __init__(self, config_manager: ConfigManager | Any) -> None:
         self.config_manager = config_manager
         self._bot_instances: dict[str, object] = {}  # {platform_id: bot_instance}
         self._adapters: dict[
@@ -28,14 +43,14 @@ class BotManager:
         ] = {}  # {platform_id: PlatformAdapter} - DDD 集成
         self._platforms: dict[str, object] = {}  # 存储平台对象以访问配置
         self._bot_self_ids: list[str] = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
-        self._context: object | None = None
+        self._context: Context | object | None = None
         self._is_initialized = False
         self._default_platform = (
             "default"  # AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）
         )
         self._plugin_instance: object | None = None  # 插件实例引用，用于适配器回调
 
-    def set_context(self, context):
+    def set_context(self, context: Context | object | None) -> None:
         """设置AstrBot上下文，并传递给所有支持的适配器"""
         self._context = context
 

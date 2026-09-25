@@ -4,6 +4,8 @@ Web 控制台请求与响应数据传输对象 (Rest DTOs)
 为 WebUI 控制台接口提供标准强类型契约与字段定义，作为应用层与表现层之间的通信模型。
 """
 
+from __future__ import annotations
+
 from typing import Any, TypedDict
 
 

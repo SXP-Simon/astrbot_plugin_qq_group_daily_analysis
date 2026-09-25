@@ -5,6 +5,8 @@
 它封装了现有的 history_manager 功能。
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -25,12 +27,15 @@ class HistoryRepository:
         history_dir (Path): 专门存放历史记录的子目录
     """
 
-    def __init__(self, data_dir: str):
+    data_dir: Path
+    history_dir: Path
+
+    def __init__(self, data_dir: str | Path) -> None:
         """
         初始化历史仓库。
 
         Args:
-            data_dir (str): 存储历史数据的基础目录路径
+            data_dir (str | Path): 存储历史数据的基础目录路径
         """
         self.data_dir = Path(data_dir)
         self.history_dir = self.data_dir / "history"

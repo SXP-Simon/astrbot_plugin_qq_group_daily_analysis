@@ -3,9 +3,12 @@
 负责定时任务和自动分析功能，支持传统单次分析与增量多次分析两种调度模式。
 """
 
+from __future__ import annotations
+
 import asyncio
 import time as time_mod
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -16,6 +19,15 @@ from ..messaging.message_sender import MessageSender
 from ..reporting.dispatcher import ReportDispatcher
 from .incremental_trigger import IncrementalTriggerCoordinator
 from .target_resolver import ScheduledTargetResolver
+
+if TYPE_CHECKING:
+    from ...application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...domain.repositories.report_repository import IReportGenerator
+    from ..config.config_manager import ConfigManager
+    from ..platform.bot_manager import BotManager
+    from ..reporting.generators import ReportGenerator
 
 _SCHEDULED_DISPATCH_INFO_SECONDS = 1.0
 _SCHEDULED_DISPATCH_WARN_SECONDS = 15.0
@@ -35,15 +47,25 @@ AUTO_ANALYSIS_SKIP_REASONS: dict[str, str] = {
 class AutoScheduler:
     """自动调度器，支持传统模式和增量模式"""
 
+    config_manager: ConfigManager | Any
+    analysis_service: AnalysisApplicationService | Any
+    bot_manager: BotManager | Any
+    report_generator: ReportGenerator | IReportGenerator | Any
+    html_render_func: Callable[..., Any] | None
+    plugin_instance: Any | None
+    target_resolver: ScheduledTargetResolver
+    message_sender: MessageSender
+    report_dispatcher: ReportDispatcher
+
     def __init__(
         self,
-        config_manager,
-        analysis_service,
-        bot_manager,
-        report_generator=None,
-        html_render_func=None,
+        config_manager: ConfigManager | Any,
+        analysis_service: AnalysisApplicationService | Any,
+        bot_manager: BotManager | Any,
+        report_generator: ReportGenerator | IReportGenerator | Any = None,
+        html_render_func: Callable[..., Any] | None = None,
         plugin_instance: Any | None = None,
-    ):
+    ) -> None:
         self.config_manager = config_manager
         self.analysis_service = analysis_service
         self.bot_manager = bot_manager

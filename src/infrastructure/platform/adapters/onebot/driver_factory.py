@@ -4,6 +4,8 @@ OneBot 协议端驱动工厂 (OneBot Driver Factory)
 根据 get_version_info 响应中的 app_name 或配置自动匹配并创建对应的 OneBotDriver 实例。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from .....utils.logger import logger

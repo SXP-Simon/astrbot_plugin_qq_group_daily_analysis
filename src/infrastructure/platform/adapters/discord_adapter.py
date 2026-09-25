@@ -8,6 +8,8 @@ Discord 平台适配器
 具体实现取决于 AstrBot 的 Discord 集成方式。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from ....utils.logger import logger

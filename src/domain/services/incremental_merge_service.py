@@ -12,6 +12,8 @@
 - IncrementalState → list[GoldenQuote]
 """
 
+from __future__ import annotations
+
 import time
 
 from ...utils.logger import logger

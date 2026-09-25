@@ -3,10 +3,12 @@ LLM API请求处理工具模块
 提供LLM调用和token统计功能
 """
 
+from __future__ import annotations
+
 import asyncio
 import random
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context
@@ -15,7 +17,6 @@ from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
-from ...config.config_manager import ConfigManager
 from .llm_diagnostics import (
     LLMBlockDiagnosis,
     diagnose_llm_task_block,
@@ -23,6 +24,9 @@ from .llm_diagnostics import (
     format_task_await_chain,
 )
 from .structured_output_schema import JSONObject, JSONValue
+
+if TYPE_CHECKING:
+    from ...config.config_manager import ConfigManager
 
 __all__ = [
     "LLMBlockDiagnosis",
@@ -187,7 +191,7 @@ async def _try_get_first_available_provider_id(context) -> str | None:
 
 async def get_provider_id_with_fallback(
     context: Context,
-    config_manager: ConfigManager,
+    config_manager: ConfigManager | Any,
     provider_id_key: str | None,
     umo: str | None = None,
 ) -> str | None:

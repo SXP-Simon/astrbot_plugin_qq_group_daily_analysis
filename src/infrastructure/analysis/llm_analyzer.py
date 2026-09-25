@@ -3,7 +3,10 @@ LLM分析器模块
 负责协调各个分析器进行话题分析、用户称号分析和金句分析
 """
 
+from __future__ import annotations
+
 import asyncio
+from typing import TYPE_CHECKING, Any
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
@@ -24,6 +27,11 @@ from .analyzers.user_title_analyzer import UserTitleAnalyzer
 from .utils.json_utils import fix_json
 from .utils.llm_utils import call_provider_with_retry
 
+if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
+    from ..config.config_manager import ConfigManager
+
 
 class LLMAnalyzer(IAnalysisProvider):
     """
@@ -32,12 +40,19 @@ class LLMAnalyzer(IAnalysisProvider):
     保持向后兼容性，提供原有的接口
     """
 
+    context: Context | Any
+    config_manager: ConfigManager | Any
     topic_analyzer: TopicAnalyzer
     user_title_analyzer: UserTitleAnalyzer
     golden_quote_analyzer: GoldenQuoteAnalyzer
+    chat_quality_analyzer: ChatQualityAnalyzer
     comic_storyboard_analyzer: ComicStoryboardAnalyzer
 
-    def __init__(self, context, config_manager):
+    def __init__(
+        self,
+        context: Context | Any,
+        config_manager: ConfigManager | Any,
+    ) -> None:
         """
         初始化LLM分析器
 

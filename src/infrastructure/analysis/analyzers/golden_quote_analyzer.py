@@ -3,6 +3,8 @@
 专门处理群聊金句提取和分析
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 
 from ....domain.value_objects import GoldenQuote, TokenUsage

@@ -1,12 +1,17 @@
 """基于群消息量的增量分析触发协调器。"""
 
+from __future__ import annotations
+
 import asyncio
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
 
 
 class IncrementalTriggerCoordinator:
@@ -17,9 +22,26 @@ class IncrementalTriggerCoordinator:
     _FLUSH_DELAY_SECONDS = 5
     _SEMAPHORE_WARN_SECONDS = 15.0
 
+    config_manager: ConfigManager | Any
+    plugin: Any
+    analyze_callback: Callable[[str, str], Awaitable[dict | None]]
+    on_analysis_succeeded: Callable[[str, str], None] | None
+    _states: dict[str, dict[str, Any]]
+    _loaded: bool
+    _load_lock: asyncio.Lock
+    _state_lock: asyncio.Lock
+    _seen_event_ids: OrderedDict[str, None]
+    _analysis_tasks: dict[str, asyncio.Task]
+    _running_state_keys: set[str]
+    _state_versions: dict[str, int]
+    _target_config_signature: tuple[Any, ...] | None
+    _flush_task: asyncio.Task | None
+    _closed: bool
+    _semaphore: asyncio.Semaphore | None
+
     def __init__(
         self,
-        config_manager: Any,
+        config_manager: ConfigManager | Any,
         plugin_instance: Any,
         analyze_callback: Callable[[str, str], Awaitable[dict | None]],
         on_analysis_succeeded: Callable[[str, str], None] | None = None,

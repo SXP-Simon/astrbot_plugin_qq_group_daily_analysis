@@ -4,6 +4,8 @@ OneBot v11 平台适配器
 支持 NapCat、go-cqhttp、Lagrange 及其他 OneBot 实现。
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import os

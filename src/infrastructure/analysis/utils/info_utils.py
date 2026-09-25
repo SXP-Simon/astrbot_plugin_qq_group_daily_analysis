@@ -1,6 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ...config.config_manager import ConfigManager
+
+
 class InfoUtils:
     @staticmethod
-    def get_user_nickname(config_manager, sender) -> str:
+    def get_user_nickname(
+        config_manager: ConfigManager | Any, sender: dict[str, Any]
+    ) -> str:
         """
         获取用户昵称
 

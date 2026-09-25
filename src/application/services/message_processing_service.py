@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from collections import Counter, OrderedDict
 
@@ -28,15 +30,22 @@ class MessageProcessingService:
     5. QQ 官方事件消息去重（按 message_id 预占 + 确认机制）
     """
 
-    def __init__(self, context: Context, group_registry: PlatformGroupRegistry):
+    context: Context
+    group_registry: PlatformGroupRegistry
+    _seen_event_ids: OrderedDict[str, None]
+    _inflight_event_ids: set[str]
+    _seen_event_ids_limit: int
+    _supports_history_max_messages: bool | None
+
+    def __init__(self, context: Context, group_registry: PlatformGroupRegistry) -> None:
         self.context = context
         self.group_registry = group_registry
-        self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
-        self._inflight_event_ids: set[str] = set()
+        self._seen_event_ids = OrderedDict()
+        self._inflight_event_ids = set()
         self._seen_event_ids_limit = 4096
         # AstrBot 4.26.x 的消息历史接口尚未提供 max_messages 参数。
         # 首次探测到旧签名后缓存结果，避免每条消息都触发一次失败调用。
-        self._supports_history_max_messages: bool | None = None
+        self._supports_history_max_messages = None
 
     async def process_message(self, event: AstrMessageEvent) -> bool:
         """

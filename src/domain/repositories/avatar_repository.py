@@ -2,6 +2,8 @@
 头像仓储接口 - 跨平台头像抽象
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 

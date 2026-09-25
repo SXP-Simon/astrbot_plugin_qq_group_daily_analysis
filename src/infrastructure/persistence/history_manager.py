@@ -4,6 +4,8 @@
 使用 AstrBot 的 put_kv_data/get_kv_data 实现
 """
 
+from __future__ import annotations
+
 import datetime
 from typing import Any
 
@@ -19,7 +21,9 @@ class HistoryManager:
     确保即使在 Bot 重启后也能回溯历史数据。
     """
 
-    def __init__(self, star_instance: Any):
+    plugin: Any
+
+    def __init__(self, star_instance: Any) -> None:
         """
         初始化历史记录管理器。
 

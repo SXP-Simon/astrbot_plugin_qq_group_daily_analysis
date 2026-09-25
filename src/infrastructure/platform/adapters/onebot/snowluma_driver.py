@@ -4,6 +4,8 @@ SnowLuma 专属驱动实现 (SnowLuma Driver)
 适配 SnowLuma 的 message_id 分页、result=120 发消息拒绝判定及特有接口行为。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from .standard_driver import StandardOneBotDriver

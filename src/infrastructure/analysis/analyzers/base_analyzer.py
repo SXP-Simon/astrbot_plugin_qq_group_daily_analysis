@@ -3,9 +3,11 @@
 定义通用分析流程和接口
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sized
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
@@ -18,6 +20,11 @@ from ..utils.llm_utils import (
 )
 from ..utils.structured_output_schema import JSONObject, build_response_format
 
+if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
+    from ...config.config_manager import ConfigManager
+
 TDataObject = TypeVar("TDataObject")
 TInputData = TypeVar("TInputData")
 
@@ -28,7 +35,14 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
     定义所有分析器的通用接口 and 流程
     """
 
-    def __init__(self, context, config_manager):
+    context: Context | Any
+    config_manager: ConfigManager | Any
+
+    def __init__(
+        self,
+        context: Context | Any,
+        config_manager: ConfigManager | Any,
+    ) -> None:
         """
         初始化基础分析器
 

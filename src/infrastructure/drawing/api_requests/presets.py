@@ -5,6 +5,8 @@
 在对应分支描述其请求格式，不会把服务商细节重新堆回 DrawingClient。
 """
 
+from __future__ import annotations
+
 import base64
 from typing import Any
 

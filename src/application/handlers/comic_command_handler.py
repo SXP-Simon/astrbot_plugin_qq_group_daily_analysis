@@ -9,7 +9,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from astrbot.api.event import AstrMessageEvent
 
@@ -24,14 +24,30 @@ from ..services.analysis_application_service import (
 )
 from ..services.comic_application_service import ComicApplicationService
 
+if TYPE_CHECKING:
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.platform.bot_manager import BotManager
+
 
 class ComicCommandHandler:
     """群漫画指令应用层处理器。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    bot_manager: BotManager | Any
+    comic_service: ComicApplicationService
+    analysis_service: AnalysisApplicationService
+    active_task_manager: ActiveTaskManager | None
+    plugin_data_dir: Path
+    plugin_instance: Any | None
+    terminating: bool
+    _comic_semaphore: asyncio.Semaphore
+    _comic_group_tasks: dict[str, asyncio.Task]
+    _background_tasks: set[asyncio.Task]
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
-        bot_manager: Any,
+        config_manager: IConfigProvider | ConfigManager | Any,
+        bot_manager: BotManager | Any,
         comic_service: ComicApplicationService,
         analysis_service: AnalysisApplicationService,
         active_task_manager: ActiveTaskManager | None = None,
@@ -526,7 +542,7 @@ class ComicCommandHandler:
         )
         if not (callable(upload_album_fn) and upload_album_fn()):
             return
-        adapter = (
+        adapter: Any = (
             self.bot_manager.get_adapter(platform_id) if self.bot_manager else None
         )
         if not adapter or not hasattr(adapter, "upload_group_album"):

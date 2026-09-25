@@ -3,6 +3,8 @@ JSON处理工具模块
 提供JSON解析、修复和正则提取功能
 """
 
+from __future__ import annotations
+
 import json
 import re
 from typing import Any

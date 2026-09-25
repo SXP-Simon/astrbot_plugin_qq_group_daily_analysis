@@ -3,6 +3,8 @@
 参考 astrbot_plugin_github_analyzer 的实现方式
 """
 
+from __future__ import annotations
+
 from collections import defaultdict
 from datetime import datetime
 from typing import TypedDict

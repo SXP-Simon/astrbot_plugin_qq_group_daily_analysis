@@ -10,7 +10,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
@@ -22,11 +22,20 @@ from .template_installer import (
     validate_template_name,
 )
 
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
+
 
 class HTMLTemplates:
     """HTML模板管理类"""
 
-    def __init__(self, config_manager):
+    config_manager: ConfigManager | Any
+    base_dir: str
+    platform_base_dir: str
+    _envs: dict[str, SandboxedEnvironment]
+    _env_lock: threading.Lock
+
+    def __init__(self, config_manager: ConfigManager | Any) -> None:
         """初始化Jinja2环境"""
         self.config_manager = config_manager
         # 设置模板根目录

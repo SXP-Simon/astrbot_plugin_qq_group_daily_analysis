@@ -5,14 +5,15 @@
 全局配置读取，避免 HTTP 协议细节再次集中到一个过大的类中。
 """
 
+from __future__ import annotations
+
 import asyncio
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from ...utils.logger import logger
-from ..config.config_manager import ConfigManager
 from .api_requests import DrawingApiRequestService
 from .api_requests.context import DrawingRequestContext
 from .api_requests.presets import resolve_dashscope_size
@@ -20,6 +21,9 @@ from .drawing_image_response import (
     DrawingImageResponseService,
     ImageDownloadFailedError,
 )
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
 
 __all__ = ["DrawingClient", "ImageDownloadFailedError"]
 
@@ -48,7 +52,11 @@ class DrawingClient:
     ``_post_json_for_image`` 等方法时能够继续生效。
     """
 
-    def __init__(self, config_manager: ConfigManager):
+    config_manager: ConfigManager | Any
+    _image_response_service: DrawingImageResponseService
+    _request_service: DrawingApiRequestService
+
+    def __init__(self, config_manager: ConfigManager | Any) -> None:
         self.config_manager = config_manager
         self._image_response_service = DrawingImageResponseService(
             hooks=self,

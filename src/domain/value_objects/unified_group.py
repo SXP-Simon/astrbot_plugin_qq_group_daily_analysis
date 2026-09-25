@@ -2,6 +2,8 @@
 统一群组值对象 - 跨平台群组抽象
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 

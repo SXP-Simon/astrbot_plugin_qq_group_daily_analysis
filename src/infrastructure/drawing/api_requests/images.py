@@ -6,6 +6,8 @@ JSON 的 ``/images/generations``，有参考图时使用 multipart 的 ``/images
 因未知字段拒绝请求。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import httpx

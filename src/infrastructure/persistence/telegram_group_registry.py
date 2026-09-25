@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
 from astrbot.api.star import Star
 
@@ -14,7 +17,10 @@ class TelegramGroupRegistry:
 
     _KV_KEY = "telegram_seen_groups_v1"
 
-    def __init__(self, plugin_instance: Star):
+    plugin: Star | Any
+    _lock: asyncio.Lock
+
+    def __init__(self, plugin_instance: Star | Any) -> None:
         self.plugin = plugin_instance
         self._lock = asyncio.Lock()
 

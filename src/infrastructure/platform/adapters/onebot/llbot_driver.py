@@ -4,6 +4,8 @@ LuckyLilliaBot (LLOneBot) 专属驱动实现 (LLOneBot Driver)
 适配 LLOneBot，支持其 upload_group_album 接收 files: list 数组等接口规范。
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from .....utils.logger import logger

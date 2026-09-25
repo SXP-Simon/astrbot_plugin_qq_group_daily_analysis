@@ -9,7 +9,7 @@ import asyncio
 import datetime as dt
 import time as time_mod
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.repositories.config_repository import IConfigProvider
@@ -40,17 +40,38 @@ from .incremental_batch_builder import (
 from .pipeline_context import PipelineContext
 from .task_guard import DuplicateGroupTaskError, TaskGuard
 
+if TYPE_CHECKING:
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.persistence.history_manager import HistoryManager
+    from ...infrastructure.platform.bot_manager import BotManager
+
 __all__ = ["AnalysisApplicationService", "DuplicateGroupTaskError"]
 
 
 class AnalysisApplicationService:
     """分析应用服务 - 协调业务流程（每日分析 + 增量分析 + 断点续跑）。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    bot_manager: BotManager | Any
+    history_manager: HistoryManager | Any
+    report_generator: IReportGenerator
+    llm_analyzer: IAnalysisProvider
+    statistics_service: StatisticsService
+    analysis_domain_service: AnalysisDomainService
+    incremental_store: IIncrementalStore | None
+    incremental_merge_service: IncrementalMergeService | None
+    checkpoint_store: ICheckpointStore | None
+    html_render: Any | None
+    _task_guard: TaskGuard
+    llm_semaphore: asyncio.Semaphore
+    _incremental_service: IncrementalAnalysisService
+    _recovery_service: AnalysisRecoveryService
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
-        bot_manager: Any,
-        history_manager: Any,
+        config_manager: IConfigProvider | ConfigManager | Any,
+        bot_manager: BotManager | Any,
+        history_manager: HistoryManager | Any,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
@@ -59,7 +80,7 @@ class AnalysisApplicationService:
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: ICheckpointStore | None = None,
         html_render: Any | None = None,
-    ):
+    ) -> None:
         """初始化分析应用服务。
 
         Args:
@@ -223,7 +244,9 @@ class AnalysisApplicationService:
             )
 
             if days is None:
-                days = self.config_manager.get_analysis_days()
+                days = int(self.config_manager.get_analysis_days() or 1)
+            else:
+                days = int(days)
             max_count = self.config_manager.get_max_messages()
 
             async with pipeline.step(
@@ -621,7 +644,9 @@ class AnalysisApplicationService:
                     )
 
             if days is None:
-                days = self.config_manager.get_analysis_days()
+                days = int(self.config_manager.get_analysis_days() or 1)
+            else:
+                days = int(days)
             max_count = self.config_manager.get_max_messages()
 
             raw_messages = await adapter.fetch_messages(

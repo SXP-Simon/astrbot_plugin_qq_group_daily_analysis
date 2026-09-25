@@ -5,18 +5,23 @@
 将接口错误页、内网地址或超大内容作为漫画图片继续投递。
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import binascii
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
 
 
 class ImageDownloadFailedError(Exception):
@@ -30,7 +35,7 @@ class ImageDownloadFailedError(Exception):
 class DrawingImageResponseHooks(Protocol):
     """描述图片响应服务依赖的宿主能力。"""
 
-    config_manager: Any
+    config_manager: ConfigManager | Any
 
 
 @dataclass(slots=True)

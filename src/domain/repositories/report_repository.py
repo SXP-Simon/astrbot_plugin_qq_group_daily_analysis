@@ -3,6 +3,8 @@
 定义分析报告生成的抽象契约
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 

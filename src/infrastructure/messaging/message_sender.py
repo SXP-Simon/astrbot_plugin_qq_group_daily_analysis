@@ -1,9 +1,12 @@
-"""
-消息发送器 - 基础设施层
-提供高层消息发送接口，支持跨平台智能路由。
-"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
+    from ..platform.bot_manager import BotManager
 
 
 class MessageSender:
@@ -12,7 +15,14 @@ class MessageSender:
     封装了 PlatformAdapter 的底层调用，提供更高层的发送接口
     """
 
-    def __init__(self, bot_manager, config_manager):
+    bot_manager: BotManager | Any
+    config_manager: ConfigManager | Any
+
+    def __init__(
+        self,
+        bot_manager: BotManager | Any,
+        config_manager: ConfigManager | Any,
+    ) -> None:
         self.bot_manager = bot_manager
         self.config_manager = config_manager
 

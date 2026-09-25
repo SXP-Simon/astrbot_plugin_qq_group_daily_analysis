@@ -2,6 +2,8 @@
 消息仓储接口 - 平台无关的抽象
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from ..value_objects.platform_capabilities import PlatformCapabilities

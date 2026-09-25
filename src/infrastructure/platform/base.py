@@ -2,6 +2,8 @@
 平台适配器基类
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -32,12 +34,16 @@ class PlatformAdapter(
     """
 
     bot: Any
+    config: dict[str, object]
+    _platform_id: str
+    bot_self_ids: list[str]
+    _capabilities: PlatformCapabilities | None
 
     def __init__(
         self,
         bot_instance: Any,
         config: Mapping[str, Any] | None = None,
-    ):
+    ) -> None:
         """
         初始化平台适配器。
 
@@ -231,7 +237,12 @@ class PlatformAdapter(
         """
         return False
 
-    async def send_text_report(self, group_id: str, content: str) -> bool:
+    async def send_text_report(
+        self,
+        group_id: str,
+        content: str,
+        fallback_content: str | None = None,
+    ) -> bool:
         """
         以最适合当前平台的方式发送长文本报告。
         默认逻辑：将长文本切分为多个节点，然后调用 send_forward_msg。

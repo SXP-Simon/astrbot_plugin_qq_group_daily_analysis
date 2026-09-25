@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import os
 import tempfile
@@ -6,12 +8,17 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
+    from ..messaging.message_sender import MessageSender
+    from .generators import ReportGenerator
 
 
 class ReportDispatcher:
@@ -20,16 +27,20 @@ class ReportDispatcher:
     负责协调报告生成、格式选择、消息发送和失败重试
     """
 
+    config_manager: ConfigManager | Any
+    report_generator: ReportGenerator | Any
+    message_sender: MessageSender | Any
+
     def __init__(
         self,
-        config_manager,
-        report_generator,
-        message_sender,
-    ):
+        config_manager: ConfigManager | Any,
+        report_generator: ReportGenerator | Any,
+        message_sender: MessageSender | Any,
+    ) -> None:
         self.config_manager = config_manager
         self.report_generator = report_generator
         self.message_sender = message_sender
-        self._html_render_func: Callable | None = None
+        self._html_render_func: Callable[..., Any] | None = None
 
     def set_html_render(self, render_func: Callable):
         """设置 HTML 渲染函数 (运行时注入)"""

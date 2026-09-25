@@ -1,5 +1,7 @@
 """安全模板渲染工具（String Template 兼容）"""
 
+from __future__ import annotations
+
 import re
 from string import Template
 

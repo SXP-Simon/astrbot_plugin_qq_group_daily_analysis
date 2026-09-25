@@ -13,7 +13,7 @@ import tempfile
 from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from astrbot.api.event import AstrMessageEvent
@@ -33,21 +33,40 @@ from ..services.analysis_application_service import (
     DuplicateGroupTaskError,
 )
 
+if TYPE_CHECKING:
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.messaging.message_sender import MessageSender
+    from ...infrastructure.platform.bot_manager import BotManager
+    from .comic_command_handler import ComicCommandHandler
+
 
 class AnalysisCommandHandler:
     """日常分析指令应用层处理器。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    bot_manager: BotManager | Any
+    analysis_service: AnalysisApplicationService
+    report_generator: ReportGenerator
+    html_render: Callable
+    active_task_manager: ActiveTaskManager | None
+    trace_store: TraceSQLiteStore | None
+    message_sender: MessageSender | Any | None
+    comic_handler: ComicCommandHandler | Any | None
+    plugin_data_dir: Path
+    plugin_instance: Any | None
+    terminating: bool
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
-        bot_manager: Any,
+        config_manager: IConfigProvider | ConfigManager | Any,
+        bot_manager: BotManager | Any,
         analysis_service: AnalysisApplicationService,
         report_generator: ReportGenerator,
         html_render: Callable,
         active_task_manager: ActiveTaskManager | None = None,
         trace_store: TraceSQLiteStore | None = None,
-        message_sender: Any | None = None,
-        comic_handler: Any | None = None,
+        message_sender: MessageSender | Any | None = None,
+        comic_handler: ComicCommandHandler | Any | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: Any | None = None,
     ) -> None:
@@ -576,7 +595,7 @@ class AnalysisCommandHandler:
         if not enable_file and not enable_album:
             return
 
-        adapter = self.bot_manager.get_adapter(platform_id)
+        adapter: Any = self.bot_manager.get_adapter(platform_id)
         if not adapter:
             return
         if enable_file and not hasattr(adapter, "upload_group_file_to_folder"):

@@ -3,6 +3,8 @@
 负责用户维度的活跃度分析、发言习惯及活动模式识别。
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import TypedDict
 

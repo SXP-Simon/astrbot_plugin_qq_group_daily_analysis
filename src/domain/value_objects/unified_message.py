@@ -4,6 +4,8 @@
 所有平台消息都转换为此格式进行分析。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

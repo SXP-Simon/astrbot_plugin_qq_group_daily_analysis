@@ -27,24 +27,38 @@ if TYPE_CHECKING:
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
     from ...domain.services.statistics_service import StatisticsService
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.persistence.history_manager import HistoryManager
+    from ...infrastructure.platform.bot_manager import BotManager
     from .task_guard import TaskGuard
 
 
 class AnalysisRecoveryService:
     """分析恢复与重绘服务 - 提供幂等断点续跑与按模板重新渲染。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    bot_manager: BotManager | Any
+    history_manager: HistoryManager | Any
+    report_generator: IReportGenerator
+    llm_analyzer: IAnalysisProvider
+    statistics_service: StatisticsService
+    task_guard: TaskGuard
+    checkpoint_store: ICheckpointStore | None
+    html_render: Any | None
+    _serializer: AnalysisResultSerializer
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
-        bot_manager: Any,
-        history_manager: Any,
+        config_manager: IConfigProvider | ConfigManager | Any,
+        bot_manager: BotManager | Any,
+        history_manager: HistoryManager | Any,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
         task_guard: TaskGuard,
         checkpoint_store: ICheckpointStore | None = None,
         html_render: Any | None = None,
-    ):
+    ) -> None:
         """初始化恢复与重绘服务。
 
         Args:

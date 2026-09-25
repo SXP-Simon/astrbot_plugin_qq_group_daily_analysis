@@ -3,6 +3,8 @@
 专门处理用户称号和MBTI类型分析
 """
 
+from __future__ import annotations
+
 from ....domain.value_objects import TokenUsage, UserTitle
 from ....utils.logger import logger
 from ....utils.template_utils import render_template

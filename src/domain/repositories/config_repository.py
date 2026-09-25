@@ -3,6 +3,8 @@
 定义插件配置与群组偏好读取的抽象协议，解耦应用层与具体配置载体。
 """
 
+from __future__ import annotations
+
 from typing import Protocol, runtime_checkable
 
 

@@ -5,6 +5,8 @@
 应用层根据能力决定操作。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 

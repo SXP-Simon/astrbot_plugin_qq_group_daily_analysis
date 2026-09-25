@@ -3,6 +3,8 @@
 定义增量存储、阶段检查点快照与配置访问的抽象接口，实现领域层与基础设施层的彻底解耦。
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 

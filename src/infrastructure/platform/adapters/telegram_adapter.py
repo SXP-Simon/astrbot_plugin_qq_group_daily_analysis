@@ -5,6 +5,8 @@ Telegram 平台适配器
 通过 AstrBot 的 message_history_manager 存储和读取消息历史。
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import os
@@ -75,7 +77,7 @@ class TelegramAdapter(PlatformAdapter):
         # user_id -> (expires_at, reason)
         self._avatar_negative_cache: dict[str, tuple[float, str]] = {}
 
-    def set_context(self, context: "Context") -> None:
+    def set_context(self, context: Context) -> None:
         """
         设置 AstrBot 上下文
 
@@ -231,8 +233,11 @@ class TelegramAdapter(PlatformAdapter):
                 for record in history_records:
                     sender_id = str(getattr(record, "sender_id", "") or "").strip()
                     sender_name = str(getattr(record, "sender_name", "") or "").strip()
-                    if sender_id and not TelegramMessageConverter.is_placeholder_sender_name(
-                        sender_name, sender_id
+                    if (
+                        sender_id
+                        and not TelegramMessageConverter.is_placeholder_sender_name(
+                            sender_name, sender_id
+                        )
                     ):
                         sender_name_cache[sender_id] = sender_name
 

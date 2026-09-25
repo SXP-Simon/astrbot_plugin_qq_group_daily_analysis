@@ -33,17 +33,32 @@ if TYPE_CHECKING:
     from ...domain.services.analysis_domain_service import AnalysisDomainService
     from ...domain.services.incremental_merge_service import IncrementalMergeService
     from ...domain.services.statistics_service import StatisticsService
+    from ...infrastructure.config.config_manager import ConfigManager
+    from ...infrastructure.persistence.history_manager import HistoryManager
+    from ...infrastructure.platform.bot_manager import BotManager
     from .task_guard import TaskGuard
 
 
 class IncrementalAnalysisService:
     """增量分析服务 - 处理滑动窗口增量批次分析与最终合并报告生成。"""
 
+    config_manager: IConfigProvider | ConfigManager | Any
+    bot_manager: BotManager | Any
+    history_manager: HistoryManager | Any
+    llm_analyzer: IAnalysisProvider
+    statistics_service: StatisticsService
+    analysis_domain_service: AnalysisDomainService
+    task_guard: TaskGuard
+    incremental_store: IIncrementalStore | None
+    incremental_merge_service: IncrementalMergeService | None
+    checkpoint_store: ICheckpointStore | None
+    _message_cleaner: MessageCleanerService
+
     def __init__(
         self,
-        config_manager: IConfigProvider,
-        bot_manager: Any,
-        history_manager: Any,
+        config_manager: IConfigProvider | ConfigManager | Any,
+        bot_manager: BotManager | Any,
+        history_manager: HistoryManager | Any,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
         analysis_domain_service: AnalysisDomainService,
@@ -51,7 +66,7 @@ class IncrementalAnalysisService:
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: ICheckpointStore | None = None,
-    ):
+    ) -> None:
         """初始化增量分析服务。
 
         Args:

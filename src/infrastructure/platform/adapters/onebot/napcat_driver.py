@@ -4,6 +4,8 @@ NapCatQQ 专属驱动实现 (NapCat Driver)
 适配 NapCat.Onebot，支持 NapCat 独有的 stream 流式分块上传及特有 API 行为。
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 

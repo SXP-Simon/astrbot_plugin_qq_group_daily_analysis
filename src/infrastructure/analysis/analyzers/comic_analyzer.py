@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 from ....domain.value_objects import TokenUsage
@@ -48,7 +50,7 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         return self.config_manager.get_max_topics()
 
     def build_prompt(self, data: list[dict], prompt_template: str | None = None) -> str:
-        prompt_template = (
+        template_str = (
             prompt_template
             or self.config_manager.get_comic_storyboard_prompt()
             or DEFAULT_COMIC_STORYBOARD_PROMPT
@@ -66,14 +68,14 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
         try:
             from string import Template
 
-            if "${" in prompt_template or "$" in prompt_template:
-                return Template(prompt_template).safe_substitute(
+            if "${" in template_str or "$" in template_str:
+                return Template(template_str).safe_substitute(
                     chat_content=chat_content,
                     topic_count=topic_count,
                     max_count=topic_count,
                 )
             else:
-                return prompt_template.format(
+                return template_str.format(
                     chat_content=chat_content,
                     topic_count=topic_count,
                     max_count=topic_count,

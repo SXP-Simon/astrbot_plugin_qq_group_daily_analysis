@@ -3,6 +3,8 @@
 负责核心统计逻辑的计算，不依赖于具体的平台或基础设施。
 """
 
+from __future__ import annotations
+
 from collections import defaultdict
 from datetime import datetime
 
@@ -14,7 +16,9 @@ from ..value_objects.unified_message import MessageContentType, UnifiedMessage
 class StatisticsService:
     """统计服务 - 处理群聊数据的聚合统计"""
 
-    def __init__(self, activity_visualizer: IActivityVisualizer):
+    activity_visualizer: IActivityVisualizer
+
+    def __init__(self, activity_visualizer: IActivityVisualizer) -> None:
         """初始化统计领域服务。
 
         Args:
