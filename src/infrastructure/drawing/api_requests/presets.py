@@ -40,13 +40,21 @@ async def call_preset_api(
     Raises:
         ValueError: 供应商预设类型不受支持时抛出。
     """
-    api_key = context.get_provider_value("api_key", provider)
-    api_base = str(context.get_provider_value("api_url", provider)).rstrip("/")
-    model = context.get_provider_value("model", provider)
-    timeout = context.get_provider_value("timeout", provider)
-    image_size = str(context.get_provider_value("image_size", provider))
-    aspect_ratio = context.get_provider_value("aspect_ratio", provider)
-    output_format = context.get_provider_value("output_format", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    api_base = str(context.get_provider_value("api_url", provider) or "").rstrip("/")
+    model = str(context.get_provider_value("model", provider) or "")
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
+    image_size = str(context.get_provider_value("image_size", provider) or "")
+    aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "")
+    output_format = str(context.get_provider_value("output_format", provider) or "")
     # 各个原生 JSON 接口都可接收 data URI。这里统一转换一次，后续分支只
     # 负责自己的字段语义和参考图数量上限。
     data_uris = [
@@ -321,7 +329,7 @@ async def call_stepfun_api(
 ) -> bytes | None:
     """调用阶跃星辰图片接口，图生图使用官方 multipart 字段。"""
     target_url = context.build_target_url(
-        context.get_provider_value("api_url", provider), "images"
+        str(context.get_provider_value("api_url", provider) or ""), "images"
     )
     headers = {"Authorization": f"Bearer {api_key}"}
     api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
@@ -352,8 +360,8 @@ async def call_stepfun_api(
             "model": model,
             "prompt": prompt,
             "size": context.resolve_size(
-                context.get_provider_value("image_size", provider),
-                context.get_provider_value("aspect_ratio", provider),
+                str(context.get_provider_value("image_size", provider) or ""),
+                str(context.get_provider_value("aspect_ratio", provider) or ""),
             ),
             "response_format": "url",
         }

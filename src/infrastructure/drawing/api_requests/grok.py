@@ -30,18 +30,26 @@ async def call_grok_api(
         Exception: 请求失败、响应不是 JSON 或响应中没有有效图片。
     """
     provider = provider or {}
-    raw_url = context.get_provider_value("api_url", provider)
+    raw_url = str(context.get_provider_value("api_url", provider) or "")
     target_url = context.build_target_url(raw_url, "grok")
-    api_key = context.get_provider_value("api_key", provider)
-    model = context.get_provider_value("model", provider)
-    timeout = context.get_provider_value("timeout", provider)
-    aspect_ratio = context.get_provider_value("aspect_ratio", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    model = str(context.get_provider_value("model", provider) or "")
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
+    aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    response_format = (
+    response_format = str(
         context.get_provider_value("response_format", provider) or "b64_json"
     )
     payload: dict[str, Any] = {

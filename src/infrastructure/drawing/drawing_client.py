@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -30,7 +30,7 @@ __all__ = ["DrawingClient", "ImageDownloadFailedError"]
 
 # 供应商条目是唯一的连接配置来源。这里的默认值只用于兼容手工编辑的缺失字段，
 # 不再读取配置面板中已移除的外层绘图参数。
-DRAWING_PROVIDER_DEFAULTS: dict[str, Any] = {
+DRAWING_PROVIDER_DEFAULTS: dict[str, object] = {
     "api_url": "",
     "api_key": "",
     "model": "gpt-image-2",
@@ -170,7 +170,9 @@ class DrawingClient:
         provider: dict,
     ) -> tuple[bytes | None, str | None]:
         """使用一个已配置供应商执行生成并处理重试。"""
-        api_protocol = self._get_provider_value("api_protocol", provider)
+        api_protocol = str(
+            self._get_provider_value("api_protocol", provider) or "images"
+        )
         max_retries = self.config_manager.get_drawing_network_retries()
         output_exception_retries = (
             0
@@ -256,7 +258,7 @@ class DrawingClient:
         logger.debug("[Comic] 画图重试次数耗尽或请求失败，任务终止。")
         return None, last_error_msg
 
-    def _get_provider_value(self, name: str, provider: dict) -> Any:
+    def _get_provider_value(self, name: str, provider: dict[str, object]) -> object:
         """读取供应商条目字段，并为缺失字段提供安全默认值。
 
         绘图连接参数只允许来自当前条目，避免删除面板外层字段后仍出现不可见的
@@ -358,7 +360,7 @@ class DrawingClient:
         self,
         target_url: str,
         headers: dict[str, str],
-        payload: dict[str, Any],
+        payload: dict[str, object],
         timeout: int | float,
         provider_name: str,
         provider: dict,
@@ -407,7 +409,7 @@ class DrawingClient:
         return await self._request_service.call_chat_api(prompt, images_data, provider)
 
     async def _extract_image_from_response(
-        self, data: Any, proxy: str | None = None
+        self, data: object, proxy: str | None = None
     ) -> bytes | None:
         return await self._image_response_service.extract_image_from_response(
             data, proxy
@@ -435,5 +437,5 @@ class DrawingClient:
         return DrawingImageResponseService.sanitize_url(url)
 
     @staticmethod
-    def _summarize_response(data: Any) -> str:
+    def _summarize_response(data: object) -> str:
         return DrawingImageResponseService.summarize_response(data)

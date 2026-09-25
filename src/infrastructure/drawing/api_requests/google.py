@@ -36,21 +36,33 @@ async def call_google_api(
                 }
             }
         )
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "16:9")
+
     payload = {
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "responseModalities": ["TEXT", "IMAGE"],
             "imageConfig": {
                 "image_size": image_size if image_size in {"1K", "2K", "4K"} else "2K",
-                "aspect_ratio": context.get_provider_value("aspect_ratio", provider),
+                "aspect_ratio": aspect_ratio,
             },
         },
     }
     return await context.request_json(
         target_url,
-        {"x-goog-api-key": context.get_provider_value("api_key", provider)},
+        {"x-goog-api-key": api_key},
         payload,
-        context.get_provider_value("timeout", provider),
+        timeout,
         "Google Gemini",
         provider,
     )
