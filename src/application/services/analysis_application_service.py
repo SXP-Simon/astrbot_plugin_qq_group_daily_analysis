@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...domain.services.message_cleaner_service import MessageCleanerService
 from ...domain.value_objects import TokenUsage
@@ -61,7 +61,7 @@ class AnalysisApplicationService:
     incremental_store: IIncrementalStore | None
     incremental_merge_service: IncrementalMergeService | None
     checkpoint_store: ICheckpointStore | None
-    html_render: Callable[..., Any] | None
+    html_render: Callable[..., object] | None
     _task_guard: TaskGuard
     llm_semaphore: asyncio.Semaphore
     _incremental_service: IncrementalAnalysisService
@@ -79,7 +79,7 @@ class AnalysisApplicationService:
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: ICheckpointStore | None = None,
-        html_render: Callable[..., Any] | None = None,
+        html_render: Callable[..., object] | None = None,
     ) -> None:
         """初始化分析应用服务。
 
@@ -173,7 +173,7 @@ class AnalysisApplicationService:
         platform_id: str | None = None,
         manual: bool = False,
         days: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """执行每日全量分析核心用例。
 
         Args:
@@ -567,7 +567,7 @@ class AnalysisApplicationService:
         platform_id: str | None = None,
         render_format: str = "image",
         trace_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """重新渲染历史报告（委托 AnalysisRecoveryService）。"""
         return await self._recovery_service.rerender_report(
             group_id=group_id,
@@ -585,7 +585,7 @@ class AnalysisApplicationService:
         platform_id: str | None = None,
         date_str: str | None = None,
         template_name: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """从上一次 Checkpoint 检查点执行幂等断点续跑（委托 AnalysisRecoveryService）。"""
         return await self._recovery_service.resume_analysis(
             trace_id=trace_id,
@@ -601,7 +601,7 @@ class AnalysisApplicationService:
         group_id: str,
         platform_id: str | None = None,
         days: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """为独立漫画命令提取话题。
 
         Args:
@@ -709,7 +709,7 @@ class AnalysisApplicationService:
         self,
         group_id: str,
         platform_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """执行单次增量分析（委托 IncrementalAnalysisService）。"""
         return await self._incremental_service.execute_incremental_analysis(
             group_id=group_id,
@@ -718,24 +718,26 @@ class AnalysisApplicationService:
 
     async def execute_incremental_final_report(
         self, group_id: str, platform_id: str | None = None
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """合并增量批次生成最终报告（委托 IncrementalAnalysisService）。"""
         return await self._incremental_service.execute_incremental_final_report(
             group_id=group_id,
             platform_id=platform_id,
         )
 
-    def _to_json_friendly(self, obj: Any) -> Any:
+    def _to_json_friendly(self, obj: object) -> object:
         """递归将领域模型转换为 JSON 兼容结构。"""
         return AnalysisResultSerializer.to_json_friendly(obj)
 
     def _serialize_analysis_result(
-        self, analysis_result: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, analysis_result: dict[str, object]
+    ) -> dict[str, object]:
         """序列化领域模型字典为 JSON 友好结构。"""
         return AnalysisResultSerializer.serialize(analysis_result)
 
-    def _deserialize_analysis_result(self, data: dict[str, Any]) -> dict[str, Any]:
+    def _deserialize_analysis_result(
+        self, data: dict[str, object]
+    ) -> dict[str, object]:
         """反序列化 JSON 结构为领域模型字典。"""
         return AnalysisResultSerializer.deserialize(data)
 

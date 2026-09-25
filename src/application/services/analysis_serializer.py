@@ -9,7 +9,6 @@ from __future__ import annotations
 import dataclasses
 import enum
 from datetime import date, datetime, time
-from typing import Any
 
 from ...domain.value_objects import (
     ActivityVisualization,
@@ -28,7 +27,7 @@ class AnalysisResultSerializer:
     """领域分析结果序列化与快照转换器。"""
 
     @staticmethod
-    def to_json_friendly(obj: Any) -> Any:
+    def to_json_friendly(obj: object) -> object:
         """递归将领域模型、dataclass、Enum、datetime 等转换为标准 JSON 原生数据结构。
 
         Args:
@@ -63,7 +62,7 @@ class AnalysisResultSerializer:
         return obj
 
     @classmethod
-    def serialize(cls, analysis_result: dict[str, Any]) -> dict[str, Any]:
+    def serialize(cls, analysis_result: dict[str, object]) -> dict[str, object]:
         """将包含领域对象的 analysis_result 序列化为 JSON 友好的 dict 快照。
 
         Args:
@@ -85,7 +84,7 @@ class AnalysisResultSerializer:
         }
 
     @classmethod
-    def deserialize(cls, data: dict[str, Any]) -> dict[str, Any]:
+    def deserialize(cls, data: dict[str, object]) -> dict[str, object]:
         """将持久化的 JSON 快照还原为包含领域数据模型的 analysis_result。
 
         Args:
@@ -154,14 +153,16 @@ class AnalysisResultSerializer:
             chat_quality_review=quality_review,
         )
 
+        raw_topics = data.get("topics")
         topics = [
             SummaryTopic(**t) if isinstance(t, dict) else t
-            for t in data.get("topics", [])
+            for t in (raw_topics if isinstance(raw_topics, list) else [])
             if isinstance(t, (dict, SummaryTopic))
         ]
+        raw_user_titles = data.get("user_titles")
         user_titles = [
             UserTitle(**t) if isinstance(t, dict) else t
-            for t in data.get("user_titles", [])
+            for t in (raw_user_titles if isinstance(raw_user_titles, list) else [])
             if isinstance(t, (dict, UserTitle))
         ]
 

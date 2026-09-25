@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.api.star import StarTools
 
-from ...domain.value_objects import TokenUsage
+from ...domain.value_objects import GroupStatistics, TokenUsage
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -116,7 +116,7 @@ class AnalysisRecoveryService:
             cached_data = self.checkpoint_store.get_checkpoint(
                 group_id, date_str, "LLM_ANALYSIS", trace_id=trace_id or ""
             )
-            if cached_data:
+            if isinstance(cached_data, dict):
                 analysis_result = AnalysisResultSerializer.deserialize(cached_data)
 
         if not analysis_result:
@@ -174,23 +174,28 @@ class AnalysisRecoveryService:
                     try:
                         trace_data = _global_trace_store.get_trace(trace_id)
                         if trace_data:
-                            extra = trace_data.get("extra") or {}
-                            rfiles = extra.setdefault("report_files", [])
-                            if not any(rf.get("filename") == filename for rf in rfiles):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "html",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
+                            extra = trace_data.get("extra")
+                            if isinstance(extra, dict):
+                                rfiles = extra.setdefault("report_files", [])
+                                if isinstance(rfiles, list) and not any(
+                                    isinstance(rf, dict)
+                                    and rf.get("filename") == filename
+                                    for rf in rfiles
+                                ):
+                                    rfiles.append(
+                                        {
+                                            "filename": filename,
+                                            "path": str(dest.resolve()),
+                                            "format": "html",
+                                            "template": template_name,
+                                            "size_bytes": dest.stat().st_size
+                                            if dest.exists()
+                                            else 0,
+                                            "created_at": time_mod.time(),
+                                        }
+                                    )
+                                trace_data["extra"] = extra
+                                _global_trace_store.save_trace(trace_data)
                     except Exception:
                         pass
 
@@ -232,23 +237,27 @@ class AnalysisRecoveryService:
                 try:
                     trace_data = _global_trace_store.get_trace(trace_id)
                     if trace_data:
-                        extra = trace_data.get("extra") or {}
-                        rfiles = extra.setdefault("report_files", [])
-                        if not any(rf.get("filename") == filename for rf in rfiles):
-                            rfiles.append(
-                                {
-                                    "filename": filename,
-                                    "path": str(dest.resolve()),
-                                    "format": "image",
-                                    "template": template_name,
-                                    "size_bytes": dest.stat().st_size
-                                    if dest.exists()
-                                    else 0,
-                                    "created_at": time_mod.time(),
-                                }
-                            )
-                        trace_data["extra"] = extra
-                        _global_trace_store.save_trace(trace_data)
+                        extra = trace_data.get("extra")
+                        if isinstance(extra, dict):
+                            rfiles = extra.setdefault("report_files", [])
+                            if isinstance(rfiles, list) and not any(
+                                isinstance(rf, dict) and rf.get("filename") == filename
+                                for rf in rfiles
+                            ):
+                                rfiles.append(
+                                    {
+                                        "filename": filename,
+                                        "path": str(dest.resolve()),
+                                        "format": "image",
+                                        "template": template_name,
+                                        "size_bytes": dest.stat().st_size
+                                        if dest.exists()
+                                        else 0,
+                                        "created_at": time_mod.time(),
+                                    }
+                                )
+                            trace_data["extra"] = extra
+                            _global_trace_store.save_trace(trace_data)
                 except Exception:
                     pass
 
@@ -332,7 +341,7 @@ class AnalysisRecoveryService:
             except Exception:
                 cached_llm = None
 
-        if cached_llm:
+        if isinstance(cached_llm, dict):
             cached_result = AnalysisResultSerializer.deserialize(cached_llm)
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
@@ -388,7 +397,7 @@ class AnalysisRecoveryService:
             else None
         )
 
-        if not clean_checkpoint:
+        if not clean_checkpoint or not isinstance(clean_checkpoint, dict):
             logger.info(f"未找到群 {group_id} 的前置清洗快照，回退到全量重新分析")
             if trace:
                 trace.metadata["fallback_to_fresh_run"] = True
@@ -415,27 +424,40 @@ class AnalysisRecoveryService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            stats_data = clean_checkpoint.get("statistics", {})
+            stats_data = clean_checkpoint.get("statistics")
             deserialized = AnalysisResultSerializer.deserialize(
                 {
-                    "statistics": stats_data,
+                    "statistics": stats_data if isinstance(stats_data, dict) else {},
                     "user_analysis": clean_checkpoint.get("user_activity", {}),
                     "user_titles": clean_checkpoint.get("top_users", []),
                 }
             )
             statistics = deserialized["statistics"]
-            user_activity = deserialized.get("user_analysis", {})
-            top_users = deserialized.get("user_titles", [])
-            unified_messages = clean_checkpoint.get("unified_messages", [])
+            user_activity_raw = deserialized.get("user_analysis")
+            user_activity: dict[str, object] = (
+                user_activity_raw if isinstance(user_activity_raw, dict) else {}
+            )
+            top_users_raw = deserialized.get("user_titles")
+            top_users: list[dict[str, object]] | None = (
+                top_users_raw if isinstance(top_users_raw, list) else None
+            )
+            unified_messages_raw = clean_checkpoint.get("unified_messages")
+            unified_messages = (
+                unified_messages_raw if isinstance(unified_messages_raw, list) else []
+            )
 
             pipeline.restore_checkpoint_span(AnalysisStage.CLEAN_MESSAGES)
 
             cached_result = (
-                AnalysisResultSerializer.deserialize(cached_llm) if cached_llm else {}
+                AnalysisResultSerializer.deserialize(cached_llm)
+                if isinstance(cached_llm, dict)
+                else {}
             )
 
-            topics = cached_result.get("topics", [])
-            user_titles = cached_result.get("user_titles", [])
+            raw_topics = cached_result.get("topics")
+            topics = raw_topics if isinstance(raw_topics, list) else []
+            raw_user_titles = cached_result.get("user_titles")
+            user_titles = raw_user_titles if isinstance(raw_user_titles, list) else []
             cached_stats = cached_result.get("statistics")
             golden_quotes = (
                 getattr(cached_stats, "golden_quotes", []) if cached_stats else []
@@ -534,8 +556,9 @@ class AnalysisRecoveryService:
                         if trace:
                             trace.metadata["has_warnings"] = True
 
-            statistics.golden_quotes = golden_quotes
-            statistics.token_usage = total_token_usage
+            if isinstance(statistics, GroupStatistics):
+                statistics.golden_quotes = golden_quotes
+                statistics.token_usage = total_token_usage
 
             analysis_result = {
                 "statistics": statistics,

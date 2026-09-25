@@ -71,7 +71,7 @@ class CrashRecoveryService:
         aborted_count = 0
 
         for trace_dict in crashed_traces:
-            trace_id = trace_dict.get("trace_id", "")
+            trace_id = str(trace_dict.get("trace_id", "") or "")
             if not trace_id:
                 continue
 
@@ -79,9 +79,12 @@ class CrashRecoveryService:
             platform_id = str(trace_dict.get("platform", "") or "")
             trigger_type = str(trace_dict.get("trigger_type", "") or "manual")
             started_at = trace_dict.get("started_at")
+            started_at_ts = (
+                float(started_at) if isinstance(started_at, (int, float)) else None
+            )
             task_date_str = (
-                dt.datetime.fromtimestamp(started_at).strftime("%Y-%m-%d")
-                if started_at
+                dt.datetime.fromtimestamp(started_at_ts).strftime("%Y-%m-%d")
+                if started_at_ts
                 else today_date_str
             )
 
@@ -134,13 +137,15 @@ class CrashRecoveryService:
 
                 if result and result.get("success"):
                     analysis_result = result.get("analysis_result")
-                    actual_platform_id = result.get("platform_id") or platform_id
+                    actual_platform_id = (
+                        str(result.get("platform_id") or platform_id or "") or None
+                    )
 
                     if is_same_day:
                         if (
                             trigger_type in ("manual", "auto", "scheduled")
                             and self.report_dispatcher
-                            and analysis_result
+                            and isinstance(analysis_result, dict)
                         ):
                             await self.report_dispatcher.dispatch(
                                 group_id, analysis_result, actual_platform_id

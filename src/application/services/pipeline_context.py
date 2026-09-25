@@ -10,16 +10,20 @@ import asyncio
 import enum
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator, Callable, Mapping
+    from typing import Any
 
     from ...domain.repositories.persistence_repository import ICheckpointStore
-    from ...shared.trace_context import TraceContext
+    from ...shared.trace_context import (
+        SpanRecord,
+        TraceContext,
+    )
 
 
 @dataclass
@@ -35,12 +39,12 @@ class PipelineStep:
     """
 
     stage_name: str
-    span_record: dict[str, Any]
-    payload: dict[str, Any] = field(default_factory=dict)
-    output: Any = None
+    span_record: SpanRecord
+    payload: dict[str, object] = field(default_factory=dict)
+    output: object = None
     status: str = "running"
 
-    def set_payload(self, **kwargs: Any) -> None:
+    def set_payload(self, **kwargs: object) -> None:
         """更新当前阶段的指标与元数据。
 
         Args:
@@ -49,7 +53,7 @@ class PipelineStep:
         self.payload.update(kwargs)
         self.span_record.setdefault("payload", {}).update(kwargs)
 
-    def set_output(self, output: Any, **payload_kwargs: Any) -> None:
+    def set_output(self, output: object, **payload_kwargs: object) -> None:
         """设置当前阶段产出物并同步更新指标。
 
         Args:
@@ -108,9 +112,9 @@ class PipelineContext:
     async def step(
         self,
         stage: AnalysisStage | str,
-        initial_payload: dict[str, Any] | None = None,
+        initial_payload: Mapping[str, object] | None = None,
         save_checkpoint: bool = False,
-        serializer: Callable[[Any], dict[str, Any]] | None = None,
+        serializer: Callable[[Any], dict[str, object]] | None = None,
         ttl_seconds: int = 86400 * 30,
     ) -> AsyncGenerator[PipelineStep]:
         """开启一个流水线执行阶段，自动管理 Span 耗时与 Checkpoint 持久化。
@@ -133,7 +137,18 @@ class PipelineContext:
             span_record = span_cm.__enter__()
         else:
             span_cm = None
-            span_record = {"stage_name": stage_name, "payload": payload_dict}
+            span_record: SpanRecord = {
+                "span_id": "",
+                "trace_id": "",
+                "stage_name": stage_name,
+                "status": "running",
+                "started_at": 0.0,
+                "duration_ms": None,
+                "start_memory_mb": 0.0,
+                "end_memory_mb": None,
+                "delta_memory_mb": None,
+                "payload": payload_dict,
+            }
 
         step_obj = PipelineStep(
             stage_name=stage_name,
@@ -207,7 +222,7 @@ class PipelineContext:
     def restore_checkpoint_span(
         self,
         stage: AnalysisStage | str,
-        payload: dict[str, Any] | None = None,
+        payload: Mapping[str, object] | None = None,
     ) -> None:
         """记录从 Checkpoint 恢复的瞬时 Span。
 

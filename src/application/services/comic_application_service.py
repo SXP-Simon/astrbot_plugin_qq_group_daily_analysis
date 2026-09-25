@@ -3,7 +3,7 @@ from __future__ import annotations
 import mimetypes
 from contextlib import nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
@@ -92,11 +92,12 @@ class ComicApplicationService:
                 prompt_template=prompt_template or None,
             )
             if sb_rec:
-                sb_prompts: dict[str, Any] = {}
-                if trace and trace.metadata.get("llm_prompts"):
-                    for k, p in trace.metadata["llm_prompts"].items():
-                        if "comic" in k or k == "comic_storyboards":
-                            sb_prompts[k] = p
+                sb_prompts: dict[str, object] = {}
+                llm_prompts = trace.metadata.get("llm_prompts") if trace else None
+                if isinstance(llm_prompts, dict):
+                    for k, p in llm_prompts.items():
+                        if "comic" in str(k) or str(k) == "comic_storyboards":
+                            sb_prompts[str(k)] = p
                 if not sb_prompts and storyboards:
                     sb_prompts["comic_storyboards"] = {
                         "prompt": prompt_template
@@ -458,7 +459,7 @@ class ComicApplicationService:
                     "[Comic] 参考图无法解析为「大香蕉」图片资源，将不带参考图生成。"
                 )
 
-        params: dict[str, Any] = {
+        params: dict[str, object] = {
             "prompt": scene_prompt,
             "capability": "image_generation",
             "sub_brain": False,
@@ -493,7 +494,7 @@ class ComicApplicationService:
         return image_bytes
 
     @staticmethod
-    def _import_big_banana_image_resource(plugin: Any):
+    def _import_big_banana_image_resource(plugin: object) -> type | None:
         """导入「大香蕉」插件的 ImageResource 类型。
 
         AstrBot 以 ``data.plugins.<插件名>.main`` 形式加载插件，模块名并非
