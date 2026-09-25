@@ -1,0 +1,19 @@
+# Lefthook Git hooks configuration
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: false
+  commands:
+    ruff-format:
+      run: uv run ruff format .
+      stage_fixed: true
+    ruff-check:
+      run: uv run ruff check . --fix
+      stage_fixed: true
+    pyright:
+      run: npx pyright main.py src/
+
+commit-msg:
+  commands:
+    verify-commit:
+      run: node scripts/verify-commit.js {1}
