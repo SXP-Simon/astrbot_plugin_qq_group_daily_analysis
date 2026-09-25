@@ -124,7 +124,7 @@ src/application/services/
 
 ### 4.2 配置中心与跨版本迁移 (`infrastructure/config/`)
 - `config_manager.py` (`ConfigManager`)：专职处理配置读取、类型校验、层级名单合并与动态设值；
-- `config_migrator.py` (`ConfigMigrator`)：专职负责版本断代升级（如 v1 $\to$ v2 模板升级）、数据目录备份与 schema 自动迁移。
+- `config_migrator.py` (`ConfigMigrator`)：专职负责版本断代升级（如 v1 $\to$ v2 模板升级）、数据目录备份、升级保护指纹比对与 schema 自动迁移。
 
 ### 4.3 定时调度与名单解析 (`infrastructure/scheduler/`)
 - `auto_scheduler.py` (`AutoScheduler`)：专职负责 Cron/时间点调度器注册、后台心跳循环与触发执行；
@@ -132,13 +132,15 @@ src/application/services/
 
 ### 4.4 平台适配与消息转换 (`infrastructure/platform/`)
 - `OneBotAdapter`：处理与 OneBot 协议端（NapCat、LLOneBot 等）的 API 交互；
-- `message_converter.py` (`MessageConverter`)：专职负责 OneBot CQ 码/消息段与统一 `UnifiedMessage` 的双向转换；
+- `onebot/message_converter.py` (`OneBotMessageConverter`)：专职负责 OneBot CQ 码/消息段与统一 `UnifiedMessage` 的双向转换；
+- `telegram_message_converter.py` (`TelegramMessageConverter`)：专职负责 Telegram 历史记录转换、占位昵称自愈与话题群 ID 解析；
 - `group_file_manager.py` (`GroupFileManager`)：专职负责群文件上传与归档管理；
 - `QQOfficialAdapter`, `TelegramAdapter`, `DiscordAdapter`：跨平台协议独立实现。
 
-### 4.5 LLM 语义分析器 (`infrastructure/analysis/`)
+### 4.5 LLM 语义分析器与可观测性 (`infrastructure/analysis/`)
 - `LLMAnalyzer`：作为 IAnalysisProvider 门面协调器；
-- 各独立 Analyzer（`TopicAnalyzer`, `UserTitleAnalyzer`, `GoldenQuoteAnalyzer`, `ChatQualityAnalyzer`, `ComicStoryboardAnalyzer`）继承自泛型基类 `BaseAnalyzer[TDataObject, TInputData]`，实现标准化重试、结构化 Schema 校验与 Token 统计。
+- 各独立 Analyzer（`TopicAnalyzer`, `UserTitleAnalyzer`, `GoldenQuoteAnalyzer`, `ChatQualityAnalyzer`, `ComicStoryboardAnalyzer`）继承自泛型基类 `BaseAnalyzer[TDataObject, TInputData]`，实现标准化重试、结构化 Schema 校验与 Token 统计；
+- `utils/llm_diagnostics.py`：专职负责 Python 异步协程帧栈深度反查、超时卡死链路追踪与长耗时诊断。
 
 ---
 
