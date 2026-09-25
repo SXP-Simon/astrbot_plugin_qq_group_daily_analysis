@@ -396,10 +396,10 @@ class PluginPageWebUIBridge:
 
             global_log_buffer.register_listener(
                 lambda record: self.active_task_manager.publish_log_sync(
-                    trace_id=record.get("trace_id", ""),
-                    stage=record.get("stage", ""),
-                    message=record.get("message", ""),
-                    level=record.get("level", "INFO"),
+                    trace_id=record.trace_id or "",
+                    stage=record.stage or "",
+                    message=record.message,
+                    level=record.level or "INFO",
                 )
             )
         except Exception as e:

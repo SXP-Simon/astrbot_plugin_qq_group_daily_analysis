@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
 from ...reporting.template_installer import TemplateInstallError, validate_template_name
@@ -45,7 +45,7 @@ class ReportRoutes:
     async def api_get_report_history(self) -> WebApiResponse:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
-            reports: list[dict[str, Any]] = []
+            reports: list[dict[str, object]] = []
             group_info_map = {
                 str(g["group_id"]): {
                     "group_name": str(g.get("group_name", "")),
@@ -58,11 +58,21 @@ class ReportRoutes:
                 candidate_dirs.append(self.report_output_dir)
 
             # 兼容自托管 HTML 输出目录
-            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
-                self.report_dispatcher, "config_manager", None
+            cfg_mgr = (
+                self.analysis_service.config_manager
+                if self.analysis_service
+                else (
+                    self.report_dispatcher.config_manager
+                    if self.report_dispatcher
+                    else None
+                )
             )
             if cfg_mgr:
-                custom_html_dir = getattr(cfg_mgr, "get_html_output_dir", lambda: "")()
+                custom_html_dir = (
+                    cfg_mgr.get_html_output_dir()
+                    if hasattr(cfg_mgr, "get_html_output_dir")
+                    else ""
+                )
                 if custom_html_dir:
                     p = Path(custom_html_dir)
                     if p.exists() and p not in candidate_dirs:
@@ -82,11 +92,10 @@ class ReportRoutes:
                         all_files.append(p)
 
             report_trace_map: dict[str, str] = {}
-            if hasattr(self.trace_store, "get_report_trace_map"):
-                try:
-                    report_trace_map = self.trace_store.get_report_trace_map()
-                except Exception:
-                    pass
+            try:
+                report_trace_map = self.trace_store.get_report_trace_map()
+            except Exception:
+                pass
 
             for file_path in sorted(
                 all_files,
@@ -190,11 +199,7 @@ class ReportRoutes:
     async def api_get_report_content(self) -> WebApiResponse:
         """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
         try:
-            filename = (
-                request.query.get("filename", "").strip()
-                if request and hasattr(request, "query")
-                else ""
-            )
+            filename = request.query.get("filename", "").strip()
             if not filename:
                 return error_response("Missing filename parameter", status_code=400)
 
@@ -204,11 +209,21 @@ class ReportRoutes:
             search_dirs = []
             if self.report_output_dir and self.report_output_dir.exists():
                 search_dirs.append(self.report_output_dir)
-            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
-                self.report_dispatcher, "config_manager", None
+            cfg_mgr = (
+                self.analysis_service.config_manager
+                if self.analysis_service
+                else (
+                    self.report_dispatcher.config_manager
+                    if self.report_dispatcher
+                    else None
+                )
             )
             if cfg_mgr:
-                custom_html_dir = getattr(cfg_mgr, "get_html_output_dir", lambda: "")()
+                custom_html_dir = (
+                    cfg_mgr.get_html_output_dir()
+                    if hasattr(cfg_mgr, "get_html_output_dir")
+                    else ""
+                )
                 if custom_html_dir:
                     p = Path(custom_html_dir)
                     if p.exists() and p not in search_dirs:
@@ -270,8 +285,7 @@ class ReportRoutes:
     async def api_rerender_report(self) -> WebApiResponse:
         """免 Token 切换模板重新渲染历史分析报告"""
         try:
-            body_raw = await request.json() if hasattr(request, "json") else {}
-            body: dict[str, Any] = body_raw if isinstance(body_raw, dict) else {}
+            body = await request.json()
         except Exception:
             body = {}
 
@@ -283,7 +297,7 @@ class ReportRoutes:
         except TemplateInstallError:
             return error_response("模板名包含非法字符。", status_code=400)
         render_format = str(body.get("render_format", "image")).strip()
-        platform_id = body.get("platform_id")
+        platform_id = str(body.get("platform_id")) if body.get("platform_id") is not None else None
         trace_id = str(body.get("trace_id", "")).strip()
 
         if not group_id:
@@ -293,10 +307,9 @@ class ReportRoutes:
 
             date_str = _dt.datetime.now().strftime("%Y-%m-%d")
 
-        if not trace_id and hasattr(self, "trace_store"):
+        if not trace_id and self.trace_store:
             try:
-                recent_res = self.trace_store.list_traces(group_id=group_id, limit=5)
-                items = recent_res.get("items") if isinstance(recent_res, dict) else []
+                items, _ = self.trace_store.list_traces(group_id=group_id, limit=5)
                 if items:
                     trace_id = str(items[0].get("trace_id", ""))
             except Exception:
@@ -316,7 +329,7 @@ class ReportRoutes:
             )
             if not result.get("success"):
                 return error_response(
-                    result.get("reason", "重新渲染失败"), status_code=400
+                    str(result.get("reason", "重新渲染失败")), status_code=400
                 )
             return json_response({"status": "ok", "data": result})
         except Exception as e:

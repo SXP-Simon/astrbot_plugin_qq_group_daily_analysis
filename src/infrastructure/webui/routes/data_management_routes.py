@@ -17,8 +17,10 @@ if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
-    from ...persistence.checkpoint_store import CheckpointStore
-    from ...persistence.incremental_store import IncrementalStore
+    from ....domain.repositories.persistence_repository import (
+        ICheckpointStore,
+        IIncrementalStore,
+    )
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
 
 
@@ -36,11 +38,13 @@ class DataManagementRoutes:
         self.report_output_dir = report_output_dir
 
     @property
-    def _incremental_store(self) -> IncrementalStore | None:
-        return self.analysis_service.incremental_store if self.analysis_service else None
+    def _incremental_store(self) -> IIncrementalStore | None:
+        return (
+            self.analysis_service.incremental_store if self.analysis_service else None
+        )
 
     @property
-    def _checkpoint_store(self) -> CheckpointStore | None:
+    def _checkpoint_store(self) -> ICheckpointStore | None:
         return self.analysis_service.checkpoint_store if self.analysis_service else None
 
     def _get_plugin_data_dir(self) -> Path | None:
@@ -347,12 +351,9 @@ class DataManagementRoutes:
         """删除指定群的单个增量批次"""
         try:
             try:
-                payload_raw = await request.json()
+                payload = await request.json()
             except Exception:
-                payload_raw = {}
-            payload: dict[str, object] = (
-                payload_raw if isinstance(payload_raw, dict) else {}
-            )
+                payload = {}
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()
@@ -388,12 +389,9 @@ class DataManagementRoutes:
         """一键清空指定群全部增量批次并将游标归零"""
         try:
             try:
-                payload_raw = await request.json()
+                payload = await request.json()
             except Exception:
-                payload_raw = {}
-            payload: dict[str, object] = (
-                payload_raw if isinstance(payload_raw, dict) else {}
-            )
+                payload = {}
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()
@@ -502,12 +500,9 @@ class DataManagementRoutes:
         """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
         try:
             try:
-                payload_raw = await request.json()
+                payload = await request.json()
             except Exception:
-                payload_raw = {}
-            payload: dict[str, object] = (
-                payload_raw if isinstance(payload_raw, dict) else {}
-            )
+                payload = {}
             group_id = str(
                 payload.get("group_id") or request.query.get("group_id") or ""
             ).strip()

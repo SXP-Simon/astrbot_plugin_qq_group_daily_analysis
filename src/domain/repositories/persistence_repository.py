@@ -54,6 +54,26 @@ class IIncrementalStore(ABC):
     async def reset_group(self, group_id: str) -> int:
         """清空指定群组的所有增量批次与游标"""
 
+    @abstractmethod
+    async def get_tracked_groups(self) -> list[str]:
+        """获取所有已记录增量批次的群组列表"""
+
+    @abstractmethod
+    async def get_all_batches_with_details(
+        self, group_id: str
+    ) -> list[dict[str, object]]:
+        """获取指定群组的所有增量批次详情列表"""
+
+    @abstractmethod
+    async def get_batch_detail(
+        self, group_id: str, batch_id: str
+    ) -> IncrementalBatch | None:
+        """获取单个增量批次的完整结构化详情"""
+
+    @abstractmethod
+    async def delete_batch(self, group_id: str, batch_id: str) -> bool:
+        """删除指定群组的单个增量批次"""
+
 
 class ICheckpointStore(ABC):
     """阶段快照检查点仓储接口"""
@@ -99,3 +119,29 @@ class ICheckpointStore(ABC):
         trace_id: str = "",
     ) -> bool:
         """单点删除指定阶段 Checkpoint"""
+
+    @abstractmethod
+    def list_all_checkpoints(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        group_id: str | None = None,
+        date_str: str | None = None,
+        stage_name: str | None = None,
+        trace_id: str | None = None,
+    ) -> tuple[list[CheckpointSummaryPayload], int]:
+        """分页获取所有 Checkpoint 快照元数据列表"""
+
+    @abstractmethod
+    def get_distinct_checkpoint_groups(self) -> list[str]:
+        """获取所有存在 Checkpoint 快照的唯一群号列表"""
+
+    @abstractmethod
+    def get_checkpoint_detail(
+        self,
+        group_id: str,
+        date_str: str,
+        stage_name: str,
+        trace_id: str = "",
+    ) -> dict[str, object] | None:
+        """读取指定 Checkpoint 的完整详情与反序列化产物"""

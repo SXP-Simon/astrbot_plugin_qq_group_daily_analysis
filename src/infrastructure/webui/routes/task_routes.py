@@ -6,7 +6,7 @@ WebUI 任务管理路由 (Task Routes)
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -50,11 +50,14 @@ class TaskRoutes:
     async def api_cancel_task(self) -> WebApiResponse:
         """手动取消正在执行的任务"""
         try:
-            payload_raw = await request.json(default={})
-            payload: dict[str, Any] = (
-                payload_raw if isinstance(payload_raw, dict) else {}
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            task_id = (
+                str(payload.get("task_id", "")).strip()
+                or request.query.get("task_id", "").strip()
             )
-            task_id = str(payload.get("task_id", "")).strip()
             if not task_id:
                 return error_response("Missing task_id in request", status_code=400)
 
@@ -76,18 +79,16 @@ class TaskRoutes:
             return error_response("分析服务未初始化", status_code=500)
 
         try:
-            payload_raw = await request.json(default={})
-            payload: dict[str, Any] = (
-                payload_raw if isinstance(payload_raw, dict) else {}
-            )
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
             group_id = str(payload.get("group_id", "")).strip()
             if not group_id:
                 return error_response("group_id is required", status_code=400)
 
             # 防重入即时拦截：若该群已有分析任务正在执行，直接拒绝重复触发并返回友好提示
-            if hasattr(
-                self.analysis_service, "is_group_running"
-            ) and self.analysis_service.is_group_running(group_id, "daily"):
+            if self.analysis_service.is_group_running(group_id, "daily"):
                 return error_response(
                     f"群 {group_id} 的日常分析任务正在执行中，请勿重复触发",
                     status_code=409,
@@ -98,15 +99,17 @@ class TaskRoutes:
 
             trace_id = TraceContext.generate("web_manual", group_name)
 
-            provider_id = payload.get("provider_id")
-            if not provider_id and hasattr(request, "query"):
-                provider_id = request.query.get("provider_id")
+            provider_id = (
+                str(payload.get("provider_id"))
+                if payload.get("provider_id") is not None
+                else request.query.get("provider_id")
+            )
 
-            template_name = payload.get("template_name") or payload.get("template")
-            if not template_name and hasattr(request, "query"):
-                template_name = request.query.get("template_name") or request.query.get(
-                    "template"
-                )
+            template_name = (
+                str(payload.get("template_name") or payload.get("template"))
+                if (payload.get("template_name") or payload.get("template"))
+                else (request.query.get("template_name") or request.query.get("template"))
+            )
 
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
@@ -168,87 +171,66 @@ class TaskRoutes:
         if template_name and template_name != "auto":
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
-            if hasattr(self.analysis_service, "execute_daily_analysis"):
-                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
-                target_platform = None
+            bot_mgr = self.analysis_service.bot_manager
+            target_platform: str | None = None
 
-                if platform and bot_mgr and bot_mgr.get_adapter(platform):
-                    target_platform = str(platform).strip()
-                elif bot_mgr:
-                    adapters = (
-                        bot_mgr.get_all_adapters()
-                        if hasattr(bot_mgr, "get_all_adapters")
-                        else {}
-                    )
-                    if len(adapters) == 1:
-                        target_platform = next(iter(adapters.keys()))
-                    elif len(adapters) > 1 and group_id:
-                        for p_id, adp in adapters.items():
-                            try:
-                                if hasattr(
-                                    adp, "get_group_info"
-                                ) and await adp.get_group_info(str(group_id)):
-                                    target_platform = (
-                                        bot_mgr.get_adapter_platform_id(adp)
-                                        if hasattr(bot_mgr, "get_adapter_platform_id")
-                                        else str(p_id)
-                                    ) or str(p_id)
-                                    break
-                            except Exception:
-                                continue
-
-                result = await self.analysis_service.execute_daily_analysis(
-                    group_id=group_id,
-                    platform_id=target_platform,
-                    manual=True,
-                )
-                if result and result.get("success"):
-                    analysis_result = result.get("analysis_result")
-                    adapter = result.get("adapter")
-                    bot_mgr = getattr(self.analysis_service, "bot_manager", None)
-                    dispatch_platform_id = (
-                        (
-                            bot_mgr.get_adapter_platform_id(adapter)
-                            if bot_mgr and adapter
-                            else ""
-                        )
-                        or getattr(adapter, "platform_id", "")
-                        or target_platform
-                        or ""
-                    )
-                    trace_ctx.platform = str(dispatch_platform_id)
-                    if self.report_dispatcher and analysis_result:
-                        try:
-                            with trace_ctx.span(
-                                AnalysisStage.DISPATCH_REPORT,
-                                {
-                                    "platform": dispatch_platform_id or "auto",
-                                    "group_id": group_id,
-                                },
-                            ):
-                                await self.report_dispatcher.dispatch(
-                                    group_id,
-                                    analysis_result,
-                                    dispatch_platform_id,
-                                )
-                        except Exception as dispatch_err:
-                            logger.error(
-                                f"WebUI 报告发送异常 (群 {group_id}): {dispatch_err}",
-                                exc_info=True,
-                            )
-
-                    if trace_ctx.status == "running":
-                        trace_ctx.finish(status="succeeded")
-                else:
-                    if trace_ctx.status == "running":
-                        trace_ctx.finish(
-                            status="failed",
-                            error_message=str(result.get("reason", "unknown")),
-                        )
+            if platform and bot_mgr.get_adapter(platform):
+                target_platform = str(platform).strip()
             else:
-                logger.warning(
-                    f"analysis_service does not have execute_daily_analysis for trace {trace_id}"
+                adapters = bot_mgr.get_all_adapters()
+                if len(adapters) == 1:
+                    target_platform = next(iter(adapters.keys()))
+                elif len(adapters) > 1 and group_id:
+                    for p_id, adp in adapters.items():
+                        try:
+                            if await adp.get_group_info(str(group_id)):
+                                target_platform = bot_mgr.get_adapter_platform_id(adp) or str(p_id)
+                                break
+                        except Exception:
+                            continue
+
+            result = await self.analysis_service.execute_daily_analysis(
+                group_id=group_id,
+                platform_id=target_platform,
+                manual=True,
+            )
+            if result and result.get("success"):
+                analysis_result = result.get("analysis_result")
+                adapter = result.get("adapter")
+                dispatch_platform_id = (
+                    (bot_mgr.get_adapter_platform_id(adapter) if adapter else "")
+                    or target_platform
+                    or ""
                 )
+                trace_ctx.platform = str(dispatch_platform_id)
+                if self.report_dispatcher and isinstance(analysis_result, dict):
+                    try:
+                        with trace_ctx.span(
+                            AnalysisStage.DISPATCH_REPORT,
+                            {
+                                "platform": dispatch_platform_id or "auto",
+                                "group_id": group_id,
+                            },
+                        ):
+                            await self.report_dispatcher.dispatch(
+                                group_id,
+                                analysis_result,
+                                dispatch_platform_id,
+                            )
+                    except Exception as dispatch_err:
+                        logger.error(
+                            f"WebUI 报告发送异常 (群 {group_id}): {dispatch_err}",
+                            exc_info=True,
+                        )
+
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(status="succeeded")
+            else:
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(
+                        status="failed",
+                        error_message=str(result.get("reason", "unknown")) if result else "unknown",
+                    )
         except asyncio.CancelledError:
             logger.info(f"触发分析任务已取消: {trace_id}")
             if trace_ctx.status == "running":
@@ -274,19 +256,21 @@ class TaskRoutes:
             group_name = str(trace_record.get("group_name", ""))
             platform = str(trace_record.get("platform", ""))
 
-            payload: dict[str, Any] = {}
-            if hasattr(request, "json"):
-                try:
-                    payload_raw = await request.json()
-                    payload = payload_raw if isinstance(payload_raw, dict) else {}
-                except Exception:
-                    payload = {}
-            provider_id = payload.get("provider_id")
-            template_name = payload.get("template_name")
-            if not provider_id and hasattr(request, "query"):
-                provider_id = request.query.get("provider_id")
-            if not template_name and hasattr(request, "query"):
-                template_name = request.query.get("template_name")
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+
+            provider_id = (
+                str(payload.get("provider_id"))
+                if payload.get("provider_id") is not None
+                else request.query.get("provider_id")
+            )
+            template_name = (
+                str(payload.get("template_name"))
+                if payload.get("template_name") is not None
+                else request.query.get("template_name")
+            )
 
             asyncio_task = asyncio.create_task(
                 self._run_resumed_task(
@@ -349,97 +333,78 @@ class TaskRoutes:
         if template_name and template_name != "auto":
             trace_ctx.metadata["override_template_name"] = str(template_name)
         try:
-            if hasattr(self.analysis_service, "resume_analysis"):
-                bot_mgr = getattr(self.analysis_service, "bot_manager", None)
-                target_platform = None
+            bot_mgr = self.analysis_service.bot_manager
+            target_platform: str | None = None
 
-                if platform and bot_mgr and bot_mgr.get_adapter(platform):
-                    target_platform = str(platform).strip()
-                elif bot_mgr:
-                    adapters = (
-                        bot_mgr.get_all_adapters()
-                        if hasattr(bot_mgr, "get_all_adapters")
-                        else {}
-                    )
-                    if len(adapters) == 1:
-                        target_platform = next(iter(adapters.keys()))
-                    elif len(adapters) > 1 and group_id:
-                        for p_id, adp in adapters.items():
-                            try:
-                                if hasattr(
-                                    adp, "get_group_info"
-                                ) and await adp.get_group_info(str(group_id)):
-                                    target_platform = (
-                                        bot_mgr.get_adapter_platform_id(adp)
-                                        if hasattr(bot_mgr, "get_adapter_platform_id")
-                                        else str(p_id)
-                                    ) or str(p_id)
-                                    break
-                            except Exception:
-                                continue
-
-                result = await self.analysis_service.resume_analysis(
-                    trace_id=trace_id,
-                    group_id=group_id,
-                    platform_id=target_platform,
-                    template_name=template_name,
-                )
-                if result and result.get("success"):
-                    if result.get("fallback_to_fresh_run"):
-                        trace_ctx.metadata["fallback_to_fresh_run"] = True
-                        trace_ctx.metadata["fallback_reason"] = str(
-                            result.get(
-                                "fallback_reason",
-                                "checkpoint_missing_auto_refetched",
-                            )
-                        )
-                        trace_ctx.metadata["resumed_from"] = str(
-                            result.get("resumed_from", "fresh_run_fallback")
-                        )
-                    analysis_result = result.get("analysis_result")
-                    adapter = result.get("adapter")
-                    bot_mgr = getattr(self.analysis_service, "bot_manager", None)
-                    dispatch_platform_id = (
-                        (
-                            bot_mgr.get_adapter_platform_id(adapter)
-                            if bot_mgr and adapter
-                            else ""
-                        )
-                        or getattr(adapter, "platform_id", "")
-                        or target_platform
-                        or ""
-                    )
-                    trace_ctx.platform = str(dispatch_platform_id)
-                    if self.report_dispatcher and analysis_result:
-                        try:
-                            with trace_ctx.span(
-                                AnalysisStage.DISPATCH_REPORT,
-                                {
-                                    "platform": dispatch_platform_id or "auto",
-                                    "group_id": group_id,
-                                },
-                            ):
-                                await self.report_dispatcher.dispatch(
-                                    group_id,
-                                    analysis_result,
-                                    dispatch_platform_id,
-                                )
-                        except Exception as dispatch_err:
-                            logger.error(
-                                f"WebUI 续跑报告发送异常 (群 {group_id}): {dispatch_err}",
-                                exc_info=True,
-                            )
-
-                    if trace_ctx.status == "running":
-                        trace_ctx.finish(status="succeeded")
-                else:
-                    if trace_ctx.status == "running":
-                        trace_ctx.finish(
-                            status="failed",
-                            error_message=str(result.get("reason", "unknown")),
-                        )
+            if platform and bot_mgr.get_adapter(platform):
+                target_platform = str(platform).strip()
             else:
-                await self._run_triggered_task(trace_id, group_id, group_name, platform)
+                adapters = bot_mgr.get_all_adapters()
+                if len(adapters) == 1:
+                    target_platform = next(iter(adapters.keys()))
+                elif len(adapters) > 1 and group_id:
+                    for p_id, adp in adapters.items():
+                        try:
+                            if await adp.get_group_info(str(group_id)):
+                                target_platform = bot_mgr.get_adapter_platform_id(adp) or str(p_id)
+                                break
+                        except Exception:
+                            continue
+
+            result = await self.analysis_service.resume_analysis(
+                trace_id=trace_id,
+                group_id=group_id,
+                platform_id=target_platform,
+                template_name=template_name,
+            )
+            if result and result.get("success"):
+                if result.get("fallback_to_fresh_run"):
+                    trace_ctx.metadata["fallback_to_fresh_run"] = True
+                    trace_ctx.metadata["fallback_reason"] = str(
+                        result.get(
+                            "fallback_reason",
+                            "checkpoint_missing_auto_refetched",
+                        )
+                    )
+                    trace_ctx.metadata["resumed_from"] = str(
+                        result.get("resumed_from", "fresh_run_fallback")
+                    )
+                analysis_result = result.get("analysis_result")
+                adapter = result.get("adapter")
+                dispatch_platform_id = (
+                    (bot_mgr.get_adapter_platform_id(adapter) if adapter else "")
+                    or target_platform
+                    or ""
+                )
+                trace_ctx.platform = str(dispatch_platform_id)
+                if self.report_dispatcher and isinstance(analysis_result, dict):
+                    try:
+                        with trace_ctx.span(
+                            AnalysisStage.DISPATCH_REPORT,
+                            {
+                                "platform": dispatch_platform_id or "auto",
+                                "group_id": group_id,
+                            },
+                        ):
+                            await self.report_dispatcher.dispatch(
+                                group_id,
+                                analysis_result,
+                                dispatch_platform_id,
+                            )
+                    except Exception as dispatch_err:
+                        logger.error(
+                            f"WebUI 续跑报告发送异常 (群 {group_id}): {dispatch_err}",
+                            exc_info=True,
+                        )
+
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(status="succeeded")
+            else:
+                if trace_ctx.status == "running":
+                    trace_ctx.finish(
+                        status="failed",
+                        error_message=str(result.get("reason", "unknown")) if result else "unknown",
+                    )
         except Exception as e:
             if trace_ctx.status == "running":
                 trace_ctx.finish(status="failed", error_message=str(e))

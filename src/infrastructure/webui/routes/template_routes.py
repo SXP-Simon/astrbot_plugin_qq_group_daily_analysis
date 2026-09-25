@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....utils.logger import logger
 from ...reporting.template_installer import (
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ...reporting.dispatcher import ReportDispatcher
+    from ...reporting.templates import HTMLTemplates
 
 
 class TemplateRoutes:
@@ -44,21 +45,36 @@ class TemplateRoutes:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
 
+    def _get_html_templates(self) -> HTMLTemplates | None:
+        """获取当前可用的 HTMLTemplates 实例。"""
+        if self.report_dispatcher and self.report_dispatcher.report_generator:
+            return getattr(
+                self.report_dispatcher.report_generator, "html_templates", None
+            )
+        if self.analysis_service and self.analysis_service.report_generator:
+            return getattr(
+                self.analysis_service.report_generator, "html_templates", None
+            )
+        return None
+
     async def api_get_report_templates(self) -> WebApiResponse:
         """获取系统内置及用户自定义的所有可用报告视觉模板"""
         try:
-            generator = getattr(
-                self.analysis_service, "report_generator", None
-            ) or getattr(self.report_dispatcher, "report_generator", None)
-            html_tpls = getattr(generator, "html_templates", None)
+            html_tpls = self._get_html_templates()
             if html_tpls and hasattr(html_tpls, "get_available_templates"):
                 templates = html_tpls.get_available_templates()
             else:
                 from ...reporting.templates import HTMLTemplates
 
-                cfg_mgr = getattr(
-                    self.analysis_service, "config_manager", None
-                ) or getattr(self.report_dispatcher, "config_manager", None)
+                cfg_mgr = (
+                    self.analysis_service.config_manager
+                    if self.analysis_service
+                    else (
+                        self.report_dispatcher.config_manager
+                        if self.report_dispatcher
+                        else None
+                    )
+                )
                 if not cfg_mgr:
                     return error_response("配置管理器未初始化", status_code=500)
                 tpl_mgr = HTMLTemplates(cfg_mgr)
@@ -71,11 +87,7 @@ class TemplateRoutes:
     async def api_get_template_preview(self) -> WebApiResponse:
         """获取自定义模板的预览图（base64 data URL，供 WebUI 画廊等展示）"""
         try:
-            template_name = (
-                str(request.query.get("template_name") or "").strip()
-                if hasattr(request, "query") and request.query
-                else ""
-            )
+            template_name = str(request.query.get("template_name", "")).strip()
             if not template_name:
                 return error_response("缺少模板名 (template_name)", status_code=400)
             try:
@@ -107,14 +119,10 @@ class TemplateRoutes:
     async def api_install_template_from_url(self) -> WebApiResponse:
         """从 GitHub 仓库链接安装自定义报告视觉模板"""
         try:
-            body: dict[str, Any] = {}
-            if hasattr(request, "json"):
-                try:
-                    parsed_body = await request.json(default={})
-                    if isinstance(parsed_body, dict):
-                        body = parsed_body
-                except Exception:
-                    body = {}
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
 
             repo_url = str(body.get("repo_url") or "")
             name = str(body.get("name") or "").strip() or None
@@ -134,14 +142,10 @@ class TemplateRoutes:
     async def api_install_template_from_file(self) -> WebApiResponse:
         """从上传的 zip 压缩包安装自定义报告视觉模板（JSON Base64 编码）"""
         try:
-            body: dict[str, Any] = {}
-            if hasattr(request, "json"):
-                try:
-                    parsed_body = await request.json(default={})
-                    if isinstance(parsed_body, dict):
-                        body = parsed_body
-                except Exception:
-                    body = {}
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
 
             file_data = body.get("file_data") or body.get("base64")
             name = str(body.get("name") or "").strip() or None
@@ -173,14 +177,10 @@ class TemplateRoutes:
     async def api_uninstall_template(self) -> WebApiResponse:
         """卸载通过安装器安装的自定义报告视觉模板（内置模板与手动放入的目录拒绝）"""
         try:
-            body: dict[str, Any] = {}
-            if hasattr(request, "json"):
-                try:
-                    parsed_body = await request.json(default={})
-                    if isinstance(parsed_body, dict):
-                        body = parsed_body
-                except Exception:
-                    body = {}
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
 
             name = str(body.get("name") or "").strip()
             if not name:
@@ -188,10 +188,7 @@ class TemplateRoutes:
 
             result = await asyncio.to_thread(uninstall_template, name)
 
-            generator = getattr(
-                self.analysis_service, "report_generator", None
-            ) or getattr(self.report_dispatcher, "report_generator", None)
-            html_tpls = getattr(generator, "html_templates", None)
+            html_tpls = self._get_html_templates()
             if html_tpls and hasattr(html_tpls, "invalidate_env"):
                 html_tpls.invalidate_env(name)
 

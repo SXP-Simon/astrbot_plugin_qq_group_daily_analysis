@@ -5,12 +5,14 @@ WebUI 插件配置中心路由 (Config Routes)
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import re
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
@@ -57,16 +59,20 @@ class ConfigRoutes:
     async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
         try:
-            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
-                self.report_dispatcher, "config_manager", None
+            cfg_mgr = (
+                self.analysis_service.config_manager
+                if self.analysis_service
+                else (
+                    self.report_dispatcher.config_manager
+                    if self.report_dispatcher
+                    else None
+                )
             )
             config_dict = {}
             if cfg_mgr and hasattr(cfg_mgr, "config"):
                 raw_cfg = cfg_mgr.config
                 if hasattr(raw_cfg, "items"):
                     config_dict = {str(k): v for k, v in raw_cfg.items()}
-                elif isinstance(raw_cfg, dict):
-                    config_dict = dict(raw_cfg)
 
             plugin_root = Path(__file__).resolve().parents[4]
             schema_file = plugin_root / "_conf_schema.json"
@@ -104,21 +110,30 @@ class ConfigRoutes:
     async def api_save_config(self) -> WebApiResponse:
         """保存并更新插件配置"""
         try:
-            body = await request.json() if hasattr(request, "json") else {}
-            new_config = body.get("config") if isinstance(body, dict) else None
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            new_config = body.get("config")
             if not isinstance(new_config, dict):
                 return error_response("缺少有效的 config 配置数据", status_code=400)
 
-            cfg_mgr = getattr(self.analysis_service, "config_manager", None) or getattr(
-                self.report_dispatcher, "config_manager", None
+            cfg_mgr = (
+                self.analysis_service.config_manager
+                if self.analysis_service
+                else (
+                    self.report_dispatcher.config_manager
+                    if self.report_dispatcher
+                    else None
+                )
             )
-            config_obj = getattr(cfg_mgr, "config", None) if cfg_mgr else None
+            config_obj = cfg_mgr.config if cfg_mgr and hasattr(cfg_mgr, "config") else None
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 
             plugin_root = Path(__file__).resolve().parents[4]
 
-            def _cleanse_reference_images(val: Any) -> Any:
+            def _cleanse_reference_images(val: object) -> object:
                 if isinstance(val, list):
                     cleaned = []
                     for item in val:
@@ -171,9 +186,9 @@ class ConfigRoutes:
                 return val
 
             new_config = _cleanse_reference_images(new_config)
-
-            for k, v in new_config.items():
-                config_obj[k] = v
+            if isinstance(new_config, dict):
+                for k, v in new_config.items():
+                    config_obj[k] = v
 
             if hasattr(config_obj, "save_config"):
                 try:
@@ -196,23 +211,13 @@ class ConfigRoutes:
     async def api_upload_config_file(self) -> WebApiResponse:
         """上传插件配置所需的文件/参考图，并存入合规的 files/{folder}/ 物理路径"""
         try:
-            body: dict[str, Any] = {}
-            if hasattr(request, "json"):
-                try:
-                    parsed_body = await request.json(default={})
-                    if isinstance(parsed_body, dict):
-                        body = parsed_body
-                except Exception:
-                    body = {}
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
 
-            config_key = ""
-            if (
-                hasattr(request, "query")
-                and request.query
-                and request.query.get("config_key")
-            ):
-                config_key = request.query.get("config_key")
-            elif body.get("config_key"):
+            config_key = request.query.get("config_key", "")
+            if not config_key and body.get("config_key"):
                 config_key = str(body.get("config_key"))
 
             if not config_key or config_key == "reference_images":
@@ -248,22 +253,51 @@ class ConfigRoutes:
 
             saved_paths: list[str] = []
 
-            if hasattr(request, "files"):
+            req_files = getattr(request, "files", None)
+            if req_files is not None:
                 try:
-                    uploaded_files = await request.files()
-                    for key in uploaded_files:
-                        for f in uploaded_files.getlist(key):
-                            orig_name = (
-                                getattr(f, "filename", "") or "uploaded_image.png"
-                            )
-                            clean_name = re.sub(r"[^\w\.\-]", "_", orig_name)
-                            ts = int(time.time() * 1000)
-                            final_name = f"{ts}_{clean_name}"
-                            file_bytes = await f.read()
-                            if file_bytes:
-                                for d in target_dirs:
-                                    (d / final_name).write_bytes(file_bytes)
-                                saved_paths.append(f"files/{folder}/{final_name}")
+                    uploaded_files: object
+                    if callable(req_files):
+                        res_files = req_files()
+                        uploaded_files = (
+                            await res_files
+                            if asyncio.iscoroutine(res_files)
+                            else res_files
+                        )
+                    else:
+                        uploaded_files = req_files
+
+                    getlist_fn = getattr(uploaded_files, "getlist", None)
+                    if callable(getlist_fn) and isinstance(uploaded_files, Iterable):
+                        for key in uploaded_files:
+                            file_items = getlist_fn(key)
+                            if isinstance(file_items, list):
+                                for f in file_items:
+                                    orig_name = (
+                                        getattr(f, "filename", "")
+                                        or "uploaded_image.png"
+                                    )
+                                    clean_name = re.sub(
+                                        r"[^\w\.\-]", "_", str(orig_name)
+                                    )
+                                    ts = int(time.time() * 1000)
+                                    final_name = f"{ts}_{clean_name}"
+                                    read_fn = getattr(f, "read", None)
+                                    if callable(read_fn):
+                                        res_read = read_fn()
+                                        file_bytes = (
+                                            await res_read
+                                            if asyncio.iscoroutine(res_read)
+                                            else res_read
+                                        )
+                                    else:
+                                        file_bytes = None
+                                    if isinstance(file_bytes, bytes):
+                                        for d in target_dirs:
+                                            (d / final_name).write_bytes(file_bytes)
+                                        saved_paths.append(
+                                            f"files/{folder}/{final_name}"
+                                        )
                 except Exception:
                     pass
 
@@ -271,7 +305,7 @@ class ConfigRoutes:
                 raw_data = (
                     body.get("file_data") or body.get("data") or body.get("base64")
                 )
-                file_name = body.get("filename") or "upload.png"
+                file_name = str(body.get("filename") or "upload.png")
                 clean_name = re.sub(r"[^\w\.\-]", "_", file_name)
                 if raw_data and isinstance(raw_data, str):
                     if raw_data.startswith("data:"):
@@ -305,15 +339,12 @@ class ConfigRoutes:
     async def api_get_config_file_content(self) -> WebApiResponse:
         """获取配置中的文件（如角色参考图）内容用于 WebUI 在线缩略图展示"""
         try:
-            rel_path = ""
-            if hasattr(request, "query") and request.query:
-                rel_path = request.query.get("path", "").strip()
+            rel_path = request.query.get("path", "").strip()
 
-            if not rel_path and hasattr(request, "json"):
+            if not rel_path:
                 try:
-                    body = await request.json(default={})
-                    if isinstance(body, dict):
-                        rel_path = str(body.get("path") or "").strip()
+                    body = await request.json()
+                    rel_path = str(body.get("path") or "").strip()
                 except Exception:
                     pass
 

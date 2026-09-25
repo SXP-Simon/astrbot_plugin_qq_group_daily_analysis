@@ -301,20 +301,19 @@ class TraceRoutes:
                     break
 
             if active_trace or task_info:
-                started_at = (
-                    active_trace.started_at
-                    if active_trace
-                    else (
-                        task_info.get("started_at", time.time())
-                        if task_info
-                        else time.time()
-                    )
-                )
+                task_started_at = task_info.get("started_at") if task_info else None
+                if active_trace:
+                    started_at = active_trace.started_at
+                elif isinstance(task_started_at, (int, float)):
+                    started_at = float(task_started_at)
+                else:
+                    started_at = time.time()
+
                 current_stage = (
                     active_trace.current_stage
                     if (active_trace and active_trace.current_stage)
                     else (
-                        task_info.get("current_stage", "")
+                        str(task_info.get("current_stage", ""))
                         if task_info
                         else AnalysisStage.FETCH_MESSAGES.value
                     )
@@ -326,18 +325,18 @@ class TraceRoutes:
                 token_usage = active_trace._token_usage if active_trace else None
 
                 group_id_val = (active_trace.group_id if active_trace else "") or (
-                    task_info.get("group_id", "") if task_info else ""
+                    str(task_info.get("group_id", "")) if task_info else ""
                 )
                 group_name_val = (active_trace.group_name if active_trace else "") or (
-                    task_info.get("group_name", "") if task_info else ""
+                    str(task_info.get("group_name", "")) if task_info else ""
                 )
                 platform_val = (active_trace.platform if active_trace else "") or (
-                    task_info.get("platform", "") if task_info else ""
+                    str(task_info.get("platform", "")) if task_info else ""
                 )
                 trigger_type_val = (
                     active_trace.trigger_type if active_trace else ""
                 ) or (
-                    task_info.get("trigger_type", "manual") if task_info else "manual"
+                    str(task_info.get("trigger_type", "manual")) if task_info else "manual"
                 )
 
                 return json_response(
@@ -384,18 +383,11 @@ class TraceRoutes:
     async def api_get_analytics_trends(self) -> WebApiResponse:
         """获取时序趋势统计（支持按小时或按天细粒度切换，并包含服务商与模型统计）"""
         try:
-            granularity = (
-                request.query.get("granularity", "day")
-                if request and hasattr(request, "query")
-                else "day"
-            )
+            granularity = request.query.get("granularity", "day")
+            range_count_str = request.query.get("range_count")
             range_count = (
-                int(
-                    request.query.get(
-                        "range_count", 48 if granularity == "hour" else 14
-                    )
-                )
-                if request and hasattr(request, "query")
+                int(range_count_str)
+                if range_count_str
                 else (48 if granularity == "hour" else 14)
             )
 
