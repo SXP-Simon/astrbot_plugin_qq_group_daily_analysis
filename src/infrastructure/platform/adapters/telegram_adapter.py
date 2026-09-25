@@ -14,7 +14,7 @@ import time
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....domain.value_objects.platform_capabilities import (
     TELEGRAM_CAPABILITIES,
@@ -28,6 +28,11 @@ from .telegram_message_converter import TelegramMessageConverter
 if TYPE_CHECKING:
     from astrbot.api.star import Context
 
+    from ....domain.repositories.bot_client_protocol import (
+        HistoryRecordProtocol,
+        TelegramClientProtocol,
+    )
+    from ....domain.repositories.plugin_host_repository import PluginHostProtocol
     from ....domain.value_objects.unified_message import UnifiedMessage
 
 # Telegram 依赖
@@ -47,23 +52,20 @@ TELEGRAM_AVATAR_NEGATIVE_CACHE_MAX_SIZE = 1024
 
 
 class TelegramAdapter(PlatformAdapter):
-    """
-    Telegram Bot API 适配器
+    """Telegram Bot API 适配器。
 
     实现 PlatformAdapter 接口，支持：
     - 消息发送（文本、图片、文件）
     - 头像获取
     - 群组信息获取
     - 消息历史（通过 AstrBot 的 message_history_manager）
-
-    消息历史机制：
-    - 消息通过拦截器存储到 AstrBot 数据库
-    - fetch_messages 从数据库读取历史消息
     """
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
+    def __init__(
+        self, bot_instance: object, config: dict[str, object] | None = None
+    ) -> None:
         super().__init__(bot_instance, config)
-        self._cached_client: Any = None
+        self._cached_client: TelegramClientProtocol | None = None
         self._context: Context | None = None
 
         # 机器人自身 ID（用于消息过滤）
@@ -73,7 +75,7 @@ class TelegramAdapter(PlatformAdapter):
         self.bot_self_ids: list[str] = []
         if config:
             ids = config.get("bot_self_ids", [])
-            self.bot_self_ids = [str(i) for i in ids] if ids else []
+            self.bot_self_ids = [str(i) for i in ids] if isinstance(ids, list) else []
             self._plugin_instance = config.get("plugin_instance")
         else:
             self._plugin_instance = None
@@ -81,13 +83,13 @@ class TelegramAdapter(PlatformAdapter):
         # user_id -> (expires_at, reason)
         self._avatar_negative_cache: dict[str, tuple[float, str]] = {}
 
-    def set_context(self, context: Context) -> None:
-        """
-        设置 AstrBot 上下文
+    def set_context(self, context: Context | object) -> None:
+        """设置 AstrBot 上下文。
 
         用于访问 message_history_manager 等核心服务。
         """
-        self._context = context
+        if hasattr(context, "message_history_manager") or hasattr(context, "get_event_queue"):
+            self._context = context  # type: ignore[assignment]
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回 Telegram 平台能力声明"""
@@ -110,11 +112,9 @@ class TelegramAdapter(PlatformAdapter):
         # 2. 回退：使用 KV 注册表
         if not groups and self._plugin_instance:
             try:
-                # 检查插件实例是否有 get_telegram_seen_group_ids 方法
-                if hasattr(self._plugin_instance, "get_telegram_seen_group_ids"):
-                    kv_groups = await self._plugin_instance.get_telegram_seen_group_ids(
-                        self._platform_id
-                    )
+                registry = getattr(self._plugin_instance, "platform_group_registry", None)
+                if registry is not None and hasattr(registry, "get_seen_groups"):
+                    kv_groups = await registry.get_seen_groups(self._platform_id)
                     if kv_groups:
                         groups.extend(kv_groups)
                         logger.debug(
@@ -129,9 +129,8 @@ class TelegramAdapter(PlatformAdapter):
         return list(set(groups))
 
     @property
-    def _telegram_client(self) -> Any:
-        """
-        懒加载获取 Telegram 客户端
+    def _telegram_client(self) -> TelegramClientProtocol | None:
+        """懒加载获取 Telegram 客户端。
 
         支持多种获取路径，适应 AstrBot 不同版本。
         """
@@ -144,19 +143,19 @@ class TelegramAdapter(PlatformAdapter):
 
         # 路径 A: bot 本身就是 ExtBot
         if ExtBot is not None and isinstance(self.bot, ExtBot):
-            self._cached_client = self.bot
+            self._cached_client = self.bot  # type: ignore[assignment]
             return self._cached_client
 
         # 路径 B: bot.client
         if hasattr(self.bot, "client"):
-            client = self.bot.client
+            client = getattr(self.bot, "client", None)
             if ExtBot is not None and isinstance(client, ExtBot):
-                self._cached_client = client
+                self._cached_client = client  # type: ignore[assignment]
                 return self._cached_client
 
         # 路径 C: bot 有 send_message 方法（ExtBot 的特征）
         if hasattr(self.bot, "send_message") and hasattr(self.bot, "send_photo"):
-            self._cached_client = self.bot
+            self._cached_client = self.bot  # type: ignore[assignment]
             return self._cached_client
 
         # 尝试从 bot 的其他属性获取
@@ -164,7 +163,7 @@ class TelegramAdapter(PlatformAdapter):
             if hasattr(self.bot, attr):
                 client = getattr(self.bot, attr)
                 if hasattr(client, "send_message"):
-                    self._cached_client = client
+                    self._cached_client = client  # type: ignore[assignment]
                     return self._cached_client
 
         logger.warning("无法从 bot_instance 获取 Telegram 客户端")
@@ -178,7 +177,7 @@ class TelegramAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 100,
         before_id: str | None = None,
-        since_ts: int | None = None,
+        since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
         """
         获取历史消息。
@@ -346,7 +345,7 @@ class TelegramAdapter(PlatformAdapter):
         )
 
     def _convert_history_record(
-        self, record: Any, group_id: str
+        self, record: HistoryRecordProtocol, group_id: str
     ) -> UnifiedMessage | None:
         """将数据库记录转换为 UnifiedMessage（委托 TelegramMessageConverter）。"""
         return TelegramMessageConverter.to_unified_message(record, group_id)
@@ -376,13 +375,12 @@ class TelegramAdapter(PlatformAdapter):
             # 处理群组话题 ID
             chat_id, message_thread_id = self._parse_group_id(group_id)
 
-            kwargs: dict[str, Any] = {"chat_id": chat_id, "text": text}
-            if message_thread_id:
-                kwargs["message_thread_id"] = int(message_thread_id)
-            if reply_to:
-                kwargs["reply_to_message_id"] = int(reply_to)
-
-            await client.send_message(**kwargs)
+            await client.send_message(
+                chat_id=chat_id,
+                text=text,
+                message_thread_id=int(message_thread_id) if message_thread_id else None,
+                reply_to_message_id=int(reply_to) if reply_to else None,
+            )
             return True
         except Exception as e:
             logger.error(f"[Telegram] 发送文本失败: {e}")
@@ -402,14 +400,8 @@ class TelegramAdapter(PlatformAdapter):
 
         try:
             chat_id, message_thread_id = self._parse_group_id(group_id)
-            file_obj: Any = None
+            file_obj: BytesIO | str | None = None
             is_temp_obj = False
-
-            kwargs: dict[str, Any] = {"chat_id": chat_id}
-            if message_thread_id:
-                kwargs["message_thread_id"] = int(message_thread_id)
-            if caption:
-                kwargs["caption"] = caption
 
             # 1. 统一处理输入源 (Base64 / URL / Local File)
             if image_path.startswith("base64://"):
@@ -450,11 +442,15 @@ class TelegramAdapter(PlatformAdapter):
                     file_obj = image_path
 
             # 2. 发送图片
-            kwargs["photo"] = file_obj
             try:
-                await client.send_photo(**kwargs)
+                await client.send_photo(
+                    chat_id=chat_id,
+                    photo=file_obj,
+                    caption=caption if caption else None,
+                    message_thread_id=int(message_thread_id) if message_thread_id else None,
+                )
             finally:
-                if is_temp_obj and hasattr(file_obj, "close"):
+                if is_temp_obj and isinstance(file_obj, BytesIO):
                     file_obj.close()
 
             return True
@@ -489,12 +485,8 @@ class TelegramAdapter(PlatformAdapter):
 
         try:
             chat_id, message_thread_id = self._parse_group_id(group_id)
-            file_obj: Any = None
+            file_obj: BytesIO | str | None = None
             is_temp_obj = False
-
-            kwargs: dict[str, Any] = {"chat_id": chat_id}
-            if message_thread_id:
-                kwargs["message_thread_id"] = int(message_thread_id)
 
             # 1. 统一处理输入源 (Base64 / Local File)
             if file_path.startswith("base64://"):
@@ -522,13 +514,15 @@ class TelegramAdapter(PlatformAdapter):
                 if not filename:
                     filename = "file"
 
-            kwargs["document"] = file_obj
-            kwargs["filename"] = filename
-
             try:
-                await client.send_document(**kwargs)
+                await client.send_document(
+                    chat_id=chat_id,
+                    document=file_obj,
+                    filename=filename,
+                    message_thread_id=int(message_thread_id) if message_thread_id else None,
+                )
             finally:
-                if is_temp_obj and hasattr(file_obj, "close"):
+                if is_temp_obj and isinstance(file_obj, BytesIO):
                     file_obj.close()
 
             return True

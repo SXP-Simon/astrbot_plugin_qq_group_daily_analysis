@@ -8,7 +8,7 @@ Telegram 消息转换器 (Telegram Message Converter)
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ....domain.value_objects.unified_message import (
     MessageContent,
@@ -18,8 +18,9 @@ from ....domain.value_objects.unified_message import (
 from ....utils.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine
+    from collections.abc import Awaitable, Callable
 
+    from ....domain.repositories.bot_client_protocol import HistoryRecordProtocol
     from ....domain.value_objects.unified_group import UnifiedMember
 
 
@@ -69,7 +70,7 @@ class TelegramMessageConverter:
         group_id: str,
         msg: UnifiedMessage,
         sender_name_cache: dict[str, str],
-        member_fetcher: Callable[[str, str], Coroutine[Any, Any, UnifiedMember | None]],
+        member_fetcher: Callable[[str, str], Awaitable[UnifiedMember | None]],
     ) -> UnifiedMessage:
         """若发送者昵称为占位值，尝试通过成员查询回调自愈修复。
 
@@ -114,7 +115,9 @@ class TelegramMessageConverter:
         return replace(msg, sender_name=resolved_name)
 
     @staticmethod
-    def to_unified_message(record: Any, group_id: str) -> UnifiedMessage | None:
+    def to_unified_message(
+        record: HistoryRecordProtocol, group_id: str
+    ) -> UnifiedMessage | None:
         """将数据库历史消息记录转换为 UnifiedMessage 领域值对象。
 
         Args:
@@ -130,15 +133,16 @@ class TelegramMessageConverter:
                 return None
 
             # 提取消息内容
-            message_parts = content.get("message", [])
+            raw_parts = content.get("message", [])
+            message_parts = raw_parts if isinstance(raw_parts, list) else []
             text_content = ""
             contents: list[MessageContent] = []
 
             for part in message_parts:
                 if isinstance(part, dict):
-                    part_type = part.get("type", "")
+                    part_type = str(part.get("type", ""))
                     if part_type in ("plain", "text"):
-                        text = part.get("text", "")
+                        text = str(part.get("text", ""))
                         text_content += text
                         contents.append(
                             MessageContent(
@@ -150,8 +154,10 @@ class TelegramMessageConverter:
                         contents.append(
                             MessageContent(
                                 type=MessageContentType.IMAGE,
-                                url=part.get("url", "")
-                                or part.get("attachment_id", ""),
+                                url=str(
+                                    part.get("url", "")
+                                    or part.get("attachment_id", "")
+                                ),
                             )
                         )
                     elif part_type == "at":
@@ -196,7 +202,7 @@ class TelegramMessageConverter:
             return None
 
     @staticmethod
-    def to_raw_format(messages: list[UnifiedMessage]) -> list[dict]:
+    def to_raw_format(messages: list[UnifiedMessage]) -> list[dict[str, object]]:
         """将统一消息列表转换为 OneBot 兼容的原生消息字典列表。
 
         用于向后兼容现有分析管线与数据序列化。
@@ -205,11 +211,26 @@ class TelegramMessageConverter:
             messages: 统一消息列表。
 
         Returns:
-            list[dict]: OneBot 兼容格式的原始消息字典列表。
+            list[dict[str, object]]: OneBot 兼容格式的原始消息字典列表。
         """
-        result: list[dict] = []
+        result: list[dict[str, object]] = []
         for msg in messages:
-            raw: dict[str, Any] = {
+            msg_segments: list[dict[str, object]] = []
+            for content in msg.contents:
+                if content.type == MessageContentType.TEXT:
+                    msg_segments.append(
+                        {"type": "text", "data": {"text": content.text or ""}}
+                    )
+                elif content.type == MessageContentType.IMAGE:
+                    msg_segments.append(
+                        {"type": "image", "data": {"url": content.url or ""}}
+                    )
+                elif content.type == MessageContentType.AT:
+                    msg_segments.append(
+                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
+                    )
+
+            raw: dict[str, object] = {
                 "message_id": msg.message_id,
                 "group_id": msg.group_id,
                 "time": msg.timestamp,
@@ -218,23 +239,9 @@ class TelegramMessageConverter:
                     "nickname": msg.sender_name,
                     "card": msg.sender_card or "",
                 },
-                "message": [],
+                "message": msg_segments,
                 "user_id": msg.sender_id,
             }
-
-            for content in msg.contents:
-                if content.type == MessageContentType.TEXT:
-                    raw["message"].append(
-                        {"type": "text", "data": {"text": content.text or ""}}
-                    )
-                elif content.type == MessageContentType.IMAGE:
-                    raw["message"].append(
-                        {"type": "image", "data": {"url": content.url or ""}}
-                    )
-                elif content.type == MessageContentType.AT:
-                    raw["message"].append(
-                        {"type": "at", "data": {"qq": content.at_user_id or ""}}
-                    )
 
             result.append(raw)
 

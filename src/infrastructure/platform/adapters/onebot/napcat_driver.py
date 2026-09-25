@@ -6,7 +6,7 @@ NapCatQQ 专属驱动实现 (NapCat Driver)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from .....utils.logger import logger
 from ...napcat_stream import upload_file_stream
@@ -14,6 +14,9 @@ from .standard_driver import StandardOneBotDriver
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from .....domain.value_objects import OneBotAlbumPayload
 
 
 class NapCatDriver(StandardOneBotDriver):
@@ -23,9 +26,9 @@ class NapCatDriver(StandardOneBotDriver):
 
     async def get_group_album_list(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[OneBotAlbumPayload]:
         """调用 NapCat 特有的 get_qun_album_list 获取群相册列表。
 
         Args:
@@ -33,7 +36,7 @@ class NapCatDriver(StandardOneBotDriver):
             group_id: 目标群号
 
         Returns:
-            list[dict[str, Any]]: 相册列表
+            list[OneBotAlbumPayload]: 相册列表
         """
         try:
             logger.debug(
@@ -43,13 +46,13 @@ class NapCatDriver(StandardOneBotDriver):
             logger.debug(
                 f"[OneBot:{self.name}] 接口 get_qun_album_list 原始响应内容: {res}"
             )
-            albums: list[dict[str, Any]] = []
+            albums: list[OneBotAlbumPayload] = []
             if isinstance(res, list):
-                albums = [item for item in res if isinstance(item, dict)]
+                albums = [cast("OneBotAlbumPayload", item) for item in res if isinstance(item, dict)]
             elif isinstance(res, dict):
                 data = res.get("data")
                 if isinstance(data, list):
-                    albums = [item for item in data if isinstance(item, dict)]
+                    albums = [cast("OneBotAlbumPayload", item) for item in data if isinstance(item, dict)]
                 elif isinstance(data, dict):
                     album_list = (
                         data.get("album_list")
@@ -59,7 +62,7 @@ class NapCatDriver(StandardOneBotDriver):
                         or data.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [item for item in album_list if isinstance(item, dict)]
+                        albums = [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
                 if not albums:
                     album_list = (
                         res.get("album_list")
@@ -69,7 +72,7 @@ class NapCatDriver(StandardOneBotDriver):
                         or res.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [item for item in album_list if isinstance(item, dict)]
+                        albums = [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
             if albums:
                 logger.debug(
                     f"[OneBot:{self.name}] get_qun_album_list 成功获取并提取到 {len(albums)} 个相册对象"
@@ -86,14 +89,14 @@ class NapCatDriver(StandardOneBotDriver):
 
     async def upload_stream_file(
         self,
-        bot: Any,
-        file_path: Path,
+        bot: OneBotClientProtocol,
+        file_path: str | Path,
     ) -> str | None:
         """调用 NapCat 特有的 upload_file_stream 分块上传文件。
 
         Args:
             bot: 机器人实例
-            file_path: 本地文件 Path 对象
+            file_path: 本地文件 Path 对象或路径字符串
 
         Returns:
             str | None: 上传成功返回远程路径/标识，失败返回 None

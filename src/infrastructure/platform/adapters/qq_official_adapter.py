@@ -9,11 +9,12 @@ import os
 import random
 import re
 from collections.abc import Awaitable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import aiohttp
 
+from ....domain.repositories.plugin_host_repository import PluginHostProtocol
 from ....domain.value_objects.platform_capabilities import (
     QQ_OFFICIAL_CAPABILITIES,
     PlatformCapabilities,
@@ -28,6 +29,7 @@ from ....utils.logger import logger
 from ..base import PlatformAdapter
 
 if TYPE_CHECKING:
+    from astrbot.api.event import MessageChain
     from astrbot.api.star import Context
 
 
@@ -39,13 +41,19 @@ class QQOfficialAdapter(PlatformAdapter):
     HISTORY_PAGE_SIZE = 500
     MARKDOWN_CHUNK_SIZE = 3900
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
+    def __init__(
+        self, bot_instance: object, config: dict[str, object] | None = None
+    ) -> None:
         super().__init__(bot_instance, config)
         self._context: Context | None = None
         self._plugin_instance = config.get("plugin_instance") if config else None
         self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
-        ids = config.get("bot_self_ids", []) if config else []
-        self.bot_self_ids = [str(item) for item in ids if item]
+        raw_ids = config.get("bot_self_ids", []) if config else []
+        self.bot_self_ids = (
+            [str(item) for item in raw_ids if item]
+            if isinstance(raw_ids, (list, tuple, set))
+            else []
+        )
         self.appid = self._resolve_appid(config or {})
         self._markdown_msg_seq = random.randint(1, 10000)
         self._member_profiles: dict[str, dict[str, str]] = {}
@@ -83,11 +91,12 @@ class QQOfficialAdapter(PlatformAdapter):
         digest = hashlib.sha256(f"{group_id}\0{sender_id}".encode()).hexdigest()[:8]
         return f"群友-{digest.upper()}"
 
-    def set_context(self, context: Context) -> None:
-        self._context = context
+    def set_context(self, context: Context | object) -> None:
+        if hasattr(context, "message_history_manager") or hasattr(context, "get_event_queue"):
+            self._context = context  # type: ignore[assignment]
 
     def remember_user_profile(
-        self, user_id: str, nickname: str = "", avatar_url: str = ""
+        self, user_id: str, nickname: str | None = None, avatar_url: str | None = None
     ) -> None:
         """缓存 QQ 官方消息事件提供的用户资料。
 
@@ -120,7 +129,7 @@ class QQOfficialAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 1000,
         before_id: str | None = None,
-        since_ts: int | None = None,
+        since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
         if not self._context:
             logger.warning("[QQOfficial] 未设置 context，无法读取本地消息历史")
@@ -197,7 +206,7 @@ class QQOfficialAdapter(PlatformAdapter):
             return []
 
     def _convert_history_record(
-        self, record: Any, group_id: str
+        self, record: object, group_id: str
     ) -> UnifiedMessage | None:
         try:
             content = getattr(record, "content", None)
@@ -312,7 +321,7 @@ class QQOfficialAdapter(PlatformAdapter):
             )
         return result
 
-    async def _send_chain(self, group_id: str, chain: Any) -> bool:
+    async def _send_chain(self, group_id: str, chain: MessageChain) -> bool:
         if not self._context:
             logger.error("[QQOfficial] 未设置 context，无法发送消息")
             return False
@@ -380,7 +389,7 @@ class QQOfficialAdapter(PlatformAdapter):
 
     async def _send_markdown_chunk(self, group_id: str, content: str) -> bool:
         api = getattr(self.bot, "api", None)
-        post_group_message: Any = getattr(api, "post_group_message", None)
+        post_group_message: object = getattr(api, "post_group_message", None)
         if not callable(post_group_message):
             return False
 
@@ -392,7 +401,7 @@ class QQOfficialAdapter(PlatformAdapter):
         try:
             from botpy.types.message import MarkdownPayload
 
-            markdown: Any = MarkdownPayload(content=content)
+            markdown: object = MarkdownPayload(content=content)
         except ImportError:
             # Allows lightweight test environments while botpy is provided by
             # AstrBot in production.
@@ -510,11 +519,10 @@ class QQOfficialAdapter(PlatformAdapter):
         )
 
     async def get_group_list(self) -> list[str]:
-        if self._plugin_instance and hasattr(
-            self._plugin_instance, "get_seen_group_ids"
-        ):
+        if isinstance(self._plugin_instance, PluginHostProtocol):
             try:
-                return await self._plugin_instance.get_seen_group_ids(self.platform_id)
+                res = await self._plugin_instance.get_seen_group_ids(self.platform_id)
+                return list(res)
             except Exception as exc:
                 logger.warning("[QQOfficial] 获取已见群列表失败: %s", exc)
         return []

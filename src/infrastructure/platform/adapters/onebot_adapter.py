@@ -12,10 +12,14 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 import aiohttp
 
+from ....domain.repositories.platform_adapter_repository import (
+    GroupAlbumSupportProtocol,
+    GroupFileSupportProtocol,
+)
 from ....domain.value_objects.platform_capabilities import (
     ONEBOT_V11_CAPABILITIES,
     PlatformCapabilities,
@@ -32,14 +36,18 @@ from .onebot import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from ....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from ....domain.repositories.plugin_host_repository import PluginHostProtocol
+    from ....domain.value_objects import OneBotAlbumPayload
     from ....domain.value_objects.unified_message import (
         UnifiedMessage,
     )
 
 
-class OneBotAdapter(PlatformAdapter):
-    """
-    具体实现：OneBot v11 平台适配器
+class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportProtocol, GroupFileSupportProtocol):
+    """具体实现：OneBot v11 平台适配器。
 
     支持 NapCat, go-cqhttp, Lagrange 等遵循 OneBot v11 协议的 QQ 机器人框架。
     实现了消息获取、发送、群组管理及头像解析等全套功能。
@@ -56,17 +64,20 @@ class OneBotAdapter(PlatformAdapter):
     AVATAR_URL_TTL = 3600.0
     AVATAR_NEGATIVE_TTL = 600.0
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
+    def __init__(
+        self, bot_instance: OneBotClientProtocol, config: dict[str, object] | None = None
+    ) -> None:
         """
         初始化 OneBot 适配器。
         """
         super().__init__(bot_instance, config)
         # 支持从多个潜在的配置键中提取机器人 ID
+        raw_ids = config.get("bot_self_ids") if config else None
+        if not isinstance(raw_ids, (list, tuple)):
+            raw_ids = config.get("bot_qq_ids") if config else None
         self.bot_self_ids = (
-            [str(id) for id in config.get("bot_self_ids", [])] if config else []
+            [str(id) for id in raw_ids] if isinstance(raw_ids, (list, tuple)) else []
         )
-        if not self.bot_self_ids and config:
-            self.bot_self_ids = [str(id) for id in config.get("bot_qq_ids", [])]
         self.filter_bot_messages = (
             config.get("filter_bot_messages", True) if config else True
         )
@@ -114,7 +125,7 @@ class OneBotAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 1000,
         before_id: str | None = None,
-        since_ts: int | None = None,
+        since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
         """
         从 OneBot 后端拉取群组历史消息。
@@ -199,7 +210,7 @@ class OneBotAdapter(PlatformAdapter):
                         )
                     break
 
-                if not result or "messages" not in result:
+                if not isinstance(result, dict) or "messages" not in result:
                     logger.debug(
                         f"OneBot 分页拉取：API 调用返回空或无效数据，停止回溯。群: {group_id}"
                     )
@@ -371,7 +382,7 @@ class OneBotAdapter(PlatformAdapter):
     async def _execute_transmission_strategy(
         self,
         path: str,
-        worker: Any,
+        worker: Callable[[str, str], Awaitable[None]],
         label: str,
         format_path_as_url: bool = False,
     ) -> bool:
@@ -584,19 +595,21 @@ class OneBotAdapter(PlatformAdapter):
                 group_id=int(group_id),
             )
 
-            if not result:
+            if not isinstance(result, dict):
                 return None
 
-            info = result
-            if isinstance(result, dict) and isinstance(result.get("data"), dict):
-                info = result["data"]
+            info: dict[str, object] = result
+            if isinstance(result.get("data"), dict):
+                info = cast("dict[str, object]", result["data"])
 
+            create_time_raw = info.get("group_create_time")
+            member_count_raw = info.get("member_count", 0)
             return UnifiedGroup(
                 group_id=str(info.get("group_id", group_id)),
-                group_name=info.get("group_name", ""),
-                member_count=info.get("member_count", 0),
+                group_name=str(info.get("group_name", "")),
+                member_count=int(member_count_raw) if isinstance(member_count_raw, (int, float, str)) else 0,
                 owner_id=str(info.get("owner_id", "")) or None,
-                create_time=info.get("group_create_time"),
+                create_time=int(create_time_raw) if isinstance(create_time_raw, (int, float, str)) else None,
                 platform="onebot",
             )
         except Exception as e:
@@ -688,19 +701,20 @@ class OneBotAdapter(PlatformAdapter):
                 user_id=int(user_id),
             )
 
-            if not result:
+            if not isinstance(result, dict):
                 return None
 
-            info = result
-            if isinstance(result, dict) and isinstance(result.get("data"), dict):
-                info = result["data"]
+            info: dict[str, object] = result
+            if isinstance(result.get("data"), dict):
+                info = cast("dict[str, object]", result["data"])
 
+            join_time_raw = info.get("join_time")
             return UnifiedMember(
                 user_id=str(info.get("user_id", user_id)),
-                nickname=info.get("nickname", ""),
-                card=info.get("card", "") or None,
-                role=info.get("role", "member"),
-                join_time=info.get("join_time"),
+                nickname=str(info.get("nickname", "")),
+                card=str(info.get("card", "")) or None,
+                role=str(info.get("role", "member")),
+                join_time=int(join_time_raw) if isinstance(join_time_raw, (int, float, str)) else None,
             )
         except Exception as e:
             logger.debug(f"[OneBot] 获取群 {group_id} 成员 {user_id} 信息失败: {e}")
@@ -734,11 +748,11 @@ class OneBotAdapter(PlatformAdapter):
     # ==================== IAvatarRepository 实现 ====================
 
     @staticmethod
-    def _extract_protocol_avatar_url(payload: Any) -> str | None:
+    def _extract_protocol_avatar_url(payload: object) -> str | None:
         """从协议端用户资料响应中提取头像 URL。"""
         if not isinstance(payload, dict):
             return None
-        targets: list[dict[str, Any]] = [payload]
+        targets: list[dict[str, object]] = [payload]
         if isinstance(payload.get("data"), dict):
             targets.append(payload["data"])
         for target in targets:
@@ -1075,7 +1089,7 @@ class OneBotAdapter(PlatformAdapter):
         """判断是否为禁言异常（委派给当前绑定的协议端驱动）。"""
         return self._driver.is_mute_exception(e)
 
-    def _record_mute_status(self, group_id: Any, is_muted: bool):
+    def _record_mute_status(self, group_id: str | int, is_muted: bool) -> None:
         group_id_str = str(group_id)
         if is_muted:
             # Prune expired cache entries if cache size grows too large (threshold of 1000)
@@ -1167,9 +1181,9 @@ class OneBotAdapter(PlatformAdapter):
     async def get_group_album_list(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[dict]:  # type: ignore[override]
         """获取群相册列表（委托 OneBotGroupFileManager）。"""
-        return await self._file_manager.get_group_album_list(group_id=group_id)
+        return cast("list[dict]", await self._file_manager.get_group_album_list(group_id=group_id))
 
     async def find_album_id(
         self,
@@ -1223,18 +1237,21 @@ class OneBotAdapter(PlatformAdapter):
 
     def _get_use_base64(self) -> bool:
         """从插件配置中获取是否启用 Base64"""
-        plugin: Any = self.config.get("plugin_instance") if self.config else None
-        if plugin and hasattr(plugin, "config_manager"):
+        raw = self.config.get("plugin_instance") if self.config else None
+        if not isinstance(raw, PluginHostProtocol):
+            return False
+        plugin: PluginHostProtocol = raw
+        if plugin.config_manager:
             return plugin.config_manager.get_enable_base64_image()
         return False
 
     def _get_napcat_stream_threshold_bytes(self) -> int:
         """获取配置的 NapCat 流式上传兜底阈值（字节）。"""
-        plugin: Any = self.config.get("plugin_instance") if self.config else None
-        if not plugin or not hasattr(plugin, "config_manager"):
+        raw = self.config.get("plugin_instance") if self.config else None
+        if not isinstance(raw, PluginHostProtocol) or not raw.config_manager:
             return 0
         try:
-            threshold_mb = plugin.config_manager.get_napcat_stream_threshold_mb()
+            threshold_mb = raw.config_manager.get_napcat_stream_threshold_mb()
             return max(0, int(float(threshold_mb) * 1024 * 1024))
         except (TypeError, ValueError):
             return 0

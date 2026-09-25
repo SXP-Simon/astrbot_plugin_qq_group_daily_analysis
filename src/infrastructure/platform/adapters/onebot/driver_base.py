@@ -8,7 +8,16 @@ OneBot 协议端方言驱动基类 (OneBot Protocol Driver Interface)
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from .....domain.value_objects import (
+        OneBotAlbumPayload,
+        OneBotHistoryFetchParams,
+    )
 
 
 class OneBotDriver(ABC):
@@ -22,7 +31,7 @@ class OneBotDriver(ABC):
         group_id: str,
         count: int,
         anchor_id: str | int | None,
-    ) -> dict[str, Any]:
+    ) -> OneBotHistoryFetchParams:
         """构建拉取群历史消息 (get_group_msg_history) 的 API 参数。
 
         Args:
@@ -31,14 +40,14 @@ class OneBotDriver(ABC):
             anchor_id: 分页回溯锚点 ID（可能是 message_seq、message_id 或其他标识）
 
         Returns:
-            dict[str, Any]: 传给 call_action 的参数字典
+            传给 call_action 的强类型参数字典。
         """
         raise NotImplementedError
 
     @abstractmethod
     def extract_history_anchor(
         self,
-        earliest_msg: dict[str, Any],
+        earliest_msg: dict[str, object],
     ) -> str | int | None:
         """从拉取到的最早一条消息中提取用于下一次分页回溯的锚点 ID。
 
@@ -53,7 +62,7 @@ class OneBotDriver(ABC):
     @abstractmethod
     async def upload_group_album(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
         album_id: str,
         album_name: str | None,
@@ -72,8 +81,8 @@ class OneBotDriver(ABC):
 
     async def upload_stream_file(
         self,
-        bot: Any,
-        file_path: Any,
+        bot: OneBotClientProtocol,
+        file_path: str | Path,
     ) -> str | None:
         """可选扩展：执行分块流式上传（NapCat 特性）。默认返回 None。"""
         return None
@@ -107,9 +116,9 @@ class OneBotDriver(ABC):
     @abstractmethod
     async def get_group_album_list(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[OneBotAlbumPayload]:
         """获取群相册列表。
 
         Args:
@@ -117,7 +126,7 @@ class OneBotDriver(ABC):
             group_id: 目标群号
 
         Returns:
-            list[dict[str, Any]]: 相册信息字典列表
+            相册信息字典列表。
         """
         raise NotImplementedError
 
@@ -134,7 +143,7 @@ class OneBotDriver(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def is_whole_ban(self, group_info: dict[str, Any]) -> bool:
+    def is_whole_ban(self, group_info: dict[str, object]) -> bool:
         """从 get_group_info 响应中判断当前群聊是否开启了全群禁言。
 
         Args:

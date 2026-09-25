@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
 from ...domain.repositories.message_repository import (
@@ -14,29 +14,41 @@ from ...domain.repositories.message_repository import (
     IMessageRepository,
     IMessageSender,
 )
+from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from astrbot.api.star import Context
 
     from ...domain.value_objects.platform_capabilities import PlatformCapabilities
     from ...domain.value_objects.unified_message import UnifiedMessage
 
 
+
+TBot = TypeVar("TBot")
+
+
 class PlatformAdapter(
-    IMessageRepository, IMessageSender, IGroupInfoRepository, IAvatarRepository, ABC
+    IMessageRepository,
+    IMessageSender,
+    IGroupInfoRepository,
+    IAvatarRepository,
+    PlatformAdapterProtocol,
+    Generic[TBot],
+    ABC,
 ):
-    """
-    基础设施：平台适配器基类
+    """基础设施：平台适配器基类。
 
     继承自多个领域接口（仓储、发送器、群组信息、头像），
     充当领域层与具体聊天平台（如 OneBot, Discord）之间的中转站。
 
     Attributes:
-        bot (Any): 平台对应的机器人 SDK 实例，显式标注为 Any 以支持动态属性调用
+        bot (TBot): 平台对应的机器人 SDK 实例
         config (dict): 针对该平台的特定配置
     """
 
-    bot: Any
+    bot: TBot
     config: dict[str, object]
     _platform_id: str
     bot_self_ids: list[str]
@@ -44,15 +56,14 @@ class PlatformAdapter(
 
     def __init__(
         self,
-        bot_instance: Any,
-        config: Mapping[str, Any] | None = None,
+        bot_instance: TBot,
+        config: Mapping[str, object] | None = None,
     ) -> None:
-        """
-        初始化平台适配器。
+        """初始化平台适配器。
 
         Args:
-            bot_instance (Any): 后端机器人实例
-            config (dict, optional): 平台特定配置项
+            bot_instance: 后端机器人实例。
+            config: 平台特定配置项。
         """
         self.bot = bot_instance
         self.config: dict[str, object] = dict(config) if config is not None else {}
@@ -119,12 +130,11 @@ class PlatformAdapter(
         """获取当前适配器的平台实例 ID（如 nuits）"""
         return self._platform_id
 
-    def set_context(self, context: Any):
-        """
-        设置上下文对象（用于部分需要 ctx 的平台如 Telegram）。
+    def set_context(self, context: Context | object) -> None:
+        """设置上下文对象（用于部分需要 ctx 的平台如 Telegram）。
 
         Args:
-            context (Any): 上下文对象
+            context: 上下文对象。
         """
 
     @property

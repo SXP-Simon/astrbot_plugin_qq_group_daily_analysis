@@ -7,22 +7,26 @@ OneBot 群文件与群相册管理器 (OneBot Group File & Album Manager)
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .....utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from .....domain.value_objects import OneBotAlbumPayload
     from .driver_base import OneBotDriver
 
 
 class OneBotGroupFileManager:
     """OneBot 群文件与群相册功能管理器。"""
 
+    bot: OneBotClientProtocol
+
     def __init__(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         driver_getter: Callable[[], Awaitable[OneBotDriver]],
         transmission_executor: Callable[..., Awaitable[bool]],
     ):
@@ -62,7 +66,7 @@ class OneBotGroupFileManager:
         )
 
         async def do_upload(content: str, label: str):
-            params: dict[str, Any] = {
+            params: dict[str, object] = {
                 "group_id": int(group_id),
                 "file": content,
                 "name": target_filename,
@@ -328,14 +332,14 @@ class OneBotGroupFileManager:
     async def get_group_album_list(
         self,
         group_id: str,
-    ) -> list[dict]:
+    ) -> list[OneBotAlbumPayload]:
         """获取群相册列表。
 
         Args:
             group_id: 目标群号。
 
         Returns:
-            list[dict]: 相册字典列表。
+            list[OneBotAlbumPayload]: 相册字典列表。
         """
         driver = await self._ensure_driver()
         return await driver.get_group_album_list(self.bot, group_id)

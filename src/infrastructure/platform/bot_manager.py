@@ -6,7 +6,7 @@ Bot实例管理模块 - 基础设施层
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
@@ -355,7 +355,7 @@ class BotManager:
         )
         return None
 
-    def get_adapter_platform_id(self, adapter: Any) -> str:
+    def get_adapter_platform_id(self, adapter: PlatformAdapter | object) -> str:
         """获取适配器对应的真实平台实例 ID（如 'nuits'）"""
         if not adapter:
             return ""

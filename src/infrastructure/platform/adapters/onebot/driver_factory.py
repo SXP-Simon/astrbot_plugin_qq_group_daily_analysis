@@ -6,8 +6,9 @@ OneBot 协议端驱动工厂 (OneBot Driver Factory)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
 from .....utils.logger import logger
 from .llbot_driver import LLOneBotDriver
 from .napcat_driver import NapCatDriver
@@ -47,10 +48,10 @@ class OneBotDriverFactory:
         return StandardOneBotDriver()
 
     @classmethod
-    async def detect_driver(cls, bot: Any) -> OneBotDriver:
+    async def detect_driver(cls, bot: OneBotClientProtocol | object) -> OneBotDriver:
         """通过向 bot 发起 get_version_info / get_version (OB12) 探测并创建驱动。"""
-        if not hasattr(bot, "call_action"):
-            logger.debug("[OneBot] bot 实例无 call_action 接口，使用标准驱动")
+        if not isinstance(bot, OneBotClientProtocol):
+            logger.debug("[OneBot] bot 实例未实现 OneBotClientProtocol，使用标准驱动")
             return StandardOneBotDriver()
 
         # 1. 优先尝试 OneBot v11 标准 get_version_info

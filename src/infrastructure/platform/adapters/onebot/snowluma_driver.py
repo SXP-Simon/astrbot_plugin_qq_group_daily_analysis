@@ -6,9 +6,12 @@ SnowLuma 专属驱动实现 (SnowLuma Driver)
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .standard_driver import StandardOneBotDriver
+
+if TYPE_CHECKING:
+    from .....domain.value_objects import OneBotHistoryFetchParams
 
 
 class SnowLumaDriver(StandardOneBotDriver):
@@ -21,7 +24,7 @@ class SnowLumaDriver(StandardOneBotDriver):
         group_id: str,
         count: int,
         anchor_id: str | int | None,
-    ) -> dict[str, Any]:
+    ) -> OneBotHistoryFetchParams:
         """构建 SnowLuma 历史消息拉取参数（使用 message_id，不传 reverseOrder）。
 
         Args:
@@ -30,9 +33,9 @@ class SnowLumaDriver(StandardOneBotDriver):
             anchor_id: message_id 锚点
 
         Returns:
-            dict[str, Any]: API 参数字典
+            OneBotHistoryFetchParams: API 参数字典
         """
-        params: dict[str, Any] = {
+        params: OneBotHistoryFetchParams = {
             "group_id": int(group_id),
             "count": count,
         }
@@ -53,7 +56,10 @@ class SnowLumaDriver(StandardOneBotDriver):
         Returns:
             str | int | None: message_id 锚点
         """
-        return earliest_msg.get("message_id")
+        val = earliest_msg.get("message_id")
+        if isinstance(val, (str, int)):
+            return val
+        return None
 
     def is_mute_exception(self, exc: Exception) -> bool:
         """识别 SnowLuma 特有的 result=120 / rejected 拒绝与禁言错误。
