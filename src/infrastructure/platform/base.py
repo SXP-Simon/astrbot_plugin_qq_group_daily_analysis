@@ -290,7 +290,7 @@ class PlatformAdapter(
             return await self.send_forward_msg(group_id, nodes)
         except Exception:
             # 兜底：直接发送
-            return await self.send_text(group_id, str(content))
+            return await self.send_text(group_id, str(fallback_content or content))
 
     async def is_group_muted(self, group_id: str) -> bool:
         """

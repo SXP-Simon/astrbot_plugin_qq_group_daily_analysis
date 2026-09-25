@@ -315,7 +315,7 @@ class OneBotGroupFileManager:
             )
             return False
 
-        async def do_upload(content: str, label: str):
+        async def do_upload(content: str, _label: str):
             driver = await self._ensure_driver()
             await driver.upload_group_album(
                 bot=self.bot,
