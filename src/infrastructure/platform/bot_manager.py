@@ -13,6 +13,7 @@ from . import PlatformAdapter, PlatformAdapterFactory
 
 if TYPE_CHECKING:
     from astrbot.api.all import Context
+    from astrbot.api.event import AstrMessageEvent
 
     from ..config.config_manager import ConfigManager
 
@@ -65,7 +66,7 @@ class BotManager:
 
     def set_bot_instance(
         self,
-        bot_instance: Any,
+        bot_instance: object,
         platform_id: str | None = None,
         platform_name: str | None = None,
     ) -> None:
@@ -134,7 +135,7 @@ class BotManager:
             if hasattr(adapter, "bot_self_ids"):
                 adapter.bot_self_ids = self._bot_self_ids.copy()
 
-    def get_bot_instance(self, platform_id: str | None = None) -> Any:
+    def get_bot_instance(self, platform_id: str | None = None) -> object | None:
         """获取指定平台的bot实例，如果不指定则返回第一个可用的实例"""
         if platform_id:
             # 如果指定了平台ID，尝试获取
@@ -257,23 +258,22 @@ class BotManager:
 
         return True
 
-    def _get_platform_id_from_instance(self, bot_instance: Any) -> str:
+    def _get_platform_id_from_instance(self, bot_instance: object) -> str:
         """从bot实例获取平台ID"""
-        if hasattr(bot_instance, "platform") and isinstance(bot_instance.platform, str):
-            return bot_instance.platform
+        platform = getattr(bot_instance, "platform", None)
+        if isinstance(platform, str):
+            return platform
         return self._default_platform
 
-    def _detect_platform_name(self, bot_instance: Any) -> str | None:
-        """
-        从 bot 实例检测平台名称，用于创建适配器。
+    def _detect_platform_name(self, bot_instance: object) -> str | None:
+        """从 bot 实例检测平台名称，用于创建适配器。
 
         返回平台名称如 'aiocqhttp', 'discord' 等。
         """
         # 优先使用 platform 属性
-        if hasattr(bot_instance, "platform"):
-            platform = bot_instance.platform
-            if isinstance(platform, str):
-                return platform
+        platform = getattr(bot_instance, "platform", None)
+        if isinstance(platform, str):
+            return platform
 
         # 检查已知的 API 特征（平台无关的方式）
         # OneBot/aiocqhttp 特征: 有 call_action 方法
@@ -541,7 +541,7 @@ class BotManager:
             "ready_for_auto_analysis": self.is_ready_for_auto_analysis(),
         }
 
-    def update_from_event(self, event: Any) -> bool:
+    def update_from_event(self, event: AstrMessageEvent) -> bool:
         """从事件更新bot实例（用于手动命令）"""
         # 兼容不同平台的 bot 实例属性名 (OneBot 使用 bot, Discord 使用 client)
         bot_instance = getattr(event, "bot", None) or getattr(event, "client", None)
@@ -562,12 +562,7 @@ class BotManager:
             bot_self_id = None
             if hasattr(event, "get_self_id"):
                 val = event.get_self_id()
-                if (
-                    val
-                    and isinstance(val, (str, int))
-                    and not callable(val)
-                    and "partial" not in str(val)
-                ):
+                if val and not callable(val) and "partial" not in str(val):
                     bot_self_id = str(val)
 
             if not bot_self_id:
@@ -584,30 +579,22 @@ class BotManager:
             return True
         return False
 
-    def _extract_bot_self_id(self, bot_instance: Any) -> str | None:
+    def _extract_bot_self_id(self, bot_instance: object) -> str | None:
         """从bot实例中提取自身ID（单个）"""
         return self._extract_bot_self_id_impl(bot_instance)
 
-    def _extract_bot_self_id_impl(self, bot_instance: Any) -> str | None:
+    def _extract_bot_self_id_impl(self, bot_instance: object) -> str | None:
         """从bot实例中提取ID（通用实现）"""
         # 尝试多种方式获取bot ID，并严格限制类型为 str/int 且不可调用，防止 OneBot (aiocqhttp) 动态代理返回 functools.partial
-        if hasattr(bot_instance, "self_id") and bot_instance.self_id:
-            val = bot_instance.self_id
-            if isinstance(val, (str, int)) and not callable(val):
-                return str(val)
-        if hasattr(bot_instance, "user_id") and bot_instance.user_id:
-            val = bot_instance.user_id
-            if isinstance(val, (str, int)) and not callable(val):
+        for attr in ("self_id", "user_id", "id"):
+            val = getattr(bot_instance, attr, None)
+            if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
         # Discord.py style: client.user.id
-        if hasattr(bot_instance, "user") and hasattr(bot_instance.user, "id"):
-            val = bot_instance.user.id
-            if isinstance(val, (str, int)) and not callable(val):
-                return str(val)
-        # python-telegram-bot style: bot.id
-        if hasattr(bot_instance, "id") and bot_instance.id:
-            val = bot_instance.id
-            if isinstance(val, (str, int)) and not callable(val):
+        user = getattr(bot_instance, "user", None)
+        if user is not None:
+            val = getattr(user, "id", None)
+            if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
         return None
 

@@ -22,6 +22,8 @@ from .target_resolver import ScheduledTargetResolver
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from astrbot.api.event import AstrMessageEvent
+
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -102,7 +104,7 @@ class AutoScheduler:
             else None
         )
 
-    def set_bot_instance(self, bot_instance: Any) -> None:
+    def set_bot_instance(self, bot_instance: object) -> None:
         """设置bot实例（保持向后兼容）"""
         self.bot_manager.set_bot_instance(bot_instance)
 
@@ -580,7 +582,7 @@ class AutoScheduler:
     # 增量模式：增量分析
     # ================================================================
 
-    async def record_incremental_message(self, event: Any) -> bool:
+    async def record_incremental_message(self, event: AstrMessageEvent) -> bool:
         """记录一条群消息，用于按消息量触发增量分析。
 
         Args:
