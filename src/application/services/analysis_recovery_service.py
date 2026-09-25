@@ -8,9 +8,9 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.api.star import StarTools
 
@@ -43,7 +43,7 @@ class AnalysisRecoveryService:
     statistics_service: StatisticsService
     task_guard: TaskGuard
     checkpoint_store: ICheckpointStore | None
-    html_render: Callable[..., Any] | None
+    html_render: Callable[..., Awaitable[str | bytes | None]] | None
     _serializer: AnalysisResultSerializer
 
     def __init__(
@@ -56,7 +56,7 @@ class AnalysisRecoveryService:
         statistics_service: StatisticsService,
         task_guard: TaskGuard,
         checkpoint_store: ICheckpointStore | None = None,
-        html_render: Callable[..., Any] | None = None,
+        html_render: Callable[..., Awaitable[str | bytes | None]] | None = None,
     ) -> None:
         """初始化恢复与重绘服务。
 
@@ -89,7 +89,7 @@ class AnalysisRecoveryService:
         platform_id: str | None = None,
         render_format: str = "image",
         trace_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """根据历史分析产物重新渲染指定模板风格的报告。
 
         Args:
@@ -125,10 +125,7 @@ class AnalysisRecoveryService:
                 "reason": f"未找到群 {group_id} 在 {date_str} 的分析产物记录",
             }
 
-        reports_dir = (
-            getattr(self.report_generator, "data_dir", None)
-            or StarTools.get_data_dir(PLUGIN_NAME)
-        ) / "reports"
+        reports_dir = StarTools.get_data_dir(PLUGIN_NAME) / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -155,9 +152,9 @@ class AnalysisRecoveryService:
                     )
                 else:
                     render_data = analysis_result
-                html_tpls = getattr(self.report_generator, "html_templates", None)
+                html_tpls = self.report_generator.html_templates
                 if html_tpls and hasattr(html_tpls, "render_template"):
-                    render_kwargs: dict[str, Any] = (
+                    render_kwargs: dict[str, object] = (
                         dict(render_data) if isinstance(render_data, Mapping) else {}
                     )
                     html_content = html_tpls.render_template(
@@ -278,8 +275,8 @@ class AnalysisRecoveryService:
         platform_id: str | None = None,
         date_str: str | None = None,
         template_name: str | None = None,
-        fallback_daily_func: Callable[..., Any] | None = None,
-    ) -> dict[str, Any]:
+        fallback_daily_func: Callable[..., Awaitable[dict[str, object]]] | None = None,
+    ) -> dict[str, object]:
         """从上一次 Checkpoint 检查点执行幂等断点续跑。
 
         Args:
@@ -346,9 +343,15 @@ class AnalysisRecoveryService:
             cached_topics = cached_result.get("topics", [])
             cached_titles = cached_result.get("user_titles", [])
             cached_stats = cached_result.get("statistics")
-            cached_quotes = (
-                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
-            )
+            if isinstance(cached_stats, GroupStatistics):
+                cached_quotes = cached_stats.golden_quotes
+                cached_msg_count = cached_stats.message_count
+            elif isinstance(cached_stats, dict):
+                cached_quotes = cached_stats.get("golden_quotes", [])
+                cached_msg_count = cached_stats.get("message_count", 0)
+            else:
+                cached_quotes = []
+                cached_msg_count = 0
             cached_quality = cached_result.get("chat_quality_review")
 
             has_required_topics = not topic_enabled or bool(cached_topics)
@@ -374,14 +377,12 @@ class AnalysisRecoveryService:
                     return {
                         "success": True,
                         "analysis_result": cached_result,
-                        "messages_count": (
-                            getattr(cached_stats, "message_count", 0)
-                            if cached_stats
-                            else 0
-                        ),
+                        "messages_count": cached_msg_count,
                         "adapter": adapter,
                         "group_id": group_id,
-                        "platform_id": getattr(adapter, "platform_id", platform_id),
+                        "platform_id": adapter.platform_id
+                        if adapter
+                        else (platform_id or ""),
                         "resumed_from": AnalysisStage.LLM_ANALYSIS.value,
                         "trace_id": trace_id,
                     }
@@ -409,10 +410,9 @@ class AnalysisRecoveryService:
                     platform_id=platform_id,
                     manual=True,
                 )
-                if isinstance(result, dict):
-                    result["fallback_to_fresh_run"] = True
-                    result["fallback_reason"] = "checkpoint_missing_auto_refetched"
-                    result["resumed_from"] = "fresh_run_fallback"
+                result["fallback_to_fresh_run"] = True
+                result["fallback_reason"] = "checkpoint_missing_auto_refetched"
+                result["resumed_from"] = "fresh_run_fallback"
                 return result
             return {"success": False, "reason": "checkpoint_missing"}
 
@@ -459,15 +459,16 @@ class AnalysisRecoveryService:
             raw_user_titles = cached_result.get("user_titles")
             user_titles = raw_user_titles if isinstance(raw_user_titles, list) else []
             cached_stats = cached_result.get("statistics")
-            golden_quotes = (
-                getattr(cached_stats, "golden_quotes", []) if cached_stats else []
-            )
             chat_quality_review = cached_result.get("chat_quality_review")
-            total_token_usage = (
-                getattr(cached_stats, "token_usage", TokenUsage())
-                if cached_stats
-                else TokenUsage()
-            )
+            if isinstance(cached_stats, GroupStatistics):
+                golden_quotes = cached_stats.golden_quotes
+                total_token_usage = cached_stats.token_usage
+            elif isinstance(cached_stats, dict):
+                golden_quotes = cached_stats.get("golden_quotes", [])
+                total_token_usage = cached_stats.get("token_usage", TokenUsage())
+            else:
+                golden_quotes = []
+                total_token_usage = TokenUsage()
 
             run_topic = topic_enabled and not bool(topics)
             run_user_title = user_title_enabled and not bool(user_titles)
@@ -599,7 +600,7 @@ class AnalysisRecoveryService:
                 "messages_count": len(unified_messages),
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id if adapter else (platform_id or ""),
                 "resumed_from": AnalysisStage.CLEAN_MESSAGES.value,
                 "trace_id": trace_id,
             }
