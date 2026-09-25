@@ -556,8 +556,7 @@ class TelegramAdapter(PlatformAdapter):
                 if not await self.send_text(group_id, part):
                     return False
             return True
-        else:
-            return await self.send_text(group_id, full_text)
+        return await self.send_text(group_id, full_text)
 
     # ==================== IGroupInfoRepository ====================
 

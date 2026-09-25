@@ -27,6 +27,11 @@ select = [
   "RUF",   # Ruff 专属规则
   "FA",    # flake8-future-annotations (类型延后导入)
   "TCH",   # flake8-type-checking (类型导入隔离)
+  "PGH",   # pygrep-hooks (严格类型注解与规则指令)
+  "RSE",   # flake8-raise (规范抛出异常写法)
+  "YTT",   # flake8-2020 (系统与环境兼容性检查)
+  "RET",   # flake8-return (返回语句与提前返回规范)
+  "T20",   # flake8-print (禁止生产代码残留 print 调用，统一走 logger)
 ]
 ignore = [
   "F403",
@@ -40,3 +45,7 @@ ignore = [
   "RUF002",   # 允许中文 Docstring 中的全角标点符号
   "RUF003",   # 允许中文注释中的全角标点符号
 ]
+
+[lint.per-file-ignores]
+"scripts/*" = ["T201"] # 允许独立离线调试脚本使用控制台 print 输出
+

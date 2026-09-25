@@ -333,10 +333,9 @@ class AutoScheduler:
                         return await self._perform_incremental_final_report_for_group_with_timeout(
                             gid, pid
                         )
-                    else:
-                        return await self._perform_auto_analysis_for_group_with_timeout(
-                            gid, pid
-                        )
+                    return await self._perform_auto_analysis_for_group_with_timeout(
+                        gid, pid
+                    )
                 finally:
                     sem.release()
                     logger.debug(
@@ -615,10 +614,9 @@ class AutoScheduler:
         Returns:
             增量分析结果。
         """
-        result = await self._perform_incremental_analysis_for_group_with_timeout(
+        return await self._perform_incremental_analysis_for_group_with_timeout(
             group_id, platform_id
         )
-        return result
 
     def _request_immediate_incremental_report(
         self, group_id: str, platform_id: str
@@ -721,13 +719,12 @@ class AutoScheduler:
     ):
         """为指定群执行增量分析（带超时控制，10分钟）。"""
         try:
-            result = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 self._perform_incremental_analysis_for_group(
                     group_id, target_platform_id
                 ),
                 timeout=600,
             )
-            return result
         except TimeoutError:
             logger.error(f"群 {group_id} 增量分析超时（10分钟），跳过")
             return {"success": False, "reason": "timeout"}
@@ -755,7 +752,7 @@ class AutoScheduler:
             )
 
             if self._terminating:
-                return
+                return None
 
             logger.debug(
                 f"开始为群 {group_id} 执行增量分析 "

@@ -350,16 +350,14 @@ class MessageProcessingService:
                 )
             message_parts.append({"type": "plain", "text": fallback_text})
 
-        # 清理空文本段
-        message_parts = [
+        # 清理空文本段并返回
+        return [
             part
             for part in message_parts
             if not (
                 part.get("type") == "plain" and not str(part.get("text", "")).strip()
             )
         ]
-
-        return message_parts
 
     @classmethod
     def _extract_qq_official_mention_replacements(

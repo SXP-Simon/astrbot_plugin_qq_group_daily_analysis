@@ -77,12 +77,11 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
                     topic_count=topic_count,
                     max_count=topic_count,
                 )
-            else:
-                return template_str.format(
-                    chat_content=chat_content,
-                    topic_count=topic_count,
-                    max_count=topic_count,
-                )
+            return template_str.format(
+                chat_content=chat_content,
+                topic_count=topic_count,
+                max_count=topic_count,
+            )
         except Exception as e:
             logger.warning(f"漫画分镜提示词格式化失败，使用默认格式: {e}")
             return f"请从以下群聊话题中提取并生成包含 scene 的 JSON：\n{chat_content}"

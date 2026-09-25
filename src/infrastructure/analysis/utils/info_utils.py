@@ -21,9 +21,8 @@ class InfoUtils:
                 or sender.get("nickname", "")
                 or str(sender.get("user_id", ""))
             )
-        else:
-            return (
-                sender.get("nickname", "")
-                or sender.get("card", "")
-                or str(sender.get("user_id", ""))
-            )
+        return (
+            sender.get("nickname", "")
+            or sender.get("card", "")
+            or str(sender.get("user_id", ""))
+        )

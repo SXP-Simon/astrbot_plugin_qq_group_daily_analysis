@@ -166,7 +166,7 @@ class ConfigRoutes:
                         else:
                             cleaned.append(item)
                     return cleaned
-                elif isinstance(val, dict):
+                if isinstance(val, dict):
                     return {k: _cleanse_reference_images(v) for k, v in val.items()}
                 return val
 

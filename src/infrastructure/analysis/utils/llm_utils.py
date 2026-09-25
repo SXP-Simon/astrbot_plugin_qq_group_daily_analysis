@@ -744,8 +744,7 @@ def extract_response_text(response: Any) -> str:
     try:
         if hasattr(response, "completion_text"):
             return response.completion_text
-        else:
-            return str(response)
+        return str(response)
     except Exception as e:
         logger.error(f"提取响应文本失败: {e}")
         return ""

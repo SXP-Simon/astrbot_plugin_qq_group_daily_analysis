@@ -507,7 +507,7 @@ class AnalysisApplicationService:
                             "reason": "llm_analysis_failed",
                             "error": "大模型文本分析全部子任务失败，已中止后续报告生成与发送",
                         }
-                    elif enabled_count > 0 and success_count < enabled_count:
+                    if enabled_count > 0 and success_count < enabled_count:
                         step.mark_warning(
                             f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
                         )

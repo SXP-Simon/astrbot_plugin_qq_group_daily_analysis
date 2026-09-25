@@ -450,7 +450,7 @@ class ReportGenerator(IReportGenerator):
                                         f"[Base64 数据 {len(image_data)} 字节]"
                                     )
                                     return image_url, html_content
-                                elif isinstance(image_data, str):
+                                if isinstance(image_data, str):
                                     logger.info(
                                         "图片生成成功 "
                                         f"(轮次 {attempt}, 视口 {viewport_description}): "

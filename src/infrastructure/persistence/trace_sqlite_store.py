@@ -483,8 +483,7 @@ class TraceSQLiteStore:
                 WHERE status = 'running'
                 """
             )
-            reconciled_count = cursor.rowcount
-            return reconciled_count
+            return cursor.rowcount
 
     def get_distinct_groups(self) -> list[dict[str, str]]:
         """获取所有有历史分析记录的唯一群组列表（按 group_id 分组，取每个群最新一次运行的群名与平台标识）"""

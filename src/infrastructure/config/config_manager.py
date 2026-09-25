@@ -724,11 +724,11 @@ class ConfigManager:
                 # 白名单为空：此级别不开启 (按需开启逻辑)
                 return False
             return any(self._is_group_match(target, item) for item in group_list)
-        else:  # blacklist
-            if not group_list:
-                # 黑名单为空：全通过
-                return True
-            return not any(self._is_group_match(target, item) for item in group_list)
+        # blacklist
+        if not group_list:
+            # 黑名单为空：全通过
+            return True
+        return not any(self._is_group_match(target, item) for item in group_list)
 
     def set_min_messages_threshold(self, threshold: int):
         """设置最小消息阈值"""

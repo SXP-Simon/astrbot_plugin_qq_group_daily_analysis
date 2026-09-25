@@ -219,8 +219,7 @@ class PlatformAdapter(
                 if not await self.send_text(group_id, chunk):
                     return False
             return True
-        else:
-            return await self.send_text(group_id, full_text)
+        return await self.send_text(group_id, full_text)
 
     async def set_reaction(
         self, group_id: str, message_id: str, emoji: str | int, is_add: bool = True

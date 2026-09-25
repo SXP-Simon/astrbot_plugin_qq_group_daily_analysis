@@ -202,66 +202,65 @@ class AnalysisRecoveryService:
                 "from_checkpoint": True,
                 "trace_id": trace_id,
             }
-        else:
-            image_res = await self.report_generator.generate_image_report(
-                analysis_result=analysis_result,
-                group_id=group_id,
-                html_render_func=self.html_render,
-                template_theme=template_name,
-            )
-            image_url = image_res[0]
-            filename = (
-                f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
-                if trace_id
-                else f"report_{group_id}_{ts_str}_{template_name}.jpg"
-            )
-            dest = reports_dir / filename
-            if image_url and Path(image_url).exists():
-                import shutil
+        image_res = await self.report_generator.generate_image_report(
+            analysis_result=analysis_result,
+            group_id=group_id,
+            html_render_func=self.html_render,
+            template_theme=template_name,
+        )
+        image_url = image_res[0]
+        filename = (
+            f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
+            if trace_id
+            else f"report_{group_id}_{ts_str}_{template_name}.jpg"
+        )
+        dest = reports_dir / filename
+        if image_url and Path(image_url).exists():
+            import shutil
 
-                shutil.copy2(image_url, dest)
-            elif image_url and image_url.startswith("base64://"):
-                import base64
+            shutil.copy2(image_url, dest)
+        elif image_url and image_url.startswith("base64://"):
+            import base64
 
-                data = base64.b64decode(image_url[9:])
-                dest.write_bytes(data)
+            data = base64.b64decode(image_url[9:])
+            dest.write_bytes(data)
 
-            if trace_id:
-                from ...shared.trace_context import _global_trace_store
+        if trace_id:
+            from ...shared.trace_context import _global_trace_store
 
-                if _global_trace_store is not None:
-                    try:
-                        trace_data = _global_trace_store.get_trace(trace_id)
-                        if trace_data:
-                            extra = trace_data.get("extra") or {}
-                            rfiles = extra.setdefault("report_files", [])
-                            if not any(rf.get("filename") == filename for rf in rfiles):
-                                rfiles.append(
-                                    {
-                                        "filename": filename,
-                                        "path": str(dest.resolve()),
-                                        "format": "image",
-                                        "template": template_name,
-                                        "size_bytes": dest.stat().st_size
-                                        if dest.exists()
-                                        else 0,
-                                        "created_at": time_mod.time(),
-                                    }
-                                )
-                            trace_data["extra"] = extra
-                            _global_trace_store.save_trace(trace_data)
-                    except Exception:
-                        pass
+            if _global_trace_store is not None:
+                try:
+                    trace_data = _global_trace_store.get_trace(trace_id)
+                    if trace_data:
+                        extra = trace_data.get("extra") or {}
+                        rfiles = extra.setdefault("report_files", [])
+                        if not any(rf.get("filename") == filename for rf in rfiles):
+                            rfiles.append(
+                                {
+                                    "filename": filename,
+                                    "path": str(dest.resolve()),
+                                    "format": "image",
+                                    "template": template_name,
+                                    "size_bytes": dest.stat().st_size
+                                    if dest.exists()
+                                    else 0,
+                                    "created_at": time_mod.time(),
+                                }
+                            )
+                        trace_data["extra"] = extra
+                        _global_trace_store.save_trace(trace_data)
+                except Exception:
+                    pass
 
-            return {
-                "success": True,
-                "filename": filename,
-                "report_path": str(dest),
-                "image_url": image_url,
-                "is_html": False,
-                "from_checkpoint": True,
-                "trace_id": trace_id,
-            }
+        return {
+            "success": True,
+            "filename": filename,
+            "report_path": str(dest),
+            "image_url": image_url,
+            "is_html": False,
+            "from_checkpoint": True,
+            "trace_id": trace_id,
+        }
 
     async def resume_analysis(
         self,
@@ -528,7 +527,7 @@ class AnalysisRecoveryService:
                             "reason": "llm_analysis_failed",
                             "error": "大模型文本分析全部子任务失败，已中止续跑",
                         }
-                    elif enabled_count > 0 and success_count < enabled_count:
+                    if enabled_count > 0 and success_count < enabled_count:
                         step.mark_warning(
                             f"续跑大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
                         )

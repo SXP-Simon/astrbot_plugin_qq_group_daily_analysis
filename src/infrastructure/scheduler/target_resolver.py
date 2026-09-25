@@ -62,10 +62,7 @@ class ScheduledTargetResolver:
                             ) or str(platform_id)
                             logger.info(f"✅ 群 {group_id} 属于平台 {actual_pid}")
                             return actual_pid
-                        else:
-                            logger.debug(
-                                f"平台 {platform_id} 无法获取群 {group_id} 信息"
-                            )
+                        logger.debug(f"平台 {platform_id} 无法获取群 {group_id} 信息")
                 except Exception as e:
                     logger.debug(f"平台 {platform_id} 验证群 {group_id} 失败: {e}")
                     continue

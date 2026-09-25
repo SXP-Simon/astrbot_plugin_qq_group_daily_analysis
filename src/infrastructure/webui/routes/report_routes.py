@@ -247,23 +247,22 @@ class ReportRoutes:
                         },
                     }
                 )
-            else:
-                mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-                with open(target_file, "rb") as f:
-                    b64_content = base64.b64encode(f.read()).decode("utf-8")
-                return json_response(
-                    {
-                        "status": "ok",
-                        "data": {
-                            "filename": safe_filename,
-                            "size_bytes": stat.st_size,
-                            "modified_at": stat.st_mtime,
-                            "absolute_path": str(target_file.resolve()),
-                            "is_html": False,
-                            "data_url": f"data:{mime_type};base64,{b64_content}",
-                        },
-                    }
-                )
+            mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            with open(target_file, "rb") as f:
+                b64_content = base64.b64encode(f.read()).decode("utf-8")
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "filename": safe_filename,
+                        "size_bytes": stat.st_size,
+                        "modified_at": stat.st_mtime,
+                        "absolute_path": str(target_file.resolve()),
+                        "is_html": False,
+                        "data_url": f"data:{mime_type};base64,{b64_content}",
+                    },
+                }
+            )
         except Exception as e:
             logger.error(f"读取历史报告内容异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
