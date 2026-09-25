@@ -251,7 +251,7 @@ class SettingsCommandHandler:
                 yield result
             return
         elif action == "reload":
-            if self.auto_scheduler:
+            if self.auto_scheduler and self.context:
                 self.auto_scheduler.schedule_jobs(self.context)
             await self._refresh_incremental_target_states()
             yield event.plain_result("✅ 已重新加载配置并重启定时任务")
@@ -420,7 +420,7 @@ class SettingsCommandHandler:
             if not self.config_manager.is_group_allowed(target_id):
                 glist.append(target_id)
                 self.config_manager.set_group_list(glist)
-                if self.auto_scheduler:
+                if self.auto_scheduler and self.context:
                     self.auto_scheduler.schedule_jobs(self.context)
                 await self._refresh_incremental_target_states()
                 yield event.plain_result(f"✅ 已将当前群加入白名单\nID: {target_id}")
@@ -438,7 +438,7 @@ class SettingsCommandHandler:
 
             if removed:
                 self.config_manager.set_group_list(glist)
-                if self.auto_scheduler:
+                if self.auto_scheduler and self.context:
                     self.auto_scheduler.schedule_jobs(self.context)
                 await self._refresh_incremental_target_states()
                 yield event.plain_result("✅ 已将当前群从黑名单移除")
@@ -474,7 +474,7 @@ class SettingsCommandHandler:
 
             if removed:
                 self.config_manager.set_group_list(glist)
-                if self.auto_scheduler:
+                if self.auto_scheduler and self.context:
                     self.auto_scheduler.schedule_jobs(self.context)
                 await self._refresh_incremental_target_states()
                 yield event.plain_result("✅ 已将当前群从白名单移除")
@@ -485,7 +485,7 @@ class SettingsCommandHandler:
             if self.config_manager.is_group_allowed(target_id):
                 glist.append(target_id)
                 self.config_manager.set_group_list(glist)
-                if self.auto_scheduler:
+                if self.auto_scheduler and self.context:
                     self.auto_scheduler.schedule_jobs(self.context)
                 await self._refresh_incremental_target_states()
                 yield event.plain_result(f"✅ 已将当前群加入黑名单\nID: {target_id}")

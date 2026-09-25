@@ -8,11 +8,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from ...domain.repositories.platform_adapter_repository import (
-    GroupAlbumSupportProtocol,
-)
 from ...domain.value_objects.analysis_results import SummaryTopic
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -27,6 +24,7 @@ if TYPE_CHECKING:
 
     from astrbot.api.event import AstrMessageEvent
 
+    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -42,7 +40,7 @@ class ComicCommandHandler:
     analysis_service: AnalysisApplicationService
     active_task_manager: ActiveTaskManager | None
     plugin_data_dir: Path
-    plugin_instance: object | None
+    plugin_instance: PluginHostProtocol | None
     terminating: bool
     _comic_semaphore: asyncio.Semaphore
     _comic_group_tasks: dict[str, asyncio.Task[object]]
@@ -56,7 +54,7 @@ class ComicCommandHandler:
         analysis_service: AnalysisApplicationService,
         active_task_manager: ActiveTaskManager | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: object | None = None,
+        plugin_instance: PluginHostProtocol | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -159,7 +157,9 @@ class ComicCommandHandler:
 
             self.bot_manager.update_from_event(event)
 
-            check_target = event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            check_target = (
+                event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            )
 
             if not self.config_manager.get_enable_daily_comic():
                 yield event.plain_result("❌ 漫画生成功能未启用")
@@ -230,11 +230,11 @@ class ComicCommandHandler:
                 return
 
             trigger_fn = self.try_trigger_comic_generation
-            if self.plugin_instance and hasattr(
-                self.plugin_instance, "_try_trigger_comic_generation"
-            ):
-                inst_fn = self.plugin_instance._try_trigger_comic_generation
-                if (
+            if self.plugin_instance:
+                inst_fn = getattr(
+                    self.plugin_instance, "_try_trigger_comic_generation", None
+                )
+                if inst_fn is not None and (
                     hasattr(inst_fn, "assert_called")
                     or hasattr(inst_fn, "_mock_name")
                     or type(inst_fn).__name__ in ("Mock", "MagicMock", "AsyncMock")
@@ -353,8 +353,8 @@ class ComicCommandHandler:
         if not topics and statistics:
             if isinstance(statistics, dict):
                 topics = statistics.get("topics", [])
-            elif hasattr(statistics, "topics"):
-                topics = statistics.topics
+            else:
+                topics = getattr(statistics, "topics", [])
 
         comic_topics = []
         for topic in topics if isinstance(topics, list) else []:
@@ -450,14 +450,15 @@ class ComicCommandHandler:
 
                     if cur_trace:
                         rfiles = cur_trace.metadata.setdefault("report_files", [])
-                        rfiles.append(
-                            {
-                                "filename": filename,
-                                "format": "image",
-                                "size_bytes": len(comic_bytes),
-                                "stage": "COMIC_GENERATION",
-                            }
-                        )
+                        if isinstance(rfiles, list):
+                            rfiles.append(
+                                {
+                                    "filename": filename,
+                                    "format": "image",
+                                    "size_bytes": len(comic_bytes),
+                                    "stage": "COMIC_GENERATION",
+                                }
+                            )
 
                     adapter = (
                         self.bot_manager.get_adapter(platform_id)
@@ -482,11 +483,11 @@ class ComicCommandHandler:
                             group_id, str(comic_file_path), caption=caption
                         )
                         if sent:
-                            if self.plugin_instance and hasattr(
-                                self.plugin_instance, "_try_upload_image"
-                            ):
-                                inst_upload = self.plugin_instance._try_upload_image
-                                if (
+                            if self.plugin_instance:
+                                inst_upload = getattr(
+                                    self.plugin_instance, "_try_upload_image", None
+                                )
+                                if inst_upload is not None and (
                                     hasattr(inst_upload, "assert_called")
                                     or hasattr(inst_upload, "assert_awaited")
                                     or hasattr(inst_upload, "_mock_name")
@@ -537,7 +538,10 @@ class ComicCommandHandler:
         adapter = (
             self.bot_manager.get_adapter(platform_id) if self.bot_manager else None
         )
-        if not adapter or not (isinstance(adapter, GroupAlbumSupportProtocol) or hasattr(adapter, "upload_group_album")):
+        upload_fn: Any = (
+            getattr(adapter, "upload_group_album", None) if adapter else None
+        )
+        if not callable(upload_fn):
             return
 
         album_name = self.config_manager.get_comic_album_name() or "daily_analysis"
@@ -548,12 +552,14 @@ class ComicCommandHandler:
                 if Path(image_url).exists()
                 else image_url
             )
-            await adapter.upload_group_album(
+            res = upload_fn(
                 group_id,
                 target_path,
                 album_id=None,
                 album_name=album_name,
                 strict_mode=strict_mode,
             )
+            if asyncio.iscoroutine(res):
+                await res
         except Exception as e:
             logger.warning(f"漫画群相册上传异常 (群 {group_id}): {e}")

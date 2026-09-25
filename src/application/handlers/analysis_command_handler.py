@@ -12,7 +12,7 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 # File is only available via astrbot.core (internal API — may change).
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from astrbot.api.event import AstrMessageEvent
 
+    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.messaging.message_sender import MessageSender
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
@@ -58,7 +59,7 @@ class AnalysisCommandHandler:
     message_sender: MessageSender | None
     comic_handler: ComicCommandHandler | None
     plugin_data_dir: Path
-    plugin_instance: object | None
+    plugin_instance: PluginHostProtocol | None
     terminating: bool
 
     def __init__(
@@ -73,7 +74,7 @@ class AnalysisCommandHandler:
         message_sender: MessageSender | None = None,
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: object | None = None,
+        plugin_instance: PluginHostProtocol | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -142,7 +143,9 @@ class AnalysisCommandHandler:
 
             self.bot_manager.update_from_event(event)
 
-            check_target = event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            check_target = (
+                event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
+            )
 
             if not self.config_manager.is_group_allowed(check_target):
                 yield event.plain_result("❌ 此群未启用日常分析功能")
@@ -207,10 +210,14 @@ class AnalysisCommandHandler:
             if not result.get("success"):
                 reason = result.get("reason")
                 if trace and trace.status == "running":
+                    err_msg = (
+                        str(result.get("error"))
+                        if result.get("error")
+                        else f"Analysis skipped/failed: {reason}"
+                    )
                     trace.finish(
                         status="failed",
-                        error_message=result.get("error")
-                        or f"Analysis skipped/failed: {reason}",
+                        error_message=err_msg,
                     )
                 if reason == "no_messages":
                     yield event.plain_result("❌ 未找到足够的群聊记录")
@@ -228,11 +235,7 @@ class AnalysisCommandHandler:
                     )
                 return
 
-            if (
-                not use_text_reply
-                and adapter
-                and orig_msg_id
-            ):
+            if not use_text_reply and adapter and orig_msg_id:
                 await adapter.set_reaction(
                     event.get_group_id(), orig_msg_id, "analysis_done"
                 )
@@ -283,16 +286,24 @@ class AnalysisCommandHandler:
             logger.warning("插件正在关闭，停止发送报告")
             return
 
-        group_id = result["group_id"]
-        platform_id = result["platform_id"]
-        analysis_result = result["analysis_result"]
-        adapter = result["adapter"]
+        group_id = str(result.get("group_id", ""))
+        platform_id = str(result["platform_id"]) if result.get("platform_id") else None
+        raw_analysis = result.get("analysis_result")
+        analysis_result: dict[str, object] = (
+            raw_analysis if isinstance(raw_analysis, dict) else {}
+        )
+        raw_adapter = result.get("adapter")
+        adapter: Any = raw_adapter
 
-        if self.plugin_instance and hasattr(
-            self.plugin_instance, "_try_trigger_comic_generation"
-        ):
-            inst_fn = self.plugin_instance._try_trigger_comic_generation
-            if (
+        if not adapter:
+            logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
+            return
+
+        if self.plugin_instance:
+            inst_fn = getattr(
+                self.plugin_instance, "_try_trigger_comic_generation", None
+            )
+            if inst_fn is not None and (
                 hasattr(inst_fn, "assert_called")
                 or hasattr(inst_fn, "_mock_name")
                 or type(inst_fn).__name__ in ("Mock", "MagicMock", "AsyncMock")
@@ -318,17 +329,16 @@ class AnalysisCommandHandler:
             "qq_official_webhook",
         }
 
-        async def avatar_url_getter(user_id: str) -> str | None:
-            if adapter:
-                return await adapter.get_user_avatar_url(user_id)
-            return None
+        async def avatar_url_getter(
+            user_id: str, avatar_size: int | None = None
+        ) -> str | None:
+            return await adapter.get_user_avatar_url(user_id, size=avatar_size or 40)
 
         async def nickname_getter(user_id: str) -> str | None:
             try:
-                if adapter:
-                    member = await adapter.get_member_info(group_id, user_id)
-                    if member:
-                        return member.card or member.nickname
+                member = await adapter.get_member_info(group_id, user_id)
+                if member:
+                    return member.card or member.nickname
             except Exception:
                 pass
             return None
@@ -336,10 +346,10 @@ class AnalysisCommandHandler:
         trace = TraceContext.current()
         override_theme = trace.metadata.get("override_template_name") if trace else None
         tpl_getter = getattr(self.config_manager, "get_report_template", None)
-        template_theme = (
-            override_theme
-            or (tpl_getter() if callable(tpl_getter) else "default")
+        raw_theme = override_theme or (
+            tpl_getter() if callable(tpl_getter) else "default"
         )
+        template_theme = str(raw_theme) if raw_theme else "default"
 
         if output_format == "image":
             if trace:
@@ -457,18 +467,23 @@ class AnalysisCommandHandler:
 
                 if should_send_file:
                     caption = self.report_generator.build_html_caption(html_path)
-                    sender = self.message_sender
-                    if sender and hasattr(sender, "send_file"):
-                        sent = await sender.send_file(
+                    sent = False
+                    if self.message_sender:
+                        sent = await self.message_sender.send_file(
                             group_id,
                             html_path,
                             caption=caption,
                             platform_id=platform_id,
                         )
-                    else:
-                        sent = await adapter.send_file(group_id, html_path)
-                        if sent and caption and hasattr(adapter, "send_text"):
-                            await adapter.send_text(group_id, caption)
+                    elif isinstance(adapter, GroupFileSupportProtocol):
+                        sent = await adapter.upload_group_file_to_folder(
+                            group_id, html_path, filename=Path(html_path).name
+                        )
+                        send_text_fn: Any = getattr(adapter, "send_text", None)
+                        if sent and caption and callable(send_text_fn):
+                            st_res = send_text_fn(group_id, caption)
+                            if asyncio.iscoroutine(st_res):
+                                await st_res
 
                     if not sent:
                         yield event.chain_result(
@@ -480,11 +495,9 @@ class AnalysisCommandHandler:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
         else:
-            if self.plugin_instance and hasattr(
-                self.plugin_instance, "_send_text_reports"
-            ):
-                inst_send = self.plugin_instance._send_text_reports
-                if (
+            if self.plugin_instance:
+                inst_send = getattr(self.plugin_instance, "_send_text_reports", None)
+                if inst_send is not None and (
                     hasattr(inst_send, "assert_called")
                     or hasattr(inst_send, "_mock_name")
                     or type(inst_send).__name__ in ("Mock", "MagicMock", "AsyncMock")
@@ -603,9 +616,7 @@ class AnalysisCommandHandler:
         try:
             group_info = await adapter.get_group_info(group_id)
             if group_info and group_info.group_name:
-                safe_name = re.sub(
-                    r'[\\/:*?"<>|]', "", group_info.group_name
-                ).strip()
+                safe_name = re.sub(r'[\\/:*?"<>|]', "", group_info.group_name).strip()
                 if safe_name:
                     filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
         except Exception:
@@ -668,7 +679,8 @@ class AnalysisCommandHandler:
                 except Exception as e:
                     logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
 
-            if enable_album and isinstance(adapter, GroupAlbumSupportProtocol):
+            album_upload_fn: Any = getattr(adapter, "upload_group_album", None)
+            if enable_album and callable(album_upload_fn):
                 try:
                     album_name = (
                         self.config_manager.get_comic_album_name()
@@ -680,17 +692,21 @@ class AnalysisCommandHandler:
                         pass
                     else:
                         album_id = None
-                        if album_name:
-                            album_id = await adapter.find_album_id(
-                                group_id, album_name, create_if_missing=True
+                        find_album_fn: Any = getattr(adapter, "find_album_id", None)
+                        if album_name and callable(find_album_fn):
+                            f_res = find_album_fn(group_id, album_name)
+                            album_id = (
+                                await f_res if asyncio.iscoroutine(f_res) else f_res
                             )
-                        await adapter.upload_group_album(
+                        u_res = album_upload_fn(
                             group_id=group_id,
-                            file_path=image_file,
+                            image_path=image_file,
                             album_id=album_id,
                             album_name=album_name or "",
                             strict_mode=strict_mode,
                         )
+                        if asyncio.iscoroutine(u_res):
+                            await u_res
                 except Exception as e:
                     logger.warning(f"群相册上传失败 (群 {group_id}): {e}")
         except Exception as e:
