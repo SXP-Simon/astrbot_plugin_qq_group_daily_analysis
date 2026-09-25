@@ -5,14 +5,24 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
+    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ..config.config_manager import ConfigManager
+
+
+class IncrementalTriggerState(TypedDict):
+    """增量分析触发状态强类型契约字典。"""
+
+    platform_id: str
+    group_id: str
+    count: int
+    version: int
 
 
 class IncrementalTriggerCoordinator:
@@ -24,27 +34,27 @@ class IncrementalTriggerCoordinator:
     _SEMAPHORE_WARN_SECONDS = 15.0
 
     config_manager: ConfigManager
-    plugin: Any
-    analyze_callback: Callable[[str, str], Awaitable[dict | None]]
+    plugin: PluginHostProtocol
+    analyze_callback: Callable[[str, str], Awaitable[dict[str, object] | None]]
     on_analysis_succeeded: Callable[[str, str], None] | None
-    _states: dict[str, dict[str, Any]]
+    _states: dict[str, IncrementalTriggerState]
     _loaded: bool
     _load_lock: asyncio.Lock
     _state_lock: asyncio.Lock
     _seen_event_ids: OrderedDict[str, None]
-    _analysis_tasks: dict[str, asyncio.Task]
+    _analysis_tasks: dict[str, asyncio.Task[None]]
     _running_state_keys: set[str]
     _state_versions: dict[str, int]
-    _target_config_signature: tuple[Any, ...] | None
-    _flush_task: asyncio.Task | None
+    _target_config_signature: tuple[object, ...] | None
+    _flush_task: asyncio.Task[None] | None
     _closed: bool
     _semaphore: asyncio.Semaphore | None
 
     def __init__(
         self,
         config_manager: ConfigManager,
-        plugin_instance: Any,
-        analyze_callback: Callable[[str, str], Awaitable[dict | None]],
+        plugin_instance: PluginHostProtocol,
+        analyze_callback: Callable[[str, str], Awaitable[dict[str, object] | None]],
         on_analysis_succeeded: Callable[[str, str], None] | None = None,
     ) -> None:
         """初始化触发协调器。
@@ -59,16 +69,16 @@ class IncrementalTriggerCoordinator:
         self.plugin = plugin_instance
         self.analyze_callback = analyze_callback
         self.on_analysis_succeeded = on_analysis_succeeded
-        self._states: dict[str, dict[str, Any]] = {}
+        self._states: dict[str, IncrementalTriggerState] = {}
         self._loaded = False
         self._load_lock = asyncio.Lock()
         self._state_lock = asyncio.Lock()
         self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
-        self._analysis_tasks: dict[str, asyncio.Task] = {}
+        self._analysis_tasks: dict[str, asyncio.Task[None]] = {}
         self._running_state_keys: set[str] = set()
         self._state_versions: dict[str, int] = {}
-        self._target_config_signature: tuple[Any, ...] | None = None
-        self._flush_task: asyncio.Task | None = None
+        self._target_config_signature: tuple[object, ...] | None = None
+        self._flush_task: asyncio.Task[None] | None = None
         self._closed = False
         self._semaphore: asyncio.Semaphore | None = None
 
@@ -78,29 +88,24 @@ class IncrementalTriggerCoordinator:
             return False
         return self.config_manager.is_incremental_group_allowed(unified_msg_origin)
 
-    def _get_target_config_signature(self) -> tuple[Any, ...]:
+    def _get_target_config_signature(self) -> tuple[object, ...]:
         """生成影响增量目标群判定的配置快照。"""
 
-        def get_group_list(getter_name: str) -> tuple[str, ...]:
-            getter = getattr(self.config_manager, getter_name, None)
-            values = getter() if callable(getter) else []
+        def normalize_list(values: object) -> tuple[str, ...]:
             if not isinstance(values, (list, tuple, set)):
-                values = [values]
-            return tuple(sorted({str(value).strip() for value in values}))
-
-        def get_group_mode(getter_name: str, default: str) -> str:
-            getter = getattr(self.config_manager, getter_name, None)
-            value = getter() if callable(getter) else default
-            return str(value).strip().lower()
+                values = [values] if values is not None else []
+            return tuple(
+                sorted({str(value).strip() for value in values if str(value).strip()})
+            )
 
         return (
             bool(self.config_manager.get_incremental_enabled()),
-            get_group_mode("get_group_list_mode", "none"),
-            get_group_list("get_group_list"),
-            get_group_mode("get_scheduled_group_list_mode", "whitelist"),
-            get_group_list("get_scheduled_group_list"),
-            get_group_mode("get_incremental_group_list_mode", "whitelist"),
-            get_group_list("get_incremental_group_list"),
+            str(self.config_manager.get_group_list_mode()).strip().lower(),
+            normalize_list(self.config_manager.get_group_list()),
+            str(self.config_manager.get_scheduled_group_list_mode()).strip().lower(),
+            normalize_list(self.config_manager.get_scheduled_group_list()),
+            str(self.config_manager.get_incremental_group_list_mode()).strip().lower(),
+            normalize_list(self.config_manager.get_incremental_group_list()),
         )
 
     async def refresh_target_states(self) -> None:
@@ -167,34 +172,42 @@ class IncrementalTriggerCoordinator:
             if self._loaded:
                 return
             data = await self.plugin.get_kv_data(self._KV_KEY, {})
-            if isinstance(data, dict) and isinstance(data.get("states"), dict):
-                for key, state in data["states"].items():
-                    if not isinstance(state, dict):
-                        continue
-                    platform_id = str(state.get("platform_id", "")).strip()
-                    group_id = str(state.get("group_id", "")).strip()
-                    if not platform_id or not group_id:
-                        continue
-                    try:
-                        count = max(0, int(state.get("count", 0)))
-                    except (TypeError, ValueError):
-                        continue
-                    self._states[str(key)] = {
-                        "platform_id": platform_id,
-                        "group_id": group_id,
-                        "count": count,
-                        "version": 1,
-                    }
-                    self._state_versions[str(key)] = 1
+            if isinstance(data, dict):
+                states_dict = data.get("states")
+                if isinstance(states_dict, dict):
+                    for key, raw_state in states_dict.items():
+                        if not isinstance(raw_state, dict):
+                            continue
+                        platform_id = str(raw_state.get("platform_id", "")).strip()
+                        group_id = str(raw_state.get("group_id", "")).strip()
+                        if not platform_id or not group_id:
+                            continue
+                        try:
+                            raw_cnt = raw_state.get("count", 0)
+                            count = max(
+                                0,
+                                int(raw_cnt)
+                                if isinstance(raw_cnt, (int, float, str))
+                                else 0,
+                            )
+                        except (TypeError, ValueError):
+                            continue
+                        self._states[str(key)] = {
+                            "platform_id": platform_id,
+                            "group_id": group_id,
+                            "count": count,
+                            "version": 1,
+                        }
+                        self._state_versions[str(key)] = 1
             self._loaded = True
             state_details = ", ".join(
-                f"{state_key}={int(state['count'])}"
+                f"{state_key}={state['count']}"
                 for state_key, state in sorted(self._states.items())
             )
             logger.debug(
                 "增量计数状态恢复完成: 群数=%s, 待处理消息=%s, 群计数=[%s]",
                 len(self._states),
-                sum(int(state.get("count", 0)) for state in self._states.values()),
+                sum(state["count"] for state in self._states.values()),
                 state_details or "无",
             )
 
@@ -224,10 +237,10 @@ class IncrementalTriggerCoordinator:
                 key: {
                     "platform_id": state["platform_id"],
                     "group_id": state["group_id"],
-                    "count": int(state["count"]),
+                    "count": state["count"],
                 }
                 for key, state in self._states.items()
-                if int(state.get("count", 0)) > 0
+                if state["count"] > 0
             }
         await self.plugin.put_kv_data(
             self._KV_KEY,
@@ -236,7 +249,7 @@ class IncrementalTriggerCoordinator:
         logger.debug(
             "增量计数状态已持久化: 群数=%s, 待处理消息=%s",
             len(states),
-            sum(int(state.get("count", 0)) for state in states.values()),
+            sum(state["count"] for state in states.values()),
         )
 
     async def record_message(
@@ -291,15 +304,16 @@ class IncrementalTriggerCoordinator:
             if state is None:
                 version = self._state_versions.get(state_key, 0) + 1
                 self._state_versions[state_key] = version
-                state = {
+                new_state: IncrementalTriggerState = {
                     "platform_id": platform_id,
                     "group_id": group_id,
                     "count": 0,
                     "version": version,
                 }
-                self._states[state_key] = state
-            state["count"] = int(state["count"]) + 1
-            pending_count = int(state["count"])
+                self._states[state_key] = new_state
+                state = new_state
+            state["count"] = state["count"] + 1
+            pending_count = state["count"]
             threshold = self.config_manager.get_incremental_min_messages()
             should_trigger = pending_count >= threshold
 
@@ -326,7 +340,7 @@ class IncrementalTriggerCoordinator:
             or not self.is_target_group(state_key)
         ):
             return
-        state = self._states.get(state_key, {})
+        state = self._states.get(state_key)
         task = asyncio.create_task(
             self._run_analysis(state_key),
             name=f"incremental_volume_{state_key}",
@@ -335,9 +349,9 @@ class IncrementalTriggerCoordinator:
         logger.debug(
             "增量消息计数达到阈值，安排分析任务: platform=%s, group=%s, pending=%s, "
             "threshold=%s, 当前活跃群任务=%s",
-            state.get("platform_id", ""),
-            state.get("group_id", ""),
-            int(state.get("count", 0)),
+            state["platform_id"] if state else "",
+            state["group_id"] if state else "",
+            state["count"] if state else 0,
             self.config_manager.get_incremental_min_messages(),
             len(self._analysis_tasks),
         )
@@ -354,10 +368,10 @@ class IncrementalTriggerCoordinator:
                 state = self._states.get(state_key)
                 if not state:
                     return
-                count_at_start = int(state.get("count", 0))
-                platform_id = str(state["platform_id"])
-                group_id = str(state["group_id"])
-                task_version = int(state.get("version", 0))
+                count_at_start = state["count"]
+                platform_id = state["platform_id"]
+                group_id = state["group_id"]
+                task_version = state["version"]
 
             logger.debug(
                 "增量分析任务开始: platform=%s, group=%s, pending_at_start=%s",
@@ -426,21 +440,25 @@ class IncrementalTriggerCoordinator:
                 )
 
             result = result if isinstance(result, dict) else {}
-            consumed = max(0, int(result.get("messages_count", 0)))
+            raw_consumed = result.get("messages_count", 0)
+            consumed = max(
+                0,
+                int(raw_consumed) if isinstance(raw_consumed, (int, float, str)) else 0,
+            )
             reason = str(result.get("reason", ""))
             await self.refresh_target_states()
             async with self._state_lock:
                 state = self._states.get(state_key)
                 if (
                     not state
-                    or int(state.get("version", -1)) != task_version
+                    or state["version"] != task_version
                     or not self.is_target_group(state_key)
                 ):
                     discarded = True
                     remaining_count = 0
                     new_arrivals = 0
                 else:
-                    current_count = int(state.get("count", 0))
+                    current_count = state["count"]
                     new_arrivals = max(0, current_count - count_at_start)
                     if result.get("success"):
                         state["count"] = max(0, current_count - consumed)
@@ -450,7 +468,7 @@ class IncrementalTriggerCoordinator:
                         state["count"] = new_arrivals
                     # 成功消费后可连续排空积压；失败必须等待任务结束后的新消息。
                     allow_continuation = bool(result.get("success") and consumed > 0)
-                    remaining_count = int(state.get("count", 0))
+                    remaining_count = state["count"]
 
             logger.debug(
                 "增量分析计数结算: platform=%s, group=%s, success=%s, reason=%s, "
@@ -498,14 +516,14 @@ class IncrementalTriggerCoordinator:
             return
         async with self._state_lock:
             state = self._states.get(state_key)
-            current_count = int(state.get("count", 0)) if state else 0
+            current_count = state["count"] if state else 0
             should_continue = bool(
                 state
                 and self.is_target_group(state_key)
                 and current_count >= self.config_manager.get_incremental_min_messages()
                 and (
                     allow_continuation
-                    or (discarded and int(state.get("version", -1)) != task_version)
+                    or (discarded and state["version"] != task_version)
                 )
             )
         if should_continue:
@@ -529,8 +547,7 @@ class IncrementalTriggerCoordinator:
                 state_key
                 for state_key, state in self._states.items()
                 if self.is_target_group(state_key)
-                and int(state.get("count", 0))
-                >= self.config_manager.get_incremental_min_messages()
+                and state["count"] >= self.config_manager.get_incremental_min_messages()
             ]
         for state_key in ready_keys:
             self._schedule_analysis(state_key)

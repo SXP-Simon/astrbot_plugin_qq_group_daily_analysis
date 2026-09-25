@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import time as time_mod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from apscheduler.triggers.cron import CronTrigger
 
 from ...application.services.analysis_application_service import DuplicateGroupTaskError
+from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..messaging.message_sender import MessageSender
@@ -22,11 +23,14 @@ from .target_resolver import ScheduledTargetResolver
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.star import Context
 
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
+    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ..config.config_manager import ConfigManager
     from ..platform.bot_manager import BotManager
     from ..reporting.generators import ReportGenerator
@@ -53,8 +57,8 @@ class AutoScheduler:
     analysis_service: AnalysisApplicationService
     bot_manager: BotManager
     report_generator: ReportGenerator | None
-    html_render_func: Callable[..., Any] | None
-    plugin_instance: Any | None
+    html_render_func: Callable[..., object] | None
+    plugin_instance: PluginHostProtocol | None
     target_resolver: ScheduledTargetResolver
     message_sender: MessageSender
     report_dispatcher: ReportDispatcher
@@ -66,8 +70,8 @@ class AutoScheduler:
         analysis_service: AnalysisApplicationService,
         bot_manager: BotManager,
         report_generator: ReportGenerator | None = None,
-        html_render_func: Callable[..., Any] | None = None,
-        plugin_instance: Any | None = None,
+        html_render_func: Callable[..., object] | None = None,
+        plugin_instance: PluginHostProtocol | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.analysis_service = analysis_service
@@ -135,7 +139,7 @@ class AutoScheduler:
     # 任务注册与取消
     # ================================================================
 
-    def schedule_jobs(self, context: Any) -> None:
+    def schedule_jobs(self, context: Context) -> None:
         """根据分层名单配置注册定时任务。"""
         # 首先清理之前的任务
         self.unschedule_jobs(context)
@@ -161,7 +165,7 @@ class AutoScheduler:
         else:
             logger.info("增量分析总开关未启用，仅执行传统定时全量分析。")
 
-    def _schedule_report_time_jobs(self, scheduler: Any) -> None:
+    def _schedule_report_time_jobs(self, scheduler: AsyncIOScheduler) -> None:
         """在配置的时间点注册报告生成任务。
 
         这些任务根据运行时解析出的生效模式，决定执行传统的全量分析还是增量汇报。
@@ -191,7 +195,7 @@ class AutoScheduler:
             except Exception as e:
                 logger.error(f"注册定时任务失败 ({t_str}): {e}")
 
-    def unschedule_jobs(self, context: Any) -> None:
+    def unschedule_jobs(self, context: Context) -> None:
         """取消定时任务"""
         self._terminating = True
         if (
@@ -214,7 +218,7 @@ class AutoScheduler:
                 logger.warning(f"移除定时任务失败 ({job_id}): {e}")
         self.scheduler_job_ids.clear()
 
-    async def shutdown(self, context: Any) -> None:
+    async def shutdown(self, context: Context) -> None:
         """停止调度器并持久化增量消息计数。
 
         Args:
@@ -283,7 +287,7 @@ class AutoScheduler:
 
             async def dispatch_group(
                 gid: str, pid: str | None, mode: str
-            ) -> dict[str, Any] | None:
+            ) -> dict[str, object] | None:
                 wait_started_at = time_mod.monotonic()
                 logger.debug(
                     "定时报告等待调度槽位: platform=%s, group=%s, mode=%s, available=%s/%s",
@@ -487,7 +491,7 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = str(result.get("reason", "unknown"))
-                skip_msg = result.get("error") or result.get("message")
+                skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
                     if is_skip:
@@ -501,8 +505,9 @@ class AutoScheduler:
                     else:
                         trace.finish(
                             status="failed",
-                            error_message=result.get("error")
-                            or f"自动分析执行失败: {reason}",
+                            error_message=str(
+                                result.get("error") or f"自动分析执行失败: {reason}"
+                            ),
                         )
                 logger.info(
                     f"群 {group_id} 自动分析未完成: {reason} - {result.get('error', '')}"
@@ -512,11 +517,14 @@ class AutoScheduler:
                 return result
 
             # 获取分析结果及适配器
-            analysis_result = result["analysis_result"]
-            adapter = result["adapter"]
+            raw_analysis = result.get("analysis_result")
+            analysis_result: dict[str, object] = (
+                raw_analysis if isinstance(raw_analysis, dict) else {}
+            )
+            adapter = result.get("adapter")
             dispatch_platform_id = (
                 adapter.platform_id
-                if hasattr(adapter, "platform_id")
+                if isinstance(adapter, PlatformAdapterProtocol)
                 else target_platform_id
             )
 
@@ -778,7 +786,7 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = str(result.get("reason", "unknown"))
-                skip_msg = result.get("error") or result.get("message")
+                skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
                     if is_skip:
@@ -792,14 +800,18 @@ class AutoScheduler:
                     else:
                         trace.finish(
                             status="failed",
-                            error_message=result.get("error")
-                            or f"增量分析失败: {reason}",
+                            error_message=str(
+                                result.get("error") or f"增量分析失败: {reason}"
+                            ),
                         )
                 logger.debug(f"群 {group_id} 增量分析未完成: reason={reason}")
                 return result
 
             # 增量分析只累积数据，不发送报告
-            batch_summary = result.get("batch_summary", {})
+            raw_summary = result.get("batch_summary")
+            batch_summary: dict[str, object] = (
+                raw_summary if isinstance(raw_summary, dict) else {}
+            )
             logger.debug(
                 f"群 {group_id} 增量分析调度回调完成: "
                 f"消息数={result.get('messages_count', 0)}, "
@@ -986,7 +998,7 @@ class AutoScheduler:
 
             if not result.get("success"):
                 reason = str(result.get("reason", "unknown"))
-                skip_msg = result.get("error") or result.get("message")
+                skip_msg = str(result.get("error") or result.get("message") or "")
                 is_skip = reason in AUTO_ANALYSIS_SKIP_REASONS
                 if trace and trace.status == "running":
                     if is_skip:
@@ -1000,8 +1012,9 @@ class AutoScheduler:
                     else:
                         trace.finish(
                             status="failed",
-                            error_message=result.get("error")
-                            or f"增量最终报告失败: {reason}",
+                            error_message=str(
+                                result.get("error") or f"增量最终报告失败: {reason}"
+                            ),
                         )
                 logger.info(f"群 {group_id} 最终报告跳过: {reason}")
                 result["analysis_success"] = False
@@ -1009,11 +1022,14 @@ class AutoScheduler:
                 return result
 
             # 获取分析结果及适配器，分发报告
-            analysis_result = result["analysis_result"]
-            adapter = result["adapter"]
+            raw_analysis = result.get("analysis_result")
+            analysis_result: dict[str, object] = (
+                raw_analysis if isinstance(raw_analysis, dict) else {}
+            )
+            adapter = result.get("adapter")
             dispatch_platform_id = (
                 adapter.platform_id
-                if hasattr(adapter, "platform_id")
+                if isinstance(adapter, PlatformAdapterProtocol)
                 else target_platform_id
             )
 
