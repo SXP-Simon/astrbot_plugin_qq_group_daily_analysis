@@ -261,15 +261,15 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(
-                            self.get_data_type()
-                        )
-                        if isinstance(slot, dict):
-                            slot["completion"] = retry_text
-                            slot["corrected_completion"] = retry_text
-                            slot["prompt"] = retry_prompt
-                            slot["corrected_prompt"] = retry_prompt
-                            slot["retry_count"] = idx
+                        prompts_map = trace.metadata.get("llm_prompts")
+                        if isinstance(prompts_map, dict):
+                            slot = prompts_map.get(self.get_data_type())
+                            if isinstance(slot, dict):
+                                slot["completion"] = retry_text
+                                slot["corrected_completion"] = retry_text
+                                slot["prompt"] = retry_prompt
+                                slot["corrected_prompt"] = retry_prompt
+                                slot["retry_count"] = idx
                     return normalized
 
             retry_regex_data = extract_quality_with_regex(retry_text)
@@ -277,15 +277,15 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_regex_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(
-                            self.get_data_type()
-                        )
-                        if isinstance(slot, dict):
-                            slot["completion"] = retry_text
-                            slot["corrected_completion"] = retry_text
-                            slot["prompt"] = retry_prompt
-                            slot["corrected_prompt"] = retry_prompt
-                            slot["retry_count"] = idx
+                        prompts_map = trace.metadata.get("llm_prompts")
+                        if isinstance(prompts_map, dict):
+                            slot = prompts_map.get(self.get_data_type())
+                            if isinstance(slot, dict):
+                                slot["completion"] = retry_text
+                                slot["corrected_completion"] = retry_text
+                                slot["prompt"] = retry_prompt
+                                slot["corrected_prompt"] = retry_prompt
+                                slot["retry_count"] = idx
                     return normalized
 
         return None
@@ -389,17 +389,20 @@ ${messages_text}
             result_text = extract_response_text(response)
             trace = TraceContext.current()
             if trace:
-                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    self.get_data_type(), {}
-                )
-                slot["prompt"] = prompt
-                slot["initial_prompt"] = prompt
-                slot["system_prompt"] = system_prompt
-                slot["tokens"] = token_usage_dict["total_tokens"]
-                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
-                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
-                slot["completion"] = result_text or ""
-                slot["initial_completion"] = result_text or ""
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["initial_prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text or ""
+                        slot["initial_completion"] = result_text or ""
 
             if not result_text:
                 return None, usage
@@ -487,11 +490,12 @@ ${messages_text}
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                prompts_map[self.get_data_type()] = {
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "provider_id": resolved_provider_id or "default",
-                }
+                if isinstance(prompts_map, dict):
+                    prompts_map[self.get_data_type()] = {
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "provider_id": resolved_provider_id or "default",
+                    }
 
             # 3. 调用 LLM
             response = await call_provider_with_retry(
@@ -527,16 +531,19 @@ ${messages_text}
                 raise RuntimeError(err_text)
 
             if trace:
-                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    self.get_data_type(), {}
-                )
-                slot["prompt"] = prompt
-                slot["system_prompt"] = system_prompt
-                slot["provider_id"] = resolved_provider_id or "default"
-                slot["tokens"] = token_usage_dict["total_tokens"]
-                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
-                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
-                slot["completion"] = result_text
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["provider_id"] = resolved_provider_id or "default"
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text
 
             # 6. JSON 解析（使用 parse_json_object_response）
             success, parsed_data, error_msg = parse_json_object_response(

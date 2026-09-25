@@ -398,11 +398,12 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                prompts_map[self.get_data_type()] = {
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "provider_id": resolved_provider_id or "default",
-                }
+                if isinstance(prompts_map, dict):
+                    prompts_map[self.get_data_type()] = {
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "provider_id": resolved_provider_id or "default",
+                    }
 
             response = await call_provider_with_retry(
                 self.context,

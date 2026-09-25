@@ -40,7 +40,7 @@ __all__ = [
     "get_provider_id_with_fallback",
 ]
 
-_circuit_breakers = {}
+_circuit_breakers: dict[str, CircuitBreaker] = {}
 _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 120.0
@@ -79,13 +79,13 @@ _get_circuit_breaker = get_provider_circuit_breaker
 
 
 async def _call_provider_stream(
-    context: Context, provider_id: str, llm_kwargs: dict[str, Any]
+    context: Context, provider_id: str, llm_kwargs: dict[str, object]
 ) -> LLMResponse:
     provider: Any = context.get_provider_by_id(provider_id=provider_id)
     if provider is None or not hasattr(provider, "text_chat_stream"):
         raise RuntimeError(f"Provider 不存在或不支持流式聊天: {provider_id}")
 
-    stream_kwargs = dict(llm_kwargs)
+    stream_kwargs: dict[str, Any] = dict(llm_kwargs)
     stream_kwargs.pop("chat_provider_id", None)
 
     final_resp = None
@@ -228,7 +228,9 @@ async def get_provider_id_with_fallback(
         # 0. 显式覆盖 Provider (续跑或手动调试时通过 TraceContext 传入)
         trace = TraceContext.current()
         override_provider_id = (
-            trace.metadata.get("override_provider_id") if trace else None
+            str(trace.metadata.get("override_provider_id") or "").strip()
+            if trace
+            else ""
         )
         if override_provider_id:
             strategies.append(
@@ -435,15 +437,16 @@ async def call_provider_with_retry(
                     if actual_model:
                         trace.metadata["model"] = str(actual_model)
                     prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                    if observation_label:
+                    if isinstance(prompts_map, dict) and observation_label:
                         slot = prompts_map.setdefault(observation_label, {})
-                        slot["provider_id"] = pid
-                        if actual_model:
-                            slot["model"] = str(actual_model)
-                        if actual_provider_type:
-                            slot["provider_type"] = str(actual_provider_type)
+                        if isinstance(slot, dict):
+                            slot["provider_id"] = pid
+                            if actual_model:
+                                slot["model"] = str(actual_model)
+                            if actual_provider_type:
+                                slot["provider_type"] = str(actual_provider_type)
 
-                llm_kwargs: dict[str, Any] = {
+                llm_kwargs: dict[str, object] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
                 }
@@ -468,13 +471,14 @@ async def call_provider_with_retry(
                     f"response_format={r_format is not None}, "
                     f"streaming={enable_streaming_llm_call}"
                 )
+                llm_call_kwargs: dict[str, Any] = dict(llm_kwargs)
                 if enable_streaming_llm_call:
                     request_task = asyncio.create_task(
-                        _call_provider_stream(context, pid, llm_kwargs)
+                        _call_provider_stream(context, pid, llm_call_kwargs)
                     )
                 else:
                     request_task = asyncio.create_task(
-                        context.llm_generate(**llm_kwargs)
+                        context.llm_generate(**llm_call_kwargs)
                     )
 
                 next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
@@ -559,12 +563,14 @@ async def call_provider_with_retry(
                     "duration_ms": round(duration_ms, 1),
                     "is_fallback": is_fallback_request,
                 }
-                attempts_list.append(attempt_item)
+                if isinstance(attempts_list, list):
+                    attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
-                        s.setdefault("payload", {}).setdefault(
-                            "llm_attempts", []
-                        ).append(attempt_item)
+                        payload = s.setdefault("payload", {})
+                        span_attempts = payload.setdefault("llm_attempts", [])
+                        if isinstance(span_attempts, list):
+                            span_attempts.append(attempt_item)
                         break
             return resp
         except Exception as err:
@@ -581,12 +587,14 @@ async def call_provider_with_retry(
                     "is_fallback": is_fallback_request,
                     "error": str(err),
                 }
-                attempts_list.append(attempt_item)
+                if isinstance(attempts_list, list):
+                    attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
-                        s.setdefault("payload", {}).setdefault(
-                            "llm_attempts", []
-                        ).append(attempt_item)
+                        payload = s.setdefault("payload", {})
+                        span_attempts = payload.setdefault("llm_attempts", [])
+                        if isinstance(span_attempts, list):
+                            span_attempts.append(attempt_item)
                         break
             if r_format is not None and _is_response_format_unsupported_error(err):
                 raise err
@@ -676,7 +684,7 @@ async def call_provider_with_retry(
     return None
 
 
-def extract_token_usage(response: Any) -> dict[str, int]:
+def extract_token_usage(response: object) -> dict[str, int]:
     """
     从LLM响应中提取token使用统计
 
@@ -693,8 +701,10 @@ def extract_token_usage(response: Any) -> dict[str, int]:
         usage = getattr(response, "usage", None)
 
         # 2. 尝试从 response.raw_completion.usage 获取 (兼容旧版)
-        if not usage and hasattr(response, "raw_completion"):
-            usage = getattr(response.raw_completion, "usage", None)
+        if not usage:
+            raw_comp = getattr(response, "raw_completion", None)
+            if raw_comp:
+                usage = getattr(raw_comp, "usage", None)
 
         # 3. 如果 response 本身就是 dict (某些特殊情况)
         if not usage and isinstance(response, dict):
@@ -731,7 +741,7 @@ def extract_token_usage(response: Any) -> dict[str, int]:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-def extract_response_text(response: Any) -> str:
+def extract_response_text(response: object) -> str:
     """
     从LLM响应中提取文本内容
 
@@ -742,8 +752,9 @@ def extract_response_text(response: Any) -> str:
         响应文本内容
     """
     try:
-        if hasattr(response, "completion_text"):
-            return response.completion_text
+        text = getattr(response, "completion_text", None)
+        if text is not None:
+            return str(text)
         return str(response)
     except Exception as e:
         logger.error(f"提取响应文本失败: {e}")

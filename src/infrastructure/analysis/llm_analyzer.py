@@ -6,7 +6,7 @@ LLM分析器模块
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
@@ -614,11 +614,11 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def _call_provider_with_retry(
         self,
-        provider: Any,
+        provider: object,
         prompt: str,
         umo: str | None = None,
         provider_id_key: str | None = None,
-    ) -> Any:
+    ) -> object:
         """
         向后兼容的LLM调用方法
         现在委托给llm_utils模块处理
