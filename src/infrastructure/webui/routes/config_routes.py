@@ -124,12 +124,11 @@ class ConfigRoutes:
                     for item in val:
                         if isinstance(item, dict):
                             cleaned_item = _cleanse_reference_images(item)
-                            if isinstance(cleaned_item, dict):
-                                if (
-                                    "__template_key" not in cleaned_item
-                                    or not cleaned_item["__template_key"]
-                                ):
-                                    cleaned_item["__template_key"] = "character"
+                            if isinstance(cleaned_item, dict) and (
+                                "__template_key" not in cleaned_item
+                                or not cleaned_item["__template_key"]
+                            ):
+                                cleaned_item["__template_key"] = "character"
                             cleaned.append(cleaned_item)
                         elif isinstance(item, str):
                             folder = _config_key_to_folder(
@@ -252,7 +251,7 @@ class ConfigRoutes:
             if hasattr(request, "files"):
                 try:
                     uploaded_files = await request.files()
-                    for key in uploaded_files.keys():
+                    for key in uploaded_files:
                         for f in uploaded_files.getlist(key):
                             orig_name = (
                                 getattr(f, "filename", "") or "uploaded_image.png"

@@ -10,20 +10,14 @@ import base64
 import os
 import re
 import tempfile
-from collections.abc import AsyncGenerator, Callable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-from astrbot.api.event import AstrMessageEvent
-
 # File is only available via astrbot.core (internal API — may change).
 from astrbot.core.message.components import File
 
-from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
-from ...infrastructure.reporting.generators import ReportGenerator
-from ...infrastructure.webui.active_task_manager import ActiveTaskManager
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -33,9 +27,16 @@ from ..services.analysis_application_service import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Callable
+
+    from astrbot.api.event import AstrMessageEvent
+
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.messaging.message_sender import MessageSender
+    from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
     from ...infrastructure.platform.bot_manager import BotManager
+    from ...infrastructure.reporting.generators import ReportGenerator
+    from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from .comic_command_handler import ComicCommandHandler
 
 
@@ -261,7 +262,7 @@ class AnalysisCommandHandler:
                 trace.finish(status="failed", error_message=str(e))
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
-                f"❌ 分析失败: {str(e)}。请检查网络连接和LLM配置，或联系管理员"
+                f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
             )
         finally:
             if trace_id and self.active_task_manager:
@@ -291,7 +292,7 @@ class AnalysisCommandHandler:
         if self.plugin_instance and hasattr(
             self.plugin_instance, "_try_trigger_comic_generation"
         ):
-            inst_fn = getattr(self.plugin_instance, "_try_trigger_comic_generation")
+            inst_fn = self.plugin_instance._try_trigger_comic_generation
             if (
                 hasattr(inst_fn, "assert_called")
                 or hasattr(inst_fn, "_mock_name")
@@ -312,11 +313,7 @@ class AnalysisCommandHandler:
             )
 
         output_format_list = self.config_manager.get_output_format()
-        output_format = (
-            output_format_list[0]
-            if isinstance(output_format_list, list) and output_format_list
-            else "image"
-        )
+        output_format = output_format_list[0] if output_format_list else "image"
         is_qq_official = adapter.get_platform_name() in {
             "qq_official",
             "qq_official_webhook",
@@ -354,7 +351,7 @@ class AnalysisCommandHandler:
                 ):
                     (
                         image_url,
-                        html_content,
+                        _html_content,
                     ) = await self.report_generator.generate_image_report(
                         analysis_result,
                         group_id,
@@ -368,7 +365,7 @@ class AnalysisCommandHandler:
             else:
                 (
                     image_url,
-                    html_content,
+                    _html_content,
                 ) = await self.report_generator.generate_image_report(
                     analysis_result,
                     group_id,
@@ -407,7 +404,7 @@ class AnalysisCommandHandler:
                 ):
                     (
                         html_path,
-                        json_path,
+                        _json_path,
                     ) = await self.report_generator.generate_html_report(
                         analysis_result,
                         group_id,
@@ -419,7 +416,10 @@ class AnalysisCommandHandler:
                         trace_id=cur_trace_id,
                     )
             else:
-                html_path, json_path = await self.report_generator.generate_html_report(
+                (
+                    html_path,
+                    _json_path,
+                ) = await self.report_generator.generate_html_report(
                     analysis_result,
                     group_id,
                     avatar_url_getter=avatar_url_getter,
@@ -485,7 +485,7 @@ class AnalysisCommandHandler:
             if self.plugin_instance and hasattr(
                 self.plugin_instance, "_send_text_reports"
             ):
-                inst_send = getattr(self.plugin_instance, "_send_text_reports")
+                inst_send = self.plugin_instance._send_text_reports
                 if (
                     hasattr(inst_send, "assert_called")
                     or hasattr(inst_send, "_mock_name")

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .context import DrawingRequestContext
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_google_api(

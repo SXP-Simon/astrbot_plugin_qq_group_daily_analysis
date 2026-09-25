@@ -62,9 +62,6 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[dict]]):
         # 提取文本消息
         text_messages = []
         for msg in data:
-            if not isinstance(msg, dict):
-                continue
-
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
             bot_self_ids = self.config_manager.get_bot_self_ids()

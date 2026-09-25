@@ -212,8 +212,8 @@ def build_safe_report_path(
 
     try:
         target_path.relative_to(output_dir_resolved)
-    except ValueError:
-        raise ValueError("文件路径不在输出目录之内，可能包含路径穿越")
+    except ValueError as e:
+        raise ValueError("文件路径不在输出目录之内，可能包含路径穿越") from e
 
     if target_path.exists():
         suffix = target_path.suffix

@@ -68,8 +68,7 @@ class SnowLumaDriver(StandardOneBotDriver):
             return False
         err_str = str(exc)
 
-        # SnowLuma 特有模式：retcode=100 / result=120
-        # "send group message rejected: result=120 err="
+        # SnowLuma pattern: send group message rejected with result=120 or muted error
         err_lower = err_str.lower()
         if "rejected" in err_lower and (
             "result=120" in err_lower or "muted" in err_lower

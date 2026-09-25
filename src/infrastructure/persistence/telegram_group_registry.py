@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from astrbot.api.star import Star
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
 
 
 class TelegramGroupRegistry:
@@ -94,18 +96,14 @@ class TelegramGroupRegistry:
                 platform_map = platforms.get(str(platform_id).strip(), {})
                 if isinstance(platform_map, dict):
                     groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
+                        str(gid).strip() for gid in platform_map if str(gid).strip()
                     )
             else:
                 for platform_map in platforms.values():
                     if not isinstance(platform_map, dict):
                         continue
                     groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
+                        str(gid).strip() for gid in platform_map if str(gid).strip()
                     )
 
             return sorted(groups)

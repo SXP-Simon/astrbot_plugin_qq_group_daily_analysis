@@ -306,14 +306,14 @@ class CheckpointStore(ICheckpointStore):
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
             """
-            rows = conn.execute(query_sql, params + [limit, offset]).fetchall()
+            rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
             items = [
                 {
                     "checkpoint_id": row["checkpoint_id"],
                     "group_id": row["group_id"],
                     "date_str": row["date_str"],
                     "stage_name": row["stage_name"],
-                    "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
+                    "trace_id": row["trace_id"] or "",
                     "created_at": row["created_at"],
                     "created_at_formatted": time.strftime(
                         "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
@@ -378,7 +378,7 @@ class CheckpointStore(ICheckpointStore):
                 "group_id": row["group_id"],
                 "date_str": row["date_str"],
                 "stage_name": row["stage_name"],
-                "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
+                "trace_id": row["trace_id"] or "",
                 "created_at": row["created_at"],
                 "created_at_formatted": time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])

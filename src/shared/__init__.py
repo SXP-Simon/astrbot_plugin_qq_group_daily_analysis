@@ -6,10 +6,10 @@ from .constants import AnalysisStage, ContentType, Platform, ReportFormat, TaskS
 from .trace_context import TraceContext
 
 __all__ = [
-    "TraceContext",
-    "Platform",
-    "TaskStatus",
     "AnalysisStage",
     "ContentType",
+    "Platform",
     "ReportFormat",
+    "TaskStatus",
+    "TraceContext",
 ]

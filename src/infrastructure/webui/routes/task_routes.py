@@ -11,15 +11,15 @@ from typing import TYPE_CHECKING, Any
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
-from ...persistence.trace_sqlite_store import TraceSQLiteStore
-from ..active_task_manager import ActiveTaskManager
 from ..web_compat import error_response, json_response, request
 
 if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
+    from ...persistence.trace_sqlite_store import TraceSQLiteStore
     from ...reporting.dispatcher import ReportDispatcher
+    from ..active_task_manager import ActiveTaskManager
 
 
 class TaskRoutes:
@@ -98,17 +98,11 @@ class TaskRoutes:
 
             trace_id = TraceContext.generate("web_manual", group_name)
 
-            provider_id = (
-                payload.get("provider_id") if isinstance(payload, dict) else None
-            )
+            provider_id = payload.get("provider_id")
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
 
-            template_name = (
-                payload.get("template_name") or payload.get("template")
-                if isinstance(payload, dict)
-                else None
-            )
+            template_name = payload.get("template_name") or payload.get("template")
             if not template_name and hasattr(request, "query"):
                 template_name = request.query.get("template_name") or request.query.get(
                     "template"
@@ -287,12 +281,8 @@ class TaskRoutes:
                     payload = payload_raw if isinstance(payload_raw, dict) else {}
                 except Exception:
                     payload = {}
-            provider_id = (
-                payload.get("provider_id") if isinstance(payload, dict) else None
-            )
-            template_name = (
-                payload.get("template_name") if isinstance(payload, dict) else None
-            )
+            provider_id = payload.get("provider_id")
+            template_name = payload.get("template_name")
             if not provider_id and hasattr(request, "query"):
                 provider_id = request.query.get("provider_id")
             if not template_name and hasattr(request, "query"):

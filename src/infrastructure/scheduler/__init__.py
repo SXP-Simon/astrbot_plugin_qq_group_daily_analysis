@@ -9,6 +9,6 @@ from .target_resolver import ScheduledTargetResolver
 
 __all__ = [
     "AutoScheduler",
-    "ScheduledTargetResolver",
     "IncrementalTriggerCoordinator",
+    "ScheduledTargetResolver",
 ]

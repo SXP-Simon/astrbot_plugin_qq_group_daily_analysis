@@ -75,9 +75,13 @@ class DiscordAdapter(PlatformAdapter):
         self._cached_client = self._get_discord_client()
 
         # 兜底：尝试从客户端连接状态中补全机器人 ID
-        if not self.bot_user_id and self._cached_client:
-            if hasattr(self._cached_client, "user") and self._cached_client.user:
-                self.bot_user_id = str(self._cached_client.user.id)
+        if (
+            not self.bot_user_id
+            and self._cached_client
+            and hasattr(self._cached_client, "user")
+            and self._cached_client.user
+        ):
+            self.bot_user_id = str(self._cached_client.user.id)
 
         return self._cached_client
 
@@ -322,14 +326,17 @@ class DiscordAdapter(PlatformAdapter):
                     raw_msg["message"].append(
                         {"type": "at", "data": {"qq": content.at_user_id}}
                     )
-                elif content.type == MessageContentType.REPLY:
-                    if content.raw_data and "reply_id" in content.raw_data:
-                        raw_msg["message"].append(
-                            {
-                                "type": "reply",
-                                "data": {"id": content.raw_data["reply_id"]},
-                            }
-                        )
+                elif (
+                    content.type == MessageContentType.REPLY
+                    and content.raw_data
+                    and "reply_id" in content.raw_data
+                ):
+                    raw_msg["message"].append(
+                        {
+                            "type": "reply",
+                            "data": {"id": content.raw_data["reply_id"]},
+                        }
+                    )
 
             raw_messages.append(raw_msg)
         return raw_messages
@@ -434,31 +441,31 @@ class DiscordAdapter(PlatformAdapter):
                 import aiohttp
 
                 try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
+                    async with (
+                        aiohttp.ClientSession() as session,
+                        session.get(
                             image_path, timeout=aiohttp.ClientTimeout(total=30)
-                        ) as resp:
-                            if resp.status == 200:
-                                data = await resp.read()
-                                # 尽量保留原始后缀
-                                filename = image_path.split("/")[-1].split("?")[0]
-                                if not filename.lower().endswith(
-                                    (".png", ".jpg", ".jpeg", ".gif", ".webp")
-                                ):
-                                    filename = "daily_report_image.png"
+                        ) as resp,
+                    ):
+                        if resp.status == 200:
+                            data = await resp.read()
+                            # 尽量保留原始后缀
+                            filename = image_path.split("/")[-1].split("?")[0]
+                            if not filename.lower().endswith(
+                                (".png", ".jpg", ".jpeg", ".gif", ".webp")
+                            ):
+                                filename = "daily_report_image.png"
 
-                                file_to_send = discord.File(
-                                    BytesIO(data), filename=filename
-                                )
-                            else:
-                                # 兜底：如果下载失败，直接发 URL 给 Discord 尝试自动解析
-                                content = (
-                                    f"{caption}\n{image_path}"
-                                    if caption
-                                    else image_path
-                                )
-                                await channel.send(content=content)
-                                return True
+                            file_to_send = discord.File(
+                                BytesIO(data), filename=filename
+                            )
+                        else:
+                            # 兜底：如果下载失败，直接发 URL 给 Discord 尝试自动解析
+                            content = (
+                                f"{caption}\n{image_path}" if caption else image_path
+                            )
+                            await channel.send(content=content)
+                            return True
                 except Exception as de:
                     logger.warning(
                         f"Discord 远程图片下载失败: {de}，将回退为发送 URL。"

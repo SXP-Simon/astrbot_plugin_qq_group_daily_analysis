@@ -12,7 +12,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -21,9 +21,6 @@ from ....domain.value_objects.platform_capabilities import (
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
-from ....domain.value_objects.unified_message import (
-    UnifiedMessage,
-)
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 from .onebot import (
@@ -33,6 +30,11 @@ from .onebot import (
     OneBotMessageConverter,
     StandardOneBotDriver,
 )
+
+if TYPE_CHECKING:
+    from ....domain.value_objects.unified_message import (
+        UnifiedMessage,
+    )
 
 
 class OneBotAdapter(PlatformAdapter):
@@ -552,9 +554,12 @@ class OneBotAdapter(PlatformAdapter):
         try:
             # 兼容处理节点中的 uin -> user_id (有些后端偏好 uin)
             for node in nodes:
-                if "data" in node:
-                    if "user_id" in node["data"] and "uin" not in node["data"]:
-                        node["data"]["uin"] = node["data"]["user_id"]
+                if (
+                    "data" in node
+                    and "user_id" in node["data"]
+                    and "uin" not in node["data"]
+                ):
+                    node["data"]["uin"] = node["data"]["user_id"]
 
             await self.bot.call_action(
                 "send_group_forward_msg",
@@ -872,15 +877,15 @@ class OneBotAdapter(PlatformAdapter):
             return None
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=5)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.read()
-                        b64 = base64.b64encode(data).decode("utf-8")
-                        content_type = resp.headers.get("Content-Type", "image/png")
-                        return f"data:{content_type};base64,{b64}"
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp,
+            ):
+                if resp.status == 200:
+                    data = await resp.read()
+                    b64 = base64.b64encode(data).decode("utf-8")
+                    content_type = resp.headers.get("Content-Type", "image/png")
+                    return f"data:{content_type};base64,{b64}"
         except Exception as e:
             logger.debug(f"OneBot 头像下载失败: {e}")
         return None
@@ -931,7 +936,6 @@ class OneBotAdapter(PlatformAdapter):
                 str(uid)
                 for uid in self.bot_self_ids
                 if uid
-                and isinstance(uid, (str, int))
                 and not callable(uid)
                 and "partial" not in str(uid)
                 and str(uid).isdigit()

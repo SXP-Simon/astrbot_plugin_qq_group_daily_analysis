@@ -11,7 +11,6 @@ import asyncio
 import base64
 import binascii
 import re
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
@@ -21,6 +20,8 @@ import httpx
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from ..config.config_manager import ConfigManager
 
 

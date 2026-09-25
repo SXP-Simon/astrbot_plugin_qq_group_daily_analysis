@@ -12,14 +12,14 @@ from .report_repository import IReportGenerator
 from .visualization_repository import IActivityVisualizer
 
 __all__ = [
-    "IMessageRepository",
-    "IMessageSender",
-    "IGroupInfoRepository",
-    "IAvatarRepository",
     "IActivityVisualizer",
     "IAnalysisProvider",
-    "IReportGenerator",
-    "IIncrementalStore",
+    "IAvatarRepository",
     "ICheckpointStore",
     "IConfigProvider",
+    "IGroupInfoRepository",
+    "IIncrementalStore",
+    "IMessageRepository",
+    "IMessageSender",
+    "IReportGenerator",
 ]

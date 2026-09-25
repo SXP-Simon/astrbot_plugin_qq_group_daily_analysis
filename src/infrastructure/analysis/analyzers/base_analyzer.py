@@ -73,7 +73,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             数据类型字符串
         """
-        pass
 
     @abstractmethod
     def get_max_count(self) -> int:
@@ -83,7 +82,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             最大数量
         """
-        pass
 
     @abstractmethod
     def build_prompt(self, data: TInputData) -> str:
@@ -96,7 +94,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             提示词字符串
         """
-        pass
 
     def build_prompt_with_override(
         self, data: TInputData, prompt_override: str | None
@@ -125,7 +122,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             提取到的数据列表
         """
-        pass
 
     @abstractmethod
     def create_data_objects(self, data_list: list[dict]) -> list[TDataObject]:
@@ -138,7 +134,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             数据对象列表
         """
-        pass
 
     def get_response_schema_name(self) -> str:
         return f"{self.get_data_type()}_output"

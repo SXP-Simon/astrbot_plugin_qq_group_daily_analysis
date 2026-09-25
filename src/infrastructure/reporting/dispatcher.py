@@ -4,7 +4,6 @@ import base64
 import os
 import tempfile
 import time
-from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +15,8 @@ from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ..config.config_manager import ConfigManager
     from ..messaging.message_sender import MessageSender
     from .generators import ReportGenerator
@@ -114,7 +115,6 @@ class ReportDispatcher:
 
         # 2. 生成图片
         image_url = None
-        html_content = None
         try:
             # 定义头像获取回调，请求小尺寸头像以优化性能
             async def avatar_url_getter(user_id: str):
@@ -143,7 +143,7 @@ class ReportDispatcher:
                 ):
                     (
                         image_url,
-                        html_content,
+                        _html_content,
                     ) = await self.report_generator.generate_image_report(
                         analysis_result,
                         group_id,
@@ -156,7 +156,7 @@ class ReportDispatcher:
             else:
                 (
                     image_url,
-                    html_content,
+                    _html_content,
                 ) = await self.report_generator.generate_image_report(
                     analysis_result,
                     group_id,
@@ -273,7 +273,7 @@ class ReportDispatcher:
                         f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}"
                     )
 
-                if dispatch_span and isinstance(dispatch_span, dict):
+                if dispatch_span:
                     dispatch_span.setdefault("payload", {}).update(
                         {
                             "platform": platform_id or "auto",
@@ -344,7 +344,7 @@ class ReportDispatcher:
                 ):
                     (
                         html_path,
-                        json_path,
+                        _json_path,
                     ) = await self.report_generator.generate_html_report(
                         analysis_result,
                         group_id,
@@ -355,7 +355,10 @@ class ReportDispatcher:
                         trace_id=trace_id,
                     )
             else:
-                html_path, json_path = await self.report_generator.generate_html_report(
+                (
+                    html_path,
+                    _json_path,
+                ) = await self.report_generator.generate_html_report(
                     analysis_result,
                     group_id,
                     avatar_url_getter=avatar_url_getter,
@@ -456,7 +459,7 @@ class ReportDispatcher:
                         platform_id=platform_id,
                     )
 
-                if dispatch_span and isinstance(dispatch_span, dict):
+                if dispatch_span:
                     dispatch_span.setdefault("payload", {}).update(
                         {
                             "platform": platform_id or "auto",
@@ -549,7 +552,7 @@ class ReportDispatcher:
                 )
                 sent = False
 
-            if dispatch_span and isinstance(dispatch_span, dict):
+            if dispatch_span:
                 dispatch_span.setdefault("payload", {}).update(
                     {
                         "platform": platform_id or "auto",
@@ -605,7 +608,7 @@ class ReportDispatcher:
             except OSError:
                 pass
 
-    async def _do_upload_group_file(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_file(self, adapter: Any, group_id: str, file_path: str):
         """上传文件到群文件目录，失败静默"""
         try:
             folder_name = self.config_manager.get_group_file_folder()
@@ -620,7 +623,7 @@ class ReportDispatcher:
         except Exception as e:
             logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
 
-    async def _do_upload_group_album(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_album(self, adapter: Any, group_id: str, file_path: str):
         """上传图片到群相册，失败静默"""
         try:
             album_name = self.config_manager.get_group_album_name()

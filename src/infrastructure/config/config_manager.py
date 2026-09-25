@@ -9,15 +9,20 @@ import json
 import os
 import random
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from astrbot.api import AstrBotConfig
 from astrbot.api.star import StarTools
 
 from ...shared.constants import DEFAULT_ATRI_ASSETS_CDN_URL, PLUGIN_NAME
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    from astrbot.api import AstrBotConfig
 
 
 class ConfigManager:
@@ -44,10 +49,7 @@ class ConfigManager:
 
     def _protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置（委托 ConfigMigrator）。"""
-        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
-            self, star_tools=getattr(self, "StarTools", StarTools)
-        )
-        migrator.protect_upgrade_data()
+        self._migrator.protect_upgrade_data()
 
     @staticmethod
     def _get_plugin_root() -> Path:
@@ -100,17 +102,11 @@ class ConfigManager:
 
     def _migrate_daily_comic_characters(self) -> None:
         """迁移旧版漫画参考图配置（委托 ConfigMigrator）。"""
-        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
-            self, star_tools=getattr(self, "StarTools", StarTools)
-        )
-        migrator.migrate_daily_comic_character_references()
+        self._migrator.migrate_daily_comic_character_references()
 
     def _migrate_daily_comic_character_prompts(self) -> None:
         """将旧版全局分镜提示词复制到既有角色方案（委托 ConfigMigrator）。"""
-        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
-            self, star_tools=getattr(self, "StarTools", StarTools)
-        )
-        migrator.migrate_daily_comic_character_prompts()
+        self._migrator.migrate_daily_comic_character_prompts()
 
     def _is_legacy_default_comic_prompt(self, prompt: object) -> bool:
         """判断是否为旧版默认漫画分镜提示词（委托 ConfigMigrator）。"""
@@ -118,10 +114,7 @@ class ConfigManager:
 
     def _migrate_legacy_comic_storyboard_prompts(self) -> None:
         """自动将旧版默认漫画分镜提示词升级（委托 ConfigMigrator）。"""
-        migrator = getattr(self, "_migrator", None) or ConfigMigrator(
-            self, star_tools=getattr(self, "StarTools", StarTools)
-        )
-        migrator.migrate_legacy_comic_storyboard_prompts()
+        self._migrator.migrate_legacy_comic_storyboard_prompts()
 
     def _write_comic_config_backup(self, data: dict) -> bool:
         """写入漫画配置迁移备份（委托 ConfigMigrator）。
@@ -529,7 +522,9 @@ class ConfigManager:
         prompts["quality_analysis_prompts"]["quality_v2_prompt"] = prompt
         self.config.save_config()
 
-    def _upgrade_config_item(self, group: str, key: str, setter_func) -> bool:
+    def _upgrade_config_item(
+        self, group: str, key: str, setter_func: Callable[[Any], None]
+    ) -> bool:
         """升级指定配置项的值（委托 ConfigMigrator）。"""
         return self._migrator.upgrade_config_item(group, key, setter_func)
 
@@ -787,7 +782,7 @@ class ConfigManager:
     def get_report_template(self) -> str:
         """获取报告模板名称"""
         val = self._get_group("basic").get("report_template")
-        if not val and isinstance(self.config, dict):
+        if not val:
             val = self.config.get("report_template")
         return str(val).strip() if val else "scrapbook"
 
@@ -1165,7 +1160,7 @@ class ConfigManager:
         if not isinstance(reference_images, list):
             return ""
         for reference_image in reversed(reference_images):
-            if isinstance(reference_image, str) and reference_image.strip():
+            if reference_image.strip():
                 return reference_image.strip()
         return ""
 

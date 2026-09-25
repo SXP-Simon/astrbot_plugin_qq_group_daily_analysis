@@ -11,13 +11,16 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import TYPE_CHECKING
 
-from ...infrastructure.persistence.checkpoint_store import CheckpointStore
-from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
-from ...infrastructure.reporting.dispatcher import ReportDispatcher
 from ...shared.constants import AnalysisStage, TaskStatus
 from ...utils.logger import logger
-from .analysis_application_service import AnalysisApplicationService
+
+if TYPE_CHECKING:
+    from ...infrastructure.persistence.checkpoint_store import CheckpointStore
+    from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from ...infrastructure.reporting.dispatcher import ReportDispatcher
+    from .analysis_application_service import AnalysisApplicationService
 
 
 class CrashRecoveryService:
@@ -156,11 +159,7 @@ class CrashRecoveryService:
                         )
                         archived_count += 1
                 else:
-                    err_msg = (
-                        result.get("error") or result.get("reason") or "未知原因"
-                        if isinstance(result, dict)
-                        else "未知原因"
-                    )
+                    err_msg = result.get("error") or result.get("reason") or "未知原因"
                     logger.warning(
                         f"[CrashRecovery] 任务 {trace_id} (群 {group_id}) 恢复失败: {err_msg}"
                     )

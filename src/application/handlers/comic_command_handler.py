@@ -6,14 +6,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from astrbot.api.event import AstrMessageEvent
-
-from ...infrastructure.webui.active_task_manager import ActiveTaskManager
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -21,11 +17,16 @@ from ..services.analysis_application_service import (
     AnalysisApplicationService,
     DuplicateGroupTaskError,
 )
-from ..services.comic_application_service import ComicApplicationService
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from astrbot.api.event import AstrMessageEvent
+
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
+    from ...infrastructure.webui.active_task_manager import ActiveTaskManager
+    from ..services.comic_application_service import ComicApplicationService
 
 
 class ComicCommandHandler:
@@ -231,7 +232,7 @@ class ComicCommandHandler:
             if self.plugin_instance and hasattr(
                 self.plugin_instance, "_try_trigger_comic_generation"
             ):
-                inst_fn = getattr(self.plugin_instance, "_try_trigger_comic_generation")
+                inst_fn = self.plugin_instance._try_trigger_comic_generation
                 if (
                     hasattr(inst_fn, "assert_called")
                     or hasattr(inst_fn, "_mock_name")
@@ -300,7 +301,7 @@ class ComicCommandHandler:
                 await self.active_task_manager.finish_task(trace_id)
             logger.error(f"手动漫画生成失败: {e}", exc_info=True)
             yield event.plain_result(
-                f"❌ 漫画生成失败: {str(e)}。请检查消息获取、LLM 和绘图配置"
+                f"❌ 漫画生成失败: {e!s}。请检查消息获取、LLM 和绘图配置"
             )
         finally:
             if current_task:
@@ -487,9 +488,7 @@ class ComicCommandHandler:
                             if self.plugin_instance and hasattr(
                                 self.plugin_instance, "_try_upload_image"
                             ):
-                                inst_upload = getattr(
-                                    self.plugin_instance, "_try_upload_image"
-                                )
+                                inst_upload = self.plugin_instance._try_upload_image
                                 if (
                                     hasattr(inst_upload, "assert_called")
                                     or hasattr(inst_upload, "assert_awaited")

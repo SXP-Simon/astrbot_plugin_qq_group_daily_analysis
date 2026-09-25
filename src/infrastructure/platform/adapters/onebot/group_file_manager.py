@@ -7,11 +7,14 @@ OneBot 群文件与群相册管理器 (OneBot Group File & Album Manager)
 from __future__ import annotations
 
 import os
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .....utils.logger import logger
-from .driver_base import OneBotDriver
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from .driver_base import OneBotDriver
 
 
 class OneBotGroupFileManager:
@@ -367,12 +370,9 @@ class OneBotGroupFileManager:
                 or album.get("title")
             )
             aid = album.get("album_id") or album.get("id") or album.get("albumId")
-            if name and str(name).strip() == target_name:
-                if aid is not None:
-                    logger.info(
-                        f"[群分析相册] 成功定位相册: '{target_name}' -> ID: {aid}"
-                    )
-                    return str(aid)
+            if name and str(name).strip() == target_name and aid is not None:
+                logger.info(f"[群分析相册] 成功定位相册: '{target_name}' -> ID: {aid}")
+                return str(aid)
 
         logger.info(f"[群分析相册] 未能找到名为 '{target_name}' 的相册 (群 {group_id})")
         return None

@@ -8,12 +8,14 @@ JSON 的 ``/images/generations``，有参考图时使用 multipart 的 ``/images
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_images_api(
@@ -178,9 +180,11 @@ async def call_images_api(
 
     try:
         data = resp.json()
-    except Exception:
+    except Exception as e:
         snippet = resp.text[:500] if resp.text else "(空正文)"
-        raise Exception(f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}")
+        raise Exception(
+            f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
+        ) from e
 
     image = await context.extract_image(data, context.get_request_proxy(provider))
     if image:

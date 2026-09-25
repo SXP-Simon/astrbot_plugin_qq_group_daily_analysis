@@ -54,11 +54,6 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         Returns:
             提示词字符串
         """
-        # 验证输入数据格式
-        if not isinstance(data, list):
-            logger.error(f"build_prompt 期望列表，但收到: {type(data)}")
-            return ""
-
         # 检查消息列表是否为空
         if not data:
             logger.warning("build_prompt 收到空消息列表")
@@ -67,10 +62,6 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
         # 提取文本消息
         text_messages = []
         for i, msg in enumerate(data):
-            # 确保msg是字典类型，避免'str' object has no attribute 'get'错误
-            if not isinstance(msg, dict):
-                continue
-
             try:
                 sender = msg.get("sender", {})
                 # 确保sender是字典类型，避免'str' object has no attribute 'get'错误
@@ -92,7 +83,7 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
                 # 提取文本内容，可能分布在多个 content 中
                 text_parts = []
-                for j, content in enumerate(message_list):
+                for _j, content in enumerate(message_list):
                     if not isinstance(content, dict):
                         continue
 
@@ -215,13 +206,6 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
 
             for i, topic_data in enumerate(data_list[:max_topics]):
                 logger.debug(f"处理第 {i + 1} 条话题数据，类型: {type(topic_data)}")
-
-                # 确保topic_data是字典类型，避免'str' object has no attribute 'get'错误
-                if not isinstance(topic_data, dict):
-                    logger.warning(
-                        f"跳过非字典类型的话题数据: {type(topic_data)} - {topic_data}"
-                    )
-                    continue
 
                 try:
                     # 确保数据格式正确
@@ -378,11 +362,8 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
                     # 尝试从当前批次消息映射
                     name = id_to_nickname.get(uid)
                     if not name:
-                        # 尝试去全局配置里找 (e.g. 机器人自己)
-                        if uid in bot_ids:
-                            name = "Bot"
-                        else:
-                            name = uid  # Fallback to ID
+                        # Fallback for bot self IDs or unknown IDs
+                        name = "Bot" if uid in bot_ids else uid
                     resolved_names.append(name)
 
                 topic.contributors = resolved_names

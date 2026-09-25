@@ -5,9 +5,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...domain.repositories.avatar_repository import IAvatarRepository
 from ...domain.repositories.message_repository import (
@@ -15,8 +14,12 @@ from ...domain.repositories.message_repository import (
     IMessageRepository,
     IMessageSender,
 )
-from ...domain.value_objects.platform_capabilities import PlatformCapabilities
-from ...domain.value_objects.unified_message import UnifiedMessage
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from ...domain.value_objects.platform_capabilities import PlatformCapabilities
+    from ...domain.value_objects.unified_message import UnifiedMessage
 
 
 class PlatformAdapter(
@@ -123,7 +126,6 @@ class PlatformAdapter(
         Args:
             context (Any): 上下文对象
         """
-        pass
 
     @property
     def capabilities(self) -> PlatformCapabilities:

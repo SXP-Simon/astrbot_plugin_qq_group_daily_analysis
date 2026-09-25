@@ -29,5 +29,13 @@
   "reportFunctionMemberAccess": "error",
   "reportUntypedFunctionDecorator": "error",
   "reportUntypedClassDecorator": "error",
-  "reportUntypedBaseClass": "error"
+  "reportUntypedBaseClass": "error",
+  "reportUnusedVariable": "error",
+  "reportUnusedClass": "error",
+  "reportUnusedFunction": "error",
+  "reportDuplicateImport": "error",
+  "reportUnnecessaryIsInstance": "error",
+  "reportUnnecessaryComparison": "error",
+  "reportUnnecessaryCast": "error",
+  "reportMissingParameterType": "error"
 }

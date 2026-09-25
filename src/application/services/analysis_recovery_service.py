@@ -107,7 +107,7 @@ class AnalysisRecoveryService:
         if self.history_manager:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data and isinstance(hist_data, dict):
+                if hist_data:
                     analysis_result = hist_data
             except Exception as e:
                 logger.debug(f"从 HistoryManager 获取分析记录异常: {e}")
@@ -209,7 +209,7 @@ class AnalysisRecoveryService:
                 html_render_func=self.html_render,
                 template_theme=template_name,
             )
-            image_url = image_res[0] if isinstance(image_res, tuple) else image_res
+            image_url = image_res[0]
             filename = (
                 f"report_{group_id}_{ts_str}_{trace_id}_{template_name}.jpg"
                 if trace_id
@@ -328,7 +328,7 @@ class AnalysisRecoveryService:
         if not cached_llm:
             try:
                 hist_data = await self.history_manager.get_analysis(group_id, date_str)
-                if hist_data and isinstance(hist_data, dict):
+                if hist_data:
                     cached_llm = AnalysisResultSerializer.serialize(hist_data)
             except Exception:
                 cached_llm = None

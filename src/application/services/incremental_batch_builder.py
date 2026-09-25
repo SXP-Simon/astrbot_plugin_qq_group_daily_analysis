@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import datetime as dt
 from collections import defaultdict
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from ...domain.services.analysis_domain_service import UserActivityStats
     from ...domain.value_objects.unified_message import UnifiedMessage
 

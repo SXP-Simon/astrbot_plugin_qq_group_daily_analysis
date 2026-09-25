@@ -161,7 +161,7 @@ class AnalysisDomainService:
         most_active_hour = max(hours.items(), key=lambda x: x[1])[0] if hours else 0
 
         # 计算夜间活跃度 (0-6点)
-        night_messages = sum(hours[h] for h in range(0, 6))
+        night_messages = sum(hours[h] for h in range(6))
         night_ratio = (
             night_messages / stats["message_count"] if stats["message_count"] > 0 else 0
         )

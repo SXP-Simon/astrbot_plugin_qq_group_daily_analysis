@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..entities.incremental_state import IncrementalBatch
+if TYPE_CHECKING:
+    from ..entities.incremental_state import IncrementalBatch
 
 
 class IIncrementalStore(ABC):
@@ -17,7 +18,6 @@ class IIncrementalStore(ABC):
     @abstractmethod
     async def save_batch(self, batch: IncrementalBatch) -> bool:
         """保存单个增量批次数据"""
-        pass
 
     @abstractmethod
     async def query_batches(
@@ -27,12 +27,10 @@ class IIncrementalStore(ABC):
         window_end: float,
     ) -> list[IncrementalBatch]:
         """按时间窗口范围查询增量批次列表"""
-        pass
 
     @abstractmethod
     async def get_last_analyzed_cursor(self, group_id: str) -> tuple[int, set[str]]:
         """获取最后一次分析的消息游标 (时间戳, 消息ID集合)"""
-        pass
 
     @abstractmethod
     async def update_last_analyzed_cursor(
@@ -42,22 +40,18 @@ class IIncrementalStore(ABC):
         message_ids: set[str],
     ) -> None:
         """更新最后一次分析的消息游标"""
-        pass
 
     @abstractmethod
     async def cleanup_old_batches(self, group_id: str, before_timestamp: float) -> int:
         """清理指定群组过期的增量批次"""
-        pass
 
     @abstractmethod
     async def get_batch_count(self, group_id: str) -> int:
         """获取指定群组当前存储的批次总数"""
-        pass
 
     @abstractmethod
     async def reset_group(self, group_id: str) -> int:
         """清空指定群组的所有增量批次与游标"""
-        pass
 
 
 class ICheckpointStore(ABC):
@@ -74,7 +68,6 @@ class ICheckpointStore(ABC):
         ttl_seconds: int = 86400 * 30,
     ) -> None:
         """保存阶段产物快照"""
-        pass
 
     @abstractmethod
     def get_checkpoint(
@@ -85,19 +78,16 @@ class ICheckpointStore(ABC):
         trace_id: str = "",
     ) -> Any | None:
         """读取有效的阶段产物快照"""
-        pass
 
     @abstractmethod
     def clear_checkpoints(self, group_id: str, date_str: str) -> None:
         """清理指定群组在指定日期的阶段快照"""
-        pass
 
     @abstractmethod
     def get_checkpoints_by_group_date(
         self, group_id: str, date_str: str
     ) -> list[dict[str, Any]]:
         """获取指定群在指定日期的所有有效 Checkpoint 快照摘要列表"""
-        pass
 
     @abstractmethod
     def delete_checkpoint(
@@ -108,4 +98,3 @@ class ICheckpointStore(ABC):
         trace_id: str = "",
     ) -> bool:
         """单点删除指定阶段 Checkpoint"""
-        pass

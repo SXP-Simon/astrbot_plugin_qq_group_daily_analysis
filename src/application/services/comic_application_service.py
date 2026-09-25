@@ -5,9 +5,6 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from astrbot.api.star import Context
-
-from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
@@ -17,6 +14,9 @@ from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
+    from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...infrastructure.config.config_manager import ConfigManager
 
 
@@ -91,7 +91,7 @@ class ComicApplicationService:
                 persona_id=persona_id or None,
                 prompt_template=prompt_template or None,
             )
-            if sb_rec and isinstance(sb_rec, dict):
+            if sb_rec:
                 sb_prompts: dict[str, Any] = {}
                 if trace and trace.metadata.get("llm_prompts"):
                     for k, p in trace.metadata["llm_prompts"].items():
@@ -175,7 +175,7 @@ class ComicApplicationService:
                     logger.info(
                         f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
                     )
-                    if draw_rec and isinstance(draw_rec, dict):
+                    if draw_rec:
                         draw_rec.setdefault("payload", {}).update(
                             {
                                 "backend": backend,
@@ -202,7 +202,7 @@ class ComicApplicationService:
                     logger.warning(
                         f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
                     )
-                    if draw_rec and isinstance(draw_rec, dict):
+                    if draw_rec:
                         draw_rec.setdefault("payload", {}).update(
                             {
                                 "backend": backend,
@@ -218,7 +218,7 @@ class ComicApplicationService:
                 logger.warning(
                     "[Comic] 未配置绘图供应商（drawing_provider_overrides），取消漫画生成。"
                 )
-                if draw_rec and isinstance(draw_rec, dict):
+                if draw_rec:
                     draw_rec.setdefault("payload", {}).update(
                         {
                             "backend": "builtin",
@@ -241,7 +241,7 @@ class ComicApplicationService:
                 logger.warning(
                     f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
                 )
-                if draw_rec and isinstance(draw_rec, dict):
+                if draw_rec:
                     draw_rec.setdefault("payload", {}).update(
                         {
                             "backend": "builtin",
@@ -286,7 +286,7 @@ class ComicApplicationService:
                         logger.warning(
                             f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
                         )
-                        if draw_rec and isinstance(draw_rec, dict):
+                        if draw_rec:
                             draw_rec.setdefault("payload", {}).update(
                                 {
                                     "backend": "builtin",
@@ -303,7 +303,7 @@ class ComicApplicationService:
                         )
                         final_comic_bytes = None
 
-            if draw_rec and isinstance(draw_rec, dict):
+            if draw_rec:
                 draw_prompts = {
                     "comic_drawing": {
                         "prompt": scene_prompt,
@@ -535,7 +535,7 @@ class ComicApplicationService:
         """
         import base64
 
-        if not image_ref or not isinstance(image_ref, str):
+        if not image_ref:
             return None
 
         image_ref = image_ref.strip()

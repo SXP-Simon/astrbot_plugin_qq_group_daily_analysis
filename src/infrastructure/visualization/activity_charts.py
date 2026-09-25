@@ -52,12 +52,6 @@ class ActivityVisualizer(IActivityVisualizer):
             # 统计每小时消息数
             hourly_activity[hour] += 1
 
-            # # 统计用户活跃度
-            # user_activity[user_id] = {
-            #     "nickname": nickname,
-            #     "count": user_activity.get(user_id, {}).get("count", 0) + 1
-            # }
-
             # 统计每小时表情数
             for content in msg.get("message", []):
                 if content.get("type") in ["face", "mface", "bface", "sface"]:

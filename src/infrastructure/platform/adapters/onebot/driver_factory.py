@@ -6,14 +6,16 @@ OneBot 协议端驱动工厂 (OneBot Driver Factory)
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .....utils.logger import logger
-from .driver_base import OneBotDriver
 from .llbot_driver import LLOneBotDriver
 from .napcat_driver import NapCatDriver
 from .snowluma_driver import SnowLumaDriver
 from .standard_driver import StandardOneBotDriver
+
+if TYPE_CHECKING:
+    from .driver_base import OneBotDriver
 
 
 class OneBotDriverFactory:

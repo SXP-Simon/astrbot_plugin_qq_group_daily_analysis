@@ -7,15 +7,17 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
-from ...persistence.trace_sqlite_store import TraceSQLiteStore
 from ...platform.factory import PlatformAdapterFactory
-from ..active_task_manager import ActiveTaskManager
 from ..web_compat import Context, error_response, json_response, request
+
+if TYPE_CHECKING:
+    from ...persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..active_task_manager import ActiveTaskManager
 
 
 class TraceRoutes:
@@ -135,7 +137,7 @@ class TraceRoutes:
                         )
                         label = (
                             display_name
-                            if (p_id == p_type or p_id == display_name)
+                            if (p_id in (p_type, display_name))
                             else f"{display_name} ({p_id})"
                         )
 

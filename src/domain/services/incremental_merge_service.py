@@ -141,11 +141,7 @@ class IncrementalMergeService:
                         current_val = {}
 
                     for sub_key, sub_count in count.items():
-                        # 确保 current_val 是字典且 sub_count 是数字
-                        if isinstance(current_val, dict):
-                            current_val[sub_key] = (
-                                current_val.get(sub_key, 0) + sub_count
-                            )
+                        current_val[sub_key] = current_val.get(sub_key, 0) + sub_count
 
                     state.emoji_counts[emoji_key] = current_val
                 else:
@@ -244,7 +240,7 @@ class IncrementalMergeService:
         # 获取最活跃时段描述
         most_active_period = state.get_most_active_period()
 
-        # 转换聊天质量锐评 (如果有)
+        # Convert chat quality review if present
         chat_quality_review = None
         if state.chat_quality_review:
             review_dict = state.chat_quality_review

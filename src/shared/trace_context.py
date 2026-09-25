@@ -9,7 +9,6 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
@@ -17,6 +16,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
     from ..infrastructure.webui.active_task_manager import ActiveTaskManager
 
@@ -404,7 +405,12 @@ class TraceContext:
         _active_traces[self.trace_id] = self
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         if exc_type is not None and self.status == "running":
             self.finish(
                 status="failed",
@@ -521,10 +527,10 @@ def with_trace(
     group_id: str = "",
     platform: str = "",
     operation: str = "",
-):
-    def decorator(func):
+) -> Any:
+    def decorator(func: Any) -> Any:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             op_name = operation or func.__name__
             with TraceContext(
                 group_id=group_id,

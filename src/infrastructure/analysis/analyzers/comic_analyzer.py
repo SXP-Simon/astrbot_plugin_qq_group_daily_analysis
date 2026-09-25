@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
-from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
-from ..utils.structured_output_schema import JSONObject
 from .base_analyzer import BaseAnalyzer
+
+if TYPE_CHECKING:
+    from ....domain.value_objects import TokenUsage
+    from ..utils.structured_output_schema import JSONObject
 
 DEFAULT_COMIC_STORYBOARD_PROMPT = (
     "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n"
@@ -245,6 +248,4 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
             prompt_override=prompt_template,
         )
 
-        if isinstance(storyboards, list):
-            return [item for item in storyboards if isinstance(item, dict)], usage
-        return [], usage
+        return storyboards, usage

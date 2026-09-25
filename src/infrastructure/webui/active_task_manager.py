@@ -54,6 +54,7 @@ class ActiveTaskManager:
         self._lock = asyncio.Lock()
         self._reaper_task: asyncio.Task[None] | None = None
         self._subscribers: set[asyncio.Queue[str]] = set()
+        self._bg_tasks: set[asyncio.Task[Any]] = set()
 
     async def register_task(
         self,
@@ -115,11 +116,13 @@ class ActiveTaskManager:
             info = self._tasks[task_id]
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(
+                task = loop.create_task(
                     self._broadcast_event(
                         {"event": "task_progress", "data": info.to_dict()}
                     )
                 )
+                self._bg_tasks.add(task)
+                task.add_done_callback(self._bg_tasks.discard)
             except RuntimeError:
                 pass
 
@@ -212,7 +215,7 @@ class ActiveTaskManager:
         """同步向 SSE 推送单条日志事件"""
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(
+            task = loop.create_task(
                 self._broadcast_event(
                     {
                         "event": "log_emitted",
@@ -226,6 +229,8 @@ class ActiveTaskManager:
                     }
                 )
             )
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
         except RuntimeError:
             pass
 

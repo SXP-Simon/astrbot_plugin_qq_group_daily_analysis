@@ -10,7 +10,7 @@ import re
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from ...shared.constants import AnalysisStage
 
@@ -38,7 +38,7 @@ class PluginLogBuffer(logging.Handler):
     专用插件日志处理器，挂载到 logging 捕获群分析插件全链路日志
     """
 
-    TAG_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
+    TAG_PATTERNS: ClassVar[list[tuple[str, str, re.Pattern[str]]]] = [
         (
             "LLM",
             "大模型调用",
@@ -93,7 +93,7 @@ class PluginLogBuffer(logging.Handler):
         ("Trace", "链路追踪", re.compile(r"(trace|span|context_metric)", re.I)),
     ]
 
-    STAGE_NAMES = {
+    STAGE_NAMES: ClassVar[dict[str, str]] = {
         AnalysisStage.FETCH_MESSAGES.value: "拉取聊天记录",
         AnalysisStage.CLEAN_MESSAGES.value: "消息清洗过滤",
         AnalysisStage.STATS_ANALYSIS.value: "基础统计分析",
@@ -257,14 +257,13 @@ class PluginLogBuffer(logging.Handler):
                 continue
             if target_tag and entry.tag.lower() != target_tag.lower():
                 continue
-            if search_kw:
-                if (
-                    search_kw not in entry.message.lower()
-                    and search_kw not in (entry.trace_id or "").lower()
-                    and search_kw not in entry.logger_name.lower()
-                    and search_kw not in (entry.location or "").lower()
-                ):
-                    continue
+            if search_kw and (
+                search_kw not in entry.message.lower()
+                and search_kw not in (entry.trace_id or "").lower()
+                and search_kw not in entry.logger_name.lower()
+                and search_kw not in (entry.location or "").lower()
+            ):
+                continue
             results.append(entry)
 
         total = len(results)

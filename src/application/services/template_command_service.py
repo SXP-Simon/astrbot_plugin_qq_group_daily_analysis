@@ -109,7 +109,7 @@ class TemplateCommandService:
                 item_path = os.path.join(base_dir, item)
                 if not os.path.isdir(item_path):
                     continue
-                if item.startswith("__") or item.startswith(".") or item == "format":
+                if item.startswith(("__", ".")) or item == "format":
                     continue
                 if (
                     os.path.isfile(os.path.join(item_path, "html_template.html"))

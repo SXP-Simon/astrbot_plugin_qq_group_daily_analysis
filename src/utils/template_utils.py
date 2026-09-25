@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from string import Template
+from typing import Any
 
 from .logger import logger
 
@@ -36,7 +37,7 @@ def is_str_format_template(template: str) -> bool:
 
     # 1. 预先建立排除模式 (匹配 ${var} 或 $var)
     dollar_patterns = [re.escape(v) for v in PLACEHOLDERS.values()] + [
-        rf"\${re.escape(k)}" for k in PLACEHOLDERS.keys()
+        rf"\${re.escape(k)}" for k in PLACEHOLDERS
     ]
     exclude_regex = "|".join(dollar_patterns)
 
@@ -45,14 +46,14 @@ def is_str_format_template(template: str) -> bool:
         return False
 
     # 2. 检查是否包含标准的花括号占位符 {key}
-    for key in PLACEHOLDERS.keys():
+    for key in PLACEHOLDERS:
         pattern = rf"(?<![\{{\$])\{{{key}\}}(?!\}})"
         if re.search(pattern, template):
             return True
     return False
 
 
-def upgrade_str_format_template(template: str) -> tuple[str, bool]:
+def upgrade_str_format_template(template: str | None) -> tuple[str, bool]:
     """如果模板是 str.format 风格，则自动升级为 string.Template 语法。
 
     Args:
@@ -83,7 +84,7 @@ def upgrade_str_format_template(template: str) -> tuple[str, bool]:
     return safe_template, True
 
 
-def render_template(template: str, strict: bool = False, **kwargs) -> str:
+def render_template(template: str | None, strict: bool = False, **kwargs: Any) -> str:
     """安全渲染 string.Template 模板。
 
     Args:

@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import enum
-from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ...domain.repositories.persistence_repository import ICheckpointStore
 from ...shared.constants import AnalysisStage
-from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Callable
+
+    from ...domain.repositories.persistence_repository import ICheckpointStore
+    from ...shared.trace_context import TraceContext
 
 
 @dataclass

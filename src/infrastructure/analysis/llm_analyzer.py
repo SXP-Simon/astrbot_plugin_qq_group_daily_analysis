@@ -6,7 +6,7 @@ LLM分析器模块
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
@@ -272,7 +272,7 @@ class LLMAnalyzer(IAnalysisProvider):
                 name = task_names[i]
                 if isinstance(result, Exception):
                     logger.error(f"分析任务 {name} 失败: {result}")
-                    subtask_errors.append(f"{name}: {str(result)}")
+                    subtask_errors.append(f"{name}: {result!s}")
                     continue
 
                 if name == "topic" and isinstance(result, tuple):
@@ -488,7 +488,7 @@ class LLMAnalyzer(IAnalysisProvider):
                     name = task_names[i]
                     if isinstance(result, Exception):
                         logger.error(f"增量{name}分析失败: {result}")
-                        subtask_errors.append(f"{name}: {str(result)}")
+                        subtask_errors.append(f"{name}: {result!s}")
                         continue
 
                     if name == "topic" and isinstance(result, tuple):
@@ -612,14 +612,13 @@ class LLMAnalyzer(IAnalysisProvider):
                         break
             return [], [], TokenUsage(), None
 
-    # 向后兼容的方法，保持原有调用方式
     async def _call_provider_with_retry(
         self,
-        provider,
+        provider: Any,
         prompt: str,
         umo: str | None = None,
         provider_id_key: str | None = None,
-    ):
+    ) -> Any:
         """
         向后兼容的LLM调用方法
         现在委托给llm_utils模块处理

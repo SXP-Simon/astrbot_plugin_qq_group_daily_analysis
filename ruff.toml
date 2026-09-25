@@ -20,6 +20,13 @@ select = [
   "Q",     # flake8-quotes
   "I",     # 导入顺序
   "UP",    # pyupgrade
+  "B",     # flake8-bugbear (隐藏Bug与设计缺陷)
+  "PIE",   # flake8-pie (无用与冗余代码)
+  "SIM",   # flake8-simplify (代码简化与死分支)
+  "ERA",   # eradicate (废弃注释代码拦截)
+  "RUF",   # Ruff 专属规则
+  "FA",    # flake8-future-annotations (类型延后导入)
+  "TCH",   # flake8-type-checking (类型导入隔离)
 ]
 ignore = [
   "F403",
@@ -27,4 +34,9 @@ ignore = [
   "E501",
   "ASYNC230", # 待后续统一处理
   "ASYNC240", # 待后续统一处理
+  "SIM105",   # contextlib.suppress 允许保留可读性更强的 try-except-pass
+  "B008",     # 允许部分特定参数默认构造
+  "RUF001",   # 允许中文字符串中的全角标点符号
+  "RUF002",   # 允许中文 Docstring 中的全角标点符号
+  "RUF003",   # 允许中文注释中的全角标点符号
 ]

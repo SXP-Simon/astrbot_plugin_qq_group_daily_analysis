@@ -11,7 +11,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from astrbot.api.provider import LLMResponse
-from astrbot.api.star import Context
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -23,19 +22,21 @@ from .llm_diagnostics import (
     extract_task_await_frames,
     format_task_await_chain,
 )
-from .structured_output_schema import JSONObject, JSONValue
 
 if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
     from ...config.config_manager import ConfigManager
+    from .structured_output_schema import JSONObject, JSONValue
 
 __all__ = [
     "LLMBlockDiagnosis",
-    "diagnose_llm_task_block",
-    "extract_task_await_frames",
-    "format_task_await_chain",
     "call_provider_with_retry",
-    "extract_token_usage",
+    "diagnose_llm_task_block",
     "extract_response_text",
+    "extract_task_await_frames",
+    "extract_token_usage",
+    "format_task_await_chain",
     "get_provider_id_with_fallback",
 ]
 
@@ -112,7 +113,7 @@ async def _call_provider_stream(
 
 
 async def _try_get_provider_id_by_id(
-    context, provider_id: str, description: str
+    context: Context, provider_id: str, description: str
 ) -> str | None:
     """
     尝试通过 ID 获取 Provider ID 的辅助函数
@@ -125,7 +126,7 @@ async def _try_get_provider_id_by_id(
     Returns:
         Provider ID 或 None
     """
-    if not provider_id or not isinstance(provider_id, str) or not provider_id.strip():
+    if not provider_id or not provider_id.strip():
         return None
 
     provider_id = provider_id.strip()
@@ -141,7 +142,7 @@ async def _try_get_provider_id_by_id(
     return None
 
 
-async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
+async def _try_get_session_provider_id(context: Context, umo: str | None) -> str | None:
     """
     尝试获取会话 Provider ID 的辅助函数
 
@@ -152,6 +153,8 @@ async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
     Returns:
         Provider ID 或 None
     """
+    if not umo:
+        return None
     try:
         # 使用新 API 获取当前会话的 Provider ID
         provider_id = await context.get_current_chat_provider_id(umo=umo)
@@ -163,7 +166,7 @@ async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
     return None
 
 
-async def _try_get_first_available_provider_id(context) -> str | None:
+async def _try_get_first_available_provider_id(context: Context) -> str | None:
     """
     尝试获取第一个可用 Provider ID 的辅助函数
 
@@ -673,7 +676,7 @@ async def call_provider_with_retry(
     return None
 
 
-def extract_token_usage(response) -> dict:
+def extract_token_usage(response: Any) -> dict[str, int]:
     """
     从LLM响应中提取token使用统计
 
@@ -728,7 +731,7 @@ def extract_token_usage(response) -> dict:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-def extract_response_text(response) -> str:
+def extract_response_text(response: Any) -> str:
     """
     从LLM响应中提取文本内容
 

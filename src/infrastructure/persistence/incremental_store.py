@@ -511,34 +511,15 @@ class IncrementalStore(IIncrementalStore):
                 continue
             batch = await self.get_batch_detail(group_id, batch_id)
             if batch:
-                topics_summary = []
-                for t in batch.topics:
-                    if isinstance(t, dict):
-                        topics_summary.append(
-                            {
-                                "topic": t.get("topic", ""),
-                                "contributors": t.get("contributors", []),
-                            }
-                        )
-                    else:
-                        topics_summary.append(
-                            {
-                                "topic": getattr(t, "topic", ""),
-                                "contributors": getattr(t, "contributors", []),
-                            }
-                        )
-
-                token_dict = (
-                    batch.token_usage
-                    if isinstance(batch.token_usage, dict)
-                    else {
-                        "prompt_tokens": getattr(batch.token_usage, "prompt_tokens", 0),
-                        "completion_tokens": getattr(
-                            batch.token_usage, "completion_tokens", 0
-                        ),
-                        "total_tokens": getattr(batch.token_usage, "total_tokens", 0),
+                topics_summary = [
+                    {
+                        "topic": t.get("topic", ""),
+                        "contributors": t.get("contributors", []),
                     }
-                )
+                    for t in batch.topics
+                ]
+
+                token_dict = batch.token_usage
 
                 participants_cnt = (
                     len(batch.participant_ids)

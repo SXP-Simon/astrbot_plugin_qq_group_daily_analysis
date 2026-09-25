@@ -7,10 +7,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from ..repositories.visualization_repository import IActivityVisualizer
 from ..value_objects import EmojiStatistics, GroupStatistics, TokenUsage
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
+
+if TYPE_CHECKING:
+    from ..repositories.visualization_repository import IActivityVisualizer
 
 
 class StatisticsService:

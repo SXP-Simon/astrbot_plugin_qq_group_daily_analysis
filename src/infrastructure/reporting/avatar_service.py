@@ -11,15 +11,18 @@ import hashlib
 import html
 import re
 import time
-from collections.abc import Callable
 from io import BytesIO
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
 from diskcache import Cache
 from PIL import Image, UnidentifiedImageError
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
 
 MAX_CONCURRENT_DOWNLOADS = 4
 AVATAR_DOWNLOAD_RETRY_TIMES = 3

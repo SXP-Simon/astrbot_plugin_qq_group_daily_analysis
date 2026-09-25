@@ -45,7 +45,7 @@ def fix_json(text: str) -> str:
 
         # 4. 处理字符串内容中的特殊字符
         # 转义字符串内的双引号
-        def escape_quotes_in_strings(match):
+        def escape_quotes_in_strings(match: re.Match[str]) -> str:
             content = match.group(1)
             # 转义内部的双引号
             content = content.replace('"', '\\"')
@@ -65,7 +65,7 @@ def fix_json(text: str) -> str:
         text = re.sub(r"}\s*{", "}, {", text)
 
         # 2. 确保字段名有引号（仅在对象开始或逗号后，避免破坏字符串值）
-        def quote_field_names(match):
+        def quote_field_names(match: re.Match[str]) -> str:
             prefix = match.group(1)
             key = match.group(2)
             return f'{prefix}"{key}":'

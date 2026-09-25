@@ -8,16 +8,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .chat import call_chat_api
 from .common import post_json_for_image
-from .context import DrawingRequestContext
 from .gemini import call_gemini_api
 from .google import call_google_api
 from .grok import call_grok_api
 from .images import call_images_api
 from .presets import call_preset_api, call_stepfun_api
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 @dataclass(slots=True)

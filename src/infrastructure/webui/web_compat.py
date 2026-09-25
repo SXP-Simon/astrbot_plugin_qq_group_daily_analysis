@@ -19,8 +19,6 @@ else:
         class Context:
             """AstrBot Context 抽象基类或回退别名。"""
 
-            pass
-
 
 _real_json_response: Any = None
 _real_error_response: Any = None

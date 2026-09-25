@@ -6,12 +6,14 @@ NapCatQQ 专属驱动实现 (NapCat Driver)
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .....utils.logger import logger
 from ...napcat_stream import upload_file_stream
 from .standard_driver import StandardOneBotDriver
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class NapCatDriver(StandardOneBotDriver):

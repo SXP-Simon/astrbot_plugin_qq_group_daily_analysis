@@ -28,7 +28,6 @@ class IReportGenerator(ABC):
         template_theme: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成图片报告"""
-        pass
 
     @abstractmethod
     async def generate_html_report(
@@ -45,14 +44,11 @@ class IReportGenerator(ABC):
         trace_id: str | None = None,
     ) -> tuple[str | None, str | None]:
         """生成 HTML 报告"""
-        pass
 
     @abstractmethod
     def generate_text_report(self, analysis_result: dict) -> str:
         """生成文本报告"""
-        pass
 
     @abstractmethod
     async def close(self):
         """释放资源"""
-        pass

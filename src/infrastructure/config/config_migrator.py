@@ -354,11 +354,7 @@ class ConfigMigrator:
                 logger.warning("插件旧配置备份失败，本次不会更新升级保护状态。")
                 return
 
-        config_data = (
-            dict(self.cm.config)
-            if hasattr(self.cm, "config") and isinstance(self.cm.config, dict)
-            else {}
-        )
+        config_data = dict(self.cm.config) if self.cm.config else {}
         self.save_upgrade_protection_state(
             state_path,
             {
@@ -374,9 +370,7 @@ class ConfigMigrator:
         Returns:
             Path: 插件根目录路径。
         """
-        if hasattr(self.cm, "_get_plugin_root") and callable(
-            getattr(self.cm, "_get_plugin_root")
-        ):
+        if hasattr(self.cm, "_get_plugin_root") and callable(self.cm._get_plugin_root):
             return self.cm._get_plugin_root()
         return self.get_plugin_root()
 

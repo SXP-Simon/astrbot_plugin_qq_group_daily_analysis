@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from ..value_objects import ActivityVisualization
+if TYPE_CHECKING:
+    from ..value_objects import ActivityVisualization
 
 
 class IActivityVisualizer(ABC):
@@ -18,4 +20,3 @@ class IActivityVisualizer(ABC):
         self, messages: list[dict]
     ) -> ActivityVisualization:
         """从消息列表生成活跃度可视化数据"""
-        pass

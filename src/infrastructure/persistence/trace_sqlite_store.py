@@ -595,7 +595,7 @@ class TraceSQLiteStore:
                 ORDER BY {order_field} {order_direction}
                 LIMIT ? OFFSET ?
             """
-            rows = conn.execute(query_sql, params + [limit, offset]).fetchall()
+            rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
 
             traces = []
             for r in rows:

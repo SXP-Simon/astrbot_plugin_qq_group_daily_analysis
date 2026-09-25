@@ -3,12 +3,14 @@ from __future__ import annotations
 import base64
 import binascii
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_gemini_api(
@@ -110,11 +112,11 @@ async def call_gemini_api(
 
     try:
         data = resp.json()
-    except Exception:
+    except Exception as e:
         raise Exception(
             f"Gemini API 未返回合法的 JSON [HTTP {resp.status_code}]: "
             f"<body len={len(resp.content)}>"
-        )
+        ) from e
 
     steps = data.get("steps") if isinstance(data, dict) else None
     model_outputs = (

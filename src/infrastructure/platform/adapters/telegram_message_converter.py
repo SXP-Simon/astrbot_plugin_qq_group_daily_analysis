@@ -7,17 +7,20 @@ Telegram 消息转换器 (Telegram Message Converter)
 
 from __future__ import annotations
 
-from collections.abc import Callable, Coroutine
 from dataclasses import replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ....domain.value_objects.unified_group import UnifiedMember
 from ....domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
     UnifiedMessage,
 )
 from ....utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
+    from ....domain.value_objects.unified_group import UnifiedMember
 
 
 class TelegramMessageConverter:
@@ -58,9 +61,7 @@ class TelegramMessageConverter:
             return True
         if normalized.lower() in {"unknown", "none", "null", "nil", "undefined"}:
             return True
-        if sender_id and normalized == str(sender_id).strip():
-            return True
-        return False
+        return bool(sender_id and normalized == str(sender_id).strip())
 
     @classmethod
     async def fix_sender_name_if_needed(

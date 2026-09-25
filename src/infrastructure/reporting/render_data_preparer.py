@@ -15,7 +15,6 @@ import copy
 import html
 import json
 import re
-from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -23,11 +22,13 @@ from typing import TYPE_CHECKING, Any
 from markupsafe import Markup
 
 from ...utils.logger import logger
-from .avatar_service import AvatarService
 from .profile_mappings import resolve_profile_info
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ..visualization.activity_charts import ActivityVisualizer
+    from .avatar_service import AvatarService
     from .templates import HTMLTemplates
 
 DEFAULT_MIKU_ASSETS_CDN_URL = "https://jsd.onmicrosoft.cn/gh/SXP-Simon/daily_analysis_assets@assets/miku_assets/assets"

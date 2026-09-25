@@ -8,11 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
@@ -63,6 +61,11 @@ from .src.shared.constants import PLUGIN_NAME
 from .src.shared.trace_context import TraceContext
 from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Callable
+
+    from astrbot.api import AstrBotConfig
 
 
 def _resolve_settings_handler(plugin: Any) -> SettingsCommandHandler:

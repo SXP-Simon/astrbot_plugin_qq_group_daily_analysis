@@ -548,13 +548,13 @@ class QQOfficialAdapter(PlatformAdapter):
             return None
         try:
             timeout = aiohttp.ClientTimeout(total=15)
-            async with aiohttp.ClientSession(
-                timeout=timeout, trust_env=True
-            ) as session:
-                async with session.get(avatar_url) as response:
-                    if response.status != 200:
-                        return None
-                    payload = await response.read()
+            async with (
+                aiohttp.ClientSession(timeout=timeout, trust_env=True) as session,
+                session.get(avatar_url) as response,
+            ):
+                if response.status != 200:
+                    return None
+                payload = await response.read()
             if not payload:
                 return None
             mime = "image/png" if payload.startswith(b"\x89PNG") else "image/jpeg"

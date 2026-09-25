@@ -16,12 +16,12 @@ if TYPE_CHECKING:
     from .adapters.telegram_adapter import TelegramAdapter
 
 __all__ = [
-    "PlatformAdapterFactory",
-    "PlatformAdapter",
+    "DiscordAdapter",
     "OneBotAdapter",
+    "PlatformAdapter",
+    "PlatformAdapterFactory",
     "QQOfficialAdapter",
     "TelegramAdapter",
-    "DiscordAdapter",
 ]
 
 _LAZY_EXPORTS = {

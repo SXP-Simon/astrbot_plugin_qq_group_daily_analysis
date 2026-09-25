@@ -10,7 +10,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
@@ -29,6 +29,18 @@ if TYPE_CHECKING:
 class HTMLTemplates:
     """HTML模板管理类"""
 
+    KNOWN_TEMPLATE_NAMES: ClassVar[dict[str, str]] = {
+        "scrapbook": "手账风格 (Scrapbook / 默认)",
+        "ATRI": "亚托莉 (ATRI)",
+        "HatsuneMiku": "初音未来 (HatsuneMiku)",
+        "spring_festival": "新春佳节 (Spring Festival)",
+        "retro_futurism": "复古未来 (Retro Futurism)",
+        "hack": "黑客赛博 (Hack)",
+        "BlueArchive": "蔚蓝档案 (BlueArchive)",
+        "simple": "极简黑白 (Simple)",
+        "art_nouveau": "新艺术运动 (Art Nouveau)",
+    }
+
     config_manager: ConfigManager
     base_dir: str
     platform_base_dir: str
@@ -46,18 +58,6 @@ class HTMLTemplates:
         # 缓存不同模板的Jinja2环境（多线程安全）
         self._envs = {}
         self._env_lock = threading.Lock()
-
-    KNOWN_TEMPLATE_NAMES: dict[str, str] = {
-        "scrapbook": "手账风格 (Scrapbook / 默认)",
-        "ATRI": "亚托莉 (ATRI)",
-        "HatsuneMiku": "初音未来 (HatsuneMiku)",
-        "spring_festival": "新春佳节 (Spring Festival)",
-        "retro_futurism": "复古未来 (Retro Futurism)",
-        "hack": "黑客赛博 (Hack)",
-        "BlueArchive": "蔚蓝档案 (BlueArchive)",
-        "simple": "极简黑白 (Simple)",
-        "art_nouveau": "新艺术运动 (Art Nouveau)",
-    }
 
     def _get_env_sync(self, template_theme: str | None = None) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（同步版本，供 asyncio.to_thread 调用）"""
@@ -284,7 +284,7 @@ class HTMLTemplates:
             return ""
 
     def render_template(
-        self, template_name: str, template_theme: str | None = None, **kwargs
+        self, template_name: str, template_theme: str | None = None, **kwargs: Any
     ) -> str:
         """渲染指定的模板文件
 
@@ -307,7 +307,7 @@ class HTMLTemplates:
             return ""
 
     def render_platform_template(
-        self, platform_name: str, template_name: str, **kwargs
+        self, platform_name: str, template_name: str, **kwargs: Any
     ) -> str:
         """渲染与报告主题解耦的平台专用模板。"""
         try:

@@ -111,24 +111,14 @@ def extract_task_await_frames(
             )
             break
 
-        if code is not None:
-            frames.append(
-                _TaskAwaitFrame(
-                    filename=code.co_filename,
-                    lineno=frame.f_lineno if frame is not None else None,
-                    func_name=code.co_name,
-                    target_type=type(current).__name__,
-                )
+        frames.append(
+            _TaskAwaitFrame(
+                filename=code.co_filename,
+                lineno=frame.f_lineno if frame is not None else None,
+                func_name=code.co_name,
+                target_type=type(current).__name__,
             )
-        else:
-            frames.append(
-                _TaskAwaitFrame(
-                    filename="<Unknown>",
-                    lineno=None,
-                    func_name=type(current).__name__,
-                    target_type=type(current).__name__,
-                )
-            )
+        )
 
         current = next_awaitable
 

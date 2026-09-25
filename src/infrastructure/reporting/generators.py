@@ -10,7 +10,6 @@ import base64
 import json
 import os
 import time
-from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from enum import Enum
@@ -19,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-from markupsafe import Markup
 from PIL import Image
 
 from ...domain.repositories.report_repository import IReportGenerator
@@ -49,6 +47,10 @@ from .render_diagnostics import (
 from .templates import HTMLTemplates
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from markupsafe import Markup
+
     from ..config.config_manager import ConfigManager
 
 
@@ -60,11 +62,17 @@ class ReportGenerator(IReportGenerator):
     activity_visualizer: ActivityVisualizer
     html_templates: HTMLTemplates
     _render_semaphore: asyncio.Semaphore
-    _qq_official_markdown_generator: QQOfficialMarkdownReportGenerator
-    _avatar_service: AvatarService
-    _avatar_cache: Any
+    _avatar_cache: Any = None
     _profile_asset_manifest: dict[str, dict]
     _preparer: RenderDataPreparer
+    _qq_official_markdown_generator_inst: QQOfficialMarkdownReportGenerator | None = (
+        None
+    )
+    _avatar_service_inst: AvatarService | None = None
+    _avatar_session: Any = None
+    _avatar_session_lock: Any = None
+    _avatar_session_concurrent_semaphore: Any = None
+    _avatar_failure_cache: Any = None
 
     def __init__(self, config_manager: ConfigManager, data_dir: Path) -> None:
         """初始化报告生成器。
@@ -82,18 +90,18 @@ class ReportGenerator(IReportGenerator):
         else:
             max_concurrent = 2
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
-        self._qq_official_markdown_generator = QQOfficialMarkdownReportGenerator(
+        self._qq_official_markdown_generator_inst = QQOfficialMarkdownReportGenerator(
             config_manager,
             self.html_templates,
             self._render_semaphore,
         )
 
-        self._avatar_service = AvatarService(self.data_dir)
-        self._avatar_cache = self._avatar_service._avatar_cache
+        self._avatar_service_inst = AvatarService(self.data_dir)
+        self._avatar_cache = self._avatar_service_inst._avatar_cache
         self._profile_asset_manifest = load_profile_asset_manifest()
         self._preparer = RenderDataPreparer(
             config_manager=self.config_manager,
-            avatar_service=self._avatar_service,
+            avatar_service=self._avatar_service_inst,
             html_templates=self.html_templates,
             activity_visualizer=self.activity_visualizer,
             profile_asset_manifest=self._profile_asset_manifest,
@@ -308,8 +316,8 @@ class ReportGenerator(IReportGenerator):
 
                             if actual_data_head:
                                 if actual_data_head.startswith(
-                                    b"\xff\xd8"
-                                ) or actual_data_head.startswith(b"\x89PNG"):
+                                    (b"\xff\xd8", b"\x89PNG")
+                                ):
                                     is_valid = True
                                 else:
                                     raw_sample = b""
@@ -628,7 +636,7 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"HTML 报告已保存: {html_path}")
 
-            def json_default_encoder(obj):
+            def json_default_encoder(obj: Any) -> Any:
                 if hasattr(obj, "to_dict") and callable(obj.to_dict):
                     return obj.to_dict()
                 if is_dataclass(obj) and not isinstance(obj, type):
@@ -810,27 +818,62 @@ class ReportGenerator(IReportGenerator):
         Returns:
             元组 (markdown_text, image_url)。
         """
-        generator = getattr(self, "_qq_official_markdown_generator", None)
-        if generator is None:
-            generator = QQOfficialMarkdownReportGenerator(
-                self.config_manager,
-                getattr(self, "html_templates", None),
-                getattr(self, "_render_semaphore", None),
-            )
-            self._qq_official_markdown_generator = generator
-        return await generator.generate(
+        return await self._qq_official_markdown_generator.generate(
             analysis_result,
             html_render_func,
         )
 
     @property
+    def _qq_official_markdown_generator(self) -> QQOfficialMarkdownReportGenerator:
+        if self._qq_official_markdown_generator_inst is None:
+            templates = getattr(self, "html_templates", None) or HTMLTemplates(
+                self.config_manager
+            )
+            sem = getattr(self, "_render_semaphore", None) or asyncio.Semaphore(2)
+            self._qq_official_markdown_generator_inst = (
+                QQOfficialMarkdownReportGenerator(
+                    self.config_manager,
+                    templates,
+                    sem,
+                )
+            )
+        return self._qq_official_markdown_generator_inst
+
+    @_qq_official_markdown_generator.setter
+    def _qq_official_markdown_generator(
+        self, val: QQOfficialMarkdownReportGenerator
+    ) -> None:
+        self._qq_official_markdown_generator_inst = val
+
+    @property
+    def _avatar_service(self) -> AvatarService:
+        if self._avatar_service_inst is None:
+            data_dir = getattr(self, "data_dir", None) or Path("./data")
+            inst = AvatarService(data_dir)
+            if self._avatar_cache is not None:
+                inst._avatar_cache = self._avatar_cache
+            if self._avatar_failure_cache is not None:
+                inst._avatar_failure_cache = self._avatar_failure_cache
+            if self._avatar_session is not None:
+                inst._avatar_session = self._avatar_session
+            if self._avatar_session_lock is not None:
+                inst._avatar_session_lock = self._avatar_session_lock
+            if self._avatar_session_concurrent_semaphore is not None:
+                inst._avatar_session_concurrent_semaphore = (
+                    self._avatar_session_concurrent_semaphore
+                )
+            self._avatar_service_inst = inst
+        return self._avatar_service_inst
+
+    @_avatar_service.setter
+    def _avatar_service(self, val: AvatarService) -> None:
+        self._avatar_service_inst = val
+
+    @property
     def _preparer_service(self) -> RenderDataPreparer:
         """获取或懒加载 RenderDataPreparer 实例。"""
-        if hasattr(self, "_preparer"):
+        if hasattr(self, "_preparer") and self._preparer:
             return self._preparer
-        avatar_service = getattr(self, "_avatar_service", None) or AvatarService(
-            getattr(self, "data_dir", Path("data"))
-        )
         profile_manifest = (
             getattr(self, "_profile_asset_manifest", None)
             or load_profile_asset_manifest()
@@ -843,12 +886,16 @@ class ReportGenerator(IReportGenerator):
         )
         self._preparer = RenderDataPreparer(
             config_manager=self.config_manager,
-            avatar_service=avatar_service,
+            avatar_service=self._avatar_service,
             html_templates=html_templates,
             activity_visualizer=activity_visualizer,
             profile_asset_manifest=profile_manifest,
         )
         return self._preparer
+
+    @_preparer_service.setter
+    def _preparer_service(self, val: RenderDataPreparer) -> None:
+        self._preparer = val
 
     def _sanitize_analysis_result_for_export(
         self, analysis_result: dict
@@ -977,22 +1024,17 @@ class ReportGenerator(IReportGenerator):
         self, user_id: str, avatar_url_getter: Callable | None = None
     ) -> bytes | None:
         """获取头像原始字节流。"""
-        if hasattr(self, "_avatar_service"):
-            return await self._avatar_service.get_user_avatar_bytes(
-                user_id, avatar_url_getter
+        if self._avatar_session is not None:
+            self._avatar_service._avatar_session = self._avatar_session
+        if self._avatar_session_lock is not None:
+            self._avatar_service._avatar_session_lock = self._avatar_session_lock
+        if self._avatar_session_concurrent_semaphore is not None:
+            self._avatar_service._avatar_session_concurrent_semaphore = (
+                self._avatar_session_concurrent_semaphore
             )
-        # 兼容直接通过 object.__new__ 初始化的测试用例
-        service = object.__new__(AvatarService)
-        service._avatar_session = getattr(self, "_avatar_session", None)
-        service._avatar_session_lock = getattr(
-            self, "_avatar_session_lock", asyncio.Lock()
+        return await self._avatar_service.get_user_avatar_bytes(
+            user_id, avatar_url_getter
         )
-        service._avatar_session_concurrent_semaphore = getattr(
-            self,
-            "_avatar_session_concurrent_semaphore",
-            asyncio.Semaphore(4),
-        )
-        return await service.get_user_avatar_bytes(user_id, avatar_url_getter)
 
     async def _get_user_avatar(
         self,
@@ -1001,41 +1043,24 @@ class ReportGenerator(IReportGenerator):
         avatar_cache_namespace: str | None = None,
     ) -> str:
         """获取用户头像 Base64（委托 AvatarService）。"""
-        if hasattr(self, "_avatar_service"):
-            return await self._avatar_service.get_user_avatar(
-                avatar_id, avatar_url_getter, avatar_cache_namespace
-            )
+        if self._avatar_cache is not None:
+            self._avatar_service._avatar_cache = self._avatar_cache
+        if self._avatar_failure_cache is not None:
+            self._avatar_service._avatar_failure_cache = self._avatar_failure_cache
 
-        # 兼容直接通过 object.__new__ 初始化的测试用例
-        cache_key = AvatarService.get_avatar_cache_key(
-            avatar_id, avatar_cache_namespace
+        if "_get_user_avatar_bytes" in self.__dict__:
+            orig = self._avatar_service.get_user_avatar_bytes
+            self._avatar_service.get_user_avatar_bytes = self._get_user_avatar_bytes  # type: ignore
+            try:
+                return await self._avatar_service.get_user_avatar(
+                    avatar_id, avatar_url_getter, avatar_cache_namespace
+                )
+            finally:
+                self._avatar_service.get_user_avatar_bytes = orig  # type: ignore
+
+        return await self._avatar_service.get_user_avatar(
+            avatar_id, avatar_url_getter, avatar_cache_namespace
         )
-        avatar_cache = getattr(self, "_avatar_cache", None)
-        if avatar_cache is not None and cache_key in avatar_cache:
-            data = avatar_cache[cache_key]
-            return str(data)
-
-        failure_cache = getattr(self, "_avatar_failure_cache", None)
-        if failure_cache is not None:
-            failed_until = failure_cache.get(cache_key, 0)
-            if failed_until > time.monotonic():
-                return self._get_default_avatar_base64()
-
-        avatar_bytes = await self._get_user_avatar_bytes(avatar_id, avatar_url_getter)
-        if not avatar_bytes:
-            if failure_cache is not None:
-                failure_cache[cache_key] = time.monotonic() + 60
-            return self._get_default_avatar_base64()
-
-        avatar = AvatarService.b64_with_mime(
-            AvatarService.resize_avatar_bytes(avatar_bytes)
-        )
-        if avatar:
-            if avatar_cache is not None:
-                avatar_cache[cache_key] = avatar
-            return avatar
-
-        return self._get_default_avatar_base64()
 
     def _get_default_avatar_base64(self) -> str:
         """获取默认头像 Base64。"""

@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
-from ...persistence.trace_sqlite_store import TraceSQLiteStore
 from ..web_compat import error_response, json_response, request
+
+if TYPE_CHECKING:
+    from ...persistence.trace_sqlite_store import TraceSQLiteStore
 
 
 class DataManagementRoutes:

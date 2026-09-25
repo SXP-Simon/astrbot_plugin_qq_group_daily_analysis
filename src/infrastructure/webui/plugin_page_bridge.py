@@ -6,14 +6,11 @@ AstrBot 插件 Pages 后端 Web API 桥接服务
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
-from ..persistence.trace_sqlite_store import TraceSQLiteStore
-from .active_task_manager import ActiveTaskManager
 from .routes import (
     ConfigRoutes,
     DataManagementRoutes,
@@ -31,6 +28,12 @@ from .web_compat import (
     request,
     stream_response,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from ..persistence.trace_sqlite_store import TraceSQLiteStore
+    from .active_task_manager import ActiveTaskManager
 
 __all__ = [
     "Context",

@@ -104,13 +104,12 @@ class PlatformCapabilities:
         Returns:
             bool: 支持该格式则返回 True
         """
-        if format == "text":
-            return self.supports_text_message
-        elif format == "image":
-            return self.supports_image_message
-        elif format == "pdf":
-            return self.supports_file_message
-        return False
+        format_map = {
+            "text": self.supports_text_message,
+            "image": self.supports_image_message,
+            "pdf": self.supports_file_message,
+        }
+        return format_map.get(format, False)
 
     def get_effective_days(self, requested_days: int) -> int:
         """

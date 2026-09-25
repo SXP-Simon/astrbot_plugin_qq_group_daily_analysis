@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import re
 from collections import Counter, OrderedDict
+from typing import TYPE_CHECKING
 
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.star import Context
-
-from ...infrastructure.persistence.platform_group_registry import PlatformGroupRegistry
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.star import Context
+
+    from ...infrastructure.persistence.platform_group_registry import (
+        PlatformGroupRegistry,
+    )
 
 _QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
 _QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")

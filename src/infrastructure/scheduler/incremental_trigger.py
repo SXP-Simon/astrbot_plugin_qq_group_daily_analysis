@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from ..config.config_manager import ConfigManager
 
 

@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from ..value_objects.platform_capabilities import PlatformCapabilities
-from ..value_objects.unified_group import UnifiedGroup, UnifiedMember
-from ..value_objects.unified_message import UnifiedMessage
+if TYPE_CHECKING:
+    from ..value_objects.platform_capabilities import PlatformCapabilities
+    from ..value_objects.unified_group import UnifiedGroup, UnifiedMember
+    from ..value_objects.unified_message import UnifiedMessage
 
 
 class IMessageRepository(ABC):
@@ -41,17 +43,14 @@ class IMessageRepository(ABC):
         返回:
             统一消息列表，按时间升序排列
         """
-        pass
 
     @abstractmethod
     def get_capabilities(self) -> PlatformCapabilities:
         """获取平台能力"""
-        pass
 
     @abstractmethod
     def get_platform_name(self) -> str:
         """获取平台名称"""
-        pass
 
 
 class IMessageSender(ABC):
@@ -65,7 +64,6 @@ class IMessageSender(ABC):
         reply_to: str | None = None,
     ) -> bool:
         """发送文本消息"""
-        pass
 
     @abstractmethod
     async def send_image(
@@ -75,7 +73,6 @@ class IMessageSender(ABC):
         caption: str = "",
     ) -> bool:
         """发送图片消息"""
-        pass
 
     @abstractmethod
     async def send_forward_msg(
@@ -91,7 +88,6 @@ class IMessageSender(ABC):
             nodes: 转发节点列表。每个节点通常包含 name, uin (或 user_id), content。
                    目前主要用于 OneBot 兼容性。
         """
-        pass
 
     @abstractmethod
     async def send_file(
@@ -101,7 +97,6 @@ class IMessageSender(ABC):
         filename: str | None = None,
     ) -> bool:
         """发送文件"""
-        pass
 
 
 class IGroupInfoRepository(ABC):
@@ -110,17 +105,14 @@ class IGroupInfoRepository(ABC):
     @abstractmethod
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取群组信息"""
-        pass
 
     @abstractmethod
     async def get_group_list(self) -> list[str]:
         """获取机器人所在的所有群组 ID"""
-        pass
 
     @abstractmethod
     async def get_member_list(self, group_id: str) -> list[UnifiedMember]:
         """获取群组成员列表"""
-        pass
 
     @abstractmethod
     async def get_member_info(
@@ -129,4 +121,3 @@ class IGroupInfoRepository(ABC):
         user_id: str,
     ) -> UnifiedMember | None:
         """获取指定成员信息"""
-        pass

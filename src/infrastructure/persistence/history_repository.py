@@ -181,7 +181,7 @@ class HistoryRepository:
             cutoff = (datetime.now() - timedelta(days=keep_days)).strftime("%Y-%m-%d")
 
             # 筛选已过期的日期
-            dates_to_delete = [date for date in daily.keys() if date < cutoff]
+            dates_to_delete = [date for date in daily if date < cutoff]
 
             for date in dates_to_delete:
                 del daily[date]

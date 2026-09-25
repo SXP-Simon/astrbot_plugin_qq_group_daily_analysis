@@ -20,8 +20,6 @@ _LLM_SEMAPHORE_WARN_SECONDS = 15.0
 class DuplicateGroupTaskError(Exception):
     """当同一个群组在同一时间尝试启动相同类型的重复任务时抛出。"""
 
-    pass
-
 
 class TaskGuard:
     """任务并发控制与排他锁管理器。"""

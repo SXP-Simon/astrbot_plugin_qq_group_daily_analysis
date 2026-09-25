@@ -7,23 +7,24 @@
 from __future__ import annotations
 
 import time as time_mod
-from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from astrbot.api.event import AstrMessageEvent
     from astrbot.api.star import Context
 
+    from ...domain.repositories.persistence_repository import IIncrementalStore
+    from ...domain.services.incremental_merge_service import IncrementalMergeService
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.platform.template_preview import TemplatePreviewRouter
     from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
+    from ..services.template_command_service import TemplateCommandService
 
-from ...domain.repositories.persistence_repository import IIncrementalStore
-from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ..services.analysis_application_service import DuplicateGroupTaskError
-from ..services.template_command_service import TemplateCommandService
 
 
 class SettingsCommandHandler:
@@ -277,19 +278,15 @@ class SettingsCommandHandler:
                 else:
                     result = {"success": False, "reason": "auto_scheduler_missing"}
 
-                if isinstance(result, dict) and result.get("success"):
+                if result.get("success"):
                     yield event.plain_result("✅ 自动分析及报告发送成功，请查看群消息")
                 else:
-                    reason = (
-                        result.get("reason", "unknown")
-                        if isinstance(result, dict)
-                        else "invalid_result"
-                    )
+                    reason = result.get("reason", "unknown")
                     yield event.plain_result(f"❌ 自动分析或报告发送失败: {reason}")
             except DuplicateGroupTaskError:
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
             except Exception as e:
-                yield event.plain_result(f"❌ 自动分析测试失败: {str(e)}")
+                yield event.plain_result(f"❌ 自动分析测试失败: {e!s}")
             return
         elif action == "incremental_debug":
             current_state = self.config_manager.get_incremental_report_immediately()
@@ -318,11 +315,7 @@ class SettingsCommandHandler:
                 "已启用" if self.config_manager.is_auto_analysis_enabled() else "未启用"
             )
             auto_time_raw = self.config_manager.get_auto_analysis_time()
-            auto_time_str = (
-                ", ".join(auto_time_raw)
-                if isinstance(auto_time_raw, list)
-                else str(auto_time_raw)
-            )
+            auto_time_str = ", ".join(auto_time_raw)
 
             output_formats = self.config_manager.get_output_format()
             output_format = output_formats[0] if output_formats else "image"

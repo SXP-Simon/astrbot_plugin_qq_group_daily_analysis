@@ -8,24 +8,10 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
-from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
-from ...domain.repositories.analysis_repository import IAnalysisProvider
-from ...domain.repositories.persistence_repository import (
-    ICheckpointStore,
-    IIncrementalStore,
-)
-from ...domain.repositories.report_repository import IReportGenerator
-from ...domain.services.analysis_domain_service import (
-    AnalysisDomainService,
-    UserActivityStats,
-)
-from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ...domain.services.message_cleaner_service import MessageCleanerService
-from ...domain.services.statistics_service import StatisticsService
 from ...domain.value_objects import TokenUsage
-from ...domain.value_objects.unified_message import UnifiedMessage
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -40,6 +26,21 @@ from .pipeline_context import PipelineContext
 from .task_guard import DuplicateGroupTaskError, TaskGuard
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from ...domain.repositories.analysis_repository import IAnalysisProvider
+    from ...domain.repositories.persistence_repository import (
+        ICheckpointStore,
+        IIncrementalStore,
+    )
+    from ...domain.repositories.report_repository import IReportGenerator
+    from ...domain.services.analysis_domain_service import (
+        AnalysisDomainService,
+        UserActivityStats,
+    )
+    from ...domain.services.incremental_merge_service import IncrementalMergeService
+    from ...domain.services.statistics_service import StatisticsService
+    from ...domain.value_objects.unified_message import UnifiedMessage
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager

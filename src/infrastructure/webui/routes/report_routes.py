@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ....utils.logger import logger
-from ...persistence.trace_sqlite_store import TraceSQLiteStore
 from ...reporting.template_installer import TemplateInstallError, validate_template_name
 from ..web_compat import error_response, json_response, request
 
@@ -19,6 +18,7 @@ if TYPE_CHECKING:
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
+    from ...persistence.trace_sqlite_store import TraceSQLiteStore
     from ...reporting.dispatcher import ReportDispatcher
 
 

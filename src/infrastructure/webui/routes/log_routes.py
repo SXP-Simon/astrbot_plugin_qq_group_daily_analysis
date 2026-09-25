@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....utils.logger import logger
 from ...logging.plugin_log_buffer import global_log_buffer
-from ..active_task_manager import ActiveTaskManager
 from ..web_compat import error_response, json_response, request, stream_response
+
+if TYPE_CHECKING:
+    from ..active_task_manager import ActiveTaskManager
 
 
 class LogRoutes:

@@ -154,7 +154,7 @@ def builtin_template_names() -> list[str]:
 
 def validate_template_name(name: str) -> str:
     """校验并规范化模板名。仅做安全校验，不约束命名风格。"""
-    if not isinstance(name, str) or not name.strip():
+    if not name or not name.strip():
         raise TemplateInstallError("模板名不能为空。")
     cleaned = name.strip()
     if cleaned in {".", ".."}:
@@ -199,11 +199,7 @@ def _validate_archive_members(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
             raise TemplateInstallError(
                 f"压缩包包含控制字符的文件名: {member.filename!r}"
             )
-        if (
-            norm.startswith("/")
-            or norm.startswith("//")
-            or re.match(r"^[A-Za-z]:", norm)
-        ):
+        if norm.startswith(("/", "//")) or re.match(r"^[A-Za-z]:", norm):
             raise TemplateInstallError(f"压缩包包含非法绝对路径: {member.filename}")
         parts = norm.split("/")
         if any(part in {".", ".."} for part in parts):
@@ -436,7 +432,7 @@ def parse_github_repo_url(repo_url: str) -> dict[str, str]:
     Returns:
         包含 owner/repo/branch/default_name 的字典。
     """
-    if not isinstance(repo_url, str) or not repo_url.strip():
+    if not repo_url or not repo_url.strip():
         raise TemplateInstallError("GitHub 链接不能为空。")
     url = repo_url.strip()
     parsed = urlparse(url)

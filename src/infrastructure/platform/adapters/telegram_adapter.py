@@ -13,6 +13,7 @@ import os
 import time
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ....domain.value_objects.platform_capabilities import (
@@ -20,13 +21,14 @@ from ....domain.value_objects.platform_capabilities import (
     PlatformCapabilities,
 )
 from ....domain.value_objects.unified_group import UnifiedGroup, UnifiedMember
-from ....domain.value_objects.unified_message import UnifiedMessage
 from ....utils.logger import logger
 from ..base import PlatformAdapter
 from .telegram_message_converter import TelegramMessageConverter
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
+
+    from ....domain.value_objects.unified_message import UnifiedMessage
 
 # Telegram 依赖
 try:
@@ -309,7 +311,7 @@ class TelegramAdapter(PlatformAdapter):
         if self._platform_id:
             return self._platform_id
 
-        if isinstance(self.config, dict):
+        if self.config:
             config_platform_id = str(self.config.get("platform_id", "")).strip()
             if config_platform_id:
                 return config_platform_id
@@ -421,23 +423,25 @@ class TelegramAdapter(PlatformAdapter):
                 try:
                     import aiohttp
 
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
+                    async with (
+                        aiohttp.ClientSession() as session,
+                        session.get(
                             image_path, timeout=aiohttp.ClientTimeout(total=30)
-                        ) as resp:
-                            if resp.status == 200:
-                                data = await resp.read()
-                                file_obj = BytesIO(data)
-                                is_temp_obj = True
-                            else:
-                                file_obj = image_path  # 尝试直接发 URL
+                        ) as resp,
+                    ):
+                        if resp.status == 200:
+                            data = await resp.read()
+                            file_obj = BytesIO(data)
+                            is_temp_obj = True
+                        else:
+                            file_obj = image_path  # 尝试直接发 URL
                 except Exception as e:
                     logger.warning(f"[Telegram] 下载图片失败，尝试直接发送: {e}")
                     file_obj = image_path
             else:
                 # 本地文件
                 if os.path.exists(image_path):
-                    file_obj = open(image_path, "rb")
+                    file_obj = BytesIO(Path(image_path).read_bytes())
                     is_temp_obj = True
                 else:
                     file_obj = image_path
@@ -505,7 +509,7 @@ class TelegramAdapter(PlatformAdapter):
                     if not filename:
                         filename = "file.png"
             elif os.path.isfile(file_path):
-                file_obj = open(file_path, "rb")
+                file_obj = BytesIO(Path(file_path).read_bytes())
                 is_temp_obj = True
                 if not filename:
                     filename = os.path.basename(file_path)

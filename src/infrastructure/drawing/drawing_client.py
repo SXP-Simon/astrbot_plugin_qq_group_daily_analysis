@@ -242,8 +242,7 @@ class DrawingClient:
                 status_code = int(status_match.group(1)) if status_match else None
                 is_retryable_network_error = isinstance(exc, httpx.RequestError) or (
                     status_code in {408, 409, 429}
-                    or status_code is not None
-                    and status_code >= 500
+                    or (status_code is not None and status_code >= 500)
                 )
                 if not is_retryable_network_error or network_retry_count >= max_retries:
                     break

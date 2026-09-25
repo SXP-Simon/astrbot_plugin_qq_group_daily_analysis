@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_grok_api(
@@ -82,11 +84,11 @@ async def call_grok_api(
 
     try:
         data = resp.json()
-    except Exception:
+    except Exception as e:
         raise Exception(
             f"Grok API 未返回合法的 JSON [HTTP {resp.status_code}]: "
             f"<body len={len(resp.content)}>"
-        )
+        ) from e
 
     image = await context.extract_image(data, context.get_request_proxy(provider))
     if image:

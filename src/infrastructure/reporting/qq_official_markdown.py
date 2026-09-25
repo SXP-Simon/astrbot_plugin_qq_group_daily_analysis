@@ -23,7 +23,7 @@ class QQOfficialMarkdownReportGenerator:
         self.render_semaphore = render_semaphore
 
     async def generate(
-        self, analysis_result: dict, html_render_func=None
+        self, analysis_result: dict, html_render_func: Any = None
     ) -> tuple[str, str]:
         """Generate QQ Markdown and a URL-free Markdown fallback report."""
         fallback_report = self._generate_markdown_report(analysis_result)
@@ -44,7 +44,7 @@ class QQOfficialMarkdownReportGenerator:
         )
 
     async def _generate_summary_dashboard_url(
-        self, analysis_result: dict, html_render_func
+        self, analysis_result: dict, html_render_func: Any
     ) -> str | None:
         stats = analysis_result["statistics"]
         hourly_counts = self.get_hourly_counts(stats)

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import time as time_mod
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from apscheduler.triggers.cron import CronTrigger
@@ -21,6 +20,8 @@ from .incremental_trigger import IncrementalTriggerCoordinator
 from .target_resolver import ScheduledTargetResolver
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -55,6 +56,7 @@ class AutoScheduler:
     target_resolver: ScheduledTargetResolver
     message_sender: MessageSender
     report_dispatcher: ReportDispatcher
+    incremental_trigger: IncrementalTriggerCoordinator | None = None
 
     def __init__(
         self,
@@ -100,18 +102,20 @@ class AutoScheduler:
             else None
         )
 
-    def set_bot_instance(self, bot_instance):
+    def set_bot_instance(self, bot_instance: Any) -> None:
         """设置bot实例（保持向后兼容）"""
         self.bot_manager.set_bot_instance(bot_instance)
 
-    def set_bot_self_ids(self, bot_self_ids):
+    def set_bot_self_ids(
+        self, bot_self_ids: list[str | int] | str | int | None
+    ) -> None:
         """设置bot ID（支持单个ID或ID列表）"""
         if isinstance(bot_self_ids, list):
             self.bot_manager.set_bot_self_ids(bot_self_ids)
         elif bot_self_ids:
             self.bot_manager.set_bot_self_ids([bot_self_ids])
 
-    def set_bot_qq_ids(self, bot_qq_ids):
+    def set_bot_qq_ids(self, bot_qq_ids: list[str | int] | str | int | None) -> None:
         """设置bot QQ号（已弃用，使用 set_bot_self_ids）"""
         self.set_bot_self_ids(bot_qq_ids)
 
@@ -129,7 +133,7 @@ class AutoScheduler:
     # 任务注册与取消
     # ================================================================
 
-    def schedule_jobs(self, context):
+    def schedule_jobs(self, context: Any) -> None:
         """根据分层名单配置注册定时任务。"""
         # 首先清理之前的任务
         self.unschedule_jobs(context)
@@ -155,7 +159,7 @@ class AutoScheduler:
         else:
             logger.info("增量分析总开关未启用，仅执行传统定时全量分析。")
 
-    def _schedule_report_time_jobs(self, scheduler):
+    def _schedule_report_time_jobs(self, scheduler: Any) -> None:
         """在配置的时间点注册报告生成任务。
 
         这些任务根据运行时解析出的生效模式，决定执行传统的全量分析还是增量汇报。
@@ -185,7 +189,7 @@ class AutoScheduler:
             except Exception as e:
                 logger.error(f"注册定时任务失败 ({t_str}): {e}")
 
-    def unschedule_jobs(self, context):
+    def unschedule_jobs(self, context: Any) -> None:
         """取消定时任务"""
         self._terminating = True
         if (
@@ -208,7 +212,7 @@ class AutoScheduler:
                 logger.warning(f"移除定时任务失败 ({job_id}): {e}")
         self.scheduler_job_ids.clear()
 
-    async def shutdown(self, context) -> None:
+    async def shutdown(self, context: Any) -> None:
         """停止调度器并持久化增量消息计数。
 
         Args:
@@ -275,7 +279,9 @@ class AutoScheduler:
                 f"定时报告: {len(all_targets)} 个目标 (并发限制: {max_concurrent})"
             )
 
-            async def dispatch_group(gid, pid, mode):
+            async def dispatch_group(
+                gid: str, pid: str | None, mode: str
+            ) -> dict[str, Any] | None:
                 wait_started_at = time_mod.monotonic()
                 logger.debug(
                     "定时报告等待调度槽位: platform=%s, group=%s, mode=%s, available=%s/%s",
@@ -407,18 +413,10 @@ class AutoScheduler:
     ):
         """为指定群执行自动分析并返回真实的分析与发送状态。"""
         try:
-            result = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 self._perform_auto_analysis_for_group(group_id, target_platform_id),
                 timeout=1800,
             )
-            if not isinstance(result, dict):
-                return {
-                    "success": False,
-                    "analysis_success": False,
-                    "report_sent": False,
-                    "reason": "invalid_result",
-                }
-            return result
         except TimeoutError:
             logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
             return {
@@ -523,7 +521,7 @@ class AutoScheduler:
 
             # 调度导出并发送报告
             comic_trigger = getattr(
-                getattr(self, "plugin_instance", None),
+                self.plugin_instance,
                 "_try_trigger_comic_generation",
                 None,
             )
@@ -582,7 +580,7 @@ class AutoScheduler:
     # 增量模式：增量分析
     # ================================================================
 
-    async def record_incremental_message(self, event) -> bool:
+    async def record_incremental_message(self, event: Any) -> bool:
         """记录一条群消息，用于按消息量触发增量分析。
 
         Args:
@@ -675,7 +673,6 @@ class AutoScheduler:
                         group_id, platform_id
                     )
                 )
-                result = result if isinstance(result, dict) else {}
                 has_new_batch = (
                     self._immediate_report_versions.get(state_key, 0)
                     != requested_version
@@ -849,14 +846,6 @@ class AutoScheduler:
                 timeout=1800,
             )
 
-            if not isinstance(result, dict):
-                return {
-                    "success": False,
-                    "analysis_success": False,
-                    "report_sent": False,
-                    "reason": "invalid_result",
-                }
-
             # 判定是否需要触发回退 (例如：无增量数据等)
             if not result.get("success"):
                 reason = result.get("reason", "")
@@ -909,14 +898,6 @@ class AutoScheduler:
             result = await self._perform_auto_analysis_for_group_with_timeout(
                 group_id, target_platform_id
             )
-            if not isinstance(result, dict):
-                return {
-                    "success": False,
-                    "analysis_success": False,
-                    "report_sent": False,
-                    "fallback": True,
-                    "reason": "fallback_invalid_result",
-                }
             result["fallback"] = True
             return result
         except Exception as fallback_err:
@@ -957,7 +938,7 @@ class AutoScheduler:
                     "reason": "terminating",
                 }
 
-            incremental_trigger = getattr(self, "incremental_trigger", None)
+            incremental_trigger = self.incremental_trigger
             if (
                 incremental_trigger
                 and target_platform_id
@@ -1052,7 +1033,7 @@ class AutoScheduler:
                 return result
 
             comic_trigger = getattr(
-                getattr(self, "plugin_instance", None),
+                self.plugin_instance,
                 "_try_trigger_comic_generation",
                 None,
             )
