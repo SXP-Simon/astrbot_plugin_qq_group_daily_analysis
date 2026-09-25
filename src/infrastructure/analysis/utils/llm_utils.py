@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from astrbot.api.provider import LLMResponse
 
@@ -26,6 +26,9 @@ from .llm_diagnostics import (
 if TYPE_CHECKING:
     from astrbot.api.star import Context
 
+    from ....domain.repositories.bot_client_protocol import (
+        LLMStreamProviderProtocol,
+    )
     from ...config.config_manager import ConfigManager
     from .structured_output_schema import JSONObject, JSONValue
 
@@ -81,16 +84,20 @@ _get_circuit_breaker = get_provider_circuit_breaker
 async def _call_provider_stream(
     context: Context, provider_id: str, llm_kwargs: dict[str, object]
 ) -> LLMResponse:
-    provider: Any = context.get_provider_by_id(provider_id=provider_id)
-    if provider is None or not hasattr(provider, "text_chat_stream"):
+    raw_provider = context.get_provider_by_id(provider_id=provider_id)
+    if raw_provider is None or not callable(
+        getattr(raw_provider, "text_chat_stream", None)
+    ):
         raise RuntimeError(f"Provider 不存在或不支持流式聊天: {provider_id}")
+    provider: LLMStreamProviderProtocol = cast("LLMStreamProviderProtocol", raw_provider)
 
-    stream_kwargs: dict[str, Any] = dict(llm_kwargs)
+    stream_kwargs: dict[str, object] = dict(llm_kwargs)
     stream_kwargs.pop("chat_provider_id", None)
 
     final_resp = None
     content_parts: list[str] = []
-    async for resp in provider.text_chat_stream(**stream_kwargs):
+    stream_iter = provider.text_chat_stream(**stream_kwargs)  # pyright: ignore[reportArgumentType]
+    async for resp in stream_iter:
         final_resp = resp
         if getattr(resp, "is_chunk", False):
             text = getattr(resp, "completion_text", "")
@@ -102,7 +109,16 @@ async def _call_provider_stream(
 
     final_text = extract_response_text(final_resp)
     if final_text and not getattr(final_resp, "is_chunk", False):
-        return final_resp
+        return (
+            final_resp
+            if isinstance(final_resp, LLMResponse)
+            else LLMResponse(
+                role="assistant",
+                completion_text=final_text,
+                usage=getattr(final_resp, "usage", None),
+                raw_completion=getattr(final_resp, "raw_completion", None),
+            )
+        )
 
     return LLMResponse(
         role="assistant",
@@ -471,14 +487,23 @@ async def call_provider_with_retry(
                     f"response_format={r_format is not None}, "
                     f"streaming={enable_streaming_llm_call}"
                 )
-                llm_call_kwargs: dict[str, Any] = dict(llm_kwargs)
                 if enable_streaming_llm_call:
                     request_task = asyncio.create_task(
-                        _call_provider_stream(context, pid, llm_call_kwargs)
+                        _call_provider_stream(context, pid, llm_kwargs)
                     )
                 else:
+                    llm_call_params: dict[str, object] = {
+                        "chat_provider_id": pid,
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                    }
+                    if r_format is not None:
+                        llm_call_params["response_format"] = r_format
+                    if extra_generate_kwargs:
+                        llm_call_params.update(extra_generate_kwargs)
+
                     request_task = asyncio.create_task(
-                        context.llm_generate(**llm_call_kwargs)
+                        context.llm_generate(**llm_call_params)  # pyright: ignore[reportArgumentType]
                     )
 
                 next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS

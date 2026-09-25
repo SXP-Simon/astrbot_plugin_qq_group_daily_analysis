@@ -357,3 +357,21 @@ class QQOfficialBotProtocol(Protocol):
 
     api: QQOfficialApiProtocol | None
     platform: QQOfficialPlatformProtocol | None
+
+
+@runtime_checkable
+class LLMStreamProviderProtocol(Protocol):
+    """支持流式输出的 LLM Provider 行为协议。"""
+
+    def text_chat_stream(
+        self,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        func_tool: object | None = None,
+        contexts: list[object] | None = None,
+        system_prompt: str | None = None,
+        **kwargs: object,
+    ) -> AsyncIterator[object]:
+        """流式调用 LLM 并返回异步生成器。"""
+        ...
