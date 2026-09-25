@@ -580,22 +580,46 @@ class BotManager:
         return False
 
     def _extract_bot_self_id(self, bot_instance: object) -> str | None:
-        """从bot实例中提取自身ID（单个）"""
+        """从 Bot 客户端实例中提取自身唯一标识 ID（单个目标）。
+
+        Args:
+            bot_instance: 平台 Bot 客户端实例。
+
+        Returns:
+            提取到的机器人字符串 ID，未获取到时返回 None。
+        """
         return self._extract_bot_self_id_impl(bot_instance)
 
     def _extract_bot_self_id_impl(self, bot_instance: object) -> str | None:
-        """从bot实例中提取ID（通用实现）"""
-        # 尝试多种方式获取bot ID，并严格限制类型为 str/int 且不可调用，防止 OneBot (aiocqhttp) 动态代理返回 functools.partial
+        """跨平台 SDK 通用 Bot ID 提取实现。
+
+        适配以下平台的属性特征：
+        1. OneBot / aiocqhttp: `self_id`, `user_id`
+        2. python-telegram-bot: `id`
+        3. Discord.py: `client.user.id`
+
+        严格限制类型为不可调用的 str 或 int，防止 OneBot (aiocqhttp)
+        动态属性代理返回 functools.partial 等对象导致误匹配。
+
+        Args:
+            bot_instance: 平台 Bot 客户端实例。
+
+        Returns:
+            提取到的机器人字符串 ID，无法识别时返回 None。
+        """
+        # 1. 直接属性匹配 (OneBot: self_id / user_id, Telegram: id)
         for attr in ("self_id", "user_id", "id"):
             val = getattr(bot_instance, attr, None)
             if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
-        # Discord.py style: client.user.id
+
+        # 2. 嵌套用户对象匹配 (Discord.py: client.user.id)
         user = getattr(bot_instance, "user", None)
         if user is not None:
             val = getattr(user, "id", None)
             if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
+
         return None
 
     def validate_for_message_fetching(self, group_id: str) -> bool:
