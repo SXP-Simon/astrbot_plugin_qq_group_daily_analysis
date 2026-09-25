@@ -124,9 +124,7 @@ class TraceSQLiteStore:
             except Exception:
                 pass
 
-    def save_trace(
-        self, trace_dict: TraceContextSnapshot | dict[str, object]
-    ) -> None:
+    def save_trace(self, trace_dict: TraceContextSnapshot | dict[str, object]) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
         trace_id = trace_dict.get("trace_id", "")
         if not trace_id:

@@ -48,7 +48,9 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
     MARKDOWN_CHUNK_SIZE = 3900
 
     def __init__(
-        self, bot_instance: QQOfficialBotProtocol, config: dict[str, object] | None = None
+        self,
+        bot_instance: QQOfficialBotProtocol,
+        config: dict[str, object] | None = None,
     ) -> None:
         super().__init__(bot_instance, config)
         self._context: Context | None = None

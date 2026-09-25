@@ -108,7 +108,9 @@ class TaskRoutes:
             template_name = (
                 str(payload.get("template_name") or payload.get("template"))
                 if (payload.get("template_name") or payload.get("template"))
-                else (request.query.get("template_name") or request.query.get("template"))
+                else (
+                    request.query.get("template_name") or request.query.get("template")
+                )
             )
 
             asyncio_task = asyncio.create_task(
@@ -184,7 +186,9 @@ class TaskRoutes:
                     for p_id, adp in adapters.items():
                         try:
                             if await adp.get_group_info(str(group_id)):
-                                target_platform = bot_mgr.get_adapter_platform_id(adp) or str(p_id)
+                                target_platform = bot_mgr.get_adapter_platform_id(
+                                    adp
+                                ) or str(p_id)
                                 break
                         except Exception:
                             continue
@@ -229,7 +233,9 @@ class TaskRoutes:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(
                         status="failed",
-                        error_message=str(result.get("reason", "unknown")) if result else "unknown",
+                        error_message=str(result.get("reason", "unknown"))
+                        if result
+                        else "unknown",
                     )
         except asyncio.CancelledError:
             logger.info(f"触发分析任务已取消: {trace_id}")
@@ -346,7 +352,9 @@ class TaskRoutes:
                     for p_id, adp in adapters.items():
                         try:
                             if await adp.get_group_info(str(group_id)):
-                                target_platform = bot_mgr.get_adapter_platform_id(adp) or str(p_id)
+                                target_platform = bot_mgr.get_adapter_platform_id(
+                                    adp
+                                ) or str(p_id)
                                 break
                         except Exception:
                             continue
@@ -403,7 +411,9 @@ class TaskRoutes:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(
                         status="failed",
-                        error_message=str(result.get("reason", "unknown")) if result else "unknown",
+                        error_message=str(result.get("reason", "unknown"))
+                        if result
+                        else "unknown",
                     )
         except Exception as e:
             if trace_ctx.status == "running":

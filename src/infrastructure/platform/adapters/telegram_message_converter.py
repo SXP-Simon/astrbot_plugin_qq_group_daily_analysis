@@ -155,8 +155,7 @@ class TelegramMessageConverter:
                             MessageContent(
                                 type=MessageContentType.IMAGE,
                                 url=str(
-                                    part.get("url", "")
-                                    or part.get("attachment_id", "")
+                                    part.get("url", "") or part.get("attachment_id", "")
                                 ),
                             )
                         )

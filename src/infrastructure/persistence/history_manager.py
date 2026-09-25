@@ -74,15 +74,19 @@ class HistoryManager:
             topics_summary = []
             for t in topics:
                 if isinstance(t, dict):
-                    topics_summary.append({
-                        "topic": str(t.get("topic", "")),
-                        "detail": str(t.get("detail", "")),
-                    })
+                    topics_summary.append(
+                        {
+                            "topic": str(t.get("topic", "")),
+                            "detail": str(t.get("detail", "")),
+                        }
+                    )
                 elif hasattr(t, "topic"):
-                    topics_summary.append({
-                        "topic": str(getattr(t, "topic", "")),
-                        "detail": str(getattr(t, "detail", "")),
-                    })
+                    topics_summary.append(
+                        {
+                            "topic": str(getattr(t, "topic", "")),
+                            "detail": str(getattr(t, "detail", "")),
+                        }
+                    )
 
             summary = {
                 "message_count": getattr(stats, "message_count", 0) if stats else 0,

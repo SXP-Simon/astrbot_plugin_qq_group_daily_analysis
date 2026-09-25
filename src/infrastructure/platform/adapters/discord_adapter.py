@@ -48,7 +48,9 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
     """
 
     def __init__(
-        self, bot_instance: DiscordClientProtocol, config: dict[str, object] | None = None
+        self,
+        bot_instance: DiscordClientProtocol,
+        config: dict[str, object] | None = None,
     ) -> None:
         """初始化 Discord 适配器。
 
@@ -201,7 +203,9 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
             logger.error(f"Discord fetch_messages failed: {e}", exc_info=True)
             return []
 
-    def _convert_message(self, raw_msg: DiscordMessageProtocol, group_id: str) -> UnifiedMessage | None:
+    def _convert_message(
+        self, raw_msg: DiscordMessageProtocol, group_id: str
+    ) -> UnifiedMessage | None:
         """内部方法：将 `discord.Message` 对象转换为统一的 `UnifiedMessage`。"""
         try:
             from typing import Any
@@ -281,9 +285,15 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     )
 
             # 确定发送者的显示名称（服务器昵称 > 全局名称 > 用户名）
-            sender_card = getattr(raw_msg.author, "nick", None) or getattr(raw_msg.author, "global_name", None)
+            sender_card = getattr(raw_msg.author, "nick", None) or getattr(
+                raw_msg.author, "global_name", None
+            )
 
-            ref_msg_id = getattr(raw_msg.reference, "message_id", None) if raw_msg.reference else None
+            ref_msg_id = (
+                getattr(raw_msg.reference, "message_id", None)
+                if raw_msg.reference
+                else None
+            )
             return UnifiedMessage(
                 message_id=str(raw_msg.id),
                 sender_id=str(raw_msg.author.id),
@@ -601,7 +611,9 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 group_name=group_name,
                 member_count=member_count,
                 owner_id=owner_id or None,
-                create_time=int(channel.created_at.timestamp()) if channel.created_at else None,
+                create_time=int(channel.created_at.timestamp())
+                if channel.created_at
+                else None,
                 platform="discord",
             )
         except Exception as e:
@@ -744,6 +756,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 allowed_sizes = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
                 from typing import Any
+
                 avatar: Any = user.display_avatar
                 return avatar.with_size(target_size).url
 

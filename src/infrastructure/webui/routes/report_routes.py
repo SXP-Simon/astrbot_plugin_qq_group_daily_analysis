@@ -297,7 +297,11 @@ class ReportRoutes:
         except TemplateInstallError:
             return error_response("模板名包含非法字符。", status_code=400)
         render_format = str(body.get("render_format", "image")).strip()
-        platform_id = str(body.get("platform_id")) if body.get("platform_id") is not None else None
+        platform_id = (
+            str(body.get("platform_id"))
+            if body.get("platform_id") is not None
+            else None
+        )
         trace_id = str(body.get("trace_id", "")).strip()
 
         if not group_id:

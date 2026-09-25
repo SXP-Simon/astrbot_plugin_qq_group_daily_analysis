@@ -127,7 +127,9 @@ class ConfigRoutes:
                     else None
                 )
             )
-            config_obj = cfg_mgr.config if cfg_mgr and hasattr(cfg_mgr, "config") else None
+            config_obj = (
+                cfg_mgr.config if cfg_mgr and hasattr(cfg_mgr, "config") else None
+            )
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 

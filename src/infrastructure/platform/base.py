@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from ...domain.value_objects.unified_message import UnifiedMessage
 
 
-
 TBot = TypeVar("TBot")
 
 

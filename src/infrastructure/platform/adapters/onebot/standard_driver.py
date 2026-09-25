@@ -91,7 +91,11 @@ class StandardOneBotDriver(OneBotDriver):
 
         def extract_list(payload: object) -> list[OneBotAlbumPayload]:
             if isinstance(payload, list):
-                return [cast("OneBotAlbumPayload", item) for item in payload if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in payload
+                    if isinstance(item, dict)
+                ]
             if not isinstance(payload, dict):
                 logger.debug(
                     f"[OneBot:{self.name}] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
@@ -100,7 +104,11 @@ class StandardOneBotDriver(OneBotDriver):
 
             data = payload.get("data")
             if isinstance(data, list):
-                return [cast("OneBotAlbumPayload", item) for item in data if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in data
+                    if isinstance(item, dict)
+                ]
             if isinstance(data, dict):
                 album_list = (
                     data.get("album_list")
@@ -110,7 +118,11 @@ class StandardOneBotDriver(OneBotDriver):
                     or data.get("album")
                 )
                 if isinstance(album_list, list):
-                    return [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
+                    return [
+                        cast("OneBotAlbumPayload", item)
+                        for item in album_list
+                        if isinstance(item, dict)
+                    ]
                 logger.debug(
                     f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}"
                 )
@@ -123,7 +135,11 @@ class StandardOneBotDriver(OneBotDriver):
                 or payload.get("album")
             )
             if isinstance(album_list, list):
-                return [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in album_list
+                    if isinstance(item, dict)
+                ]
 
             logger.debug(
                 f"[OneBot:{self.name}] 无法从响应中提取相册列表: payload={payload}"

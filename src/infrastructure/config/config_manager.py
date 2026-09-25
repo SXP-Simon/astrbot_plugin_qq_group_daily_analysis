@@ -9,7 +9,7 @@ import json
 import os
 import random
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.api.star import StarTools

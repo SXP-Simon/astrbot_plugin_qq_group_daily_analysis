@@ -21,7 +21,7 @@ from .incremental_trigger import IncrementalTriggerCoordinator
 from .target_resolver import ScheduledTargetResolver
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from astrbot.api.event import AstrMessageEvent
@@ -57,7 +57,7 @@ class AutoScheduler:
     analysis_service: AnalysisApplicationService
     bot_manager: BotManager
     report_generator: ReportGenerator | None
-    html_render_func: Callable[..., object] | None
+    html_render_func: Callable[..., Awaitable[str | bytes | None]] | None
     plugin_instance: PluginHostProtocol | None
     target_resolver: ScheduledTargetResolver
     message_sender: MessageSender
@@ -70,7 +70,7 @@ class AutoScheduler:
         analysis_service: AnalysisApplicationService,
         bot_manager: BotManager,
         report_generator: ReportGenerator | None = None,
-        html_render_func: Callable[..., object] | None = None,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
         plugin_instance: PluginHostProtocol | None = None,
     ) -> None:
         self.config_manager = config_manager

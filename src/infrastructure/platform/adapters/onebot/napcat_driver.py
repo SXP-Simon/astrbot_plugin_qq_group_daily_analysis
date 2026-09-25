@@ -48,11 +48,19 @@ class NapCatDriver(StandardOneBotDriver):
             )
             albums: list[OneBotAlbumPayload] = []
             if isinstance(res, list):
-                albums = [cast("OneBotAlbumPayload", item) for item in res if isinstance(item, dict)]
+                albums = [
+                    cast("OneBotAlbumPayload", item)
+                    for item in res
+                    if isinstance(item, dict)
+                ]
             elif isinstance(res, dict):
                 data = res.get("data")
                 if isinstance(data, list):
-                    albums = [cast("OneBotAlbumPayload", item) for item in data if isinstance(item, dict)]
+                    albums = [
+                        cast("OneBotAlbumPayload", item)
+                        for item in data
+                        if isinstance(item, dict)
+                    ]
                 elif isinstance(data, dict):
                     album_list = (
                         data.get("album_list")
@@ -62,7 +70,11 @@ class NapCatDriver(StandardOneBotDriver):
                         or data.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
+                        albums = [
+                            cast("OneBotAlbumPayload", item)
+                            for item in album_list
+                            if isinstance(item, dict)
+                        ]
                 if not albums:
                     album_list = (
                         res.get("album_list")
@@ -72,7 +84,11 @@ class NapCatDriver(StandardOneBotDriver):
                         or res.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [cast("OneBotAlbumPayload", item) for item in album_list if isinstance(item, dict)]
+                        albums = [
+                            cast("OneBotAlbumPayload", item)
+                            for item in album_list
+                            if isinstance(item, dict)
+                        ]
             if albums:
                 logger.debug(
                     f"[OneBot:{self.name}] get_qun_album_list 成功获取并提取到 {len(albums)} 个相册对象"

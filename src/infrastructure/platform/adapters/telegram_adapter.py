@@ -87,7 +87,9 @@ class TelegramAdapter(PlatformAdapter):
 
         用于访问 message_history_manager 等核心服务。
         """
-        if hasattr(context, "message_history_manager") or hasattr(context, "get_event_queue"):
+        if hasattr(context, "message_history_manager") or hasattr(
+            context, "get_event_queue"
+        ):
             self._context = context  # type: ignore[assignment]
 
     def _init_capabilities(self) -> PlatformCapabilities:
@@ -111,7 +113,9 @@ class TelegramAdapter(PlatformAdapter):
         # 2. 回退：使用 KV 注册表
         if not groups and self._plugin_instance:
             try:
-                registry = getattr(self._plugin_instance, "platform_group_registry", None)
+                registry = getattr(
+                    self._plugin_instance, "platform_group_registry", None
+                )
                 if registry is not None and hasattr(registry, "get_seen_groups"):
                     kv_groups = await registry.get_seen_groups(self._platform_id)
                     if kv_groups:
@@ -446,7 +450,9 @@ class TelegramAdapter(PlatformAdapter):
                     chat_id=chat_id,
                     photo=file_obj,
                     caption=caption if caption else None,
-                    message_thread_id=int(message_thread_id) if message_thread_id else None,
+                    message_thread_id=int(message_thread_id)
+                    if message_thread_id
+                    else None,
                 )
             finally:
                 if is_temp_obj and isinstance(file_obj, BytesIO):
@@ -518,7 +524,9 @@ class TelegramAdapter(PlatformAdapter):
                     chat_id=chat_id,
                     document=file_obj,
                     filename=filename,
-                    message_thread_id=int(message_thread_id) if message_thread_id else None,
+                    message_thread_id=int(message_thread_id)
+                    if message_thread_id
+                    else None,
                 )
             finally:
                 if is_temp_obj and isinstance(file_obj, BytesIO):

@@ -336,7 +336,9 @@ class TraceRoutes:
                 trigger_type_val = (
                     active_trace.trigger_type if active_trace else ""
                 ) or (
-                    str(task_info.get("trigger_type", "manual")) if task_info else "manual"
+                    str(task_info.get("trigger_type", "manual"))
+                    if task_info
+                    else "manual"
                 )
 
                 return json_response(

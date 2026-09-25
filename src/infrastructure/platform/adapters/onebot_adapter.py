@@ -45,7 +45,11 @@ if TYPE_CHECKING:
     )
 
 
-class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportProtocol, GroupFileSupportProtocol):
+class OneBotAdapter(
+    PlatformAdapter["OneBotClientProtocol"],
+    GroupAlbumSupportProtocol,
+    GroupFileSupportProtocol,
+):
     """具体实现：OneBot v11 平台适配器。
 
     支持 NapCat, go-cqhttp, Lagrange 等遵循 OneBot v11 协议的 QQ 机器人框架。
@@ -64,7 +68,9 @@ class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportPr
     AVATAR_NEGATIVE_TTL = 600.0
 
     def __init__(
-        self, bot_instance: OneBotClientProtocol, config: dict[str, object] | None = None
+        self,
+        bot_instance: OneBotClientProtocol,
+        config: dict[str, object] | None = None,
     ) -> None:
         """
         初始化 OneBot 适配器。
@@ -606,9 +612,13 @@ class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportPr
             return UnifiedGroup(
                 group_id=str(info.get("group_id", group_id)),
                 group_name=str(info.get("group_name", "")),
-                member_count=int(member_count_raw) if isinstance(member_count_raw, (int, float, str)) else 0,
+                member_count=int(member_count_raw)
+                if isinstance(member_count_raw, (int, float, str))
+                else 0,
                 owner_id=str(info.get("owner_id", "")) or None,
-                create_time=int(create_time_raw) if isinstance(create_time_raw, (int, float, str)) else None,
+                create_time=int(create_time_raw)
+                if isinstance(create_time_raw, (int, float, str))
+                else None,
                 platform="onebot",
             )
         except Exception as e:
@@ -713,7 +723,9 @@ class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportPr
                 nickname=str(info.get("nickname", "")),
                 card=str(info.get("card", "")) or None,
                 role=str(info.get("role", "member")),
-                join_time=int(join_time_raw) if isinstance(join_time_raw, (int, float, str)) else None,
+                join_time=int(join_time_raw)
+                if isinstance(join_time_raw, (int, float, str))
+                else None,
             )
         except Exception as e:
             logger.debug(f"[OneBot] 获取群 {group_id} 成员 {user_id} 信息失败: {e}")
@@ -1182,7 +1194,10 @@ class OneBotAdapter(PlatformAdapter["OneBotClientProtocol"], GroupAlbumSupportPr
         group_id: str,
     ) -> list[dict]:  # type: ignore[override]
         """获取群相册列表（委托 OneBotGroupFileManager）。"""
-        return cast("list[dict]", await self._file_manager.get_group_album_list(group_id=group_id))
+        return cast(
+            "list[dict]",
+            await self._file_manager.get_group_album_list(group_id=group_id),
+        )
 
     async def find_album_id(
         self,
