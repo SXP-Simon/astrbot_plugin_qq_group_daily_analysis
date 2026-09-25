@@ -25,7 +25,6 @@ from .pipeline_context import PipelineContext
 
 if TYPE_CHECKING:
     from ...domain.repositories.analysis_repository import IAnalysisProvider
-    from ...domain.repositories.config_repository import IConfigProvider
     from ...domain.repositories.persistence_repository import (
         ICheckpointStore,
         IIncrementalStore,
@@ -42,9 +41,9 @@ if TYPE_CHECKING:
 class IncrementalAnalysisService:
     """增量分析服务 - 处理滑动窗口增量批次分析与最终合并报告生成。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
-    bot_manager: BotManager | Any
-    history_manager: HistoryManager | Any
+    config_manager: ConfigManager
+    bot_manager: BotManager
+    history_manager: HistoryManager
     llm_analyzer: IAnalysisProvider
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
@@ -56,9 +55,9 @@ class IncrementalAnalysisService:
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
-        bot_manager: BotManager | Any,
-        history_manager: HistoryManager | Any,
+        config_manager: ConfigManager,
+        bot_manager: BotManager,
+        history_manager: HistoryManager,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
         analysis_domain_service: AnalysisDomainService,

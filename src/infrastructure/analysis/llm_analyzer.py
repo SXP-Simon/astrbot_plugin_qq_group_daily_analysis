@@ -6,7 +6,7 @@ LLM分析器模块
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...domain.value_objects import (
@@ -40,8 +40,8 @@ class LLMAnalyzer(IAnalysisProvider):
     保持向后兼容性，提供原有的接口
     """
 
-    context: Context | Any
-    config_manager: ConfigManager | Any
+    context: Context
+    config_manager: ConfigManager
     topic_analyzer: TopicAnalyzer
     user_title_analyzer: UserTitleAnalyzer
     golden_quote_analyzer: GoldenQuoteAnalyzer
@@ -50,8 +50,8 @@ class LLMAnalyzer(IAnalysisProvider):
 
     def __init__(
         self,
-        context: Context | Any,
-        config_manager: ConfigManager | Any,
+        context: Context,
+        config_manager: ConfigManager,
     ) -> None:
         """
         初始化LLM分析器

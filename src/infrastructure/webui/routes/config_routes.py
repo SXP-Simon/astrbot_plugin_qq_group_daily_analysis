@@ -10,11 +10,17 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
 from ..web_compat import error_response, json_response, request
+
+if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...reporting.dispatcher import ReportDispatcher
 
 
 def _sanitize_path_segment(segment: str) -> str:
@@ -37,10 +43,13 @@ def _config_key_to_folder(key_path: str) -> str:
 class ConfigRoutes:
     """插件配置中心 Web API 路由处理器。"""
 
+    analysis_service: AnalysisApplicationService | None
+    report_dispatcher: ReportDispatcher | None
+
     def __init__(
         self,
-        analysis_service: Any,
-        report_dispatcher: Any | None = None,
+        analysis_service: AnalysisApplicationService | None,
+        report_dispatcher: ReportDispatcher | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher

@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 class ReportGenerator(IReportGenerator):
     """报告生成器 - 负责全格式群聊分析报告的数据装配与渲染。"""
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
     data_dir: Path
     activity_visualizer: ActivityVisualizer
     html_templates: HTMLTemplates
@@ -66,7 +66,7 @@ class ReportGenerator(IReportGenerator):
     _profile_asset_manifest: dict[str, dict]
     _preparer: RenderDataPreparer
 
-    def __init__(self, config_manager: ConfigManager | Any, data_dir: Path) -> None:
+    def __init__(self, config_manager: ConfigManager, data_dir: Path) -> None:
         """初始化报告生成器。
 
         Args:
@@ -77,8 +77,10 @@ class ReportGenerator(IReportGenerator):
         self.data_dir = data_dir
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)
-
-        max_concurrent = self.config_manager.get_t2i_max_concurrent()
+        if hasattr(self.config_manager, "get_t2i_max_concurrent"):
+            max_concurrent = int(self.config_manager.get_t2i_max_concurrent())
+        else:
+            max_concurrent = 2
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
         self._qq_official_markdown_generator = QQOfficialMarkdownReportGenerator(
             config_manager,
@@ -834,13 +836,13 @@ class ReportGenerator(IReportGenerator):
             or load_profile_asset_manifest()
         )
         html_templates = getattr(self, "html_templates", None) or HTMLTemplates(
-            getattr(self, "config_manager", None)
+            self.config_manager
         )
         activity_visualizer = (
             getattr(self, "activity_visualizer", None) or ActivityVisualizer()
         )
         self._preparer = RenderDataPreparer(
-            config_manager=getattr(self, "config_manager", None),
+            config_manager=self.config_manager,
             avatar_service=avatar_service,
             html_templates=html_templates,
             activity_visualizer=activity_visualizer,

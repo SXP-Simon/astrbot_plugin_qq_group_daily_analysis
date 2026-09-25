@@ -191,7 +191,7 @@ async def _try_get_first_available_provider_id(context) -> str | None:
 
 async def get_provider_id_with_fallback(
     context: Context,
-    config_manager: ConfigManager | Any,
+    config_manager: ConfigManager,
     provider_id_key: str | None,
     umo: str | None = None,
 ) -> str | None:

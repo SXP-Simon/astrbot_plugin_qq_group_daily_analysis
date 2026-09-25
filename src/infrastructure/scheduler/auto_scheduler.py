@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
-    from ...domain.repositories.report_repository import IReportGenerator
     from ..config.config_manager import ConfigManager
     from ..platform.bot_manager import BotManager
     from ..reporting.generators import ReportGenerator
@@ -47,10 +46,10 @@ AUTO_ANALYSIS_SKIP_REASONS: dict[str, str] = {
 class AutoScheduler:
     """自动调度器，支持传统模式和增量模式"""
 
-    config_manager: ConfigManager | Any
-    analysis_service: AnalysisApplicationService | Any
-    bot_manager: BotManager | Any
-    report_generator: ReportGenerator | IReportGenerator | Any
+    config_manager: ConfigManager
+    analysis_service: AnalysisApplicationService
+    bot_manager: BotManager
+    report_generator: ReportGenerator | None
     html_render_func: Callable[..., Any] | None
     plugin_instance: Any | None
     target_resolver: ScheduledTargetResolver
@@ -59,10 +58,10 @@ class AutoScheduler:
 
     def __init__(
         self,
-        config_manager: ConfigManager | Any,
-        analysis_service: AnalysisApplicationService | Any,
-        bot_manager: BotManager | Any,
-        report_generator: ReportGenerator | IReportGenerator | Any = None,
+        config_manager: ConfigManager,
+        analysis_service: AnalysisApplicationService,
+        bot_manager: BotManager,
+        report_generator: ReportGenerator | None = None,
         html_render_func: Callable[..., Any] | None = None,
         plugin_instance: Any | None = None,
     ) -> None:

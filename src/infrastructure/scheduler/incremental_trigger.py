@@ -22,7 +22,7 @@ class IncrementalTriggerCoordinator:
     _FLUSH_DELAY_SECONDS = 5
     _SEMAPHORE_WARN_SECONDS = 15.0
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
     plugin: Any
     analyze_callback: Callable[[str, str], Awaitable[dict | None]]
     on_analysis_succeeded: Callable[[str, str], None] | None
@@ -41,7 +41,7 @@ class IncrementalTriggerCoordinator:
 
     def __init__(
         self,
-        config_manager: ConfigManager | Any,
+        config_manager: ConfigManager,
         plugin_instance: Any,
         analyze_callback: Callable[[str, str], Awaitable[dict | None]],
         on_analysis_succeeded: Callable[[str, str], None] | None = None,

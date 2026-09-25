@@ -14,7 +14,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..infrastructure.webui.active_task_manager import ActiveTaskManager
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
@@ -39,9 +43,9 @@ _current_trace: ContextVar[TraceContext | None] = ContextVar(
 )
 
 # 全局持有的 Trace 仓储引用（用于链路自动持久化）
-_global_trace_store: Any | None = None
-_global_active_task_manager: Any | None = None
-_active_traces: dict[str, Any] = {}
+_global_trace_store: TraceSQLiteStore | None = None
+_global_active_task_manager: ActiveTaskManager | None = None
+_active_traces: dict[str, TraceContext] = {}
 
 
 @dataclass
@@ -118,19 +122,19 @@ class TraceContext:
         return cls._enable_metrics
 
     @classmethod
-    def set_global_store(cls, store: Any) -> None:
+    def set_global_store(cls, store: TraceSQLiteStore | None) -> None:
         """设置全局持久化仓储实例"""
         global _global_trace_store
         _global_trace_store = store
 
     @classmethod
-    def set_active_task_manager(cls, manager: Any) -> None:
+    def set_active_task_manager(cls, manager: ActiveTaskManager | None) -> None:
         """设置全局活跃任务管理器引用"""
         global _global_active_task_manager
         _global_active_task_manager = manager
 
     @classmethod
-    def get_active_trace(cls, trace_id: str) -> Any | None:
+    def get_active_trace(cls, trace_id: str) -> TraceContext | None:
         """根据 trace_id 获取内存中活跃运行的 TraceContext 实例"""
         return _active_traces.get(trace_id)
 

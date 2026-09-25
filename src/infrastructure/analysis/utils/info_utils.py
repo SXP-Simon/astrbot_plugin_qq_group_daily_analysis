@@ -8,9 +8,7 @@ if TYPE_CHECKING:
 
 class InfoUtils:
     @staticmethod
-    def get_user_nickname(
-        config_manager: ConfigManager | Any, sender: dict[str, Any]
-    ) -> str:
+    def get_user_nickname(config_manager: ConfigManager, sender: dict[str, Any]) -> str:
         """
         获取用户昵称
 

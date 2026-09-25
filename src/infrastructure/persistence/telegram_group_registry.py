@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
 
 from astrbot.api.star import Star
 
@@ -17,10 +16,10 @@ class TelegramGroupRegistry:
 
     _KV_KEY = "telegram_seen_groups_v1"
 
-    plugin: Star | Any
+    plugin: Star | None
     _lock: asyncio.Lock
 
-    def __init__(self, plugin_instance: Star | Any) -> None:
+    def __init__(self, plugin_instance: Star | None) -> None:
         self.plugin = plugin_instance
         self._lock = asyncio.Lock()
 
@@ -33,6 +32,8 @@ class TelegramGroupRegistry:
         event_message_id: str,
     ) -> None:
         """更新 Telegram 已见群/话题注册表（KV）。"""
+        if not self.plugin:
+            return
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             if not isinstance(registry, dict):
@@ -77,6 +78,8 @@ class TelegramGroupRegistry:
 
     async def get_all_group_ids(self, platform_id: str | None = None) -> list[str]:
         """读取 Telegram 已见群/话题列表。"""
+        if not self.plugin:
+            return []
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             if not isinstance(registry, dict):

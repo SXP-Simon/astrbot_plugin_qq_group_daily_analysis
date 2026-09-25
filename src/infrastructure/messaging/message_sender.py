@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
 
@@ -15,13 +15,13 @@ class MessageSender:
     封装了 PlatformAdapter 的底层调用，提供更高层的发送接口
     """
 
-    bot_manager: BotManager | Any
-    config_manager: ConfigManager | Any
+    bot_manager: BotManager
+    config_manager: ConfigManager
 
     def __init__(
         self,
-        bot_manager: BotManager | Any,
-        config_manager: ConfigManager | Any,
+        bot_manager: BotManager,
+        config_manager: ConfigManager,
     ) -> None:
         self.bot_manager = bot_manager
         self.config_manager = config_manager

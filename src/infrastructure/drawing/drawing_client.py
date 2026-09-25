@@ -52,11 +52,11 @@ class DrawingClient:
     ``_post_json_for_image`` 等方法时能够继续生效。
     """
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
     _image_response_service: DrawingImageResponseService
     _request_service: DrawingApiRequestService
 
-    def __init__(self, config_manager: ConfigManager | Any) -> None:
+    def __init__(self, config_manager: ConfigManager) -> None:
         self.config_manager = config_manager
         self._image_response_service = DrawingImageResponseService(
             hooks=self,

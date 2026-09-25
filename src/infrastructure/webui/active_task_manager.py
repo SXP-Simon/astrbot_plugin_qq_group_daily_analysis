@@ -8,10 +8,13 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..persistence.trace_sqlite_store import TraceSQLiteStore
 
 
 @dataclass
@@ -43,7 +46,9 @@ class ActiveTaskInfo:
 class ActiveTaskManager:
     """活跃任务管理器与孤儿回收器"""
 
-    def __init__(self, trace_store: Any | None = None):
+    trace_store: TraceSQLiteStore | None
+
+    def __init__(self, trace_store: TraceSQLiteStore | None = None) -> None:
         self.trace_store = trace_store
         self._tasks: dict[str, ActiveTaskInfo] = {}
         self._lock = asyncio.Lock()

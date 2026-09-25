@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....utils.logger import logger
 from ...reporting.template_installer import (
@@ -23,14 +23,23 @@ from ...reporting.template_installer import (
 )
 from ..web_compat import error_response, json_response, request
 
+if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...reporting.dispatcher import ReportDispatcher
+
 
 class TemplateRoutes:
     """视觉模板 Web API 路由处理器。"""
 
+    analysis_service: AnalysisApplicationService | None
+    report_dispatcher: ReportDispatcher | None
+
     def __init__(
         self,
-        analysis_service: Any,
-        report_dispatcher: Any | None = None,
+        analysis_service: AnalysisApplicationService | None,
+        report_dispatcher: ReportDispatcher | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
@@ -50,6 +59,8 @@ class TemplateRoutes:
                 cfg_mgr = getattr(
                     self.analysis_service, "config_manager", None
                 ) or getattr(self.report_dispatcher, "config_manager", None)
+                if not cfg_mgr:
+                    return error_response("配置管理器未初始化", status_code=500)
                 tpl_mgr = HTMLTemplates(cfg_mgr)
                 templates = tpl_mgr.get_available_templates()
             return json_response({"status": "ok", "data": templates})

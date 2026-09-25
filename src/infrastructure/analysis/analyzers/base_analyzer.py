@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sized
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
@@ -35,13 +35,13 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
     定义所有分析器的通用接口 and 流程
     """
 
-    context: Context | Any
-    config_manager: ConfigManager | Any
+    context: Context
+    config_manager: ConfigManager
 
     def __init__(
         self,
-        context: Context | Any,
-        config_manager: ConfigManager | Any,
+        context: Context,
+        config_manager: ConfigManager,
     ) -> None:
         """
         初始化基础分析器

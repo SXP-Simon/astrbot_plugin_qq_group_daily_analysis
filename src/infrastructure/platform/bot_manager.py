@@ -25,17 +25,17 @@ class BotManager:
     实现跨平台支持。
     """
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
     _bot_instances: dict[str, object]
     _adapters: dict[str, PlatformAdapter]
     _platforms: dict[str, object]
     _bot_self_ids: list[str]
-    _context: Context | object | None
+    _context: Context | None
     _is_initialized: bool
     _default_platform: str
     _plugin_instance: object | None
 
-    def __init__(self, config_manager: ConfigManager | Any) -> None:
+    def __init__(self, config_manager: ConfigManager) -> None:
         self.config_manager = config_manager
         self._bot_instances: dict[str, object] = {}  # {platform_id: bot_instance}
         self._adapters: dict[
@@ -43,14 +43,14 @@ class BotManager:
         ] = {}  # {platform_id: PlatformAdapter} - DDD 集成
         self._platforms: dict[str, object] = {}  # 存储平台对象以访问配置
         self._bot_self_ids: list[str] = []  # 支持多个机器人账号 ID (原 _bot_qq_ids)
-        self._context: Context | object | None = None
+        self._context = None
         self._is_initialized = False
         self._default_platform = (
             "default"  # AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）
         )
         self._plugin_instance: object | None = None  # 插件实例引用，用于适配器回调
 
-    def set_context(self, context: Context | object | None) -> None:
+    def set_context(self, context: Context | None) -> None:
         """设置AstrBot上下文，并传递给所有支持的适配器"""
         self._context = context
 

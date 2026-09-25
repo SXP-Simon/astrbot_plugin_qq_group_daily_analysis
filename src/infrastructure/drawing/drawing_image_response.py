@@ -35,7 +35,7 @@ class ImageDownloadFailedError(Exception):
 class DrawingImageResponseHooks(Protocol):
     """描述图片响应服务依赖的宿主能力。"""
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
 
 
 @dataclass(slots=True)

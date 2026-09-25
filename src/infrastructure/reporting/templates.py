@@ -29,13 +29,13 @@ if TYPE_CHECKING:
 class HTMLTemplates:
     """HTML模板管理类"""
 
-    config_manager: ConfigManager | Any
+    config_manager: ConfigManager
     base_dir: str
     platform_base_dir: str
     _envs: dict[str, SandboxedEnvironment]
     _env_lock: threading.Lock
 
-    def __init__(self, config_manager: ConfigManager | Any) -> None:
+    def __init__(self, config_manager: ConfigManager) -> None:
         """初始化Jinja2环境"""
         self.config_manager = config_manager
         # 设置模板根目录

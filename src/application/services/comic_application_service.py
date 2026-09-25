@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from astrbot.api.star import Context
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
-from ...domain.repositories.config_repository import IConfigProvider
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
@@ -31,7 +30,7 @@ class ComicApplicationService:
 
     llm_analyzer: IAnalysisProvider
     drawing_client: DrawingClient
-    config_manager: IConfigProvider | ConfigManager | Any
+    config_manager: ConfigManager
     plugin_data_dir: Path
     context: Context | None
 
@@ -39,7 +38,7 @@ class ComicApplicationService:
         self,
         llm_analyzer: IAnalysisProvider,
         drawing_client: DrawingClient,
-        config_manager: IConfigProvider | ConfigManager | Any,
+        config_manager: ConfigManager,
         plugin_data_dir: Path,
         context: Context | None = None,
     ) -> None:

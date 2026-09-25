@@ -8,22 +8,33 @@ from __future__ import annotations
 import base64
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....utils.logger import logger
 from ...persistence.trace_sqlite_store import TraceSQLiteStore
 from ...reporting.template_installer import TemplateInstallError, validate_template_name
 from ..web_compat import error_response, json_response, request
 
+if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...reporting.dispatcher import ReportDispatcher
+
 
 class ReportRoutes:
     """报告产物 Web API 路由处理器。"""
 
+    trace_store: TraceSQLiteStore
+    analysis_service: AnalysisApplicationService | None
+    report_dispatcher: ReportDispatcher | None
+    report_output_dir: Path | None
+
     def __init__(
         self,
         trace_store: TraceSQLiteStore,
-        analysis_service: Any,
-        report_dispatcher: Any | None = None,
+        analysis_service: AnalysisApplicationService | None,
+        report_dispatcher: ReportDispatcher | None = None,
         report_output_dir: Path | None = None,
     ) -> None:
         self.trace_store = trace_store
@@ -291,6 +302,9 @@ class ReportRoutes:
                     trace_id = str(items[0].get("trace_id", ""))
             except Exception:
                 pass
+
+        if not self.analysis_service:
+            return error_response("分析服务未初始化", status_code=500)
 
         try:
             result = await self.analysis_service.rerender_report(

@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from astrbot.api.event import AstrMessageEvent
 
-from ...domain.repositories.config_repository import IConfigProvider
 from ...infrastructure.webui.active_task_manager import ActiveTaskManager
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -32,8 +31,8 @@ if TYPE_CHECKING:
 class ComicCommandHandler:
     """群漫画指令应用层处理器。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
-    bot_manager: BotManager | Any
+    config_manager: ConfigManager
+    bot_manager: BotManager
     comic_service: ComicApplicationService
     analysis_service: AnalysisApplicationService
     active_task_manager: ActiveTaskManager | None
@@ -46,8 +45,8 @@ class ComicCommandHandler:
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
-        bot_manager: BotManager | Any,
+        config_manager: ConfigManager,
+        bot_manager: BotManager,
         comic_service: ComicApplicationService,
         analysis_service: AnalysisApplicationService,
         active_task_manager: ActiveTaskManager | None = None,

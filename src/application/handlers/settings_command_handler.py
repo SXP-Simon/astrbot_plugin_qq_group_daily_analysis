@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ...infrastructure.platform.template_preview import TemplatePreviewRouter
     from ...infrastructure.scheduler.auto_scheduler import AutoScheduler
 
-from ...domain.repositories.config_repository import IConfigProvider
 from ...domain.repositories.persistence_repository import IIncrementalStore
 from ...domain.services.incremental_merge_service import IncrementalMergeService
 from ..services.analysis_application_service import DuplicateGroupTaskError
@@ -30,25 +29,25 @@ from ..services.template_command_service import TemplateCommandService
 class SettingsCommandHandler:
     """管理设置、模板切换与状态查询的命令处理器。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
+    config_manager: ConfigManager
     template_command_service: TemplateCommandService
-    template_preview_router: TemplatePreviewRouter | Any
-    auto_scheduler: AutoScheduler | Any
+    template_preview_router: TemplatePreviewRouter
+    auto_scheduler: AutoScheduler
     incremental_store: IIncrementalStore | None
     incremental_merge_service: IncrementalMergeService | None
-    bot_manager: BotManager | Any | None
-    context: Context | Any | None
+    bot_manager: BotManager | None
+    context: Context | None
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
+        config_manager: ConfigManager,
         template_command_service: TemplateCommandService,
-        template_preview_router: TemplatePreviewRouter | Any,
-        auto_scheduler: AutoScheduler | Any,
+        template_preview_router: TemplatePreviewRouter,
+        auto_scheduler: AutoScheduler,
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
-        bot_manager: BotManager | Any | None = None,
-        context: Context | Any | None = None,
+        bot_manager: BotManager | None = None,
+        context: Context | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.template_command_service = template_command_service

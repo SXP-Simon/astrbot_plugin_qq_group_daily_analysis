@@ -21,7 +21,6 @@ from astrbot.api.event import AstrMessageEvent
 # File is only available via astrbot.core (internal API — may change).
 from astrbot.core.message.components import File
 
-from ...domain.repositories.config_repository import IConfigProvider
 from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from ...infrastructure.reporting.generators import ReportGenerator
 from ...infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -43,30 +42,30 @@ if TYPE_CHECKING:
 class AnalysisCommandHandler:
     """日常分析指令应用层处理器。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
-    bot_manager: BotManager | Any
+    config_manager: ConfigManager
+    bot_manager: BotManager
     analysis_service: AnalysisApplicationService
     report_generator: ReportGenerator
     html_render: Callable
     active_task_manager: ActiveTaskManager | None
     trace_store: TraceSQLiteStore | None
-    message_sender: MessageSender | Any | None
-    comic_handler: ComicCommandHandler | Any | None
+    message_sender: MessageSender | None
+    comic_handler: ComicCommandHandler | None
     plugin_data_dir: Path
     plugin_instance: Any | None
     terminating: bool
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
-        bot_manager: BotManager | Any,
+        config_manager: ConfigManager,
+        bot_manager: BotManager,
         analysis_service: AnalysisApplicationService,
         report_generator: ReportGenerator,
         html_render: Callable,
         active_task_manager: ActiveTaskManager | None = None,
         trace_store: TraceSQLiteStore | None = None,
-        message_sender: MessageSender | Any | None = None,
-        comic_handler: ComicCommandHandler | Any | None = None,
+        message_sender: MessageSender | None = None,
+        comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: Any | None = None,
     ) -> None:

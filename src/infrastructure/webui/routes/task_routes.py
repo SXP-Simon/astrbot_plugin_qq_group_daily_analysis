@@ -6,7 +6,7 @@ WebUI 任务管理路由 (Task Routes)
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -15,16 +15,27 @@ from ...persistence.trace_sqlite_store import TraceSQLiteStore
 from ..active_task_manager import ActiveTaskManager
 from ..web_compat import error_response, json_response, request
 
+if TYPE_CHECKING:
+    from ....application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from ...reporting.dispatcher import ReportDispatcher
+
 
 class TaskRoutes:
     """任务管理 Web API 路由处理器。"""
+
+    trace_store: TraceSQLiteStore
+    active_task_manager: ActiveTaskManager
+    analysis_service: AnalysisApplicationService | None
+    report_dispatcher: ReportDispatcher | None
 
     def __init__(
         self,
         trace_store: TraceSQLiteStore,
         active_task_manager: ActiveTaskManager,
-        analysis_service: Any,
-        report_dispatcher: Any | None = None,
+        analysis_service: AnalysisApplicationService | None,
+        report_dispatcher: ReportDispatcher | None = None,
     ) -> None:
         self.trace_store = trace_store
         self.active_task_manager = active_task_manager
@@ -61,6 +72,9 @@ class TaskRoutes:
 
     async def api_trigger_task(self) -> Any:
         """从 Web 界面手动触发群分析任务"""
+        if not self.analysis_service:
+            return error_response("分析服务未初始化", status_code=500)
+
         try:
             payload_raw = await request.json(default={})
             payload: dict[str, Any] = (
@@ -146,6 +160,8 @@ class TaskRoutes:
         template_name: str | None = None,
     ) -> None:
         """后台异步执行触发任务"""
+        if not self.analysis_service:
+            return
         trace_ctx = TraceContext.set(
             trace_id=trace_id,
             group_id=group_id,
@@ -252,6 +268,9 @@ class TaskRoutes:
 
     async def api_resume_task(self, trace_id: str) -> Any:
         """从 Checkpoint 幂等恢复并重试任务"""
+        if not self.analysis_service:
+            return error_response("分析服务未初始化", status_code=500)
+
         try:
             trace_record = self.trace_store.get_trace(trace_id)
             if not trace_record:
@@ -326,6 +345,8 @@ class TaskRoutes:
         template_name: str | None = None,
     ) -> None:
         """后台异步执行断点续跑"""
+        if not self.analysis_service:
+            return
         trace_ctx = TraceContext.set(
             trace_id=trace_id,
             group_id=group_id,

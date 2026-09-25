@@ -8,11 +8,10 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from ...domain.repositories.analysis_repository import IAnalysisProvider
-from ...domain.repositories.config_repository import IConfigProvider
 from ...domain.repositories.persistence_repository import (
     ICheckpointStore,
     IIncrementalStore,
@@ -51,9 +50,9 @@ __all__ = ["AnalysisApplicationService", "DuplicateGroupTaskError"]
 class AnalysisApplicationService:
     """分析应用服务 - 协调业务流程（每日分析 + 增量分析 + 断点续跑）。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
-    bot_manager: BotManager | Any
-    history_manager: HistoryManager | Any
+    config_manager: ConfigManager
+    bot_manager: BotManager
+    history_manager: HistoryManager
     report_generator: IReportGenerator
     llm_analyzer: IAnalysisProvider
     statistics_service: StatisticsService
@@ -61,7 +60,7 @@ class AnalysisApplicationService:
     incremental_store: IIncrementalStore | None
     incremental_merge_service: IncrementalMergeService | None
     checkpoint_store: ICheckpointStore | None
-    html_render: Any | None
+    html_render: Callable[..., Any] | None
     _task_guard: TaskGuard
     llm_semaphore: asyncio.Semaphore
     _incremental_service: IncrementalAnalysisService
@@ -69,9 +68,9 @@ class AnalysisApplicationService:
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
-        bot_manager: BotManager | Any,
-        history_manager: HistoryManager | Any,
+        config_manager: ConfigManager,
+        bot_manager: BotManager,
+        history_manager: HistoryManager,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
@@ -79,7 +78,7 @@ class AnalysisApplicationService:
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: ICheckpointStore | None = None,
-        html_render: Any | None = None,
+        html_render: Callable[..., Any] | None = None,
     ) -> None:
         """初始化分析应用服务。
 

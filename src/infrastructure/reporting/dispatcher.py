@@ -27,15 +27,15 @@ class ReportDispatcher:
     负责协调报告生成、格式选择、消息发送和失败重试
     """
 
-    config_manager: ConfigManager | Any
-    report_generator: ReportGenerator | Any
-    message_sender: MessageSender | Any
+    config_manager: ConfigManager
+    report_generator: ReportGenerator | None
+    message_sender: MessageSender
 
     def __init__(
         self,
-        config_manager: ConfigManager | Any,
-        report_generator: ReportGenerator | Any,
-        message_sender: MessageSender | Any,
+        config_manager: ConfigManager,
+        report_generator: ReportGenerator | None,
+        message_sender: MessageSender,
     ) -> None:
         self.config_manager = config_manager
         self.report_generator = report_generator
@@ -103,6 +103,10 @@ class ReportDispatcher:
     ) -> bool:
         trace_id = TraceContext.get()
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error(f"[{trace_id}] 报告生成器未初始化，无法生成图片报告。")
+            return False
+
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
@@ -307,6 +311,9 @@ class ReportDispatcher:
     ) -> bool:
         trace_id = TraceContext.get()
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error(f"[{trace_id}] 报告生成器未初始化，无法生成 HTML 报告。")
+            return False
 
         html_path = None
         try:
@@ -482,6 +489,9 @@ class ReportDispatcher:
         """分发文本报告"""
         logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error("[分发器] 报告生成器未初始化，无法生成文本报告。")
+            return False
         is_qq_official = self._is_qq_official(platform_id)
         fallback_report = None
         if is_qq_official:

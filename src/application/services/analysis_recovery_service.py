@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +23,6 @@ from .pipeline_context import PipelineContext
 
 if TYPE_CHECKING:
     from ...domain.repositories.analysis_repository import IAnalysisProvider
-    from ...domain.repositories.config_repository import IConfigProvider
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...domain.repositories.report_repository import IReportGenerator
     from ...domain.services.statistics_service import StatisticsService
@@ -36,28 +35,28 @@ if TYPE_CHECKING:
 class AnalysisRecoveryService:
     """分析恢复与重绘服务 - 提供幂等断点续跑与按模板重新渲染。"""
 
-    config_manager: IConfigProvider | ConfigManager | Any
-    bot_manager: BotManager | Any
-    history_manager: HistoryManager | Any
+    config_manager: ConfigManager
+    bot_manager: BotManager
+    history_manager: HistoryManager
     report_generator: IReportGenerator
     llm_analyzer: IAnalysisProvider
     statistics_service: StatisticsService
     task_guard: TaskGuard
     checkpoint_store: ICheckpointStore | None
-    html_render: Any | None
+    html_render: Callable[..., Any] | None
     _serializer: AnalysisResultSerializer
 
     def __init__(
         self,
-        config_manager: IConfigProvider | ConfigManager | Any,
-        bot_manager: BotManager | Any,
-        history_manager: HistoryManager | Any,
+        config_manager: ConfigManager,
+        bot_manager: BotManager,
+        history_manager: HistoryManager,
         report_generator: IReportGenerator,
         llm_analyzer: IAnalysisProvider,
         statistics_service: StatisticsService,
         task_guard: TaskGuard,
         checkpoint_store: ICheckpointStore | None = None,
-        html_render: Any | None = None,
+        html_render: Callable[..., Any] | None = None,
     ) -> None:
         """初始化恢复与重绘服务。
 
@@ -271,7 +270,7 @@ class AnalysisRecoveryService:
         platform_id: str | None = None,
         date_str: str | None = None,
         template_name: str | None = None,
-        fallback_daily_func: Any | None = None,
+        fallback_daily_func: Callable[..., Any] | None = None,
     ) -> dict[str, Any]:
         """从上一次 Checkpoint 检查点执行幂等断点续跑。
 
