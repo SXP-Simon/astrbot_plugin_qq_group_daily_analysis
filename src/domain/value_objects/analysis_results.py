@@ -465,4 +465,3 @@ class IncrementalTriggerStatePayload(TypedDict, total=False):
     last_triggered_at: float
     platform_id: str
     group_id: str
-

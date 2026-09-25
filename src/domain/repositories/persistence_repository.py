@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..entities.incremental_state import IncrementalBatch
-    from ..value_objects.analysis_results import CheckpointSummaryPayload
+    from ..value_objects.analysis_results import (
+        CheckpointDetailPayload,
+        CheckpointSummaryPayload,
+    )
 
 
 class IIncrementalStore(ABC):
@@ -143,5 +146,5 @@ class ICheckpointStore(ABC):
         date_str: str,
         stage_name: str,
         trace_id: str = "",
-    ) -> dict[str, object] | None:
+    ) -> CheckpointDetailPayload | None:
         """读取指定 Checkpoint 的完整详情与反序列化产物"""

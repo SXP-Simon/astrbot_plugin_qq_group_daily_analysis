@@ -69,6 +69,10 @@ class PlatformAdapterProtocol(Protocol):
         """发送结构化文本分析报告。"""
         ...
 
+    def get_platform_name(self) -> str:
+        """获取当前适配器的平台标识名称。"""
+        ...
+
     async def get_group_info(self, group_id: str) -> UnifiedGroup | None:
         """获取群组基础信息。"""
         ...
@@ -77,9 +81,13 @@ class PlatformAdapterProtocol(Protocol):
         """获取群成员列表。"""
         ...
 
-    async def get_user_avatar_url(
-        self, user_id: str, size: int = 40
-    ) -> str | None:
+    async def get_member_info(
+        self, group_id: str, user_id: str
+    ) -> UnifiedMember | None:
+        """获取指定群成员详细信息。"""
+        ...
+
+    async def get_user_avatar_url(self, user_id: str, size: int = 40) -> str | None:
         """获取用户头像 URL。"""
         ...
 
@@ -106,9 +114,7 @@ class PlatformAdapterProtocol(Protocol):
         """设置或移除消息表情回应。"""
         ...
 
-    def convert_to_raw_format(
-        self, messages: list[UnifiedMessage]
-    ) -> list[dict]:
+    def convert_to_raw_format(self, messages: list[UnifiedMessage]) -> list[dict]:
         """将统一消息列表转换为平台原生字典结构。"""
         ...
 

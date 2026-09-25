@@ -247,9 +247,7 @@ class IncrementalMergeService:
         if state.chat_quality_review:
             review_dict = state.chat_quality_review
             dimensions_raw = review_dict.get("dimensions")
-            dimensions_list = (
-                dimensions_raw if isinstance(dimensions_raw, list) else []
-            )
+            dimensions_list = dimensions_raw if isinstance(dimensions_raw, list) else []
             dimensions = [
                 QualityDimension(
                     name=str(d.get("name", "未知")),

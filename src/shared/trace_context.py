@@ -283,10 +283,11 @@ class TraceContext:
         """
         if isinstance(stage_name, AnalysisStage):
             stage_str = stage_name.value
-        elif hasattr(stage_name, "value") and isinstance(getattr(stage_name, "value"), str):
-            stage_str = getattr(stage_name, "value")
+        elif isinstance(stage_name, str):
+            stage_str = stage_name
         else:
-            stage_str = str(stage_name)
+            val = getattr(stage_name, "value", None)
+            stage_str = str(val) if val is not None else str(stage_name)
         self.current_stage = stage_str
         _active_traces[self.trace_id] = self
         if _global_active_task_manager is not None:
