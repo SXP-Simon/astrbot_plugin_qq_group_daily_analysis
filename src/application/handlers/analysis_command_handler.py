@@ -12,12 +12,17 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 # File is only available via astrbot.core (internal API — may change).
 from astrbot.core.message.components import File
 
+from ...domain.repositories.platform_adapter_repository import (
+    GroupAlbumSupportProtocol,
+    GroupFileSupportProtocol,
+    PlatformAdapterProtocol,
+)
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -53,7 +58,7 @@ class AnalysisCommandHandler:
     message_sender: MessageSender | None
     comic_handler: ComicCommandHandler | None
     plugin_data_dir: Path
-    plugin_instance: Any | None
+    plugin_instance: object | None
     terminating: bool
 
     def __init__(
@@ -68,7 +73,7 @@ class AnalysisCommandHandler:
         message_sender: MessageSender | None = None,
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: Any | None = None,
+        plugin_instance: object | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -109,7 +114,7 @@ class AnalysisCommandHandler:
 
     async def handle_daily_analysis(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[object, None]:
         """处理 /群分析 核心指令流程。
 
         Args:
@@ -117,7 +122,7 @@ class AnalysisCommandHandler:
             days: 分析回溯天数（可选）。
 
         Returns:
-            AsyncGenerator[Any, None]: 指令响应消息生成器。
+            AsyncGenerator[object, None]: 指令响应消息生成器。
         """
         if self.terminating:
             return
@@ -135,29 +140,24 @@ class AnalysisCommandHandler:
                 yield event.plain_result("❌ 请在群聊中使用此命令")
                 return
 
-            if hasattr(self.bot_manager, "update_from_event"):
-                self.bot_manager.update_from_event(event)
+            self.bot_manager.update_from_event(event)
 
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
+            check_target = event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
 
             if not self.config_manager.is_group_allowed(check_target):
                 yield event.plain_result("❌ 此群未启用日常分析功能")
                 return
 
-            if hasattr(
-                self.analysis_service, "is_group_running"
-            ) and self.analysis_service.is_group_running(group_id, "daily"):
+            if self.analysis_service.is_group_running(group_id, "daily"):
                 yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
                 return
 
             group_name = ""
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
-                if adapter and hasattr(adapter, "get_group_info"):
+                if adapter:
                     info = await adapter.get_group_info(group_id)
-                    if info and getattr(info, "group_name", None):
+                    if info and info.group_name:
                         group_name = info.group_name
             except Exception:
                 pass
@@ -195,7 +195,7 @@ class AnalysisCommandHandler:
 
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
-            elif adapter and orig_msg_id and hasattr(adapter, "set_reaction"):
+            elif adapter and orig_msg_id:
                 await adapter.set_reaction(
                     event.get_group_id(), orig_msg_id, "analysis_started"
                 )
@@ -232,7 +232,6 @@ class AnalysisCommandHandler:
                 not use_text_reply
                 and adapter
                 and orig_msg_id
-                and hasattr(adapter, "set_reaction")
             ):
                 await adapter.set_reaction(
                     event.get_group_id(), orig_msg_id, "analysis_done"
@@ -269,8 +268,8 @@ class AnalysisCommandHandler:
                 await self.active_task_manager.finish_task(trace_id)
 
     async def send_analysis_report(
-        self, event: AstrMessageEvent, result: dict[str, Any]
-    ) -> AsyncGenerator[Any, None]:
+        self, event: AstrMessageEvent, result: dict[str, object]
+    ) -> AsyncGenerator[object, None]:
         """处理分析结果的渲染和发送。
 
         Args:
@@ -278,7 +277,7 @@ class AnalysisCommandHandler:
             result: 分析服务产出的结果字典。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[object, None]: 结果消息生成器。
         """
         if self.terminating or not self.config_manager:
             logger.warning("插件正在关闭，停止发送报告")
@@ -320,13 +319,13 @@ class AnalysisCommandHandler:
         }
 
         async def avatar_url_getter(user_id: str) -> str | None:
-            if hasattr(adapter, "get_user_avatar_url"):
+            if adapter:
                 return await adapter.get_user_avatar_url(user_id)
             return None
 
         async def nickname_getter(user_id: str) -> str | None:
             try:
-                if hasattr(adapter, "get_member_info"):
+                if adapter:
                     member = await adapter.get_member_info(group_id, user_id)
                     if member:
                         return member.card or member.nickname
@@ -336,11 +335,10 @@ class AnalysisCommandHandler:
 
         trace = TraceContext.current()
         override_theme = trace.metadata.get("override_template_name") if trace else None
+        tpl_getter = getattr(self.config_manager, "get_report_template", None)
         template_theme = (
             override_theme
-            or getattr(
-                self.config_manager, "get_report_template", lambda: "scrapbook"
-            )()
+            or (tpl_getter() if callable(tpl_getter) else "default")
         )
 
         if output_format == "image":
@@ -504,9 +502,9 @@ class AnalysisCommandHandler:
     async def _send_text_reports(
         self,
         group_id: str,
-        analysis_result: dict[str, Any],
+        analysis_result: dict[str, object],
         is_qq_official: bool,
-        adapter: Any,
+        adapter: PlatformAdapterProtocol,
     ) -> None:
         """发送纯文本分析报告。
 
@@ -526,20 +524,14 @@ class AnalysisCommandHandler:
                 ) = await self.report_generator.generate_qq_official_markdown_report(
                     analysis_result, self.html_render
                 )
-                if hasattr(adapter, "send_text_report"):
-                    await adapter.send_text_report(
-                        group_id, text_report, fallback_content=fallback_report
-                    )
-                elif hasattr(adapter, "send_text"):
-                    await adapter.send_text(group_id, text_report)
+                await adapter.send_text_report(
+                    group_id, text_report, fallback_content=fallback_report
+                )
                 return
 
             text = self.report_generator.generate_text_report(analysis_result)
             if text and text.strip():
-                if hasattr(adapter, "send_text_report"):
-                    await adapter.send_text_report(group_id, text)
-                elif hasattr(adapter, "send_text"):
-                    await adapter.send_text(group_id, text)
+                await adapter.send_text_report(group_id, text)
         except Exception as e:
             logger.error(f"发送纯文本报告失败 (群 {group_id}): {e}", exc_info=True)
 
@@ -594,12 +586,12 @@ class AnalysisCommandHandler:
         if not enable_file and not enable_album:
             return
 
-        adapter: Any = self.bot_manager.get_adapter(platform_id)
+        adapter = self.bot_manager.get_adapter(platform_id)
         if not adapter:
             return
-        if enable_file and not hasattr(adapter, "upload_group_file_to_folder"):
+        if enable_file and not isinstance(adapter, GroupFileSupportProtocol):
             enable_file = False
-        if enable_album and not hasattr(adapter, "upload_group_album"):
+        if enable_album and not isinstance(adapter, GroupAlbumSupportProtocol):
             enable_album = False
         if not enable_file and not enable_album:
             return
@@ -609,14 +601,13 @@ class AnalysisCommandHandler:
         date_str = now.strftime("%Y-%m-%d")
         filename_stem = f"群分析报告_{group_id}_{date_str}_{timestamp}"
         try:
-            if hasattr(adapter, "get_group_info"):
-                group_info = await adapter.get_group_info(group_id)
-                if group_info and getattr(group_info, "group_name", None):
-                    safe_name = re.sub(
-                        r'[\\/:*?"<>|]', "", group_info.group_name
-                    ).strip()
-                    if safe_name:
-                        filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
+            group_info = await adapter.get_group_info(group_id)
+            if group_info and group_info.group_name:
+                safe_name = re.sub(
+                    r'[\\/:*?"<>|]', "", group_info.group_name
+                ).strip()
+                if safe_name:
+                    filename_stem = f"群分析报告_{safe_name}_{date_str}_{timestamp}"
         except Exception:
             pass
 
@@ -660,11 +651,11 @@ class AnalysisCommandHandler:
             if not image_file:
                 return
 
-            if enable_file and hasattr(adapter, "upload_group_file_to_folder"):
+            if enable_file and isinstance(adapter, GroupFileSupportProtocol):
                 try:
                     folder_name = self.config_manager.get_group_file_folder()
                     folder_id = None
-                    if folder_name and hasattr(adapter, "find_or_create_folder"):
+                    if folder_name:
                         folder_id = await adapter.find_or_create_folder(
                             group_id, folder_name
                         )
@@ -677,7 +668,7 @@ class AnalysisCommandHandler:
                 except Exception as e:
                     logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
 
-            if enable_album and hasattr(adapter, "upload_group_album"):
+            if enable_album and isinstance(adapter, GroupAlbumSupportProtocol):
                 try:
                     album_name = (
                         self.config_manager.get_comic_album_name()
@@ -688,11 +679,16 @@ class AnalysisCommandHandler:
                     if strict_mode and not album_name:
                         pass
                     else:
+                        album_id = None
+                        if album_name:
+                            album_id = await adapter.find_album_id(
+                                group_id, album_name, create_if_missing=True
+                            )
                         await adapter.upload_group_album(
-                            group_id,
-                            image_file,
-                            album_id=None,
-                            album_name=album_name,
+                            group_id=group_id,
+                            file_path=image_file,
+                            album_id=album_id,
+                            album_name=album_name or "",
                             strict_mode=strict_mode,
                         )
                 except Exception as e:

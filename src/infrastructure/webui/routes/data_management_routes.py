@@ -37,11 +37,11 @@ class DataManagementRoutes:
 
     @property
     def _incremental_store(self) -> IncrementalStore | None:
-        return getattr(self.analysis_service, "incremental_store", None)
+        return self.analysis_service.incremental_store if self.analysis_service else None
 
     @property
     def _checkpoint_store(self) -> CheckpointStore | None:
-        return getattr(self.analysis_service, "checkpoint_store", None)
+        return self.analysis_service.checkpoint_store if self.analysis_service else None
 
     def _get_plugin_data_dir(self) -> Path | None:
         """获取 AstrBot 标准 plugin_data 目录（StarTools.get_data_dir）"""
@@ -270,7 +270,7 @@ class DataManagementRoutes:
         try:
             store = self._incremental_store
             tracked: set[str] = set()
-            if store and hasattr(store, "get_tracked_groups"):
+            if store:
                 tracked.update(await store.get_tracked_groups())
 
             if self.trace_store:
@@ -346,7 +346,10 @@ class DataManagementRoutes:
     async def api_delete_incremental_batch(self) -> WebApiResponse:
         """删除指定群的单个增量批次"""
         try:
-            payload_raw = await request.json(default={})
+            try:
+                payload_raw = await request.json()
+            except Exception:
+                payload_raw = {}
             payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )
@@ -384,7 +387,10 @@ class DataManagementRoutes:
     async def api_reset_incremental_group(self) -> WebApiResponse:
         """一键清空指定群全部增量批次并将游标归零"""
         try:
-            payload_raw = await request.json(default={})
+            try:
+                payload_raw = await request.json()
+            except Exception:
+                payload_raw = {}
             payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )
@@ -495,7 +501,10 @@ class DataManagementRoutes:
     async def api_delete_checkpoint(self) -> WebApiResponse:
         """删除指定 Checkpoint 或清空群指定日期所有 Checkpoint"""
         try:
-            payload_raw = await request.json(default={})
+            try:
+                payload_raw = await request.json()
+            except Exception:
+                payload_raw = {}
             payload: dict[str, object] = (
                 payload_raw if isinstance(payload_raw, dict) else {}
             )

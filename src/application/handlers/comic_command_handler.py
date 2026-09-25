@@ -8,8 +8,12 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from ...domain.repositories.platform_adapter_repository import (
+    GroupAlbumSupportProtocol,
+)
+from ...domain.value_objects.analysis_results import SummaryTopic
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -38,11 +42,11 @@ class ComicCommandHandler:
     analysis_service: AnalysisApplicationService
     active_task_manager: ActiveTaskManager | None
     plugin_data_dir: Path
-    plugin_instance: Any | None
+    plugin_instance: object | None
     terminating: bool
     _comic_semaphore: asyncio.Semaphore
-    _comic_group_tasks: dict[str, asyncio.Task]
-    _background_tasks: set[asyncio.Task]
+    _comic_group_tasks: dict[str, asyncio.Task[object]]
+    _background_tasks: set[asyncio.Task[object]]
 
     def __init__(
         self,
@@ -52,7 +56,7 @@ class ComicCommandHandler:
         analysis_service: AnalysisApplicationService,
         active_task_manager: ActiveTaskManager | None = None,
         plugin_data_dir: Path | None = None,
-        plugin_instance: Any | None = None,
+        plugin_instance: object | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -65,15 +69,15 @@ class ComicCommandHandler:
         self.plugin_instance = plugin_instance
         self.terminating: bool = False
 
-        t2i_max_fn: Any = getattr(self.config_manager, "get_t2i_max_concurrent", None)
         try:
-            raw_val = t2i_max_fn() if callable(t2i_max_fn) else 1
+            getter = getattr(self.config_manager, "get_t2i_max_concurrent", None)
+            raw_val = getter() if callable(getter) else 1
             max_concurrent = int(str(raw_val))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             max_concurrent = 1
         self._comic_semaphore = asyncio.Semaphore(max(1, max_concurrent))
-        self._comic_group_tasks: dict[str, asyncio.Task] = {}
-        self._background_tasks: set[asyncio.Task] = set()
+        self._comic_group_tasks: dict[str, asyncio.Task[object]] = {}
+        self._background_tasks: set[asyncio.Task[object]] = set()
 
     def set_terminating(self, terminating: bool) -> None:
         self.terminating = terminating
@@ -125,7 +129,7 @@ class ComicCommandHandler:
 
     async def handle_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[Any, None]:
+    ) -> AsyncGenerator[object, None]:
         """处理 /群漫画 核心指令流程。
 
         Args:
@@ -133,7 +137,7 @@ class ComicCommandHandler:
             days: 分析回溯天数（可选）。
 
         Returns:
-            AsyncGenerator[Any, None]: 指令响应消息生成器。
+            AsyncGenerator[object, None]: 指令响应消息生成器。
         """
         if self.terminating:
             return
@@ -153,12 +157,9 @@ class ComicCommandHandler:
                 yield event.plain_result("❌ 请在群聊中使用此命令")
                 return
 
-            if hasattr(self.bot_manager, "update_from_event"):
-                self.bot_manager.update_from_event(event)
+            self.bot_manager.update_from_event(event)
 
-            check_target = getattr(event, "unified_msg_origin", None)
-            if not check_target:
-                check_target = f"{platform_id}:GroupMessage:{group_id}"
+            check_target = event.unified_msg_origin or f"{platform_id}:GroupMessage:{group_id}"
 
             if not self.config_manager.get_enable_daily_comic():
                 yield event.plain_result("❌ 漫画生成功能未启用")
@@ -176,10 +177,10 @@ class ComicCommandHandler:
 
             group_name = None
             adapter = self.bot_manager.get_adapter(platform_id)
-            if adapter and hasattr(adapter, "get_group_info"):
+            if adapter:
                 try:
                     info = await adapter.get_group_info(group_id)
-                    if info and hasattr(info, "group_name") and info.group_name:
+                    if info and info.group_name:
                         group_name = info.group_name
                 except Exception:
                     pass
@@ -311,7 +312,7 @@ class ComicCommandHandler:
         self,
         group_id: str,
         platform_id: str | None,
-        analysis_result: dict[str, Any],
+        analysis_result: dict[str, object],
         *,
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,
@@ -330,27 +331,18 @@ class ComicCommandHandler:
         """
         if self.terminating:
             return "terminating"
-        enable_comic_fn = (
-            getattr(self.config_manager, "get_enable_daily_comic", None)
-            if self.config_manager
-            else None
-        )
-        if enable_comic_fn and not enable_comic_fn():
+        enabled_getter = getattr(self.config_manager, "get_enable_daily_comic", None)
+        if callable(enabled_getter) and not enabled_getter():
             return "disabled"
-        auto_comic_enabled = getattr(
-            self.config_manager, "get_enable_auto_daily_comic", None
-        )
-        if (
-            require_auto_enabled
-            and callable(auto_comic_enabled)
-            and not auto_comic_enabled()
-        ):
+        auto_getter = getattr(self.config_manager, "get_enable_auto_daily_comic", None)
+        auto_enabled = auto_getter() if callable(auto_getter) else True
+        if require_auto_enabled and not auto_enabled:
             return "auto_disabled"
 
         umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
-        comic_allowed = getattr(self.config_manager, "is_comic_group_allowed", None)
         inherit_allowed = True if require_auto_enabled else None
-        if callable(comic_allowed) and not comic_allowed(umo, inherit_allowed):
+        allowed_checker = getattr(self.config_manager, "is_comic_group_allowed", None)
+        if callable(allowed_checker) and not allowed_checker(umo, inherit_allowed):
             logger.info(
                 f"群 {group_id} 未通过漫画名单判定，跳过漫画生成。platform={platform_id or 'default'}"
             )
@@ -359,20 +351,25 @@ class ComicCommandHandler:
         topics = analysis_result.get("topics", [])
         statistics = analysis_result.get("statistics")
         if not topics and statistics:
-            topics = getattr(statistics, "topics", [])
+            if isinstance(statistics, dict):
+                topics = statistics.get("topics", [])
+            elif hasattr(statistics, "topics"):
+                topics = statistics.topics
 
         comic_topics = []
         for topic in topics if isinstance(topics, list) else []:
-            title = (
-                topic.get("topic", "")
-                if isinstance(topic, dict)
-                else getattr(topic, "topic", "")
-            )
-            detail = (
-                topic.get("detail", "")
-                if isinstance(topic, dict)
-                else getattr(topic, "detail", "")
-            )
+            if isinstance(topic, SummaryTopic):
+                title = topic.topic
+                detail = topic.detail
+            elif isinstance(topic, dict):
+                title = str(topic.get("topic", ""))
+                detail = str(topic.get("detail", ""))
+            elif hasattr(topic, "topic") and hasattr(topic, "detail"):
+                title = str(topic.topic)
+                detail = str(topic.detail)
+            else:
+                title = ""
+                detail = ""
             if str(title).strip():
                 comic_topics.append(
                     {"topic": str(title).strip(), "detail": str(detail).strip()}
@@ -406,7 +403,7 @@ class ComicCommandHandler:
 
     async def _trigger_comic_generation(
         self,
-        topics: list[dict[str, Any]],
+        topics: list[dict[str, object]],
         group_id: str,
         platform_id: str | None,
         umo: str,
@@ -535,23 +532,16 @@ class ComicCommandHandler:
         """尝试将图片上传到群相册"""
         if not self.config_manager:
             return
-        upload_album_fn = getattr(
-            self.config_manager, "get_enable_comic_album_upload", None
-        )
-        if not (callable(upload_album_fn) and upload_album_fn()):
+        if not self.config_manager.get_enable_comic_album_upload():
             return
-        adapter: Any = (
+        adapter = (
             self.bot_manager.get_adapter(platform_id) if self.bot_manager else None
         )
-        if not adapter or not hasattr(adapter, "upload_group_album"):
+        if not adapter or not (isinstance(adapter, GroupAlbumSupportProtocol) or hasattr(adapter, "upload_group_album")):
             return
 
-        album_name_fn = getattr(self.config_manager, "get_comic_album_name", None)
-        album_name = album_name_fn() if callable(album_name_fn) else "daily_analysis"
-        strict_mode_fn = getattr(
-            self.config_manager, "get_group_album_strict_mode", None
-        )
-        strict_mode = strict_mode_fn() if callable(strict_mode_fn) else False
+        album_name = self.config_manager.get_comic_album_name() or "daily_analysis"
+        strict_mode = self.config_manager.get_group_album_strict_mode()
         try:
             target_path = (
                 str(Path(image_url).resolve())
