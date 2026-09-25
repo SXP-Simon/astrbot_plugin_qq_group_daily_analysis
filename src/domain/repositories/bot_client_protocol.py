@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import AsyncIterator, Mapping, Sequence
     from datetime import datetime
 
 
@@ -244,6 +244,14 @@ class DiscordMessageProtocol(Protocol):
     stickers: Sequence[object]
     reference: object | None
 
+    async def add_reaction(self, emoji: object) -> None:
+        """添加表情回应。"""
+        ...
+
+    async def remove_reaction(self, emoji: object, member: object = None) -> None:
+        """移除表情回应。"""
+        ...
+
 
 @runtime_checkable
 class DiscordChannelProtocol(Protocol):
@@ -315,3 +323,37 @@ class DiscordClientProtocol(Protocol):
     async def fetch_user(self, user_id: int) -> DiscordUserProtocol:
         """通过网络拉取用户信息。"""
         ...
+
+
+@runtime_checkable
+class QQOfficialPlatformProtocol(Protocol):
+    """QQ 官方机器人平台协议。"""
+
+    config: Mapping[str, object] | None
+
+    def remember_session_scene(self, session_id: str, scene: str) -> None:
+        """记录会话场景（用于主动发消息前恢复场景）。"""
+        ...
+
+
+@runtime_checkable
+class QQOfficialApiProtocol(Protocol):
+    """QQ 官方机器人 API 协议。"""
+
+    def post_group_message(
+        self,
+        group_openid: str,
+        msg_type: int,
+        markdown: object,
+        msg_seq: int,
+    ) -> object:
+        """发送 QQ 官方群 Markdown 消息。"""
+        ...
+
+
+@runtime_checkable
+class QQOfficialBotProtocol(Protocol):
+    """QQ 官方机器人客户端行为协议。"""
+
+    api: QQOfficialApiProtocol | None
+    platform: QQOfficialPlatformProtocol | None

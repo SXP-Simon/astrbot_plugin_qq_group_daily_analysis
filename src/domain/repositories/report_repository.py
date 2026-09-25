@@ -17,10 +17,7 @@ if TYPE_CHECKING:
 class IReportGenerator(ABC):
     """报告生成器接口 - 领域层契约。"""
 
-    @property
-    def html_templates(self) -> HTMLTemplates | None:
-        """HTML 模板管理组件。"""
-        return None
+    html_templates: HTMLTemplates | None = None
 
     @abstractmethod
     async def generate_image_report(

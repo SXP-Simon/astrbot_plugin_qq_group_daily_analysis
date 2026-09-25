@@ -8,7 +8,7 @@ import hashlib
 import os
 import random
 import re
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping, Sequence
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -32,8 +32,14 @@ if TYPE_CHECKING:
     from astrbot.api.event import MessageChain
     from astrbot.api.star import Context
 
+    from ....domain.repositories.bot_client_protocol import (
+        HistoryRecordProtocol,
+        QQOfficialBotProtocol,
+    )
+    from ....domain.value_objects.analysis_results import QQOfficialMemberProfile
 
-class QQOfficialAdapter(PlatformAdapter):
+
+class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
     """Adapter for QQ Official group bots (WebSocket and Webhook variants)."""
 
     platform_name = "qq_official"
@@ -42,11 +48,14 @@ class QQOfficialAdapter(PlatformAdapter):
     MARKDOWN_CHUNK_SIZE = 3900
 
     def __init__(
-        self, bot_instance: object, config: dict[str, object] | None = None
+        self, bot_instance: QQOfficialBotProtocol, config: dict[str, object] | None = None
     ) -> None:
         super().__init__(bot_instance, config)
         self._context: Context | None = None
-        self._plugin_instance = config.get("plugin_instance") if config else None
+        raw_plugin = config.get("plugin_instance") if config else None
+        self._plugin_instance: PluginHostProtocol | None = (
+            raw_plugin if isinstance(raw_plugin, PluginHostProtocol) else None
+        )
         self._platform_id = str(config.get("platform_id", "")).strip() if config else ""
         raw_ids = config.get("bot_self_ids", []) if config else []
         self.bot_self_ids = (
@@ -56,19 +65,19 @@ class QQOfficialAdapter(PlatformAdapter):
         )
         self.appid = self._resolve_appid(config or {})
         self._markdown_msg_seq = random.randint(1, 10000)
-        self._member_profiles: dict[str, dict[str, str]] = {}
+        self._member_profiles: dict[str, QQOfficialMemberProfile] = {}
 
     @property
     def platform_id(self) -> str:
         return self._platform_id or "qq_official"
 
-    def _resolve_appid(self, config: dict) -> str:
+    def _resolve_appid(self, config: Mapping[str, object]) -> str:
         direct = str(config.get("appid", "") or "").strip()
         if direct:
             return direct
-        platform = getattr(self.bot, "platform", None)
-        platform_config = getattr(platform, "config", None)
-        if isinstance(platform_config, dict):
+        platform = self.bot.platform if self.bot else None
+        platform_config = platform.config if platform else None
+        if isinstance(platform_config, Mapping):
             return str(platform_config.get("appid", "") or "").strip()
         return ""
 
@@ -92,7 +101,7 @@ class QQOfficialAdapter(PlatformAdapter):
         return f"群友-{digest.upper()}"
 
     def set_context(self, context: Context | object) -> None:
-        if hasattr(context, "message_history_manager") or hasattr(context, "get_event_queue"):
+        if context is not None:
             self._context = context  # type: ignore[assignment]
 
     def remember_user_profile(
@@ -153,7 +162,7 @@ class QQOfficialAdapter(PlatformAdapter):
 
         try:
             while len(messages) < target_count:
-                records = await history_mgr.get(
+                records: Sequence[HistoryRecordProtocol] = await history_mgr.get(
                     platform_id=self.platform_id,
                     user_id=str(group_id),
                     page=page,
@@ -164,7 +173,7 @@ class QQOfficialAdapter(PlatformAdapter):
 
                 reached_cutoff = False
                 for record in records:
-                    record_id = getattr(record, "id", None)
+                    record_id = record.id
                     if (
                         before_record_id is not None
                         and record_id is not None
@@ -206,10 +215,10 @@ class QQOfficialAdapter(PlatformAdapter):
             return []
 
     def _convert_history_record(
-        self, record: object, group_id: str
+        self, record: HistoryRecordProtocol, group_id: str
     ) -> UnifiedMessage | None:
         try:
-            content = getattr(record, "content", None)
+            content = record.content
             if not isinstance(content, dict):
                 return None
             metadata = content.get("_qq_official")
@@ -218,65 +227,67 @@ class QQOfficialAdapter(PlatformAdapter):
 
             contents: list[MessageContent] = []
             text_parts: list[str] = []
-            for part in content.get("message", []):
-                if not isinstance(part, dict):
-                    continue
-                part_type = str(part.get("type", "")).lower()
-                if part_type in {"plain", "text"}:
-                    text = str(part.get("text", "") or "")
-                    text_parts.append(text)
-                    contents.append(
-                        MessageContent(type=MessageContentType.TEXT, text=text)
-                    )
-                elif part_type == "image":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.IMAGE,
-                            url=str(part.get("url", "") or ""),
+            raw_parts = content.get("message", [])
+            if isinstance(raw_parts, list):
+                for part in raw_parts:
+                    if not isinstance(part, dict):
+                        continue
+                    part_type = str(part.get("type", "")).lower()
+                    if part_type in {"plain", "text"}:
+                        text = str(part.get("text", "") or "")
+                        text_parts.append(text)
+                        contents.append(
+                            MessageContent(type=MessageContentType.TEXT, text=text)
                         )
-                    )
-                elif part_type == "at":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.AT,
-                            at_user_id=str(part.get("target_id", "") or ""),
+                    elif part_type == "image":
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.IMAGE,
+                                url=str(part.get("url", "") or ""),
+                            )
                         )
-                    )
-                elif part_type == "file":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.FILE,
-                            url=str(part.get("url", "") or ""),
-                            raw_data={"name": part.get("name", "")},
+                    elif part_type == "at":
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.AT,
+                                at_user_id=str(part.get("target_id", "") or ""),
+                            )
                         )
-                    )
-                elif part_type in {"record", "voice"}:
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.VOICE,
-                            url=str(part.get("url", "") or ""),
+                    elif part_type == "file":
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.FILE,
+                                url=str(part.get("url", "") or ""),
+                                raw_data={"name": part.get("name", "")},
+                            )
                         )
-                    )
-                elif part_type == "video":
-                    contents.append(
-                        MessageContent(
-                            type=MessageContentType.VIDEO,
-                            url=str(part.get("url", "") or ""),
+                    elif part_type in {"record", "voice"}:
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.VOICE,
+                                url=str(part.get("url", "") or ""),
+                            )
                         )
-                    )
+                    elif part_type == "video":
+                        contents.append(
+                            MessageContent(
+                                type=MessageContentType.VIDEO,
+                                url=str(part.get("url", "") or ""),
+                            )
+                        )
 
             message_id = str(metadata.get("message_id", "") or "")
             if not message_id:
-                message_id = f"local:{getattr(record, 'id', '')}"
+                message_id = f"local:{record.id or ''}"
             timestamp = int(metadata.get("timestamp", 0) or 0)
             if timestamp <= 0:
-                created_at = getattr(record, "created_at", None)
+                created_at = record.created_at
                 timestamp = int(created_at.timestamp()) if created_at else 0
-            sender_id = str(getattr(record, "sender_id", "") or "")
+            sender_id = str(record.sender_id or "")
             if not sender_id:
                 return None
             sender_name = self._resolve_history_sender_name(
-                getattr(record, "sender_name", None), sender_id, group_id
+                record.sender_name, sender_id, group_id
             )
 
             return UnifiedMessage(
@@ -329,10 +340,9 @@ class QQOfficialAdapter(PlatformAdapter):
             # AstrBot's QQ Official adapter keeps the group/channel scene only
             # in memory. Restore it before proactive sends so scheduled reports
             # continue to work after a process restart, before the next event.
-            platform = getattr(self.bot, "platform", None)
-            remember_scene = getattr(platform, "remember_session_scene", None)
-            if callable(remember_scene):
-                remember_scene(str(group_id), "group")
+            platform = self.bot.platform if self.bot else None
+            if platform and hasattr(platform, "remember_session_scene"):
+                platform.remember_session_scene(str(group_id), "group")
             umo = f"{self.platform_id}:GroupMessage:{group_id}"
             return bool(await self._context.send_message(umo, chain))
         except Exception as exc:
@@ -388,15 +398,13 @@ class QQOfficialAdapter(PlatformAdapter):
         return True
 
     async def _send_markdown_chunk(self, group_id: str, content: str) -> bool:
-        api = getattr(self.bot, "api", None)
-        post_group_message: object = getattr(api, "post_group_message", None)
-        if not callable(post_group_message):
+        api = self.bot.api if self.bot else None
+        if not api or not hasattr(api, "post_group_message"):
             return False
 
-        platform = getattr(self.bot, "platform", None)
-        remember_scene = getattr(platform, "remember_session_scene", None)
-        if callable(remember_scene):
-            remember_scene(str(group_id), "group")
+        platform = self.bot.platform if self.bot else None
+        if platform and hasattr(platform, "remember_session_scene"):
+            platform.remember_session_scene(str(group_id), "group")
 
         try:
             from botpy.types.message import MarkdownPayload
@@ -407,7 +415,7 @@ class QQOfficialAdapter(PlatformAdapter):
             # AstrBot in production.
             markdown = {"content": content}
 
-        call_result = post_group_message(
+        call_result = api.post_group_message(
             group_openid=str(group_id),
             msg_type=2,
             markdown=markdown,

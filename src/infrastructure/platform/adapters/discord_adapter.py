@@ -10,9 +10,7 @@ Discord 平台适配器
 
 from __future__ import annotations
 
-from typing import Any
-
-from ....utils.logger import logger
+from typing import TYPE_CHECKING, cast
 
 try:
     import discord
@@ -29,12 +27,18 @@ from ....domain.value_objects.unified_message import (
     MessageContentType,
     UnifiedMessage,
 )
+from ....utils.logger import logger
 from ..base import PlatformAdapter
 
+if TYPE_CHECKING:
+    from ....domain.repositories.bot_client_protocol import (
+        DiscordClientProtocol,
+        DiscordMessageProtocol,
+    )
 
-class DiscordAdapter(PlatformAdapter):
-    """
-    具体实现：Discord 平台适配器
+
+class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
+    """具体实现：Discord 平台适配器。
 
     利用 Discord API 为群组（频道）提供消息获取、发送及基础元数据查询功能。
     由于 Discord 的高度异步特性和复杂的权限模型，该适配器集成了懒加载客户端和多级频道查询机制。
@@ -43,30 +47,32 @@ class DiscordAdapter(PlatformAdapter):
         bot_user_id (str): 机器人自身的 Discord 用户 ID
     """
 
-    def __init__(self, bot_instance: Any, config: dict | None = None):
-        """
-        初始化 Discord 适配器。
+    def __init__(
+        self, bot_instance: DiscordClientProtocol, config: dict[str, object] | None = None
+    ) -> None:
+        """初始化 Discord 适配器。
 
         Args:
-            bot_instance (Any): 宿主机器人实例
-            config (dict, optional): 配置项，用于提取机器人自身的 Discord ID
+            bot_instance: Discord 客户端实例。
+            config: 配置项，用于提取机器人自身的 Discord ID。
         """
         super().__init__(bot_instance, config)
         # 机器人自己的用户 ID，用于消息过滤（避免分析博取回复）
-        self.bot_user_id = str(config.get("bot_user_id", "")) if config else ""
+        self.bot_user_id = (
+            str(config.get("bot_user_id", "")) if config is not None else ""
+        )
 
         # 缓存 Discord 客户端（Lazy Loading）
-        self._cached_client = None
+        self._cached_client: DiscordClientProtocol | None = None
 
     @property
-    def _discord_client(self) -> Any:
-        """
-        内部属性：获取实际的 Discord 客户端实例。
+    def _discord_client(self) -> DiscordClientProtocol | None:
+        """内部属性：获取实际的 Discord 客户端实例。
 
         具备懒加载和自动身份嗅探功能。
 
         Returns:
-            Any: Discord Client 对象
+            Discord Client 对象。
         """
         if self._cached_client:
             return self._cached_client
@@ -75,30 +81,27 @@ class DiscordAdapter(PlatformAdapter):
         self._cached_client = self._get_discord_client()
 
         # 兜底：尝试从客户端连接状态中补全机器人 ID
-        if (
-            not self.bot_user_id
-            and self._cached_client
-            and hasattr(self._cached_client, "user")
-            and self._cached_client.user
-        ):
+        if not self.bot_user_id and self._cached_client and self._cached_client.user:
             self.bot_user_id = str(self._cached_client.user.id)
 
         return self._cached_client
 
-    def _get_discord_client(self) -> Any:
+    def _get_discord_client(self) -> DiscordClientProtocol | None:
         """内部方法：通过多级探测从 bot_instance 中提取 Discord SDK 客户端。"""
         # 路径 A：bot 本身就是 Client (如小型集成)
         if hasattr(self.bot, "get_channel"):
-            return self.bot
+            return self.bot  # type: ignore[assignment]
         # 路径 B：bot 是包装器，client 在标准成员变量中
         if hasattr(self.bot, "client"):
-            return self.bot.client
+            client = getattr(self.bot, "client", None)
+            if hasattr(client, "get_channel"):
+                return client  # type: ignore[assignment]
         # 路径 C：其他常见私有属性名
         for attr in ("_client", "discord_client", "_discord_client"):
             if hasattr(self.bot, attr):
                 client = getattr(self.bot, attr)
                 if hasattr(client, "get_channel"):
-                    return client
+                    return client  # type: ignore[assignment]
         logger.warning(f"无法从 {type(self.bot).__name__} 中提取 Discord 客户端实例")
         return None
 
@@ -114,7 +117,7 @@ class DiscordAdapter(PlatformAdapter):
         days: int = 1,
         max_count: int = 100,
         before_id: str | None = None,
-        since_ts: int | None = None,
+        since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
         """
         从 Discord 频道异步拉取历史消息记录。
@@ -134,12 +137,16 @@ class DiscordAdapter(PlatformAdapter):
 
         try:
             channel_id = int(group_id)
+            client = self._discord_client
+            if not client:
+                return []
+
             # 先从缓存尝试获取频道
-            channel = self._discord_client.get_channel(channel_id)
+            channel = client.get_channel(channel_id)
             if not channel:
                 # 缓存未命中则通过网络 fetch
                 try:
-                    channel = await self._discord_client.fetch_channel(channel_id)
+                    channel = await client.fetch_channel(channel_id)
                 except Exception as e:
                     logger.debug(f"拉取 Discord 频道 {group_id} 失败: {e}")
                     return []
@@ -194,9 +201,11 @@ class DiscordAdapter(PlatformAdapter):
             logger.error(f"Discord fetch_messages failed: {e}", exc_info=True)
             return []
 
-    def _convert_message(self, raw_msg: Any, group_id: str) -> UnifiedMessage | None:
+    def _convert_message(self, raw_msg: DiscordMessageProtocol, group_id: str) -> UnifiedMessage | None:
         """内部方法：将 `discord.Message` 对象转换为统一的 `UnifiedMessage`。"""
         try:
+            from typing import Any
+
             contents = []
 
             # 1. 基础文本
@@ -206,6 +215,7 @@ class DiscordAdapter(PlatformAdapter):
                 )
 
             # 2. 附件处理 (图片/视频/语音/普通文件)
+            attachment: Any
             for attachment in raw_msg.attachments:
                 content_type = attachment.content_type or ""
                 if content_type.startswith("image/"):
@@ -239,6 +249,7 @@ class DiscordAdapter(PlatformAdapter):
                     )
 
             # 3. 嵌入内容处理 (部分 Embed 可能包含富文本描述)
+            embed: Any
             for embed in raw_msg.embeds:
                 if embed.image:
                     contents.append(
@@ -256,6 +267,7 @@ class DiscordAdapter(PlatformAdapter):
 
             # 4. 贴纸处理 (Stickers)
             if raw_msg.stickers:
+                sticker: Any
                 for sticker in raw_msg.stickers:
                     contents.append(
                         MessageContent(
@@ -269,12 +281,9 @@ class DiscordAdapter(PlatformAdapter):
                     )
 
             # 确定发送者的显示名称（服务器昵称 > 全局名称 > 用户名）
-            sender_card = None
-            if hasattr(raw_msg.author, "nick") and raw_msg.author.nick:
-                sender_card = raw_msg.author.nick
-            elif hasattr(raw_msg.author, "global_name") and raw_msg.author.global_name:
-                sender_card = raw_msg.author.global_name
+            sender_card = getattr(raw_msg.author, "nick", None) or getattr(raw_msg.author, "global_name", None)
 
+            ref_msg_id = getattr(raw_msg.reference, "message_id", None) if raw_msg.reference else None
             return UnifiedMessage(
                 message_id=str(raw_msg.id),
                 sender_id=str(raw_msg.author.id),
@@ -285,9 +294,7 @@ class DiscordAdapter(PlatformAdapter):
                 contents=tuple(contents),
                 timestamp=int(raw_msg.created_at.timestamp()),
                 platform="discord",
-                reply_to_id=str(raw_msg.reference.message_id)
-                if raw_msg.reference
-                else None,
+                reply_to_id=str(ref_msg_id) if ref_msg_id else None,
             )
         except Exception as e:
             logger.debug(f"Discord 消息转换错误: {e}")
@@ -410,10 +417,13 @@ class DiscordAdapter(PlatformAdapter):
             return False
 
         try:
+            client = self._discord_client
+            if not client:
+                return False
             channel_id = int(group_id)
-            channel = self._discord_client.get_channel(channel_id)
+            channel = client.get_channel(channel_id)
             if not channel:
-                channel = await self._discord_client.fetch_channel(channel_id)
+                channel = await client.fetch_channel(channel_id)
 
             if not hasattr(channel, "send"):
                 return False
@@ -525,10 +535,13 @@ class DiscordAdapter(PlatformAdapter):
             return False
 
         try:
+            client = self._discord_client
+            if not client:
+                return False
             channel_id = int(group_id)
-            channel = self._discord_client.get_channel(channel_id)
+            channel = client.get_channel(channel_id)
             if not channel:
-                channel = await self._discord_client.fetch_channel(channel_id)
+                channel = await client.fetch_channel(channel_id)
 
             if not hasattr(channel, "send"):
                 return False
@@ -588,7 +601,7 @@ class DiscordAdapter(PlatformAdapter):
                 group_name=group_name,
                 member_count=member_count,
                 owner_id=owner_id or None,
-                create_time=int(channel.created_at.timestamp()),
+                create_time=int(channel.created_at.timestamp()) if channel.created_at else None,
                 platform="discord",
             )
         except Exception as e:
@@ -601,8 +614,11 @@ class DiscordAdapter(PlatformAdapter):
             return []
 
         try:
+            client = self._discord_client
+            if not client:
+                return []
             channel_ids = []
-            for guild in self._discord_client.guilds:
+            for guild in client.guilds:
                 for channel in guild.text_channels:
                     channel_ids.append(str(channel.id))
             return channel_ids
@@ -727,7 +743,9 @@ class DiscordAdapter(PlatformAdapter):
                 # 自动对齐 Discord 支持的尺寸 (2的幂)
                 allowed_sizes = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
-                return user.display_avatar.with_size(target_size).url
+                from typing import Any
+                avatar: Any = user.display_avatar
+                return avatar.with_size(target_size).url
 
             return None
         except Exception as e:
@@ -781,6 +799,10 @@ class DiscordAdapter(PlatformAdapter):
         if not discord:
             return False
 
+        client = self._discord_client
+        if not client:
+            return False
+
         try:
             reaction_key = str(emoji)
             emoji_to_use = {
@@ -792,20 +814,23 @@ class DiscordAdapter(PlatformAdapter):
             }.get(reaction_key, reaction_key)
 
             channel_id = int(group_id)
-            channel = self._discord_client.get_channel(channel_id)
+            channel = client.get_channel(channel_id)
             if not channel:
-                channel = await self._discord_client.fetch_channel(channel_id)
+                channel = await client.fetch_channel(channel_id)
 
-            if not hasattr(channel, "get_partial_message"):
-                # 如果较低版本的 SDK 没这个方法，则直接 fetch
-                msg = await channel.fetch_message(int(message_id))
+            msg: DiscordMessageProtocol
+            if hasattr(channel, "get_partial_message"):
+                from typing import Any
+
+                partial_msg: Any = channel.get_partial_message(int(message_id))
+                msg = cast("DiscordMessageProtocol", partial_msg)
             else:
-                msg = channel.get_partial_message(int(message_id))
+                msg = await channel.fetch_message(int(message_id))
 
             if is_add:
                 await msg.add_reaction(emoji_to_use)
-            else:
-                await msg.remove_reaction(emoji_to_use, self._discord_client.user)
+            elif client.user:
+                await msg.remove_reaction(emoji_to_use, client.user)
             return True
         except Exception as e:
             logger.debug(f"Discord set_reaction 失败: {e}")

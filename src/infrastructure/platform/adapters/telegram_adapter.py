@@ -32,7 +32,6 @@ if TYPE_CHECKING:
         HistoryRecordProtocol,
         TelegramClientProtocol,
     )
-    from ....domain.repositories.plugin_host_repository import PluginHostProtocol
     from ....domain.value_objects.unified_message import UnifiedMessage
 
 # Telegram 依赖

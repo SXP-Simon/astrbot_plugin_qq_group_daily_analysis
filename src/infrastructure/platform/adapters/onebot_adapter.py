@@ -20,6 +20,7 @@ from ....domain.repositories.platform_adapter_repository import (
     GroupAlbumSupportProtocol,
     GroupFileSupportProtocol,
 )
+from ....domain.repositories.plugin_host_repository import PluginHostProtocol
 from ....domain.value_objects.platform_capabilities import (
     ONEBOT_V11_CAPABILITIES,
     PlatformCapabilities,
@@ -39,8 +40,6 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from ....domain.repositories.bot_client_protocol import OneBotClientProtocol
-    from ....domain.repositories.plugin_host_repository import PluginHostProtocol
-    from ....domain.value_objects import OneBotAlbumPayload
     from ....domain.value_objects.unified_message import (
         UnifiedMessage,
     )

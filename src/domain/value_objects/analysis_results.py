@@ -338,6 +338,13 @@ class DrawingProviderConfigPayload(TypedDict, total=False):
 
     api_url: str
     api_key: str
+
+
+class QQOfficialMemberProfile(TypedDict, total=False):
+    """QQ 官方机器人成员资料缓存契约"""
+
+    nickname: str
+    avatar_url: str
     model: str
     api_protocol: str
     image_size: str

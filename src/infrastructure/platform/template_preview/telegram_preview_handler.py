@@ -8,11 +8,14 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ....domain.repositories.bot_client_protocol import (
+    TelegramApplicationProtocol,
+    TelegramClientProtocol,
+)
 from ....utils.logger import logger
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
-    from astrbot.api.star import Context
     from telegram import (
         CallbackQuery,
         InlineKeyboardButton,
@@ -25,10 +28,6 @@ if TYPE_CHECKING:
 
     from ....application.services.template_command_service import (
         TemplateCommandService,
-    )
-    from ....domain.repositories.bot_client_protocol import (
-        TelegramApplicationProtocol,
-        TelegramClientProtocol,
     )
     from ...config.config_manager import ConfigManager
 
