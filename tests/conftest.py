@@ -10,7 +10,6 @@ if str(PLUGIN_ROOT.parent) not in sys.path:
     sys.path.insert(0, str(PLUGIN_ROOT.parent))
 
 
-
 if "astrbot.api" not in sys.modules:
     astrbot_module = types.ModuleType("astrbot")
     astrbot_api_module = types.ModuleType("astrbot.api")
@@ -167,6 +166,3 @@ if "astrbot.api" not in sys.modules:
     sys.modules.setdefault(
         "astrbot.core.message.components", astrbot_core_message_components_module
     )
-
-
-

@@ -208,4 +208,3 @@ def test_fetch_messages_with_recent_since_ts_honors_cursor(monkeypatch):
 
     assert [message.message_id for message in messages] == ["502"]
     assert [message.text_content for message in messages] == ["游标后新消息"]
-

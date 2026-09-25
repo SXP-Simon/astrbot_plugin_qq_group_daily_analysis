@@ -26,7 +26,7 @@ from .pipeline_context import PipelineContext
 from .task_guard import DuplicateGroupTaskError, TaskGuard
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Awaitable, Callable, Mapping
 
     from ...domain.repositories.analysis_repository import IAnalysisProvider
     from ...domain.repositories.persistence_repository import (
@@ -61,7 +61,7 @@ class AnalysisApplicationService:
     incremental_store: IIncrementalStore | None
     incremental_merge_service: IncrementalMergeService | None
     checkpoint_store: ICheckpointStore | None
-    html_render: Callable[..., object] | None
+    html_render: Callable[..., Awaitable[str | bytes | None]] | None
     _task_guard: TaskGuard
     llm_semaphore: asyncio.Semaphore
     _incremental_service: IncrementalAnalysisService
@@ -79,7 +79,7 @@ class AnalysisApplicationService:
         incremental_store: IIncrementalStore | None = None,
         incremental_merge_service: IncrementalMergeService | None = None,
         checkpoint_store: ICheckpointStore | None = None,
-        html_render: Callable[..., object] | None = None,
+        html_render: Callable[..., Awaitable[str | bytes | None]] | None = None,
     ) -> None:
         """初始化分析应用服务。
 

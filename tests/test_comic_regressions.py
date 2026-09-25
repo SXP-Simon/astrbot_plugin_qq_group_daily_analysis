@@ -65,6 +65,7 @@ def load_main_method(name: str):
         "Any": Any,
         "AsyncGenerator": AsyncGenerator,
         "AstrMessageEvent": object,
+        "MessageEventResult": object,
         "DuplicateGroupTaskError": RuntimeError,
         "SettingsCommandHandler": SettingsCommandHandler,
         "ComicCommandHandler": ComicCommandHandler,
@@ -118,7 +119,9 @@ def load_main_method(name: str):
                         bot_manager=getattr(plugin, "bot_manager", None),
                         comic_service=getattr(plugin, "comic_service", None),
                         analysis_service=getattr(plugin, "analysis_service", None),
-                        active_task_manager=getattr(plugin, "active_task_manager", None),
+                        active_task_manager=getattr(
+                            plugin, "active_task_manager", None
+                        ),
                         plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
                         plugin_instance=plugin,
                     )
@@ -728,7 +731,9 @@ def test_t2i_viewport_fallback_only_fills_missing_meta_dimension():
     assert description == "模板width=980，兜底height=900"
 
 
-def test_custom_report_template_falls_back_to_scrapbook_for_missing_components(tmp_path: Path):
+def test_custom_report_template_falls_back_to_scrapbook_for_missing_components(
+    tmp_path: Path,
+):
     """自定义报告模板若未提供局部组件，自动回退到内置默认手账模板（scrapbook）。"""
     scrapbook_dir = tmp_path / "builtin" / "scrapbook"
     custom_template_dir = tmp_path / "custom" / "my_custom_theme"
@@ -737,9 +742,7 @@ def test_custom_report_template_falls_back_to_scrapbook_for_missing_components(t
     (scrapbook_dir / "image_template.html").write_text(
         "默认手账图片模板", encoding="utf-8"
     )
-    (scrapbook_dir / "topic_item.html").write_text(
-        "默认手账话题模板", encoding="utf-8"
-    )
+    (scrapbook_dir / "topic_item.html").write_text("默认手账话题模板", encoding="utf-8")
     (custom_template_dir / "image_template.html").write_text(
         "自定义主题图片模板", encoding="utf-8"
     )
@@ -752,7 +755,9 @@ def test_custom_report_template_falls_back_to_scrapbook_for_missing_components(t
     templates.base_dir = str(tmp_path / "builtin")
     environment = templates._get_env_sync()
 
-    assert environment.get_template("image_template.html").render() == "自定义主题图片模板"
+    assert (
+        environment.get_template("image_template.html").render() == "自定义主题图片模板"
+    )
     assert environment.get_template("topic_item.html").render() == "默认手账话题模板"
 
 
@@ -851,8 +856,7 @@ def test_standalone_comic_command_is_decoupled_from_analysis_permission():
     method = next(
         node
         for node in handler_class.body
-        if isinstance(node, ast.AsyncFunctionDef)
-        and node.name == "handle_group_comic"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "handle_group_comic"
     )
     attribute_names = {
         node.attr for node in ast.walk(method) if isinstance(node, ast.Attribute)
@@ -1592,14 +1596,14 @@ def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
     raw_config = {
         "prompts": {
             "comic_analysis_prompts": {
-                "comic_storyboard_prompt": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 \"scene\" 字段的 JSON 对象。"
+                "comic_storyboard_prompt": '你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 "scene" 字段的 JSON 对象。'
             }
         },
         "daily_comic": {
             "comic_characters": [
                 {
                     "name": "旧人设",
-                    "storyboard_prompt": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 \"scene\" 字段的 JSON 对象。",
+                    "storyboard_prompt": '你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n【核心视觉、台词与双层排版规则】\n请输出包含 "scene" 字段的 JSON 对象。',
                 },
                 {
                     "name": "自定义人设",
@@ -1633,8 +1637,3 @@ def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
         == "我的完全自定义专属提示词，不应被覆盖"
     )
     config_instance.save_config.assert_called()
-
-
-
-
-

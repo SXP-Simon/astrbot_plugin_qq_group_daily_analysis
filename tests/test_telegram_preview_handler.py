@@ -157,7 +157,6 @@ async def test_preview_handler_session_cleanup(preview_handler):
     assert "fresh_tok" in preview_handler._sessions
 
 
-
 @pytest.mark.asyncio
 async def test_preview_handler_register_and_unregister(preview_handler):
     mock_context = SimpleNamespace(

@@ -32,6 +32,7 @@ from .src.application.services.message_processing_service import (
 from .src.application.services.template_command_service import (
     TemplateCommandService,
 )
+from .src.domain.repositories import PluginHostProtocol
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
 from .src.domain.services.incremental_merge_service import IncrementalMergeService
 from .src.domain.services.statistics_service import StatisticsService
@@ -62,26 +63,66 @@ from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator
+    from pathlib import Path
 
     from astrbot.api import AstrBotConfig
+    from astrbot.api.event import MessageEventResult
 
-    from .src.domain.repositories import PluginHostProtocol
-
-
-def _resolve_settings_handler(plugin: PluginHostProtocol) -> SettingsCommandHandler:
-    """获取插件设置指令处理器实例（契约规范）。"""
-    return plugin.settings_command_handler
+    from .src.domain.repositories import PlatformAdapterProtocol
 
 
-def _resolve_comic_handler(plugin: PluginHostProtocol) -> ComicCommandHandler:
-    """获取插件漫画指令处理器实例（契约规范）。"""
-    return plugin.comic_command_handler
+def _resolve_settings_handler(plugin: object) -> SettingsCommandHandler:
+    """获取插件设置指令处理器实例（契约规范与测试兼容）。"""
+    handler = getattr(plugin, "settings_command_handler", None)
+    if isinstance(handler, SettingsCommandHandler):
+        return handler
+    return SettingsCommandHandler(
+        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
+        template_command_service=getattr(plugin, "template_command_service", None),  # type: ignore[reportArgumentType]
+        template_preview_router=getattr(plugin, "template_preview_router", None),  # type: ignore[reportArgumentType]
+        auto_scheduler=getattr(plugin, "auto_scheduler", None),  # type: ignore[reportArgumentType]
+        incremental_store=getattr(plugin, "incremental_store", None),
+        incremental_merge_service=getattr(plugin, "incremental_merge_service", None),
+        bot_manager=getattr(plugin, "bot_manager", None),
+        context=getattr(plugin, "context", None),
+    )
 
 
-def _resolve_analysis_handler(plugin: PluginHostProtocol) -> AnalysisCommandHandler:
-    """获取插件日常分析指令处理器实例（契约规范）。"""
-    return plugin.analysis_command_handler
+def _resolve_comic_handler(plugin: object) -> ComicCommandHandler:
+    """获取插件漫画指令处理器实例（契约规范与测试兼容）。"""
+    handler = getattr(plugin, "comic_command_handler", None)
+    if isinstance(handler, ComicCommandHandler):
+        return handler
+    return ComicCommandHandler(
+        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
+        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore[reportArgumentType]
+        comic_service=getattr(plugin, "comic_service", None),  # type: ignore[reportArgumentType]
+        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore[reportArgumentType]
+        active_task_manager=getattr(plugin, "active_task_manager", None),
+        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+        plugin_instance=plugin if isinstance(plugin, PluginHostProtocol) else None,
+    )
+
+
+def _resolve_analysis_handler(plugin: object) -> AnalysisCommandHandler:
+    """获取插件日常分析指令处理器实例（契约规范与测试兼容）。"""
+    handler = getattr(plugin, "analysis_command_handler", None)
+    if isinstance(handler, AnalysisCommandHandler):
+        return handler
+    return AnalysisCommandHandler(
+        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
+        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore[reportArgumentType]
+        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore[reportArgumentType]
+        report_generator=getattr(plugin, "report_generator", None),  # type: ignore[reportArgumentType]
+        html_render=getattr(plugin, "html_render", None),  # type: ignore[reportArgumentType]
+        active_task_manager=getattr(plugin, "active_task_manager", None),
+        trace_store=getattr(plugin, "trace_store", None),
+        message_sender=getattr(plugin, "message_sender", None),
+        comic_handler=_resolve_comic_handler(plugin),
+        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
+        plugin_instance=plugin if isinstance(plugin, PluginHostProtocol) else None,
+    )
 
 
 class GroupDailyAnalysis(Star):
@@ -92,8 +133,8 @@ class GroupDailyAnalysis(Star):
     config_manager: ConfigManager
     bot_manager: BotManager
     history_manager: HistoryManager
+    plugin_data_dir: Path
     report_generator: ReportGenerator
-    html_render: Callable
     platform_group_registry: PlatformGroupRegistry
     statistics_service: StatisticsService
     analysis_domain_service: AnalysisDomainService
@@ -101,6 +142,8 @@ class GroupDailyAnalysis(Star):
     incremental_store: IncrementalStore
     incremental_merge_service: IncrementalMergeService
     analysis_service: AnalysisApplicationService
+    drawing_client: DrawingClient
+    comic_service: ComicApplicationService
     message_processing_service: MessageProcessingService
     template_command_service: TemplateCommandService
     telegram_template_preview_handler: TelegramTemplatePreviewHandler
@@ -111,9 +154,15 @@ class GroupDailyAnalysis(Star):
     checkpoint_store: CheckpointStore
     active_task_manager: ActiveTaskManager
     webui_bridge: PluginPageWebUIBridge
+    crash_recovery_service: CrashRecoveryService
     settings_command_handler: SettingsCommandHandler
     comic_command_handler: ComicCommandHandler
     analysis_command_handler: AnalysisCommandHandler
+    _initialized: bool
+    _terminating: bool
+    _init_lock: asyncio.Lock
+    _init_task: asyncio.Task[None] | None
+    _discovery_run: bool
 
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -286,7 +335,7 @@ class GroupDailyAnalysis(Star):
 
     async def initialize(self):
         """在 AstrBot 插件生命周期中确认初始化已经完成。"""
-        init_task = getattr(self, "_init_task", None)
+        init_task = self._init_task
         if init_task is None:
             await self._run_initialization("Plugin Lifecycle")
             return
@@ -347,10 +396,8 @@ class GroupDailyAnalysis(Star):
                         recovery_task = loop.create_task(
                             crash_recovery.recover_crashed_tasks()
                         )
-                        bg_tasks = getattr(self, "_background_tasks", None)
-                        if isinstance(bg_tasks, set):
-                            bg_tasks.add(recovery_task)
-                            recovery_task.add_done_callback(bg_tasks.discard)
+                        self._background_tasks.add(recovery_task)
+                        recovery_task.add_done_callback(self._background_tasks.discard)
                     except RuntimeError:
                         pass
 
@@ -367,10 +414,8 @@ class GroupDailyAnalysis(Star):
             return
         self._terminating = True
 
-        if hasattr(self, "analysis_command_handler"):
-            self.analysis_command_handler.set_terminating(True)
-        if hasattr(self, "comic_command_handler"):
-            self.comic_command_handler.set_terminating(True)
+        self.analysis_command_handler.set_terminating(True)
+        self.comic_command_handler.set_terminating(True)
 
         try:
             logger.info("开始清理群日常分析插件资源...")
@@ -439,7 +484,8 @@ class GroupDailyAnalysis(Star):
     )
     async def intercept_qq_official_messages(self, event: AstrMessageEvent):
         """缓存 QQ 官方机器人群消息"""
-        raw_message = getattr(getattr(event, "message_obj", None), "raw_message", None)
+        msg_obj = event.message_obj
+        raw_message = msg_obj.raw_message if msg_obj else None
         if isinstance(raw_message, dict):
             author = raw_message.get("author") or {}
             group_openid = str(raw_message.get("group_openid", "") or "").strip()
@@ -500,12 +546,8 @@ class GroupDailyAnalysis(Star):
         try:
             return event.get_platform_id()
         except Exception:
-            if (
-                hasattr(event, "platform_meta")
-                and event.platform_meta
-                and hasattr(event.platform_meta, "id")
-            ):
-                return event.platform_meta.id
+            if event.platform_meta and hasattr(event.platform_meta, "id"):
+                return str(event.platform_meta.id)
             return "default"
 
     # ==================== 指令注册与分发 ====================
@@ -514,7 +556,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[object, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """分析群聊日常活动（跨平台支持）"""
         handler = _resolve_analysis_handler(self)
         async for result in handler.handle_daily_analysis(event, days):
@@ -524,7 +566,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def generate_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[object, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """生成群聊趣味漫画（跨平台支持）"""
         handler = _resolve_comic_handler(self)
         async for result in handler.handle_group_comic(event, days):
@@ -532,7 +574,9 @@ class GroupDailyAnalysis(Star):
 
     @filter.command("设置格式", alias={"set_format"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def set_output_format(self, event: AstrMessageEvent, format_input: str = ""):
+    async def set_output_format(
+        self, event: AstrMessageEvent, format_input: str = ""
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """设置分析报告输出格式（跨平台支持）"""
         handler = _resolve_settings_handler(self)
         async for result in handler.handle_set_output_format(event, format_input):
@@ -542,7 +586,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
-    ):
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """设置分析报告模板（跨平台支持）"""
         handler = _resolve_settings_handler(self)
         async for result in handler.handle_set_report_template(event, template_input):
@@ -550,20 +594,38 @@ class GroupDailyAnalysis(Star):
 
     @filter.command("查看模板", alias={"view_templates"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def view_templates(self, event: AstrMessageEvent):
+    async def view_templates(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """查看所有可用的报告模板及预览图（跨平台支持）"""
-        platform_id = str(self._get_platform_id_from_event(event) or "")
+        platform_getter = getattr(self, "_get_platform_id_from_event", None)
+        platform_id = (
+            str(platform_getter(event) or "")
+            if callable(platform_getter)
+            else str(getattr(event, "get_platform_id", lambda: "")() or "")
+        )
         handler = _resolve_settings_handler(self)
         async for result in handler.handle_view_templates(event, platform_id):
             yield result
 
     @filter.command("分析设置", alias={"analysis_settings"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def analysis_settings(self, event: AstrMessageEvent, action: str = "status"):
+    async def analysis_settings(
+        self, event: AstrMessageEvent, action: str = "status"
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """管理分析设置（跨平台支持）"""
-        group_id = str(self._get_group_id_from_event(event) or "")
-        get_plat_id = getattr(self, "_get_platform_id_from_event", None)
-        platform_id = str(get_plat_id(event) if callable(get_plat_id) else "" or "")
+        group_getter = getattr(self, "_get_group_id_from_event", None)
+        group_id = (
+            str(group_getter(event) or "")
+            if callable(group_getter)
+            else str(getattr(event, "get_group_id", lambda: "")() or "")
+        )
+        platform_getter = getattr(self, "_get_platform_id_from_event", None)
+        platform_id = (
+            str(platform_getter(event) or "")
+            if callable(platform_getter)
+            else str(getattr(event, "get_platform_id", lambda: "")() or "")
+        )
         handler = _resolve_settings_handler(self)
         async for result in handler.handle_analysis_settings(
             event, action, str(group_id), platform_id
@@ -572,9 +634,16 @@ class GroupDailyAnalysis(Star):
 
     @filter.command("增量状态", alias={"incremental_status"})
     @filter.permission_type(PermissionType.ADMIN)
-    async def incremental_status(self, event: AstrMessageEvent):
+    async def incremental_status(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """查看当前增量分析状态（滑动窗口）"""
-        group_id = str(self._get_group_id_from_event(event) or "")
+        group_getter = getattr(self, "_get_group_id_from_event", None)
+        group_id = (
+            str(group_getter(event) or "")
+            if callable(group_getter)
+            else str(getattr(event, "get_group_id", lambda: "")() or "")
+        )
         handler = _resolve_settings_handler(self)
         async for result in handler.handle_incremental_status(event, str(group_id)):
             yield result
@@ -588,7 +657,7 @@ class GroupDailyAnalysis(Star):
 
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict[str, object]
-    ) -> AsyncGenerator[object, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         handler = _resolve_analysis_handler(self)
         async for res in handler.send_analysis_report(event, result):
             yield res
@@ -620,7 +689,7 @@ class GroupDailyAnalysis(Star):
         group_id: str,
         analysis_result: dict[str, object],
         is_qq_official: bool,
-        adapter: object,
+        adapter: PlatformAdapterProtocol,
     ) -> None:
         handler = _resolve_analysis_handler(self)
         await handler._send_text_reports(

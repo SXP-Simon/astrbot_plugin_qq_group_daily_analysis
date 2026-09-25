@@ -148,8 +148,6 @@ async def test_api_traces_crud(bridge_setup):
         assert data.get("status") == "ok"
         assert data.get("data", {}).get("total") == 1
 
-
-
     # 2. 详情查询
     res_detail = await bridge.api_get_trace_detail("tr_100")
     data_detail = (

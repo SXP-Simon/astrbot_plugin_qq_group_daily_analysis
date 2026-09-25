@@ -15,7 +15,7 @@ from ....domain.repositories.bot_client_protocol import (
 from ....utils.logger import logger
 
 if TYPE_CHECKING:
-    from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.event import AstrMessageEvent, MessageEventResult
     from telegram import (
         CallbackQuery,
         InlineKeyboardButton,
@@ -375,12 +375,12 @@ class TelegramTemplatePreviewHandler:
         event: AstrMessageEvent,
         platform_id: str,
         available_templates: list[str],
-    ) -> tuple[bool, list[object]]:
+    ) -> tuple[bool, list[MessageEventResult]]:
         """统一处理 Telegram 的 /查看模板 流程。"""
         if not self.supports(event):
             return False, []
 
-        results: list[object] = []
+        results: list[MessageEventResult] = []
 
         async def _append_fallback_results() -> None:
             current_template = self.config_manager.get_report_template()

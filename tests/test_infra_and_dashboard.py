@@ -280,8 +280,15 @@ async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
 @pytest.mark.asyncio
 async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     from unittest.mock import AsyncMock, MagicMock
-    from src.application.services.analysis_application_service import AnalysisApplicationService
-    from src.domain.value_objects import GroupStatistics, SummaryTopic, UserTitle, TokenUsage
+    from src.application.services.analysis_application_service import (
+        AnalysisApplicationService,
+    )
+    from src.domain.value_objects import (
+        GroupStatistics,
+        SummaryTopic,
+        UserTitle,
+        TokenUsage,
+    )
 
     chk_store = CheckpointStore(temp_db)
 
@@ -295,8 +302,18 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
         emoji_count=5,
         token_usage=TokenUsage(total_tokens=500),
     )
-    topics = [SummaryTopic(topic="测试话题A", contributors=["测试用户"], detail="话题详情")]
-    user_titles = [UserTitle(name="测试用户", user_id="123", title="水群王", mbti="INTJ", reason="经常水群")]
+    topics = [
+        SummaryTopic(topic="测试话题A", contributors=["测试用户"], detail="话题详情")
+    ]
+    user_titles = [
+        UserTitle(
+            name="测试用户",
+            user_id="123",
+            title="水群王",
+            mbti="INTJ",
+            reason="经常水群",
+        )
+    ]
     analysis_result = {
         "statistics": stats,
         "topics": topics,
@@ -307,7 +324,9 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
 
     mock_report_gen = MagicMock()
     mock_report_gen.data_dir = tmp_path
-    mock_report_gen.generate_image_report = AsyncMock(return_value=(str(tmp_path / "temp.jpg"), None))
+    mock_report_gen.generate_image_report = AsyncMock(
+        return_value=(str(tmp_path / "temp.jpg"), None)
+    )
     mock_report_gen.html_templates = MagicMock()
     mock_report_gen.html_templates.render_template = MagicMock(
         return_value="<html>测试报告</html>"
@@ -404,7 +423,11 @@ async def test_resume_analysis_using_checkpoint(temp_db: Path, tmp_path: Path):
     mock_llm = MagicMock()
     mock_llm.analyze_all_concurrent = AsyncMock(
         return_value=(
-            [SummaryTopic(topic="断点续跑话题", detail="续跑测试", contributors=["用户A"])],
+            [
+                SummaryTopic(
+                    topic="断点续跑话题", detail="续跑测试", contributors=["用户A"]
+                )
+            ],
             [],
             [],
             TokenUsage(prompt_tokens=100, completion_tokens=20, total_tokens=120),
@@ -590,7 +613,9 @@ async def test_resume_analysis_falls_back_to_fresh_run_when_checkpoint_missing(
         assert mock_service.execute_daily_analysis.called
 
 
-def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(temp_db: Path):
+def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(
+    temp_db: Path,
+):
     """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
     from src.infrastructure.visualization.activity_charts import ActivityVisualizer
     from src.domain.value_objects import ActivityVisualization, GroupStatistics
@@ -658,7 +683,9 @@ async def test_report_dispatcher_span_tracking():
 
     mock_rep_gen = MagicMock()
     mock_rep_gen.data_dir = Path("./tmp")
-    mock_rep_gen.generate_image_report = AsyncMock(return_value=("base64://dGVzdA==", "<html></html>"))
+    mock_rep_gen.generate_image_report = AsyncMock(
+        return_value=("base64://dGVzdA==", "<html></html>")
+    )
 
     mock_msg_sender = MagicMock()
     mock_msg_sender.bot_manager = MagicMock(get_adapter=MagicMock(return_value=None))
@@ -699,7 +726,9 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     # 自定义模板1：覆盖已有内置模板的修改版 (ATRI) - 修改了内容
     theme1_dir = custom_root / "ATRI"
     theme1_dir.mkdir()
-    (theme1_dir / "image_template.html").write_text("<div>ATRI Custom Modified</div>", encoding="utf-8")
+    (theme1_dir / "image_template.html").write_text(
+        "<div>ATRI Custom Modified</div>", encoding="utf-8"
+    )
 
     # 自定义模板2：全新的第三方未知本地模板 (third_party_cyber)
     theme2_dir = custom_root / "third_party_cyber"
@@ -709,9 +738,15 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     # 自定义模板3：用户拷贝了内置的 simple 模板但未做任何修改 (内容哈希完全相同)
     theme3_dir = custom_root / "simple"
     theme3_dir.mkdir()
-    builtin_simple_img = Path(templates_mgr_dummy := HTMLTemplates(MagicMock()).base_dir) / "simple" / "image_template.html"
+    builtin_simple_img = (
+        Path(templates_mgr_dummy := HTMLTemplates(MagicMock()).base_dir)
+        / "simple"
+        / "image_template.html"
+    )
     if builtin_simple_img.exists():
-        (theme3_dir / "image_template.html").write_bytes(builtin_simple_img.read_bytes())
+        (theme3_dir / "image_template.html").write_bytes(
+            builtin_simple_img.read_bytes()
+        )
 
     mock_config = MagicMock()
     mock_config.get_report_template = MagicMock(return_value="scrapbook")
@@ -817,7 +852,9 @@ async def test_plugin_config_api(tmp_path: Path):
 
     mock_config = MagicMock()
     mock_config.__iter__.return_value = ["basic", "analysis_features"]
-    mock_config.__getitem__.side_effect = lambda k: {"enabled": True} if k == "basic" else {}
+    mock_config.__getitem__.side_effect = lambda k: (
+        {"enabled": True} if k == "basic" else {}
+    )
     mock_config_dict = {"basic": {"enabled": True}}
     mock_config.__iter__ = lambda self: iter(mock_config_dict)
     mock_config.items = lambda: mock_config_dict.items()
@@ -840,7 +877,9 @@ async def test_plugin_config_api(tmp_path: Path):
     assert get_res is not None
     # 2. 验证 api_save_config
     with patch("src.infrastructure.webui.plugin_page_bridge.request") as mock_req:
-        mock_req.json = AsyncMock(return_value={"config": {"basic": {"enabled": False}}})
+        mock_req.json = AsyncMock(
+            return_value={"config": {"basic": {"enabled": False}}}
+        )
         save_res = await bridge.api_save_config()
         assert save_res is not None
 
@@ -891,10 +930,21 @@ async def test_render_report_span_reports_correct_template_theme(tmp_path: Path)
     mock_config = MagicMock()
     mock_config.get_report_template = MagicMock(return_value="miku")
     mock_config.get_t2i_max_concurrent = MagicMock(return_value=2)
-    mock_config.get_t2i_rendering_strategies = MagicMock(return_value=[{"type": "jpeg", "full_page": True, "device_scale_factor_level": 2, "timeout": 30}])
+    mock_config.get_t2i_rendering_strategies = MagicMock(
+        return_value=[
+            {
+                "type": "jpeg",
+                "full_page": True,
+                "device_scale_factor_level": 2,
+                "timeout": 30,
+            }
+        ]
+    )
     mock_config.get_profile_mapping = MagicMock(return_value="{}")
     mock_config.get_html_output_dir = MagicMock(return_value=str(tmp_path / "html"))
-    mock_config.get_html_filename_format = MagicMock(return_value="report_{group_id}_{date}")
+    mock_config.get_html_filename_format = MagicMock(
+        return_value="report_{group_id}_{date}"
+    )
 
     mock_tpl = MagicMock()
     mock_tpl.render_template = MagicMock(return_value="<html>miku</html>")
@@ -920,6 +970,7 @@ async def test_render_report_span_reports_correct_template_theme(tmp_path: Path)
 
     # 1. 验证 generate_image_report 在 template_theme 未传时自动继承 config 中的 "miku" 并上报
     with trace.span("RENDER_REPORT", {"format": "image"}):
+
         async def dummy_render(html, data, return_url, options):
             return b"\xff\xd8\xff\xe0" + b"fake_jpeg_content"
 
@@ -930,7 +981,12 @@ async def test_render_report_span_reports_correct_template_theme(tmp_path: Path)
             template_theme=None,
         )
 
-    image_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "image"]
+    image_spans = [
+        s
+        for s in trace._spans
+        if s["stage_name"] == "RENDER_REPORT"
+        and s.get("payload", {}).get("format") == "image"
+    ]
     assert len(image_spans) == 1
     assert image_spans[0]["payload"]["template"] == "miku"
 
@@ -943,7 +999,11 @@ async def test_render_report_span_reports_correct_template_theme(tmp_path: Path)
             template_theme=None,
         )
 
-    html_spans = [s for s in trace._spans if s["stage_name"] == "RENDER_REPORT" and s.get("payload", {}).get("format") == "html"]
+    html_spans = [
+        s
+        for s in trace._spans
+        if s["stage_name"] == "RENDER_REPORT"
+        and s.get("payload", {}).get("format") == "html"
+    ]
     assert len(html_spans) == 1
     assert html_spans[0]["payload"]["template"] == "gda_miku_dream"
-

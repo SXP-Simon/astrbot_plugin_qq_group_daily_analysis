@@ -52,9 +52,8 @@ class MockEvent:
         self._platform_name = platform_name
         self._sender_id = sender_id
         self._sender_name = sender_name
-        self.unified_msg_origin = (
-            unified_msg_origin
-            or (f"{platform_id}:GroupMessage:{group_id}" if group_id else None)
+        self.unified_msg_origin = unified_msg_origin or (
+            f"{platform_id}:GroupMessage:{group_id}" if group_id else None
         )
         self.message_obj = SimpleNamespace(
             message_id=message_id,
@@ -329,7 +328,6 @@ async def test_analyze_group_daily_reaction_mode(plugin):
         send_image=AsyncMock(return_value=True),
     )
     plugin.bot_manager.get_adapter = Mock(return_value=mock_adapter)
-
 
     mock_analysis_result = {
         "success": True,
@@ -685,9 +683,7 @@ async def test_incremental_status_not_in_group(plugin):
 
 @pytest.mark.asyncio
 async def test_incremental_status_disabled(plugin):
-    plugin.config_manager._ensure_group("incremental")[
-        "incremental_group_list"
-    ] = []
+    plugin.config_manager._ensure_group("incremental")["incremental_group_list"] = []
     event = MockEvent(group_id="123456")
     results = []
     async for res in plugin.incremental_status(event):

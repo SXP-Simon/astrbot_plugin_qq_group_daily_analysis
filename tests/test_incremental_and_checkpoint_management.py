@@ -123,9 +123,7 @@ async def test_incremental_store_crud_and_registration(dummy_plugin_kv: DummyPlu
     assert batch_list[1]["batch_id"] == "batch_001"
 
     # 4. 更新游标并检查
-    await store.update_last_analyzed_cursor(
-        "group_123", 1725960000, {"msg_1", "msg_2"}
-    )
+    await store.update_last_analyzed_cursor("group_123", 1725960000, {"msg_1", "msg_2"})
     ts, ids = await store.get_last_analyzed_cursor("group_123")
     assert ts == 1725960000
     assert ids == {"msg_1", "msg_2"}
@@ -515,9 +513,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             timestamp=three_days_ago_ts + 10,
             text_content="周一的话题消息",
             contents=(
-                MessageContent(
-                    type=MessageContentType.TEXT, text="周一的话题消息"
-                ),
+                MessageContent(type=MessageContentType.TEXT, text="周一的话题消息"),
             ),
         ),
         UnifiedMessage(
@@ -528,9 +524,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             timestamp=two_days_ago_ts,
             text_content="周二的话题消息",
             contents=(
-                MessageContent(
-                    type=MessageContentType.TEXT, text="周二的话题消息"
-                ),
+                MessageContent(type=MessageContentType.TEXT, text="周二的话题消息"),
             ),
         ),
         UnifiedMessage(
@@ -541,9 +535,7 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
             timestamp=one_hour_ago_ts,
             text_content="周三今天的话题消息",
             contents=(
-                MessageContent(
-                    type=MessageContentType.TEXT, text="周三今天的话题消息"
-                ),
+                MessageContent(type=MessageContentType.TEXT, text="周三今天的话题消息"),
             ),
         ),
     ]
@@ -614,14 +606,10 @@ async def test_run_incremental_analysis_enforces_days_lookback_boundary(
     # 验证 adapter.fetch_messages 的 since_ts 参数被约束在 1 天内
     fetch_call_args = mock_adapter.fetch_messages.call_args
     assert fetch_call_args is not None
-    assert (
-        fetch_call_args.kwargs["since_ts"] >= now_ts - 86400 - 5
-    )  # 允许 5s 运行误差
+    assert fetch_call_args.kwargs["since_ts"] >= now_ts - 86400 - 5  # 允许 5s 运行误差
 
     # 验证传入统计与转换的消息只有周三的消息 (msg_wed)，周一与周二的消息被严格过滤
-    legacy_msgs_passed = (
-        mock_stat_service._convert_to_legacy_dict.call_args[0][0]
-    )
+    legacy_msgs_passed = mock_stat_service._convert_to_legacy_dict.call_args[0][0]
     assert len(legacy_msgs_passed) == 1
     assert legacy_msgs_passed[0].message_id == "msg_wed"
     assert legacy_msgs_passed[0].text_content == "周三今天的话题消息"
@@ -704,14 +692,8 @@ async def test_incremental_store_query_batches_and_cleanup_cross_days(
     assert deleted_count == 1
     assert await store.get_batch_count("group_multiday") == 2
     assert await store.get_batch_detail("group_multiday", "batch_monday") is None
-    assert (
-        await store.get_batch_detail("group_multiday", "batch_tuesday")
-        is not None
-    )
-    assert (
-        await store.get_batch_detail("group_multiday", "batch_wednesday")
-        is not None
-    )
+    assert await store.get_batch_detail("group_multiday", "batch_tuesday") is not None
+    assert await store.get_batch_detail("group_multiday", "batch_wednesday") is not None
 
 
 @pytest.mark.asyncio
@@ -806,7 +788,3 @@ async def test_incremental_final_report_aggregates_only_in_window_batches(
     assert "周一已结题旧话题" not in topic_titles
     # 验证消息量仅为周三当天的 40 条
     assert analysis_result["statistics"].message_count == 40
-
-
-
-

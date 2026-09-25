@@ -114,9 +114,7 @@ def test_telegram_message_converter_placeholder_detection():
         TelegramMessageConverter.is_placeholder_sender_name("Unknown", "12345") is True
     )
     assert TelegramMessageConverter.is_placeholder_sender_name("none", "12345") is True
-    assert (
-        TelegramMessageConverter.is_placeholder_sender_name("12345", "12345") is True
-    )
+    assert TelegramMessageConverter.is_placeholder_sender_name("12345", "12345") is True
     assert (
         TelegramMessageConverter.is_placeholder_sender_name("Alice", "12345") is False
     )

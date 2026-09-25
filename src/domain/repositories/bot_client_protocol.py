@@ -375,3 +375,36 @@ class LLMStreamProviderProtocol(Protocol):
     ) -> AsyncIterator[object]:
         """流式调用 LLM 并返回异步生成器。"""
         ...
+
+
+@runtime_checkable
+class GroupFileSupportProtocol(Protocol):
+    """群文件管理协议。"""
+
+    async def find_or_create_folder(
+        self, group_id: str, folder_name: str
+    ) -> str | None: ...
+
+    async def upload_group_file_to_folder(
+        self,
+        group_id: str,
+        file_path: str,
+        folder_id: str | None = None,
+        filename: str | None = None,
+    ) -> bool: ...
+
+
+@runtime_checkable
+class GroupAlbumSupportProtocol(Protocol):
+    """群相册上传协议。"""
+
+    async def find_album_id(self, group_id: str, album_name: str) -> str | None: ...
+
+    async def upload_group_album(
+        self,
+        group_id: str,
+        image_path: str,
+        album_id: str | None = None,
+        album_name: str = "",
+        strict_mode: bool = False,
+    ) -> bool: ...

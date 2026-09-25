@@ -18,7 +18,9 @@ from src.domain.value_objects import (
 
 def test_to_json_friendly_primitives_and_dataclass():
     """测试基本类型与 dataclass 的 JSON 友好转换。"""
-    quote = GoldenQuote(content="测试金句", sender="Alice", reason="幽默", user_id="1001")
+    quote = GoldenQuote(
+        content="测试金句", sender="Alice", reason="幽默", user_id="1001"
+    )
     serialized = AnalysisResultSerializer.to_json_friendly(quote)
     assert isinstance(serialized, dict)
     assert serialized["content"] == "测试金句"
@@ -34,16 +36,16 @@ def test_serialize_and_deserialize_roundtrip():
         participant_count=10,
         most_active_period="20:00-21:00",
         golden_quotes=[
-            GoldenQuote(
-                content="金句内容", sender="Bob", reason="精彩", user_id="1002"
-            )
+            GoldenQuote(content="金句内容", sender="Bob", reason="精彩", user_id="1002")
         ],
         emoji_count=5,
         emoji_statistics=EmojiStatistics(face_count=3, other_emoji_count=2),
         activity_visualization=ActivityVisualization(
             hourly_activity={20: 50, 21: 50}, peak_hours=[20, 21]
         ),
-        token_usage=TokenUsage(prompt_tokens=150, completion_tokens=80, total_tokens=230),
+        token_usage=TokenUsage(
+            prompt_tokens=150, completion_tokens=80, total_tokens=230
+        ),
         chat_quality_review=QualityReview(
             title="群聊质量锐评",
             subtitle="高活跃群组",

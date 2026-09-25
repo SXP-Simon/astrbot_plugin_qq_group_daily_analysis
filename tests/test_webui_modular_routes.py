@@ -42,7 +42,9 @@ def mock_active_mgr(mock_trace_store: TraceSQLiteStore):
 
 
 @pytest.mark.asyncio
-async def test_task_routes_direct(mock_trace_store: TraceSQLiteStore, mock_active_mgr: ActiveTaskManager):
+async def test_task_routes_direct(
+    mock_trace_store: TraceSQLiteStore, mock_active_mgr: ActiveTaskManager
+):
     """测试 TaskRoutes 独立路由行为"""
     mock_svc = MagicMock()
     routes = TaskRoutes(
@@ -64,7 +66,9 @@ async def test_task_routes_direct(mock_trace_store: TraceSQLiteStore, mock_activ
 
 
 @pytest.mark.asyncio
-async def test_trace_routes_direct(mock_trace_store: TraceSQLiteStore, mock_active_mgr: ActiveTaskManager):
+async def test_trace_routes_direct(
+    mock_trace_store: TraceSQLiteStore, mock_active_mgr: ActiveTaskManager
+):
     """测试 TraceRoutes 独立路由行为"""
     mock_context = MagicMock()
     mock_context.platform_manager = None

@@ -22,7 +22,7 @@ from ..services.analysis_application_service import (
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ...infrastructure.config.config_manager import ConfigManager
@@ -127,7 +127,7 @@ class ComicCommandHandler:
 
     async def handle_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[object, None]:
+    ) -> AsyncGenerator[MessageEventResult, None]:
         """处理 /群漫画 核心指令流程。
 
         Args:

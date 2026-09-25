@@ -23,7 +23,9 @@ def test_trace_context_performance_metrics_lifecycle():
         assert trace._init_memory_mb >= 0.0
         assert trace._peak_memory_mb >= trace._init_memory_mb
 
-        with trace.span(AnalysisStage.FETCH_MESSAGES, {"fetched_count": 100}) as span_rec:
+        with trace.span(
+            AnalysisStage.FETCH_MESSAGES, {"fetched_count": 100}
+        ) as span_rec:
             assert span_rec.get("start_memory_mb") is not None
             assert span_rec["payload"]["fetched_count"] == 100
 
@@ -36,7 +38,9 @@ def test_trace_context_performance_metrics_lifecycle():
         assert span_0["payload"]["start_memory_mb"] == span_0["start_memory_mb"]
         assert span_0["payload"]["end_memory_mb"] == span_0["end_memory_mb"]
 
-        with trace.span(AnalysisStage.CLEAN_MESSAGES, {"raw_count": 100, "cleaned_count": 80}):
+        with trace.span(
+            AnalysisStage.CLEAN_MESSAGES, {"raw_count": 100, "cleaned_count": 80}
+        ):
             pass
 
     # Trace 结束后的全局 performance_metrics
@@ -103,13 +107,17 @@ def test_trace_sqlite_store_performance_metrics_persistence(tmp_path: Path):
     spans = saved_data["spans"]
     assert len(spans) == 2
 
-    render_span = next(s for s in spans if s["stage_name"] == AnalysisStage.RENDER_REPORT.value)
+    render_span = next(
+        s for s in spans if s["stage_name"] == AnalysisStage.RENDER_REPORT.value
+    )
     assert render_span["payload"]["template_render_ms"] == 45.2
     assert render_span["payload"]["html_size_kb"] == 128.5
     assert render_span["payload"]["t2i_render_ms"] == 1250.0
     assert render_span["payload"]["dimensions"] == "1200x4800"
 
-    dispatch_span = next(s for s in spans if s["stage_name"] == AnalysisStage.DISPATCH_REPORT.value)
+    dispatch_span = next(
+        s for s in spans if s["stage_name"] == AnalysisStage.DISPATCH_REPORT.value
+    )
     assert dispatch_span["payload"]["transmission_mode"] == "base64"
     assert dispatch_span["payload"]["bloat_ratio"] == "+33.3%"
     assert dispatch_span["payload"]["dispatch_api_ms"] == 320.0
@@ -118,6 +126,7 @@ def test_trace_sqlite_store_performance_metrics_persistence(tmp_path: Path):
 def test_trace_sqlite_store_migration_from_old_schema(tmp_path: Path):
     """测试旧版 SQLite 数据库平滑升级与缺少 performance_metrics/metrics_json 时的容错。"""
     import sqlite3
+
     db_path = tmp_path / "legacy_traces.db"
 
     # 1. 模拟旧版数据库表结构（无 performance_metrics 表）
@@ -186,6 +195,7 @@ def test_trace_sqlite_store_migration_from_old_schema(tmp_path: Path):
 def test_trace_sqlite_store_corrupted_metrics_json_tolerance(tmp_path: Path):
     """测试 metrics_json 数据损坏（非法 JSON）时 get_trace() 安全容错。"""
     import sqlite3
+
     db_path = tmp_path / "corrupted_traces.db"
     store = TraceSQLiteStore(db_path)
 
@@ -255,5 +265,3 @@ def test_log_buffer_raw_trace_id_sanitization():
     assert entry.message == "消息拉取完成"
     assert not entry.raw.endswith("[test_trace_123] [test_trace_123] 消息拉取完成")
     assert entry.raw.endswith("[analysis]: 消息拉取完成")
-
-

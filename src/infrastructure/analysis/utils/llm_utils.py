@@ -89,7 +89,9 @@ async def _call_provider_stream(
         getattr(raw_provider, "text_chat_stream", None)
     ):
         raise RuntimeError(f"Provider 不存在或不支持流式聊天: {provider_id}")
-    provider: LLMStreamProviderProtocol = cast("LLMStreamProviderProtocol", raw_provider)
+    provider: LLMStreamProviderProtocol = cast(
+        "LLMStreamProviderProtocol", raw_provider
+    )
 
     stream_kwargs: dict[str, object] = dict(llm_kwargs)
     stream_kwargs.pop("chat_provider_id", None)
