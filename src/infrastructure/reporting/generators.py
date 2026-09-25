@@ -15,7 +15,7 @@ from datetime import date, datetime
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from PIL import Image
@@ -47,8 +47,10 @@ from .render_diagnostics import (
 from .templates import HTMLTemplates
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
+    import aiohttp
+    from diskcache import Cache
     from markupsafe import Markup
 
     from ..config.config_manager import ConfigManager
@@ -60,19 +62,19 @@ class ReportGenerator(IReportGenerator):
     config_manager: ConfigManager
     data_dir: Path
     activity_visualizer: ActivityVisualizer
-    html_templates: HTMLTemplates
+    html_templates: HTMLTemplates | None
     _render_semaphore: asyncio.Semaphore
-    _avatar_cache: Any = None
+    _avatar_cache: Cache | None = None
     _profile_asset_manifest: dict[str, dict]
     _preparer: RenderDataPreparer
     _qq_official_markdown_generator_inst: QQOfficialMarkdownReportGenerator | None = (
         None
     )
     _avatar_service_inst: AvatarService | None = None
-    _avatar_session: Any = None
-    _avatar_session_lock: Any = None
-    _avatar_session_concurrent_semaphore: Any = None
-    _avatar_failure_cache: Any = None
+    _avatar_session: aiohttp.ClientSession | None = None
+    _avatar_session_lock: asyncio.Lock | None = None
+    _avatar_session_concurrent_semaphore: asyncio.Semaphore | None = None
+    _avatar_failure_cache: dict[str, float] | None = None
 
     def __init__(self, config_manager: ConfigManager, data_dir: Path) -> None:
         """初始化报告生成器。
@@ -185,11 +187,12 @@ class ReportGenerator(IReportGenerator):
 
     async def generate_image_report(
         self,
-        analysis_result: dict,
+        analysis_result: dict[str, object],
         group_id: str,
-        html_render_func: Callable,
-        avatar_url_getter: Callable | None = None,
-        nickname_getter: Callable | None = None,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
+        avatar_url_getter: Callable[[str, int | None], Awaitable[str | None]]
+        | None = None,
+        nickname_getter: Callable[[str], Awaitable[str | None]] | None = None,
         avatar_cache_namespace: str | None = None,
         hide_user_names: bool = False,
         allow_alphanumeric_user_ids: bool = False,
@@ -212,10 +215,14 @@ class ReportGenerator(IReportGenerator):
             元组 (image_url_or_path, html_content)。
         """
         html_content = None
+        if not self.html_templates:
+            return None, None
         if not template_theme:
             trace_ctx = TraceContext.current()
             if trace_ctx and trace_ctx.metadata.get("override_template_name"):
-                template_theme = trace_ctx.metadata.get("override_template_name")
+                template_theme = str(
+                    trace_ctx.metadata.get("override_template_name") or ""
+                ).strip()
             elif hasattr(self.config_manager, "get_report_template"):
                 template_theme = self.config_manager.get_report_template()
             else:
@@ -259,6 +266,10 @@ class ReportGenerator(IReportGenerator):
                 f"图片报告HTML渲染完成，耗时 {template_render_ms}ms, "
                 f"大小: {html_size_kb} KB ({len(html_content)} 字符)"
             )
+
+            if not callable(html_render_func):
+                logger.error("图片报告渲染失败：未提供可调用的 html_render_func")
+                return None, html_content
 
             render_strategies = self.config_manager.get_t2i_rendering_strategies()
 
@@ -305,9 +316,7 @@ class ReportGenerator(IReportGenerator):
 
                             if isinstance(image_data, bytes):
                                 actual_data_head = image_data[:10]
-                            elif isinstance(image_data, str) and os.path.exists(
-                                image_data
-                            ):
+                            elif os.path.exists(image_data):
                                 try:
                                     with open(image_data, "rb") as f:
                                         actual_data_head = f.read(10)
@@ -323,9 +332,7 @@ class ReportGenerator(IReportGenerator):
                                     raw_sample = b""
                                     if isinstance(image_data, bytes):
                                         raw_sample = image_data[:4096]
-                                    elif isinstance(image_data, str) and os.path.exists(
-                                        image_data
-                                    ):
+                                    elif os.path.exists(image_data):
                                         try:
                                             with open(image_data, "rb") as f:
                                                 raw_sample = f.read(4096)
@@ -345,10 +352,7 @@ class ReportGenerator(IReportGenerator):
                                     if isinstance(image_data, bytes)
                                     else (
                                         os.path.getsize(image_data)
-                                        if (
-                                            isinstance(image_data, str)
-                                            and os.path.exists(image_data)
-                                        )
+                                        if os.path.exists(image_data)
                                         else 0
                                     )
                                 )
@@ -358,9 +362,7 @@ class ReportGenerator(IReportGenerator):
                                     if isinstance(image_data, bytes):
                                         with Image.open(BytesIO(image_data)) as img:
                                             dimensions = f"{img.width}x{img.height}"
-                                    elif isinstance(image_data, str) and os.path.exists(
-                                        image_data
-                                    ):
+                                    elif os.path.exists(image_data):
                                         with Image.open(image_data) as img:
                                             dimensions = f"{img.width}x{img.height}"
                                 except Exception:
@@ -374,6 +376,22 @@ class ReportGenerator(IReportGenerator):
                                             == AnalysisStage.RENDER_REPORT.value
                                         ):
                                             payload = s.setdefault("payload", {})
+                                            topics_raw = analysis_result.get("topics")
+                                            titles_raw = analysis_result.get(
+                                                "user_titles"
+                                            )
+                                            stats_raw = analysis_result.get(
+                                                "statistics"
+                                            )
+                                            golden_quotes_raw = (
+                                                getattr(
+                                                    stats_raw,
+                                                    "golden_quotes",
+                                                    [],
+                                                )
+                                                if stats_raw
+                                                else []
+                                            )
                                             payload.update(
                                                 {
                                                     "format": "image",
@@ -391,26 +409,23 @@ class ReportGenerator(IReportGenerator):
                                                     "template_render_ms": template_render_ms,
                                                     "html_size_kb": html_size_kb,
                                                     "t2i_render_ms": t2i_render_ms,
-                                                    "topics_rendered": len(
-                                                        analysis_result.get(
-                                                            "topics", []
-                                                        )
-                                                    ),
-                                                    "titles_rendered": len(
-                                                        analysis_result.get(
-                                                            "user_titles", []
-                                                        )
-                                                    ),
+                                                    "topics_rendered": len(topics_raw)
+                                                    if isinstance(
+                                                        topics_raw, (list, tuple)
+                                                    )
+                                                    else 0,
+                                                    "titles_rendered": len(titles_raw)
+                                                    if isinstance(
+                                                        titles_raw, (list, tuple)
+                                                    )
+                                                    else 0,
                                                     "quotes_rendered": len(
-                                                        getattr(
-                                                            analysis_result.get(
-                                                                "statistics"
-                                                            ),
-                                                            "golden_quotes",
-                                                            [],
-                                                        )
-                                                        or []
-                                                    ),
+                                                        golden_quotes_raw
+                                                    )
+                                                    if isinstance(
+                                                        golden_quotes_raw, (list, tuple)
+                                                    )
+                                                    else 0,
                                                     "avatars_processed": len(
                                                         render_payload.get(
                                                             "avatar_reuse_registry", {}
@@ -424,21 +439,23 @@ class ReportGenerator(IReportGenerator):
                                                     ),
                                                 }
                                             )
-                                            payload.setdefault(
+                                            attempts = payload.setdefault(
                                                 "render_attempts", []
-                                            ).append(
-                                                {
-                                                    "attempt": attempt,
-                                                    "type": str(
-                                                        image_options.get(
-                                                            "type", "jpeg"
-                                                        )
-                                                    ),
-                                                    "viewport": viewport_description,
-                                                    "duration_ms": t2i_render_ms,
-                                                    "status": "success",
-                                                }
                                             )
+                                            if isinstance(attempts, list):
+                                                attempts.append(
+                                                    {
+                                                        "attempt": attempt,
+                                                        "type": str(
+                                                            image_options.get(
+                                                                "type", "jpeg"
+                                                            )
+                                                        ),
+                                                        "viewport": viewport_description,
+                                                        "duration_ms": t2i_render_ms,
+                                                        "status": "success",
+                                                    }
+                                                )
                                             break
 
                                 if isinstance(image_data, bytes):
@@ -450,13 +467,12 @@ class ReportGenerator(IReportGenerator):
                                         f"[Base64 数据 {len(image_data)} 字节]"
                                     )
                                     return image_url, html_content
-                                if isinstance(image_data, str):
-                                    logger.info(
-                                        "图片生成成功 "
-                                        f"(轮次 {attempt}, 视口 {viewport_description}): "
-                                        f"{image_data}"
-                                    )
-                                    return image_data, html_content
+                                logger.info(
+                                    "图片生成成功 "
+                                    f"(轮次 {attempt}, 视口 {viewport_description}): "
+                                    f"{image_data}"
+                                )
+                                return image_data, html_content
 
                         logger.warning(
                             f"渲染轮次 {attempt} ({image_options['type']}) 返回了无效或空数据"
@@ -468,20 +484,21 @@ class ReportGenerator(IReportGenerator):
                                     s.get("stage_name")
                                     == AnalysisStage.RENDER_REPORT.value
                                 ):
-                                    s.setdefault("payload", {}).setdefault(
-                                        "render_attempts", []
-                                    ).append(
-                                        {
-                                            "attempt": attempt,
-                                            "type": str(
-                                                image_options.get("type", "jpeg")
-                                            ),
-                                            "viewport": viewport_description,
-                                            "status": "failed",
-                                            "error": html_error
-                                            or "返回数据非合法图片头",
-                                        }
-                                    )
+                                    payload = s.setdefault("payload", {})
+                                    attempts = payload.setdefault("render_attempts", [])
+                                    if isinstance(attempts, list):
+                                        attempts.append(
+                                            {
+                                                "attempt": attempt,
+                                                "type": str(
+                                                    image_options.get("type", "jpeg")
+                                                ),
+                                                "viewport": viewport_description,
+                                                "status": "failed",
+                                                "error": html_error
+                                                or "返回数据非合法图片头",
+                                            }
+                                        )
                                     break
 
                     except Exception as e:
@@ -494,19 +511,21 @@ class ReportGenerator(IReportGenerator):
                                     s.get("stage_name")
                                     == AnalysisStage.RENDER_REPORT.value
                                 ):
-                                    s.setdefault("payload", {}).setdefault(
-                                        "render_attempts", []
-                                    ).append(
-                                        {
-                                            "attempt": attempt,
-                                            "type": str(
-                                                image_options.get("type", "jpeg")
-                                            ),
-                                            "viewport": viewport_description,
-                                            "status": "failed",
-                                            "error": str(e),
-                                        }
-                                    )
+                                    payload = s.setdefault("payload", {})
+                                    attempts = payload.setdefault("render_attempts", [])
+                                    if isinstance(attempts, list):
+                                        attempts.append(
+                                            {
+                                                "attempt": attempt,
+                                                "type": str(
+                                                    image_options.get("type", "jpeg")
+                                                ),
+                                                "viewport": viewport_description,
+                                                "status": "failed",
+                                                "error": str(e),
+                                            }
+                                        )
+                                    break
                                     break
                         if attempt < len(render_strategies):
                             logger.debug("准备尝试下一轮回退策略")
@@ -549,10 +568,14 @@ class ReportGenerator(IReportGenerator):
         Returns:
             元组 (html_file_path, json_file_path)。
         """
+        if not self.html_templates:
+            return None, None
         if not template_theme:
             trace_ctx = TraceContext.current()
             if trace_ctx and trace_ctx.metadata.get("override_template_name"):
-                template_theme = trace_ctx.metadata.get("override_template_name")
+                template_theme = str(
+                    trace_ctx.metadata.get("override_template_name") or ""
+                ).strip()
             elif hasattr(self.config_manager, "get_report_template"):
                 template_theme = self.config_manager.get_report_template()
             else:
@@ -636,9 +659,10 @@ class ReportGenerator(IReportGenerator):
             )
             logger.info(f"HTML 报告已保存: {html_path}")
 
-            def json_default_encoder(obj: Any) -> Any:
-                if hasattr(obj, "to_dict") and callable(obj.to_dict):
-                    return obj.to_dict()
+            def json_default_encoder(obj: object) -> object:
+                to_dict_fn = getattr(obj, "to_dict", None)
+                if callable(to_dict_fn):
+                    return to_dict_fn()
                 if is_dataclass(obj) and not isinstance(obj, type):
                     return asdict(obj)
                 if isinstance(obj, (datetime, date)):
@@ -676,26 +700,27 @@ class ReportGenerator(IReportGenerator):
             if trace_ctx:
                 for s in reversed(trace_ctx._spans):
                     if s.get("stage_name") == AnalysisStage.RENDER_REPORT.value:
+                        topics_rendered = analysis_result.get("topics")
+                        titles_rendered = analysis_result.get("user_titles")
+                        stats_obj = analysis_result.get("statistics")
+                        golden_quotes = (
+                            getattr(stats_obj, "golden_quotes", []) if stats_obj else []
+                        )
                         s.setdefault("payload", {}).update(
                             {
                                 "format": "html",
                                 "template": template_theme or "scrapbook",
                                 "html_chars": len(html_content) if html_content else 0,
                                 "html_file": html_path.name,
-                                "topics_rendered": len(
-                                    analysis_result.get("topics", [])
-                                ),
-                                "titles_rendered": len(
-                                    analysis_result.get("user_titles", [])
-                                ),
-                                "quotes_rendered": len(
-                                    getattr(
-                                        analysis_result.get("statistics"),
-                                        "golden_quotes",
-                                        [],
-                                    )
-                                    or []
-                                ),
+                                "topics_rendered": len(topics_rendered)
+                                if isinstance(topics_rendered, (list, tuple))
+                                else 0,
+                                "titles_rendered": len(titles_rendered)
+                                if isinstance(titles_rendered, (list, tuple))
+                                else 0,
+                                "quotes_rendered": len(golden_quotes)
+                                if isinstance(golden_quotes, (list, tuple))
+                                else 0,
                                 "avatars_processed": len(
                                     render_data.get("avatar_reuse_registry", {})
                                 ),
@@ -705,7 +730,10 @@ class ReportGenerator(IReportGenerator):
                         break
 
                 rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                if not any(rf.get("filename") == html_path.name for rf in rfiles):
+                if isinstance(rfiles, list) and not any(
+                    isinstance(rf, dict) and rf.get("filename") == html_path.name
+                    for rf in rfiles
+                ):
                     rfiles.append(
                         {
                             "filename": html_path.name,
@@ -899,18 +927,20 @@ class ReportGenerator(IReportGenerator):
 
     def _sanitize_analysis_result_for_export(
         self, analysis_result: dict
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """导出 HTML Sidecar JSON 前脱敏敏感身份信息。"""
         return self._preparer_service.sanitize_analysis_result_for_export(
             analysis_result
         )
 
     @classmethod
-    def _to_plain_export_data(cls, value: Any) -> Any:
+    def _to_plain_export_data(cls, value: object) -> object:
         """递归转换领域模型为普通字典与列表。"""
         return RenderDataPreparer.to_plain_export_data(value)
 
-    def _sanitize_export_identity_text(self, value: Any, analysis_result: dict) -> Any:
+    def _sanitize_export_identity_text(
+        self, value: object, analysis_result: dict
+    ) -> object:
         """从导出的文本字段中去除用户名称与 ID。"""
         return self._preparer_service.sanitize_export_identity_text(
             value, analysis_result

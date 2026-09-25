@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    import asyncio
+    from collections.abc import Awaitable, Callable
+
+    from ..config.config_manager import ConfigManager
+    from .templates import HTMLTemplates
 
 
 class QQOfficialMarkdownReportGenerator:
@@ -14,16 +21,18 @@ class QQOfficialMarkdownReportGenerator:
 
     def __init__(
         self,
-        config_manager: Any,
-        html_templates: Any = None,
-        render_semaphore: Any = None,
+        config_manager: ConfigManager,
+        html_templates: HTMLTemplates | None = None,
+        render_semaphore: asyncio.Semaphore | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.html_templates = html_templates
         self.render_semaphore = render_semaphore
 
     async def generate(
-        self, analysis_result: dict, html_render_func: Any = None
+        self,
+        analysis_result: dict,
+        html_render_func: Callable[..., Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
         """Generate QQ Markdown and a URL-free Markdown fallback report."""
         fallback_report = self._generate_markdown_report(analysis_result)
@@ -44,8 +53,12 @@ class QQOfficialMarkdownReportGenerator:
         )
 
     async def _generate_summary_dashboard_url(
-        self, analysis_result: dict, html_render_func: Any
+        self,
+        analysis_result: dict,
+        html_render_func: Callable[..., Awaitable[str | None]],
     ) -> str | None:
+        if not self.html_templates:
+            return None
         stats = analysis_result["statistics"]
         hourly_counts = self.get_hourly_counts(stats)
         max_count = max(hourly_counts, default=0)

@@ -23,11 +23,14 @@ import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
 from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    import aiohttp
 
 IMAGE_TEMPLATE_MARKER = "image_template.html"
 HTML_TEMPLATE_MARKER = "html_template.html"
@@ -285,7 +288,7 @@ def _extract_template_root(
     return written
 
 
-def _read_template_meta(extract_dir: Path) -> dict[str, Any]:
+def _read_template_meta(extract_dir: Path) -> dict[str, str]:
     """读取可选的 template.json 元信息（仅取 name/desc 字符串）。"""
     meta_path = extract_dir / TEMPLATE_META_FILENAME
     if not meta_path.is_file():
@@ -295,7 +298,7 @@ def _read_template_meta(extract_dir: Path) -> dict[str, Any]:
     except Exception:
         logger.warning(f"模板元信息 {TEMPLATE_META_FILENAME} 解析失败，已忽略。")
         return {}
-    meta: dict[str, Any] = {}
+    meta: dict[str, str] = {}
     for key in ("name", "desc"):
         value = raw.get(key) if isinstance(raw, dict) else None
         if isinstance(value, str) and value.strip():
@@ -329,7 +332,7 @@ def install_template_from_zip(
     name: str | None = None,
     source: str = "upload",
     source_url: str = "",
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """从 zip 字节安装模板。
 
     Args:
@@ -475,7 +478,9 @@ def parse_github_repo_url(repo_url: str) -> dict[str, str]:
     }
 
 
-async def _resolve_default_branch(session: Any, owner: str, repo: str) -> str:
+async def _resolve_default_branch(
+    session: aiohttp.ClientSession, owner: str, repo: str
+) -> str:
     """通过 GitHub API 获取默认分支；失败时返回空串由调用方回退。"""
     url = f"https://api.github.com/repos/{owner}/{repo}"
     try:
@@ -490,7 +495,7 @@ async def _resolve_default_branch(session: Any, owner: str, repo: str) -> str:
     return ""
 
 
-def aiohttp_client_timeout(seconds: float) -> Any:
+def aiohttp_client_timeout(seconds: float) -> aiohttp.ClientTimeout:
     """构造 aiohttp 超时对象（延迟导入，避免模块加载时依赖 aiohttp）。"""
     import aiohttp
 
@@ -566,7 +571,7 @@ async def download_github_archive(
 def uninstall_template(
     name: str,
     store_dir: Path | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """卸载通过插件安装器下载的自定义模板。
 
     仅允许卸载带安装标记（.tpl_installed.json）的模板：
@@ -622,7 +627,7 @@ async def install_template_from_github_url(
     repo_url: str,
     store_dir: Path | None = None,
     name: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """从 GitHub 仓库链接安装模板（异步：下载 + 解压安装）。"""
     parsed = parse_github_repo_url(repo_url)
     zip_data = await download_github_archive(

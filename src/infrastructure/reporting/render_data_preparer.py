@@ -17,7 +17,7 @@ import json
 import re
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from markupsafe import Markup
 
@@ -32,6 +32,7 @@ from .profile_mappings import resolve_profile_info
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from ..config.config_manager import ConfigManager
     from ..visualization.activity_charts import ActivityVisualizer
     from .avatar_service import AvatarService
     from .templates import HTMLTemplates
@@ -42,7 +43,7 @@ class RenderDataPreparer:
 
     def __init__(
         self,
-        config_manager: Any,
+        config_manager: ConfigManager,
         avatar_service: AvatarService,
         html_templates: HTMLTemplates,
         activity_visualizer: ActivityVisualizer,
@@ -83,7 +84,7 @@ class RenderDataPreparer:
 
     def sanitize_analysis_result_for_export(
         self, analysis_result: dict
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """导出 HTML Sidecar JSON 前脱敏敏感身份信息。
 
         Args:
@@ -92,25 +93,34 @@ class RenderDataPreparer:
         Returns:
             脱敏后的纯净数据字典。
         """
-        sanitized = self.to_plain_export_data(copy.deepcopy(analysis_result))
+        raw_sanitized = self.to_plain_export_data(copy.deepcopy(analysis_result))
+        sanitized: dict[str, object] = (
+            raw_sanitized if isinstance(raw_sanitized, dict) else {}
+        )
         sanitized["user_analysis"] = {}
-        for topic in sanitized.get("topics", []):
-            if not isinstance(topic, dict):
-                continue
-            topic["contributors"] = []
-            topic["contributor_ids"] = []
-        for title in sanitized.get("user_titles", []):
-            if not isinstance(title, dict):
-                continue
-            title["name"] = ""
-            title["user_id"] = ""
+        topics = sanitized.get("topics")
+        if isinstance(topics, list):
+            for topic in topics:
+                if not isinstance(topic, dict):
+                    continue
+                topic["contributors"] = []
+                topic["contributor_ids"] = []
+        user_titles = sanitized.get("user_titles")
+        if isinstance(user_titles, list):
+            for title in user_titles:
+                if not isinstance(title, dict):
+                    continue
+                title["name"] = ""
+                title["user_id"] = ""
         stats = sanitized.get("statistics")
         if isinstance(stats, dict):
-            for golden_quote in stats.get("golden_quotes", []) or []:
-                if not isinstance(golden_quote, dict):
-                    continue
-                golden_quote["sender"] = ""
-                golden_quote["user_id"] = ""
+            quotes = stats.get("golden_quotes")
+            if isinstance(quotes, list):
+                for golden_quote in quotes:
+                    if not isinstance(golden_quote, dict):
+                        continue
+                    golden_quote["sender"] = ""
+                    golden_quote["user_id"] = ""
 
             activity_visualization = stats.get("activity_visualization")
             if isinstance(activity_visualization, dict):
@@ -122,7 +132,7 @@ class RenderDataPreparer:
         return sanitized
 
     @classmethod
-    def to_plain_export_data(cls, value: Any) -> Any:
+    def to_plain_export_data(cls, value: object) -> object:
         """递归转换领域模型为普通字典与列表。
 
         Args:
@@ -131,8 +141,9 @@ class RenderDataPreparer:
         Returns:
             JSON 兼容的纯原生结构。
         """
-        if hasattr(value, "to_dict") and callable(value.to_dict):
-            return cls.to_plain_export_data(value.to_dict())
+        to_dict_fn = getattr(value, "to_dict", None)
+        if callable(to_dict_fn):
+            return cls.to_plain_export_data(to_dict_fn())
         if is_dataclass(value) and not isinstance(value, type):
             return cls.to_plain_export_data(asdict(value))
         if isinstance(value, dict):
@@ -141,7 +152,9 @@ class RenderDataPreparer:
             return [cls.to_plain_export_data(item) for item in value]
         return value
 
-    def sanitize_export_identity_text(self, value: Any, analysis_result: dict) -> Any:
+    def sanitize_export_identity_text(
+        self, value: object, analysis_result: dict
+    ) -> object:
         """从导出的文本字段中去除用户名称与 ID。
 
         Args:

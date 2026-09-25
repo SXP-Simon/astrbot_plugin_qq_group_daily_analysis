@@ -10,7 +10,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
@@ -127,9 +127,9 @@ class HTMLTemplates:
 
         return env
 
-    def get_available_templates(self) -> list[dict[str, Any]]:
+    def get_available_templates(self) -> list[dict[str, object]]:
         """动态扫描内置与自定义数据目录，返回所有可用的视觉主题模板列表"""
-        found_themes: dict[str, dict[str, Any]] = {}
+        found_themes: dict[str, dict[str, object]] = {}
 
         # 1. 扫描内置模板目录（官方模板始终由源码管理）
         if os.path.isdir(self.base_dir):
@@ -284,7 +284,7 @@ class HTMLTemplates:
             return ""
 
     def render_template(
-        self, template_name: str, template_theme: str | None = None, **kwargs: Any
+        self, template_name: str, template_theme: str | None = None, **kwargs: object
     ) -> str:
         """渲染指定的模板文件
 
@@ -307,7 +307,7 @@ class HTMLTemplates:
             return ""
 
     def render_platform_template(
-        self, platform_name: str, template_name: str, **kwargs: Any
+        self, platform_name: str, template_name: str, **kwargs: object
     ) -> str:
         """渲染与报告主题解耦的平台专用模板。"""
         try:

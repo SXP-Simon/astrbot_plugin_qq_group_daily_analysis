@@ -1,15 +1,13 @@
-"""人格与特征映射模块
-
-负责 MBTI / SBTI / ACGTI 人格映射数据、资源清单加载与头像推导。
-"""
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
 
 # 默认人格特征映射表
 DEFAULT_PROFILE_MAPPING = {
@@ -161,7 +159,7 @@ def resolve_profile_info(
     profile_mode: str,
     overrides: dict[str, dict],
     manifest: dict[str, dict],
-    config_manager: Any,
+    config_manager: ConfigManager,
 ) -> dict[str, str | float]:
     """根据当前展示模式解析人格标签的展示信息。
 
