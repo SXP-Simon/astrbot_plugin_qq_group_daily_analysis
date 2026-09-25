@@ -32,6 +32,7 @@ select = [
   "YTT",   # flake8-2020 (系统与环境兼容性检查)
   "RET",   # flake8-return (返回语句与提前返回规范)
   "T20",   # flake8-print (禁止生产代码残留 print 调用，统一走 logger)
+  "ANN401",# flake8-annotations (禁止在类型注解中随意使用 Any)
 ]
 ignore = [
   "F403",

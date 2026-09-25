@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..entities.incremental_state import IncrementalBatch
+    from ..value_objects.analysis_results import CheckpointSummaryPayload
 
 
 class IIncrementalStore(ABC):
@@ -63,7 +64,7 @@ class ICheckpointStore(ABC):
         group_id: str,
         date_str: str,
         stage_name: str,
-        data: Any,
+        data: object,
         trace_id: str = "",
         ttl_seconds: int = 86400 * 30,
     ) -> None:
@@ -76,7 +77,7 @@ class ICheckpointStore(ABC):
         date_str: str,
         stage_name: str,
         trace_id: str = "",
-    ) -> Any | None:
+    ) -> object | None:
         """读取有效的阶段产物快照"""
 
     @abstractmethod
@@ -86,7 +87,7 @@ class ICheckpointStore(ABC):
     @abstractmethod
     def get_checkpoints_by_group_date(
         self, group_id: str, date_str: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[CheckpointSummaryPayload]:
         """获取指定群在指定日期的所有有效 Checkpoint 快照摘要列表"""
 
     @abstractmethod

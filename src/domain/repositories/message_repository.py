@@ -28,7 +28,7 @@ class IMessageRepository(ABC):
         days: int = 1,
         max_count: int = 1000,
         before_id: str | None = None,
-        since_ts: int | None = None,
+        since_ts: int | float | None = None,
     ) -> list[UnifiedMessage]:
         """
         获取群组消息历史

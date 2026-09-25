@@ -7,6 +7,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from ..repositories.platform_adapter_repository import PlatformAdapterProtocol
 
 
 @dataclass
@@ -256,3 +260,202 @@ class GroupStatistics:
     )
     token_usage: TokenUsage = field(default_factory=TokenUsage)
     chat_quality_review: QualityReview | None = None
+
+
+class ComicTopicPayload(TypedDict):
+    """漫画分镜提取话题数据结构"""
+
+    topic: str
+    summary: str
+
+
+@dataclass
+class ComicTopic:
+    """漫画分镜话题领域模型"""
+
+    topic: str
+    summary: str
+    heat_score: float = 0.0
+
+    def to_dict(self) -> ComicTopicPayload:
+        return {
+            "topic": self.topic,
+            "summary": self.summary,
+        }
+
+
+class AnalysisResultPayload(TypedDict, total=False):
+    """领域分析结果字典快照契约"""
+
+    statistics: object
+    topics: list[object]
+    user_titles: list[object]
+    user_analysis: dict[str, object]
+    chat_quality_review: object | None
+
+
+class GroupHistoryTopicPayload(TypedDict):
+    """历史归档话题摘要契约"""
+
+    topic: str
+    detail: str
+
+
+class GroupHistorySummaryPayload(TypedDict):
+    """每日群聊分析归档摘要数据契约"""
+
+    message_count: int
+    participant_count: int
+    topics: list[GroupHistoryTopicPayload]
+    user_titles_count: int
+    generated_at: str
+
+
+class OneBotAlbumPayload(TypedDict, total=False):
+    """OneBot 相册元数据契约"""
+
+    album_id: str
+    albumId: str
+    album_name: str
+    albumName: str
+    name: str
+    pic_total: int
+
+
+class OneBotHistoryFetchParams(TypedDict, total=False):
+    """OneBot 历史消息拉取参数契约"""
+
+    group_id: int | str
+    message_seq: int | str
+    seq: int | str
+    count: int
+    message_id: int | str
+    reverseOrder: bool
+
+
+class DrawingProviderConfigPayload(TypedDict, total=False):
+    """绘图服务商预设与配置契约"""
+
+    api_url: str
+    api_key: str
+    model: str
+    api_protocol: str
+    image_size: str
+    aspect_ratio: str
+    image_quality: str
+    background: str
+    output_format: str
+    timeout: int
+    proxy: str | None
+
+
+class AnalysisExportPayload(TypedDict, total=False):
+    """群聊分析导出渲染数据聚合契约"""
+
+    statistics: GroupStatistics | dict[str, object]
+    topics: list[SummaryTopic] | list[dict[str, object]]
+    user_titles: list[UserTitle] | list[dict[str, object]]
+    user_analysis: dict[str, object]
+    chat_quality_review: QualityReview | dict[str, object] | None
+    generated_at: str
+    group_id: str
+    date_str: str
+
+
+class CheckpointSummaryPayload(TypedDict, total=False):
+    """阶段 Checkpoint 摘要元数据契约"""
+
+    checkpoint_id: str
+    group_id: str
+    date_str: str
+    stage_name: str
+    trace_id: str
+    created_at: float
+    created_at_formatted: str
+    expire_at: float
+    data_size: int
+    data_size_bytes: int
+
+
+class CheckpointDetailPayload(TypedDict, total=False):
+    """阶段 Checkpoint 详情数据契约"""
+
+    checkpoint_id: str
+    group_id: str
+    date_str: str
+    stage_name: str
+    trace_id: str
+    created_at: float
+    created_at_formatted: str
+    expire_at: float
+    data: object
+    checkpoint_data: object
+    data_size: int
+    data_size_bytes: int
+    metadata: CheckpointSummaryPayload
+
+
+@dataclass
+class AnalysisResult:
+    """领域分析聚合结果 (Analysis Result Aggregate)
+
+    封装单次群聊日常分析产出的全量领域聚合，提供严格的类型检查与安全转换。
+    """
+
+    statistics: GroupStatistics
+    topics: list[SummaryTopic] = field(default_factory=list)
+    user_titles: list[UserTitle] = field(default_factory=list)
+    user_analysis: dict[str, object] = field(default_factory=dict)
+    chat_quality_review: QualityReview | None = None
+
+    def to_dict(self) -> AnalysisResultPayload:
+        return {
+            "statistics": self.statistics,
+            "topics": list(self.topics),
+            "user_titles": list(self.user_titles),
+            "user_analysis": self.user_analysis,
+            "chat_quality_review": self.chat_quality_review,
+        }
+
+
+class DailyAnalysisExecutionResult(TypedDict, total=False):
+    """每日群聊分析应用服务执行结果契约"""
+
+    success: bool
+    reason: str
+    error: str
+    analysis_result: dict[str, object]
+    messages_count: int
+    adapter: PlatformAdapterProtocol
+    group_id: str
+    platform_id: str
+    date_str: str
+    fallback_to_fresh_run: bool
+    fallback_reason: str
+    resumed_from: str
+
+
+class ComicAnalysisExecutionResult(TypedDict, total=False):
+    """漫画话题分析应用服务执行结果契约"""
+
+    success: bool
+    reason: str
+    error: str
+    topics: list[ComicTopic] | list[dict[str, object]]
+    token_usage: TokenUsage
+    messages_count: int
+    adapter: PlatformAdapterProtocol
+    group_id: str
+    platform_id: str
+
+
+class IncrementalTriggerStatePayload(TypedDict, total=False):
+    """增量分析群状态持久化契约"""
+
+    count: int
+    version: int
+    last_event_ts: float
+    last_triggered_at: float
+    platform_id: str
+    group_id: str
+

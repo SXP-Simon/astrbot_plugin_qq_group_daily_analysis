@@ -19,6 +19,8 @@
     ".venv/lib/python3.12/site-packages",
     "."
   ],
+  "venvPath": "../../..",
+  "venv": ".venv",
   "pythonVersion": "3.12",
   "typeCheckingMode": "standard",
   "reportMissingTypeStubs": false,
