@@ -34,10 +34,12 @@ if TYPE_CHECKING:
 try:
     from telegram.ext import ExtBot
 
-    TELEGRAM_AVAILABLE = True
+    _telegram_available = True
 except ImportError:
     ExtBot = None
-    TELEGRAM_AVAILABLE = False
+    _telegram_available = False
+
+TELEGRAM_AVAILABLE: bool = _telegram_available
 
 
 TELEGRAM_AVATAR_NEGATIVE_CACHE_TTL = 600

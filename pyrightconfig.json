@@ -37,5 +37,14 @@
   "reportUnnecessaryIsInstance": "error",
   "reportUnnecessaryComparison": "error",
   "reportUnnecessaryCast": "error",
-  "reportMissingParameterType": "error"
+  "reportMissingParameterType": "error",
+  "reportUntypedNamedTuple": "error",
+  "reportUnnecessaryContains": "error",
+  "reportAssertAlwaysTrue": "error",
+  "reportSelfClsParameterName": "error",
+  "reportInvalidTypeVarUse": "error",
+  "reportUnusedCoroutine": "error",
+  "reportCallInDefaultInitializer": "error",
+  "reportTypeCommentUsage": "error",
+  "reportConstantRedefinition": "error"
 }
