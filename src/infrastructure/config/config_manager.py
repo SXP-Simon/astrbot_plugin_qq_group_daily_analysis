@@ -523,7 +523,7 @@ class ConfigManager:
         self.config.save_config()
 
     def _upgrade_config_item(
-        self, group: str, key: str, setter_func: Callable[[Any], None]
+        self, group: str, key: str, setter_func: Callable[[str], None]
     ) -> bool:
         """升级指定配置项的值（委托 ConfigMigrator）。"""
         return self._migrator.upgrade_config_item(group, key, setter_func)

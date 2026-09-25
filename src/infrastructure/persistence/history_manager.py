@@ -7,35 +7,36 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
 
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
+
 
 class HistoryManager:
-    """
-    核心组件：历史分析存档管理器
+    """核心组件：历史分析存档管理器。
 
     该类负责将每日生成的群消息分析报告摘要持久化存储，并提供查询接口。
     底层基于 AstrBot 提供的 KV 存储能力（put_kv_data/get_kv_data），
     确保即使在 Bot 重启后也能回溯历史数据。
     """
 
-    plugin: Any
+    plugin: Star
 
-    def __init__(self, star_instance: Any) -> None:
-        """
-        初始化历史记录管理器。
+    def __init__(self, star_instance: Star) -> None:
+        """初始化历史记录管理器。
 
         Args:
-            star_instance (Any): Star 插件实例，用于访问底层持久化引擎
+            star_instance: Star 插件实例，用于访问底层持久化引擎。
         """
         self.plugin = star_instance
 
     async def save_analysis(
         self,
         group_id: str,
-        analysis_result: dict[str, Any],
+        analysis_result: dict[str, object],
         date_str: str | None = None,
         time_str: str | None = None,
     ) -> bool:
@@ -65,15 +66,30 @@ class HistoryManager:
 
             # 从分析结果中剥离非持久化字段，提取核心统计元数据
             stats = analysis_result.get("statistics")
-            topics = analysis_result.get("topics", [])
-            user_titles = analysis_result.get("user_titles", [])
+            topics_raw = analysis_result.get("topics")
+            topics = topics_raw if isinstance(topics_raw, list) else []
+            user_titles_raw = analysis_result.get("user_titles")
+            user_titles = user_titles_raw if isinstance(user_titles_raw, list) else []
+
+            topics_summary = []
+            for t in topics:
+                if isinstance(t, dict):
+                    topics_summary.append({
+                        "topic": str(t.get("topic", "")),
+                        "detail": str(t.get("detail", "")),
+                    })
+                elif hasattr(t, "topic"):
+                    topics_summary.append({
+                        "topic": str(getattr(t, "topic", "")),
+                        "detail": str(getattr(t, "detail", "")),
+                    })
 
             summary = {
                 "message_count": getattr(stats, "message_count", 0) if stats else 0,
                 "participant_count": getattr(stats, "participant_count", 0)
                 if stats
                 else 0,
-                "topics": [{"topic": t.topic, "detail": t.detail} for t in topics],
+                "topics": topics_summary,
                 "user_titles_count": len(user_titles),
                 "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
             }
@@ -91,7 +107,7 @@ class HistoryManager:
 
     async def get_analysis(
         self, group_id: str, date_str: str, time_str: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         """根据群组和日期获取分析数据。
 
         如果指定了 time_str 则按精确 key 读取，否则检索该日期的分析记录。
@@ -108,7 +124,7 @@ class HistoryManager:
 
     async def get_history(
         self, group_id: str, date_str: str, time_str: str
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, object] | None:
         """
         根据群组、日期和时间点检索一份历史摘要。
         """

@@ -10,9 +10,12 @@ import re
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from ...shared.constants import AnalysisStage
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass
@@ -29,7 +32,7 @@ class PluginLogEntry:
     raw: str
     location: str | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -111,13 +114,13 @@ class PluginLogBuffer(logging.Handler):
         self.max_capacity = max_capacity
         self._buffer: deque[PluginLogEntry] = deque(maxlen=max_capacity)
         self._counter = 0
-        self._listeners: set[Any] = set()
+        self._listeners: set[Callable[[PluginLogEntry], object]] = set()
 
-    def register_listener(self, listener: Any) -> None:
+    def register_listener(self, listener: Callable[[PluginLogEntry], object]) -> None:
         """注册日志实时推送监听器"""
         self._listeners.add(listener)
 
-    def unregister_listener(self, listener: Any) -> None:
+    def unregister_listener(self, listener: Callable[[PluginLogEntry], object]) -> None:
         """注销日志实时推送监听器"""
         self._listeners.discard(listener)
 
@@ -242,7 +245,7 @@ class PluginLogBuffer(logging.Handler):
         trace_id: str | None = None,
         tag: str | None = None,
         search: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, object]], int]:
         """按条件多维度筛选日志列表（按时间倒序）"""
         results: list[PluginLogEntry] = []
         target_level = level.upper().strip() if level else None
@@ -270,7 +273,7 @@ class PluginLogBuffer(logging.Handler):
         paged = results[offset : offset + limit]
         return [e.to_dict() for e in paged], total
 
-    def get_trace_logs(self, trace_id: str) -> list[dict[str, Any]]:
+    def get_trace_logs(self, trace_id: str) -> list[dict[str, object]]:
         """获取特定 TraceID 的全部日志记录"""
         return [
             e.to_dict()

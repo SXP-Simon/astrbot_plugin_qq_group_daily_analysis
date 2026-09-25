@@ -9,9 +9,20 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TypedDict
 
 from ...shared.constants import AnalysisStage
+
+if TYPE_CHECKING:
+    from ...shared.trace_context import TraceContextSnapshot
+
+
+class TokenBreakdownItem(TypedDict):
+    """Token 服务商/模型消耗分布结构"""
+
+    name: str
+    total_tokens: int
+    request_count: int
 
 
 class TraceSQLiteStore:
@@ -113,23 +124,29 @@ class TraceSQLiteStore:
             except Exception:
                 pass
 
-    def save_trace(self, trace_dict: dict[str, Any]) -> None:
+    def save_trace(
+        self, trace_dict: TraceContextSnapshot | dict[str, object]
+    ) -> None:
         """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
         trace_id = trace_dict.get("trace_id", "")
         if not trace_id:
             return
 
         with self._get_connection() as conn:
-            # 1. 写入主表前，合并既有的 extra_json（特别是 report_files 产物列表）
-            extra_payload = dict(trace_dict.get("extra", {}))
+            extra_raw = trace_dict.get("extra")
+            extra_payload: dict[str, object] = (
+                dict(extra_raw) if isinstance(extra_raw, dict) else {}
+            )
             meta = trace_dict.get("metadata", {})
             if isinstance(meta, dict):
                 for k, v in meta.items():
                     if k not in extra_payload:
                         extra_payload[k] = v
-                    elif isinstance(v, dict) and isinstance(extra_payload.get(k), dict):
-                        extra_payload[k].update(v)
-                    elif isinstance(v, list) and isinstance(extra_payload.get(k), list):
+                    elif isinstance(v, dict):
+                        existing_val = extra_payload.get(k)
+                        if isinstance(existing_val, dict):
+                            existing_val.update(v)
+                    elif isinstance(v, list):
                         extra_payload[k] = v
 
             existing_row = conn.execute(
@@ -144,12 +161,14 @@ class TraceSQLiteStore:
                         for rf in merged_rfiles
                         if isinstance(rf, dict) and rf.get("filename")
                     }
-                    for rf in extra_payload.get("report_files", []):
-                        if isinstance(rf, dict):
-                            fn = rf.get("filename")
-                            if fn and fn not in seen_filenames:
-                                seen_filenames.add(fn)
-                                merged_rfiles.append(rf)
+                    new_rfiles = extra_payload.get("report_files")
+                    if isinstance(new_rfiles, list):
+                        for rf in new_rfiles:
+                            if isinstance(rf, dict):
+                                fn = rf.get("filename")
+                                if fn and fn not in seen_filenames:
+                                    seen_filenames.add(fn)
+                                    merged_rfiles.append(rf)
                     extra_payload["report_files"] = merged_rfiles
 
                     # 保留历史已记录的 prompts 与 attempts
@@ -165,6 +184,13 @@ class TraceSQLiteStore:
                         extra_payload["llm_attempts"] = old_extra["llm_attempts"]
                 except Exception:
                     pass
+
+            started_raw = trace_dict.get("started_at")
+            started_val = (
+                float(started_raw)
+                if isinstance(started_raw, (int, float))
+                else time.time()
+            )
 
             conn.execute(
                 """
@@ -193,7 +219,7 @@ class TraceSQLiteStore:
                     str(trace_dict.get("platform", "")),
                     str(trace_dict.get("trigger_type", "manual")),
                     str(trace_dict.get("status", "running")),
-                    float(trace_dict.get("started_at", time.time())),
+                    started_val,
                     trace_dict.get("completed_at"),
                     trace_dict.get("duration_ms"),
                     trace_dict.get("error_stage"),
@@ -204,8 +230,17 @@ class TraceSQLiteStore:
             )
 
             # 2. 写入 Spans (增量覆写)
-            spans = trace_dict.get("spans", [])
+            spans_raw = trace_dict.get("spans")
+            spans = spans_raw if isinstance(spans_raw, list) else []
             for span in spans:
+                if not isinstance(span, dict):
+                    continue
+                span_started_raw = span.get("started_at")
+                span_started = (
+                    float(span_started_raw)
+                    if isinstance(span_started_raw, (int, float))
+                    else time.time()
+                )
                 conn.execute(
                     """
                     INSERT INTO trace_spans (
@@ -219,9 +254,9 @@ class TraceSQLiteStore:
                     (
                         span.get("span_id", f"{trace_id}_{span.get('stage_name')}"),
                         trace_id,
-                        span.get("stage_name", ""),
-                        span.get("status", "success"),
-                        float(span.get("started_at", time.time())),
+                        str(span.get("stage_name", "")),
+                        str(span.get("status", "success")),
+                        span_started,
                         span.get("duration_ms"),
                         json.dumps(span.get("payload", {}), ensure_ascii=False),
                     ),
@@ -229,7 +264,7 @@ class TraceSQLiteStore:
 
             # 3. 写入 Context Metrics
             context_metrics = trace_dict.get("context_metrics")
-            if context_metrics:
+            if isinstance(context_metrics, dict):
                 conn.execute(
                     """
                     INSERT INTO context_metrics (
@@ -255,7 +290,7 @@ class TraceSQLiteStore:
 
             # 4. 写入 Token Usage
             token_usage = trace_dict.get("token_usage")
-            if token_usage:
+            if isinstance(token_usage, dict):
                 conn.execute(
                     """
                     INSERT INTO token_usage (
@@ -308,7 +343,7 @@ class TraceSQLiteStore:
                     ),
                 )
 
-    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
+    def get_trace(self, trace_id: str) -> dict[str, object] | None:
         """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
         with self._get_connection() as conn:
             trace_row = conn.execute(
@@ -448,7 +483,7 @@ class TraceSQLiteStore:
                     pass
         return mapping
 
-    def get_crashed_traces_on_startup(self) -> list[dict[str, Any]]:
+    def get_crashed_traces_on_startup(self) -> list[dict[str, object]]:
         """获取开机前因系统异常终止而遗留的 running 任务列表。"""
         with self._get_connection() as conn:
             rows = conn.execute(
@@ -534,10 +569,10 @@ class TraceSQLiteStore:
         end_time: float | None = None,
         sort_by: str = "started_at",
         sort_order: str = "desc",
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, object]], int]:
         """分页筛选查询 Trace 列表（支持按群组、状态、触发方式、关键词、时间范围筛选与排序）"""
         conditions = []
-        params: list[Any] = []
+        params: list[object] = []
 
         if group_id:
             conditions.append("t.group_id = ?")
@@ -613,7 +648,7 @@ class TraceSQLiteStore:
 
             return traces, total_count
 
-    def get_metrics_summary(self) -> dict[str, Any]:
+    def get_metrics_summary(self) -> dict[str, object]:
         """获取控制台顶部 KPI 指标与聚合数据"""
         now = time.time()
         local_tm = time.localtime(now)
@@ -695,14 +730,14 @@ class TraceSQLiteStore:
 
     def get_analytics_trends(
         self, granularity: str = "day", range_count: int = 14
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """获取时序趋势数据（支持小时 / 天维度切换，并提取服务商与模型消耗细粒度拆分）"""
         now = time.time()
         local_tm = time.localtime(now)
 
-        points: list[dict[str, Any]] = []
-        provider_map: dict[str, dict[str, Any]] = {}
-        model_map: dict[str, dict[str, Any]] = {}
+        points: list[dict[str, object]] = []
+        provider_map: dict[str, TokenBreakdownItem] = {}
+        model_map: dict[str, TokenBreakdownItem] = {}
 
         if granularity == "hour":
             # 按小时划分（默认近 48 小时 / 2 天视野）
@@ -723,7 +758,7 @@ class TraceSQLiteStore:
             )
             start_timestamp = cur_hour_start - ((hours - 1) * 3600)
 
-            trend_map: dict[str, dict[str, Any]] = {}
+            trend_map: dict[str, dict[str, object]] = {}
             for i in range(hours):
                 h_ts = start_timestamp + (i * 3600)
                 h_tm = time.localtime(h_ts)
@@ -879,6 +914,8 @@ class TraceSQLiteStore:
                 "",
             }
             invalid_model_names = {"default", "default_model", "none", ""}
+            provider_map.clear()
+            model_map.clear()
 
             for tw in traces_with_usage:
                 try:
@@ -929,8 +966,10 @@ class TraceSQLiteStore:
                             "total_tokens": 0,
                             "request_count": 0,
                         }
-                    provider_map[pid]["total_tokens"] += tokens_per_p
-                    provider_map[pid]["request_count"] += 1
+                    cur_p_tokens = int(provider_map[pid]["total_tokens"])
+                    cur_p_reqs = int(provider_map[pid]["request_count"])
+                    provider_map[pid]["total_tokens"] = cur_p_tokens + tokens_per_p
+                    provider_map[pid]["request_count"] = cur_p_reqs + 1
 
                 tokens_per_m = tot_tok // max(1, len(models_in_trace))
                 for mid in models_in_trace:
@@ -940,26 +979,28 @@ class TraceSQLiteStore:
                             "total_tokens": 0,
                             "request_count": 0,
                         }
-                    model_map[mid]["total_tokens"] += tokens_per_m
-                    model_map[mid]["request_count"] += 1
+                    cur_m_tokens = int(model_map[mid]["total_tokens"])
+                    cur_m_reqs = int(model_map[mid]["request_count"])
+                    model_map[mid]["total_tokens"] = cur_m_tokens + tokens_per_m
+                    model_map[mid]["request_count"] = cur_m_reqs + 1
 
         provider_breakdown = [
             p
             for p in sorted(
                 provider_map.values(),
-                key=lambda x: x["total_tokens"],
+                key=lambda x: int(x["total_tokens"]),
                 reverse=True,
             )
-            if p["total_tokens"] > 0 or p["request_count"] > 0
+            if int(p["total_tokens"]) > 0 or int(p["request_count"]) > 0
         ]
         model_breakdown = [
             m
             for m in sorted(
                 model_map.values(),
-                key=lambda x: x["total_tokens"],
+                key=lambda x: int(x["total_tokens"]),
                 reverse=True,
             )
-            if m["total_tokens"] > 0 or m["request_count"] > 0
+            if int(m["total_tokens"]) > 0 or int(m["request_count"]) > 0
         ]
 
         return {

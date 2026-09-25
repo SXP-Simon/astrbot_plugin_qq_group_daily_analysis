@@ -16,7 +16,7 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from astrbot.api.star import StarTools
 
@@ -25,7 +25,11 @@ from ...utils.logger import logger
 from ...utils.template_utils import upgrade_str_format_template
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
     from .config_manager import ConfigManager
+
+StarToolsType = type[StarTools]
 
 
 class ConfigMigrator:
@@ -34,7 +38,7 @@ class ConfigMigrator:
     def __init__(
         self,
         config_manager: ConfigManager,
-        star_tools: Any = None,
+        star_tools: StarToolsType | None = None,
     ):
         """初始化配置迁移器。
 
@@ -43,7 +47,7 @@ class ConfigMigrator:
             star_tools: Star 工具类替身或模块（用于路径查找与测试替身注入）。
         """
         self.cm = config_manager
-        self.star_tools = star_tools or StarTools
+        self.star_tools: StarToolsType = star_tools or StarTools
 
     def run_all_migrations(self) -> None:
         """执行所有版本升级、数据结构迁移与结构保护检查。"""
@@ -73,7 +77,12 @@ class ConfigMigrator:
             logger.info("旧版配置迁移完成，已自动回写")
         return modified
 
-    def upgrade_config_item(self, group: str, key: str, setter_func: Any) -> bool:
+    def upgrade_config_item(
+        self,
+        group: str,
+        key: str,
+        setter_func: Callable[[str], None],
+    ) -> bool:
         """升级指定配置项的值（从 str.format -> string.Template），并回写。
 
         Args:
@@ -484,7 +493,9 @@ class ConfigMigrator:
 
     @staticmethod
     def write_upgrade_config_backup_data(
-        config: dict, version: str, star_tools: Any = None
+        config: dict[str, object],
+        version: str,
+        star_tools: StarToolsType | None = None,
     ) -> bool:
         """保存旧版本配置快照，并最多保留二十份。
 
@@ -532,7 +543,10 @@ class ConfigMigrator:
             return False
 
     def write_upgrade_config_backup(
-        self, config: dict, version: str, star_tools: Any = None
+        self,
+        config: dict[str, object],
+        version: str,
+        star_tools: StarToolsType | None = None,
     ) -> bool:
         """保存旧版本配置快照。
 
@@ -572,7 +586,10 @@ class ConfigMigrator:
         )
 
     @staticmethod
-    def write_comic_config_backup(data: dict, star_tools: Any = None) -> bool:
+    def write_comic_config_backup(
+        data: Mapping[str, object],
+        star_tools: StarToolsType | None = None,
+    ) -> bool:
         """写入漫画配置迁移备份。
 
         Args:
@@ -592,7 +609,7 @@ class ConfigMigrator:
                 json.dumps(
                     {
                         "migrated_at": datetime.now().isoformat(),
-                        "config": data,
+                        "config": dict(data),
                     },
                     ensure_ascii=False,
                     indent=2,
@@ -607,7 +624,7 @@ class ConfigMigrator:
     @staticmethod
     def copy_legacy_comic_reference_images(
         references: list[str],
-        star_tools: Any = None,
+        star_tools: StarToolsType | None = None,
     ) -> list[str]:
         """复制旧参考图到角色模板对应的原生上传目录。
 

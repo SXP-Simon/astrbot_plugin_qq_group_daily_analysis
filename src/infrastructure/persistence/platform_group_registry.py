@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
 
 
 class PlatformGroupRegistry:
@@ -13,11 +16,11 @@ class PlatformGroupRegistry:
     _KV_KEY = "platform_seen_groups_v1"
     _LEGACY_TELEGRAM_KEY = "telegram_seen_groups_v1"
 
-    plugin: Any
+    plugin: Star
     _lock: asyncio.Lock
     _known_groups: set[tuple[str, str]]
 
-    def __init__(self, plugin_instance: Any) -> None:
+    def __init__(self, plugin_instance: Star) -> None:
         self.plugin = plugin_instance
         self._lock = asyncio.Lock()
         self._known_groups = set()

@@ -15,11 +15,14 @@ KV 键设计：
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.repositories.persistence_repository import IIncrementalStore
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
 
 
 class IncrementalStore(IIncrementalStore):
@@ -40,9 +43,9 @@ class IncrementalStore(IIncrementalStore):
     LAST_TS_PREFIX = "incr_last_ts"
     GROUPS_REGISTRY_KEY = "incr_tracked_groups"
 
-    plugin: Any
+    plugin: Star
 
-    def __init__(self, star_instance: Any) -> None:
+    def __init__(self, star_instance: Star) -> None:
         """
         初始化批次持久化仓储。
 
@@ -111,12 +114,9 @@ class IncrementalStore(IIncrementalStore):
         """
         key = self._index_key(group_id)
         try:
-            data = await self.plugin.get_kv_data(key, None)
-            if data is None:
-                return []
+            data = await self.plugin.get_kv_data(key, default=[])
             if isinstance(data, list):
-                return data
-            logger.warning(f"批次索引数据格式异常 (Key: {key}): {type(data)}")
+                return [item for item in data if isinstance(item, dict)]
             return []
         except Exception as e:
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
@@ -331,8 +331,8 @@ class IncrementalStore(IIncrementalStore):
         """
         batch_key = self._batch_key(group_id, batch_id)
         try:
-            data = await self.plugin.get_kv_data(batch_key, None)
-            if data is not None and isinstance(data, dict):
+            data = await self.plugin.get_kv_data(batch_key, default={})
+            if isinstance(data, dict) and data:
                 return IncrementalBatch.from_dict(data)
             return None
         except Exception as e:
@@ -492,19 +492,21 @@ class IncrementalStore(IIncrementalStore):
         index.sort(key=lambda x: x.get("timestamp", 0))
         return index
 
-    async def get_all_batches_with_details(self, group_id: str) -> list[dict[str, Any]]:
+    async def get_all_batches_with_details(
+        self, group_id: str
+    ) -> list[dict[str, object]]:
         """获取指定群所有批次的概览详情列表（包含话题标签与基本指标）。
 
         Args:
             group_id: 群组 ID。
 
         Returns:
-            list[dict[str, Any]]: 批次卡片展示用字典列表。
+            list[dict[str, object]]: 批次卡片展示用字典列表。
         """
         index = await self._get_index(group_id)
         index.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
 
-        results: list[dict[str, Any]] = []
+        results: list[dict[str, object]] = []
         for entry in index:
             batch_id = entry.get("batch_id")
             if not batch_id:
