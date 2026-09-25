@@ -32,7 +32,6 @@ from .src.application.services.message_processing_service import (
 from .src.application.services.template_command_service import (
     TemplateCommandService,
 )
-from .src.domain.repositories import PluginHostProtocol
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
 from .src.domain.services.incremental_merge_service import IncrementalMergeService
 from .src.domain.services.statistics_service import StatisticsService
@@ -70,59 +69,6 @@ if TYPE_CHECKING:
     from astrbot.api.event import MessageEventResult
 
     from .src.domain.repositories import PlatformAdapterProtocol
-
-
-def _resolve_settings_handler(plugin: object) -> SettingsCommandHandler:
-    """获取插件设置指令处理器实例（契约规范与测试兼容）。"""
-    handler = getattr(plugin, "settings_command_handler", None)
-    if isinstance(handler, SettingsCommandHandler):
-        return handler
-    return SettingsCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
-        template_command_service=getattr(plugin, "template_command_service", None),  # type: ignore[reportArgumentType]
-        template_preview_router=getattr(plugin, "template_preview_router", None),  # type: ignore[reportArgumentType]
-        auto_scheduler=getattr(plugin, "auto_scheduler", None),  # type: ignore[reportArgumentType]
-        incremental_store=getattr(plugin, "incremental_store", None),
-        incremental_merge_service=getattr(plugin, "incremental_merge_service", None),
-        bot_manager=getattr(plugin, "bot_manager", None),
-        context=getattr(plugin, "context", None),
-    )
-
-
-def _resolve_comic_handler(plugin: object) -> ComicCommandHandler:
-    """获取插件漫画指令处理器实例（契约规范与测试兼容）。"""
-    handler = getattr(plugin, "comic_command_handler", None)
-    if isinstance(handler, ComicCommandHandler):
-        return handler
-    return ComicCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
-        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore[reportArgumentType]
-        comic_service=getattr(plugin, "comic_service", None),  # type: ignore[reportArgumentType]
-        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore[reportArgumentType]
-        active_task_manager=getattr(plugin, "active_task_manager", None),
-        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-        plugin_instance=plugin if isinstance(plugin, PluginHostProtocol) else None,
-    )
-
-
-def _resolve_analysis_handler(plugin: object) -> AnalysisCommandHandler:
-    """获取插件日常分析指令处理器实例（契约规范与测试兼容）。"""
-    handler = getattr(plugin, "analysis_command_handler", None)
-    if isinstance(handler, AnalysisCommandHandler):
-        return handler
-    return AnalysisCommandHandler(
-        config_manager=getattr(plugin, "config_manager", None),  # type: ignore[reportArgumentType]
-        bot_manager=getattr(plugin, "bot_manager", None),  # type: ignore[reportArgumentType]
-        analysis_service=getattr(plugin, "analysis_service", None),  # type: ignore[reportArgumentType]
-        report_generator=getattr(plugin, "report_generator", None),  # type: ignore[reportArgumentType]
-        html_render=getattr(plugin, "html_render", None),  # type: ignore[reportArgumentType]
-        active_task_manager=getattr(plugin, "active_task_manager", None),
-        trace_store=getattr(plugin, "trace_store", None),
-        message_sender=getattr(plugin, "message_sender", None),
-        comic_handler=_resolve_comic_handler(plugin),
-        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-        plugin_instance=plugin if isinstance(plugin, PluginHostProtocol) else None,
-    )
 
 
 class GroupDailyAnalysis(Star):
@@ -558,8 +504,9 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, days: int | None = None
     ) -> AsyncGenerator[MessageEventResult, None]:
         """分析群聊日常活动（跨平台支持）"""
-        handler = _resolve_analysis_handler(self)
-        async for result in handler.handle_daily_analysis(event, days):
+        async for result in self.analysis_command_handler.handle_daily_analysis(
+            event, days
+        ):
             yield result
 
     @filter.command("群漫画", alias={"group_comic", "daily_comic"})
@@ -568,8 +515,7 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, days: int | None = None
     ) -> AsyncGenerator[MessageEventResult, None]:
         """生成群聊趣味漫画（跨平台支持）"""
-        handler = _resolve_comic_handler(self)
-        async for result in handler.handle_group_comic(event, days):
+        async for result in self.comic_command_handler.handle_group_comic(event, days):
             yield result
 
     @filter.command("设置格式", alias={"set_format"})
@@ -578,8 +524,9 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, format_input: str = ""
     ) -> AsyncGenerator[MessageEventResult, None]:
         """设置分析报告输出格式（跨平台支持）"""
-        handler = _resolve_settings_handler(self)
-        async for result in handler.handle_set_output_format(event, format_input):
+        async for result in self.settings_command_handler.handle_set_output_format(
+            event, format_input
+        ):
             yield result
 
     @filter.command("设置模板", alias={"set_template"})
@@ -588,8 +535,9 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, template_input: str = ""
     ) -> AsyncGenerator[MessageEventResult, None]:
         """设置分析报告模板（跨平台支持）"""
-        handler = _resolve_settings_handler(self)
-        async for result in handler.handle_set_report_template(event, template_input):
+        async for result in self.settings_command_handler.handle_set_report_template(
+            event, template_input
+        ):
             yield result
 
     @filter.command("查看模板", alias={"view_templates"})
@@ -598,14 +546,10 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[MessageEventResult, None]:
         """查看所有可用的报告模板及预览图（跨平台支持）"""
-        platform_getter = getattr(self, "_get_platform_id_from_event", None)
-        platform_id = (
-            str(platform_getter(event) or "")
-            if callable(platform_getter)
-            else str(getattr(event, "get_platform_id", lambda: "")() or "")
-        )
-        handler = _resolve_settings_handler(self)
-        async for result in handler.handle_view_templates(event, platform_id):
+        platform_id = str(self._get_platform_id_from_event(event) or "")
+        async for result in self.settings_command_handler.handle_view_templates(
+            event, platform_id
+        ):
             yield result
 
     @filter.command("分析设置", alias={"analysis_settings"})
@@ -614,20 +558,9 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent, action: str = "status"
     ) -> AsyncGenerator[MessageEventResult, None]:
         """管理分析设置（跨平台支持）"""
-        group_getter = getattr(self, "_get_group_id_from_event", None)
-        group_id = (
-            str(group_getter(event) or "")
-            if callable(group_getter)
-            else str(getattr(event, "get_group_id", lambda: "")() or "")
-        )
-        platform_getter = getattr(self, "_get_platform_id_from_event", None)
-        platform_id = (
-            str(platform_getter(event) or "")
-            if callable(platform_getter)
-            else str(getattr(event, "get_platform_id", lambda: "")() or "")
-        )
-        handler = _resolve_settings_handler(self)
-        async for result in handler.handle_analysis_settings(
+        group_id = str(self._get_group_id_from_event(event) or "")
+        platform_id = str(self._get_platform_id_from_event(event) or "")
+        async for result in self.settings_command_handler.handle_analysis_settings(
             event, action, str(group_id), platform_id
         ):
             yield result
@@ -638,28 +571,24 @@ class GroupDailyAnalysis(Star):
         self, event: AstrMessageEvent
     ) -> AsyncGenerator[MessageEventResult, None]:
         """查看当前增量分析状态（滑动窗口）"""
-        group_getter = getattr(self, "_get_group_id_from_event", None)
-        group_id = (
-            str(group_getter(event) or "")
-            if callable(group_getter)
-            else str(getattr(event, "get_group_id", lambda: "")() or "")
-        )
-        handler = _resolve_settings_handler(self)
-        async for result in handler.handle_incremental_status(event, str(group_id)):
+        group_id = str(self._get_group_id_from_event(event) or "")
+        async for result in self.settings_command_handler.handle_incremental_status(
+            event, str(group_id)
+        ):
             yield result
 
     async def _refresh_incremental_target_states(self) -> None:
         """在插件内修改名单后立即同步增量状态。"""
-        handler = _resolve_settings_handler(self)
-        await handler._refresh_incremental_target_states()
+        await self.settings_command_handler._refresh_incremental_target_states()
 
     # ==================== 兼容性私有方法代理转发 ====================
 
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict[str, object]
     ) -> AsyncGenerator[MessageEventResult, None]:
-        handler = _resolve_analysis_handler(self)
-        async for res in handler.send_analysis_report(event, result):
+        async for res in self.analysis_command_handler.send_analysis_report(
+            event, result
+        ):
             yield res
 
     async def _try_upload_image(
@@ -670,19 +599,16 @@ class GroupDailyAnalysis(Star):
         is_comic: bool = False,
     ) -> None:
         if is_comic:
-            comic_handler = _resolve_comic_handler(self)
-            await comic_handler._try_upload_image(
+            await self.comic_command_handler._try_upload_image(
                 group_id, image_url, platform_id, is_comic=True
             )
         else:
-            handler = _resolve_analysis_handler(self)
-            await handler._try_upload_image(
+            await self.analysis_command_handler._try_upload_image(
                 group_id, image_url, platform_id, is_comic=False
             )
 
     def _save_report_to_history(self, image_url: str, group_id: str) -> None:
-        handler = _resolve_analysis_handler(self)
-        handler._save_report_to_history(image_url, group_id)
+        self.analysis_command_handler._save_report_to_history(image_url, group_id)
 
     async def _send_text_reports(
         self,
@@ -691,8 +617,7 @@ class GroupDailyAnalysis(Star):
         is_qq_official: bool,
         adapter: PlatformAdapterProtocol,
     ) -> None:
-        handler = _resolve_analysis_handler(self)
-        await handler._send_text_reports(
+        await self.analysis_command_handler._send_text_reports(
             group_id, analysis_result, is_qq_official, adapter
         )
 
@@ -705,8 +630,7 @@ class GroupDailyAnalysis(Star):
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,
     ) -> str:
-        handler = _resolve_comic_handler(self)
-        return handler.try_trigger_comic_generation(
+        return self.comic_command_handler.try_trigger_comic_generation(
             group_id,
             platform_id,
             analysis_result,
@@ -722,18 +646,17 @@ class GroupDailyAnalysis(Star):
         umo: str,
         trace: TraceContext | None = None,
     ) -> None:
-        handler = _resolve_comic_handler(self)
-        await handler._trigger_comic_generation(
+        await self.comic_command_handler._trigger_comic_generation(
             topics, group_id, platform_id, umo, trace=trace
         )
 
     @property
     def _comic_group_tasks(self) -> dict[str, asyncio.Task[object]]:
-        return _resolve_comic_handler(self)._comic_group_tasks
+        return self.comic_command_handler._comic_group_tasks
 
     @_comic_group_tasks.setter
     def _comic_group_tasks(self, val: dict[str, asyncio.Task[object]]) -> None:
-        _resolve_comic_handler(self)._comic_group_tasks = val
+        self.comic_command_handler._comic_group_tasks = val
 
     @staticmethod
     def _detect_image_ext(data: bytes) -> str:

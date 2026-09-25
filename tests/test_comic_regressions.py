@@ -70,9 +70,34 @@ def load_main_method(name: str):
         "SettingsCommandHandler": SettingsCommandHandler,
         "ComicCommandHandler": ComicCommandHandler,
         "AnalysisCommandHandler": AnalysisCommandHandler,
-        "_resolve_settings_handler": lambda plugin: (
-            getattr(plugin, "settings_command_handler", None)
-            or SettingsCommandHandler(
+        "asyncio": asyncio,
+        "datetime": datetime,
+        "logger": Mock(),
+        "os": os,
+        "Path": Path,
+        "PLUGIN_NAME": "test_plugin",
+        "StarTools": SimpleNamespace(get_data_dir=Mock()),
+        "TraceContext": TraceContext,
+    }
+    exec(compile(isolated_module, str(main_path), "exec"), namespace)
+    target_func = getattr(namespace["MainMethodHarness"], name)
+
+    import functools
+    import inspect
+
+    def _ensure_plugin_handlers(plugin):
+        if not hasattr(plugin, "__dict__"):
+            return
+        if not hasattr(plugin, "_get_platform_id_from_event"):
+            plugin._get_platform_id_from_event = lambda e: (
+                getattr(e, "get_platform_id", lambda: "")() or "default"
+            )
+        if not hasattr(plugin, "_get_group_id_from_event"):
+            plugin._get_group_id_from_event = lambda e: getattr(
+                e, "get_group_id", lambda: None
+            )()
+        if not hasattr(plugin, "settings_command_handler"):
+            plugin.settings_command_handler = SettingsCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
                 template_command_service=getattr(
                     plugin, "template_command_service", None
@@ -88,10 +113,8 @@ def load_main_method(name: str):
                 bot_manager=getattr(plugin, "bot_manager", None),
                 context=getattr(plugin, "context", None),
             )
-        ),
-        "_resolve_comic_handler": lambda plugin: (
-            getattr(plugin, "comic_command_handler", None)
-            or ComicCommandHandler(
+        if not hasattr(plugin, "comic_command_handler"):
+            plugin.comic_command_handler = ComicCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
                 bot_manager=getattr(plugin, "bot_manager", None),
                 comic_service=getattr(plugin, "comic_service", None),
@@ -100,10 +123,8 @@ def load_main_method(name: str):
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
                 plugin_instance=plugin,
             )
-        ),
-        "_resolve_analysis_handler": lambda plugin: (
-            getattr(plugin, "analysis_command_handler", None)
-            or AnalysisCommandHandler(
+        if not hasattr(plugin, "analysis_command_handler"):
+            plugin.analysis_command_handler = AnalysisCommandHandler(
                 config_manager=getattr(plugin, "config_manager", None),
                 bot_manager=getattr(plugin, "bot_manager", None),
                 analysis_service=getattr(plugin, "analysis_service", None),
@@ -112,35 +133,36 @@ def load_main_method(name: str):
                 active_task_manager=getattr(plugin, "active_task_manager", None),
                 trace_store=getattr(plugin, "trace_store", None),
                 message_sender=getattr(plugin, "message_sender", None),
-                comic_handler=(
-                    getattr(plugin, "comic_command_handler", None)
-                    or ComicCommandHandler(
-                        config_manager=getattr(plugin, "config_manager", None),
-                        bot_manager=getattr(plugin, "bot_manager", None),
-                        comic_service=getattr(plugin, "comic_service", None),
-                        analysis_service=getattr(plugin, "analysis_service", None),
-                        active_task_manager=getattr(
-                            plugin, "active_task_manager", None
-                        ),
-                        plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
-                        plugin_instance=plugin,
-                    )
-                ),
+                comic_handler=plugin.comic_command_handler,
                 plugin_data_dir=getattr(plugin, "plugin_data_dir", None),
                 plugin_instance=plugin,
             )
-        ),
-        "asyncio": asyncio,
-        "datetime": datetime,
-        "logger": Mock(),
-        "os": os,
-        "Path": Path,
-        "PLUGIN_NAME": "test_plugin",
-        "StarTools": SimpleNamespace(get_data_dir=Mock()),
-        "TraceContext": TraceContext,
-    }
-    exec(compile(isolated_module, str(main_path), "exec"), namespace)
-    return getattr(namespace["MainMethodHarness"], name)
+
+    if inspect.iscoroutinefunction(target_func):
+
+        @functools.wraps(target_func)
+        async def async_wrapper(plugin, *args, **kwargs):
+            _ensure_plugin_handlers(plugin)
+            return await target_func(plugin, *args, **kwargs)
+
+        return async_wrapper
+    elif inspect.isasyncgenfunction(target_func):
+
+        @functools.wraps(target_func)
+        async def async_gen_wrapper(plugin, *args, **kwargs):
+            _ensure_plugin_handlers(plugin)
+            async for item in target_func(plugin, *args, **kwargs):
+                yield item
+
+        return async_gen_wrapper
+    else:
+
+        @functools.wraps(target_func)
+        def sync_wrapper(plugin, *args, **kwargs):
+            _ensure_plugin_handlers(plugin)
+            return target_func(plugin, *args, **kwargs)
+
+        return sync_wrapper
 
 
 def load_comic_service_method(name: str):
