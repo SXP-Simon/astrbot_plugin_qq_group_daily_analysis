@@ -4,28 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const msgPath = process.argv[2];
-if (!msgPath) {
-  console.error('\x1b[31m[Commit Lint Error] 未能获取 commit 信息路径。\x1b[0m');
-  process.exit(1);
-}
-
-const rawMessage = fs.readFileSync(path.resolve(msgPath), 'utf-8');
-
-// 过滤掉 Git 自动生成的注释行 (# 开头的行)
-const cleanLines = rawMessage
-  .split('\n')
-  .map((line) => line.trim())
-  .filter((line) => line && !line.startsWith('#'));
-
-const fullText = cleanLines.join('\n');
-const nonWhitespaceCount = fullText.replace(/\s+/g, '').length;
-
-// 1. 提取 Header 并校验 Scope 范围
-const header = cleanLines[0] || '';
-const headerMatch = header.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\(([^)]+)\))?:\s*(.+)/);
-
+// ============================================================================
 // 1. DDD 架构分层、业务子领域与前端 FSD 架构 Scope 结构化分类定义
+// ============================================================================
 const SCOPE_CATEGORIES = {
   '🏛️ 后端 DDD 架构分层 (Backend DDD Architectural Layers)': {
     domain: '领域层核心 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
@@ -92,218 +73,275 @@ function isScopeValid(scope) {
   return false;
 }
 
-const errors = [];
+// 路径匹配规则集（精确对齐 DDD 与 FSD 物理目录）
+const SCOPE_PATH_RULES = [
+  {
+    matchScope: (s) => s === 'domain' || s.startsWith('domain/'),
+    matchFile: (f) => f.startsWith('src/domain/'),
+    name: 'domain 领域层 (src/domain/)',
+  },
+  {
+    matchScope: (s) => s === 'app' || s === 'application' || s.startsWith('app/') || s.startsWith('application/'),
+    matchFile: (f) => f.startsWith('src/application/'),
+    name: 'app 应用层 (src/application/)',
+  },
+  {
+    matchScope: (s) => s === 'platform' || s === 'infra/platform',
+    matchFile: (f) => f.startsWith('src/infrastructure/platform/'),
+    name: 'platform 平台通信子域 (src/infrastructure/platform/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/pages',
+    matchFile: (f) => f.startsWith('dashboard/src/pages/'),
+    name: 'webui/pages 页面层 (dashboard/src/pages/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/widgets',
+    matchFile: (f) => f.startsWith('dashboard/src/widgets/'),
+    name: 'webui/widgets 小部件层 (dashboard/src/widgets/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/features',
+    matchFile: (f) => f.startsWith('dashboard/src/features/'),
+    name: 'webui/features 特征交互层 (dashboard/src/features/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/entities',
+    matchFile: (f) => f.startsWith('dashboard/src/entities/'),
+    name: 'webui/entities 业务实体层 (dashboard/src/entities/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/shared',
+    matchFile: (f) => f.startsWith('dashboard/src/shared/'),
+    name: 'webui/shared 共享基建层 (dashboard/src/shared/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/app',
+    matchFile: (f) => f.startsWith('dashboard/src/app/'),
+    name: 'webui/app 应用入口层 (dashboard/src/app/)',
+  },
+  {
+    matchScope: (s) => s === 'webui/tasks',
+    matchFile: (f) => f.includes('task') && f.startsWith('dashboard/'),
+    name: 'webui/tasks 任务业务切片 (dashboard/src/**/task*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/traces',
+    matchFile: (f) => f.includes('trace') && f.startsWith('dashboard/'),
+    name: 'webui/traces 追踪业务切片 (dashboard/src/**/trace*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/reports',
+    matchFile: (f) => f.includes('report') && f.startsWith('dashboard/'),
+    name: 'webui/reports 报告业务切片 (dashboard/src/**/report*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/charts',
+    matchFile: (f) => (f.includes('chart') || f.includes('trend')) && f.startsWith('dashboard/'),
+    name: 'webui/charts 图表业务切片 (dashboard/src/**/trend-charts*, token-chart*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/config',
+    matchFile: (f) => f.includes('config') && f.startsWith('dashboard/'),
+    name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
+  },
+  {
+    matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard',
+    matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/') || f.startsWith('src/infrastructure/webui/'),
+    name: 'webui 展现层 (dashboard/, pages/, src/infrastructure/webui/)',
+  },
+  {
+    matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
+    matchFile: (f) => f.startsWith('src/infrastructure/'),
+    name: 'infra 基础设施层 (src/infrastructure/)',
+  },
+  {
+    matchScope: (s) => s === 'analysis' || s.endsWith('/analysis'),
+    matchFile: (f) => f.includes('analysis') || f.startsWith('src/domain/value_objects/analysis_results.py'),
+    name: 'analysis 分析子域',
+  },
+  {
+    matchScope: (s) => s === 'comic' || s.endsWith('/comic'),
+    matchFile: (f) => f.includes('comic'),
+    name: 'comic 漫画子域',
+  },
+  {
+    matchScope: (s) => s === 'reporting' || s === 'render' || s.endsWith('/reporting') || s.endsWith('/render'),
+    matchFile: (f) => f.startsWith('src/infrastructure/reporting/'),
+    name: 'reporting/render 渲染子域 (src/infrastructure/reporting/)',
+  },
+  {
+    matchScope: (s) => s === 'scheduler' || s.endsWith('/scheduler'),
+    matchFile: (f) => f.startsWith('src/infrastructure/scheduler/'),
+    name: 'scheduler 调度子域 (src/infrastructure/scheduler/)',
+  },
+  {
+    matchScope: (s) => s === 'config' || s.endsWith('/config'),
+    matchFile: (f) => f.startsWith('src/infrastructure/config/') || f === '_conf_schema.json',
+    name: 'config 配置子域',
+  },
+  {
+    matchScope: (s) => s === 'test' || s === 'tests',
+    matchFile: (f) => f.startsWith('tests/'),
+    name: 'test 测试套件 (tests/)',
+  },
+  {
+    matchScope: (s) => s === 'ci',
+    matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml' || f === 'pyrightconfig.json' || f === 'ruff.toml' || f === '.pre-commit-config.yaml',
+    name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json)',
+  },
+  {
+    matchScope: (s) => s === 'deps',
+    matchFile: (f) => f === 'pyproject.toml' || f === 'pnpm-lock.yaml' || f === 'package.json' || f === 'uv.lock' || f.endsWith('package.json'),
+    name: 'deps 依赖文件',
+  },
+  {
+    matchScope: (s) => s === 'docs',
+    matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md'),
+    name: 'docs 文档 (docs/, *.md)',
+  },
+  {
+    matchScope: (s) => s === 'core' || s === 'spec',
+    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml',
+    name: 'core/spec 核心协议与基建',
+  },
+];
 
-if (!headerMatch) {
-  errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain/analysis): 增强分析值对象类型约束');
-} else {
-  const scope = headerMatch[2];
-  if (!scope) {
-    errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ... 或 feat(webui/widgets): ...');
-  } else if (!isScopeValid(scope)) {
-    let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或前端 FSD 对应的 Scope：\n`;
-    for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
-      scopeHelp += `\n     ${catName}:\n`;
-      for (const [sKey, sDesc] of Object.entries(scopes)) {
-        scopeHelp += `       • ${sKey.padEnd(18)} -> ${sDesc}\n`;
-      }
-    }
-    scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, webui/features`;
-    errors.push(scopeHelp.trimEnd());
+// ============================================================================
+// 2. 检查单条 Commit 消息的核心校验函数
+// ============================================================================
+function isMergeOrReleaseCommit(firstLine, commitSha = null) {
+  // 1. 匹配标准 Merge commit 头
+  if (/^Merge (branch|remote-tracking branch|pull request|\w+ into \w+)/i.test(firstLine)) {
+    return true;
   }
+  // 2. 匹配版本发布/自动化机器人提交
+  if (/^chore(?:\([^)]+\))?:\s*bump version/i.test(firstLine) || /^v\d+\.\d+\.\d+/i.test(firstLine)) {
+    return true;
+  }
+  // 3. 检查 Git 中是否包含多于 1 个 Parent Commit (Merge Commit)
+  if (commitSha) {
+    try {
+      execSync(`git rev-parse --verify --quiet "${commitSha}^2"`, { stdio: 'ignore' });
+      return true; // 存在第2个父节点，确认为 Merge commit
+    } catch {
+      // 非 Merge commit
+    }
+  }
+  return false;
 }
 
-// 2. 真实暂存区文件路径与 Scope 一致性校验
-try {
-  const stagedFilesRaw = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
-  if (stagedFilesRaw) {
-    const stagedFiles = stagedFilesRaw.split(/\r?\n/).map((f) => f.trim().replace(/\\/g, '/')).filter(Boolean);
-    const scope = headerMatch ? headerMatch[2] : null;
+function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitAuthor = null }) {
+  const cleanLines = rawMessage
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
 
-    if (scope && stagedFiles.length > 0) {
-      // 路径匹配规则集（精确对齐 DDD 与 FSD 物理目录）
-      const SCOPE_PATH_RULES = [
-        {
-          matchScope: (s) => s === 'domain' || s.startsWith('domain/'),
-          matchFile: (f) => f.startsWith('src/domain/'),
-          name: 'domain 领域层 (src/domain/)',
-        },
-        {
-          matchScope: (s) => s === 'app' || s === 'application' || s.startsWith('app/') || s.startsWith('application/'),
-          matchFile: (f) => f.startsWith('src/application/'),
-          name: 'app 应用层 (src/application/)',
-        },
-        {
-          matchScope: (s) => s === 'platform' || s === 'infra/platform',
-          matchFile: (f) => f.startsWith('src/infrastructure/platform/'),
-          name: 'platform 平台通信子域 (src/infrastructure/platform/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/pages',
-          matchFile: (f) => f.startsWith('dashboard/src/pages/'),
-          name: 'webui/pages 页面层 (dashboard/src/pages/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/widgets',
-          matchFile: (f) => f.startsWith('dashboard/src/widgets/'),
-          name: 'webui/widgets 小部件层 (dashboard/src/widgets/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/features',
-          matchFile: (f) => f.startsWith('dashboard/src/features/'),
-          name: 'webui/features 特征交互层 (dashboard/src/features/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/entities',
-          matchFile: (f) => f.startsWith('dashboard/src/entities/'),
-          name: 'webui/entities 业务实体层 (dashboard/src/entities/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/shared',
-          matchFile: (f) => f.startsWith('dashboard/src/shared/'),
-          name: 'webui/shared 共享基建层 (dashboard/src/shared/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/app',
-          matchFile: (f) => f.startsWith('dashboard/src/app/'),
-          name: 'webui/app 应用入口层 (dashboard/src/app/)',
-        },
-        {
-          matchScope: (s) => s === 'webui/tasks',
-          matchFile: (f) => f.includes('task') && f.startsWith('dashboard/'),
-          name: 'webui/tasks 任务业务切片 (dashboard/src/**/task*)',
-        },
-        {
-          matchScope: (s) => s === 'webui/traces',
-          matchFile: (f) => f.includes('trace') && f.startsWith('dashboard/'),
-          name: 'webui/traces 追踪业务切片 (dashboard/src/**/trace*)',
-        },
-        {
-          matchScope: (s) => s === 'webui/reports',
-          matchFile: (f) => f.includes('report') && f.startsWith('dashboard/'),
-          name: 'webui/reports 报告业务切片 (dashboard/src/**/report*)',
-        },
-        {
-          matchScope: (s) => s === 'webui/charts',
-          matchFile: (f) => (f.includes('chart') || f.includes('trend')) && f.startsWith('dashboard/'),
-          name: 'webui/charts 图表业务切片 (dashboard/src/**/trend-charts*, token-chart*)',
-        },
-        {
-          matchScope: (s) => s === 'webui/config',
-          matchFile: (f) => f.includes('config') && f.startsWith('dashboard/'),
-          name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
-        },
-        {
-          matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard',
-          matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/') || f.startsWith('src/infrastructure/webui/'),
-          name: 'webui 展现层 (dashboard/, pages/, src/infrastructure/webui/)',
-        },
-        {
-          matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
-          matchFile: (f) => f.startsWith('src/infrastructure/'),
-          name: 'infra 基础设施层 (src/infrastructure/)',
-        },
-        {
-          matchScope: (s) => s === 'analysis' || s.endsWith('/analysis'),
-          matchFile: (f) => f.includes('analysis') || f.startsWith('src/domain/value_objects/analysis_results.py'),
-          name: 'analysis 分析子域',
-        },
-        {
-          matchScope: (s) => s === 'comic' || s.endsWith('/comic'),
-          matchFile: (f) => f.includes('comic'),
-          name: 'comic 漫画子域',
-        },
-        {
-          matchScope: (s) => s === 'reporting' || s === 'render' || s.endsWith('/reporting') || s.endsWith('/render'),
-          matchFile: (f) => f.startsWith('src/infrastructure/reporting/'),
-          name: 'reporting/render 渲染子域 (src/infrastructure/reporting/)',
-        },
-        {
-          matchScope: (s) => s === 'scheduler' || s.endsWith('/scheduler'),
-          matchFile: (f) => f.startsWith('src/infrastructure/scheduler/'),
-          name: 'scheduler 调度子域 (src/infrastructure/scheduler/)',
-        },
-        {
-          matchScope: (s) => s === 'config' || s.endsWith('/config'),
-          matchFile: (f) => f.startsWith('src/infrastructure/config/') || f === '_conf_schema.json',
-          name: 'config 配置子域',
-        },
-        {
-          matchScope: (s) => s === 'test' || s === 'tests',
-          matchFile: (f) => f.startsWith('tests/'),
-          name: 'test 测试套件 (tests/)',
-        },
-        {
-          matchScope: (s) => s === 'ci',
-          matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml' || f === 'pyrightconfig.json' || f === 'ruff.toml' || f === '.pre-commit-config.yaml',
-          name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json)',
-        },
-        {
-          matchScope: (s) => s === 'deps',
-          matchFile: (f) => f === 'pyproject.toml' || f === 'pnpm-lock.yaml' || f === 'package.json' || f === 'uv.lock' || f.endsWith('package.json'),
-          name: 'deps 依赖文件',
-        },
-        {
-          matchScope: (s) => s === 'docs',
-          matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md'),
-          name: 'docs 文档 (docs/, *.md)',
-        },
-        {
-          matchScope: (s) => s === 'core' || s === 'spec',
-          matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml',
-          name: 'core/spec 核心协议与基建',
-        },
-      ];
+  const header = cleanLines[0] || '';
 
-      // 寻找与当前 scope 对应的规则
+  // 若为 Merge commit 或版本 Bump commit，直接放行
+  if (isMergeOrReleaseCommit(header, commitSha)) {
+    return {
+      isSkipped: true,
+      skipReason: 'Merge / Release Commit 已自动豁免三点论校验',
+      header,
+      errors: [],
+    };
+  }
+
+  const fullText = cleanLines.join('\n');
+  const nonWhitespaceCount = fullText.replace(/\s+/g, '').length;
+  const headerMatch = header.match(/^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\(([^)]+)\))?:\s*(.+)/);
+
+  const errors = [];
+
+  // 1. Header 与 Scope 校验
+  if (!headerMatch) {
+    errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain/analysis): 增强分析值对象类型约束');
+  } else {
+    const scope = headerMatch[2];
+    if (!scope) {
+      errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ... 或 feat(webui/widgets): ...');
+    } else if (!isScopeValid(scope)) {
+      let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或前端 FSD 对应的 Scope：\n`;
+      for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
+        scopeHelp += `\n     ${catName}:\n`;
+        for (const [sKey, sDesc] of Object.entries(scopes)) {
+          scopeHelp += `       • ${sKey.padEnd(18)} -> ${sDesc}\n`;
+        }
+      }
+      scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, webui/features`;
+      errors.push(scopeHelp.trimEnd());
+    } else if (touchedFiles.length > 0) {
+      // 2. 匹配 Scope 与实际文件路径
       const matchedRule = SCOPE_PATH_RULES.find((r) => r.matchScope(scope));
       if (matchedRule) {
-        const hasMatchingFile = stagedFiles.some((file) => matchedRule.matchFile(file));
+        const hasMatchingFile = touchedFiles.some((file) => matchedRule.matchFile(file));
         if (!hasMatchingFile) {
           errors.push(
-            `【Scope 与暂存文件路径不匹配】\n` +
+            `【Scope 与修改文件路径不匹配】\n` +
             `     您声明的 Scope 为 "${scope}"（预期涉及: ${matchedRule.name}），\n` +
-            `     但本次暂存的文件全部属于其他路径：\n` +
-            `     -> ${stagedFiles.slice(0, 5).join(', ')}${stagedFiles.length > 5 ? ' 等' : ''}\n` +
+            `     但本次涉及的文件全部属于其他路径：\n` +
+            `     -> ${touchedFiles.slice(0, 5).join(', ')}${touchedFiles.length > 5 ? ' 等' : ''}\n` +
             `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
           );
         }
       }
     }
   }
-} catch (e) {
-  // Git 暂存区检查异常时不阻断流程
+
+  // 3. 检查三点论关键词
+  const hasProblem = /(?:^|\n)\s*问题[：:]\s*\S+/.test(fullText);
+  const hasSolution = /(?:^|\n)\s*解决措施[：:]\s*\S+/.test(fullText);
+  const hasEffect = /(?:^|\n)\s*效果[：:]\s*\S+/.test(fullText);
+
+  if (!hasProblem) {
+    errors.push('【缺失“问题”说明】Body 必须包含以“问题：”或“问题:”开头并阐述具体原因的段落');
+  }
+
+  if (!hasSolution) {
+    errors.push('【缺失“解决措施”说明】Body 必须包含以“解决措施：”或“解决措施:”开头并阐述修改方法的段落');
+  }
+
+  if (!hasEffect) {
+    errors.push('【缺失“效果”说明】Body 必须包含以“效果：”或“效果:”开头并说明预期结果/量化数据的段落');
+  }
+
+  if (nonWhitespaceCount < 40) {
+    errors.push(`【字数不足门禁】提交内容去空格后当前仅 ${nonWhitespaceCount} 字，要求不少于 40 字`);
+  }
+
+  return {
+    isSkipped: false,
+    header,
+    commitSha,
+    commitAuthor,
+    errors,
+  };
 }
 
-// 3. 检查三点论关键词
-const hasProblem = /(?:^|\n)\s*问题[：:]\s*\S+/.test(fullText);
-const hasSolution = /(?:^|\n)\s*解决措施[：:]\s*\S+/.test(fullText);
-const hasEffect = /(?:^|\n)\s*效果[：:]\s*\S+/.test(fullText);
+// ============================================================================
+// 3. 友好的终端输出与 GitHub Actions Annotation
+// ============================================================================
+function printFailureGuide(failedResults) {
+  console.error('\n' + '='.repeat(74));
+  console.error('\x1b[31;1m[FAIL] Git Commit 门禁校验未通过，已阻止合并/提交：\x1b[0m');
 
-if (!hasProblem) {
-  errors.push('【缺失“问题”说明】Body 必须包含以“问题：”或“问题:”开头并阐述具体原因的段落');
-}
+  failedResults.forEach((res, i) => {
+    const shaTag = res.commitSha ? ` [${res.commitSha.slice(0, 7)}]` : '';
+    console.error(`\n\x1b[31;1m❌ 提交 #${i + 1}${shaTag}: ${res.header}\x1b[0m`);
+    res.errors.forEach((err, idx) => {
+      console.error(`  \x1b[33m${idx + 1}. ${err}\x1b[0m`);
+    });
 
-if (!hasSolution) {
-  errors.push('【缺失“解决措施”说明】Body 必须包含以“解决措施：”或“解决措施:”开头并阐述修改方法的段落');
-}
-
-if (!hasEffect) {
-  errors.push('【缺失“效果”说明】Body 必须包含以“效果：”或“效果:”开头并说明预期结果/量化数据的段落');
-}
-
-if (nonWhitespaceCount < 40) {
-  errors.push(`【字数不足门禁】提交内容去空格后当前仅 ${nonWhitespaceCount} 字，要求不少于 40 字`);
-}
-
-if (errors.length > 0) {
-  console.error('\n' + '='.repeat(72));
-  console.error('\x1b[31;1m[FAIL] Git Commit 门禁校验未通过，已阻止本次提交：\x1b[0m');
-  errors.forEach((err, idx) => {
-    console.error(`  \x1b[33m${idx + 1}. ${err}\x1b[0m`);
+    // GitHub Actions Workflow Error Annotation 输出
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const singleLineMsg = res.errors.map((e) => e.split('\n')[0]).join(' | ');
+      console.error(`::error title=Commit Lint Failed${shaTag}::${singleLineMsg.replace(/"/g, "'")}`);
+    }
   });
 
-  console.error('\n' + '-'.repeat(72));
+  console.error('\n' + '-'.repeat(74));
   console.error('\x1b[36;1m💡【STAR 原则与问题导向提交指南 (Problem-Oriented Commit Guide)】\x1b[0m');
   console.error('\x1b[90m  提交信息应清晰回答：为什么改(痛点根因) -> 怎么改(设计手段) -> 带来什么价值(量化收益)。\x1b[0m');
   console.error('\x1b[90m  避免无信息量的流水账（如“修改了某文件”），应注重技术决策与实际工程影响。\x1b[0m\n');
@@ -336,9 +374,124 @@ if (errors.length > 0) {
   console.error('解决措施：在 PlatformAdapter 抽象层引入指数退避并发限流器，并对失败 OpenID 建立 10 分钟负缓存 (Negative Cache) 实施熔断。');
   console.error('效果：彻底切断外部抖动对核心链路的阻塞传播，单次报告生成 P99 耗时从 35s 下降至 6.2s，网络异常率下降 98%。');
   console.error('\x1b[0m');
-  console.error('='.repeat(72) + '\n');
-  process.exit(1);
+  console.error('='.repeat(74) + '\n');
 }
 
-console.log('\x1b[32;1m[PASS] Git 提交规范校验通过（原子化 Scope + 路径一致性 + 中文三点论 + 40字门禁已达标）\x1b[0m');
-process.exit(0);
+// ============================================================================
+// 4. 主执行入口 (支持 本地 Hook 文件模式 / CI Commit 范围模式)
+// ============================================================================
+function main() {
+  const args = process.argv.slice(2);
+  const isCiMode = args.includes('--ci') || args.includes('-ci');
+  const rangeIndex = args.indexOf('--range');
+
+  let commitRange = null;
+  if (rangeIndex !== -1 && args[rangeIndex + 1]) {
+    commitRange = args[rangeIndex + 1];
+  }
+
+  // 模式 A: CI 或范围校验模式 (检查多条 commit)
+  if (isCiMode || commitRange) {
+    if (!commitRange) {
+      if (process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.GITHUB_BASE_REF) {
+        commitRange = `origin/${process.env.GITHUB_BASE_REF}...HEAD`;
+      } else if (process.env.GITHUB_EVENT_BEFORE && !/^0+$/.test(process.env.GITHUB_EVENT_BEFORE)) {
+        commitRange = `${process.env.GITHUB_EVENT_BEFORE}...${process.env.GITHUB_SHA || 'HEAD'}`;
+      } else {
+        commitRange = 'HEAD~1..HEAD';
+      }
+    }
+
+    console.log(`\x1b[36m🔍 [CI Commit Lint] 正在检查提交范围: ${commitRange}\x1b[0m`);
+
+    let commitShas = [];
+    try {
+      const output = execSync(`git log --format="%H" ${commitRange}`, { encoding: 'utf-8' }).trim();
+      if (output) {
+        commitShas = output.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      }
+    } catch {
+      // 容错：如果 range 解析失败（如浅克隆单提交），尝试检查 HEAD
+      try {
+        const headSha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+        commitShas = [headSha];
+      } catch (err) {
+        console.error('\x1b[31m[Commit Lint Error] 无法从 git 中获取提交记录: ' + err.message + '\x1b[0m');
+        process.exit(1);
+      }
+    }
+
+    if (commitShas.length === 0) {
+      console.log('\x1b[32m[PASS] 未发现需要校验的新提交。\x1b[0m');
+      process.exit(0);
+    }
+
+    const failedResults = [];
+    let checkedCount = 0;
+    let skippedCount = 0;
+
+    for (const sha of commitShas) {
+      try {
+        const rawMessage = execSync(`git log -1 --format="%B" ${sha}`, { encoding: 'utf-8' });
+        const commitAuthor = execSync(`git log -1 --format="%an" ${sha}`, { encoding: 'utf-8' }).trim();
+        const touchedFilesRaw = execSync(`git diff-tree --no-commit-id --name-only -r ${sha}`, { encoding: 'utf-8' }).trim();
+        const touchedFiles = touchedFilesRaw ? touchedFilesRaw.split(/\r?\n/).map((f) => f.trim().replace(/\\/g, '/')).filter(Boolean) : [];
+
+        const result = verifyCommit({ rawMessage, touchedFiles, commitSha: sha, commitAuthor });
+        if (result.isSkipped) {
+          skippedCount++;
+          console.log(`\x1b[90m  • [${sha.slice(0, 7)}] [SKIP] ${result.header} (${result.skipReason})\x1b[0m`);
+        } else if (result.errors.length > 0) {
+          failedResults.push(result);
+        } else {
+          checkedCount++;
+          console.log(`\x1b[32m  ✔ [${sha.slice(0, 7)}] ${result.header}\x1b[0m`);
+        }
+      } catch (e) {
+        console.warn(`\x1b[33m  ⚠ 无法解析提交 ${sha.slice(0, 7)}: ${e.message}\x1b[0m`);
+      }
+    }
+
+    if (failedResults.length > 0) {
+      printFailureGuide(failedResults);
+      process.exit(1);
+    }
+
+    console.log(`\n\x1b[32;1m[PASS] 所有提交均通过规范校验！(已检查: ${checkedCount} 个常规提交, 已放行: ${skippedCount} 个合并/发布提交)\x1b[0m`);
+    process.exit(0);
+  }
+
+  // 模式 B: 本地 Hook 模式 (传入 COMMIT_EDITMSG 路径)
+  const msgPath = args[0];
+  if (!msgPath) {
+    console.error('\x1b[31m[Commit Lint Error] 未能获取 commit 信息路径。用法: node verify-commit.js <commit-msg-path> 或 node verify-commit.js --ci\x1b[0m');
+    process.exit(1);
+  }
+
+  const rawMessage = fs.readFileSync(path.resolve(msgPath), 'utf-8');
+  let stagedFiles = [];
+  try {
+    const stagedFilesRaw = execSync('git diff --cached --name-only', { encoding: 'utf-8' }).trim();
+    if (stagedFilesRaw) {
+      stagedFiles = stagedFilesRaw.split(/\r?\n/).map((f) => f.trim().replace(/\\/g, '/')).filter(Boolean);
+    }
+  } catch {
+    // 忽略异常
+  }
+
+  const result = verifyCommit({ rawMessage, touchedFiles: stagedFiles });
+  if (result.isSkipped) {
+    console.log(`\x1b[90m[SKIP] ${result.header} (${result.skipReason})\x1b[0m`);
+    process.exit(0);
+  }
+
+  if (result.errors.length > 0) {
+    printFailureGuide([result]);
+    process.exit(1);
+  }
+
+  console.log('\x1b[32;1m[PASS] Git 提交规范校验通过（原子化 Scope + 路径一致性 + 中文三点论 + 40字门禁已达标）\x1b[0m');
+  process.exit(0);
+}
+
+main();

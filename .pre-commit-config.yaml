@@ -1,4 +1,4 @@
-﻿default_install_hook_types: [pre-commit, prepare-commit-msg]
+default_install_hook_types: [pre-commit, commit-msg, prepare-commit-msg]
 ci:
   autofix_commit_msg: ":sparkles: auto fixes by pre-commit hooks"
   autofix_prs: true
@@ -23,3 +23,11 @@ repos:
   hooks:
     - id: pyupgrade
       args: [--py310-plus]
+
+- repo: local
+  hooks:
+    - id: verify-commit
+      name: Verify Conventional Commit & STAR 3-point message
+      entry: node scripts/verify-commit.js
+      language: system
+      stages: [commit-msg]

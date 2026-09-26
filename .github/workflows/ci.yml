@@ -8,6 +8,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  commit-lint:
+    name: Verify Commit Messages (STAR Standard)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify Conventional Commit Messages
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            node scripts/verify-commit.js --range "origin/${{ github.base_ref }}...HEAD"
+          else
+            node scripts/verify-commit.js --ci
+          fi
+
   python-lint:
     name: Python Lint, Type Check & Test
     runs-on: ubuntu-latest
