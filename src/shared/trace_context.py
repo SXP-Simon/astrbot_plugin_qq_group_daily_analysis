@@ -272,7 +272,7 @@ class TraceContext:
     @contextmanager
     def span(
         self,
-        stage_name: AnalysisStage | str | object,
+        stage_name: AnalysisStage | str,
         payload: Mapping[str, object] | None = None,
     ) -> Generator[SpanRecord, None, None]:
         """创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
@@ -281,13 +281,11 @@ class TraceContext:
             stage_name: 阶段名称，如 AnalysisStage.FETCH_MESSAGES 或字符串
             payload: 随 Span 记录的参数或快照字典
         """
-        if isinstance(stage_name, AnalysisStage):
-            stage_str = stage_name.value
-        elif isinstance(stage_name, str):
-            stage_str = stage_name
-        else:
-            val = getattr(stage_name, "value", None)
-            stage_str = str(val) if val is not None else str(stage_name)
+        stage_str = (
+            stage_name.value
+            if isinstance(stage_name, AnalysisStage)
+            else str(stage_name)
+        )
         self.current_stage = stage_str
         _active_traces[self.trace_id] = self
         if _global_active_task_manager is not None:

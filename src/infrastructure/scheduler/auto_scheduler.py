@@ -605,11 +605,16 @@ class AutoScheduler:
         if str(event.get_sender_id()) == str(event.get_self_id()):
             return False
         message_obj = getattr(event, "message_obj", None)
+        message_id = (
+            str(message_obj.message_id)
+            if message_obj and hasattr(message_obj, "message_id")
+            else ""
+        )
         return await self.incremental_trigger.record_message(
             platform_id=event.get_platform_id(),
             group_id=event.get_group_id(),
             unified_msg_origin=event.unified_msg_origin,
-            message_id=str(getattr(message_obj, "message_id", "") or ""),
+            message_id=message_id,
         )
 
     async def _trigger_incremental_analysis(
@@ -1050,17 +1055,15 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
                 return result
 
-            comic_trigger = getattr(
-                self.plugin_instance,
-                "_try_trigger_comic_generation",
-                None,
-            )
-            if callable(comic_trigger):
+            if self.plugin_instance and self.plugin_instance.comic_command_handler:
                 try:
-                    comic_trigger(group_id, dispatch_platform_id, analysis_result)
+                    self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
+                        group_id, dispatch_platform_id, analysis_result
+                    )
                 except Exception as exc:
                     logger.error(
-                        f"群 {group_id} 触发增量报告漫画失败: {exc}", exc_info=True
+                        f"群 {group_id} 触发增量报告漫画失败: {exc}",
+                        exc_info=True,
                     )
 
             report_sent = await self.report_dispatcher.dispatch(
