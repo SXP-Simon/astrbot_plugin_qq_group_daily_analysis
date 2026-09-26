@@ -1045,9 +1045,9 @@ class ReportGenerator(IReportGenerator):
         """缩放头像图片尺寸。"""
         return AvatarService.resize_avatar_bytes(payload)
 
-    def _b64_with_mime(self, _bytes: bytes) -> str | None:
+    def _b64_with_mime(self, raw_bytes: bytes) -> str | None:
         """将二进制字节流转换为带 MIME 前缀的 Data URI。"""
-        return AvatarService.b64_with_mime(_bytes)
+        return AvatarService.b64_with_mime(raw_bytes)
 
     async def _get_user_avatar_bytes(
         self, user_id: str, avatar_url_getter: Callable | None = None

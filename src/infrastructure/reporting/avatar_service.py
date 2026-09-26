@@ -260,25 +260,25 @@ class AvatarService:
             return payload
 
     @staticmethod
-    def b64_with_mime(_bytes: bytes) -> str | None:
+    def b64_with_mime(raw_bytes: bytes) -> str | None:
         """将二进制字节流转换为带 MIME 前缀的 Data URI。
 
         Args:
-            _bytes: 图片二进制数据。
+            raw_bytes: 图片二进制数据。
 
         Returns:
             Data URI 字符串，转换异常返回 None。
         """
         try:
-            b64 = base64.b64encode(_bytes).decode("utf-8")
+            b64 = base64.b64encode(raw_bytes).decode("utf-8")
             mime = "image/jpeg"
-            if _bytes.startswith(b"\x89PNG"):
+            if raw_bytes.startswith(b"\x89PNG"):
                 mime = "image/png"
-            elif _bytes.startswith(b"GIF8"):
+            elif raw_bytes.startswith(b"GIF8"):
                 mime = "image/gif"
-            elif _bytes.startswith(b"RIFF") and b"WEBP" in _bytes[8:16]:
+            elif raw_bytes.startswith(b"RIFF") and b"WEBP" in raw_bytes[8:16]:
                 mime = "image/webp"
-            elif _bytes.startswith(b"\xff\xd8"):
+            elif raw_bytes.startswith(b"\xff\xd8"):
                 mime = "image/jpeg"
 
             return f"data:{mime};base64,{b64}"
