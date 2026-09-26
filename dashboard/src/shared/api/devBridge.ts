@@ -7,16 +7,29 @@ export type DevBridgeMode = "mock" | "proxy";
 
 export function getDevBridgeMode(): DevBridgeMode {
   if (typeof window === "undefined") return "mock";
-  const urlParam = new URLSearchParams(window.location.search).get("devMode");
-  if (urlParam === "proxy" || urlParam === "mock") {
-    return urlParam;
+  try {
+    const urlParam = new URLSearchParams(window.location.search).get("devMode");
+    if (urlParam === "proxy" || urlParam === "mock") {
+      return urlParam;
+    }
+    if (window.localStorage && typeof window.localStorage.getItem === "function") {
+      return (window.localStorage.getItem("astrbot_dev_bridge_mode") as DevBridgeMode) || "mock";
+    }
+  } catch {
+    // ignore
   }
-  return (localStorage.getItem("astrbot_dev_bridge_mode") as DevBridgeMode) || "mock";
+  return "mock";
 }
 
 export function setDevBridgeMode(mode: DevBridgeMode) {
   if (typeof window !== "undefined") {
-    localStorage.setItem("astrbot_dev_bridge_mode", mode);
+    try {
+      if (window.localStorage && typeof window.localStorage.setItem === "function") {
+        window.localStorage.setItem("astrbot_dev_bridge_mode", mode);
+      }
+    } catch {
+      // ignore
+    }
     window.location.reload();
   }
 }

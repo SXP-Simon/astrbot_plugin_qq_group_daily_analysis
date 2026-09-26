@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:no-typecheck": "vite build",
+    "generate:types": "openapi-typescript ../openapi.json -o src/shared/api/generated/schema.d.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "typecheck": "tsc --noEmit",
@@ -22,6 +25,8 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
@@ -31,7 +36,10 @@
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.26",
+    "jsdom": "^30.1.1",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.7.3",
-    "vite": "^5.4.14"
+    "vite": "^5.4.14",
+    "vitest": "^2.1.9"
   }
 }
