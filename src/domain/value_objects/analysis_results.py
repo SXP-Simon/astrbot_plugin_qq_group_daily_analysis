@@ -51,6 +51,37 @@ class SummaryTopic:
         if user_id and user_id not in self.contributor_ids:
             self.contributor_ids.append(user_id)
 
+    def to_dict(self) -> dict[str, object]:
+        """将话题总结值对象序列化为字典。"""
+        return {
+            "topic": self.topic,
+            "contributors": list(self.contributors),
+            "detail": self.detail,
+            "contributor_ids": list(self.contributor_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> SummaryTopic:
+        """从字典反序列化生成 SummaryTopic 值对象。"""
+        raw_contribs = data.get("contributors", [])
+        contribs = (
+            [str(c) for c in raw_contribs if c is not None]
+            if isinstance(raw_contribs, list)
+            else []
+        )
+        raw_ids = data.get("contributor_ids", [])
+        c_ids = (
+            [str(cid) for cid in raw_ids if cid is not None]
+            if isinstance(raw_ids, list)
+            else []
+        )
+        return cls(
+            topic=str(data.get("topic", "") or ""),
+            contributors=contribs,
+            detail=str(data.get("detail", "") or ""),
+            contributor_ids=c_ids,
+        )
+
 
 @dataclass
 class UserTitle:
@@ -78,6 +109,27 @@ class UserTitle:
         """
         return bool(self.user_id and self.name and self.title)
 
+    def to_dict(self) -> dict[str, object]:
+        """将用户称号值对象序列化为字典。"""
+        return {
+            "name": self.name,
+            "user_id": self.user_id,
+            "title": self.title,
+            "mbti": self.mbti,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> UserTitle:
+        """从字典反序列化生成 UserTitle 值对象。"""
+        return cls(
+            name=str(data.get("name", "") or ""),
+            user_id=str(data.get("user_id", "") or ""),
+            title=str(data.get("title", "") or ""),
+            mbti=str(data.get("mbti", "") or ""),
+            reason=str(data.get("reason", "") or ""),
+        )
+
 
 @dataclass
 class GoldenQuote:
@@ -103,6 +155,25 @@ class GoldenQuote:
         """
         return bool(self.content and self.content.strip())
 
+    def to_dict(self) -> dict[str, object]:
+        """将金句值对象序列化为字典。"""
+        return {
+            "content": self.content,
+            "sender": self.sender,
+            "reason": self.reason,
+            "user_id": self.user_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> GoldenQuote:
+        """从字典反序列化生成 GoldenQuote 值对象。"""
+        return cls(
+            content=str(data.get("content", "") or ""),
+            sender=str(data.get("sender", "") or ""),
+            reason=str(data.get("reason", "") or ""),
+            user_id=str(data.get("user_id", "") or ""),
+        )
+
 
 @dataclass
 class QualityDimension:
@@ -127,6 +198,29 @@ class QualityDimension:
             bool: 维度名非空且占比在 0~100 范围内返回 True。
         """
         return bool(self.name and 0.0 <= self.percentage <= 100.0)
+
+    def to_dict(self) -> dict[str, object]:
+        """将维度评分值对象序列化为字典。"""
+        return {
+            "name": self.name,
+            "percentage": self.percentage,
+            "comment": self.comment,
+            "color": self.color,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> QualityDimension:
+        """从字典反序列化生成 QualityDimension 值对象。"""
+        try:
+            pct = float(str(data.get("percentage", 0.0) or 0.0))
+        except (TypeError, ValueError):
+            pct = 0.0
+        return cls(
+            name=str(data.get("name", "") or ""),
+            percentage=pct,
+            comment=str(data.get("comment", "") or ""),
+            color=str(data.get("color", "#607d8b") or "#607d8b"),
+        )
 
 
 @dataclass
@@ -223,6 +317,15 @@ class ComicStoryboard:
         """
         return bool(self.scene and self.scene.strip())
 
+    def to_dict(self) -> dict[str, object]:
+        """将分镜场景序列化为字典。"""
+        return {"scene": self.scene}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> ComicStoryboard:
+        """从字典反序列化生成 ComicStoryboard 值对象。"""
+        return cls(scene=str(data.get("scene", "") or ""))
+
 
 @dataclass
 class TokenUsage:
@@ -237,6 +340,30 @@ class TokenUsage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        """将 Token 消耗统计序列化为字典。"""
+        return {
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> TokenUsage:
+        """从字典反序列化生成 TokenUsage 值对象。"""
+
+        def _to_int(val: object) -> int:
+            try:
+                return int(str(val or 0))
+            except (TypeError, ValueError):
+                return 0
+
+        return cls(
+            prompt_tokens=_to_int(data.get("prompt_tokens", 0)),
+            completion_tokens=_to_int(data.get("completion_tokens", 0)),
+            total_tokens=_to_int(data.get("total_tokens", 0)),
+        )
 
 
 @dataclass
@@ -324,6 +451,50 @@ class ActivityVisualization:
     peak_hours: list = field(default_factory=list)
     activity_heatmap_data: dict = field(default_factory=dict)
 
+    def to_dict(self) -> dict[str, object]:
+        """将活跃度时序与图表数据序列化为字典。"""
+        return {
+            "hourly_activity": dict(self.hourly_activity),
+            "daily_activity": dict(self.daily_activity),
+            "user_activity_ranking": list(self.user_activity_ranking),
+            "peak_hours": list(self.peak_hours),
+            "activity_heatmap_data": dict(self.activity_heatmap_data),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> ActivityVisualization:
+        """从字典反序列化生成 ActivityVisualization 值对象。"""
+        hourly_raw = data.get("hourly_activity")
+        hourly_parsed = {}
+        if isinstance(hourly_raw, dict):
+            for k, v in hourly_raw.items():
+                try:
+                    key = int(k) if str(k).isdigit() else k
+                    val = int(str(v or 0))
+                except (TypeError, ValueError):
+                    key, val = k, 0
+                hourly_parsed[key] = val
+
+        daily_raw = data.get("daily_activity")
+        daily_activity = dict(daily_raw) if isinstance(daily_raw, dict) else {}
+
+        ranking_raw = data.get("user_activity_ranking")
+        user_ranking = list(ranking_raw) if isinstance(ranking_raw, list) else []
+
+        peak_raw = data.get("peak_hours")
+        peak_hours = list(peak_raw) if isinstance(peak_raw, list) else []
+
+        heatmap_raw = data.get("activity_heatmap_data")
+        heatmap_data = dict(heatmap_raw) if isinstance(heatmap_raw, dict) else {}
+
+        return cls(
+            hourly_activity=hourly_parsed,
+            daily_activity=daily_activity,
+            user_activity_ranking=user_ranking,
+            peak_hours=peak_hours,
+            activity_heatmap_data=heatmap_data,
+        )
+
 
 @dataclass
 class GroupStatistics:
@@ -355,6 +526,83 @@ class GroupStatistics:
     token_usage: TokenUsage = field(default_factory=TokenUsage)
     chat_quality_review: QualityReview | None = None
 
+    def to_dict(self) -> dict[str, object]:
+        """将群聊统计聚合值对象序列化为字典。"""
+        return {
+            "message_count": self.message_count,
+            "total_characters": self.total_characters,
+            "participant_count": self.participant_count,
+            "most_active_period": self.most_active_period,
+            "golden_quotes": [g.to_dict() for g in self.golden_quotes],
+            "emoji_count": self.emoji_count,
+            "emoji_statistics": self.emoji_statistics.to_dict(),
+            "activity_visualization": self.activity_visualization.to_dict(),
+            "token_usage": self.token_usage.to_dict(),
+            "chat_quality_review": self.chat_quality_review.to_dict()
+            if self.chat_quality_review
+            else None,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> GroupStatistics:
+        """从字典反序列化生成 GroupStatistics 值对象。"""
+
+        def _to_int(val: object) -> int:
+            try:
+                return int(str(val or 0))
+            except (TypeError, ValueError):
+                return 0
+
+        raw_quotes = data.get("golden_quotes", [])
+        quotes: list[GoldenQuote] = []
+        if isinstance(raw_quotes, list):
+            for q in raw_quotes:
+                if isinstance(q, dict):
+                    quotes.append(GoldenQuote.from_dict(q))
+                elif isinstance(q, GoldenQuote):
+                    quotes.append(q)
+
+        raw_emoji = data.get("emoji_statistics", {})
+        emoji_stats = (
+            EmojiStatistics.from_dict(raw_emoji)
+            if isinstance(raw_emoji, dict)
+            else EmojiStatistics()
+        )
+
+        raw_viz = data.get("activity_visualization", {})
+        viz = (
+            ActivityVisualization.from_dict(raw_viz)
+            if isinstance(raw_viz, dict)
+            else ActivityVisualization()
+        )
+
+        raw_tokens = data.get("token_usage", {})
+        tokens = (
+            TokenUsage.from_dict(raw_tokens)
+            if isinstance(raw_tokens, dict)
+            else TokenUsage()
+        )
+
+        raw_quality = data.get("chat_quality_review")
+        quality = (
+            QualityReview.from_dict(raw_quality)
+            if isinstance(raw_quality, dict)
+            else (raw_quality if isinstance(raw_quality, QualityReview) else None)
+        )
+
+        return cls(
+            message_count=_to_int(data.get("message_count", 0)),
+            total_characters=_to_int(data.get("total_characters", 0)),
+            participant_count=_to_int(data.get("participant_count", 0)),
+            most_active_period=str(data.get("most_active_period", "") or ""),
+            golden_quotes=quotes,
+            emoji_count=_to_int(data.get("emoji_count", 0)),
+            emoji_statistics=emoji_stats,
+            activity_visualization=viz,
+            token_usage=tokens,
+            chat_quality_review=quality,
+        )
+
 
 class ComicTopicPayload(TypedDict):
     """漫画分镜提取话题数据结构"""
@@ -376,6 +624,19 @@ class ComicTopic:
             "topic": self.topic,
             "summary": self.summary,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> ComicTopic:
+        """从字典反序列化生成 ComicTopic 领域模型。"""
+        try:
+            score = float(str(data.get("heat_score", 0.0) or 0.0))
+        except (TypeError, ValueError):
+            score = 0.0
+        return cls(
+            topic=str(data.get("topic", "") or ""),
+            summary=str(data.get("summary", "") or ""),
+            heat_score=score,
+        )
 
 
 class _AnalysisResultOptional(TypedDict, total=False):

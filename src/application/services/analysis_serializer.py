@@ -11,15 +11,10 @@ import enum
 from datetime import date, datetime, time
 
 from ...domain.value_objects import (
-    ActivityVisualization,
     AnalysisResultPayload,
-    EmojiStatistics,
-    GoldenQuote,
     GroupStatistics,
-    QualityDimension,
     QualityReview,
     SummaryTopic,
-    TokenUsage,
     UserTitle,
 )
 
@@ -95,77 +90,46 @@ class AnalysisResultSerializer:
             还原后的领域模型字典。
         """
         stats_raw = data.get("statistics", {})
-        if not isinstance(stats_raw, dict):
-            stats_raw = {}
-
-        golden_quotes = [
-            GoldenQuote(**g) if isinstance(g, dict) else g
-            for g in stats_raw.get("golden_quotes", [])
-        ]
-        emoji_stats_raw = stats_raw.get("emoji_statistics", {})
-        emoji_stats = (
-            EmojiStatistics(**emoji_stats_raw)
-            if isinstance(emoji_stats_raw, dict)
-            else EmojiStatistics()
-        )
-        act_viz_raw = stats_raw.get("activity_visualization", {})
-        if isinstance(act_viz_raw, dict):
-            hourly_act = act_viz_raw.get("hourly_activity")
-            if isinstance(hourly_act, dict):
-                act_viz_raw["hourly_activity"] = {
-                    int(k) if str(k).isdigit() else k: v for k, v in hourly_act.items()
-                }
-            act_viz = ActivityVisualization(**act_viz_raw)
-        else:
-            act_viz = ActivityVisualization()
-        token_usage_raw = stats_raw.get("token_usage", {})
-        token_usage = (
-            TokenUsage(**token_usage_raw)
-            if isinstance(token_usage_raw, dict)
-            else TokenUsage()
-        )
-
-        quality_raw = data.get("chat_quality_review") or stats_raw.get(
-            "chat_quality_review"
-        )
-        quality_review = None
-        if isinstance(quality_raw, dict):
-            dims = [
-                QualityDimension(**d) if isinstance(d, dict) else d
-                for d in quality_raw.get("dimensions", [])
-            ]
-            quality_review = QualityReview(
-                title=str(quality_raw.get("title", "群聊质量锐评")),
-                subtitle=str(quality_raw.get("subtitle", "")),
-                dimensions=dims,
-                summary=str(quality_raw.get("summary", "")),
+        stats = (
+            GroupStatistics.from_dict(stats_raw)
+            if isinstance(stats_raw, dict)
+            else (
+                stats_raw
+                if isinstance(stats_raw, GroupStatistics)
+                else GroupStatistics(0, 0, 0, "", [], 0)
             )
-
-        stats = GroupStatistics(
-            message_count=int(stats_raw.get("message_count", 0)),
-            total_characters=int(stats_raw.get("total_characters", 0)),
-            participant_count=int(stats_raw.get("participant_count", 0)),
-            most_active_period=str(stats_raw.get("most_active_period", "")),
-            golden_quotes=golden_quotes,
-            emoji_count=int(stats_raw.get("emoji_count", 0)),
-            emoji_statistics=emoji_stats,
-            activity_visualization=act_viz,
-            token_usage=token_usage,
-            chat_quality_review=quality_review,
         )
+
+        quality_raw = data.get("chat_quality_review")
+        quality_review = (
+            QualityReview.from_dict(quality_raw)
+            if isinstance(quality_raw, dict)
+            else (
+                quality_raw
+                if isinstance(quality_raw, QualityReview)
+                else stats.chat_quality_review
+            )
+        )
+        if stats.chat_quality_review is None and quality_review is not None:
+            stats.chat_quality_review = quality_review
 
         raw_topics = data.get("topics")
-        topics = [
-            SummaryTopic(**t) if isinstance(t, dict) else t
-            for t in (raw_topics if isinstance(raw_topics, list) else [])
-            if isinstance(t, (dict, SummaryTopic))
-        ]
+        topics: list[SummaryTopic] = []
+        if isinstance(raw_topics, list):
+            for t in raw_topics:
+                if isinstance(t, dict):
+                    topics.append(SummaryTopic.from_dict(t))
+                elif isinstance(t, SummaryTopic):
+                    topics.append(t)
+
         raw_user_titles = data.get("user_titles")
-        user_titles = [
-            UserTitle(**t) if isinstance(t, dict) else t
-            for t in (raw_user_titles if isinstance(raw_user_titles, list) else [])
-            if isinstance(t, (dict, UserTitle))
-        ]
+        user_titles: list[UserTitle] = []
+        if isinstance(raw_user_titles, list):
+            for t in raw_user_titles:
+                if isinstance(t, dict):
+                    user_titles.append(UserTitle.from_dict(t))
+                elif isinstance(t, UserTitle):
+                    user_titles.append(t)
 
         raw_user_analysis = data.get("user_analysis")
         user_analysis: dict[str, object] = (
