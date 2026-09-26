@@ -111,19 +111,26 @@ class TelegramAdapter(PlatformAdapter):
 
         # 2. 回退：使用 KV 注册表
         if not groups and self._plugin_instance:
-            try:
-                registry = getattr(
-                    self._plugin_instance, "platform_group_registry", None
-                )
-                if registry is not None and hasattr(registry, "get_seen_groups"):
-                    kv_groups = await registry.get_seen_groups(self._platform_id)
-                    if kv_groups:
-                        groups.extend(kv_groups)
-                        logger.debug(
-                            f"[Telegram] 通过 KV 回退获取到 {len(kv_groups)} 个群组"
-                        )
-            except Exception as e:
-                logger.warning(f"[Telegram] KV 回退获取群列表失败: {e}")
+            registry = getattr(self._plugin_instance, "platform_group_registry", None)
+            if registry is not None:
+                # 先取方法再调用：只有「接口不存在/被改名」才算契约错误；
+                # 方法内部抛出的 AttributeError 应落到普通 KV 失败路径，避免误导排查方向。
+                get_all_group_ids = getattr(registry, "get_all_group_ids", None)
+                if get_all_group_ids is None:
+                    logger.error(
+                        "[Telegram] 群注册表缺少 get_all_group_ids 接口，群发现不可用"
+                    )
+                else:
+                    try:
+                        kv_groups = await get_all_group_ids(self._platform_id)
+                    except Exception as e:
+                        logger.warning(f"[Telegram] KV 回退获取群列表失败: {e}")
+                    else:
+                        if kv_groups:
+                            groups.extend(kv_groups)
+                            logger.debug(
+                                f"[Telegram] 通过 KV 回退获取到 {len(kv_groups)} 个群组"
+                            )
 
         if not groups:
             logger.debug("[Telegram] 无法获取群列表 (API不支持且无KV记录)")
