@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api import AstrBotConfig
+from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
 
@@ -62,12 +65,6 @@ from .src.utils.logger import logger
 from .src.utils.resilience import GlobalRateLimiter
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-    from pathlib import Path
-
-    from astrbot.api import AstrBotConfig
-    from astrbot.api.event import MessageEventResult
-
     from .src.domain.repositories import PlatformAdapterProtocol
     from .src.domain.value_objects import AnalysisResultPayload
 

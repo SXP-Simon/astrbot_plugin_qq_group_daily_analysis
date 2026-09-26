@@ -52,4 +52,5 @@ ignore = [
 
 [lint.per-file-ignores]
 "scripts/*" = ["T201", "ARG001", "ARG002"] # 允许独立离线调试脚本使用控制台 print 输出及占位参数
+"main.py" = ["TC001", "TC002", "TC003"]    # 允许主入口保留 AstrBot 运行时反射所需的类型注解导入
 
