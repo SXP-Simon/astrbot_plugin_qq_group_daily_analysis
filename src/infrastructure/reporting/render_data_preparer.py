@@ -67,11 +67,7 @@ class RenderDataPreparer:
 
     def get_profile_mapping_overrides(self) -> dict[str, dict]:
         """解析用户配置的人格映射覆盖项。"""
-        raw = (
-            self.config_manager.get_profile_mapping_config()
-            if hasattr(self.config_manager, "get_profile_mapping_config")
-            else ""
-        )
+        raw = self.config_manager.get_profile_mapping_config() or ""
         if not raw:
             return {}
 
@@ -451,7 +447,7 @@ class RenderDataPreparer:
 
         chat_quality_html = ""
         chat_quality_review = analysis_result.get("chat_quality_review")
-        if not chat_quality_review and hasattr(stats, "chat_quality_review"):
+        if not chat_quality_review:
             chat_quality_review = stats.chat_quality_review
 
         if chat_quality_review:

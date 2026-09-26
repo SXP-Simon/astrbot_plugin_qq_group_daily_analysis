@@ -88,10 +88,7 @@ class ReportGenerator(IReportGenerator):
         self.data_dir = data_dir
         self.activity_visualizer = ActivityVisualizer()
         self.html_templates = HTMLTemplates(config_manager)
-        if hasattr(self.config_manager, "get_t2i_max_concurrent"):
-            max_concurrent = int(self.config_manager.get_t2i_max_concurrent())
-        else:
-            max_concurrent = 2
+        max_concurrent = int(self.config_manager.get_t2i_max_concurrent() or 2)
         self._render_semaphore = asyncio.Semaphore(max_concurrent)
         self._qq_official_markdown_generator_inst = QQOfficialMarkdownReportGenerator(
             config_manager,
@@ -224,10 +221,10 @@ class ReportGenerator(IReportGenerator):
                 template_theme = str(
                     trace_ctx.metadata.get("override_template_name") or ""
                 ).strip()
-            elif hasattr(self.config_manager, "get_report_template"):
-                template_theme = self.config_manager.get_report_template()
             else:
-                template_theme = "scrapbook"
+                template_theme = (
+                    self.config_manager.get_report_template() or "scrapbook"
+                )
 
         try:
             render_payload = await self._prepare_render_data(
@@ -574,10 +571,10 @@ class ReportGenerator(IReportGenerator):
                 template_theme = str(
                     trace_ctx.metadata.get("override_template_name") or ""
                 ).strip()
-            elif hasattr(self.config_manager, "get_report_template"):
-                template_theme = self.config_manager.get_report_template()
             else:
-                template_theme = "scrapbook"
+                template_theme = (
+                    self.config_manager.get_report_template() or "scrapbook"
+                )
 
         try:
             output_dir = Path(self.config_manager.get_html_output_dir())

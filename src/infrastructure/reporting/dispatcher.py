@@ -136,7 +136,7 @@ class ReportDispatcher:
                 if not platform_id:
                     return None
                 adapter = self.message_sender.bot_manager.get_adapter(platform_id)
-                if adapter and hasattr(adapter, "get_user_avatar_url"):
+                if adapter:
                     return await adapter.get_user_avatar_url(user_id, size=size or 40)
                 return None
 
@@ -148,11 +148,7 @@ class ReportDispatcher:
             )
             template_theme: str = (
                 override_theme
-                or (
-                    self.config_manager.get_report_template()
-                    if hasattr(self.config_manager, "get_report_template")
-                    else "scrapbook"
-                )
+                or self.config_manager.get_report_template()
                 or "scrapbook"
             )
 
@@ -362,11 +358,7 @@ class ReportDispatcher:
             )
             template_theme: str = (
                 override_theme
-                or (
-                    self.config_manager.get_report_template()
-                    if hasattr(self.config_manager, "get_report_template")
-                    else "scrapbook"
-                )
+                or self.config_manager.get_report_template()
                 or "scrapbook"
             )
 

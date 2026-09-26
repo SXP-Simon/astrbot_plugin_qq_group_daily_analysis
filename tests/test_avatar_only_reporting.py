@@ -35,6 +35,9 @@ class FakeConfig:
     def get_qq_official_t2i_summary_dashboard_enabled(self):
         return True
 
+    def get_report_template(self):
+        return "scrapbook"
+
 
 def build_generator_without_io():
     generator = object.__new__(ReportGenerator)
