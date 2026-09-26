@@ -68,11 +68,7 @@ class ReportRoutes:
                 )
             )
             if cfg_mgr:
-                custom_html_dir = (
-                    cfg_mgr.get_html_output_dir()
-                    if hasattr(cfg_mgr, "get_html_output_dir")
-                    else ""
-                )
+                custom_html_dir = cfg_mgr.get_html_output_dir() or ""
                 if custom_html_dir:
                     p = Path(custom_html_dir)
                     if p.exists() and p not in candidate_dirs:
@@ -219,11 +215,7 @@ class ReportRoutes:
                 )
             )
             if cfg_mgr:
-                custom_html_dir = (
-                    cfg_mgr.get_html_output_dir()
-                    if hasattr(cfg_mgr, "get_html_output_dir")
-                    else ""
-                )
+                custom_html_dir = cfg_mgr.get_html_output_dir() or ""
                 if custom_html_dir:
                     p = Path(custom_html_dir)
                     if p.exists() and p not in search_dirs:

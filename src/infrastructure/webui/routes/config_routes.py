@@ -69,10 +69,8 @@ class ConfigRoutes:
                 )
             )
             config_dict = {}
-            if cfg_mgr and hasattr(cfg_mgr, "config"):
-                raw_cfg = cfg_mgr.config
-                if hasattr(raw_cfg, "items"):
-                    config_dict = {str(k): v for k, v in raw_cfg.items()}
+            if cfg_mgr:
+                config_dict = {str(k): v for k, v in cfg_mgr.config.items()}
 
             plugin_root = Path(__file__).resolve().parents[4]
             schema_file = plugin_root / "_conf_schema.json"
@@ -127,9 +125,7 @@ class ConfigRoutes:
                     else None
                 )
             )
-            config_obj = (
-                cfg_mgr.config if cfg_mgr and hasattr(cfg_mgr, "config") else None
-            )
+            config_obj = cfg_mgr.config if cfg_mgr else None
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 
@@ -192,11 +188,8 @@ class ConfigRoutes:
                 for k, v in new_config.items():
                     config_obj[k] = v
 
-            if hasattr(config_obj, "save_config"):
-                try:
-                    config_obj.save_config()
-                except TypeError:
-                    config_obj.save_config()
+            if cfg_mgr:
+                cfg_mgr.save_config()
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
             return json_response(
