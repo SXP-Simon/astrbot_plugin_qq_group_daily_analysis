@@ -292,3 +292,20 @@ def test_qq_official_fetch_messages_clamps_stale_since_ts_to_days():
     assert len(messages) == 1
     assert messages[0].message_id == "MSG-101"
     assert messages[0].text_content == "窗口内消息"
+
+
+def test_qq_official_platform_id_fallback_when_bot_uninitialized():
+    """验证 ExtBot 未初始化或访问 .id 抛错时，能优雅回退而不导致崩溃。"""
+
+    class BrokenBot:
+        platform = None
+
+        @property
+        def id(self):
+            raise AttributeError("Bot is not yet initialized")
+
+    adapter = QQOfficialAdapter(
+        BrokenBot(),
+        {"platform_id": "fallback-official-id"},
+    )
+    assert adapter.platform_id == "fallback-official-id"
