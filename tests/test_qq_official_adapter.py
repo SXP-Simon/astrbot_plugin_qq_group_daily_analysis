@@ -294,18 +294,24 @@ def test_qq_official_fetch_messages_clamps_stale_since_ts_to_days():
     assert messages[0].text_content == "窗口内消息"
 
 
-def test_qq_official_platform_id_fallback_when_bot_uninitialized():
-    """验证 ExtBot 未初始化或访问 .id 抛错时，能优雅回退而不导致崩溃。"""
+def test_qq_official_platform_id_and_appid_fallback():
+    """验证 QQ 官方机器人实例未初始化或 platform 为空时，能优雅回退平台 ID 与 appid 而不导致崩溃。"""
 
-    class BrokenBot:
+    class UninitializedQQBot:
         platform = None
 
-        @property
-        def id(self):
-            raise AttributeError("Bot is not yet initialized")
-
-    adapter = QQOfficialAdapter(
-        BrokenBot(),
-        {"platform_id": "fallback-official-id"},
+    # 1. 提供了 platform_id 与直接 appid
+    adapter1 = QQOfficialAdapter(
+        UninitializedQQBot(),
+        {"platform_id": "fallback-official-id", "appid": "10203040"},
     )
-    assert adapter.platform_id == "fallback-official-id"
+    assert adapter1.platform_id == "fallback-official-id"
+    assert adapter1.appid == "10203040"
+
+    # 2. 完全未提供配置时回退默认 platform_id 和空 appid
+    adapter2 = QQOfficialAdapter(
+        UninitializedQQBot(),
+        {},
+    )
+    assert adapter2.platform_id == "qq_official"
+    assert adapter2.appid == ""
