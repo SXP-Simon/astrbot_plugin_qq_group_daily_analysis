@@ -28,6 +28,7 @@ import { useLogsViewModel } from "../pages/logs/model/useLogsViewModel";
 import { ConfigPage } from "../pages/config/ui/ConfigPage";
 import { useConfigViewModel } from "../pages/config/model/useConfigViewModel";
 import { PluginDataPage } from "../pages/plugin-data/ui/PluginDataPage";
+import { DevToolbar } from "../widgets/dev-bar/DevToolbar";
 
 import { invalidateTraceCache } from "../entities/trace/api/traceApi";
 import { invalidateGroupsCache } from "../entities/group/api/groupApi";
@@ -326,6 +327,9 @@ export const App: React.FC = () => {
           open={!!selectedTraceId}
           onClose={() => setSelectedTraceId(null)}
         />
+
+        {/* 独立开发调试浮动工具栏 (Dev Only) */}
+        <DevToolbar />
       </div>
     </ConfigProvider>
   );

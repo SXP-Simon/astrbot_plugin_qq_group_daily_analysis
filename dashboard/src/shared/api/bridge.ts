@@ -1,3 +1,10 @@
+import {
+  devApiGet,
+  devApiPost,
+  devFetchContext,
+  devSubscribeSSE,
+} from "./devBridge";
+
 /**
  * AstrBot 插件 Page Bridge 通信底层 (Shared API Bridge)
  * 严格类型定义，杜绝无意义的 any 类型
@@ -59,6 +66,9 @@ export async function fetchContext(): Promise<AstrBotContext> {
   if (bridge && typeof bridge.ready === "function") {
     return await bridge.ready();
   }
+  if (import.meta.env.DEV) {
+    return await devFetchContext();
+  }
   return { isDark: false, pluginName: "astrbot_plugin_qq_group_daily_analysis" };
 }
 
@@ -70,6 +80,9 @@ export async function apiGet<T = unknown>(
   if (bridge && typeof bridge.apiGet === "function") {
     return await bridge.apiGet<T>(path, params);
   }
+  if (import.meta.env.DEV) {
+    return await devApiGet<T>(path, params);
+  }
   return null;
 }
 
@@ -80,6 +93,9 @@ export async function apiPost<T = unknown>(
   const bridge = getBridge();
   if (bridge && typeof bridge.apiPost === "function") {
     return await bridge.apiPost<T>(path, body);
+  }
+  if (import.meta.env.DEV) {
+    return await devApiPost<T>(path, body);
   }
   return null;
 }
@@ -108,6 +124,15 @@ export function subscribeSSE(handlers: {
         bridge.unsubscribeSSE(subId);
       }
     };
+  }
+  if (import.meta.env.DEV) {
+    return devSubscribeSSE({
+      onMessage: (evt) => {
+        const payload = evt.parsed !== undefined ? evt.parsed : evt.raw;
+        handlers.onMessage(payload);
+      },
+      onError: handlers.onError,
+    });
   }
   return null;
 }

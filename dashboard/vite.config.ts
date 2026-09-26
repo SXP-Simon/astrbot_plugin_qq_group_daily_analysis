@@ -39,6 +39,12 @@ export default defineConfig({
   },
   server: {
     port: 5175,
+    proxy: {
+      "/api/plugins/astrbot_plugin_qq_group_daily_analysis": {
+        target: "http://localhost:6185",
+        changeOrigin: true,
+      },
+    },
   },
 });
 

@@ -96,18 +96,36 @@ dashboard/src/
 
 ---
 
-## 5. 开发与构建命令
+## 5. 本地开发与调试体验 (Developer Experience)
 
+本项目支持两种本地开发调试模式，提供极速热更新（HMR）：
+
+### 5.1 独立开发模式 (Standalone Mock Mode - 推荐)
+无需启动 AstrBot 后端，前端直接拥有全套模拟数据与实时 SSE 进度流：
 ```bash
-# 进入前端工作目录
 cd dashboard
-
-# 依赖安装
-pnpm install
-
-# 本地热更新开发 (需在 AstrBot 运行环境下访问页面或直接调试)
 pnpm dev
+```
+* 打开 `http://localhost:5175`，页面将自动激活 Mock 适配器并加载全套大盘、链路、任务与日志；
+* 页面右下角提供 **开发工具箱 (DevToolbar)**，可一键切换亮暗主题、切换 Proxy/Mock 模式或注入模拟 SSE 任务流。
 
+### 5.2 代理直连模式 (Proxy Mode)
+若 AstrBot 后端正在运行（`localhost:6185`），前端开发服务器通过反向代理直接对接真实后端与 SQLite：
+* 在页面右下角工具箱中切换至 **Proxy 直连后端 (:6185)**，或在 URL 中添加 `?devMode=proxy`；
+* 享受 Vite 秒级热更新，无需重新打包或进入 AstrBot 网页手动点击。
+
+### 5.3 生产构建
+```bash
 # 生产环境编译 (自动打包为单 Bundle 输出至 ../pages/daily-analysis/)
 pnpm build
 ```
+
+---
+
+## 6. 前端自动化测试与 OpenAPI 演进规划 (Roadmap)
+
+1. **MSW (Mock Service Worker) 接入**：
+   * `src/mocks/handlers.ts` 已遵循标准 REST 匹配契约，当需要引入 Vitest/Playwright 自动化测试时，可直接接入 MSW `http.get` / `http.post` handlers 无缝复用。
+2. **OpenAPI 客户端生成**：
+   * 可通过 `@hey-api/openapi-ts` 读取后端的 OpenAPI 架构规范，自动生成 `entities/*/model` 类型与 API 客户端代码。
+
