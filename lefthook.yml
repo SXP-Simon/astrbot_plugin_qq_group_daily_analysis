@@ -24,6 +24,9 @@ pre-commit:
     webui-lint:
       glob: "dashboard/**/*.{ts,tsx,js,jsx}"
       run: pnpm --dir dashboard lint
+    webui-test:
+      glob: "dashboard/**/*.{ts,tsx,js,jsx,json}"
+      run: pnpm --dir dashboard test
     webui-build:
       glob: "dashboard/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss}"
       run: pnpm --dir dashboard build
