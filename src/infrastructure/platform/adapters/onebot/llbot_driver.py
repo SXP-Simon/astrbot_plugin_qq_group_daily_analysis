@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 class LLOneBotDriver(StandardOneBotDriver):
-    """LLOneBot (LuckyLilliaBot) 协议端方言驱动。"""
+    """LLOneBot (LuckyLilliaBot) 协议端方言驱动。
+
+    特性与行为：
+    1. 历史消息拉取：继承标准驱动参数（group_id, count, reverseOrder: True），使用 message_seq、real_id 或 seq 分页。
+    2. 锚点与偏移策略：针对 Sequence 模式通过多字段探测优先命中 real_id / seq，同样不执行 -1 偏移，由上层集合去重。
+    3. 群相册上传：支持 LLOneBot 专有的 upload_group_album 接收 files: list 数组参数，失败时自动降级通用相册上传。
+    4. 群相册列表：适配 LLOneBot 的 get_group_album_list 及其 data: list 返回结构。
+    """
 
     name: str = "llonebot"
 

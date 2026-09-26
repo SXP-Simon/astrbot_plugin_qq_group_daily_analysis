@@ -20,7 +20,14 @@ if TYPE_CHECKING:
 
 
 class NapCatDriver(StandardOneBotDriver):
-    """NapCat 协议端方言驱动。"""
+    """NapCat 协议端方言驱动。
+
+    特性与行为：
+    1. 历史消息拉取：继承标准驱动参数（group_id, count, reverseOrder: True），使用 message_seq 或 message_id 分页。
+    2. 锚点与偏移策略：针对 NTQQ 架构下 Message ID 离散不连续的特征，直接使用原值提取而不作 -1 手动偏移（防止报“消息不存在”），重叠消息由上层集合去重。
+    3. 群相册接口：优先调用 NapCat 专属 get_qun_album_list 并降级回退标准接口。
+    4. 流式上传：支持 NapCat 独有的 upload_file_stream 分块流式上传大文件。
+    """
 
     name: str = "napcat"
 

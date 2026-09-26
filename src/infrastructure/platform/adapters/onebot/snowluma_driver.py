@@ -15,7 +15,13 @@ if TYPE_CHECKING:
 
 
 class SnowLumaDriver(StandardOneBotDriver):
-    """SnowLuma 协议端方言驱动。"""
+    """SnowLuma 协议端方言驱动。
+
+    特性与行为：
+    1. 历史消息拉取：仅传 group_id, count, message_id，严格排除 reverseOrder 参数（传入会被拒绝）。
+    2. 锚点与偏移策略：仅支持提取 message_id 字段作为回溯锚点。
+    3. 禁言与拒绝判定：精准识别 result=120 与 retcode=100 rejected: muted 等 SnowLuma 专有错误码。
+    """
 
     name: str = "snowluma"
 
