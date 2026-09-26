@@ -130,7 +130,7 @@ class PlatformAdapter(
         """获取当前适配器的平台实例 ID（如 nuits）"""
         return self._platform_id
 
-    def set_context(self, context: Context | object) -> None:
+    def set_context(self, context: Context | None) -> None:
         """设置上下文对象（用于部分需要 ctx 的平台如 Telegram）。
 
         Args:

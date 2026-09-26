@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from astrbot.api.all import Context
     from astrbot.api.event import AstrMessageEvent
 
+    from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ..config.config_manager import ConfigManager
 
 
@@ -34,7 +35,7 @@ class BotManager:
     _context: Context | None
     _is_initialized: bool
     _default_platform: str
-    _plugin_instance: object | None
+    _plugin_instance: PluginHostProtocol | None
 
     def __init__(self, config_manager: ConfigManager) -> None:
         self.config_manager = config_manager
@@ -49,7 +50,9 @@ class BotManager:
         self._default_platform = (
             "default"  # AstrBot 初始未命名平台时的缺省标识占位符（非业务默认）
         )
-        self._plugin_instance: object | None = None  # 插件实例引用，用于适配器回调
+        self._plugin_instance: PluginHostProtocol | None = (
+            None  # 插件实例引用，用于适配器回调
+        )
 
     def set_context(self, context: Context | None) -> None:
         """设置AstrBot上下文，并传递给所有支持的适配器"""
@@ -60,7 +63,7 @@ class BotManager:
             if hasattr(adapter, "set_context"):
                 adapter.set_context(context)
 
-    def set_plugin_instance(self, plugin_instance: object):
+    def set_plugin_instance(self, plugin_instance: PluginHostProtocol | None) -> None:
         """设置插件实例引用"""
         self._plugin_instance = plugin_instance
 

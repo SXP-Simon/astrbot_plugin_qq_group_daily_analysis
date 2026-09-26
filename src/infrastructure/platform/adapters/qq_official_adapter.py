@@ -102,9 +102,9 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
         digest = hashlib.sha256(f"{group_id}\0{sender_id}".encode()).hexdigest()[:8]
         return f"群友-{digest.upper()}"
 
-    def set_context(self, context: Context | object) -> None:
+    def set_context(self, context: Context | None) -> None:
         if context is not None:
-            self._context = context  # type: ignore[assignment]
+            self._context = context
 
     def remember_user_profile(
         self, user_id: str, nickname: str | None = None, avatar_url: str | None = None

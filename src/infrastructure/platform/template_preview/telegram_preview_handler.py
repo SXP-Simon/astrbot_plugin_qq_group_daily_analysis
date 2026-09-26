@@ -620,7 +620,7 @@ class TelegramTemplatePreviewHandler:
 
     @staticmethod
     def _extract_platform_client(platform: object) -> TelegramClientProtocol | None:
-        client: object = None
+        client: object | None = None
         get_client_fn = getattr(platform, "get_client", None)
         if callable(get_client_fn):
             try:

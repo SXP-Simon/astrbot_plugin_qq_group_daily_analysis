@@ -80,15 +80,16 @@ class TelegramAdapter(PlatformAdapter):
         # user_id -> (expires_at, reason)
         self._avatar_negative_cache: dict[str, tuple[float, str]] = {}
 
-    def set_context(self, context: Context | object) -> None:
+    def set_context(self, context: Context | None) -> None:
         """设置 AstrBot 上下文。
 
         用于访问 message_history_manager 等核心服务。
         """
-        if hasattr(context, "message_history_manager") or hasattr(
-            context, "get_event_queue"
+        if context is not None and (
+            hasattr(context, "message_history_manager")
+            or hasattr(context, "get_event_queue")
         ):
-            self._context = context  # type: ignore[assignment]
+            self._context = context
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回 Telegram 平台能力声明"""
