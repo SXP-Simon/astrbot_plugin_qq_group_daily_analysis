@@ -243,6 +243,7 @@ const SCOPE_PATH_RULES = [
       f.startsWith('src/utils/') ||
       f === 'lefthook.yml' ||
       f === '.gitignore' ||
+      f === '.gitattributes' ||
       f === 'pyrightconfig.json' ||
       f === 'ruff.toml' ||
       f === '.pre-commit-config.yaml' ||
