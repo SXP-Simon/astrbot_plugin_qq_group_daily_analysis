@@ -613,3 +613,101 @@ def test_adapter_cold_start_mute_exception_recognition():
     adapter = OneBotAdapter(MockBot())
     exc_snowluma = RuntimeError("send group message rejected: result=120 err=")
     assert adapter._is_mute_exception(exc_snowluma) is True
+
+
+# ==========================================
+# 11. NapCat 流式上传与相册结构变体测试
+# ==========================================
+
+
+def test_napcat_driver_album_list_structure_variations():
+    driver = NapCatDriver()
+
+    # 1. 响应结构包含 data.albums 字段
+    bot1 = MockBot(
+        {
+            "get_qun_album_list": {
+                "status": "ok",
+                "data": {
+                    "albums": [{"album_id": "alb_var_1", "name": "变体相册1"}]
+                },
+            }
+        }
+    )
+    albums1 = asyncio.run(driver.get_group_album_list(bot1, "123456"))
+    assert len(albums1) == 1
+    assert albums1[0]["album_id"] == "alb_var_1"
+
+    # 2. 响应结构直接返回相册字典列表
+    bot2 = MockBot(
+        {
+            "get_qun_album_list": [
+                {"album_id": "alb_var_2", "album_name": "变体相册2"}
+            ]
+        }
+    )
+    albums2 = asyncio.run(driver.get_group_album_list(bot2, "123456"))
+    assert len(albums2) == 1
+    assert albums2[0]["album_id"] == "alb_var_2"
+
+    # 3. get_qun_album_list 异常时回退到标准驱动的 get_group_album_list
+    bot3 = MockBot(
+        {
+            "get_qun_album_list": RuntimeError("Action not found"),
+            "get_group_album_list": {
+                "status": "ok",
+                "data": {
+                    "album_list": [{"album_id": "alb_var_3", "name": "回退相册"}]
+                },
+            },
+        }
+    )
+    albums3 = asyncio.run(driver.get_group_album_list(bot3, "123456"))
+    assert len(albums3) == 1
+    assert albums3[0]["album_id"] == "alb_var_3"
+
+
+def test_napcat_upload_stream_file_success(tmp_path: Path):
+    test_file = tmp_path / "test_report.png"
+    test_file.write_bytes(b"dummy image data content" * 1000)
+
+    bot = MockBot(
+        {
+            "upload_file_stream": {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"file_path": "/remote/temp/test_report.png"},
+            }
+        }
+    )
+    driver = NapCatDriver()
+    remote_path = asyncio.run(driver.upload_stream_file(bot, test_file))
+    assert remote_path == "/remote/temp/test_report.png"
+    # 验证触发了分块上传动作以及最终 complete 上传调用
+    actions = [call[0] for call in bot.action_calls]
+    assert "upload_file_stream" in actions
+    complete_call = [
+        call[1]
+        for call in bot.action_calls
+        if call[0] == "upload_file_stream" and call[1].get("is_complete") is True
+    ]
+    assert len(complete_call) == 1
+
+
+def test_napcat_upload_stream_file_invalid_file(tmp_path: Path):
+    driver = NapCatDriver()
+    bot = MockBot()
+
+    # 不存在的文件
+    assert (
+        asyncio.run(
+            driver.upload_stream_file(bot, tmp_path / "non_existent.png")
+        )
+        is None
+    )
+
+    # 空文件
+    empty_file = tmp_path / "empty.png"
+    empty_file.write_bytes(b"")
+    assert asyncio.run(driver.upload_stream_file(bot, empty_file)) is None
+
