@@ -303,7 +303,11 @@ class ComicTopic:
         }
 
 
-class AnalysisResultPayload(TypedDict):
+class _AnalysisResultOptional(TypedDict, total=False):
+    timestamp: str
+
+
+class AnalysisResultPayload(_AnalysisResultOptional):
     """领域分析结果字典快照契约"""
 
     statistics: GroupStatistics
@@ -459,6 +463,8 @@ class DailyAnalysisExecutionResult(TypedDict, total=False):
     fallback_to_fresh_run: bool
     fallback_reason: str
     resumed_from: str
+    analysis_success: bool
+    report_sent: bool
 
 
 class ComicAnalysisExecutionResult(TypedDict, total=False):
@@ -484,3 +490,11 @@ class IncrementalTriggerStatePayload(TypedDict, total=False):
     last_triggered_at: float
     platform_id: str
     group_id: str
+
+
+class GroupHistoryPayload(TypedDict, total=False):
+    """群历史分析持久化数据结构契约"""
+
+    group_id: str
+    last_updated: str
+    daily: dict[str, AnalysisResultPayload]

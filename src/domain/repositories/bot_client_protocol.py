@@ -220,15 +220,73 @@ class TelegramClientProtocol(Protocol):
 
 
 @runtime_checkable
+class DiscordAssetProtocol(Protocol):
+    """Discord 资源(头像/图标)协议。"""
+
+    url: str
+
+    def with_size(self, size: int) -> DiscordAssetProtocol:
+        """指定尺寸返回新资源实例。"""
+        ...
+
+
+@runtime_checkable
+class DiscordAttachmentProtocol(Protocol):
+    """Discord 附件对象协议。"""
+
+    url: str
+    filename: str
+    size: int
+    content_type: str | None
+
+
+@runtime_checkable
+class DiscordEmbedMediaProtocol(Protocol):
+    """Discord Embed 媒体协议。"""
+
+    url: str
+
+
+@runtime_checkable
+class DiscordEmbedProtocol(Protocol):
+    """Discord 嵌入内容协议。"""
+
+    image: DiscordEmbedMediaProtocol | None
+    description: str | None
+
+
+@runtime_checkable
+class DiscordStickerProtocol(Protocol):
+    """Discord 贴纸协议。"""
+
+    id: int
+    name: str
+    url: str
+
+
+@runtime_checkable
 class DiscordUserProtocol(Protocol):
     """Discord 用户对象协议。"""
 
     id: int
     name: str
     bot: bool
-    avatar: object
+    avatar: DiscordAssetProtocol | None
     display_name: str | None
-    display_avatar: object
+    display_avatar: DiscordAssetProtocol
+
+
+@runtime_checkable
+class DiscordPartialMessageProtocol(Protocol):
+    """Discord 部分消息对象协议。"""
+
+    async def add_reaction(self, emoji: object) -> None:
+        """添加表情回应。"""
+        ...
+
+    async def remove_reaction(self, emoji: object, member: object = None) -> None:
+        """移除表情回应。"""
+        ...
 
 
 @runtime_checkable
@@ -239,9 +297,9 @@ class DiscordMessageProtocol(Protocol):
     author: DiscordUserProtocol
     content: str
     created_at: datetime
-    attachments: Sequence[object]
-    embeds: Sequence[object]
-    stickers: Sequence[object]
+    attachments: Sequence[DiscordAttachmentProtocol]
+    embeds: Sequence[DiscordEmbedProtocol]
+    stickers: Sequence[DiscordStickerProtocol]
     reference: object | None
 
     async def add_reaction(self, emoji: object) -> None:
@@ -259,14 +317,14 @@ class DiscordChannelProtocol(Protocol):
 
     id: int
     name: str
-    guild: object | None
+    guild: DiscordGuildProtocol | None
     created_at: datetime | None
 
     async def fetch_message(self, id: int) -> DiscordMessageProtocol:
         """获取指定消息"""
         ...
 
-    def get_partial_message(self, message_id: int) -> object:
+    def get_partial_message(self, message_id: int) -> DiscordPartialMessageProtocol:
         """获取部分消息对象"""
         ...
 
@@ -298,6 +356,7 @@ class DiscordGuildProtocol(Protocol):
 
     id: int
     name: str
+    icon: DiscordAssetProtocol | None
     text_channels: Sequence[DiscordChannelProtocol]
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
 
 
 class MessageContentType(Enum):
@@ -47,7 +46,7 @@ class MessageContent:
         emoji_id (str): 表情 ID
         emoji_name (str): 表情名称
         at_user_id (str): 被 @ 的用户 ID
-        raw_data (Any): 平台原始数据，用于扩展
+        raw_data (object): 平台原始数据，用于扩展
     """
 
     type: MessageContentType
@@ -56,7 +55,7 @@ class MessageContent:
     emoji_id: str = ""
     emoji_name: str = ""
     at_user_id: str = ""
-    raw_data: Any = None
+    raw_data: object = None
 
     def is_text(self) -> bool:
         """检查是否为文本内容。"""
