@@ -118,3 +118,77 @@ async def test_log_routes_direct(mock_active_mgr: ActiveTaskManager):
 
         clear_res = await routes.api_clear_plugin_logs()
         assert clear_res.get("status_code", 200) == 200
+
+
+@pytest.mark.asyncio
+async def test_data_management_checkpoint_and_report_query_parsing(
+    mock_trace_store: TraceSQLiteStore, tmp_path: Path
+):
+    """测试 DataManagementRoutes 与 ReportRoutes 正确解析 PluginMultiDict 查询参数"""
+    from astrbot.api.web import PluginMultiDict
+    from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import (
+        request as proxy_request,
+    )
+
+    mock_ckpt_store = MagicMock()
+    mock_ckpt_store.get_checkpoint_detail.return_value = {
+        "group_id": "123",
+        "date_str": "2026-09-26",
+        "stage_name": "CLEAN_MESSAGES",
+        "raw_payload": {"cleaned_count": 10},
+    }
+
+    mock_svc = MagicMock()
+    mock_svc.checkpoint_store = mock_ckpt_store
+    data_routes = DataManagementRoutes(
+        trace_store=mock_trace_store,
+        analysis_service=mock_svc,
+    )
+
+    # 1. 测试 Checkpoint Detail 查询解析
+    mock_target = MagicMock()
+    mock_target.query = PluginMultiDict(
+        [
+            ("group_id", "123"),
+            ("date_str", "2026-09-26"),
+            ("stage_name", "CLEAN_MESSAGES"),
+            ("trace_id", "tr_1"),
+        ]
+    )
+
+    with patch.object(proxy_request, "_get_target", return_value=mock_target):
+        res = await data_routes.api_get_checkpoint_detail()
+        assert res.get("status_code", 200) == 200
+        body = res.get("data") if isinstance(res.get("data"), dict) and "status" in res.get("data", {}) else res
+        assert body.get("status") == "ok"
+        detail_data = body.get("data") or body.get("detail")
+        assert detail_data is not None
+        assert detail_data["group_id"] == "123"
+
+    # 2. 测试 Report Content 查询解析
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_file = reports_dir / "report_123_20260926_120000.jpg"
+    report_file.write_bytes(b"\xff\xd8\xff\xe0fake_jpeg_content")
+
+    report_routes = ReportRoutes(
+        trace_store=mock_trace_store,
+        analysis_service=None,
+        report_output_dir=reports_dir,
+    )
+
+    mock_report_target = MagicMock()
+    mock_report_target.query = PluginMultiDict(
+        [("filename", report_file.name)]
+    )
+
+    with patch.object(proxy_request, "_get_target", return_value=mock_report_target):
+        res = await report_routes.api_get_report_content()
+        assert res.get("status_code", 200) == 200
+        body = res.get("data") if isinstance(res.get("data"), dict) and "status" in res.get("data", {}) else res
+        assert body.get("status") == "ok"
+        report_data = body.get("data")
+        assert report_data is not None
+        assert report_data["filename"] == report_file.name
+        assert "data_url" in report_data
+

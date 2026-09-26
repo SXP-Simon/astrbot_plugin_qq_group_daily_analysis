@@ -122,6 +122,8 @@ if "astrbot.api" not in sys.modules:
             self.usage = usage
             self.raw_completion = raw_completion
 
+    astrbot_module.__path__ = []
+    astrbot_api_module.__path__ = []
     astrbot_event_module.__path__ = []
     astrbot_event_filter_module = types.ModuleType("astrbot.api.event.filter")
     astrbot_event_filter_module.PermissionType = PermissionType
@@ -156,10 +158,31 @@ if "astrbot.api" not in sys.modules:
     )
     astrbot_core_message_components_module.File = File
 
+    astrbot_web_module = types.ModuleType("astrbot.api.web")
+
+    class PluginMultiDict:
+        def __init__(self, pairs=None):
+            self._pairs = pairs or []
+
+        def get(self, key, default=None):
+            for k, v in reversed(self._pairs):
+                if k == key:
+                    return v
+            return default
+
+        def items(self):
+            return list(self._pairs)
+
+    astrbot_web_module.PluginMultiDict = PluginMultiDict
+    astrbot_web_module.json_response = lambda data=None, status_code=200, **kwargs: {"status_code": status_code, "data": data, **(data if isinstance(data, dict) else {})}
+    astrbot_web_module.error_response = lambda message="", status_code=400, **kwargs: {"status_code": status_code, "error": message, "message": message}
+    astrbot_web_module.request = None
+
     sys.modules.setdefault("astrbot", astrbot_module)
     sys.modules.setdefault("astrbot.api", astrbot_api_module)
     sys.modules.setdefault("astrbot.api.event", astrbot_event_module)
     sys.modules.setdefault("astrbot.api.event.filter", astrbot_event_filter_module)
+    sys.modules.setdefault("astrbot.api.web", astrbot_web_module)
     sys.modules.setdefault("astrbot.api.provider", astrbot_provider_module)
     sys.modules.setdefault("astrbot.api.star", astrbot_star_module)
     sys.modules.setdefault(
