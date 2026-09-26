@@ -851,6 +851,24 @@ class ReportGenerator(IReportGenerator):
             html_render_func,
         )
 
+    def generate_shared_markdown_text_report(
+        self, analysis_result: AnalysisResultPayload
+    ) -> str:
+        """复用 QQ 官方 Markdown 排版生成文本报告（身份降级为昵称）。
+
+        供 Telegram / Discord 等没有 @ 提及能力、但支持富文本渲染的平台使用，
+        与 QQ 官方共用同一套排版，避免各平台各维护一份文字版模板。
+
+        Args:
+            analysis_result: 分析结果载荷。
+
+        Returns:
+            str: Markdown 文本报告，由各平台适配器自行转义渲染。
+        """
+        return self._qq_official_markdown_generator.generate_plain_markdown_report(
+            analysis_result
+        )
+
     @property
     def _qq_official_markdown_generator(self) -> QQOfficialMarkdownReportGenerator:
         gen = getattr(self, "_qq_official_markdown_generator_inst", None)

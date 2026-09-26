@@ -368,6 +368,30 @@ class TelegramAdapter(PlatformAdapter):
 
     # ==================== IMessageSender ====================
 
+    # 只有「HTML 被 Telegram 拒绝」（请求未被接受）才值得降级重发；
+    # 网络/超时类错误可能已经投递成功，重发会在群里产生重复报告，应交由上层处理。
+    _HTML_REJECT_MARKERS = (
+        "can't parse entities",
+        "can't find end",
+        "unsupported start tag",
+        "unsupported tag",
+        "unexpected end tag",
+        "bad request",
+    )
+
+    @classmethod
+    def _is_html_rejected(cls, error: Exception) -> bool:
+        """判断发送异常是否为「HTML 被 Telegram 拒绝」。
+
+        Args:
+            error: 发送时抛出的异常。
+
+        Returns:
+            bool: True 表示请求未被接受，可安全降级重发纯文本。
+        """
+        message = str(error).lower()
+        return any(marker in message for marker in cls._HTML_REJECT_MARKERS)
+
     async def send_text(
         self,
         group_id: str,
@@ -383,13 +407,45 @@ class TelegramAdapter(PlatformAdapter):
         try:
             # 处理群组话题 ID
             chat_id, message_thread_id = self._parse_group_id(group_id)
+            thread_id = int(message_thread_id) if message_thread_id else None
+            reply_id = int(reply_to) if reply_to else None
 
-            await client.send_message(
-                chat_id=chat_id,
-                text=text,
-                message_thread_id=int(message_thread_id) if message_thread_id else None,
-                reply_to_message_id=int(reply_to) if reply_to else None,
-            )
+            if not TelegramMessageConverter.looks_like_markdown_report(text):
+                # 图片标题、进度提示等普通文本按原样纯文本发送：不做转义与标记转换，
+                # 避免把正文里的 2*3*4、*.py 这类字符误当成 Markdown。
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    message_thread_id=thread_id,
+                    reply_to_message_id=reply_id,
+                )
+                return True
+
+            # 报告文本带 markdown 语法，Bot API 默认纯文本会原样显示 ** 等符号；
+            # 转成 Telegram HTML 模式发送，失败时降级为去标记的纯文本。
+            html_text = TelegramMessageConverter.to_telegram_html(text)
+            try:
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=html_text,
+                    parse_mode="HTML",
+                    message_thread_id=thread_id,
+                    reply_to_message_id=reply_id,
+                )
+            except Exception as html_error:
+                if not self._is_html_rejected(html_error):
+                    # 网络/超时类错误：请求可能已投递成功，重发会造成重复报告，交给上层处理。
+                    logger.error(
+                        f"[Telegram] 文本发送失败（未降级重发，避免重复消息）: {html_error}"
+                    )
+                    return False
+                logger.warning(f"[Telegram] HTML 模式被拒，降级为纯文本: {html_error}")
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=TelegramMessageConverter.strip_markdown(text),
+                    message_thread_id=thread_id,
+                    reply_to_message_id=reply_id,
+                )
             return True
         except Exception as e:
             logger.error(f"[Telegram] 发送文本失败: {e}")
@@ -553,17 +609,45 @@ class TelegramAdapter(PlatformAdapter):
 
         full_text = TelegramMessageConverter.format_forward_nodes_to_text(nodes)
 
-        # 分段发送（Telegram 限制 4096 字符）
+        # 分段发送（Telegram 限制 4096 字符）：按行边界切分，避免把跨行的
+        # **加粗** / `代码` 标记从中间切断（切在标记中间会让该段原样显示 ** 字符）。
         max_len = 4000
         if len(full_text) > max_len:
-            parts = [
-                full_text[i : i + max_len] for i in range(0, len(full_text), max_len)
-            ]
-            for part in parts:
+            for part in self._split_text_by_line(full_text, max_len):
                 if not await self.send_text(group_id, part):
                     return False
             return True
         return await self.send_text(group_id, full_text)
+
+    @staticmethod
+    def _split_text_by_line(text: str, max_len: int) -> list[str]:
+        """按行边界切分长文本。
+
+        Args:
+            text: 待发送文本。
+            max_len: 单段最大长度。
+
+        Returns:
+            list[str]: 切分后的文本片段（拼接后与原文一致）。
+        """
+        parts: list[str] = []
+        buffer = ""
+        for line in text.split("\n"):
+            # 单行本身超长（报告里不会出现）时退化为硬切分
+            while len(line) > max_len:
+                if buffer:
+                    parts.append(buffer)
+                    buffer = ""
+                parts.append(line[:max_len])
+                line = line[max_len:]
+            if buffer and len(buffer) + 1 + len(line) > max_len:
+                parts.append(buffer)
+                buffer = line
+            else:
+                buffer = f"{buffer}\n{line}" if buffer else line
+        if buffer:
+            parts.append(buffer)
+        return parts
 
     # ==================== IGroupInfoRepository ====================
 

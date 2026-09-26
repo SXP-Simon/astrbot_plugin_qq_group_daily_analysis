@@ -7,6 +7,7 @@ Telegram 消息转换器 (Telegram Message Converter)
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,98 @@ if TYPE_CHECKING:
 
 class TelegramMessageConverter:
     """Telegram 消息转换与昵称自愈器。"""
+
+    # Telegram 文本渲染：报告文本带 markdown 语法（**加粗** / `代码`），
+    # 而 Bot API 默认按纯文本发送，导致群内看到的是 ** 原样字符。
+    # 这里把 markdown 转成 Telegram HTML 模式可识别的标签，并转义 HTML 保留字符。
+    # 刻意不处理 *斜体*：单个 * 在普通文本（2*3*4、*.py）里远比报告里常见，转换误伤大于收益。
+    _MD_BOLD_RE = re.compile(r"\*\*(.+?)\*\*", re.S)
+    _MD_CODE_RE = re.compile(r"`([^`\n]+)`")
+    # 行内代码里的 ** 不应被当成加粗（如 `**x**` 要原样显示），转换前先把代码段摘成
+    # 占位符，其余转换做完再还原，避免代码段内容被后续正则改写。
+    _MD_CODE_STASH_RE = re.compile(r"\x00(\d+)\x00")
+    # 报告采用 Markdown 排版（与 QQ 官方一致）：标题 / 列表 / 引用。
+    # Telegram HTML 模式不支持这些结构，这里逐行降级为加粗行、• 列表与引用块。
+    # 注意：这些正则作用在「已转义」的文本上，所以引用符是 &gt; 而非 >。
+    # 中标题（##/###）在 QQ 客户端自带间距，转为加粗行后需手动补一个空行，否则紧贴正文。
+    _MD_TITLE_RE = re.compile(r"(?m)^[ \t]{0,3}#[ \t]+(.+?)[ \t]*$")
+    _MD_SUBHEADING_RE = re.compile(r"(?m)^[ \t]{0,3}#{2,6}[ \t]*(.+?)[ \t]*$")
+    _MD_BULLET_RE = re.compile(r"(?m)^[ \t]{0,3}[-+][ \t]+")
+    _MD_QUOTE_RE = re.compile(r"(?m)^[ \t]{0,3}&gt;[ \t]?(.*)$")
+    # 只有报告文本才带 Markdown 结构；图片标题、进度提示等纯文本必须走原样发送，
+    # 否则正文里的 2*3*4、*.py 这类字符会被误当成斜体/列表标记。
+    _MD_MARKER_RE = re.compile(r"(?m)^#{1,6}[ \t]+\S")
+
+    @classmethod
+    def looks_like_markdown_report(cls, text: str) -> bool:
+        """判断文本是否是需要 Markdown 渲染的报告内容。
+
+        以「是否含 ** 加粗」或「是否有 # 标题行」作为判据：插件的报告排版必然包含其一，
+        而图片标题、进度提示等普通文本几乎不会出现，从而避免对普通文本做转换。
+
+        Args:
+            text: 待发送文本。
+
+        Returns:
+            bool: True 表示应按 Markdown 转 HTML 后发送。
+        """
+        source = str(text or "")
+        return "**" in source or bool(cls._MD_MARKER_RE.search(source))
+
+    @staticmethod
+    def escape_html(text: str) -> str:
+        """转义 Telegram HTML 模式下的保留字符。"""
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    @classmethod
+    def to_telegram_html(cls, text: str) -> str:
+        """将报告文本中的 markdown 语法转换为 Telegram HTML 标签。
+
+        支持 QQ 官方同款排版：`# 标题`、`## 中标题`、`- 列表`、`> 引用`，
+        以及 **加粗** / `代码`。行内代码段先摘出再还原，其中的 `**` 等标记不会被当作格式。
+
+        Args:
+            text: 含 markdown 语法的报告文本。
+
+        Returns:
+            str: 可直接以 parse_mode="HTML" 发送的文本。
+        """
+        escaped = cls.escape_html(text)
+        code_spans: list[str] = []
+
+        def stash_code(match: re.Match[str]) -> str:
+            code_spans.append(match.group(1))
+            return f"\x00{len(code_spans) - 1}\x00"
+
+        escaped = cls._MD_CODE_RE.sub(stash_code, escaped)
+        escaped = cls._MD_TITLE_RE.sub(r"<b>\1</b>", escaped)
+        # 中标题后补空行，保持与 QQ 客户端一致的段落间距
+        escaped = cls._MD_SUBHEADING_RE.sub(r"<b>\1</b>\n", escaped)
+        escaped = cls._MD_QUOTE_RE.sub(r"<blockquote>\1</blockquote>", escaped)
+        escaped = cls._MD_BULLET_RE.sub("• ", escaped)
+        escaped = cls._MD_BOLD_RE.sub(r"<b>\1</b>", escaped)
+        return cls._MD_CODE_STASH_RE.sub(
+            lambda match: f"<code>{code_spans[int(match.group(1))]}</code>", escaped
+        )
+
+    @classmethod
+    def strip_markdown(cls, text: str) -> str:
+        """去除 markdown 标记，得到纯文本（HTML 渲染失败时的兜底）。
+
+        与 `to_telegram_html` 一致，先把行内代码段摘出来，避免代码内容里的 `**`
+        被当成加粗标记吃掉（`` `**x**` `` 应保留字面量，只去掉反引号）。
+        """
+        code_spans: list[str] = []
+
+        def stash_code(match: re.Match[str]) -> str:
+            code_spans.append(match.group(1))
+            return f"\x00{len(code_spans) - 1}\x00"
+
+        plain = cls._MD_CODE_RE.sub(stash_code, text)
+        plain = cls._MD_BOLD_RE.sub(r"\1", plain)
+        return cls._MD_CODE_STASH_RE.sub(
+            lambda match: code_spans[int(match.group(1))], plain
+        )
 
     @staticmethod
     def parse_group_id(group_id: str) -> tuple[str, str | None]:
@@ -250,6 +343,11 @@ class TelegramMessageConverter:
     def format_forward_nodes_to_text(nodes: list[dict]) -> str:
         """将合并转发节点列表排版为 Markdown 格式的文本内容。
 
+        Telegram 没有原生合并转发，只能把节点扁平化成一条消息。平台按段落切分时
+        所有节点的 name 都是同一个（"分析报告"），这里不再逐段插入 **[name]** 标题，
+        否则群里每段前面都会重复出现一次 "[分析报告]"；仅当节点名称确实不同
+        （典型的多来源转发）时才保留逐段标题。
+
         Args:
             nodes: 转发节点字典列表。
 
@@ -259,10 +357,11 @@ class TelegramMessageConverter:
         if not nodes:
             return ""
 
-        lines = ["📊 **分析报告**\n"]
+        names: list[str] = []
+        contents: list[str] = []
         for node in nodes:
             data = node.get("data", node)
-            name = data.get("name", "AstrBot")
+            name = str(data.get("name", "AstrBot"))
             content = data.get("content", "")
             if isinstance(content, list):
                 text_parts: list[str] = []
@@ -270,6 +369,24 @@ class TelegramMessageConverter:
                     if isinstance(seg, dict) and seg.get("type") == "text":
                         text_parts.append(seg.get("data", {}).get("text", ""))
                 content = "".join(text_parts)
-            lines.append(f"**[{name}]**\n{content}\n")
+            text = str(content).strip()
+            if not text:
+                continue
+            names.append(name)
+            contents.append(text)
 
-        return "\n".join(lines)
+        if not contents:
+            return ""
+
+        if len(set(names)) > 1:
+            body = "\n\n".join(
+                f"**[{name}]**\n{content}"
+                for name, content in zip(names, contents, strict=True)
+            )
+        else:
+            body = "\n\n".join(contents)
+
+        # 正文自带 Markdown 标题（# 开头）时不再额外插 "📊 分析报告" 横幅
+        if body.lstrip().startswith("#"):
+            return body
+        return "📊 **分析报告**\n\n" + body
