@@ -115,11 +115,28 @@ class _RequestProxy:
         if target is None:
             return {}
         res = getattr(target, "query", None)
-        if isinstance(res, dict):
-            return dict(res)
+        if res is not None:
+            if isinstance(res, dict):
+                return dict(res)
+            if hasattr(res, "items"):
+                return {str(k): str(v) for k, v in res.items()}
+            if hasattr(res, "_pairs"):
+                pairs = getattr(res, "_pairs", [])
+                return {str(k): str(v) for k, v in pairs}
+            try:
+                return dict(res)
+            except Exception:
+                pass
         res_params = getattr(target, "query_params", None)
-        if isinstance(res_params, dict):
-            return dict(res_params)
+        if res_params is not None:
+            if isinstance(res_params, dict):
+                return dict(res_params)
+            if hasattr(res_params, "items"):
+                return {str(k): str(v) for k, v in res_params.items()}
+            try:
+                return dict(res_params)
+            except Exception:
+                pass
         return {}
 
     @property
@@ -134,8 +151,15 @@ class _RequestProxy:
         if target is None:
             return {}
         res = getattr(target, "headers", None)
-        if isinstance(res, dict):
-            return dict(res)
+        if res is not None:
+            if isinstance(res, dict):
+                return dict(res)
+            if hasattr(res, "items"):
+                return {str(k): str(v) for k, v in res.items()}
+            try:
+                return dict(res)
+            except Exception:
+                pass
         return {}
 
     @property
@@ -145,8 +169,11 @@ class _RequestProxy:
         if target is None:
             return {}
         res = getattr(target, "files", None)
-        if isinstance(res, dict):
-            return dict(res)
+        if res is not None:
+            if isinstance(res, dict):
+                return dict(res)
+            if hasattr(res, "items") and not callable(res):
+                return dict(res.items())
         return {}
 
     async def json(self) -> dict[str, object]:
