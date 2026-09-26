@@ -205,13 +205,18 @@ class BotManager:
                 metadata_obj = getattr(platform, "metadata", None)
                 if metadata_obj is not None:
                     # 优先使用 type
-                    type_val = getattr(metadata_obj, "type", None)
-                    if isinstance(type_val, str):
-                        platform_name = type_val
+                    if isinstance(metadata_obj, Mapping):
+                        platform_name = metadata_obj.get("type") or metadata_obj.get(
+                            "name"
+                        )
                     else:
-                        name_val = getattr(metadata_obj, "name", None)
-                        if isinstance(name_val, str):
-                            platform_name = name_val
+                        type_val = getattr(metadata_obj, "type", None)
+                        if isinstance(type_val, str):
+                            platform_name = type_val
+                        else:
+                            name_val = getattr(metadata_obj, "name", None)
+                            if isinstance(name_val, str):
+                                platform_name = name_val
 
                 # 兼容不同版本的元数据获取
                 if not platform_name:
