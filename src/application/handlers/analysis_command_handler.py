@@ -10,6 +10,7 @@ import base64
 import os
 import re
 import tempfile
+import time
 from datetime import datetime
 from inspect import isawaitable
 from pathlib import Path
@@ -378,10 +379,14 @@ class AnalysisCommandHandler:
                 save_history = getattr(
                     self.plugin_instance, "_save_report_to_history", None
                 )
+                cur_tid = trace.trace_id if trace else None
                 if callable(save_history):
-                    save_history(image_url, group_id)
+                    try:
+                        save_history(image_url, group_id, trace_id=cur_tid)
+                    except TypeError:
+                        save_history(image_url, group_id)
                 else:
-                    self._save_report_to_history(image_url, group_id)
+                    self._save_report_to_history(image_url, group_id, trace_id=cur_tid)
 
                 caption = (
                     TraceContext.make_report_caption()
@@ -548,18 +553,27 @@ class AnalysisCommandHandler:
         except Exception as e:
             logger.error(f"发送纯文本报告失败 (群 {group_id}): {e}", exc_info=True)
 
-    def _save_report_to_history(self, image_url: str, group_id: str) -> None:
-        """将生成的图片报告副本保存到持久化 reports 目录。
+    def _save_report_to_history(
+        self, image_url: str, group_id: str, trace_id: str | None = None
+    ) -> Path | None:
+        """将生成的图片报告副本保存到持久化 reports 目录并关联 Trace 链路。
 
         Args:
             image_url: 图片本地路径或 base64 URI。
             group_id: 目标群号。
+            trace_id: 可选的关联链路 TraceID。
+
+        Returns:
+            生成的报告文件 Path 对象（若成功），否则返回 None。
         """
         try:
             reports_dir = self.plugin_data_dir / "reports"
             reports_dir.mkdir(parents=True, exist_ok=True)
             ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dest = reports_dir / f"report_{group_id}_{ts_str}.jpg"
+            cur_trace = TraceContext.current()
+            eff_trace_id = trace_id or (cur_trace.trace_id if cur_trace else "")
+            trace_suffix = f"_{eff_trace_id}" if eff_trace_id else ""
+            dest = reports_dir / f"report_{group_id}_{ts_str}{trace_suffix}.jpg"
             if Path(image_url).exists():
                 import shutil
 
@@ -567,8 +581,33 @@ class AnalysisCommandHandler:
             elif image_url.startswith("base64://"):
                 data = base64.b64decode(image_url[9:])
                 dest.write_bytes(data)
+
+            if cur_trace:
+                rfiles = cur_trace.metadata.setdefault("report_files", [])
+                if isinstance(rfiles, list) and not any(
+                    isinstance(rf, dict) and rf.get("filename") == dest.name
+                    for rf in rfiles
+                ):
+                    rfiles.append(
+                        {
+                            "filename": dest.name,
+                            "path": str(dest.resolve()),
+                            "format": "image",
+                            "size_bytes": dest.stat().st_size if dest.exists() else 0,
+                            "created_at": time.time(),
+                        }
+                    )
+                from ...shared.trace_context import _global_trace_store
+
+                if _global_trace_store is not None:
+                    try:
+                        _global_trace_store.save_trace(cur_trace.to_dict())
+                    except Exception:
+                        pass
+            return dest
         except Exception as e:
             logger.warning(f"保存历史报告副本失败: {e}")
+            return None
 
     async def _try_upload_image(
         self,
