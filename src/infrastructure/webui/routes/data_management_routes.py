@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ....shared.constants import PLUGIN_NAME
 from ....utils.logger import logger
@@ -22,6 +22,13 @@ if TYPE_CHECKING:
         IIncrementalStore,
     )
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
+
+
+class DirectoryStatsDTO(TypedDict):
+    """目录存储统计契约"""
+
+    count: int
+    size_bytes: int
 
 
 class DataManagementRoutes:
@@ -56,7 +63,7 @@ class DataManagementRoutes:
         except Exception:
             return None
 
-    def _dir_stats(self, directory: Path) -> dict:
+    def _dir_stats(self, directory: Path) -> DirectoryStatsDTO:
         """统计目录下文件数量与总字节数，目录不存在时返回零值。"""
         if not directory.exists():
             return {"count": 0, "size_bytes": 0}
@@ -109,12 +116,12 @@ class DataManagementRoutes:
             )
 
             # 历史报告
-            report_stats: dict = {"count": 0, "size_bytes": 0}
+            report_stats: DirectoryStatsDTO = {"count": 0, "size_bytes": 0}
             if self.report_output_dir and Path(self.report_output_dir).exists():
                 report_stats = self._dir_stats(Path(self.report_output_dir))
 
             # 临时文件（AstrBot 全局 temp 目录下本插件生成的图片）
-            temp_stats: dict = {"count": 0, "size_bytes": 0}
+            temp_stats: DirectoryStatsDTO = {"count": 0, "size_bytes": 0}
             try:
                 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 

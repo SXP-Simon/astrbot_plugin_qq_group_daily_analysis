@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ....utils.logger import logger
 from ...reporting.template_installer import TemplateInstallError, validate_template_name
@@ -20,6 +20,22 @@ if TYPE_CHECKING:
     )
     from ...persistence.trace_sqlite_store import TraceSQLiteStore
     from ...reporting.dispatcher import ReportDispatcher
+
+
+class ReportHistoryItemDTO(TypedDict):
+    """历史报告文件元数据契约"""
+
+    filename: str
+    size_bytes: int
+    modified_at: float
+    absolute_path: str
+    is_html: bool
+    is_comic: bool
+    report_type: str
+    group_id: str
+    group_name: str
+    platform: str
+    trace_id: str
 
 
 class ReportRoutes:
@@ -45,7 +61,7 @@ class ReportRoutes:
     async def api_get_report_history(self) -> WebApiResponse:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
-            reports: list[dict[str, object]] = []
+            reports: list[ReportHistoryItemDTO] = []
             group_info_map = {
                 str(g["group_id"]): {
                     "group_name": str(g.get("group_name", "")),
