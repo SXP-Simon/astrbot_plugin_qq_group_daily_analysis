@@ -16,6 +16,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ....domain.repositories.bot_client_protocol import TelegramClientProtocol
 from ....domain.value_objects.platform_capabilities import (
     TELEGRAM_CAPABILITIES,
     PlatformCapabilities,
@@ -28,10 +29,7 @@ from .telegram_message_converter import TelegramMessageConverter
 if TYPE_CHECKING:
     from astrbot.api.star import Context
 
-    from ....domain.repositories.bot_client_protocol import (
-        HistoryRecordProtocol,
-        TelegramClientProtocol,
-    )
+    from ....domain.repositories.bot_client_protocol import HistoryRecordProtocol
     from ....domain.value_objects.unified_message import UnifiedMessage
 
 # Telegram 依赖
@@ -152,21 +150,21 @@ class TelegramAdapter(PlatformAdapter):
         # 路径 B: bot.client
         if hasattr(self.bot, "client"):
             client = getattr(self.bot, "client", None)
-            if ExtBot is not None and isinstance(client, ExtBot):
-                self._cached_client = client  # type: ignore[assignment]
+            if isinstance(client, TelegramClientProtocol):
+                self._cached_client = client
                 return self._cached_client
 
-        # 路径 C: bot 有 send_message 方法（ExtBot 的特征）
-        if hasattr(self.bot, "send_message") and hasattr(self.bot, "send_photo"):
-            self._cached_client = self.bot  # type: ignore[assignment]
+        # 路径 C: bot 本身是 TelegramClient
+        if isinstance(self.bot, TelegramClientProtocol):
+            self._cached_client = self.bot
             return self._cached_client
 
         # 尝试从 bot 的其他属性获取
         for attr in ("_client", "telegram_client", "_telegram_client", "bot"):
             if hasattr(self.bot, attr):
                 client = getattr(self.bot, attr)
-                if hasattr(client, "send_message"):
-                    self._cached_client = client  # type: ignore[assignment]
+                if isinstance(client, TelegramClientProtocol):
+                    self._cached_client = client
                     return self._cached_client
 
         logger.warning("无法从 bot_instance 获取 Telegram 客户端")

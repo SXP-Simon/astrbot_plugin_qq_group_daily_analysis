@@ -1192,7 +1192,7 @@ class OneBotAdapter(
     async def get_group_album_list(
         self,
         group_id: str,
-    ) -> list[dict]:  # type: ignore[override]
+    ) -> list[dict]:
         """获取群相册列表（委托 OneBotGroupFileManager）。"""
         return cast(
             "list[dict]",

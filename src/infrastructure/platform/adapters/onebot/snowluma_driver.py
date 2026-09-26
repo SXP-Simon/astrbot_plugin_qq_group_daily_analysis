@@ -6,7 +6,7 @@ SnowLuma 专属驱动实现 (SnowLuma Driver)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .standard_driver import StandardOneBotDriver
 
@@ -46,7 +46,7 @@ class SnowLumaDriver(StandardOneBotDriver):
 
     def extract_history_anchor(
         self,
-        earliest_msg: dict[str, Any],
+        earliest_msg: dict[str, object],
     ) -> str | int | None:
         """从最旧消息提取 SnowLuma 专用的 message_id 锚点。
 

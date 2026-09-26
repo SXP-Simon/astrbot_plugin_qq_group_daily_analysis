@@ -10,7 +10,7 @@ from ...utils.logger import logger
 
 if TYPE_CHECKING:
     import asyncio
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
     from ...domain.value_objects import AnalysisResultPayload
     from ..config.config_manager import ConfigManager
@@ -162,7 +162,7 @@ class QQOfficialMarkdownReportGenerator:
         for index, topic in enumerate(topics[:max_topics], 1):
             topic_name = self.render_identity_text(topic.topic, analysis_result)
             lines.append(f"### {index}. {topic_name}")
-            contributor_ids = list(getattr(topic, "contributor_ids", []) or [])
+            contributor_ids = list(topic.contributor_ids or [])
             mentions = self.mentions(contributor_ids)
             if mentions:
                 lines.append(f"**参与者**：{mentions}")
@@ -174,9 +174,9 @@ class QQOfficialMarkdownReportGenerator:
         lines.append("## 🏆 群友称号")
         max_user_titles = self.config_manager.get_max_user_titles()
         for title in user_titles[:max_user_titles]:
-            mention = self.mention(getattr(title, "user_id", ""))
+            mention = self.mention(title.user_id)
             title_text = self.render_identity_text(title.title, analysis_result)
-            mbti = f" · {title.mbti}" if getattr(title, "mbti", "") else ""
+            mbti = f" · {title.mbti}" if title.mbti else ""
             prefix = f"{mention} — " if mention else ""
             lines.append(f"- {prefix}**{title_text}**{mbti}")
             reason = self.render_identity_text(title.reason, analysis_result)
@@ -192,7 +192,7 @@ class QQOfficialMarkdownReportGenerator:
             quote_content = self.render_identity_text(
                 golden_quote.content, analysis_result
             )
-            mention = self.mention(getattr(golden_quote, "user_id", ""))
+            mention = self.mention(golden_quote.user_id)
             attribution = f" — {mention}" if mention else ""
             lines.append(f"- **{index}. {quote_content}**{attribution}")
             reason = self.render_identity_text(golden_quote.reason, analysis_result)
@@ -271,7 +271,7 @@ class QQOfficialMarkdownReportGenerator:
         return f"<@{normalized}>" if normalized else ""
 
     @classmethod
-    def mentions(cls, user_ids: list[object]) -> str:
+    def mentions(cls, user_ids: Sequence[object]) -> str:
         unique_ids = list(
             dict.fromkeys(
                 str(user_id or "").strip().strip("[]")

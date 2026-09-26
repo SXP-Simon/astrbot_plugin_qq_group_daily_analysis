@@ -6,8 +6,6 @@ OneBot v11 消息与领域模型转换器 (OneBot Message Converter)
 
 from __future__ import annotations
 
-from typing import Any
-
 from .....domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
@@ -59,7 +57,9 @@ class OneBotMessageConverter:
                         is_sticker = int(sub_type) == 1
                     except (TypeError, ValueError):
                         is_sticker = False
-                    raw_data: dict[str, Any] = {"summary": seg_data.get("summary", "")}
+                    raw_data: dict[str, object] = {
+                        "summary": seg_data.get("summary", "")
+                    }
                     if sub_type is not None:
                         try:
                             raw_data["sub_type"] = int(sub_type)
@@ -131,7 +131,7 @@ class OneBotMessageConverter:
             # 提取回复 ID
             reply_to = None
             for c in contents:
-                if c.type == MessageContentType.REPLY and c.raw_data:
+                if c.type == MessageContentType.REPLY and isinstance(c.raw_data, dict):
                     reply_to = str(c.raw_data.get("reply_id", ""))
                     break
 
@@ -164,7 +164,7 @@ class OneBotMessageConverter:
         """
         raw_messages: list[dict] = []
         for msg in messages:
-            message_chain: list[dict[str, Any]] = []
+            message_chain: list[dict[str, object]] = []
             for content in msg.contents:
                 if content.type == MessageContentType.TEXT:
                     message_chain.append(
@@ -180,8 +180,8 @@ class OneBotMessageConverter:
                     )
                 elif content.type == MessageContentType.EMOJI:
                     face_type = (
-                        content.raw_data.get("face_type", "face")
-                        if content.raw_data
+                        str(content.raw_data.get("face_type", "face"))
+                        if isinstance(content.raw_data, dict)
                         else "face"
                     )
                     message_chain.append(
@@ -189,13 +189,16 @@ class OneBotMessageConverter:
                     )
                 elif content.type == MessageContentType.REPLY:
                     reply_id = (
-                        content.raw_data.get("reply_id", "") if content.raw_data else ""
+                        str(content.raw_data.get("reply_id", ""))
+                        if isinstance(content.raw_data, dict)
+                        else ""
                     )
                     message_chain.append({"type": "reply", "data": {"id": reply_id}})
                 elif content.type == MessageContentType.FORWARD:
-                    message_chain.append(
-                        {"type": "forward", "data": content.raw_data or {}}
+                    fwd_data = (
+                        content.raw_data if isinstance(content.raw_data, dict) else {}
                     )
+                    message_chain.append({"type": "forward", "data": fwd_data})
                 elif content.type == MessageContentType.VOICE:
                     message_chain.append(
                         {"type": "record", "data": {"url": content.url or ""}}
@@ -204,7 +207,9 @@ class OneBotMessageConverter:
                     message_chain.append(
                         {"type": "video", "data": {"url": content.url or ""}}
                     )
-                elif content.type == MessageContentType.UNKNOWN and content.raw_data:
+                elif content.type == MessageContentType.UNKNOWN and isinstance(
+                    content.raw_data, dict
+                ):
                     message_chain.append(content.raw_data)
 
             raw_msg = {

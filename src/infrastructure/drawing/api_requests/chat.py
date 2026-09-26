@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 from math import gcd
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -65,7 +65,7 @@ async def call_chat_api(
 
     content.append({"type": "text", "text": full_prompt})
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
     }

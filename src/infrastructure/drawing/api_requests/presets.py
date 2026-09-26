@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -71,14 +71,15 @@ async def call_preset_api(
             if "/v1" in base
             else f"{base}/v1/images/generations"
         )
-        payload: dict[str, Any] = {
+        extra_body: dict[str, object] = {"response_format": output_format or "url"}
+        if data_uris:
+            extra_body["image"] = data_uris
+        payload: dict[str, object] = {
             "model": model,
             "prompt": prompt,
             "size": context.resolve_size(image_size, aspect_ratio),
-            "extra_body": {"response_format": output_format or "url"},
+            "extra_body": extra_body,
         }
-        if data_uris:
-            payload["extra_body"]["image"] = data_uris
         provider_name = "Agnes AI"
     elif provider_type == "xai":
         base = api_base or "https://api.x.ai"
@@ -147,7 +148,7 @@ async def call_preset_api(
             or "seedream-5.0-pro" in model.lower()
             or "seedream-5-0-pro" in model.lower()
         )
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "model": model,
             "prompt": prompt,
             "response_format": "url",
@@ -283,7 +284,7 @@ async def call_preset_api(
             dashscope_n = max(1, min(dashscope_n_limit, int(provider.get("n", 1))))
         except (TypeError, ValueError):
             dashscope_n = 1
-        parameters: dict[str, Any] = {
+        parameters: dict[str, object] = {
             "size": dashscope_size,
             "n": dashscope_n,
             "watermark": bool(provider.get("watermark", False)),

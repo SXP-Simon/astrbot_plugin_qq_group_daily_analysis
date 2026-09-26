@@ -14,7 +14,6 @@ from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ...platform.factory import PlatformAdapterFactory
 from ..web_compat import (
-    Context,
     WebApiResponse,
     error_response,
     json_response,
@@ -22,6 +21,8 @@ from ..web_compat import (
 )
 
 if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )

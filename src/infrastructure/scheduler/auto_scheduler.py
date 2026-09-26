@@ -31,7 +31,10 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
-    from ...domain.value_objects import AnalysisResultPayload
+    from ...domain.value_objects import (
+        AnalysisResultPayload,
+        DailyAnalysisExecutionResult,
+    )
     from ..config.config_manager import ConfigManager
     from ..platform.bot_manager import BotManager
     from ..reporting.generators import ReportGenerator
@@ -288,7 +291,7 @@ class AutoScheduler:
 
             async def dispatch_group(
                 gid: str, pid: str | None, mode: str
-            ) -> dict[str, object] | None:
+            ) -> DailyAnalysisExecutionResult | dict[str, object] | None:
                 wait_started_at = time_mod.monotonic()
                 logger.debug(
                     "定时报告等待调度槽位: platform=%s, group=%s, mode=%s, available=%s/%s",

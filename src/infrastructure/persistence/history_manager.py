@@ -47,7 +47,7 @@ class HistoryManager:
 
         Args:
             group_id (str): 群组 ID
-            analysis_result (dict[str, Any]): 包含 statistics, topics, user_titles 的完整分析对象
+            analysis_result (dict[str, object]): 包含 statistics, topics, user_titles 的完整分析对象
             date_str (str, optional): 归档日期 (YYYY-MM-DD)，缺省为当天
             time_str (str, optional): 归档时间点 (HH-MM)，缺省为当前时刻
 

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
         InputMediaPhoto,
     )
     from telegram.error import BadRequest
-    from telegram.ext import CallbackQueryHandler, ContextTypes
+    from telegram.ext import CallbackQueryHandler
 
     from ....application.services.template_command_service import (
         TemplateCommandService,

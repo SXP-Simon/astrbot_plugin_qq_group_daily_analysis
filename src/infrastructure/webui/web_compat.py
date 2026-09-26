@@ -9,7 +9,6 @@ import sys
 from typing import TYPE_CHECKING, Protocol, TypeAlias, runtime_checkable
 
 if TYPE_CHECKING:
-    from astrbot.api.star import Context
     from fastapi.responses import FileResponse, JSONResponse, Response
     from starlette.responses import StreamingResponse
 
@@ -17,13 +16,6 @@ if TYPE_CHECKING:
         JSONResponse | StreamingResponse | FileResponse | Response | dict[str, object]
     )
 else:
-    try:
-        from astrbot.api.star import Context
-    except ImportError:
-
-        class Context:
-            """AstrBot Context 抽象基类或回退别名。"""
-
     try:
         from fastapi.responses import FileResponse, JSONResponse, Response
         from starlette.responses import StreamingResponse
@@ -201,7 +193,7 @@ class _RequestProxy:
         return bool(self._get_target())
 
 
-request: RequestProtocol = _RequestProxy()  # type: ignore[assignment]
+request: RequestProtocol = _RequestProxy()
 
 
 def json_response(

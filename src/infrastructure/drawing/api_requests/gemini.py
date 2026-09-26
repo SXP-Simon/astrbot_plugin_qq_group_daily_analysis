@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -90,7 +90,7 @@ async def call_gemini_api(
     if output_mime:
         response_format["mime_type"] = output_mime
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "model": model,
         "input": input_content,
         "response_format": response_format,
@@ -152,7 +152,7 @@ async def call_gemini_api(
                 logger.debug(f"[Comic] 跳过无效 Gemini 最终图片: {exc}")
 
     # 当响应包含 steps 时，只在最终模型输出中回退提取图片，避免误取中间推理图。
-    fallback_data: Any = model_outputs if isinstance(steps, list) else data
+    fallback_data: object = model_outputs if isinstance(steps, list) else data
     image = await context.extract_image(
         fallback_data, context.get_request_proxy(provider)
     )

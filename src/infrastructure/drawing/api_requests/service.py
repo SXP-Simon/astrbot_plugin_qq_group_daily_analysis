@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .chat import call_chat_api
 from .common import post_json_for_image
@@ -55,7 +55,7 @@ class DrawingApiRequestService:
         self,
         target_url: str,
         headers: dict[str, str],
-        payload: dict[str, Any],
+        payload: dict[str, object],
         timeout: int | float,
         provider_name: str,
         provider: dict,

@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ...domain.value_objects import AnalysisResultPayload, GroupHistoryPayload
 
 
 class HistoryRepository:
@@ -52,7 +55,7 @@ class HistoryRepository:
     def save_analysis_result(
         self,
         group_id: str,
-        result: dict[str, Any],
+        result: AnalysisResultPayload,
         date_str: str | None = None,
     ) -> bool:
         """
@@ -60,7 +63,7 @@ class HistoryRepository:
 
         Args:
             group_id (str): 群组标识符
-            result (dict[str, Any]): 包含统计、金句等信息的分析结果字典
+            result: 包含统计、金句等信息的分析结果字典
             date_str (str, optional): 关联日期 (YYYY-MM-DD)，默认为执行日
 
         Returns:
@@ -70,15 +73,13 @@ class HistoryRepository:
             date_str = date_str or datetime.now().strftime("%Y-%m-%d")
             history = self.load_group_history(group_id)
 
-            # 注入执行时间戳
-            if "timestamp" not in result:
-                result["timestamp"] = datetime.now().isoformat()
-
             # 结构化存储：二级映射 {date -> result}
-            if "daily" not in history:
-                history["daily"] = {}
+            daily = history.setdefault("daily", {})
+            entry_data = dict(result)
+            if "timestamp" not in entry_data:
+                entry_data["timestamp"] = datetime.now().isoformat()
 
-            history["daily"][date_str] = result
+            daily[date_str] = cast("AnalysisResultPayload", entry_data)
             history["last_updated"] = datetime.now().isoformat()
 
             # 原子写入（覆盖）
@@ -93,7 +94,7 @@ class HistoryRepository:
             logger.error(f"保存群 {group_id} 的历史记录失败: {e}")
             return False
 
-    def load_group_history(self, group_id: str) -> dict[str, Any]:
+    def load_group_history(self, group_id: str) -> GroupHistoryPayload:
         """
         加载特定群组的完整历史记录字典。
 
@@ -101,13 +102,15 @@ class HistoryRepository:
             group_id (str): 群组标识符
 
         Returns:
-            dict[str, Any]: 历史数据字典，若文件不存在则返回包含空 daily 结构的初始字典
+            GroupHistoryPayload: 历史数据字典，若文件不存在则返回包含空 daily 结构的初始字典
         """
         try:
             history_path = self._get_group_history_path(group_id)
             if history_path.exists():
                 with open(history_path, encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return cast("GroupHistoryPayload", data)
             return {"daily": {}, "group_id": group_id}
         except Exception as e:
             logger.error(f"加载群 {group_id} 的历史记录失败: {e}")
@@ -115,7 +118,7 @@ class HistoryRepository:
 
     def get_analysis_result(
         self, group_id: str, date_str: str
-    ) -> dict[str, Any] | None:
+    ) -> AnalysisResultPayload | None:
         """
         获取指定日期已存档的分析结果。
 
@@ -124,12 +127,14 @@ class HistoryRepository:
             date_str (str): 目标日期 (YYYY-MM-DD)
 
         Returns:
-            Optional[dict[str, Any]]: 分析结果字典，未找到则返回 None
+            AnalysisResultPayload | None: 分析结果字典，未找到则返回 None
         """
         history = self.load_group_history(group_id)
         return history.get("daily", {}).get(date_str)
 
-    def get_recent_results(self, group_id: str, limit: int = 7) -> list[dict[str, Any]]:
+    def get_recent_results(
+        self, group_id: str, limit: int = 7
+    ) -> list[AnalysisResultPayload]:
         """
         获取指定群组最近 N 次的分析结果列表。
 
@@ -138,7 +143,7 @@ class HistoryRepository:
             limit (int): 最大返回条数
 
         Returns:
-            list[dict[str, Any]]: 按日期降序排列的结果列表
+            list[AnalysisResultPayload]: 按日期降序排列的结果列表
         """
         history = self.load_group_history(group_id)
         daily = history.get("daily", {})

@@ -22,7 +22,6 @@ from .routes import (
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
 from .web_compat import (
-    Context,
     WebApiResponse,
     error_response,
     json_response,
@@ -33,6 +32,8 @@ from .web_compat import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from astrbot.api.star import Context
+
     from ...application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
     from .active_task_manager import ActiveTaskManager
 
 __all__ = [
-    "Context",
     "PluginPageWebUIBridge",
     "_config_key_to_folder",
     "_sanitize_path_segment",

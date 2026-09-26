@@ -10,7 +10,7 @@ Discord 平台适配器
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 try:
     import discord
@@ -89,23 +89,8 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
         return self._cached_client
 
     def _get_discord_client(self) -> DiscordClientProtocol | None:
-        """内部方法：通过多级探测从 bot_instance 中提取 Discord SDK 客户端。"""
-        # 路径 A：bot 本身就是 Client (如小型集成)
-        if hasattr(self.bot, "get_channel"):
-            return self.bot  # type: ignore[assignment]
-        # 路径 B：bot 是包装器，client 在标准成员变量中
-        if hasattr(self.bot, "client"):
-            client = getattr(self.bot, "client", None)
-            if hasattr(client, "get_channel"):
-                return client  # type: ignore[assignment]
-        # 路径 C：其他常见私有属性名
-        for attr in ("_client", "discord_client", "_discord_client"):
-            if hasattr(self.bot, attr):
-                client = getattr(self.bot, attr)
-                if hasattr(client, "get_channel"):
-                    return client  # type: ignore[assignment]
-        logger.warning(f"无法从 {type(self.bot).__name__} 中提取 Discord 客户端实例")
-        return None
+        """内部方法：获取 Discord SDK 客户端。"""
+        return self.bot
 
     def _init_capabilities(self) -> PlatformCapabilities:
         """返回预定义的 Discord 平台能力集。"""
@@ -208,8 +193,6 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
     ) -> UnifiedMessage | None:
         """内部方法：将 `discord.Message` 对象转换为统一的 `UnifiedMessage`。"""
         try:
-            from typing import Any
-
             contents = []
 
             # 1. 基础文本
@@ -219,7 +202,6 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 )
 
             # 2. 附件处理 (图片/视频/语音/普通文件)
-            attachment: Any
             for attachment in raw_msg.attachments:
                 content_type = attachment.content_type or ""
                 if content_type.startswith("image/"):
@@ -253,7 +235,6 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     )
 
             # 3. 嵌入内容处理 (部分 Embed 可能包含富文本描述)
-            embed: Any
             for embed in raw_msg.embeds:
                 if embed.image:
                     contents.append(
@@ -271,7 +252,6 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
 
             # 4. 贴纸处理 (Stickers)
             if raw_msg.stickers:
-                sticker: Any
                 for sticker in raw_msg.stickers:
                     contents.append(
                         MessageContent(
@@ -345,7 +325,7 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                     )
                 elif (
                     content.type == MessageContentType.REPLY
-                    and content.raw_data
+                    and isinstance(content.raw_data, dict)
                     and "reply_id" in content.raw_data
                 ):
                     raw_msg["message"].append(
@@ -755,10 +735,10 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
                 # 自动对齐 Discord 支持的尺寸 (2的幂)
                 allowed_sizes = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
                 target_size = min(allowed_sizes, key=lambda x: abs(x - size))
-                from typing import Any
-
-                avatar: Any = user.display_avatar
-                return avatar.with_size(target_size).url
+                avatar = user.display_avatar
+                if hasattr(avatar, "with_size"):
+                    return avatar.with_size(target_size).url
+                return str(getattr(avatar, "url", avatar))
 
             return None
         except Exception as e:
@@ -831,19 +811,18 @@ class DiscordAdapter(PlatformAdapter["DiscordClientProtocol"]):
             if not channel:
                 channel = await client.fetch_channel(channel_id)
 
-            msg: DiscordMessageProtocol
             if hasattr(channel, "get_partial_message"):
-                from typing import Any
-
-                partial_msg: Any = channel.get_partial_message(int(message_id))
-                msg = cast("DiscordMessageProtocol", partial_msg)
+                partial_msg = channel.get_partial_message(int(message_id))
+                if is_add:
+                    await partial_msg.add_reaction(emoji_to_use)
+                elif client.user:
+                    await partial_msg.remove_reaction(emoji_to_use, client.user)
             else:
                 msg = await channel.fetch_message(int(message_id))
-
-            if is_add:
-                await msg.add_reaction(emoji_to_use)
-            elif client.user:
-                await msg.remove_reaction(emoji_to_use, client.user)
+                if is_add:
+                    await msg.add_reaction(emoji_to_use)
+                elif client.user:
+                    await msg.remove_reaction(emoji_to_use, client.user)
             return True
         except Exception as e:
             logger.debug(f"Discord set_reaction 失败: {e}")

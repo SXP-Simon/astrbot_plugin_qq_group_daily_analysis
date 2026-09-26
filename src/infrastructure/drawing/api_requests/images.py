@@ -8,7 +8,7 @@ JSON 的 ``/images/generations``，有参考图时使用 multipart 的 ``/images
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -55,7 +55,7 @@ async def call_images_api(
     resolved_size = context.resolve_size(raw_size, ar)
     output_format = str(context.get_provider_value("output_format", provider) or "")
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "prompt": prompt,
         "model": model,
         "n": 1,

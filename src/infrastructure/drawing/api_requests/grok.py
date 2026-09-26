@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -52,7 +52,7 @@ async def call_grok_api(
     response_format = str(
         context.get_provider_value("response_format", provider) or "b64_json"
     )
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "model": model,
         "prompt": prompt,
         "response_format": response_format,

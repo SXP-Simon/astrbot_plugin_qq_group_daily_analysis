@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .context import DrawingRequestContext
@@ -26,7 +26,7 @@ async def call_google_api(
         target_url = f"{api_base}/models/{model}:generateContent"
 
     image_size = str(context.get_provider_value("image_size", provider)).upper()
-    parts: list[dict[str, Any]] = [{"text": prompt}]
+    parts: list[dict[str, object]] = [{"text": prompt}]
     for image_bytes, mime in (images_data or [])[:14]:
         parts.append(
             {
