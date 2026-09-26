@@ -44,23 +44,28 @@ class MarkdownReportGenerator:
         self.html_templates = html_templates
         self.render_semaphore = render_semaphore
 
-    async def generate_qq_official_report(
+    async def generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
         html_render_func: Callable[..., Awaitable[str | None]] | None = None,
+        mention_style: str = MENTION_STYLE_NAME,
     ) -> tuple[str, str]:
-        """生成 QQ 官方 Markdown 报告（含可选 T2I 概览图）与无 URL 的备选降级报告。
+        """生成结构化 Markdown 报告（含可选概览图）与备选降级报告。
 
         Args:
             analysis_result: 分析结果载荷。
             html_render_func: HTML 异步渲染函数。
+            mention_style: 提及展示风格（'name' 为昵称文本，'qq' 为 QQ 官方真提及）。
 
         Returns:
             tuple[str, str]: (主报告内容, 降级报告内容)
         """
         fallback_report = self._generate_markdown_report(
-            analysis_result, mention_style=MENTION_STYLE_QQ
+            analysis_result, mention_style=mention_style
         )
+        if mention_style != MENTION_STYLE_QQ:
+            return fallback_report, fallback_report
+
         enabled = self.config_manager.get_qq_official_t2i_summary_dashboard_enabled()
         if not enabled or not callable(html_render_func) or self.html_templates is None:
             return fallback_report, fallback_report
@@ -74,13 +79,10 @@ class MarkdownReportGenerator:
             self._generate_markdown_report(
                 analysis_result,
                 summary_dashboard_url=dashboard_url,
-                mention_style=MENTION_STYLE_QQ,
+                mention_style=mention_style,
             ),
             fallback_report,
         )
-
-    # 兼容历史别名
-    generate = generate_qq_official_report
 
     async def _generate_summary_dashboard_url(
         self,
@@ -154,25 +156,6 @@ class MarkdownReportGenerator:
         except Exception as exc:
             logger.warning("[MarkdownReport] T2I 群聊概览图生成失败: %s", exc)
             return None
-
-    def generate_plain_markdown_report(
-        self,
-        analysis_result: AnalysisResultPayload,
-    ) -> str:
-        """生成跨平台通用的 Markdown 文本报告（身份降级为昵称）。
-
-        供 Telegram / Discord 等无法渲染 <@user_id> 真提及的平台复用同一套排版，
-        避免为每个平台重复维护文本模版。
-
-        Args:
-            analysis_result: 分析结果载荷。
-
-        Returns:
-            str: 格式化的 Markdown 文本报告。
-        """
-        return self._generate_markdown_report(
-            analysis_result, mention_style=MENTION_STYLE_NAME
-        )
 
     def _collect_identity_names(
         self, analysis_result: AnalysisResultPayload
@@ -503,7 +486,3 @@ class MarkdownReportGenerator:
         for placeholder, mention in placeholders.items():
             source = source.replace(placeholder, mention)
         return source.strip()
-
-
-# 向后兼容别名
-QQOfficialMarkdownReportGenerator = MarkdownReportGenerator

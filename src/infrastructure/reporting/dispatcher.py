@@ -548,25 +548,17 @@ class ReportDispatcher:
             (
                 text_report,
                 fallback_report,
-            ) = await self.report_generator.generate_qq_official_markdown_report(
-                analysis_result, self._html_render_func
+            ) = await self.report_generator.generate_markdown_report(
+                analysis_result, self._html_render_func, mention_style="qq"
             )
         elif self._uses_shared_markdown_report(platform_id):
             # 支持富文本 Markdown 但无 QQ @ 提及能力的平台（如 Telegram / Discord）走通用 Markdown 排版（身份降级为昵称）
-            if hasattr(self.report_generator, "generate_plain_markdown_report"):
-                text_report = self.report_generator.generate_plain_markdown_report(
-                    analysis_result
-                )
-            elif hasattr(self.report_generator, "generate_shared_markdown_text_report"):
-                text_report = (
-                    self.report_generator.generate_shared_markdown_text_report(
-                        analysis_result
-                    )
-                )
-            else:
-                text_report = self.report_generator.generate_text_report(
-                    analysis_result
-                )
+            (
+                text_report,
+                _,
+            ) = await self.report_generator.generate_markdown_report(
+                analysis_result, mention_style="name"
+            )
         else:
             text_report = self.report_generator.generate_text_report(analysis_result)
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
