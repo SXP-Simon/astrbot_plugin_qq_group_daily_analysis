@@ -378,19 +378,55 @@ function printFailureGuide(failedResults) {
 }
 
 // ============================================================================
-// 4. 主执行入口 (支持 本地 Hook 文件模式 / CI Commit 范围模式)
+// 4. 主执行入口 (支持 PR Squash 模式 / 本地 Hook 模式 / CI Commit 范围模式)
 // ============================================================================
 function main() {
   const args = process.argv.slice(2);
   const isCiMode = args.includes('--ci') || args.includes('-ci');
   const rangeIndex = args.indexOf('--range');
+  let commitRange = rangeIndex !== -1 && args[rangeIndex + 1] ? args[rangeIndex + 1] : null;
 
-  let commitRange = null;
-  if (rangeIndex !== -1 && args[rangeIndex + 1]) {
-    commitRange = args[rangeIndex + 1];
+  const prTitleIndex = args.indexOf('--pr-title');
+  const prBodyIndex = args.indexOf('--pr-body');
+  const msgTextIndex = args.indexOf('--msg');
+
+  // 模式 A: PR 标题与描述校验模式 (针对 GitHub PR Squash Merge 工作流)
+  if (prTitleIndex !== -1 && args[prTitleIndex + 1]) {
+    const prTitle = args[prTitleIndex + 1];
+    const prBody = prBodyIndex !== -1 && args[prBodyIndex + 1] ? args[prBodyIndex + 1] : '';
+    const rawMessage = `${prTitle}\n\n${prBody}`;
+
+    console.log(`\x1b[36m🔍 [PR Squash Lint] 正在检查 PR 标题与描述规范...\x1b[0m`);
+    const result = verifyCommit({ rawMessage });
+    if (result.isSkipped) {
+      console.log(`\x1b[90m[SKIP] ${result.header} (${result.skipReason})\x1b[0m`);
+      process.exit(0);
+    }
+    if (result.errors.length > 0) {
+      printFailureGuide([result]);
+      process.exit(1);
+    }
+    console.log(`\x1b[32;1m[PASS] Pull Request 标题与描述规范校验通过！Squash Merge 将生成合规主干提交。\x1b[0m`);
+    process.exit(0);
   }
 
-  // 模式 A: CI 或范围校验模式 (检查多条 commit)
+  // 模式 B: 直接传入消息文本模式
+  if (msgTextIndex !== -1 && args[msgTextIndex + 1]) {
+    const rawMessage = args[msgTextIndex + 1];
+    const result = verifyCommit({ rawMessage });
+    if (result.isSkipped) {
+      console.log(`\x1b[90m[SKIP] ${result.header} (${result.skipReason})\x1b[0m`);
+      process.exit(0);
+    }
+    if (result.errors.length > 0) {
+      printFailureGuide([result]);
+      process.exit(1);
+    }
+    console.log('\x1b[32;1m[PASS] Commit 消息文本规范校验通过！\x1b[0m');
+    process.exit(0);
+  }
+
+  // 模式 C: CI 或范围校验模式 (检查多条 commit)
   if (isCiMode || commitRange) {
     if (!commitRange) {
       if (process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.GITHUB_BASE_REF) {
