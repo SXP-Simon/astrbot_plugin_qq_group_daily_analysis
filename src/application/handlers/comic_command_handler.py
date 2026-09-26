@@ -128,7 +128,7 @@ class ComicCommandHandler:
 
     async def handle_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /群漫画 核心指令流程。
 
         Args:

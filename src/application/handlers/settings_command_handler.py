@@ -61,7 +61,7 @@ class SettingsCommandHandler:
 
     async def handle_set_output_format(
         self, event: AstrMessageEvent, format_input: str = ""
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /设置格式 命令。
 
         Args:
@@ -131,7 +131,7 @@ class SettingsCommandHandler:
 
     async def handle_set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /设置模板 命令。
 
         Args:
@@ -179,7 +179,7 @@ class SettingsCommandHandler:
 
     async def handle_view_templates(
         self, event: AstrMessageEvent, platform_id: str
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /查看模板 命令。
 
         Args:
@@ -226,7 +226,7 @@ class SettingsCommandHandler:
         action: str,
         group_id: str,
         platform_id: str,
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /分析设置 命令。
 
         Args:
@@ -347,7 +347,7 @@ class SettingsCommandHandler:
 
     async def handle_incremental_status(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /增量状态 命令。
 
         Args:
@@ -402,7 +402,7 @@ class SettingsCommandHandler:
 
     async def _handle_settings_enable(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理启用设置的分支逻辑。
 
         Args:
@@ -449,7 +449,7 @@ class SettingsCommandHandler:
 
     async def _handle_settings_disable(
         self, event: AstrMessageEvent, group_id: str
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理禁用设置的分支逻辑。
 
         Args:

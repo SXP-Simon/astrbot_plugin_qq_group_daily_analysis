@@ -117,7 +117,7 @@ class AnalysisCommandHandler:
 
     async def handle_daily_analysis(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理 /群分析 核心指令流程。
 
         Args:
@@ -274,7 +274,7 @@ class AnalysisCommandHandler:
 
     async def send_analysis_report(
         self, event: AstrMessageEvent, result: dict[str, object]
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """处理分析结果的渲染和发送。
 
         Args:
