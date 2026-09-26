@@ -54,6 +54,7 @@ const SCOPE_CATEGORIES = {
     'test/webui': 'WebUI 路由与前端桥接单测',
     deps: '依赖管理 (第三方库版本升级, uv/pip/pnpm 依赖锁)',
     docs: '文档 (架构设计, 接口文档, 开发者指南)',
+    'docs/release': '版本发布说明与更新日志 (CHANGELOG.md, metadata.yaml)',
     'docs/arch': 'DDD/FSD 架构设计文档',
     core: '核心协议与规范 (基础常量, 全局上下文, 通用基建)',
     spec: '设计规范与契约定义',
@@ -63,13 +64,13 @@ const SCOPE_CATEGORIES = {
 // 扁平化所有明确注册的合法 Scope
 const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
 
-// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts）
+// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts, docs/release）
 const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs'];
 const ALLOWED_SUBDOMAINS = [
   'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
   'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common',
-  'unit', 'e2e', 'infra', 'mocks', 'github-actions', 'lefthook', 'workflow', 'scripts', 'pipeline', 'pre-commit', 'gate', 'arch'
+  'unit', 'e2e', 'infra', 'mocks', 'github-actions', 'lefthook', 'workflow', 'scripts', 'pipeline', 'pre-commit', 'gate', 'arch', 'release'
 ];
 
 function isScopeValid(scope) {
@@ -245,12 +246,12 @@ const SCOPE_PATH_RULES = [
   },
   {
     matchScope: (s) => s === 'docs',
-    matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md'),
-    name: 'docs 文档 (docs/, *.md)',
+    matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md') || f === 'metadata.yaml',
+    name: 'docs 文档 (docs/, *.md, metadata.yaml)',
   },
   {
     matchScope: (s) => s === 'core' || s === 'spec',
-    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml',
+    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml' || f === 'metadata.yaml',
     name: 'core/spec 核心协议与基建',
   },
 ];
@@ -263,8 +264,12 @@ function isMergeOrReleaseCommit(firstLine, commitSha = null) {
   if (/^Merge (branch|remote-tracking branch|pull request|\w+ into \w+)/i.test(firstLine)) {
     return true;
   }
-  // 2. 匹配版本发布/自动化机器人提交
-  if (/^chore(?:\([^)]+\))?:\s*bump version/i.test(firstLine) || /^v\d+\.\d+\.\d+/i.test(firstLine)) {
+  // 2. 匹配版本发布/自动化机器人提交 (支持 [vX.Y.Z], vX.Y.Z, chore(release): bump version, release: 等)
+  if (
+    /^chore(?:\([^)]+\))?:\s*(?:bump version|release)/i.test(firstLine) ||
+    /^\[?v\d+\.\d+(?:\.\d+)?(?:-[a-z0-9.]+)?\]?/i.test(firstLine) ||
+    /^release(?:\([^)]+\))?:/i.test(firstLine)
+  ) {
     return true;
   }
   // 3. 检查 Git 中是否包含多于 1 个 Parent Commit (Merge Commit)

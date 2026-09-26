@@ -34,8 +34,12 @@ cd astrbot_plugin_qq_group_daily_analysis
 uv venv
 uv pip install -r requirements-dev.txt
 
-# 安装 git pre-commit 钩子
-pre-commit install
+# 安装 git pre-commit 钩子 (务必同时安装 pre-commit 与 commit-msg 门禁)
+pip install pre-commit
+pre-commit install --hook-type pre-commit --hook-type commit-msg
+
+# 或使用 Lefthook (二选一)
+# npm install -g @evilmartians/lefthook && lefthook install
 ```
 
 ### 1.2 WebUI 控制台前端环境
@@ -198,23 +202,50 @@ uv run scripts/debug_render.py -h
 
 ## 4. Commit 提交信息规范 (Conventional Commits)
 
-本项目遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范，推荐采用**中文**清晰阐述改动场景与成效。
+本项目配置了自动化提交门禁脚本（`scripts/verify-commit.js`），在本地 `commit-msg` 阶段与 GitHub Actions CI 中严格校验提交信息格式。
 
-### 格式要求
+### 4.1 格式要求
 ```text
-<type>(<scope>): <简要总结>
+<type>(<scope>): <简要总结 (Header)>
 
-[可选正文：说明场景、背景、核心改动与成效]
+问题: 说明本次改动解决的具体痛点、缺陷根因或业务背景 (Body 第 1 点)
+解决措施: 详细阐述核心实现方案、关键算法、架构分层与边界处理 (Body 第 2 点)
+效果: 总结改动带来的实际成效、测试覆盖与稳定性提升 (Body 第 3 点)
 ```
+> **要求**：
+> 1. Header 简要总结必须简洁明了，建议使用中文；
+> 2. 正文 Body 推荐采用 **STAR 三段式结构**（`问题:` / `解决措施:` / `效果:` 或 `背景:` / `方案:` / `成效:`），总字符数需 $\ge 40$ 字符。
 
-### Type 类型枚举
-* `feat`: 新增功能特性（如增加新平台适配、WebUI 新增图表组件等）；
+### 4.2 Type 类型枚举
+* `feat`: 新增功能特性；
 * `fix`: 修复缺陷或 Bug；
 * `refactor`: 重构代码（不改变外部行为，如分层重构、架构优化）；
 * `perf`: 性能优化（如缓存机制、并发提速）；
 * `docs`: 文档变更（如补充说明、修正错别字）；
 * `test`: 新增或修改单元测试；
-* `chore`: 构建配置、依赖更新、代码格式化与工作流调整。
+* `ci`: 持续集成与工作流脚本配置；
+* `build`: 前端或工程打包构建（如 `build(dashboard)`）；
+* `chore`: 依赖更新、代码格式化与琐碎配置调整。
+
+### 4.3 Scope 作用域分类指南
+
+为了保证 Git 提交历史的可溯源性与原子性，Scope 必须精准反映改动所属的架构层级或业务子域：
+
+| 分类 | 推荐合法 Scope 示例 | 适用改动路径 / 说明 |
+| :--- | :--- | :--- |
+| **🏛️ 后端 DDD 分层** | `domain` / `app` / `infra` | `src/domain/`, `src/application/`, `src/infrastructure/` |
+| **🌐 后端 WebUI 路由** | `infra/webui` / `infra/routes` / `infra/api` | `src/infrastructure/webui/` (Python 路由适配层) |
+| **🎯 后端业务子域** | `analysis` / `comic` / `reporting` / `platform` / `scheduler` / `config` | 对应各业务领域服务与适配器实现 |
+| **🎨 前端 Dashboard** | `dashboard` / `webui/pages` / `webui/widgets` / `webui/features` / `webui/entities` / `webui/shared` | `dashboard/` 源码及 FSD 架构分层 |
+| **📦 前端静态产物** | `build(dashboard)` / `build(webui)` | `pages/daily-analysis/` (Vite 打包产物) |
+| **🛠️ 工程与 CI** | `ci/github-actions` / `ci/workflow` / `ci/scripts` / `ci/lefthook` | `.github/workflows/`, `scripts/`, `lefthook.yml` |
+| **🧪 单元测试** | `test/unit` / `test/e2e` / `test/webui` / `test/infra` | `tests/` 测试文件与 Mock 桩 |
+| **📖 文档与其他** | `docs` / `docs/arch` / `core` / `deps` | `README.md`, `CONTRIBUTING.md`, `metadata.yaml` |
+
+> **⚠️ 门禁拦截规则**：
+> 1. **拒绝冗余 Scope**：禁止提交 `ci(ci)`、`test(test)`、`docs(docs)` 等 Type 与 Scope 完全相同的无意义格式，请使用细分子域（如 `ci/workflow`、`test/unit`）。
+> 2. **解耦前后端 WebUI**：后端 Python WebUI 路由改动请使用 `infra/webui`，前端 React 控制台改动请使用 `dashboard` 或 `webui/*`。
+> 3. **原子化提交**：单次 Commit 尽量聚焦于单一模块，避免跨领域混合提交。
 
 ---
 
