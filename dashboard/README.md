@@ -122,10 +122,42 @@ pnpm build
 
 ---
 
-## 6. 前端自动化测试与 OpenAPI 演进规划 (Roadmap)
+## 6. 前端自动化测试与契约体系 (Automated Tests & Contracts)
 
-1. **MSW (Mock Service Worker) 接入**：
-   * `src/mocks/handlers.ts` 已遵循标准 REST 匹配契约，当需要引入 Vitest/Playwright 自动化测试时，可直接接入 MSW `http.get` / `http.post` handlers 无缝复用。
-2. **OpenAPI 客户端生成**：
-   * 可通过 `@hey-api/openapi-ts` 读取后端的 OpenAPI 架构规范，自动生成 `entities/*/model` 类型与 API 客户端代码。
+### 6.1 OpenAPI 契约与类型自动同步
+前端 `src/entities/*/model/types.ts` 中的所有实体类型直接由 `src/shared/api/generated/schema.d.ts` 派生，实现 100% 强类型保护：
+```bash
+# 1. 导出后端最新 OpenAPI 3.1 规范
+python ../scripts/export_openapi.py
+
+# 2. 自动生成前端强类型 schema.d.ts
+pnpm generate:types
+```
+
+### 6.2 自动化测试矩阵 (Vitest + React Testing Library)
+项目内置 8 个测试套件，全面覆盖通信网桥、Mock 路由分发、格式化工具库、原子组件、业务小部件以及全景页面冒烟测试：
+```bash
+pnpm test          # 运行全套自动化测试
+pnpm test:watch    # 开启 TDD 监听模式
+```
+
+### 6.3 MSW (Mock Service Worker) 零成本复用
+在 `src/mocks/mswHandlers.ts` 中提供了标准 MSW Handler 适配器 `createMswHandlerDefinitions()`，可将内部 Mock Handlers 0 成本接入 MSW 的 `http.get` / `http.post`，方便后续编写 Playwright 端到端测试。
+
+---
+
+## 7. 质量门禁与发布流程 (Quality Gates & Release)
+
+### 7.1 本地 Git 提交门禁 (Lefthook)
+在每次 `git commit` 时，Lefthook 将自动触发全套前端门禁，任何失败均会阻止提交：
+1. **类型检查**：`pnpm typecheck`（严格 0 报错）
+2. **代码规范**：`pnpm lint`（ESLint 严格检查）
+3. **自动化测试**：`pnpm test`（28 项单测与冒烟测试 100% 通过）
+4. **生产构建**：`pnpm build`（打包为单 Bundle 同步生成至 `../pages/daily-analysis/`）
+5. **提交信息规范**：`verify-commit.js`（原子化 Scope + 中文三点论门禁）
+
+### 7.2 新版本发布流程
+与原本发布流程保持完全一致且更加自动化：
+* 日常开发提交时，Lefthook 门禁会自动执行 `pnpm build` 将最新的控制台静态页面更新至 `pages/daily-analysis/assets/`；
+* 插件发布新版本（例如修改 `metadata.yaml` 与版本号）时，直接提交代码并打 Tag 即可，无需额外手动构建打包前端。
 
