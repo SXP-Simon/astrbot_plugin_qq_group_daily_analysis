@@ -600,6 +600,7 @@ class BotManager:
         1. OneBot / aiocqhttp: `self_id`, `user_id`
         2. python-telegram-bot: `id`
         3. Discord.py: `client.user.id`
+        4. Telegram 兜底: token 前缀 (`<bot_id>:<secret>`，initialize() 之前可用)
 
         严格限制类型为不可调用的 str 或 int，防止 OneBot (aiocqhttp)
         动态属性代理返回 functools.partial 等对象导致误匹配。
@@ -612,16 +613,35 @@ class BotManager:
         """
         # 1. 直接属性匹配 (OneBot: self_id / user_id, Telegram: id)
         for attr in ("self_id", "user_id", "id"):
-            val = getattr(bot_instance, attr, None)
+            try:
+                val = getattr(bot_instance, attr, None)
+            except Exception as e:
+                # python-telegram-bot 的 ExtBot.id / ExtBot.user 是 property，
+                # initialize() 之前访问会抛 RuntimeError；getattr 的默认值只兜
+                # AttributeError 不兜异常，放任传播会整体拖垮插件初始化。
+                logger.debug(f"[BotManager] 读取客户端属性 {attr} 失败，跳过: {e}")
+                continue
             if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
 
         # 2. 嵌套用户对象匹配 (Discord.py: client.user.id)
-        user = getattr(bot_instance, "user", None)
+        try:
+            user = getattr(bot_instance, "user", None)
+        except Exception as e:
+            logger.debug(f"[BotManager] 读取客户端属性 user 失败，跳过: {e}")
+            user = None
         if user is not None:
             val = getattr(user, "id", None)
             if val and isinstance(val, (str, int)) and not callable(val):
                 return str(val)
+
+        # 3. Telegram 兜底：bot token 形如 "<bot_id>:<secret>"，initialize() 之前也能
+        #    拿到自身 ID，避免 Telegram 平台在启动阶段无法登记 bot_self_ids。
+        token = getattr(bot_instance, "token", None)
+        if isinstance(token, str) and ":" in token:
+            prefix = token.split(":", 1)[0]
+            if prefix.isdigit():
+                return prefix
 
         return None
 
