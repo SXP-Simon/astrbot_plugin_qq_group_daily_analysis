@@ -534,13 +534,13 @@ class AnalysisCommandHandler:
         """
         try:
             if is_qq_official and hasattr(
-                self.report_generator, "generate_qq_official_markdown_report"
+                self.report_generator, "generate_markdown_report"
             ):
                 (
                     text_report,
                     fallback_report,
-                ) = await self.report_generator.generate_qq_official_markdown_report(
-                    analysis_result, self.html_render
+                ) = await self.report_generator.generate_markdown_report(
+                    analysis_result, self.html_render, mention_style="qq"
                 )
                 await adapter.send_text_report(
                     group_id, text_report, fallback_content=fallback_report
