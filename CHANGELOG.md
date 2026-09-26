@@ -1,6 +1,22 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.6.6] - 跨平台 Markdown 报告、平台适配器容灾加固
+
+*   **📊 【领域架构与报告重构】统一跨平台 Markdown 报告生成契约，消除组织异味与平台单点耦合**：
+    *   **领域契约平台中立化**：彻底删除历史遗留的 `qq_official_markdown.py` 单平台专属文件，在领域层 `IReportGenerator` 中正式确立中立的 `generate_markdown_report` 抽象方法，消除领域层对 QQ 官方平台的概念污染。
+    *   **多平台提及风格支持**：支持 `mention_style="name"`（Telegram / Discord 纯文本昵称）与 `mention_style="qq"`（QQ 官方原生提及与可选生图卡片），统一渲染排版与数据组装逻辑。
+    *   **Telegram 文本报告全面升级为原生 HTML 渲染 (#246)**：Telegram 发送文本报告由 Markdown 解析切换为原生 Telegram HTML 模式，支持代码块与预格式化标签安全保护，大幅改善排版美观度并杜绝特殊字符转义异常。
+    *   **全面清理反射探测与假回退**：移除应用层和命令处理器中对特定平台方法名的 `hasattr` 反射嗅探及兼容别名，全链路规范对接领域服务。
+
+*   **🛡️ 【跨平台适配与容灾加固】Telegram Bot 实例管理与未初始化状态防御升级**：
+    *   **Telegram 未初始化属性异常防御 (#247)**：拦截 `python-telegram-bot` 的 `ExtBot.id` / `ExtBot.user` 在未执行 `initialize()` 前访问抛出 `RuntimeError` 的问题，自动降级至 Token 前缀 (`<bot_id>:<secret>`) 提取 ID，根治 Telegram 平台拖垮插件启动初始化的问题。
+    *   **Telegram 群组发现与 TargetResolver 自动降级 (#245)**：修复 Telegram 适配器在外部宿主缺少群注册表方法时导致的定时分析静默失效问题，建立 TargetResolver 注册表与事件历史双重探测机制。
+    *   **BotManager 平台元数据字典映射兼容与状态保持**：修复懒加载刷新平台实例时对 `Mapping` 字典元数据的解析支持，并在重复设置同一 bot 实例时自动保持内部适配器状态与缓存，避免丢失状态。
+
 ## [v5.6.5] - 提供 WebUI 独立开发体验、OpenAPI 契约生成与全套自动化测试门禁
+*   **🧪 【质量工程与开发体验】WebUI 独立开发环境、OpenAPI 契约生成与全套自动化测试门禁 (#244)**：
+    *   **WebUI 独立开发体验**：支持前端控制台脱离后端独立运行与 Mock 调试，新增 OpenAPI 契约自动导出与强类型接口同步。
+    *   **Lefthook + STAR 原子化提交门禁**：建立严格的提交信息三点论（问题/解决措施/效果）、Scope 架构分层一致性与原子化提交门禁，杜绝跨模块混杂提交。
 
 ## [v5.6.4] - 任务报告链路确定性溯源、WebUI 全面板查询容错加固与核心架构底座升级
 
