@@ -192,3 +192,100 @@ async def test_data_management_checkpoint_and_report_query_parsing(
         assert report_data["filename"] == report_file.name
         assert "data_url" in report_data
 
+
+@pytest.mark.asyncio
+async def test_trace_and_log_routes_query_resilience(
+    mock_trace_store: TraceSQLiteStore, mock_active_mgr: ActiveTaskManager
+):
+    """测试 TraceRoutes 与 LogRoutes 针对空字符串、异常数字与 PluginMultiDict 的高容错性"""
+    from astrbot.api.web import PluginMultiDict
+    from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import (
+        request as proxy_request,
+    )
+
+    mock_context = MagicMock()
+    mock_context.platform_manager = None
+    mock_context.persona_manager = None
+    mock_svc = MagicMock()
+
+    trace_routes = TraceRoutes(
+        context=mock_context,
+        trace_store=mock_trace_store,
+        active_task_manager=mock_active_mgr,
+        analysis_service=mock_svc,
+    )
+
+    mock_trace_target = MagicMock()
+    mock_trace_target.query = PluginMultiDict(
+        [
+            ("limit", ""),
+            ("offset", ""),
+            ("group_id", ""),
+            ("status", ""),
+            ("trigger_type", ""),
+            ("search", ""),
+            ("start_time", ""),
+            ("end_time", ""),
+            ("granularity", "invalid_val"),
+            ("range_count", ""),
+        ]
+    )
+
+    with patch.object(proxy_request, "_get_target", return_value=mock_trace_target):
+        res = await trace_routes.api_list_traces()
+        assert res.get("status_code", 200) == 200
+        trends_res = await trace_routes.api_get_analytics_trends()
+        assert trends_res.get("status_code", 200) == 200
+
+    log_routes = LogRoutes(active_task_manager=mock_active_mgr)
+    mock_log_target = MagicMock()
+    mock_log_target.query = PluginMultiDict(
+        [("limit", ""), ("offset", ""), ("level", ""), ("search", "")]
+    )
+    with patch.object(proxy_request, "_get_target", return_value=mock_log_target):
+        logs_res = await log_routes.api_get_plugin_logs()
+        assert logs_res.get("status_code", 200) == 200
+
+
+@pytest.mark.asyncio
+async def test_incremental_and_checkpoint_routes_resilience(
+    mock_trace_store: TraceSQLiteStore,
+):
+    """测试 DataManagementRoutes 增量批次与 Checkpoint 列表在空值与多值参数下的容错性"""
+    from astrbot.api.web import PluginMultiDict
+    from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import (
+        request as proxy_request,
+    )
+
+    mock_ckpt_store = MagicMock()
+    mock_ckpt_store.list_all_checkpoints.return_value = ([], 0)
+    mock_inc_store = AsyncMock()
+    mock_inc_store.get_all_batches_with_details.return_value = []
+    mock_inc_store.get_last_analyzed_cursor.return_value = (None, set())
+
+    mock_svc = MagicMock()
+    mock_svc.checkpoint_store = mock_ckpt_store
+    mock_svc.incremental_store = mock_inc_store
+
+    data_routes = DataManagementRoutes(
+        trace_store=mock_trace_store,
+        analysis_service=mock_svc,
+    )
+
+    # 1. 批次列表空群号与正常群号
+    mock_inc_target = MagicMock()
+    mock_inc_target.query = PluginMultiDict([("group_id", "group_999")])
+    with patch.object(proxy_request, "_get_target", return_value=mock_inc_target):
+        inc_res = await data_routes.api_get_incremental_batches()
+        assert inc_res.get("status_code", 200) == 200
+
+    # 2. Checkpoints 列表带有空筛选字段
+    mock_ckpt_target = MagicMock()
+    mock_ckpt_target.query = PluginMultiDict(
+        [("limit", ""), ("offset", ""), ("group_id", ""), ("date_str", "")]
+    )
+    with patch.object(proxy_request, "_get_target", return_value=mock_ckpt_target):
+        ckpt_res = await data_routes.api_list_checkpoints()
+        assert ckpt_res.get("status_code", 200) == 200
+
+
