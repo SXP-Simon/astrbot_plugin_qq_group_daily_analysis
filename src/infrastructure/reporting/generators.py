@@ -30,13 +30,16 @@ from ..visualization.activity_charts import ActivityVisualizer
 from .avatar_service import (
     AvatarService,
 )
+from .markdown_report_generator import (
+    MarkdownReportGenerator,
+    QQOfficialMarkdownReportGenerator,
+)
 from .profile_mappings import (
     build_profile_image_from_manifest_pattern,
     get_manifest_profile_item_by_mbti,
     load_profile_asset_manifest,
     resolve_profile_info,
 )
-from .qq_official_markdown import QQOfficialMarkdownReportGenerator
 from .render_data_preparer import RenderDataPreparer
 from .render_diagnostics import (
     build_safe_report_path,
@@ -837,7 +840,7 @@ class ReportGenerator(IReportGenerator):
         analysis_result: AnalysisResultPayload,
         html_render_func: Callable | None = None,
     ) -> tuple[str, str]:
-        """委托 QQ 官方机器人专属生成器构建 Markdown 报告。
+        """委托多平台 Markdown 生成器构建 QQ 官方 Markdown 报告。
 
         Args:
             analysis_result: 分析结果字典。
@@ -846,51 +849,56 @@ class ReportGenerator(IReportGenerator):
         Returns:
             元组 (markdown_text, image_url)。
         """
-        return await self._qq_official_markdown_generator.generate(
+        return await self._markdown_generator.generate_qq_official_report(
             analysis_result,
             html_render_func,
         )
 
-    def generate_shared_markdown_text_report(
+    def generate_plain_markdown_report(
         self, analysis_result: AnalysisResultPayload
     ) -> str:
-        """复用 QQ 官方 Markdown 排版生成文本报告（身份降级为昵称）。
+        """生成跨平台 Markdown 排版文本报告（身份降级为昵称）。
 
-        供 Telegram / Discord 等没有 @ 提及能力、但支持富文本渲染的平台使用，
-        与 QQ 官方共用同一套排版，避免各平台各维护一份文字版模板。
+        供 Telegram / Discord 等无 @ 提及能力、但支持富文本渲染的平台使用，
+        与 QQ 官方共用同一套结构化排版。
 
         Args:
             analysis_result: 分析结果载荷。
 
         Returns:
-            str: Markdown 文本报告，由各平台适配器自行转义渲染。
+            str: 格式化的 Markdown 文本报告。
         """
-        return self._qq_official_markdown_generator.generate_plain_markdown_report(
-            analysis_result
-        )
+        return self._markdown_generator.generate_plain_markdown_report(analysis_result)
+
+    def generate_shared_markdown_text_report(
+        self, analysis_result: AnalysisResultPayload
+    ) -> str:
+        """向后兼容别名：生成跨平台 Markdown 文本报告。"""
+        return self.generate_plain_markdown_report(analysis_result)
 
     @property
-    def _qq_official_markdown_generator(self) -> QQOfficialMarkdownReportGenerator:
-        gen = getattr(self, "_qq_official_markdown_generator_inst", None)
-        if isinstance(gen, QQOfficialMarkdownReportGenerator):
+    def _markdown_generator(self) -> MarkdownReportGenerator:
+        gen = getattr(self, "_markdown_generator_inst", None)
+        if isinstance(gen, MarkdownReportGenerator):
             return gen
         templates = getattr(self, "html_templates", None) or HTMLTemplates(
             self.config_manager
         )
         sem = getattr(self, "_render_semaphore", None) or asyncio.Semaphore(2)
-        inst = QQOfficialMarkdownReportGenerator(
+        inst = MarkdownReportGenerator(
             self.config_manager,
             templates,
             sem,
         )
-        self._qq_official_markdown_generator_inst = inst
+        self._markdown_generator_inst = inst
         return inst
 
-    @_qq_official_markdown_generator.setter
-    def _qq_official_markdown_generator(
-        self, val: QQOfficialMarkdownReportGenerator
-    ) -> None:
-        self._qq_official_markdown_generator_inst = val
+    @_markdown_generator.setter
+    def _markdown_generator(self, val: MarkdownReportGenerator) -> None:
+        self._markdown_generator_inst = val
+
+    # 历史属性兼容
+    _qq_official_markdown_generator = _markdown_generator
 
     @property
     def _avatar_service(self) -> AvatarService:

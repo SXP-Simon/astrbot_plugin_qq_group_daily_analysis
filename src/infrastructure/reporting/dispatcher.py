@@ -7,7 +7,7 @@ import time
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from ...shared.constants import AnalysisStage
@@ -61,9 +61,9 @@ class ReportDispatcher:
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         return bool(adapter and adapter.get_platform_name() == "qq_official")
 
-    # 复用 QQ 官方 Markdown 文本排版的平台：这些平台无法渲染 <@user_id> 真提及，
-    # 身份自动降级为昵称文本，排版与 QQ 官方完全一致。
-    _SHARED_MARKDOWN_PLATFORMS = frozenset({"telegram"})
+    # 复用多平台通用 Markdown 结构化排版的平台（如 Telegram、Discord）：
+    # 身份自动降级为昵称文本，排版与结构化报告一致。
+    _SHARED_MARKDOWN_PLATFORMS = frozenset({"telegram", "discord"})
 
     def _uses_shared_markdown_report(self, platform_id: str | None) -> bool:
         """平台是否复用 QQ 官方的 Markdown 文本排版。"""
@@ -552,16 +552,17 @@ class ReportDispatcher:
                 analysis_result, self._html_render_func
             )
         elif self._uses_shared_markdown_report(platform_id):
-            # 无 @ 提及能力的平台复用 QQ 官方的 Markdown 排版（身份降级为昵称）。
-            # 该方法不在 IReportGenerator 契约内，自定义实现可能没有：先做能力检查，取不到则回退纯文本报告。
-            shared_markdown_generator = cast(
-                "Callable[[AnalysisResultPayload], str] | None",
-                getattr(
-                    self.report_generator, "generate_shared_markdown_text_report", None
-                ),
-            )
-            if shared_markdown_generator is not None:
-                text_report = shared_markdown_generator(analysis_result)
+            # 支持富文本 Markdown 但无 QQ @ 提及能力的平台（如 Telegram / Discord）走通用 Markdown 排版（身份降级为昵称）
+            if hasattr(self.report_generator, "generate_plain_markdown_report"):
+                text_report = self.report_generator.generate_plain_markdown_report(
+                    analysis_result
+                )
+            elif hasattr(self.report_generator, "generate_shared_markdown_text_report"):
+                text_report = (
+                    self.report_generator.generate_shared_markdown_text_report(
+                        analysis_result
+                    )
+                )
             else:
                 text_report = self.report_generator.generate_text_report(
                     analysis_result
