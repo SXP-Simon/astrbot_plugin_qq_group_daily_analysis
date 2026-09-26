@@ -251,8 +251,14 @@ const SCOPE_PATH_RULES = [
   },
   {
     matchScope: (s) => s === 'deps',
-    matchFile: (f) => f === 'pyproject.toml' || f === 'pnpm-lock.yaml' || f === 'package.json' || f === 'uv.lock' || f.endsWith('package.json'),
-    name: 'deps 依赖文件',
+    matchFile: (f) =>
+      f.endsWith('pyproject.toml') ||
+      f.endsWith('pnpm-lock.yaml') ||
+      f.endsWith('package.json') ||
+      f.endsWith('uv.lock') ||
+      f.endsWith('requirements.txt') ||
+      f.endsWith('requirements-dev.txt'),
+    name: 'deps 依赖文件 (package.json, pnpm-lock.yaml, pyproject.toml, uv.lock)',
   },
   {
     matchScope: (s) => s === 'docs',
