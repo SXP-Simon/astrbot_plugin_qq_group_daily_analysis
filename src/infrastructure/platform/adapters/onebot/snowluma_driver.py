@@ -27,6 +27,9 @@ class SnowLumaDriver(StandardOneBotDriver):
     ) -> OneBotHistoryFetchParams:
         """构建 SnowLuma 历史消息拉取参数（使用 message_id，不传 reverseOrder）。
 
+        注意：SnowLuma 仅支持以 message_id 字段作为历史回溯锚点，且协议端不接受
+        reverseOrder 参数（传入将导致请求被拒绝）。
+
         Args:
             group_id: 目标群号
             count: 拉取条数
