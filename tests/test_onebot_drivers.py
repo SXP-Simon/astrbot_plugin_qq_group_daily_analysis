@@ -259,8 +259,12 @@ def test_standard_history_pagination_params_and_anchor():
         "message_seq": 1234,
     }
 
-    anchor = driver.extract_history_anchor({"message_id": "mid_100", "message_seq": 88})
-    assert anchor == 88
+    # 1. 优先级 message_seq > real_id > seq > message_id
+    assert driver.extract_history_anchor({"message_id": "mid_100", "message_seq": 88}) == 88
+    assert driver.extract_history_anchor({"message_id": "mid_100", "real_id": 99}) == 99
+    assert driver.extract_history_anchor({"message_id": "mid_100", "seq": 77}) == 77
+    assert driver.extract_history_anchor({"message_id": "mid_100"}) == "mid_100"
+    assert driver.extract_history_anchor({}) is None
 
 
 def test_standard_whole_ban_detection():
