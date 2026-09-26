@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 
-// In-memory Storage Mock for Node 22+ / JSDOM environment
+// 针对 Node 22+ / JSDOM 环境的内存级 LocalStorage 桩实现
 class LocalStorageMock {
   private store: Record<string, string> = {};
 
@@ -39,7 +39,7 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: true,
 });
 
-// Polyfill window.matchMedia for Ant Design in jsdom
+// 为 JSDOM 环境补齐 Ant Design 所需的 window.matchMedia 桩方法
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
@@ -54,7 +54,7 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-// Polyfill ResizeObserver for charts and responsive containers
+// 为图表和响应式容器组件补齐 ResizeObserver 桩方法
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

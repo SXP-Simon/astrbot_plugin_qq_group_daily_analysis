@@ -3,8 +3,8 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MetricCard } from "../MetricCard";
 
-describe("MetricCard Component", () => {
-  it("should render title and formatted value", () => {
+describe("KPI 指标卡片组件 (MetricCard Component)", () => {
+  it("应当正确渲染标题、数值与单位后缀", () => {
     render(
       <MetricCard
         title="今日分析请求"
@@ -16,7 +16,7 @@ describe("MetricCard Component", () => {
     expect(screen.getByText("18")).toBeInTheDocument();
   });
 
-  it("should render subTitle when provided", () => {
+  it("当提供副标题时应当完整展示副标题内容", () => {
     render(
       <MetricCard
         title="成功率"

@@ -3,8 +3,8 @@ import { mockHandlers } from "../handlers";
 import { createMswHandlerDefinitions } from "../mswHandlers";
 import { mockTraces } from "../data/traces";
 
-describe("Mock Handlers Router & Dispatcher", () => {
-  it("should return metrics summary data with valid KPI fields", () => {
+describe("Mock 路由分发器与数据源 (Mock Handlers & Dispatcher)", () => {
+  it("应当返回包含核心 KPI 字段的指标大盘概览数据", () => {
     const res = mockHandlers["GET metrics/summary"]();
     expect(res.status).toBe("ok");
     expect(res.data).toBeDefined();
@@ -12,7 +12,7 @@ describe("Mock Handlers Router & Dispatcher", () => {
     expect(res.data.success_rate).toBeGreaterThan(0);
   });
 
-  it("should filter trace list by status", () => {
+  it("应当支持按任务状态对链路列表进行过滤筛选", () => {
     const allRes = mockHandlers["GET traces"]();
     expect(allRes.data.items.length).toBeGreaterThan(0);
 
@@ -20,14 +20,14 @@ describe("Mock Handlers Router & Dispatcher", () => {
     expect(filteredRes.data.items.every((t) => t.status === "failed")).toBe(true);
   });
 
-  it("should handle parameterized trace details", () => {
+  it("应当支持带动态参数的链路详情查询", () => {
     const res = mockHandlers["GET traces/:traceId"](undefined, { traceId: "trace-20260926-001" });
     expect(res.status).toBe("ok");
     expect(res.data.trace_id).toBe("trace-20260926-001");
     expect(Array.isArray(res.data.spans)).toBe(true);
   });
 
-  it("should provide 3 comprehensive Golden Mocks with different business scenarios", () => {
+  it("提供 3 套覆盖完整业务场景的高保真 Golden Mocks (正常分析/超时中断/多模态漫画)", () => {
     expect(mockTraces.length).toBeGreaterThanOrEqual(3);
     const successTrace = mockTraces.find((t) => t.status === "succeeded" && !t.extra?.comic_enabled);
     const failedTrace = mockTraces.find((t) => t.status === "failed");
@@ -40,20 +40,20 @@ describe("Mock Handlers Router & Dispatcher", () => {
     expect(comicTrace?.spans?.some((s) => s.stage_name === "comic_generation")).toBe(true);
   });
 
-  it("should handle trigger task action", () => {
+  it("应当支持手动触发分析任务并返回排队 Trace ID", () => {
     const res = mockHandlers["POST tasks/trigger"]();
     expect(res.status).toBe("ok");
     expect(res.data.trace_id).toBeDefined();
   });
 
-  it("should handle report templates query", () => {
+  it("应当返回可用的海报视觉主题模板列表", () => {
     const res = mockHandlers["GET reports/templates"]();
     expect(res.status).toBe("ok");
     expect(Array.isArray(res.data)).toBe(true);
     expect(res.data.some((t) => t.id === "scrapbook")).toBe(true);
   });
 
-  it("should generate MSW compatible handler definitions", () => {
+  it("应当正确生成符合 MSW 标准规范的 Handler 定义列表", () => {
     const defs = createMswHandlerDefinitions("/api/plugins/astrbot_plugin_qq_group_daily_analysis");
     expect(defs.length).toBeGreaterThan(15);
     const getTracesDef = defs.find((d) => d.method === "GET" && d.path === "traces");
