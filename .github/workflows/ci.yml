@@ -26,11 +26,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "::group::🔍 1. 校验 PR 标题与描述 (支持 Squash Merge 场景)"
-            node scripts/verify-commit.js --pr-title "${{ github.event.pull_request.title }}" --pr-body "${{ github.event.pull_request.body }}" || true
+            node scripts/verify-commit.js --pr-title "${{ github.event.pull_request.title }}" --pr-body "${{ github.event.pull_request.body }}"
             echo "::endgroup::"
 
             echo "::group::🔍 2. 校验分支内原子 Commit (支持 Rebase / 普通 Merge 场景)"
-            node scripts/verify-commit.js --range "origin/${{ github.base_ref }}...HEAD"
+            node scripts/verify-commit.js --range "origin/${{ github.base_ref }}...HEAD" || echo "::warning::分支历史提交中包含早期非原子或简写提交，PR 合并入主干时请使用 Squash and Merge。"
             echo "::endgroup::"
           else
             node scripts/verify-commit.js --ci
