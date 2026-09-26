@@ -139,7 +139,7 @@
 
 当前插件最适合的实现点不是分析器，而是渲染器。
 
-直接在 [`src/infrastructure/reporting/generators.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/generators.py) 的 `_prepare_render_data` 阶段，把 `title_data` 扩展一下即可。
+直接在 [`src/infrastructure/reporting/render_data_preparer.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/render_data_preparer.py) 的 `prepare_render_data` 阶段，把 `title_data` 扩展一下即可。
 
 当前已经有：
 

@@ -3,16 +3,20 @@ LLM分析器模块
 负责协调各个分析器进行话题分析、用户称号分析和金句分析
 """
 
-import asyncio
+from __future__ import annotations
 
-from ...domain.models.data_models import (
+import asyncio
+from typing import TYPE_CHECKING
+
+from ...domain.repositories.analysis_repository import IAnalysisProvider
+from ...domain.value_objects import (
+    ComicStoryboard,
     GoldenQuote,
     QualityReview,
     SummaryTopic,
     TokenUsage,
     UserTitle,
 )
-from ...domain.repositories.analysis_repository import IAnalysisProvider
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -24,6 +28,14 @@ from .analyzers.user_title_analyzer import UserTitleAnalyzer
 from .utils.json_utils import fix_json
 from .utils.llm_utils import call_provider_with_retry
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from astrbot.api.provider import LLMResponse
+    from astrbot.api.star import Context
+
+    from ..config.config_manager import ConfigManager
+
 
 class LLMAnalyzer(IAnalysisProvider):
     """
@@ -32,12 +44,19 @@ class LLMAnalyzer(IAnalysisProvider):
     保持向后兼容性，提供原有的接口
     """
 
+    context: Context
+    config_manager: ConfigManager
     topic_analyzer: TopicAnalyzer
     user_title_analyzer: UserTitleAnalyzer
     golden_quote_analyzer: GoldenQuoteAnalyzer
+    chat_quality_analyzer: ChatQualityAnalyzer
     comic_storyboard_analyzer: ComicStoryboardAnalyzer
 
-    def __init__(self, context, config_manager):
+    def __init__(
+        self,
+        context: Context,
+        config_manager: ConfigManager,
+    ) -> None:
         """
         初始化LLM分析器
 
@@ -128,11 +147,11 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def analyze_comic_storyboards(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
-    ) -> tuple[list[dict], TokenUsage]:
+    ) -> tuple[list[ComicStoryboard] | list[dict[str, str]], TokenUsage]:
         """使用 LLM 分析并生成漫画分镜和绘画提示词。
 
         Args:
@@ -169,7 +188,7 @@ class LLMAnalyzer(IAnalysisProvider):
 
     async def summarize_quality_reviews(
         self,
-        batch_reviews: list[dict],
+        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """汇总多个质量分析报告（增量模式使用）"""
@@ -257,7 +276,7 @@ class LLMAnalyzer(IAnalysisProvider):
                 name = task_names[i]
                 if isinstance(result, Exception):
                     logger.error(f"分析任务 {name} 失败: {result}")
-                    subtask_errors.append(f"{name}: {str(result)}")
+                    subtask_errors.append(f"{name}: {result!s}")
                     continue
 
                 if name == "topic" and isinstance(result, tuple):
@@ -473,7 +492,7 @@ class LLMAnalyzer(IAnalysisProvider):
                     name = task_names[i]
                     if isinstance(result, Exception):
                         logger.error(f"增量{name}分析失败: {result}")
-                        subtask_errors.append(f"{name}: {str(result)}")
+                        subtask_errors.append(f"{name}: {result!s}")
                         continue
 
                     if name == "topic" and isinstance(result, tuple):
@@ -597,17 +616,14 @@ class LLMAnalyzer(IAnalysisProvider):
                         break
             return [], [], TokenUsage(), None
 
-    # 向后兼容的方法，保持原有调用方式
     async def _call_provider_with_retry(
         self,
-        provider,
+        provider: object | None,
         prompt: str,
         umo: str | None = None,
         provider_id_key: str | None = None,
-    ):
-        """
-        向后兼容的LLM调用方法
-        现在委托给llm_utils模块处理
+    ) -> LLMResponse | None:
+        """向后兼容的LLM调用方法，现在委托给llm_utils模块处理。
 
         Args:
             provider: LLM服务商实例或None（已弃用，现在使用 provider_id_key）

@@ -13,20 +13,23 @@ AstrBot 群消息事件
 └── GroupDailyAnalysis.count_incremental_group_message()
     └── IncrementalTriggerCoordinator
         ├── 按平台和群组累计待处理消息数
-        ├── 达到阈值后创建单群分析任务
-        └── AnalysisApplicationService.execute_incremental_analysis()
-            ├── 拉取并清洗断点后的消息
-            ├── 取最早的固定数量消息构成批次
-            ├── IncrementalStore.save_batch()
-            ├── CheckpointStore.save_checkpoint() (双写快照)
-            └── 保存成功后推进分析断点
+        ├── 达到阈值后创建单群分析任务 (TaskGuard 并发互斥锁管控)
+        └── IncrementalAnalysisService.execute_incremental_analysis()
+            ├── 拉取断点后的消息并通过 MessageCleanerService 规则清洗
+            ├── IncrementalBatchBuilder: 取最早固定规模消息切分批次并计算每小时统计
+            ├── LLM 并行提取增量话题 (SummaryTopic) 与金句 (GoldenQuote)
+            ├── IncrementalStore.save_batch() (保存至 IncrementalBatch 实体)
+            ├── CheckpointStore.save_checkpoint() (双写 INCREMENTAL_BATCH 快照)
+            └── 保存成功后原子推进分析断点游标
 
 每日最终报告定时任务
 └── AutoScheduler._run_scheduled_report()
-    └── AnalysisApplicationService.execute_incremental_final_report()
-        ├── 查询滑动窗口内的批次
-        ├── IncrementalMergeService.merge_batches()
-        └── 生成并发送最终报告
+    └── ScheduledTargetResolver: 分层名单与免打扰扫描解析目标群
+        └── IncrementalAnalysisService.execute_incremental_final_report()
+            ├── IncrementalStore: 查询滑动窗口内落盘的所有 IncrementalBatch
+            ├── IncrementalMergeService.merge_batches(): 聚合为 IncrementalState 并导出值对象
+            ├── RenderDataPreparer: 组装 Jinja2 报告上下文胶囊
+            └── ReportGenerator: 生成长图/HTML 报告并通过平台适配器分发
 ```
 
 ## 消息计数触发

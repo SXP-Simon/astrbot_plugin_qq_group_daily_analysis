@@ -1,6 +1,18 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from ...config.config_manager import ConfigManager
+
+
 class InfoUtils:
     @staticmethod
-    def get_user_nickname(config_manager, sender) -> str:
+    def get_user_nickname(
+        config_manager: ConfigManager, sender: Mapping[str, object]
+    ) -> str:
         """
         获取用户昵称
 
@@ -8,14 +20,11 @@ class InfoUtils:
         """
         enable_user_card = config_manager.get_enable_user_card()
         if enable_user_card:
-            return (
-                sender.get("card", "")
-                or sender.get("nickname", "")
-                or str(sender.get("user_id", ""))
-            )
-        else:
-            return (
-                sender.get("nickname", "")
-                or sender.get("card", "")
-                or str(sender.get("user_id", ""))
-            )
+            card = str(sender.get("card") or "")
+            nickname = str(sender.get("nickname") or "")
+            user_id = str(sender.get("user_id") or "")
+            return card or nickname or user_id
+        nickname = str(sender.get("nickname") or "")
+        card = str(sender.get("card") or "")
+        user_id = str(sender.get("user_id") or "")
+        return nickname or card or user_id

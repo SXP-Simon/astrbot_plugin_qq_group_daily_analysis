@@ -1,11 +1,15 @@
+from __future__ import annotations
+
 import base64
 from math import gcd
-from typing import Any
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_chat_api(
@@ -15,21 +19,29 @@ async def call_chat_api(
     provider: dict | None = None,
 ) -> bytes | None:
     provider = provider or {}
-    raw_url = context.get_provider_value("api_url", provider)
+    raw_url = str(context.get_provider_value("api_url", provider) or "")
     target_url = context.build_target_url(raw_url, "chat")
 
-    api_key = context.get_provider_value("api_key", provider)
-    model = context.get_provider_value("model", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    model = str(context.get_provider_value("model", provider) or "")
 
-    timeout = context.get_provider_value("timeout", provider)
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    raw_size = context.get_provider_value("image_size", provider)
-    ar = context.get_provider_value("aspect_ratio", provider)
+    raw_size = str(context.get_provider_value("image_size", provider) or "")
+    ar = str(context.get_provider_value("aspect_ratio", provider) or "")
     resolved_size = context.resolve_size(raw_size, ar)
 
     # 将长宽比与分辨率要求显式追加到 prompt 结尾，防止 Chat 协议模型忽略
@@ -53,7 +65,7 @@ async def call_chat_api(
 
     content.append({"type": "text", "text": full_prompt})
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "model": model,
         "messages": [{"role": "user", "content": content}],
     }
@@ -74,11 +86,11 @@ async def call_chat_api(
 
         try:
             data = resp.json()
-        except Exception:
+        except Exception as e:
             snippet = resp.text[:500] if resp.text else "(空正文)"
             raise Exception(
                 f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
-            )
+            ) from e
 
         image = await context.extract_image(data, context.get_request_proxy(provider))
         if image:

@@ -77,7 +77,15 @@ pnpm dev
      ```bash
      npx pyright
      ```
-6. **一键格式化、自动修复 Lint 与单元测试**：
+6. **DDD 领域驱动设计分层准则 (DDD Layering Standards)**：
+   * **领域层 (`src/domain/`)**：纯业务核心，不依赖具体外部框架与基础设施；
+     - `entities/`：专职存放具有生命周期与持久化状态的聚合根（如 `IncrementalBatch`, `IncrementalState`）；
+     - `value_objects/`：存放所有不可变值对象（如 `SummaryTopic`, `UserTitle`, `GoldenQuote`, `QualityReview`, `GroupStatistics`, `UnifiedMessage` 等），严禁设立模糊的 `models/` 目录；
+     - `repositories/`：定义仓储与外部能力的纯抽象接口（如 `IAnalysisProvider`, `IConfigProvider`）；
+     - `services/`：跨实体的纯领域计算规则（如 `IncrementalMergeService`, `StatisticsService`）。
+   * **应用服务层 (`src/application/services/`)**：编排核心用例，杜绝上帝类（如将增量分析、断点恢复拆分至独立用例服务）；
+   * **基础设施层 (`src/infrastructure/`)**：具体技术实现（适配器、渲染器、LLM 分析器、配置迁移器、持久化仓储等）。
+7. **一键格式化、自动修复 Lint 与单元测试**：
    * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），提交前保证静态类型检查与测试全部通过：
      ```bash
      uv run ruff format . ; uv run ruff check . --fix
@@ -124,23 +132,29 @@ dashboard/src/
 
 ## 3. 报告模板贡献指南 (Templates Contribution)
 
-如果你想为插件贡献精美的新视觉主题模板，欢迎提交 PR！
+如果你想为插件贡献精美的新视觉主题模板，欢迎提交 PR！完整规范请参考 [`docs/REPORT_TEMPLATE_GUIDE.md`](docs/REPORT_TEMPLATE_GUIDE.md)。
 
-### 3.1 模板目录结构
+### 3.1 模板目录结构（完整 7 件套）
 在 `src/infrastructure/reporting/templates/` 下新建你的主题目录（如 `my_theme/`）：
 
 ```text
 src/infrastructure/reporting/templates/your_theme_name/
-├── image_template.html      # 图片报告主模板 (必填)
+├── image_template.html      # 图片报告主模板 (必选其一)
+├── html_template.html       # 独立网页报告主模板 (必选其一)
 ├── activity_chart.html      # 活跃度图表组件 (必填)
 ├── topic_item.html          # 话题列表项组件 (必填)
-├── user_title_item.html     # 用户称号项组件 (必填)
-└── quote_item.html          # 金句项组件 (必填)
+├── user_title_item.html     # 用户称号/画像项组件 (必填)
+├── quote_item.html          # 金句项组件 (必填)
+├── chat_quality_item.html   # 群聊质量多维锐评组件 (必填)
+├── shared_styles.html       # 可选：共享 CSS 样式片段
+├── inline_assets.html       # 可选：内联 SVG / 装饰资产片段
+└── template.json            # 可选：主题元数据 {"name": "中文显示名", "desc": "主题介绍"}
 ```
+> **提示**：只需提供 `image_template.html` 或 `html_template.html` 任一即可被识别，缺失的子模块组件会自动向内置默认 `scrapbook`（手账）模板优雅兜底。
 
 ### 3.2 模板变量对照表
 
-#### 主模板 (`image_template.html`)
+#### 主模板 (`image_template.html` / `html_template.html`)
 | 变量名 | 说明 | 示例 |
 |---|---|---|
 | `current_date` | 当前日期 | 2026年08月25日 |
@@ -154,23 +168,28 @@ src/infrastructure/reporting/templates/your_theme_name/
 | `topics_html` | 渲染后的热门话题组件 HTML | - |
 | `titles_html` | 渲染后的用户称号组件 HTML | - |
 | `quotes_html` | 渲染后的金句组件 HTML | - |
+| `chat_quality_html`| 渲染后的群聊质量多维锐评组件 HTML | - |
 | `total_tokens` | 本次分析消耗的 Token 总量 | 14,280 |
 
 #### 组件子模板 (`*_item.html`)
 * `activity_chart.html`: 注入 `chart_data` (包含 `hour`, `count`, `percentage` 的数组)；
 * `topic_item.html`: 注入 `topics` (包含 `index`, `topic`, `contributors`, `detail`)；
-* `user_title_item.html`: 注入 `titles` (包含 `name`, `title`, `mbti`, `reason`, `avatar_data`)；
-* `quote_item.html`: 注入 `quotes` (包含 `content`, `sender`, `reason`, `avatar_url`)。
+* `user_title_item.html`: 注入 `titles` (包含 `name`, `title`, `mbti`, `reason`, `avatar_data`, `profile_badge` 等)；
+* `quote_item.html`: 注入 `quotes` (包含 `content`, `sender`, `reason`, `avatar_url`)；
+* `chat_quality_item.html`: 注入 `chat_quality` (包含 `title`, `subtitle`, `summary`, `dimensions` 等)。
 
 ### 3.3 离线调试工具使用
 
-插件内置了独立的离线模板渲染调试脚本，**无需启动 AstrBot 或连接真实 LLM** 即可瞬间预览 HTML 视觉效果：
+插件内置了独立的离线模板渲染调试脚本，**无需启动 AstrBot 或连接真实 LLM** 即可瞬间预览 HTML 视觉效果并验证 MBTI/SBTI/ACGTI 映射：
 
 ```bash
 # 渲染指定模板并输出到本地 HTML
 uv run scripts/debug_render.py -t your_theme_name -o debug_output.html
 
-# 查看帮助
+# 指定人格卡片模式渲染 (支持 mbti | sbti | acgti)
+uv run scripts/debug_render.py -t your_theme_name -o debug_output.html -m acgti
+
+# 查看全部调试参数
 uv run scripts/debug_render.py -h
 ```
 在浏览器或 VSCode Live Server 中打开生成的 `debug_output.html` 即可实时热调 CSS 样式！

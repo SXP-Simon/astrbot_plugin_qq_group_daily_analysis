@@ -6,10 +6,14 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Mapping
+from typing import TYPE_CHECKING, ClassVar
 
 from ...utils.logger import logger
-from .base import PlatformAdapter
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .base import PlatformAdapter
 
 # 预定义支持的平台标识及其对应的模块与适配器类（用于按需懒加载）
 _LAZY_ADAPTER_REGISTRY: dict[str, tuple[str, str]] = {
@@ -29,7 +33,7 @@ class PlatformAdapterFactory:
     根据平台名称动态按需加载并创建适配器实例，避免未启用平台的 SDK 占用内存。
     """
 
-    _adapters: dict[str, type[PlatformAdapter]] = {}
+    _adapters: ClassVar[dict[str, type[PlatformAdapter]]] = {}
 
     @classmethod
     def register(cls, platform_name: str, adapter_class: type[PlatformAdapter]) -> None:

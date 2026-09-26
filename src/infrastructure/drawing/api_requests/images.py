@@ -6,12 +6,16 @@ JSON 的 ``/images/generations``，有参考图时使用 multipart 的 ``/images
 因未知字段拒绝请求。
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_images_api(
@@ -26,24 +30,32 @@ async def call_images_api(
     参数仅在显式配置时写入，以免把 GPT Image 的参数错误发送给兼容端点。
     """
     provider = provider or {}
-    raw_url = context.get_provider_value("api_url", provider)
+    raw_url = str(context.get_provider_value("api_url", provider) or "")
     target_url = context.build_target_url(raw_url, "images")
 
-    api_key = context.get_provider_value("api_key", provider)
-    model = context.get_provider_value("model", provider)
-    timeout = context.get_provider_value("timeout", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    model = str(context.get_provider_value("model", provider) or "")
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
-    raw_size = context.get_provider_value("image_size", provider)
-    ar = context.get_provider_value("aspect_ratio", provider)
+    raw_size = str(context.get_provider_value("image_size", provider) or "")
+    ar = str(context.get_provider_value("aspect_ratio", provider) or "")
     resolved_size = context.resolve_size(raw_size, ar)
-    output_format = context.get_provider_value("output_format", provider)
+    output_format = str(context.get_provider_value("output_format", provider) or "")
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "prompt": prompt,
         "model": model,
         "n": 1,
@@ -67,7 +79,7 @@ async def call_images_api(
     if should_send_quality:
         payload["quality"] = quality
 
-    bg = context.get_provider_value("background", provider)
+    bg = str(context.get_provider_value("background", provider) or "")
     is_gpt_image = str(model).lower().startswith("gpt-image")
     # background、压缩率和审核策略都是 GPT Image 专属字段。背景为 auto
     # 时不传，交由服务端按其默认策略处理。
@@ -176,9 +188,11 @@ async def call_images_api(
 
     try:
         data = resp.json()
-    except Exception:
+    except Exception as e:
         snippet = resp.text[:500] if resp.text else "(空正文)"
-        raise Exception(f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}")
+        raise Exception(
+            f"API 未返回合法的 JSON [HTTP {resp.status_code}]: {snippet}"
+        ) from e
 
     image = await context.extract_image(data, context.get_request_proxy(provider))
     if image:

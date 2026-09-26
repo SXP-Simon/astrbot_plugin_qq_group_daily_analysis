@@ -1,0 +1,35 @@
+# Lefthook Git hooks configuration
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: false
+  commands:
+    # --- Python 后端门禁 ---
+    ruff-format:
+      glob: "*.py"
+      run: uv run ruff format .
+      stage_fixed: true
+    ruff-check:
+      glob: "*.py"
+      run: uv run ruff check . --fix
+      stage_fixed: true
+    pyright:
+      glob: "*.py"
+      run: npx pyright main.py src/
+
+    # --- WebUI / Dashboard 前端门禁 ---
+    webui-typecheck:
+      glob: "dashboard/**/*.{ts,tsx,js,jsx,json,vue,html}"
+      run: pnpm --dir dashboard typecheck
+    webui-lint:
+      glob: "dashboard/**/*.{ts,tsx,js,jsx}"
+      run: pnpm --dir dashboard lint
+    webui-build:
+      glob: "dashboard/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss}"
+      run: pnpm --dir dashboard build
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    verify-commit:
+      run: node scripts/verify-commit.js {1}

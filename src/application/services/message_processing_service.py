@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import re
 from collections import Counter, OrderedDict
+from typing import TYPE_CHECKING
 
-from astrbot.api.event import AstrMessageEvent
-from astrbot.api.star import Context
-
-from ...infrastructure.persistence.platform_group_registry import PlatformGroupRegistry
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from astrbot.api.event import AstrMessageEvent
+    from astrbot.api.star import Context
+
+    from ...infrastructure.persistence.platform_group_registry import (
+        PlatformGroupRegistry,
+    )
 
 _QQ_OFFICIAL_PLATFORM_NAMES = frozenset({"qq_official", "qq_official_webhook"})
 _QQ_OFFICIAL_MENTION_PATTERN = re.compile(r"<@!?([A-Za-z0-9_-]+)>")
@@ -28,15 +35,22 @@ class MessageProcessingService:
     5. QQ 官方事件消息去重（按 message_id 预占 + 确认机制）
     """
 
-    def __init__(self, context: Context, group_registry: PlatformGroupRegistry):
+    context: Context
+    group_registry: PlatformGroupRegistry
+    _seen_event_ids: OrderedDict[str, None]
+    _inflight_event_ids: set[str]
+    _seen_event_ids_limit: int
+    _supports_history_max_messages: bool | None
+
+    def __init__(self, context: Context, group_registry: PlatformGroupRegistry) -> None:
         self.context = context
         self.group_registry = group_registry
-        self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
-        self._inflight_event_ids: set[str] = set()
+        self._seen_event_ids = OrderedDict()
+        self._inflight_event_ids = set()
         self._seen_event_ids_limit = 4096
         # AstrBot 4.26.x 的消息历史接口尚未提供 max_messages 参数。
         # 首次探测到旧签名后缓存结果，避免每条消息都触发一次失败调用。
-        self._supports_history_max_messages: bool | None = None
+        self._supports_history_max_messages = None
 
     async def process_message(self, event: AstrMessageEvent) -> bool:
         """
@@ -336,16 +350,14 @@ class MessageProcessingService:
                 )
             message_parts.append({"type": "plain", "text": fallback_text})
 
-        # 清理空文本段
-        message_parts = [
+        # 清理空文本段并返回
+        return [
             part
             for part in message_parts
             if not (
                 part.get("type") == "plain" and not str(part.get("text", "")).strip()
             )
         ]
-
-        return message_parts
 
     @classmethod
     def _extract_qq_official_mention_replacements(

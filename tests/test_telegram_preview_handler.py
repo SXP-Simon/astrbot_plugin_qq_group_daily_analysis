@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from astrbot_plugin_qq_group_daily_analysis.src.application.commands.template_command_service import (
+from astrbot_plugin_qq_group_daily_analysis.src.application.services.template_command_service import (
     TemplateCommandService,
 )
 from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.config.config_manager import (
@@ -155,7 +155,6 @@ async def test_preview_handler_session_cleanup(preview_handler):
     preview_handler._cleanup_expired_sessions()
     assert "old_tok" not in preview_handler._sessions
     assert "fresh_tok" in preview_handler._sessions
-
 
 
 @pytest.mark.asyncio

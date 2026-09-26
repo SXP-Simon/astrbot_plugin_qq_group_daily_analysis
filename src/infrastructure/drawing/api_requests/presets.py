@@ -5,13 +5,17 @@
 在对应分支描述其请求格式，不会把服务商细节重新堆回 DrawingClient。
 """
 
+from __future__ import annotations
+
 import base64
-from typing import Any
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_preset_api(
@@ -36,13 +40,21 @@ async def call_preset_api(
     Raises:
         ValueError: 供应商预设类型不受支持时抛出。
     """
-    api_key = context.get_provider_value("api_key", provider)
-    api_base = str(context.get_provider_value("api_url", provider)).rstrip("/")
-    model = context.get_provider_value("model", provider)
-    timeout = context.get_provider_value("timeout", provider)
-    image_size = str(context.get_provider_value("image_size", provider))
-    aspect_ratio = context.get_provider_value("aspect_ratio", provider)
-    output_format = context.get_provider_value("output_format", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    api_base = str(context.get_provider_value("api_url", provider) or "").rstrip("/")
+    model = str(context.get_provider_value("model", provider) or "")
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
+    image_size = str(context.get_provider_value("image_size", provider) or "")
+    aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "")
+    output_format = str(context.get_provider_value("output_format", provider) or "")
     # 各个原生 JSON 接口都可接收 data URI。这里统一转换一次，后续分支只
     # 负责自己的字段语义和参考图数量上限。
     data_uris = [
@@ -59,14 +71,15 @@ async def call_preset_api(
             if "/v1" in base
             else f"{base}/v1/images/generations"
         )
-        payload: dict[str, Any] = {
+        extra_body: dict[str, object] = {"response_format": output_format or "url"}
+        if data_uris:
+            extra_body["image"] = data_uris
+        payload: dict[str, object] = {
             "model": model,
             "prompt": prompt,
             "size": context.resolve_size(image_size, aspect_ratio),
-            "extra_body": {"response_format": output_format or "url"},
+            "extra_body": extra_body,
         }
-        if data_uris:
-            payload["extra_body"]["image"] = data_uris
         provider_name = "Agnes AI"
     elif provider_type == "xai":
         base = api_base or "https://api.x.ai"
@@ -135,7 +148,7 @@ async def call_preset_api(
             or "seedream-5.0-pro" in model.lower()
             or "seedream-5-0-pro" in model.lower()
         )
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "model": model,
             "prompt": prompt,
             "response_format": "url",
@@ -271,7 +284,7 @@ async def call_preset_api(
             dashscope_n = max(1, min(dashscope_n_limit, int(provider.get("n", 1))))
         except (TypeError, ValueError):
             dashscope_n = 1
-        parameters: dict[str, Any] = {
+        parameters: dict[str, object] = {
             "size": dashscope_size,
             "n": dashscope_n,
             "watermark": bool(provider.get("watermark", False)),
@@ -317,7 +330,7 @@ async def call_stepfun_api(
 ) -> bytes | None:
     """调用阶跃星辰图片接口，图生图使用官方 multipart 字段。"""
     target_url = context.build_target_url(
-        context.get_provider_value("api_url", provider), "images"
+        str(context.get_provider_value("api_url", provider) or ""), "images"
     )
     headers = {"Authorization": f"Bearer {api_key}"}
     api_timeout = httpx.Timeout(connect=20.0, read=timeout, write=20.0, pool=20.0)
@@ -348,8 +361,8 @@ async def call_stepfun_api(
             "model": model,
             "prompt": prompt,
             "size": context.resolve_size(
-                context.get_provider_value("image_size", provider),
-                context.get_provider_value("aspect_ratio", provider),
+                str(context.get_provider_value("image_size", provider) or ""),
+                str(context.get_provider_value("aspect_ratio", provider) or ""),
             ),
             "response_format": "url",
         }

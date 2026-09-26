@@ -8,8 +8,8 @@ import hashlib
 import math
 import uuid
 from pathlib import Path
-from typing import Any
 
+from ...domain.repositories.bot_client_protocol import OneBotClientProtocol
 from ...utils.logger import logger
 
 
@@ -22,7 +22,9 @@ def _calculate_sha256(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-async def upload_file_stream(bot: Any, file_path: str | Path) -> str | None:
+async def upload_file_stream(
+    bot: OneBotClientProtocol | object, file_path: str | Path
+) -> str | None:
     """通过当前 OneBot 连接上传本地文件。
 
     Args:
@@ -32,7 +34,7 @@ async def upload_file_stream(bot: Any, file_path: str | Path) -> str | None:
     Returns:
         NapCat 返回的临时文件路径；Stream API 不可用或上传失败时返回 ``None``。
     """
-    if not hasattr(bot, "call_action"):
+    if not isinstance(bot, OneBotClientProtocol):
         return None
 
     path = Path(file_path)

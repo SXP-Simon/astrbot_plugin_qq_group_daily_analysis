@@ -350,32 +350,50 @@ def test_platform_adapter_time_window_calculation_boundaries():
     six_hours_ago_ts = base_ts - 3600 * 6
 
     # 1. No since_ts: returns exactly 1 day ago
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=1, since_ts=None, now=base_now
-    ) == one_day_ago_ts
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=1, since_ts=None, now=base_now
+        )
+        == one_day_ago_ts
+    )
 
     # 2. since_ts is 0 or negative: ignored, returns 1 day ago
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=1, since_ts=0, now=base_now
-    ) == one_day_ago_ts
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=1, since_ts=-100, now=base_now
-    ) == one_day_ago_ts
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=1, since_ts=0, now=base_now
+        )
+        == one_day_ago_ts
+    )
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=1, since_ts=-100, now=base_now
+        )
+        == one_day_ago_ts
+    )
 
     # 3. since_ts is 3 days ago (stale cursor): clamped to 1 day ago
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=1, since_ts=three_days_ago_ts, now=base_now
-    ) == one_day_ago_ts
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=1, since_ts=three_days_ago_ts, now=base_now
+        )
+        == one_day_ago_ts
+    )
 
     # 4. since_ts is 6 hours ago (fresh cursor): respected
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=1, since_ts=six_hours_ago_ts, now=base_now
-    ) == six_hours_ago_ts
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=1, since_ts=six_hours_ago_ts, now=base_now
+        )
+        == six_hours_ago_ts
+    )
 
     # 5. Multi-day window (days=3): stale cursor of 3 days ago is respected
-    assert PlatformAdapter.calculate_effective_start_timestamp(
-        days=3, since_ts=three_days_ago_ts, now=base_now
-    ) == three_days_ago_ts
+    assert (
+        PlatformAdapter.calculate_effective_start_timestamp(
+            days=3, since_ts=three_days_ago_ts, now=base_now
+        )
+        == three_days_ago_ts
+    )
 
     # 6. calculate_effective_cutoff_datetime with UTC and naive
     dt_utc = PlatformAdapter.calculate_effective_cutoff_datetime(
@@ -389,5 +407,3 @@ def test_platform_adapter_time_window_calculation_boundaries():
     )
     assert dt_naive.tzinfo is None
     assert int(dt_naive.timestamp()) == one_day_ago_ts
-
-

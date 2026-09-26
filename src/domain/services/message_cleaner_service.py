@@ -3,6 +3,8 @@
 负责过滤掉机器人消息、指令、技术性内容（如原始表情代码）及敏感内容。
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import replace
 

@@ -5,18 +5,24 @@
 将接口错误页、内网地址或超大内容作为漫画图片继续投递。
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import binascii
 import re
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from ..config.config_manager import ConfigManager
 
 
 class ImageDownloadFailedError(Exception):
@@ -30,7 +36,7 @@ class ImageDownloadFailedError(Exception):
 class DrawingImageResponseHooks(Protocol):
     """描述图片响应服务依赖的宿主能力。"""
 
-    config_manager: Any
+    config_manager: ConfigManager
 
 
 @dataclass(slots=True)
@@ -49,7 +55,7 @@ class DrawingImageResponseService:
     IMAGE_DOWNLOAD_TOTAL_TIMEOUT = 90
 
     async def extract_image_from_response(
-        self, data: Any, proxy: str | None = None
+        self, data: object, proxy: str | None = None
     ) -> bytes | None:
         """递归提取绘图响应中的图片数据。"""
         encoded: list[tuple[str, str]] = []
@@ -58,7 +64,7 @@ class DrawingImageResponseService:
         content_urls: list[tuple[str, str]] = []
         fallback_urls: list[tuple[str, str]] = []
 
-        def collect(value: Any, path: tuple[str, ...] = ()) -> None:
+        def collect(value: object, path: tuple[str, ...] = ()) -> None:
             if isinstance(value, dict):
                 for name, item in value.items():
                     collect(item, (*path, name.lower()))
@@ -276,10 +282,10 @@ class DrawingImageResponseService:
         return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
 
     @staticmethod
-    def summarize_response(data: Any) -> str:
+    def summarize_response(data: object) -> str:
         """生成不包含响应正文和 Base64 的结构摘要。"""
 
-        def summarize(value: Any, depth: int = 0) -> str:
+        def summarize(value: object, depth: int = 0) -> str:
             if isinstance(value, str):
                 return f"<str len={len(value)}>"
             if depth >= 3:

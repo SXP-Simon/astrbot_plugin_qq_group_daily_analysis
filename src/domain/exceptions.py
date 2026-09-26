@@ -5,6 +5,8 @@
 这些异常是平台无关的，表示业务逻辑错误。
 """
 
+from __future__ import annotations
+
 
 class DomainException(Exception):
     """所有领域错误的基础异常。"""

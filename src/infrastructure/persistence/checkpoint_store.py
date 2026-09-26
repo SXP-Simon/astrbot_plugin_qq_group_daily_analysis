@@ -8,10 +8,18 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+from ...domain.repositories.persistence_repository import ICheckpointStore
+
+if TYPE_CHECKING:
+    from ...domain.value_objects.analysis_results import (
+        CheckpointDetailPayload,
+        CheckpointSummaryPayload,
+    )
 
 
-class CheckpointStore:
+class CheckpointStore(ICheckpointStore):
     """阶段 Checkpoint 存储器，用于在子阶段失败时实现秒级局部重试并节省 Token"""
 
     def __init__(self, db_path: Path):
@@ -64,7 +72,7 @@ class CheckpointStore:
         group_id: str,
         date_str: str,
         stage_name: str,
-        data: Any,
+        data: object,
         trace_id: str = "",
         ttl_seconds: int = 86400 * 30,
     ) -> None:
@@ -111,7 +119,7 @@ class CheckpointStore:
         date_str: str,
         stage_name: str,
         trace_id: str = "",
-    ) -> Any | None:
+    ) -> object | None:
         """读取有效的阶段产物快照。
 
         若指定 trace_id 则优先匹配该任务的专属快照，杜绝跨任务脏读；
@@ -174,7 +182,7 @@ class CheckpointStore:
 
     def get_checkpoints_by_group_date(
         self, group_id: str, date_str: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[CheckpointSummaryPayload]:
         """获取指定群在指定日期的所有有效 Checkpoint 快照摘要列表。
 
         Args:
@@ -182,7 +190,7 @@ class CheckpointStore:
             date_str: 日期字符串（YYYY-MM-DD）。
 
         Returns:
-            list[dict[str, Any]]: Checkpoint 摘要元数据列表。
+            list[CheckpointSummaryPayload]: Checkpoint 摘要元数据列表。
         """
         now = time.time()
         with self._get_connection() as conn:
@@ -257,7 +265,7 @@ class CheckpointStore:
         date_str: str | None = None,
         stage_name: str | None = None,
         trace_id: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[CheckpointSummaryPayload], int]:
         """多维条件分页查询有效 Checkpoint 列表。
 
         Args:
@@ -269,11 +277,11 @@ class CheckpointStore:
             trace_id: 可选 TraceID 筛选。
 
         Returns:
-            tuple[list[dict[str, Any]], int]: Checkpoint 列表与总数。
+            tuple[list[CheckpointSummaryPayload], int]: Checkpoint 列表与总数。
         """
         now = time.time()
         conditions = ["expire_at >= ?"]
-        params: list[Any] = [now]
+        params: list[object] = [now]
 
         if group_id:
             conditions.append("group_id = ?")
@@ -304,14 +312,14 @@ class CheckpointStore:
                 ORDER BY created_at DESC
                 LIMIT ? OFFSET ?
             """
-            rows = conn.execute(query_sql, params + [limit, offset]).fetchall()
-            items = [
+            rows = conn.execute(query_sql, [*params, limit, offset]).fetchall()
+            items: list[CheckpointSummaryPayload] = [
                 {
                     "checkpoint_id": row["checkpoint_id"],
                     "group_id": row["group_id"],
                     "date_str": row["date_str"],
                     "stage_name": row["stage_name"],
-                    "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
+                    "trace_id": row["trace_id"] or "",
                     "created_at": row["created_at"],
                     "created_at_formatted": time.strftime(
                         "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
@@ -330,7 +338,7 @@ class CheckpointStore:
         date_str: str,
         stage_name: str,
         trace_id: str = "",
-    ) -> dict[str, Any] | None:
+    ) -> CheckpointDetailPayload | None:
         """获取单个 Checkpoint 的元数据及反序列化后的产物 JSON。
 
         Args:
@@ -340,7 +348,7 @@ class CheckpointStore:
             trace_id: 可选任务 TraceID。
 
         Returns:
-            dict[str, Any] | None: 包含 metadata 和 data 的字典，不存在或过期返回 None。
+            CheckpointDetailPayload | None: 包含 metadata 和 data 的字典，不存在或过期返回 None。
         """
         now = time.time()
         with self._get_connection() as conn:
@@ -376,7 +384,7 @@ class CheckpointStore:
                 "group_id": row["group_id"],
                 "date_str": row["date_str"],
                 "stage_name": row["stage_name"],
-                "trace_id": row["trace_id"] if "trace_id" in row.keys() else "",
+                "trace_id": row["trace_id"] or "",
                 "created_at": row["created_at"],
                 "created_at_formatted": time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])

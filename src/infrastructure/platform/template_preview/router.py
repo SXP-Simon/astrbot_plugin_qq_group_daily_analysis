@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
     from astrbot.api.star import Context
 

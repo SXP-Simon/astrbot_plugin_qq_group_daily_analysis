@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-from astrbot.api.star import Star
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
 
 
 class TelegramGroupRegistry:
@@ -14,7 +18,10 @@ class TelegramGroupRegistry:
 
     _KV_KEY = "telegram_seen_groups_v1"
 
-    def __init__(self, plugin_instance: Star):
+    plugin: Star | None
+    _lock: asyncio.Lock
+
+    def __init__(self, plugin_instance: Star | None) -> None:
         self.plugin = plugin_instance
         self._lock = asyncio.Lock()
 
@@ -27,6 +34,8 @@ class TelegramGroupRegistry:
         event_message_id: str,
     ) -> None:
         """更新 Telegram 已见群/话题注册表（KV）。"""
+        if not self.plugin:
+            return
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             if not isinstance(registry, dict):
@@ -71,6 +80,8 @@ class TelegramGroupRegistry:
 
     async def get_all_group_ids(self, platform_id: str | None = None) -> list[str]:
         """读取 Telegram 已见群/话题列表。"""
+        if not self.plugin:
+            return []
         async with self._lock:
             registry = await self.plugin.get_kv_data(self._KV_KEY, {})
             if not isinstance(registry, dict):
@@ -85,18 +96,14 @@ class TelegramGroupRegistry:
                 platform_map = platforms.get(str(platform_id).strip(), {})
                 if isinstance(platform_map, dict):
                     groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
+                        str(gid).strip() for gid in platform_map if str(gid).strip()
                     )
             else:
                 for platform_map in platforms.values():
                     if not isinstance(platform_map, dict):
                         continue
                     groups.update(
-                        str(gid).strip()
-                        for gid in platform_map.keys()
-                        if str(gid).strip()
+                        str(gid).strip() for gid in platform_map if str(gid).strip()
                     )
 
             return sorted(groups)

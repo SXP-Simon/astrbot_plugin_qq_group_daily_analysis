@@ -1,11 +1,13 @@
 """安全模板渲染工具（String Template 兼容）"""
 
+from __future__ import annotations
+
 import re
 from string import Template
 
-from ...utils.logger import logger
+from .logger import logger
 
-# 统一默认 placeholder
+# 统一默认占位符映射
 PLACEHOLDERS = {
     # 分析类核心变量
     "messages_text": "${messages_text}",
@@ -21,42 +23,43 @@ PLACEHOLDERS = {
 
 
 def is_str_format_template(template: str) -> bool:
-    """判断模板是否为 str.format 风格。
+    """判断模板字符串是否为 str.format 风格。
 
-    只认为满足：
-    1) 不包含 String Template `${var}` 或 `$var`
-    2) 包含 str.format `{var}`（非 `{{...}}`）
+    Args:
+        template: 待检查的模板字符串。
+
+    Returns:
+        True 表示使用 str.format 语法，False 表示不是。
     """
     if not template:
         return False
 
-    # 1. 預先建立排除模式 (匹配 ${var} 或 $var)
-    # 使用 set 去重並組合
+    # 1. 预先建立排除模式 (匹配 ${var} 或 $var)
     dollar_patterns = [re.escape(v) for v in PLACEHOLDERS.values()] + [
-        rf"\${re.escape(k)}" for k in PLACEHOLDERS.keys()
+        rf"\${re.escape(k)}" for k in PLACEHOLDERS
     ]
     exclude_regex = "|".join(dollar_patterns)
 
-    # 如果包含任何 $ 相關的佔位符，則不視為 str.format 模板
+    # 如果包含任何 $ 相关的占位符，则不视为主流 str.format 模板
     if re.search(exclude_regex, template):
         return False
 
-    # 2. 檢查是否包含標準的 {key}，確保匹配單個花括號包裹的 Key
-    for key in PLACEHOLDERS.keys():
-        # (?<!\{)  前面不能有 {
-        # \{{key}\} 匹配 {key}
-        # (?!\})   後面不能有 }
-        # (?<!\$)  前面不能有 $
+    # 2. 检查是否包含标准的花括号占位符 {key}
+    for key in PLACEHOLDERS:
         pattern = rf"(?<![\{{\$])\{{{key}\}}(?!\}})"
         if re.search(pattern, template):
             return True
     return False
 
 
-def upgrade_str_format_template(template: str) -> tuple[str, bool]:
-    """如果模板是 str.format 风格，则自动升级为 string.Template。
+def upgrade_str_format_template(template: str | None) -> tuple[str, bool]:
+    """如果模板是 str.format 风格，则自动升级为 string.Template 语法。
 
-    返回 (升级后的模板, 是否升级)
+    Args:
+        template: 待转换的模板字符串。
+
+    Returns:
+        元组 (升级后的模板字符串, 是否发生了升级)。
     """
     if template is None:
         return "", False
@@ -74,21 +77,27 @@ def upgrade_str_format_template(template: str) -> tuple[str, bool]:
         safe_template,
     )
 
-    # 将双括号回退为单括号（str.format 里表示字面量大括号）
+    # 将双大括号回退为单括号（str.format 里表示字面量大括号）
     safe_template = safe_template.replace("{{", "{").replace("}}", "}")
 
     return safe_template, True
 
 
-def render_template(template: str, strict: bool = False, **kwargs) -> str:
-    """渲染模板（String Template）。
+def render_template(
+    template: str | None, strict: bool = False, **kwargs: object
+) -> str:
+    """安全渲染 string.Template 模板。
 
     Args:
-        template: 模板字符串
-        strict: 是否使用严格模式（变量缺失则抛出异常）
-        **kwargs: 渲染变量
+        template: 模板字符串。
+        strict: 是否使用严格模式（缺少变量时直接抛出异常）。
+        **kwargs: 传入的模板替换变量。
 
-    由于插件启动时已完成 str.format 兼容升级，运行时直接按 string.Template 渲染。
+    Returns:
+        渲染后的文本字符串。
+
+    Raises:
+        KeyError: 当 strict 为 True 且缺失必要占位符变量时抛出。
     """
     if template is None:
         return ""

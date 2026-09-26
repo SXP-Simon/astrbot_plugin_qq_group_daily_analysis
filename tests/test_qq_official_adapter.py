@@ -267,8 +267,16 @@ def test_qq_official_fetch_messages_clamps_stale_since_ts_to_days():
             message_history_manager=FakeHistoryManager(
                 {
                     1: [
-                        make_record(101, "MSG-101", "A_OPENID", msg_within, "窗口内消息"),
-                        make_record(102, "MSG-102", "B_OPENID", msg_out_of_window, "窗口外消息 (2天前)"),
+                        make_record(
+                            101, "MSG-101", "A_OPENID", msg_within, "窗口内消息"
+                        ),
+                        make_record(
+                            102,
+                            "MSG-102",
+                            "B_OPENID",
+                            msg_out_of_window,
+                            "窗口外消息 (2天前)",
+                        ),
                     ]
                 }
             )
@@ -276,10 +284,11 @@ def test_qq_official_fetch_messages_clamps_stale_since_ts_to_days():
     )
 
     messages = asyncio.run(
-        adapter.fetch_messages("GROUP_OPENID", days=1, max_count=10, since_ts=stale_since_ts)
+        adapter.fetch_messages(
+            "GROUP_OPENID", days=1, max_count=10, since_ts=stale_since_ts
+        )
     )
 
     assert len(messages) == 1
     assert messages[0].message_id == "MSG-101"
     assert messages[0].text_content == "窗口内消息"
-

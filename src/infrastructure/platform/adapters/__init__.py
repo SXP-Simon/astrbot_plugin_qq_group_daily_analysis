@@ -11,12 +11,14 @@ if TYPE_CHECKING:
     from .onebot_adapter import OneBotAdapter
     from .qq_official_adapter import QQOfficialAdapter
     from .telegram_adapter import TelegramAdapter
+    from .telegram_message_converter import TelegramMessageConverter
 
 __all__ = [
     "DiscordAdapter",
     "OneBotAdapter",
     "QQOfficialAdapter",
     "TelegramAdapter",
+    "TelegramMessageConverter",
 ]
 
 _ADAPTER_MODULES = {
@@ -24,6 +26,7 @@ _ADAPTER_MODULES = {
     "OneBotAdapter": ".onebot_adapter",
     "QQOfficialAdapter": ".qq_official_adapter",
     "TelegramAdapter": ".telegram_adapter",
+    "TelegramMessageConverter": ".telegram_message_converter",
 }
 
 

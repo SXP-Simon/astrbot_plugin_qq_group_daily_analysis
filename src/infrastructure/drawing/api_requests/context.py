@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class DrawingRequestHooks(Protocol):
@@ -17,15 +19,17 @@ class DrawingRequestHooks(Protocol):
 
     def _build_target_url(self, raw_url: str, protocol: str) -> str: ...
 
-    def _get_provider_value(self, name: str, provider: dict) -> Any: ...
+    def _get_provider_value(self, name: str, provider: dict[str, object]) -> object: ...
 
-    def _get_request_proxy(self, provider: dict | None = None) -> str | None: ...
+    def _get_request_proxy(
+        self, provider: dict[str, object] | None = None
+    ) -> str | None: ...
 
     def _resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str: ...
 
     def _sanitize_url(self, url: str) -> str: ...
 
-    def _summarize_response(self, data: Any) -> str: ...
+    def _summarize_response(self, data: object) -> str: ...
 
     def _decode_base64(self, encoded: str) -> bytes: ...
 
@@ -40,15 +44,17 @@ class DrawingRequestContext:
 
     hooks: DrawingRequestHooks
     request_json: Callable[..., Awaitable[bytes | None]]
-    extract_image: Callable[[Any, str | None], Awaitable[bytes | None]]
+    extract_image: Callable[[object, str | None], Awaitable[bytes | None]]
 
     def build_target_url(self, raw_url: str, protocol: str) -> str:
         return self.hooks._build_target_url(raw_url, protocol)
 
-    def get_provider_value(self, name: str, provider: dict) -> Any:
+    def get_provider_value(self, name: str, provider: dict[str, object]) -> object:
         return self.hooks._get_provider_value(name, provider)
 
-    def get_request_proxy(self, provider: dict | None = None) -> str | None:
+    def get_request_proxy(
+        self, provider: dict[str, object] | None = None
+    ) -> str | None:
         return self.hooks._get_request_proxy(provider)
 
     def resolve_size(self, size_or_ratio: str, aspect_ratio: str) -> str:
@@ -66,7 +72,7 @@ class DrawingRequestContext:
     def sanitize_url(self, url: str) -> str:
         return self.hooks._sanitize_url(url)
 
-    def summarize_response(self, data: Any) -> str:
+    def summarize_response(self, data: object) -> str:
         return self.hooks._summarize_response(data)
 
     def decode_base64(self, encoded: str) -> bytes:

@@ -1,9 +1,16 @@
-import re
+from __future__ import annotations
 
-from ....domain.models.data_models import TokenUsage
+import re
+from typing import TYPE_CHECKING
+
 from ....utils.logger import logger
-from ..utils.structured_output_schema import JSONObject
 from .base_analyzer import BaseAnalyzer
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from ....domain.value_objects import SummaryTopic, TokenUsage
+    from ..utils.structured_output_schema import JSONObject
 
 DEFAULT_COMIC_STORYBOARD_PROMPT = (
     "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n"
@@ -31,7 +38,9 @@ DEFAULT_COMIC_STORYBOARD_PROMPT = (
 )
 
 
-class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
+class ComicStoryboardAnalyzer(
+    BaseAnalyzer[dict, "Sequence[SummaryTopic] | Sequence[dict[str, object]]"]
+):
     """
     分镜及绘画提示词分析器
     直接从聊天记录中提取金句并生成绘画提示词（含文字渲染要求）
@@ -47,43 +56,58 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
     def get_max_count(self) -> int:
         return self.config_manager.get_max_topics()
 
-    def build_prompt(self, data: list[dict], prompt_template: str | None = None) -> str:
-        prompt_template = (
+    def build_prompt(
+        self,
+        data: Sequence[SummaryTopic] | Sequence[dict[str, object]],
+        prompt_template: str | None = None,
+    ) -> str:
+        template_str = (
             prompt_template
             or self.config_manager.get_comic_storyboard_prompt()
             or DEFAULT_COMIC_STORYBOARD_PROMPT
         )
 
-        valid_topics = [m for m in data if m.get("topic", "")]
+        valid_topics: list[tuple[str, str]] = []
+        for item in data:
+            if isinstance(item, dict):
+                t = str(item.get("topic", "")).strip()
+                d = str(item.get("detail", "")).strip()
+            else:
+                t = str(getattr(item, "topic", "")).strip()
+                d = str(getattr(item, "detail", "")).strip()
+            if t:
+                valid_topics.append((t, d))
+
         topic_count = len(valid_topics) if valid_topics else self.get_max_count()
         chat_content = "\n".join(
             [
-                f"{i + 1}. 话题: {m.get('topic', '')}\n   详情: {m.get('detail', '')}"
-                for i, m in enumerate(valid_topics)
+                f"{i + 1}. 话题: {t}\n   详情: {d}"
+                for i, (t, d) in enumerate(valid_topics)
             ]
         )
 
         try:
             from string import Template
 
-            if "${" in prompt_template or "$" in prompt_template:
-                return Template(prompt_template).safe_substitute(
+            if "${" in template_str or "$" in template_str:
+                return Template(template_str).safe_substitute(
                     chat_content=chat_content,
                     topic_count=topic_count,
                     max_count=topic_count,
                 )
-            else:
-                return prompt_template.format(
-                    chat_content=chat_content,
-                    topic_count=topic_count,
-                    max_count=topic_count,
-                )
+            return template_str.format(
+                chat_content=chat_content,
+                topic_count=topic_count,
+                max_count=topic_count,
+            )
         except Exception as e:
             logger.warning(f"漫画分镜提示词格式化失败，使用默认格式: {e}")
             return f"请从以下群聊话题中提取并生成包含 scene 的 JSON：\n{chat_content}"
 
     def build_prompt_with_override(
-        self, data: list[dict], prompt_override: str | None
+        self,
+        data: Sequence[SummaryTopic] | Sequence[dict[str, object]],
+        prompt_override: str | None,
     ) -> str:
         """使用角色专属模板构建漫画分镜提示词。"""
         return self.build_prompt(data, prompt_override)
@@ -220,7 +244,7 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
 
     async def analyze_storyboards(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         umo: str | None = None,
         persona_id: str | None = None,
         prompt_template: str | None = None,
@@ -243,6 +267,4 @@ class ComicStoryboardAnalyzer(BaseAnalyzer[dict, list[dict]]):
             prompt_override=prompt_template,
         )
 
-        if isinstance(storyboards, list):
-            return [item for item in storyboards if isinstance(item, dict)], usage
-        return [], usage
+        return storyboards, usage

@@ -13,13 +13,19 @@ KV 键设计：
   值: {"timestamp": 1234567890, "message_ids": ["..."]}
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from ...domain.entities.incremental_state import IncrementalBatch
+from ...domain.repositories.persistence_repository import IIncrementalStore
 from ...utils.logger import logger
 
+if TYPE_CHECKING:
+    from astrbot.api.star import Star
 
-class IncrementalStore:
+
+class IncrementalStore(IIncrementalStore):
     """
     增量分析批次持久化仓储
 
@@ -37,7 +43,9 @@ class IncrementalStore:
     LAST_TS_PREFIX = "incr_last_ts"
     GROUPS_REGISTRY_KEY = "incr_tracked_groups"
 
-    def __init__(self, star_instance: Any):
+    plugin: Star
+
+    def __init__(self, star_instance: Star) -> None:
         """
         初始化批次持久化仓储。
 
@@ -106,12 +114,9 @@ class IncrementalStore:
         """
         key = self._index_key(group_id)
         try:
-            data = await self.plugin.get_kv_data(key, None)
-            if data is None:
-                return []
+            data = await self.plugin.get_kv_data(key, default=[])
             if isinstance(data, list):
-                return data
-            logger.warning(f"批次索引数据格式异常 (Key: {key}): {type(data)}")
+                return [item for item in data if isinstance(item, dict)]
             return []
         except Exception as e:
             logger.error(f"读取批次索引失败 (Key: {key}): {e}", exc_info=True)
@@ -326,8 +331,8 @@ class IncrementalStore:
         """
         batch_key = self._batch_key(group_id, batch_id)
         try:
-            data = await self.plugin.get_kv_data(batch_key, None)
-            if data is not None and isinstance(data, dict):
+            data = await self.plugin.get_kv_data(batch_key, default={})
+            if isinstance(data, dict) and data:
                 return IncrementalBatch.from_dict(data)
             return None
         except Exception as e:
@@ -487,53 +492,36 @@ class IncrementalStore:
         index.sort(key=lambda x: x.get("timestamp", 0))
         return index
 
-    async def get_all_batches_with_details(self, group_id: str) -> list[dict[str, Any]]:
+    async def get_all_batches_with_details(
+        self, group_id: str
+    ) -> list[dict[str, object]]:
         """获取指定群所有批次的概览详情列表（包含话题标签与基本指标）。
 
         Args:
             group_id: 群组 ID。
 
         Returns:
-            list[dict[str, Any]]: 批次卡片展示用字典列表。
+            list[dict[str, object]]: 批次卡片展示用字典列表。
         """
         index = await self._get_index(group_id)
         index.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
 
-        results: list[dict[str, Any]] = []
+        results: list[dict[str, object]] = []
         for entry in index:
             batch_id = entry.get("batch_id")
             if not batch_id:
                 continue
             batch = await self.get_batch_detail(group_id, batch_id)
             if batch:
-                topics_summary = []
-                for t in batch.topics:
-                    if isinstance(t, dict):
-                        topics_summary.append(
-                            {
-                                "topic": t.get("topic", ""),
-                                "contributors": t.get("contributors", []),
-                            }
-                        )
-                    else:
-                        topics_summary.append(
-                            {
-                                "topic": getattr(t, "topic", ""),
-                                "contributors": getattr(t, "contributors", []),
-                            }
-                        )
-
-                token_dict = (
-                    batch.token_usage
-                    if isinstance(batch.token_usage, dict)
-                    else {
-                        "prompt_tokens": getattr(batch.token_usage, "prompt_tokens", 0),
-                        "completion_tokens": getattr(
-                            batch.token_usage, "completion_tokens", 0
-                        ),
-                        "total_tokens": getattr(batch.token_usage, "total_tokens", 0),
+                topics_summary = [
+                    {
+                        "topic": t.get("topic", ""),
+                        "contributors": t.get("contributors", []),
                     }
-                )
+                    for t in batch.topics
+                ]
+
+                token_dict = batch.token_usage
 
                 participants_cnt = (
                     len(batch.participant_ids)

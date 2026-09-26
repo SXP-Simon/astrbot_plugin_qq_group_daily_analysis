@@ -8,10 +8,13 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from ..persistence.trace_sqlite_store import TraceSQLiteStore
 
 
 @dataclass
@@ -24,9 +27,9 @@ class ActiveTaskInfo:
     current_stage: str
     started_at: float = field(default_factory=time.time)
     last_heartbeat: float = field(default_factory=time.time)
-    asyncio_task: asyncio.Task[Any] | None = None
+    asyncio_task: asyncio.Task[object] | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "task_id": self.task_id,
             "group_id": self.group_id,
@@ -43,12 +46,15 @@ class ActiveTaskInfo:
 class ActiveTaskManager:
     """活跃任务管理器与孤儿回收器"""
 
-    def __init__(self, trace_store: Any | None = None):
+    trace_store: TraceSQLiteStore | None
+
+    def __init__(self, trace_store: TraceSQLiteStore | None = None) -> None:
         self.trace_store = trace_store
         self._tasks: dict[str, ActiveTaskInfo] = {}
         self._lock = asyncio.Lock()
         self._reaper_task: asyncio.Task[None] | None = None
         self._subscribers: set[asyncio.Queue[str]] = set()
+        self._bg_tasks: set[asyncio.Task[object]] = set()
 
     async def register_task(
         self,
@@ -57,13 +63,13 @@ class ActiveTaskManager:
         group_name: str = "",
         platform: str = "",
         trigger_type: str = "manual",
-        current_stage: Any = AnalysisStage.FETCH_MESSAGES,
-        asyncio_task: asyncio.Task[Any] | None = None,
+        current_stage: str | AnalysisStage = AnalysisStage.FETCH_MESSAGES,
+        asyncio_task: asyncio.Task[object] | None = None,
     ) -> None:
         """注册新运行中的任务"""
         stage_str = (
             current_stage.value
-            if hasattr(current_stage, "value")
+            if isinstance(current_stage, AnalysisStage)
             else str(current_stage)
         )
         async with self._lock:
@@ -79,10 +85,12 @@ class ActiveTaskManager:
             self._tasks[task_id] = info
         await self._broadcast_event({"event": "task_started", "data": info.to_dict()})
 
-    async def update_stage(self, task_id: str, stage_name: Any) -> None:
+    async def update_stage(self, task_id: str, stage_name: str | AnalysisStage) -> None:
         """更新当前活跃任务的阶段名称并更新心跳"""
         stage_str = (
-            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+            stage_name.value
+            if isinstance(stage_name, AnalysisStage)
+            else str(stage_name)
         )
         async with self._lock:
             if task_id in self._tasks:
@@ -99,10 +107,12 @@ class ActiveTaskManager:
 
     update_task_stage = update_stage
 
-    def update_stage_sync(self, task_id: str, stage_name: Any) -> None:
+    def update_stage_sync(self, task_id: str, stage_name: str | AnalysisStage) -> None:
         """同步更新活跃任务阶段（供 Span 上下文即时调用）"""
         stage_str = (
-            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+            stage_name.value
+            if isinstance(stage_name, AnalysisStage)
+            else str(stage_name)
         )
         if task_id in self._tasks:
             self._tasks[task_id].current_stage = stage_str
@@ -110,11 +120,13 @@ class ActiveTaskManager:
             info = self._tasks[task_id]
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(
+                task = loop.create_task(
                     self._broadcast_event(
                         {"event": "task_progress", "data": info.to_dict()}
                     )
                 )
+                self._bg_tasks.add(task)
+                task.add_done_callback(self._bg_tasks.discard)
             except RuntimeError:
                 pass
 
@@ -174,7 +186,7 @@ class ActiveTaskManager:
         )
         return True
 
-    def get_active_tasks(self) -> list[dict[str, Any]]:
+    def get_active_tasks(self) -> list[dict[str, object]]:
         """获取所有当前正在运行的任务快照"""
         return [t.to_dict() for t in self._tasks.values()]
 
@@ -190,7 +202,7 @@ class ActiveTaskManager:
         """取消订阅"""
         self._subscribers.discard(q)
 
-    async def _broadcast_event(self, event_data: dict[str, Any]) -> None:
+    async def _broadcast_event(self, event_data: dict[str, object]) -> None:
         """向所有连接的 WebUI 客户端广播事件"""
         import json
 
@@ -200,6 +212,31 @@ class ActiveTaskManager:
                 q.put_nowait(raw)
             except Exception:
                 self._subscribers.discard(q)
+
+    def publish_log_sync(
+        self, trace_id: str, stage: str, message: str, level: str = "INFO"
+    ) -> None:
+        """同步向 SSE 推送单条日志事件"""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                self._broadcast_event(
+                    {
+                        "event": "log_emitted",
+                        "data": {
+                            "trace_id": trace_id,
+                            "stage": stage,
+                            "message": message,
+                            "level": level,
+                            "time": time.time(),
+                        },
+                    }
+                )
+            )
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
+        except RuntimeError:
+            pass
 
     # ── Task Reaper 守护线程 ──
 

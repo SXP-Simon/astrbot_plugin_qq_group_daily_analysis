@@ -41,7 +41,7 @@
 - 插件历史摘要存储：`src/infrastructure/persistence/history_manager.py`
 - 插件消息入库：`src/application/services/message_processing_service.py`
 - 插件配置管理：`src/infrastructure/config/config_manager.py`
-- 插件最终报告生成：`src/domain/services/report_generator.py`
+- 插件最终报告生成：`src/infrastructure/reporting/generators.py`
 - AstrBot 插件 KV：`astrbot/core/utils/plugin_kv_store.py`
 - AstrBot 路径工具：`astrbot/core/utils/astrbot_path.py`
 - AstrBot 共享偏好：`astrbot/core/utils/shared_preferences.py`

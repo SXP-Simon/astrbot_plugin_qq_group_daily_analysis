@@ -1,16 +1,20 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def post_json_for_image(
     context: DrawingRequestContext,
     target_url: str,
     headers: dict[str, str],
-    payload: dict[str, Any],
+    payload: dict[str, object],
     timeout: int | float,
     provider_name: str,
     provider: dict,

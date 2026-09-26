@@ -17,7 +17,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
 
 
 @dataclass
@@ -60,7 +59,7 @@ class IncrementalBatch:
     user_stats: dict[str, dict] = field(default_factory=dict)
 
     # 表情统计
-    emoji_stats: dict[str, Any] = field(default_factory=dict)
+    emoji_stats: dict[str, object] = field(default_factory=dict)
 
     # LLM 分析结果
     topics: list[dict] = field(default_factory=list)
@@ -76,7 +75,7 @@ class IncrementalBatch:
     )
 
     # 增量追踪
-    chat_quality_review: dict[str, Any] | None = None
+    chat_quality_review: dict[str, object] | None = None
     last_message_timestamp: int = 0
     participant_ids: list[str] = field(default_factory=list)
 
@@ -176,7 +175,7 @@ class IncrementalState:
     # 合并后的 LLM 分析结果
     topics: list[dict] = field(default_factory=list)
     golden_quotes: list[dict] = field(default_factory=list)
-    chat_quality_review: dict[str, Any] | None = None
+    chat_quality_review: dict[str, object] | None = None
     all_quality_reviews: list[dict] = field(
         default_factory=list
     )  # 存储所有批次的质量锐评，用于最终报告时的汇总分析
@@ -189,7 +188,7 @@ class IncrementalState:
     user_activities: dict[str, dict] = field(default_factory=dict)
 
     # 表情统计
-    emoji_counts: dict[str, Any] = field(default_factory=dict)
+    emoji_counts: dict[str, object] = field(default_factory=dict)
 
     # 汇总统计
     total_message_count: int = 0
