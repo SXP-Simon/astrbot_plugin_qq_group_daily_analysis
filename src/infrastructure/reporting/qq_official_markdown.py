@@ -6,14 +6,13 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ...domain.value_objects import ActivityVisualization, GroupStatistics
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     import asyncio
     from collections.abc import Awaitable, Callable, Sequence
 
-    from ...domain.value_objects import AnalysisResultPayload
+    from ...domain.value_objects import AnalysisResultPayload, GroupStatistics
     from ..config.config_manager import ConfigManager
     from .templates import HTMLTemplates
 
@@ -204,7 +203,7 @@ class QQOfficialMarkdownReportGenerator:
         return "\n".join(lines).strip()
 
     @staticmethod
-    def format_metric(value: object) -> str:
+    def format_metric(value: int | float | str | bytes | bytearray | None) -> str:
         try:
             if isinstance(value, (int, float, str, bytes, bytearray)):
                 number = max(0, int(value))
@@ -221,7 +220,7 @@ class QQOfficialMarkdownReportGenerator:
         return f"{number:,}"
 
     @staticmethod
-    def format_peak_period(value: object) -> str:
+    def format_peak_period(value: str | None) -> str:
         text = str(value or "").strip()
         match = re.search(r"(\d{1,2}):\d{2}\s*[-~—至]\s*(\d{1,2}):\d{2}", text)
         if match:
@@ -229,7 +228,9 @@ class QQOfficialMarkdownReportGenerator:
         return text or "—"
 
     @classmethod
-    def build_activity_chart(cls, stats: object, bar_width: int = 12) -> list[str]:
+    def build_activity_chart(
+        cls, stats: GroupStatistics | None, bar_width: int = 12
+    ) -> list[str]:
         hourly_counts = cls.get_hourly_counts(stats)
         max_count = max(hourly_counts, default=0)
         if max_count <= 0:
@@ -250,19 +251,13 @@ class QQOfficialMarkdownReportGenerator:
         return lines
 
     @staticmethod
-    def get_hourly_counts(stats: GroupStatistics | object) -> list[int]:
-        activity_viz = (
-            stats.activity_visualization
-            if isinstance(stats, GroupStatistics)
-            else getattr(stats, "activity_visualization", None)
-        )
+    def get_hourly_counts(stats: GroupStatistics | None) -> list[int]:
+        if stats is None:
+            return [0] * 24
+        activity_viz = getattr(stats, "activity_visualization", None)
         if activity_viz is None:
             return [0] * 24
-        raw_activity = (
-            activity_viz.hourly_activity
-            if isinstance(activity_viz, ActivityVisualization)
-            else getattr(activity_viz, "hourly_activity", None)
-        ) or {}
+        raw_activity = getattr(activity_viz, "hourly_activity", None)
         if not isinstance(raw_activity, dict):
             return [0] * 24
 
@@ -270,19 +265,19 @@ class QQOfficialMarkdownReportGenerator:
         for hour in range(24):
             raw_count = raw_activity.get(hour, raw_activity.get(str(hour), 0))
             try:
-                count = max(0, int(raw_count or 0))
+                count = max(0, int(str(raw_count or 0)))
             except (TypeError, ValueError):
                 count = 0
             hourly_counts.append(count)
         return hourly_counts
 
     @staticmethod
-    def mention(user_id: object) -> str:
+    def mention(user_id: str | int | None) -> str:
         normalized = str(user_id or "").strip().strip("[]")
         return f"<@{normalized}>" if normalized else ""
 
     @classmethod
-    def mentions(cls, user_ids: Sequence[object]) -> str:
+    def mentions(cls, user_ids: Sequence[str | int | None]) -> str:
         unique_ids = list(
             dict.fromkeys(
                 str(user_id or "").strip().strip("[]")
@@ -294,7 +289,7 @@ class QQOfficialMarkdownReportGenerator:
 
     @classmethod
     def render_identity_text(
-        cls, text: object, analysis_result: AnalysisResultPayload
+        cls, text: str, analysis_result: AnalysisResultPayload
     ) -> str:
         """Replace known IDs and display names with QQ mention syntax."""
         source = str(text or "")
