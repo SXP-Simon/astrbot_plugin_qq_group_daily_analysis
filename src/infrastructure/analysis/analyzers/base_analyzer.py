@@ -3,11 +3,13 @@
 定义通用分析流程和接口
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sized
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
-from ....domain.models.data_models import TokenUsage
+from ....domain.value_objects import TokenUsage
 from ....utils.logger import logger
 from ..utils.json_utils import parse_json_response
 from ..utils.llm_utils import (
@@ -17,6 +19,11 @@ from ..utils.llm_utils import (
     get_provider_id_with_fallback,
 )
 from ..utils.structured_output_schema import JSONObject, build_response_format
+
+if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
+    from ...config.config_manager import ConfigManager
 
 TDataObject = TypeVar("TDataObject")
 TInputData = TypeVar("TInputData")
@@ -28,7 +35,14 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
     定义所有分析器的通用接口 and 流程
     """
 
-    def __init__(self, context, config_manager):
+    context: Context
+    config_manager: ConfigManager
+
+    def __init__(
+        self,
+        context: Context,
+        config_manager: ConfigManager,
+    ) -> None:
         """
         初始化基础分析器
 
@@ -59,7 +73,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             数据类型字符串
         """
-        pass
 
     @abstractmethod
     def get_max_count(self) -> int:
@@ -69,7 +82,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             最大数量
         """
-        pass
 
     @abstractmethod
     def build_prompt(self, data: TInputData) -> str:
@@ -82,7 +94,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             提示词字符串
         """
-        pass
 
     def build_prompt_with_override(
         self, data: TInputData, prompt_override: str | None
@@ -111,7 +122,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             提取到的数据列表
         """
-        pass
 
     @abstractmethod
     def create_data_objects(self, data_list: list[dict]) -> list[TDataObject]:
@@ -124,7 +134,6 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
         Returns:
             数据对象列表
         """
-        pass
 
     def get_response_schema_name(self) -> str:
         return f"{self.get_data_type()}_output"
@@ -389,11 +398,12 @@ class BaseAnalyzer(ABC, Generic[TDataObject, TInputData]):
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                prompts_map[self.get_data_type()] = {
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "provider_id": resolved_provider_id or "default",
-                }
+                if isinstance(prompts_map, dict):
+                    prompts_map[self.get_data_type()] = {
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "provider_id": resolved_provider_id or "default",
+                    }
 
             response = await call_provider_with_retry(
                 self.context,

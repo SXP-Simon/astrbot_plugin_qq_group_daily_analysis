@@ -1,12 +1,11 @@
+from __future__ import annotations
+
 import mimetypes
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from astrbot.api.star import Context
-
-from ...infrastructure.analysis.llm_analyzer import LLMAnalyzer
-from ...infrastructure.config.config_manager import ConfigManager
+from ...domain.value_objects import ComicStoryboard
 from ...infrastructure.drawing.drawing_client import (
     DrawingClient,
     ImageDownloadFailedError,
@@ -14,6 +13,15 @@ from ...infrastructure.drawing.drawing_client import (
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from astrbot.api.star import Context
+
+    from ...domain.repositories.analysis_repository import IAnalysisProvider
+    from ...domain.value_objects import SummaryTopic
+    from ...infrastructure.config.config_manager import ConfigManager
 
 
 class ComicApplicationService:
@@ -24,14 +32,20 @@ class ComicApplicationService:
     3. 返回图片数据供外部上传。
     """
 
+    llm_analyzer: IAnalysisProvider
+    drawing_client: DrawingClient
+    config_manager: ConfigManager
+    plugin_data_dir: Path
+    context: Context | None
+
     def __init__(
         self,
-        llm_analyzer: LLMAnalyzer,
+        llm_analyzer: IAnalysisProvider,
         drawing_client: DrawingClient,
         config_manager: ConfigManager,
         plugin_data_dir: Path,
         context: Context | None = None,
-    ):
+    ) -> None:
         self.llm_analyzer = llm_analyzer
         self.drawing_client = drawing_client
         self.config_manager = config_manager
@@ -40,7 +54,7 @@ class ComicApplicationService:
 
     async def generate_comic(
         self,
-        topics: list[dict],
+        topics: Sequence[SummaryTopic] | Sequence[dict[str, object]],
         group_id: str,
         umo: str | None = None,
     ) -> tuple[bytes | None, str | None]:
@@ -81,20 +95,29 @@ class ComicApplicationService:
                 persona_id=persona_id or None,
                 prompt_template=prompt_template or None,
             )
-            if sb_rec and isinstance(sb_rec, dict):
-                sb_prompts: dict[str, Any] = {}
-                if trace and trace.metadata.get("llm_prompts"):
-                    for k, p in trace.metadata["llm_prompts"].items():
-                        if "comic" in k or k == "comic_storyboards":
-                            sb_prompts[k] = p
+            if sb_rec:
+                sb_prompts: dict[str, object] = {}
+                llm_prompts = trace.metadata.get("llm_prompts") if trace else None
+                if isinstance(llm_prompts, dict):
+                    for k, p in llm_prompts.items():
+                        if "comic" in str(k) or str(k) == "comic_storyboards":
+                            sb_prompts[str(k)] = p
                 if not sb_prompts and storyboards:
+                    first_sb = storyboards[0] if storyboards else None
+                    first_scene = (
+                        (
+                            first_sb.scene
+                            if isinstance(first_sb, ComicStoryboard)
+                            else first_sb.get("scene", "")
+                        )
+                        if first_sb
+                        else ""
+                    )
                     sb_prompts["comic_storyboards"] = {
                         "prompt": prompt_template
                         or "自动从群聊话题中提取漫画多格分镜与生图提示词",
                         "system_prompt": f"漫画分镜师 | 人格: {persona_id or character_name}",
-                        "completion": storyboards[0].get("scene", "")
-                        if storyboards
-                        else "",
+                        "completion": first_scene,
                         "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
                         "completion_tokens": getattr(
                             storyboard_usage, "completion_tokens", 0
@@ -126,7 +149,12 @@ class ComicApplicationService:
         logger.info("[Comic] 成功提取到全景分镜提示词，开始调用绘画 API...")
 
         # 2. 直接生成一张图片
-        scene_prompt = storyboards[0].get("scene", "")
+        first_sb = storyboards[0]
+        scene_prompt = (
+            first_sb.scene
+            if isinstance(first_sb, ComicStoryboard)
+            else first_sb.get("scene", "")
+        )
         if not scene_prompt:
             logger.error("[Comic] 提取到的场景提示词为空，取消漫画生成。")
             return None, None
@@ -165,7 +193,7 @@ class ComicApplicationService:
                     logger.info(
                         f"[Comic] 漫画生成成功（{backend} 后端），大小: {len(external_comic_bytes)} bytes"
                     )
-                    if draw_rec and isinstance(draw_rec, dict):
+                    if draw_rec:
                         draw_rec.setdefault("payload", {}).update(
                             {
                                 "backend": backend,
@@ -192,7 +220,7 @@ class ComicApplicationService:
                     logger.warning(
                         f"[Comic] {backend} 后端未产出结果，且已禁用回退内置后端，取消漫画生成。"
                     )
-                    if draw_rec and isinstance(draw_rec, dict):
+                    if draw_rec:
                         draw_rec.setdefault("payload", {}).update(
                             {
                                 "backend": backend,
@@ -208,7 +236,7 @@ class ComicApplicationService:
                 logger.warning(
                     "[Comic] 未配置绘图供应商（drawing_provider_overrides），取消漫画生成。"
                 )
-                if draw_rec and isinstance(draw_rec, dict):
+                if draw_rec:
                     draw_rec.setdefault("payload", {}).update(
                         {
                             "backend": "builtin",
@@ -231,7 +259,7 @@ class ComicApplicationService:
                 logger.warning(
                     f"[Comic] 图片下载失败，保留 fallback URL: {exc.fallback_url}"
                 )
-                if draw_rec and isinstance(draw_rec, dict):
+                if draw_rec:
                     draw_rec.setdefault("payload", {}).update(
                         {
                             "backend": "builtin",
@@ -276,7 +304,7 @@ class ComicApplicationService:
                         logger.warning(
                             f"[Comic] 重写 Prompt 后图片下载仍失败，保留 fallback URL: {exc.fallback_url}"
                         )
-                        if draw_rec and isinstance(draw_rec, dict):
+                        if draw_rec:
                             draw_rec.setdefault("payload", {}).update(
                                 {
                                     "backend": "builtin",
@@ -293,7 +321,7 @@ class ComicApplicationService:
                         )
                         final_comic_bytes = None
 
-            if draw_rec and isinstance(draw_rec, dict):
+            if draw_rec:
                 draw_prompts = {
                     "comic_drawing": {
                         "prompt": scene_prompt,
@@ -448,7 +476,7 @@ class ComicApplicationService:
                     "[Comic] 参考图无法解析为「大香蕉」图片资源，将不带参考图生成。"
                 )
 
-        params: dict[str, Any] = {
+        params: dict[str, object] = {
             "prompt": scene_prompt,
             "capability": "image_generation",
             "sub_brain": False,
@@ -483,7 +511,7 @@ class ComicApplicationService:
         return image_bytes
 
     @staticmethod
-    def _import_big_banana_image_resource(plugin: Any):
+    def _import_big_banana_image_resource(plugin: object) -> type | None:
         """导入「大香蕉」插件的 ImageResource 类型。
 
         AstrBot 以 ``data.plugins.<插件名>.main`` 形式加载插件，模块名并非
@@ -525,7 +553,7 @@ class ComicApplicationService:
         """
         import base64
 
-        if not image_ref or not isinstance(image_ref, str):
+        if not image_ref:
             return None
 
         image_ref = image_ref.strip()

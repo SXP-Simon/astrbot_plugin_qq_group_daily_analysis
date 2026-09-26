@@ -12,10 +12,13 @@
 - IncrementalState → list[GoldenQuote]
 """
 
+from __future__ import annotations
+
 import time
 
-from ...domain.entities.incremental_state import IncrementalBatch, IncrementalState
-from ...domain.models.data_models import (
+from ...utils.logger import logger
+from ..entities.incremental_state import IncrementalBatch, IncrementalState
+from ..value_objects import (
     ActivityVisualization,
     EmojiStatistics,
     GoldenQuote,
@@ -25,7 +28,6 @@ from ...domain.models.data_models import (
     SummaryTopic,
     TokenUsage,
 )
-from ...utils.logger import logger
 
 
 class IncrementalMergeService:
@@ -139,11 +141,7 @@ class IncrementalMergeService:
                         current_val = {}
 
                     for sub_key, sub_count in count.items():
-                        # 确保 current_val 是字典且 sub_count 是数字
-                        if isinstance(current_val, dict):
-                            current_val[sub_key] = (
-                                current_val.get(sub_key, 0) + sub_count
-                            )
+                        current_val[sub_key] = current_val.get(sub_key, 0) + sub_count
 
                     state.emoji_counts[emoji_key] = current_val
                 else:
@@ -153,7 +151,9 @@ class IncrementalMergeService:
                         # 此时保留字典，忽略数字或记录错误，这里选择保留字典
                         continue
 
-                    state.emoji_counts[emoji_key] = current_val + count
+                    current_int = current_val if isinstance(current_val, int) else 0
+                    count_int = count if isinstance(count, int) else 0
+                    state.emoji_counts[emoji_key] = current_int + count_int
 
             # 合并话题（去重）
             for topic in batch.topics:
@@ -242,25 +242,33 @@ class IncrementalMergeService:
         # 获取最活跃时段描述
         most_active_period = state.get_most_active_period()
 
-        # 转换聊天质量锐评 (如果有)
+        # Convert chat quality review if present
         chat_quality_review = None
         if state.chat_quality_review:
             review_dict = state.chat_quality_review
-            dimensions_dict = review_dict.get("dimensions", [])
+            dimensions_raw = review_dict.get("dimensions")
+            dimensions_list = dimensions_raw if isinstance(dimensions_raw, list) else []
             dimensions = [
                 QualityDimension(
-                    name=d.get("name", "未知"),
+                    name=str(d.get("name", "未知")),
                     percentage=float(d.get("percentage", 0)),
-                    comment=d.get("comment", ""),
-                    color=d.get("color", "#607d8b"),
+                    comment=str(d.get("comment", "")),
+                    color=str(d.get("color", "#607d8b")),
                 )
-                for d in dimensions_dict
+                for d in dimensions_list
+                if isinstance(d, dict)
             ]
             chat_quality_review = QualityReview(
-                title=review_dict.get("title", "聊天质量锐评"),
-                subtitle=review_dict.get("subtitle", "今天的群里发生了什么？"),
+                title=str(review_dict.get("title", "聊天质量锐评") or "聊天质量锐评"),
+                subtitle=str(
+                    review_dict.get("subtitle", "今天的群里发生了什么？")
+                    or "今天的群里发生了什么？"
+                ),
                 dimensions=dimensions,
-                summary=review_dict.get("summary", "今天也是充满活力的一天。"),
+                summary=str(
+                    review_dict.get("summary", "今天也是充满活力的一天。")
+                    or "今天也是充满活力的一天。"
+                ),
             )
 
         statistics = GroupStatistics(
@@ -395,15 +403,22 @@ class IncrementalMergeService:
         emoji_counts = state.emoji_counts
 
         # 显式提取并检查类型，辅助 Pylance 类型推断
-        face_details = emoji_counts.get("face_details")
-        if not isinstance(face_details, dict):
-            face_details = {}
+        face_details_raw = emoji_counts.get("face_details")
+        face_details = (
+            {k: v for k, v in face_details_raw.items() if isinstance(v, int)}
+            if isinstance(face_details_raw, dict)
+            else {}
+        )
+
+        def _get_int(key: str) -> int:
+            val = emoji_counts.get(key, 0)
+            return val if isinstance(val, int) else 0
 
         return EmojiStatistics(
-            face_count=emoji_counts.get("face_count", 0),
-            mface_count=emoji_counts.get("mface_count", 0),
-            bface_count=emoji_counts.get("bface_count", 0),
-            sface_count=emoji_counts.get("sface_count", 0),
-            other_emoji_count=emoji_counts.get("other_emoji_count", 0),
+            face_count=_get_int("face_count"),
+            mface_count=_get_int("mface_count"),
+            bface_count=_get_int("bface_count"),
+            sface_count=_get_int("sface_count"),
+            other_emoji_count=_get_int("other_emoji_count"),
             face_details=face_details,
         )

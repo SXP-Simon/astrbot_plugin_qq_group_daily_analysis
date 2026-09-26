@@ -4,10 +4,16 @@ LuckyLilliaBot (LLOneBot) 专属驱动实现 (LLOneBot Driver)
 适配 LLOneBot，支持其 upload_group_album 接收 files: list 数组等接口规范。
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
 
 from .....utils.logger import logger
 from .standard_driver import StandardOneBotDriver
+
+if TYPE_CHECKING:
+    from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from .....domain.value_objects import OneBotAlbumPayload
 
 
 class LLOneBotDriver(StandardOneBotDriver):
@@ -17,7 +23,7 @@ class LLOneBotDriver(StandardOneBotDriver):
 
     async def upload_group_album(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
         album_id: str,
         album_name: str | None,
@@ -33,7 +39,7 @@ class LLOneBotDriver(StandardOneBotDriver):
             file_content: 文件路径或内容
         """
         # LLBot 模式：upload_group_album 接收 files 作为数组
-        llbot_params = {
+        llbot_params: dict[str, object] = {
             "group_id": int(group_id),
             "album_id": str(album_id),
             "files": [file_content],
@@ -53,9 +59,9 @@ class LLOneBotDriver(StandardOneBotDriver):
 
     async def get_group_album_list(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[OneBotAlbumPayload]:
         """调用 LLOneBot 特有的 get_group_album_list 获取群相册列表。
 
         Args:
@@ -63,7 +69,7 @@ class LLOneBotDriver(StandardOneBotDriver):
             group_id: 目标群号
 
         Returns:
-            list[dict[str, Any]]: 相册列表
+            list[OneBotAlbumPayload]: 相册列表
         """
         try:
             logger.debug(
@@ -73,13 +79,21 @@ class LLOneBotDriver(StandardOneBotDriver):
             logger.debug(
                 f"[OneBot:{self.name}] 接口 get_group_album_list 原始响应内容: {res}"
             )
-            albums: list[dict[str, Any]] = []
+            albums: list[OneBotAlbumPayload] = []
             if isinstance(res, list):
-                albums = [item for item in res if isinstance(item, dict)]
+                albums = [
+                    cast("OneBotAlbumPayload", item)
+                    for item in res
+                    if isinstance(item, dict)
+                ]
             elif isinstance(res, dict):
                 data = res.get("data")
                 if isinstance(data, list):
-                    albums = [item for item in data if isinstance(item, dict)]
+                    albums = [
+                        cast("OneBotAlbumPayload", item)
+                        for item in data
+                        if isinstance(item, dict)
+                    ]
                 elif isinstance(data, dict):
                     album_list = (
                         data.get("album_list")
@@ -88,7 +102,11 @@ class LLOneBotDriver(StandardOneBotDriver):
                         or data.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [item for item in album_list if isinstance(item, dict)]
+                        albums = [
+                            cast("OneBotAlbumPayload", item)
+                            for item in album_list
+                            if isinstance(item, dict)
+                        ]
                 if not albums:
                     album_list = (
                         res.get("album_list")
@@ -97,7 +115,11 @@ class LLOneBotDriver(StandardOneBotDriver):
                         or res.get("albums")
                     )
                     if isinstance(album_list, list):
-                        albums = [item for item in album_list if isinstance(item, dict)]
+                        albums = [
+                            cast("OneBotAlbumPayload", item)
+                            for item in album_list
+                            if isinstance(item, dict)
+                        ]
             if albums:
                 logger.debug(
                     f"[OneBot:{self.name}] get_group_album_list 成功获取并提取到 {len(albums)} 个相册对象"

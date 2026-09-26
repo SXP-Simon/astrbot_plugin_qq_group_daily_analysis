@@ -32,7 +32,7 @@ Issue #167 提出的核心诉求不是“把 MBTI 算得更准”，而是让群
 
 - [`_conf_schema.json`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/_conf_schema.json) 默认的 `user_title_prompt` 已要求模型返回 `title + mbti + reason`
 - [`src/infrastructure/analysis/analyzers/user_title_analyzer.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/analyzers/user_title_analyzer.py) 会把活跃用户统计整理成 prompt 输入
-- [`src/domain/models/data_models.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/domain/models/data_models.py) 的 `UserTitle` 数据结构已经有 `mbti` 字段
+- [`src/domain/value_objects/analysis_results.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/domain/value_objects/analysis_results.py) 的 `UserTitle` 数据结构已经有 `mbti` 字段
 - [`src/infrastructure/analysis/utils/structured_output_schema.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/utils/structured_output_schema.py) 和 [`src/infrastructure/analysis/utils/response_validation.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/analysis/utils/response_validation.py) 已经把 `mbti` 当成结构化输出字段进行校验
 
 ### 当前约束
@@ -113,7 +113,7 @@ Issue #167 提出的核心诉求不是“把 MBTI 算得更准”，而是让群
 
 当前插件本身已经有比较成熟的 HTML 报告模板体系，不是从零开始：
 
-- [`src/infrastructure/reporting/generators.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/generators.py) 会在 `_prepare_render_data` 里生成 `titles_html`
+- [`src/infrastructure/reporting/render_data_preparer.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/render_data_preparer.py) 会在 `prepare_render_data` 里生成 `titles_html`
 - [`src/infrastructure/reporting/templates.py`](C:/Helianthus/SXP-Simon/astr/official/AstrBot/data/plugins/astrbot_plugin_qq_group_daily_analysis/src/infrastructure/reporting/templates.py) 会按当前模板目录加载 Jinja2 模板
 - 各模板目录下已经有独立的 `user_title_item.html` 片段，适合承载人格卡片
 

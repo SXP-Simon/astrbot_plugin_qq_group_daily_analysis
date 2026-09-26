@@ -2,6 +2,8 @@
 常量 - 插件中使用的共享常量
 """
 
+from __future__ import annotations
+
 from enum import Enum
 
 

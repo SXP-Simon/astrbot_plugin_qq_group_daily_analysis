@@ -1,17 +1,31 @@
+from __future__ import annotations
+
 import base64
 import os
 import tempfile
 import time
-from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from ...domain.repositories.platform_adapter_repository import (
+        GroupAlbumSupportProtocol,
+        GroupFileSupportProtocol,
+    )
+    from ...domain.value_objects import AnalysisResultPayload
+    from ..config.config_manager import ConfigManager
+    from ..messaging.message_sender import MessageSender
+    from ..platform.adapters.onebot_adapter import OneBotAdapter
+    from .generators import ReportGenerator
 
 
 class ReportDispatcher:
@@ -20,18 +34,26 @@ class ReportDispatcher:
     负责协调报告生成、格式选择、消息发送和失败重试
     """
 
+    config_manager: ConfigManager
+    report_generator: ReportGenerator | None
+    message_sender: MessageSender
+
     def __init__(
         self,
-        config_manager,
-        report_generator,
-        message_sender,
-    ):
+        config_manager: ConfigManager,
+        report_generator: ReportGenerator | None,
+        message_sender: MessageSender,
+    ) -> None:
         self.config_manager = config_manager
         self.report_generator = report_generator
         self.message_sender = message_sender
-        self._html_render_func: Callable | None = None
+        self._html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = (
+            None
+        )
 
-    def set_html_render(self, render_func: Callable):
+    def set_html_render(
+        self, render_func: Callable[..., Awaitable[str | bytes | None]]
+    ):
         """设置 HTML 渲染函数 (运行时注入)"""
         self._html_render_func = render_func
 
@@ -42,7 +64,7 @@ class ReportDispatcher:
     async def dispatch(
         self,
         group_id: str,
-        analysis_result: dict[str, Any],
+        analysis_result: AnalysisResultPayload,
         platform_id: str | None = None,
     ) -> bool:
         """分发分析报告，并返回至少一种格式是否实际发送成功。"""
@@ -88,10 +110,17 @@ class ReportDispatcher:
         return sent_any
 
     async def _dispatch_image(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: AnalysisResultPayload,
+        platform_id: str | None,
     ) -> bool:
         trace_id = TraceContext.get()
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error(f"[{trace_id}] 报告生成器未初始化，无法生成图片报告。")
+            return False
+
         # 1. 检查渲染函数
         if not self._html_render_func:
             logger.warning(f"[{trace_id}] 未设置 HTML 渲染函数，回退到文本模式。")
@@ -99,26 +128,28 @@ class ReportDispatcher:
 
         # 2. 生成图片
         image_url = None
-        html_content = None
         try:
             # 定义头像获取回调，请求小尺寸头像以优化性能
-            async def avatar_url_getter(user_id: str):
+            async def avatar_url_getter(
+                user_id: str, size: int | None = None
+            ) -> str | None:
                 if not platform_id:
                     return None
                 adapter = self.message_sender.bot_manager.get_adapter(platform_id)
-                if adapter and hasattr(adapter, "get_user_avatar_url"):
-                    return await adapter.get_user_avatar_url(user_id, size=40)
+                if adapter:
+                    return await adapter.get_user_avatar_url(user_id, size=size or 40)
                 return None
 
             trace = TraceContext.current()
             override_theme = (
-                trace.metadata.get("override_template_name") if trace else None
+                str(trace.metadata.get("override_template_name") or "").strip()
+                if trace
+                else ""
             )
-            template_theme = (
+            template_theme: str = (
                 override_theme
-                or getattr(
-                    self.config_manager, "get_report_template", lambda: "scrapbook"
-                )()
+                or self.config_manager.get_report_template()
+                or "scrapbook"
             )
 
             if trace:
@@ -128,7 +159,7 @@ class ReportDispatcher:
                 ):
                     (
                         image_url,
-                        html_content,
+                        _html_content,
                     ) = await self.report_generator.generate_image_report(
                         analysis_result,
                         group_id,
@@ -141,7 +172,7 @@ class ReportDispatcher:
             else:
                 (
                     image_url,
-                    html_content,
+                    _html_content,
                 ) = await self.report_generator.generate_image_report(
                     analysis_result,
                     group_id,
@@ -175,10 +206,16 @@ class ReportDispatcher:
                 try:
                     reports_dir = self.report_generator.data_dir / "reports"
                     reports_dir.mkdir(parents=True, exist_ok=True)
+                    eff_trace_id = (
+                        trace_id
+                        or (trace_ctx.trace_id if trace_ctx else "")
+                        or TraceContext.get()
+                        or ""
+                    )
                     ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = (
-                        f"report_{group_id}_{ts_str}_{trace_id}.jpg"
-                        if trace_id
+                        f"report_{group_id}_{ts_str}_{eff_trace_id}.jpg"
+                        if eff_trace_id
                         else f"report_{group_id}_{ts_str}.jpg"
                     )
                     dest = reports_dir / filename
@@ -194,7 +231,10 @@ class ReportDispatcher:
                     # 关联到 TraceContext 并在数据库中更新元数据
                     if trace_ctx:
                         rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                        if not any(rf.get("filename") == dest.name for rf in rfiles):
+                        if isinstance(rfiles, list) and not any(
+                            isinstance(rf, dict) and rf.get("filename") == dest.name
+                            for rf in rfiles
+                        ):
                             rfiles.append(
                                 {
                                     "filename": dest.name,
@@ -258,7 +298,7 @@ class ReportDispatcher:
                         f"[{trace_id}] 图片报告备份失败，不影响发送状态: {e}"
                     )
 
-                if dispatch_span and isinstance(dispatch_span, dict):
+                if dispatch_span:
                     dispatch_span.setdefault("payload", {}).update(
                         {
                             "platform": platform_id or "auto",
@@ -292,31 +332,40 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_html(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: AnalysisResultPayload,
+        platform_id: str | None,
     ) -> bool:
         trace_id = TraceContext.get()
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error(f"[{trace_id}] 报告生成器未初始化，无法生成 HTML 报告。")
+            return False
 
         html_path = None
         try:
 
-            async def avatar_url_getter(user_id: str):
+            async def avatar_url_getter(
+                user_id: str, size: int | None = None
+            ) -> str | None:
                 if not platform_id:
                     return None
                 adapter = self.message_sender.bot_manager.get_adapter(platform_id)
-                if adapter and hasattr(adapter, "get_user_avatar_url"):
-                    return await adapter.get_user_avatar_url(user_id, size=40)
+                if adapter:
+                    return await adapter.get_user_avatar_url(user_id, size=size or 40)
                 return None
 
             trace = TraceContext.current()
             override_theme = (
-                trace.metadata.get("override_template_name") if trace else None
+                str(trace.metadata.get("override_template_name") or "").strip()
+                if trace
+                else ""
             )
-            template_theme = (
+            template_theme: str = (
                 override_theme
-                or getattr(
-                    self.config_manager, "get_report_template", lambda: "scrapbook"
-                )()
+                or self.config_manager.get_report_template()
+                or "scrapbook"
             )
 
             if trace:
@@ -326,7 +375,7 @@ class ReportDispatcher:
                 ):
                     (
                         html_path,
-                        json_path,
+                        _json_path,
                     ) = await self.report_generator.generate_html_report(
                         analysis_result,
                         group_id,
@@ -337,7 +386,10 @@ class ReportDispatcher:
                         trace_id=trace_id,
                     )
             else:
-                html_path, json_path = await self.report_generator.generate_html_report(
+                (
+                    html_path,
+                    _json_path,
+                ) = await self.report_generator.generate_html_report(
                     analysis_result,
                     group_id,
                     avatar_url_getter=avatar_url_getter,
@@ -370,8 +422,10 @@ class ReportDispatcher:
                     html_filename = html_file.name
                     if trace_ctx:
                         rfiles = trace_ctx.metadata.setdefault("report_files", [])
-                        if not any(
-                            rf.get("filename") == html_file.name for rf in rfiles
+                        if isinstance(rfiles, list) and not any(
+                            isinstance(rf, dict)
+                            and rf.get("filename") == html_file.name
+                            for rf in rfiles
                         ):
                             rfiles.append(
                                 {
@@ -438,7 +492,7 @@ class ReportDispatcher:
                         platform_id=platform_id,
                     )
 
-                if dispatch_span and isinstance(dispatch_span, dict):
+                if dispatch_span:
                     dispatch_span.setdefault("payload", {}).update(
                         {
                             "platform": platform_id or "auto",
@@ -466,11 +520,17 @@ class ReportDispatcher:
         return await self._dispatch_text(group_id, analysis_result, platform_id)
 
     async def _dispatch_text(
-        self, group_id: str, analysis_result: dict[str, Any], platform_id: str | None
+        self,
+        group_id: str,
+        analysis_result: AnalysisResultPayload,
+        platform_id: str | None,
     ) -> bool:
         """分发文本报告"""
         logger.info(f"[分发器] 正在向群组 {group_id} 分发文本报告")
         trace_ctx = TraceContext.current()
+        if not self.report_generator:
+            logger.error("[分发器] 报告生成器未初始化，无法生成文本报告。")
+            return False
         is_qq_official = self._is_qq_official(platform_id)
         fallback_report = None
         if is_qq_official:
@@ -528,7 +588,7 @@ class ReportDispatcher:
                 )
                 sent = False
 
-            if dispatch_span and isinstance(dispatch_span, dict):
+            if dispatch_span:
                 dispatch_span.setdefault("payload", {}).update(
                     {
                         "platform": platform_id or "auto",
@@ -584,7 +644,12 @@ class ReportDispatcher:
             except OSError:
                 pass
 
-    async def _do_upload_group_file(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_file(
+        self,
+        adapter: GroupFileSupportProtocol | OneBotAdapter,
+        group_id: str,
+        file_path: str,
+    ) -> None:
         """上传文件到群文件目录，失败静默"""
         try:
             folder_name = self.config_manager.get_group_file_folder()
@@ -599,26 +664,30 @@ class ReportDispatcher:
         except Exception as e:
             logger.warning(f"群文件上传失败 (群 {group_id}): {e}")
 
-    async def _do_upload_group_album(self, adapter, group_id: str, file_path: str):
+    async def _do_upload_group_album(
+        self,
+        adapter: GroupAlbumSupportProtocol | OneBotAdapter,
+        group_id: str,
+        file_path: str,
+    ) -> None:
         """上传图片到群相册，失败静默"""
         try:
             album_name = self.config_manager.get_group_album_name()
             strict_mode = self.config_manager.get_group_album_strict_mode()
             album_id = None
 
-            if hasattr(adapter, "find_album_id"):
-                if album_name:
-                    album_id = await adapter.find_album_id(group_id, album_name)
-                    if not album_id and strict_mode:
-                        logger.info(
-                            f"群相册严格模式开启：在群 {group_id} 中未找到名为 '{album_name}' 的相册，停止上传。"
-                        )
-                        return
-                elif strict_mode:
+            if album_name:
+                album_id = await adapter.find_album_id(group_id, album_name)
+                if not album_id and strict_mode:
                     logger.info(
-                        f"群相册严格模式开启：未设置目标相册名称，停止上传以防止操作群 {group_id} 的默认相册。"
+                        f"群相册严格模式开启：在群 {group_id} 中未找到名为 '{album_name}' 的相册，停止上传。"
                     )
                     return
+            elif strict_mode:
+                logger.info(
+                    f"群相册严格模式开启：未设置目标相册名称，停止上传以防止操作群 {group_id} 的默认相册。"
+                )
+                return
 
             await adapter.upload_group_album(
                 group_id,
@@ -661,11 +730,13 @@ class ReportDispatcher:
             logger.debug(f"保存图片到临时文件失败: {e}")
             return None
 
-    def _get_onebot_adapter(self, platform_id: str | None):
+    def _get_onebot_adapter(self, platform_id: str | None) -> OneBotAdapter | None:
         """获取 OneBot 适配器，非 OneBot 平台返回 None。"""
         if not platform_id:
             return None
+        from ..platform.adapters.onebot_adapter import OneBotAdapter
+
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
-        if adapter and hasattr(adapter, "upload_group_file_to_folder"):
+        if isinstance(adapter, OneBotAdapter):
             return adapter
         return None

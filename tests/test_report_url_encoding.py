@@ -17,6 +17,9 @@ class FakeConfigManager:
     def get_html_output_dir(self):
         return str(self.output_dir)
 
+    def get_report_template(self):
+        return "scrapbook"
+
 
 class FakeReportGenerator:
     def __init__(self, html_path: Path):

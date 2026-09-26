@@ -9,12 +9,128 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar, ParamSpec, TypedDict, TypeVar
+
+from .constants import AnalysisStage
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine, Generator, Mapping
+
+    from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..infrastructure.webui.active_task_manager import ActiveTaskManager
+
+
+class SpanPayload(TypedDict, total=False):
+    """Span 上下文自定义载荷契约"""
+
+    success: bool
+    warning: str | bool
+    subtask_errors: list[str] | bool
+    error: str
+    start_memory_mb: float
+    end_memory_mb: float
+    delta_memory_mb: float
+    raw_message_count: int
+    cleaned_message_count: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class SpanRecord(TypedDict):
+    """单次步骤耗时与内存 Span 记录契约"""
+
+    span_id: str
+    trace_id: str
+    stage_name: str
+    status: str
+    started_at: float
+    duration_ms: float | None
+    start_memory_mb: float
+    end_memory_mb: float | None
+    delta_memory_mb: float | None
+    payload: dict[str, object]
+
+
+class AnalyzerTokenUsage(TypedDict):
+    """单个分析器 Token 消耗契约"""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class TraceTokenUsage(TypedDict):
+    """全链路 Token 消耗与成本审计契约"""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    estimated_cost: float
+    per_analyzer: dict[str, AnalyzerTokenUsage]
+
+
+class TraceContextMetrics(TypedDict):
+    """上下文演进与清洗漏斗指标契约"""
+
+    raw_message_count: int
+    cleaned_message_count: int
+    compression_ratio: float
+    incremental_batches: int
+    window_size: int
+
+
+class TracePerformanceMetrics(TypedDict):
+    """运行时内存与性能遥测契约"""
+
+    init_memory_mb: float
+    peak_memory_mb: float
+    final_memory_mb: float
+    delta_memory_mb: float
+
+
+class TraceContextSnapshot(TypedDict, total=False):
+    """全链路追踪数据落盘与传输快照契约"""
+
+    trace_id: str
+    group_id: str
+    group_name: str
+    platform: str
+    operation: str
+    trigger_type: str
+    status: str
+    current_stage: str
+    started_at: float
+    completed_at: float | None
+    duration_ms: float | None
+    error_stage: str | None
+    error_message: str | None
+    stack_trace: str | None
+    extra: dict[str, object]
+    spans: list[SpanRecord]
+    context_metrics: TraceContextMetrics | None
+    performance_metrics: TracePerformanceMetrics
+    token_usage: TraceTokenUsage
+    checkpoints: dict[str, str]
+
+
+class ActiveTaskSnapshot(TypedDict):
+    """活跃任务状态快照契约（供 WebUI 与 SSE 广播）"""
+
+    task_id: str
+    group_id: str
+    group_name: str
+    platform: str
+    trigger_type: str
+    current_stage: str
+    started_at: float
+    duration_s: float
+    last_heartbeat: float
+
 
 # Trace ID 中群名的最大长度（平衡可读性和日志宽度）
 _MAX_GROUP_NAME_LEN = 10
@@ -39,9 +155,12 @@ _current_trace: ContextVar[TraceContext | None] = ContextVar(
 )
 
 # 全局持有的 Trace 仓储引用（用于链路自动持久化）
-_global_trace_store: Any | None = None
-_global_active_task_manager: Any | None = None
-_active_traces: dict[str, Any] = {}
+_global_trace_store: TraceSQLiteStore | None = None
+_global_active_task_manager: ActiveTaskManager | None = None
+_active_traces: dict[str, TraceContext] = {}
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 @dataclass
@@ -70,13 +189,13 @@ class TraceContext:
     stack_trace: str | None = None
 
     # 扩展元数据
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
 
     # 细粒度 Span 列表
-    _spans: list[dict[str, Any]] = field(default_factory=list, init=False)
+    _spans: list[SpanRecord] = field(default_factory=list, init=False)
 
     # dsh-context 上下文演进指标
-    _context_metrics: dict[str, Any] | None = field(default=None, init=False)
+    _context_metrics: TraceContextMetrics | None = field(default=None, init=False)
 
     # 遥测开关 (类级别默认 True)
     _enable_metrics: ClassVar[bool] = True
@@ -92,7 +211,7 @@ class TraceContext:
         self._peak_memory_mb = init_rss
 
     # Token 消耗与成本审计
-    _token_usage: dict[str, Any] = field(
+    _token_usage: TraceTokenUsage = field(
         default_factory=lambda: {
             "prompt_tokens": 0,
             "completion_tokens": 0,
@@ -118,19 +237,19 @@ class TraceContext:
         return cls._enable_metrics
 
     @classmethod
-    def set_global_store(cls, store: Any) -> None:
+    def set_global_store(cls, store: TraceSQLiteStore | None) -> None:
         """设置全局持久化仓储实例"""
         global _global_trace_store
         _global_trace_store = store
 
     @classmethod
-    def set_active_task_manager(cls, manager: Any) -> None:
+    def set_active_task_manager(cls, manager: ActiveTaskManager | None) -> None:
         """设置全局活跃任务管理器引用"""
         global _global_active_task_manager
         _global_active_task_manager = manager
 
     @classmethod
-    def get_active_trace(cls, trace_id: str) -> Any | None:
+    def get_active_trace(cls, trace_id: str) -> TraceContext | None:
         """根据 trace_id 获取内存中活跃运行的 TraceContext 实例"""
         return _active_traces.get(trace_id)
 
@@ -152,17 +271,20 @@ class TraceContext:
 
     @contextmanager
     def span(
-        self, stage_name: Any, payload: dict[str, Any] | None = None
-    ) -> Generator[dict[str, Any]]:
-        """
-        创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
+        self,
+        stage_name: AnalysisStage | str,
+        payload: Mapping[str, object] | None = None,
+    ) -> Generator[SpanRecord]:
+        """创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
 
         Args:
             stage_name: 阶段名称，如 AnalysisStage.FETCH_MESSAGES 或字符串
             payload: 随 Span 记录的参数或快照字典
         """
         stage_str = (
-            stage_name.value if hasattr(stage_name, "value") else str(stage_name)
+            stage_name.value
+            if isinstance(stage_name, AnalysisStage)
+            else str(stage_name)
         )
         self.current_stage = stage_str
         _active_traces[self.trace_id] = self
@@ -178,7 +300,7 @@ class TraceContext:
             self._peak_memory_mb = start_mem
 
         span_id = f"{self.trace_id}_{stage_str}_{len(self._spans) + 1}"
-        span_record: dict[str, Any] = {
+        span_record: SpanRecord = {
             "span_id": span_id,
             "trace_id": self.trace_id,
             "stage_name": stage_str,
@@ -188,7 +310,7 @@ class TraceContext:
             "start_memory_mb": start_mem,
             "end_memory_mb": None,
             "delta_memory_mb": None,
-            "payload": payload or {},
+            "payload": dict(payload or {}),
         }
         self._spans.append(span_record)
 
@@ -198,7 +320,7 @@ class TraceContext:
                 span_record["status"] = "success"
         except Exception as exc:
             span_record["status"] = "failed"
-            span_record.setdefault("payload", {})["error"] = str(exc)
+            span_record["payload"]["error"] = str(exc)
             raise
         finally:
             end_ts = time.time()
@@ -211,7 +333,7 @@ class TraceContext:
             span_record["delta_memory_mb"] = round(end_mem - start_mem, 2)
 
             # 同步填充到 payload 字典供前端组件灵活读取
-            p = span_record.setdefault("payload", {})
+            p = span_record["payload"]
             if "start_memory_mb" not in p:
                 p["start_memory_mb"] = start_mem
             if "end_memory_mb" not in p:
@@ -284,13 +406,22 @@ class TraceContext:
             cost_est: 估算费用
         """
         total = prompt_tokens + completion_tokens
-        self._token_usage["prompt_tokens"] += prompt_tokens
-        self._token_usage["completion_tokens"] += completion_tokens
-        self._token_usage["total_tokens"] += total
-        self._token_usage["estimated_cost"] += cost_est
+        self._token_usage["prompt_tokens"] = (
+            self._token_usage.get("prompt_tokens", 0) + prompt_tokens
+        )
+        self._token_usage["completion_tokens"] = (
+            self._token_usage.get("completion_tokens", 0) + completion_tokens
+        )
+        self._token_usage["total_tokens"] = (
+            self._token_usage.get("total_tokens", 0) + total
+        )
+        self._token_usage["estimated_cost"] = (
+            self._token_usage.get("estimated_cost", 0.0) + cost_est
+        )
 
         if analyzer_name:
-            cur = self._token_usage["per_analyzer"].get(
+            per_analyzer = self._token_usage.setdefault("per_analyzer", {})
+            cur = per_analyzer.get(
                 analyzer_name,
                 {
                     "prompt_tokens": 0,
@@ -298,10 +429,12 @@ class TraceContext:
                     "total_tokens": 0,
                 },
             )
-            cur["prompt_tokens"] += prompt_tokens
-            cur["completion_tokens"] += completion_tokens
-            cur["total_tokens"] += total
-            self._token_usage["per_analyzer"][analyzer_name] = cur
+            cur["prompt_tokens"] = cur.get("prompt_tokens", 0) + prompt_tokens
+            cur["completion_tokens"] = (
+                cur.get("completion_tokens", 0) + completion_tokens
+            )
+            cur["total_tokens"] = cur.get("total_tokens", 0) + total
+            per_analyzer[analyzer_name] = cur
 
     def finish(
         self,
@@ -318,9 +451,9 @@ class TraceContext:
                 status = "failed"
             elif any(
                 s.get("status") == "warning"
-                or s.get("payload", {}).get("success") is False
-                or bool(s.get("payload", {}).get("warning"))
-                or bool(s.get("payload", {}).get("subtask_errors"))
+                or s["payload"].get("success") is False
+                or bool(s["payload"].get("warning"))
+                or bool(s["payload"].get("subtask_errors"))
                 for s in self._spans
             ) or self.metadata.get("has_warnings"):
                 status = "warning"
@@ -343,10 +476,9 @@ class TraceContext:
         for s in self._spans:
             if s.get("status") == "running":
                 s["status"] = "success"
-                if s.get("started_at") and s.get("duration_ms") is None:
-                    s["duration_ms"] = round(
-                        (self.completed_at - s["started_at"]) * 1000, 2
-                    )
+                started_at = s.get("started_at", self.started_at)
+                if s.get("duration_ms") is None:
+                    s["duration_ms"] = round((self.completed_at - started_at) * 1000, 2)
 
         _active_traces.pop(self.trace_id, None)
 
@@ -359,7 +491,7 @@ class TraceContext:
 
                 logger.warning(f"Trace 持久化保存失败: {e}")
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> TraceContextSnapshot:
         """将完整链路快照序列化为字典"""
         curr_mem = self._final_memory_mb or (
             _get_process_rss_mb() if self._enable_metrics else 0.0
@@ -400,7 +532,12 @@ class TraceContext:
         _active_traces[self.trace_id] = self
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         if exc_type is not None and self.status == "running":
             self.finish(
                 status="failed",
@@ -517,10 +654,15 @@ def with_trace(
     group_id: str = "",
     platform: str = "",
     operation: str = "",
-):
-    def decorator(func):
+) -> Callable[
+    [Callable[P, Coroutine[object, object, R]]],
+    Callable[P, Coroutine[object, object, R]],
+]:
+    def decorator(
+        func: Callable[P, Coroutine[object, object, R]],
+    ) -> Callable[P, Coroutine[object, object, R]]:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             op_name = operation or func.__name__
             with TraceContext(
                 group_id=group_id,

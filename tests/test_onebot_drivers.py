@@ -73,7 +73,15 @@ def test_driver_factory_detect_driver_with_mock_bot():
     assert isinstance(driver_napcat, NapCatDriver)
 
     # 1.1 兼容包装在 data 字典中的响应形态
-    bot_wrapped = MockBot({"get_version_info": {"status": "ok", "retcode": 0, "data": {"app_name": "NapCat.Onebot"}}})
+    bot_wrapped = MockBot(
+        {
+            "get_version_info": {
+                "status": "ok",
+                "retcode": 0,
+                "data": {"app_name": "NapCat.Onebot"},
+            }
+        }
+    )
     driver_wrapped = asyncio.run(OneBotDriverFactory.detect_driver(bot_wrapped))
     assert isinstance(driver_wrapped, NapCatDriver)
 
@@ -90,14 +98,23 @@ def test_driver_factory_detect_driver_with_mock_bot():
     bot_v12 = MockBot(
         {
             "get_version_info": Exception("Action not found"),
-            "get_version": {"impl": "SnowLuma", "version": "1.0", "onebot_version": "12"},
+            "get_version": {
+                "impl": "SnowLuma",
+                "version": "1.0",
+                "onebot_version": "12",
+            },
         }
     )
     driver_v12 = asyncio.run(OneBotDriverFactory.detect_driver(bot_v12))
     assert isinstance(driver_v12, SnowLumaDriver)
 
     # 3. 失败/超时回退标准驱动
-    bot_fail = MockBot({"get_version_info": TimeoutError("Timeout"), "get_version": TimeoutError("Timeout")})
+    bot_fail = MockBot(
+        {
+            "get_version_info": TimeoutError("Timeout"),
+            "get_version": TimeoutError("Timeout"),
+        }
+    )
     driver_fail = asyncio.run(OneBotDriverFactory.detect_driver(bot_fail))
     assert isinstance(driver_fail, StandardOneBotDriver)
 
@@ -270,7 +287,9 @@ def test_standard_driver_avatar_cdn_url_building():
     assert url_100 == "https://q1.qlogo.cn/g?b=qq&nk=10001&s=100"
 
     url_640 = driver.build_user_avatar_cdn_url("10001", size=640)
-    assert url_640 == "https://q.qlogo.cn/headimg_dl?dst_uin=10001&spec=640&img_type=jpg"
+    assert (
+        url_640 == "https://q.qlogo.cn/headimg_dl?dst_uin=10001&spec=640&img_type=jpg"
+    )
 
     url_nearest = driver.build_user_avatar_cdn_url("10001", size=120)
     assert url_nearest in (
@@ -306,9 +325,7 @@ def test_standard_driver_get_group_album_list():
     bot2 = MockBot(
         {
             "get_qun_album_list": Exception("Not found"),
-            "get_group_album_list": [
-                {"album_id": "alb_3", "name": "相册3"}
-            ],
+            "get_group_album_list": [{"album_id": "alb_3", "name": "相册3"}],
         }
     )
     albums2 = asyncio.run(driver.get_group_album_list(bot2, "123456"))
@@ -364,9 +381,7 @@ def test_llonebot_driver_get_group_album_list_array_data():
             "get_group_album_list": {
                 "status": "ok",
                 "retcode": 0,
-                "data": [
-                    {"album_id": "alb_999", "name": "群分析", "desc": "每日分析"}
-                ],
+                "data": [{"album_id": "alb_999", "name": "群分析", "desc": "每日分析"}],
             }
         }
     )
@@ -468,7 +483,9 @@ def test_adapter_create_group_file_folder_and_find():
             },
             "get_group_root_files": {
                 "data": {
-                    "folders": [{"folder_id": "f_created_123", "folder_name": "新建归档"}]
+                    "folders": [
+                        {"folder_id": "f_created_123", "folder_name": "新建归档"}
+                    ]
                 }
             },
         }
@@ -596,4 +613,3 @@ def test_adapter_cold_start_mute_exception_recognition():
     adapter = OneBotAdapter(MockBot())
     exc_snowluma = RuntimeError("send group message rejected: result=120 err=")
     assert adapter._is_mute_exception(exc_snowluma) is True
-

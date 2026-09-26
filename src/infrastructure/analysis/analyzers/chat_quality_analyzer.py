@@ -3,12 +3,18 @@
 专门处理群聊质量锐评分析
 """
 
-from datetime import datetime
+from __future__ import annotations
 
-from ....domain.models.data_models import QualityDimension, QualityReview, TokenUsage
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+from ....domain.value_objects import QualityDimension, QualityReview, TokenUsage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
-from ...utils.template_utils import render_template
+from ....utils.template_utils import render_template
 from ..utils import InfoUtils
 from ..utils.json_utils import extract_quality_with_regex, parse_json_object_response
 from ..utils.llm_utils import (
@@ -60,9 +66,6 @@ class ChatQualityAnalyzer(BaseAnalyzer[QualityReview, list[dict]]):
         # 提取文本消息
         text_messages = []
         for msg in data:
-            if not isinstance(msg, dict):
-                continue
-
             sender = msg.get("sender", {})
             user_id = str(sender.get("user_id", ""))
             bot_self_ids = self.config_manager.get_bot_self_ids()
@@ -262,15 +265,15 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_parsed_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(
-                            self.get_data_type()
-                        )
-                        if isinstance(slot, dict):
-                            slot["completion"] = retry_text
-                            slot["corrected_completion"] = retry_text
-                            slot["prompt"] = retry_prompt
-                            slot["corrected_prompt"] = retry_prompt
-                            slot["retry_count"] = idx
+                        prompts_map = trace.metadata.get("llm_prompts")
+                        if isinstance(prompts_map, dict):
+                            slot = prompts_map.get(self.get_data_type())
+                            if isinstance(slot, dict):
+                                slot["completion"] = retry_text
+                                slot["corrected_completion"] = retry_text
+                                slot["prompt"] = retry_prompt
+                                slot["corrected_prompt"] = retry_prompt
+                                slot["retry_count"] = idx
                     return normalized
 
             retry_regex_data = extract_quality_with_regex(retry_text)
@@ -278,22 +281,22 @@ ${messages_text}
                 valid, normalized, _ = self._validate_review_payload(retry_regex_data)
                 if valid and normalized:
                     if trace:
-                        slot = trace.metadata.get("llm_prompts", {}).get(
-                            self.get_data_type()
-                        )
-                        if isinstance(slot, dict):
-                            slot["completion"] = retry_text
-                            slot["corrected_completion"] = retry_text
-                            slot["prompt"] = retry_prompt
-                            slot["corrected_prompt"] = retry_prompt
-                            slot["retry_count"] = idx
+                        prompts_map = trace.metadata.get("llm_prompts")
+                        if isinstance(prompts_map, dict):
+                            slot = prompts_map.get(self.get_data_type())
+                            if isinstance(slot, dict):
+                                slot["completion"] = retry_text
+                                slot["corrected_completion"] = retry_text
+                                slot["prompt"] = retry_prompt
+                                slot["corrected_prompt"] = retry_prompt
+                                slot["retry_count"] = idx
                     return normalized
 
         return None
 
     async def summarize_batch_reviews(
         self,
-        batch_reviews: list[dict],
+        batch_reviews: Sequence[QualityReview] | Sequence[dict[str, object]],
         umo: str | None = None,
     ) -> tuple[QualityReview | None, TokenUsage]:
         """
@@ -303,20 +306,30 @@ ${messages_text}
             return None, TokenUsage()
 
         if len(batch_reviews) == 1:
-            return self._build_review_from_dict(batch_reviews[0]), TokenUsage()
+            first = batch_reviews[0]
+            if isinstance(first, QualityReview):
+                return first, TokenUsage()
+            return self._build_review_from_dict(first), TokenUsage()
 
         try:
             # 构建汇总用的提示词
             reviews_text = ""
             for i, rev in enumerate(batch_reviews):
-                title = rev.get("title", "未命名")
-                summary = rev.get("summary", "")
-                dims = ", ".join(
-                    [
+                if isinstance(rev, QualityReview):
+                    title = rev.title or "未命名"
+                    summary = rev.summary or ""
+                    dims = ", ".join(
+                        f"{d.name}({d.percentage}%)" for d in rev.dimensions
+                    )
+                else:
+                    title = str(rev.get("title", "未命名"))
+                    summary = str(rev.get("summary", ""))
+                    raw_dims = rev.get("dimensions", [])
+                    dims = ", ".join(
                         f"{d.get('name')}({d.get('percentage')}%)"
-                        for d in rev.get("dimensions", [])
-                    ]
-                )
+                        for d in (raw_dims if isinstance(raw_dims, list) else [])
+                        if isinstance(d, dict)
+                    )
                 reviews_text += f"\n批次 {i + 1} [{title}]:\n- 维度表现: {dims}\n- 核心摘要: {summary}\n"
 
             # 获取配置中的汇总提示词模板，如果没有则使用默认模板
@@ -390,17 +403,20 @@ ${messages_text}
             result_text = extract_response_text(response)
             trace = TraceContext.current()
             if trace:
-                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    self.get_data_type(), {}
-                )
-                slot["prompt"] = prompt
-                slot["initial_prompt"] = prompt
-                slot["system_prompt"] = system_prompt
-                slot["tokens"] = token_usage_dict["total_tokens"]
-                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
-                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
-                slot["completion"] = result_text or ""
-                slot["initial_completion"] = result_text or ""
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["initial_prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text or ""
+                        slot["initial_completion"] = result_text or ""
 
             if not result_text:
                 return None, usage
@@ -438,11 +454,17 @@ ${messages_text}
 
             # 降级：如果汇总失败，返回最新的一个
             logger.warning(f"聊天质量汇总分析失败，降级使用最新批次: {error_msg}")
-            return self._build_review_from_dict(batch_reviews[-1]), usage
+            last_rev = batch_reviews[-1]
+            if isinstance(last_rev, QualityReview):
+                return last_rev, usage
+            return self._build_review_from_dict(last_rev), usage
 
         except Exception as e:
             logger.error(f"聊天质量汇总分析异常: {e}", exc_info=True)
-            return self._build_review_from_dict(batch_reviews[-1]), TokenUsage()
+            last_rev = batch_reviews[-1]
+            if isinstance(last_rev, QualityReview):
+                return last_rev, TokenUsage()
+            return self._build_review_from_dict(last_rev), TokenUsage()
 
     async def analyze_quality(
         self,
@@ -488,11 +510,12 @@ ${messages_text}
             trace = TraceContext.current()
             if trace:
                 prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                prompts_map[self.get_data_type()] = {
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "provider_id": resolved_provider_id or "default",
-                }
+                if isinstance(prompts_map, dict):
+                    prompts_map[self.get_data_type()] = {
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "provider_id": resolved_provider_id or "default",
+                    }
 
             # 3. 调用 LLM
             response = await call_provider_with_retry(
@@ -528,16 +551,19 @@ ${messages_text}
                 raise RuntimeError(err_text)
 
             if trace:
-                slot = trace.metadata.setdefault("llm_prompts", {}).setdefault(
-                    self.get_data_type(), {}
-                )
-                slot["prompt"] = prompt
-                slot["system_prompt"] = system_prompt
-                slot["provider_id"] = resolved_provider_id or "default"
-                slot["tokens"] = token_usage_dict["total_tokens"]
-                slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
-                slot["completion_tokens"] = token_usage_dict["completion_tokens"]
-                slot["completion"] = result_text
+                prompts_map = trace.metadata.setdefault("llm_prompts", {})
+                if isinstance(prompts_map, dict):
+                    slot = prompts_map.setdefault(self.get_data_type(), {})
+                    if isinstance(slot, dict):
+                        slot["prompt"] = prompt
+                        slot["system_prompt"] = system_prompt
+                        slot["provider_id"] = resolved_provider_id or "default"
+                        slot["tokens"] = token_usage_dict["total_tokens"]
+                        slot["prompt_tokens"] = token_usage_dict["prompt_tokens"]
+                        slot["completion_tokens"] = token_usage_dict[
+                            "completion_tokens"
+                        ]
+                        slot["completion"] = result_text
 
             # 6. JSON 解析（使用 parse_json_object_response）
             success, parsed_data, error_msg = parse_json_object_response(

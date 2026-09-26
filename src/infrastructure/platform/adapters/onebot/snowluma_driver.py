@@ -4,9 +4,14 @@ SnowLuma 专属驱动实现 (SnowLuma Driver)
 适配 SnowLuma 的 message_id 分页、result=120 发消息拒绝判定及特有接口行为。
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from .standard_driver import StandardOneBotDriver
+
+if TYPE_CHECKING:
+    from .....domain.value_objects import OneBotHistoryFetchParams
 
 
 class SnowLumaDriver(StandardOneBotDriver):
@@ -19,7 +24,7 @@ class SnowLumaDriver(StandardOneBotDriver):
         group_id: str,
         count: int,
         anchor_id: str | int | None,
-    ) -> dict[str, Any]:
+    ) -> OneBotHistoryFetchParams:
         """构建 SnowLuma 历史消息拉取参数（使用 message_id，不传 reverseOrder）。
 
         Args:
@@ -28,9 +33,9 @@ class SnowLumaDriver(StandardOneBotDriver):
             anchor_id: message_id 锚点
 
         Returns:
-            dict[str, Any]: API 参数字典
+            OneBotHistoryFetchParams: API 参数字典
         """
-        params: dict[str, Any] = {
+        params: OneBotHistoryFetchParams = {
             "group_id": int(group_id),
             "count": count,
         }
@@ -41,7 +46,7 @@ class SnowLumaDriver(StandardOneBotDriver):
 
     def extract_history_anchor(
         self,
-        earliest_msg: dict[str, Any],
+        earliest_msg: dict[str, object],
     ) -> str | int | None:
         """从最旧消息提取 SnowLuma 专用的 message_id 锚点。
 
@@ -51,7 +56,10 @@ class SnowLumaDriver(StandardOneBotDriver):
         Returns:
             str | int | None: message_id 锚点
         """
-        return earliest_msg.get("message_id")
+        val = earliest_msg.get("message_id")
+        if isinstance(val, (str, int)):
+            return val
+        return None
 
     def is_mute_exception(self, exc: Exception) -> bool:
         """识别 SnowLuma 特有的 result=120 / rejected 拒绝与禁言错误。
@@ -66,8 +74,7 @@ class SnowLumaDriver(StandardOneBotDriver):
             return False
         err_str = str(exc)
 
-        # SnowLuma 特有模式：retcode=100 / result=120
-        # "send group message rejected: result=120 err="
+        # SnowLuma pattern: send group message rejected with result=120 or muted error
         err_lower = err_str.lower()
         if "rejected" in err_lower and (
             "result=120" in err_lower or "muted" in err_lower

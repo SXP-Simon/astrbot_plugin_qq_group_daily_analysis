@@ -3,388 +3,55 @@ LLM API请求处理工具模块
 提供LLM调用和token统计功能
 """
 
+from __future__ import annotations
+
 import asyncio
-import inspect
 import random
 import time
-from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
 from astrbot.api.provider import LLMResponse
-from astrbot.api.star import Context
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
-from ...config.config_manager import ConfigManager
-from .structured_output_schema import JSONObject, JSONValue
+from .llm_diagnostics import (
+    LLMBlockDiagnosis,
+    diagnose_llm_task_block,
+    extract_task_await_frames,
+    format_task_await_chain,
+)
 
-_circuit_breakers = {}
+if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
+    from ....domain.repositories.bot_client_protocol import (
+        LLMStreamProviderProtocol,
+    )
+    from ...config.config_manager import ConfigManager
+    from .structured_output_schema import JSONObject, JSONValue
+
+__all__ = [
+    "LLMBlockDiagnosis",
+    "call_provider_with_retry",
+    "diagnose_llm_task_block",
+    "extract_response_text",
+    "extract_task_await_frames",
+    "extract_token_usage",
+    "format_task_await_chain",
+    "get_provider_id_with_fallback",
+]
+
+_circuit_breakers: dict[str, CircuitBreaker] = {}
 _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 120.0
 _LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
-_LLM_REQUEST_STACK_MAX_DEPTH = 32
 
-
-@dataclass
-class LLMBlockDiagnosis:
-    """LLM 任务长时间阻塞点的结构化诊断结果。"""
-
-    state: str
-    status_title: str
-    guidance_hint: str
-    is_known: bool
-    await_chain: str
-    block_point: str
-
-
-@dataclass
-class _TaskAwaitFrame:
-    """异步任务调用链路中的单个调用帧元数据。"""
-
-    filename: str
-    lineno: int | None
-    func_name: str
-    target_type: str
-
-
-def _extract_task_await_frames(
-    task: asyncio.Task,
-    max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
-) -> list[_TaskAwaitFrame]:
-    """提取异步任务当前 await 链路的结构化调用帧列表。
-
-    从 task.get_coro() 开始逐层遍历 cr_await / gi_yieldfrom / ag_await，
-    获取完整的调用链路帧，仅保留文件名、行号与函数名，绝不读取 frame locals。
-    """
-    frames: list[_TaskAwaitFrame] = []
-    current = task.get_coro()
-    seen: set[int] = set()
-
-    for _ in range(max_depth):
-        if current is None:
-            break
-
-        current_id = id(current)
-        if current_id in seen:
-            break
-        seen.add(current_id)
-
-        frame = None
-        code = None
-        next_awaitable = None
-
-        if inspect.iscoroutine(current):
-            frame = current.cr_frame
-            code = current.cr_code
-            next_awaitable = current.cr_await
-        elif inspect.isgenerator(current):
-            frame = current.gi_frame
-            code = current.gi_code
-            next_awaitable = current.gi_yieldfrom
-        elif inspect.isasyncgen(current):
-            frame = current.ag_frame
-            code = current.ag_code
-            next_awaitable = current.ag_await
-        elif isinstance(current, asyncio.Task):
-            next_awaitable = current.get_coro()
-            frames.append(
-                _TaskAwaitFrame(
-                    filename="<Task>",
-                    lineno=None,
-                    func_name="Task",
-                    target_type=type(current).__name__,
-                )
-            )
-            current = next_awaitable
-            continue
-        else:
-            frames.append(
-                _TaskAwaitFrame(
-                    filename="<Awaitable>",
-                    lineno=None,
-                    func_name=type(current).__name__,
-                    target_type=type(current).__name__,
-                )
-            )
-            break
-
-        if code is not None:
-            frames.append(
-                _TaskAwaitFrame(
-                    filename=code.co_filename,
-                    lineno=frame.f_lineno if frame is not None else None,
-                    func_name=code.co_name,
-                    target_type=type(current).__name__,
-                )
-            )
-        else:
-            frames.append(
-                _TaskAwaitFrame(
-                    filename="<Unknown>",
-                    lineno=None,
-                    func_name=type(current).__name__,
-                    target_type=type(current).__name__,
-                )
-            )
-
-        current = next_awaitable
-
-    return frames
-
-
-def _format_task_await_chain(
-    task: asyncio.Task,
-    max_depth: int = _LLM_REQUEST_STACK_MAX_DEPTH,
-) -> str:
-    """格式化异步任务当前 await 链路。
-
-    这里只输出协程的文件、行号与函数名，不读取 frame locals，避免将 prompt、
-    API Key 或 Provider 请求参数写入日志。该链路用于定位长时间 LLM 请求到底
-    卡在插件、AstrBot Context、Provider SDK 还是 HTTP 客户端层。
-
-    Args:
-        task: 正在执行的 asyncio 任务。
-        max_depth: 最大追踪层数，避免异常 await 链导致日志过长。
-
-    Returns:
-        可直接写入日志的 await 链路描述。
-    """
-    frames = _extract_task_await_frames(task, max_depth)
-    if not frames:
-        return "<无可用 await 链>"
-    formatted = [
-        f"{f.filename}:{f.lineno or '?'} in {f.func_name}"
-        if f.filename not in ("<Task>", "<Awaitable>", "<Unknown>")
-        else f.func_name
-        for f in frames
-    ]
-    return " -> ".join(formatted)
-
-
-def diagnose_llm_task_block(
-    task: asyncio.Task | None,
-    elapsed_seconds: float,
-    default_block_point: str = "context.llm_generate",
-) -> LLMBlockDiagnosis:
-    """分析长时间运行的 LLM 任务阻塞点并生成对用户友好的结构化诊断信息。
-
-    基于 AstrBot 核心 Provider 调用链（ProviderManager / request_retry / OpenAI / Anthropic / Gemini / httpx）
-    的具体协程栈特征进行逐层分类：
-    1. 全局限流排队（RateLimiter / Semaphore acquire 等待中）
-    2. SDK 故障退避重试（request_retry / tenacity 在异常后处于退避 sleep 中）
-    3. 网络建连阻塞（TCP / SSL 握手 / DNS 解析中）
-    4. 大模型上游响应等待（HTTP 连接已就绪，服务端推理生成或流式传输中）
-    5. 未知阻塞点（安全回退，输出完整 await 链）
-
-    Args:
-        task: 当前执行中的异步任务。
-        elapsed_seconds: 当前请求已消耗的秒数。
-        default_block_point: 默认的业务阻塞路径。
-
-    Returns:
-        LLMBlockDiagnosis: 结构化诊断对象。
-    """
-    if task is None:
-        return LLMBlockDiagnosis(
-            state="UNKNOWN",
-            status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
-            guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），未获取到有效任务句柄。",
-            is_known=False,
-            await_chain="<无可用任务句柄>",
-            block_point=default_block_point,
-        )
-
-    frames = _extract_task_await_frames(task)
-    await_chain = _format_task_await_chain(task)
-    if not frames:
-        return LLMBlockDiagnosis(
-            state="UNKNOWN",
-            status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
-            guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），详细协程 await 栈见下方栈观测日志。",
-            is_known=False,
-            await_chain=await_chain,
-            block_point=default_block_point,
-        )
-
-    # 1. 检查是否在全局限流排队中 (RateLimiter / Semaphore acquire)
-    is_rate_limiting = any(
-        (
-            f.func_name in ("acquire", "_acquire", "_acquire_slot")
-            or "semaphore" in f.filename.lower()
-            or "globalratelimiter" in f.filename.lower()
-        )
-        and (
-            "semaphore" in f.filename.lower()
-            or "globalratelimiter" in f.filename.lower()
-            or "locks" in f.filename.lower()
-            or "resilience" in f.filename.lower()
-        )
-        for f in frames
-    )
-    if is_rate_limiting:
-        return LLMBlockDiagnosis(
-            state="RATE_LIMIT_QUEUE",
-            status_title="⏳ 正在排队等待全局大模型并发槽位 (并发排队中)",
-            guidance_hint=(
-                f"当前并发大模型任务已达上限，正在排队等待释放槽位（已排队 {elapsed_seconds:.0f}s）。"
-                "如需提升并发，可在插件配置中适当调整 llm_max_concurrent。"
-            ),
-            is_known=True,
-            await_chain=await_chain,
-            block_point="limiter.queue",
-        )
-
-    # 2. 检查是否为 SDK 故障退避重试 (request_retry / AsyncRetrying 在重试等待中)
-    # AstrBot 在 retry_provider_request 中通过 tenacity 的 AsyncRetrying 循环重试。
-    # 当处于退避等待时，当前调用栈在 retry_provider_request/tenacity 下直接执行 sleep，未处于 request_factory 内部。
-    retry_frame_idx = next(
-        (
-            idx
-            for idx, f in enumerate(frames)
-            if "request_retry" in f.filename.lower()
-            or "retry" in f.func_name.lower()
-            or "tenacity" in f.filename.lower()
-        ),
-        None,
-    )
-    if retry_frame_idx is not None:
-        sub_frames = frames[retry_frame_idx + 1 :]
-        # 若 retry 帧下方没有具体的 client query / request 帧，而是在 sleep 或 tenacity 内部迭代，则确定为退避等待
-        is_querying = any(
-            any(
-                q in f.func_name.lower()
-                for q in (
-                    "query",
-                    "text_chat",
-                    "create",
-                    "send",
-                    "handle_async_request",
-                )
-            )
-            or any(
-                k in f.filename.lower()
-                for k in (
-                    "openai",
-                    "anthropic",
-                    "google",
-                    "httpcore",
-                    "httpx",
-                    "aiohttp",
-                )
-            )
-            for f in sub_frames
-        )
-        if not is_querying:
-            return LLMBlockDiagnosis(
-                state="SDK_RETRY_BACKOFF",
-                status_title="🔄 上游请求正在执行自动重试等待 (SDK 故障退避中)",
-                guidance_hint=(
-                    f"上游 API 请求失败，AstrBot 正在进行退避重试（耗时已达 {elapsed_seconds:.0f}s，"
-                    "前序调用可能遇到了 429 频控或 5xx 临时错误）。"
-                ),
-                is_known=True,
-                await_chain=await_chain,
-                block_point="provider.retry_backoff",
-            )
-
-    # 3. 检查是否为网络建连 / TCP / SSL 握手阻塞
-    is_connecting = any(
-        any(
-            conn_kw in f.func_name.lower()
-            for conn_kw in (
-                "do_handshake",
-                "getaddrinfo",
-                "open_connection",
-                "create_connection",
-                "connect_tcp",
-                "connect",
-            )
-        )
-        or any(k in f.filename.lower() for k in ("ssl", "connector", "connect"))
-        for f in frames
-    )
-    has_entered_reading = any(
-        any(
-            r in f.func_name.lower()
-            for r in (
-                "aread",
-                "read",
-                "receive_response",
-                "read_stream",
-            )
-        )
-        for f in frames
-    )
-
-    if is_connecting and not has_entered_reading:
-        return LLMBlockDiagnosis(
-            state="CONNECTING_NETWORK",
-            status_title="🌐 正在尝试与大模型 API 服务端建立网络连接 (TCP/SSL 握手中)",
-            guidance_hint=(
-                f"网络连接或 SSL 握手耗时已达 {elapsed_seconds:.0f}s。"
-                "请检查网络代理连通性、API 中转站域名或网络出口状态。"
-            ),
-            is_known=True,
-            await_chain=await_chain,
-            block_point="network.connect",
-        )
-
-    # 4. 检查是否正在等待大模型服务端生成返回数据 (LLM 推理中 / 接收响应流)
-    is_generating = any(
-        any(
-            gen_kw in f.func_name.lower()
-            for gen_kw in (
-                "aread",
-                "read",
-                "receive_response",
-                "read_stream",
-                "async_generator_asend",
-                "text_chat",
-                "query",
-                "llm_generate",
-                "completions",
-            )
-        )
-        or any(
-            k in f.filename.lower()
-            for k in (
-                "openai",
-                "anthropic",
-                "google",
-                "httpx",
-                "httpcore",
-                "aiohttp",
-                "context.py",
-            )
-        )
-        for f in frames
-    )
-
-    if is_generating:
-        return LLMBlockDiagnosis(
-            state="WAITING_UPSTREAM_RESPONSE",
-            status_title="⌛ 正在等待大模型服务端生成返回数据 (LLM 推理中)",
-            guidance_hint=(
-                f"网络连接已正常建立，当前正在等待大模型服务端推理生成（耗时已达 {elapsed_seconds:.0f}s，"
-                "长文本或深度思考模型生成较慢，请耐心等待）。"
-            ),
-            is_known=True,
-            await_chain=await_chain,
-            block_point=default_block_point,
-        )
-
-    # 5. 未知阻塞点（Fallback：不符合已知 LLM/HTTP 链路的普通协程）
-    return LLMBlockDiagnosis(
-        state="UNKNOWN",
-        status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
-        guidance_hint=f"请求正在执行中（已耗时 {elapsed_seconds:.0f}s），详细协程 await 栈见下方栈观测日志。",
-        is_known=False,
-        await_chain=await_chain,
-        block_point=default_block_point,
-    )
+# 向后兼容内部私有别名
+_extract_task_await_frames = extract_task_await_frames
+_format_task_await_chain = format_task_await_chain
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -415,18 +82,24 @@ _get_circuit_breaker = get_provider_circuit_breaker
 
 
 async def _call_provider_stream(
-    context: Context, provider_id: str, llm_kwargs: dict[str, Any]
+    context: Context, provider_id: str, llm_kwargs: dict[str, object]
 ) -> LLMResponse:
-    provider: Any = context.get_provider_by_id(provider_id=provider_id)
-    if provider is None or not hasattr(provider, "text_chat_stream"):
+    raw_provider = context.get_provider_by_id(provider_id=provider_id)
+    if raw_provider is None or not callable(
+        getattr(raw_provider, "text_chat_stream", None)
+    ):
         raise RuntimeError(f"Provider 不存在或不支持流式聊天: {provider_id}")
+    provider: LLMStreamProviderProtocol = cast(
+        "LLMStreamProviderProtocol", raw_provider
+    )
 
-    stream_kwargs = dict(llm_kwargs)
+    stream_kwargs: dict[str, object] = dict(llm_kwargs)
     stream_kwargs.pop("chat_provider_id", None)
 
     final_resp = None
     content_parts: list[str] = []
-    async for resp in provider.text_chat_stream(**stream_kwargs):
+    stream_iter = provider.text_chat_stream(**stream_kwargs)  # pyright: ignore[reportArgumentType]
+    async for resp in stream_iter:
         final_resp = resp
         if getattr(resp, "is_chunk", False):
             text = getattr(resp, "completion_text", "")
@@ -438,7 +111,16 @@ async def _call_provider_stream(
 
     final_text = extract_response_text(final_resp)
     if final_text and not getattr(final_resp, "is_chunk", False):
-        return final_resp
+        return (
+            final_resp
+            if isinstance(final_resp, LLMResponse)
+            else LLMResponse(
+                role="assistant",
+                completion_text=final_text,
+                usage=getattr(final_resp, "usage", None),
+                raw_completion=getattr(final_resp, "raw_completion", None),
+            )
+        )
 
     return LLMResponse(
         role="assistant",
@@ -449,7 +131,7 @@ async def _call_provider_stream(
 
 
 async def _try_get_provider_id_by_id(
-    context, provider_id: str, description: str
+    context: Context, provider_id: str, description: str
 ) -> str | None:
     """
     尝试通过 ID 获取 Provider ID 的辅助函数
@@ -462,7 +144,7 @@ async def _try_get_provider_id_by_id(
     Returns:
         Provider ID 或 None
     """
-    if not provider_id or not isinstance(provider_id, str) or not provider_id.strip():
+    if not provider_id or not provider_id.strip():
         return None
 
     provider_id = provider_id.strip()
@@ -478,7 +160,7 @@ async def _try_get_provider_id_by_id(
     return None
 
 
-async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
+async def _try_get_session_provider_id(context: Context, umo: str | None) -> str | None:
     """
     尝试获取会话 Provider ID 的辅助函数
 
@@ -489,6 +171,8 @@ async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
     Returns:
         Provider ID 或 None
     """
+    if not umo:
+        return None
     try:
         # 使用新 API 获取当前会话的 Provider ID
         provider_id = await context.get_current_chat_provider_id(umo=umo)
@@ -500,7 +184,7 @@ async def _try_get_session_provider_id(context, umo: str | None) -> str | None:
     return None
 
 
-async def _try_get_first_available_provider_id(context) -> str | None:
+async def _try_get_first_available_provider_id(context: Context) -> str | None:
     """
     尝试获取第一个可用 Provider ID 的辅助函数
 
@@ -562,7 +246,9 @@ async def get_provider_id_with_fallback(
         # 0. 显式覆盖 Provider (续跑或手动调试时通过 TraceContext 传入)
         trace = TraceContext.current()
         override_provider_id = (
-            trace.metadata.get("override_provider_id") if trace else None
+            str(trace.metadata.get("override_provider_id") or "").strip()
+            if trace
+            else ""
         )
         if override_provider_id:
             strategies.append(
@@ -769,15 +455,16 @@ async def call_provider_with_retry(
                     if actual_model:
                         trace.metadata["model"] = str(actual_model)
                     prompts_map = trace.metadata.setdefault("llm_prompts", {})
-                    if observation_label:
+                    if isinstance(prompts_map, dict) and observation_label:
                         slot = prompts_map.setdefault(observation_label, {})
-                        slot["provider_id"] = pid
-                        if actual_model:
-                            slot["model"] = str(actual_model)
-                        if actual_provider_type:
-                            slot["provider_type"] = str(actual_provider_type)
+                        if isinstance(slot, dict):
+                            slot["provider_id"] = pid
+                            if actual_model:
+                                slot["model"] = str(actual_model)
+                            if actual_provider_type:
+                                slot["provider_type"] = str(actual_provider_type)
 
-                llm_kwargs: dict[str, Any] = {
+                llm_kwargs: dict[str, object] = {
                     "chat_provider_id": pid,
                     "prompt": prompt,
                 }
@@ -807,8 +494,18 @@ async def call_provider_with_retry(
                         _call_provider_stream(context, pid, llm_kwargs)
                     )
                 else:
+                    llm_call_params: dict[str, object] = {
+                        "chat_provider_id": pid,
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                    }
+                    if r_format is not None:
+                        llm_call_params["response_format"] = r_format
+                    if extra_generate_kwargs:
+                        llm_call_params.update(extra_generate_kwargs)
+
                     request_task = asyncio.create_task(
-                        context.llm_generate(**llm_kwargs)
+                        context.llm_generate(**llm_call_params)  # pyright: ignore[reportArgumentType]
                     )
 
                 next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
@@ -893,12 +590,14 @@ async def call_provider_with_retry(
                     "duration_ms": round(duration_ms, 1),
                     "is_fallback": is_fallback_request,
                 }
-                attempts_list.append(attempt_item)
+                if isinstance(attempts_list, list):
+                    attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
-                        s.setdefault("payload", {}).setdefault(
-                            "llm_attempts", []
-                        ).append(attempt_item)
+                        payload = s.setdefault("payload", {})
+                        span_attempts = payload.setdefault("llm_attempts", [])
+                        if isinstance(span_attempts, list):
+                            span_attempts.append(attempt_item)
                         break
             return resp
         except Exception as err:
@@ -915,12 +614,14 @@ async def call_provider_with_retry(
                     "is_fallback": is_fallback_request,
                     "error": str(err),
                 }
-                attempts_list.append(attempt_item)
+                if isinstance(attempts_list, list):
+                    attempts_list.append(attempt_item)
                 for s in reversed(trace._spans):
                     if s.get("stage_name") == AnalysisStage.LLM_ANALYSIS.value:
-                        s.setdefault("payload", {}).setdefault(
-                            "llm_attempts", []
-                        ).append(attempt_item)
+                        payload = s.setdefault("payload", {})
+                        span_attempts = payload.setdefault("llm_attempts", [])
+                        if isinstance(span_attempts, list):
+                            span_attempts.append(attempt_item)
                         break
             if r_format is not None and _is_response_format_unsupported_error(err):
                 raise err
@@ -1010,7 +711,7 @@ async def call_provider_with_retry(
     return None
 
 
-def extract_token_usage(response) -> dict:
+def extract_token_usage(response: object) -> dict[str, int]:
     """
     从LLM响应中提取token使用统计
 
@@ -1027,8 +728,10 @@ def extract_token_usage(response) -> dict:
         usage = getattr(response, "usage", None)
 
         # 2. 尝试从 response.raw_completion.usage 获取 (兼容旧版)
-        if not usage and hasattr(response, "raw_completion"):
-            usage = getattr(response.raw_completion, "usage", None)
+        if not usage:
+            raw_comp = getattr(response, "raw_completion", None)
+            if raw_comp:
+                usage = getattr(raw_comp, "usage", None)
 
         # 3. 如果 response 本身就是 dict (某些特殊情况)
         if not usage and isinstance(response, dict):
@@ -1065,7 +768,7 @@ def extract_token_usage(response) -> dict:
         return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
 
-def extract_response_text(response) -> str:
+def extract_response_text(response: object) -> str:
     """
     从LLM响应中提取文本内容
 
@@ -1076,10 +779,10 @@ def extract_response_text(response) -> str:
         响应文本内容
     """
     try:
-        if hasattr(response, "completion_text"):
-            return response.completion_text
-        else:
-            return str(response)
+        text = getattr(response, "completion_text", None)
+        if text is not None:
+            return str(text)
+        return str(response)
     except Exception as e:
         logger.error(f"提取响应文本失败: {e}")
         return ""

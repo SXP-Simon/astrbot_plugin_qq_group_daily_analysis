@@ -3,9 +3,13 @@
 定义活跃度可视化的抽象契约。
 """
 
-from abc import ABC, abstractmethod
+from __future__ import annotations
 
-from ..models.data_models import ActivityVisualization
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..value_objects import ActivityVisualization
 
 
 class IActivityVisualizer(ABC):
@@ -16,4 +20,3 @@ class IActivityVisualizer(ABC):
         self, messages: list[dict]
     ) -> ActivityVisualization:
         """从消息列表生成活跃度可视化数据"""
-        pass

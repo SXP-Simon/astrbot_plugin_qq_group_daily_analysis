@@ -3,32 +3,44 @@
 负责核心统计逻辑的计算，不依赖于具体的平台或基础设施。
 """
 
+from __future__ import annotations
+
 from collections import defaultdict
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from ...infrastructure.visualization.activity_charts import ActivityVisualizer
-from ..models.data_models import EmojiStatistics, GroupStatistics, TokenUsage
-from ..repositories.visualization_repository import IActivityVisualizer
+from ..value_objects import EmojiStatistics, GroupStatistics, TokenUsage
 from ..value_objects.unified_message import MessageContentType, UnifiedMessage
+
+if TYPE_CHECKING:
+    from ..repositories.visualization_repository import IActivityVisualizer
 
 
 class StatisticsService:
     """统计服务 - 处理群聊数据的聚合统计"""
 
-    def __init__(self, activity_visualizer: IActivityVisualizer | None = None):
-        if activity_visualizer is None:
-            # Fallback: keep backward compatibility
-            self.activity_visualizer: IActivityVisualizer = ActivityVisualizer()
-        else:
-            self.activity_visualizer = activity_visualizer
+    activity_visualizer: IActivityVisualizer
+
+    def __init__(self, activity_visualizer: IActivityVisualizer) -> None:
+        """初始化统计领域服务。
+
+        Args:
+            activity_visualizer: 活跃度图表可视化生成器实现。
+        """
+        self.activity_visualizer = activity_visualizer
 
     def calculate_group_statistics(
         self, messages: list[UnifiedMessage]
     ) -> GroupStatistics:
-        """
-        计算群组基础统计数据。
+        """计算群组基础统计数据。
 
         基于统一消息格式(UnifiedMessage)进行计算，确保跨平台一致性。
+
+        Args:
+            messages: 统一消息对象列表。
+
+        Returns:
+            GroupStatistics: 群聊基础统计与可视化数据模型。
         """
         total_chars = 0
         participants = set()
@@ -74,9 +86,7 @@ class StatisticsService:
             f"{most_active_hour:02d}:00-{(most_active_hour + 1) % 24:02d}:00"
         )
 
-        # 生成活跃度可视化数据
-        # 注意：ActivityVisualizer 可能需要迁移以支持 UnifiedMessage
-        # 目前先转换回 dict 以保持兼容性，或者之后重构它
+        # 生成活跃度可视化数据（转换为兼容字典格式以适配图表引擎）
         raw_msgs = self._convert_to_legacy_dict(messages)
         activity_visualization = (
             self.activity_visualizer.generate_activity_visualization(raw_msgs)
@@ -96,7 +106,14 @@ class StatisticsService:
 
     @staticmethod
     def _is_emoji_like_image(raw_data: object) -> bool:
-        """判断 IMAGE 段是否应按表情计数。"""
+        """判断 IMAGE 段是否应按表情计数。
+
+        Args:
+            raw_data: 消息段原始 payload。
+
+        Returns:
+            bool: 是否属于表情包形态图片。
+        """
         if isinstance(raw_data, dict):
             sub_type = raw_data.get("sub_type")
             if sub_type is not None:
@@ -111,7 +128,14 @@ class StatisticsService:
         return "动画表情" in text or "表情" in text
 
     def _convert_to_legacy_dict(self, messages: list[UnifiedMessage]) -> list[dict]:
-        """内部辅助：将 UnifiedMessage 转换为 Legacy Dict 格式，用于兼容可视化组件"""
+        """将 UnifiedMessage 转换为字典格式以兼容图表生成器。
+
+        Args:
+            messages: 统一消息对象列表。
+
+        Returns:
+            list[dict]: 兼容消息字典列表。
+        """
         legacy_list = []
         for msg in messages:
             legacy_list.append(

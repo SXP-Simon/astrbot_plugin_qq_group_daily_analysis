@@ -2,6 +2,8 @@
 头像仓储接口 - 跨平台头像抽象
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 
@@ -32,7 +34,6 @@ class IAvatarRepository(ABC):
         返回:
             头像 URL，如果不可用则返回 None
         """
-        pass
 
     @abstractmethod
     async def get_user_avatar_data(
@@ -49,7 +50,6 @@ class IAvatarRepository(ABC):
             Base64 编码的图片数据 (data:image/png;base64,...)，
             如果不可用则返回 None
         """
-        pass
 
     @abstractmethod
     async def get_group_avatar_url(
@@ -58,7 +58,6 @@ class IAvatarRepository(ABC):
         size: int = 100,
     ) -> str | None:
         """获取群组头像 URL"""
-        pass
 
     @abstractmethod
     async def batch_get_avatar_urls(
@@ -71,7 +70,6 @@ class IAvatarRepository(ABC):
 
         用于报告生成时需要一次获取多个头像
         """
-        pass
 
     def get_default_avatar_url(self) -> str:
         """获取默认头像 URL（当用户头像不可用时）"""

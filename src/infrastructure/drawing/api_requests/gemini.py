@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import base64
 import binascii
 import re
-from typing import Any
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ....utils.logger import logger
-from .context import DrawingRequestContext
+
+if TYPE_CHECKING:
+    from .context import DrawingRequestContext
 
 
 async def call_gemini_api(
@@ -28,12 +32,20 @@ async def call_gemini_api(
         Exception: 请求失败、响应不是 JSON 或响应中没有最终图片。
     """
     provider = provider or {}
-    raw_url = context.get_provider_value("api_url", provider)
+    raw_url = str(context.get_provider_value("api_url", provider) or "")
     target_url = context.build_target_url(raw_url, "gemini")
-    api_key = context.get_provider_value("api_key", provider)
-    model = context.get_provider_value("model", provider)
-    timeout = context.get_provider_value("timeout", provider)
-    aspect_ratio = context.get_provider_value("aspect_ratio", provider)
+    api_key = str(context.get_provider_value("api_key", provider) or "")
+    model = str(context.get_provider_value("model", provider) or "")
+    timeout_val = context.get_provider_value("timeout", provider)
+    try:
+        timeout = (
+            float(str(timeout_val))
+            if timeout_val is not None and str(timeout_val).strip()
+            else 60.0
+        )
+    except (ValueError, TypeError):
+        timeout = 60.0
+    aspect_ratio = str(context.get_provider_value("aspect_ratio", provider) or "")
 
     raw_size = str(context.get_provider_value("image_size", provider)).strip()
     if raw_size.upper() in {"1K", "2K", "4K"}:
@@ -78,7 +90,7 @@ async def call_gemini_api(
     if output_mime:
         response_format["mime_type"] = output_mime
 
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "model": model,
         "input": input_content,
         "response_format": response_format,
@@ -108,11 +120,11 @@ async def call_gemini_api(
 
     try:
         data = resp.json()
-    except Exception:
+    except Exception as e:
         raise Exception(
             f"Gemini API 未返回合法的 JSON [HTTP {resp.status_code}]: "
             f"<body len={len(resp.content)}>"
-        )
+        ) from e
 
     steps = data.get("steps") if isinstance(data, dict) else None
     model_outputs = (
@@ -140,7 +152,7 @@ async def call_gemini_api(
                 logger.debug(f"[Comic] 跳过无效 Gemini 最终图片: {exc}")
 
     # 当响应包含 steps 时，只在最终模型输出中回退提取图片，避免误取中间推理图。
-    fallback_data: Any = model_outputs if isinstance(steps, list) else data
+    fallback_data: object = model_outputs if isinstance(steps, list) else data
     image = await context.extract_image(
         fallback_data, context.get_request_proxy(provider)
     )

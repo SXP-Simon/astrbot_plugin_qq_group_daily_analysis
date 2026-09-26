@@ -7,7 +7,7 @@ from astrbot.api.provider import LLMResponse
 from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
-from src.domain.models.data_models import TokenUsage
+from src.domain.value_objects import TokenUsage
 from src.domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
@@ -168,7 +168,11 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
     class FakeAnalyzer:
         async def analyze_all_concurrent(self, *args, **kwargs):
             return (
-                [SimpleNamespace(topic="测试话题", contributors=[], detail="", contributor_ids=[])],
+                [
+                    SimpleNamespace(
+                        topic="测试话题", contributors=[], detail="", contributor_ids=[]
+                    )
+                ],
                 [],
                 [],
                 TokenUsage(),
@@ -412,7 +416,9 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
             assert result["success"] is False
             assert result["reason"] == "llm_analysis_failed"
             # 验证 span 状态
-            llm_span = next(s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS")
+            llm_span = next(
+                s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS"
+            )
             assert llm_span["status"] == "failed"
 
     asyncio.run(scenario())
@@ -495,7 +501,11 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
         async def analyze_all_concurrent(self, *args, **kwargs):
             # 话题成功，画像失败
             return (
-                [SimpleNamespace(topic="测试话题", contributors=[], detail="", contributor_ids=[])],
+                [
+                    SimpleNamespace(
+                        topic="测试话题", contributors=[], detail="", contributor_ids=[]
+                    )
+                ],
                 [],
                 [],
                 TokenUsage(),
@@ -523,7 +533,9 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
             )
             assert result["success"] is True
             assert trace.metadata.get("has_warnings") is True
-            llm_span = next(s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS")
+            llm_span = next(
+                s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS"
+            )
             assert llm_span["status"] == "warning"
             trace.finish()
             assert trace.status == "warning"
@@ -696,12 +708,16 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
     analyzer = TopicAnalyzer(context=MockContext(), config_manager=MockConfig())
 
     r1 = LLMResponse(role="assistant", completion_text="[]")
-    r1.raw_completion = {"usage": {"total_tokens": 100, "prompt_tokens": 80, "completion_tokens": 20}}
+    r1.raw_completion = {
+        "usage": {"total_tokens": 100, "prompt_tokens": 80, "completion_tokens": 20}
+    }
     r2 = LLMResponse(
         role="assistant",
         completion_text='[{"topic": "高考交流", "contributors": ["123"], "detail": "讨论高考志愿"}]',
     )
-    r2.raw_completion = {"usage": {"total_tokens": 150, "prompt_tokens": 90, "completion_tokens": 60}}
+    r2.raw_completion = {
+        "usage": {"total_tokens": 150, "prompt_tokens": 90, "completion_tokens": 60}
+    }
     responses = [r1, r2]
     call_idx = 0
 
@@ -711,8 +727,13 @@ def test_schema_retry_prompt_and_completion_updated_in_trace(monkeypatch):
         call_idx += 1
         return res
 
-    monkeypatch.setattr("src.infrastructure.analysis.analyzers.base_analyzer.call_provider_with_retry", fake_call)
-    monkeypatch.setattr(analyzer, "_build_system_prompt", lambda *a, **k: asyncio.sleep(0, result=None))
+    monkeypatch.setattr(
+        "src.infrastructure.analysis.analyzers.base_analyzer.call_provider_with_retry",
+        fake_call,
+    )
+    monkeypatch.setattr(
+        analyzer, "_build_system_prompt", lambda *a, **k: asyncio.sleep(0, result=None)
+    )
 
     async def scenario():
         with TraceContext(trace_id="test-retry-trace") as trace:
@@ -838,6 +859,3 @@ def test_plugin_log_buffer_strips_duplicate_trace_id_in_message():
     assert entry.trace_id == "test-trace-123"
     assert entry.message == "[群分析插件] [LLM 阻塞诊断] 正在等待上游响应"
     assert not entry.message.startswith("[test-trace-123]")
-
-
-

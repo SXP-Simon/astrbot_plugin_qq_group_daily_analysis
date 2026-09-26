@@ -3,9 +3,10 @@ JSON处理工具模块
 提供JSON解析、修复和正则提取功能
 """
 
+from __future__ import annotations
+
 import json
 import re
-from typing import Any
 
 from ....utils.logger import logger
 
@@ -43,7 +44,7 @@ def fix_json(text: str) -> str:
 
         # 4. 处理字符串内容中的特殊字符
         # 转义字符串内的双引号
-        def escape_quotes_in_strings(match):
+        def escape_quotes_in_strings(match: re.Match[str]) -> str:
             content = match.group(1)
             # 转义内部的双引号
             content = content.replace('"', '\\"')
@@ -63,7 +64,7 @@ def fix_json(text: str) -> str:
         text = re.sub(r"}\s*{", "}, {", text)
 
         # 2. 确保字段名有引号（仅在对象开始或逗号后，避免破坏字符串值）
-        def quote_field_names(match):
+        def quote_field_names(match: re.Match[str]) -> str:
             prefix = match.group(1)
             key = match.group(2)
             return f'{prefix}"{key}":'
@@ -84,7 +85,7 @@ def fix_json(text: str) -> str:
 
 def _parse_json_with_pattern(
     result_text: str, pattern: str, data_type: str, expected_type_name: str = "数据"
-) -> tuple[bool, Any, str | None]:
+) -> tuple[bool, object, str | None]:
     """
     通用内部 JSON 解析逻辑，包含提取、直接解析、修复后重试。
     """
@@ -142,24 +143,30 @@ def _parse_json_with_pattern(
 
 def parse_json_response(
     result_text: str, data_type: str
-) -> tuple[bool, list[dict] | None, str | None]:
+) -> tuple[bool, list[dict[str, object]] | None, str | None]:
     """
     统一的JSON解析方法（用于JSON数组响应）
     """
-    return _parse_json_with_pattern(
+    success, data, err = _parse_json_with_pattern(
         result_text, r"\[.*\]", data_type, expected_type_name="数组"
     )
+    if success and isinstance(data, list):
+        return True, data, None
+    return False, None, err
 
 
 def parse_json_object_response(
     result_text: str, data_type: str
-) -> tuple[bool, dict | None, str | None]:
+) -> tuple[bool, dict[str, object] | None, str | None]:
     """
     统一的JSON解析方法（用于JSON对象响应）
     """
-    return _parse_json_with_pattern(
+    success, data, err = _parse_json_with_pattern(
         result_text, r"\{.*\}", data_type, expected_type_name="对象"
     )
+    if success and isinstance(data, dict):
+        return True, data, None
+    return False, None, err
 
 
 def _clean_json_string(text: str) -> str:

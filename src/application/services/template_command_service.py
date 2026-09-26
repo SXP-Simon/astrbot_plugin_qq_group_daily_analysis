@@ -1,4 +1,4 @@
-"""模板管理相关命令服务。"""
+"""模板管理相关应用服务。"""
 
 from __future__ import annotations
 
@@ -38,7 +38,9 @@ class TemplateCommandService:
             return chr(0x32B1 + num - 36)
         return f"[{num}]"
 
-    def __init__(self, plugin_root: str):
+    plugin_root: str
+
+    def __init__(self, plugin_root: str) -> None:
         self.plugin_root = plugin_root
 
     def resolve_template_base_dir(self) -> str:
@@ -107,7 +109,7 @@ class TemplateCommandService:
                 item_path = os.path.join(base_dir, item)
                 if not os.path.isdir(item_path):
                     continue
-                if item.startswith("__") or item.startswith(".") or item == "format":
+                if item.startswith(("__", ".")) or item == "format":
                     continue
                 if (
                     os.path.isfile(os.path.join(item_path, "html_template.html"))

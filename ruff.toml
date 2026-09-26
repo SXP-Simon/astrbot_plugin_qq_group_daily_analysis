@@ -20,6 +20,20 @@ select = [
   "Q",     # flake8-quotes
   "I",     # 导入顺序
   "UP",    # pyupgrade
+  "B",     # flake8-bugbear (隐藏Bug与设计缺陷)
+  "PIE",   # flake8-pie (无用与冗余代码)
+  "SIM",   # flake8-simplify (代码简化与死分支)
+  "ERA",   # eradicate (废弃注释代码拦截)
+  "RUF",   # Ruff 专属规则
+  "FA",    # flake8-future-annotations (类型延后导入)
+  "TCH",   # flake8-type-checking (类型导入隔离)
+  "PGH",   # pygrep-hooks (严格类型注解与规则指令)
+  "RSE",   # flake8-raise (规范抛出异常写法)
+  "YTT",   # flake8-2020 (系统与环境兼容性检查)
+  "RET",   # flake8-return (返回语句与提前返回规范)
+  "T20",   # flake8-print (禁止生产代码残留 print 调用，统一走 logger)
+  "ANN401",# flake8-annotations (禁止在类型注解中随意使用 Any)
+  "ARG",   # flake8-unused-arguments (未使用的函数/方法参数拦截)
 ]
 ignore = [
   "F403",
@@ -27,4 +41,16 @@ ignore = [
   "E501",
   "ASYNC230", # 待后续统一处理
   "ASYNC240", # 待后续统一处理
+  "SIM105",   # contextlib.suppress 允许保留可读性更强的 try-except-pass
+  "B008",     # 允许部分特定参数默认构造
+  "RUF001",   # 允许中文字符串中的全角标点符号
+  "RUF002",   # 允许中文 Docstring 中的全角标点符号
+  "RUF003",   # 允许中文注释中的全角标点符号
+  "ARG002",   # 允许类方法/适配器为满足接口协议契约而声明但未使用的参数（保证关键字传参和LSP兼容）
+  "ARG004",   # 允许静态方法为满足契约签名而保留的入参
 ]
+
+[lint.per-file-ignores]
+"scripts/*" = ["T201", "ARG001", "ARG002"] # 允许独立离线调试脚本使用控制台 print 输出及占位参数
+"main.py" = ["TC001", "TC002", "TC003"]    # 允许主入口保留 AstrBot 运行时反射所需的类型注解导入
+

@@ -4,10 +4,19 @@
 适用于遵循 OneBot v11 标准扩展（go-cqhttp, onebots 等）及通用默认实现的协议端。
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
 
 from .....utils.logger import logger
 from .driver_base import OneBotDriver
+
+if TYPE_CHECKING:
+    from .....domain.repositories.bot_client_protocol import OneBotClientProtocol
+    from .....domain.value_objects import (
+        OneBotAlbumPayload,
+        OneBotHistoryFetchParams,
+    )
 
 
 class StandardOneBotDriver(OneBotDriver):
@@ -67,9 +76,9 @@ class StandardOneBotDriver(OneBotDriver):
 
     async def get_group_album_list(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[OneBotAlbumPayload]:
         """获取群相册列表（兼容多种 OneBot 扩展实现及返回结构）。
 
         Args:
@@ -77,12 +86,16 @@ class StandardOneBotDriver(OneBotDriver):
             group_id: 目标群号
 
         Returns:
-            list[dict[str, Any]]: 提取出的相册列表
+            提取出的相册列表。
         """
 
-        def extract_list(payload: Any) -> list[dict[str, Any]]:
+        def extract_list(payload: object) -> list[OneBotAlbumPayload]:
             if isinstance(payload, list):
-                return [item for item in payload if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in payload
+                    if isinstance(item, dict)
+                ]
             if not isinstance(payload, dict):
                 logger.debug(
                     f"[OneBot:{self.name}] 提取相册列表失败: payload 非字典/列表类型 ({type(payload)})"
@@ -91,7 +104,11 @@ class StandardOneBotDriver(OneBotDriver):
 
             data = payload.get("data")
             if isinstance(data, list):
-                return [item for item in data if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in data
+                    if isinstance(item, dict)
+                ]
             if isinstance(data, dict):
                 album_list = (
                     data.get("album_list")
@@ -101,7 +118,11 @@ class StandardOneBotDriver(OneBotDriver):
                     or data.get("album")
                 )
                 if isinstance(album_list, list):
-                    return [item for item in album_list if isinstance(item, dict)]
+                    return [
+                        cast("OneBotAlbumPayload", item)
+                        for item in album_list
+                        if isinstance(item, dict)
+                    ]
                 logger.debug(
                     f"[OneBot:{self.name}] 在 data 字段中未找到列表: data={data}"
                 )
@@ -114,7 +135,11 @@ class StandardOneBotDriver(OneBotDriver):
                 or payload.get("album")
             )
             if isinstance(album_list, list):
-                return [item for item in album_list if isinstance(item, dict)]
+                return [
+                    cast("OneBotAlbumPayload", item)
+                    for item in album_list
+                    if isinstance(item, dict)
+                ]
 
             logger.debug(
                 f"[OneBot:{self.name}] 无法从响应中提取相册列表: payload={payload}"
@@ -157,7 +182,7 @@ class StandardOneBotDriver(OneBotDriver):
         group_id: str,
         count: int,
         anchor_id: str | int | None,
-    ) -> dict[str, Any]:
+    ) -> OneBotHistoryFetchParams:
         """构建标准 OneBot 历史消息拉取参数。
 
         Args:
@@ -166,9 +191,9 @@ class StandardOneBotDriver(OneBotDriver):
             anchor_id: 消息序号锚点
 
         Returns:
-            dict[str, Any]: API 参数字典
+            OneBotHistoryFetchParams: API 参数字典
         """
-        params: dict[str, Any] = {
+        params: OneBotHistoryFetchParams = {
             "group_id": int(group_id),
             "count": count,
             "reverseOrder": True,
@@ -179,7 +204,7 @@ class StandardOneBotDriver(OneBotDriver):
 
     def extract_history_anchor(
         self,
-        earliest_msg: dict[str, Any],
+        earliest_msg: dict[str, object],
     ) -> str | int | None:
         """从最旧消息提取序号锚点（优先 message_seq）。
 
@@ -195,11 +220,14 @@ class StandardOneBotDriver(OneBotDriver):
             or earliest_msg.get("seq")
         )
         mid_val = earliest_msg.get("message_id")
-        return seq_val if seq_val is not None else mid_val
+        anchor = seq_val if seq_val is not None else mid_val
+        if isinstance(anchor, (str, int)):
+            return anchor
+        return None
 
     async def upload_group_album(
         self,
-        bot: Any,
+        bot: OneBotClientProtocol,
         group_id: str,
         album_id: str,
         album_name: str | None,
@@ -217,7 +245,7 @@ class StandardOneBotDriver(OneBotDriver):
         Raises:
             RuntimeError: 所有候选 API 均调用失败时抛出
         """
-        params: dict[str, Any] = {
+        params: dict[str, object] = {
             "group_id": int(group_id),
             "file": file_content,
             "album_id": str(album_id),
@@ -257,12 +285,10 @@ class StandardOneBotDriver(OneBotDriver):
         err_str = str(exc)
 
         # 检查常见错误码与模式（兼容标准与各类方言如 SnowLuma 的 result=120）
-        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")):
-            if (
-                any(kw in err_str for kw in self.MUTE_KEYWORDS)
-                or "result=120" in err_str
-            ):
-                return True
+        if any(rc in err_str for rc in ("1200", "retcode=100", "result=120")) and (
+            any(kw in err_str for kw in self.MUTE_KEYWORDS) or "result=120" in err_str
+        ):
+            return True
 
         for attr in ("message", "wording"):
             val = getattr(exc, attr, "") or ""
@@ -271,12 +297,9 @@ class StandardOneBotDriver(OneBotDriver):
             if "shut up" in val.lower():
                 return True
 
-        if any(kw in err_str for kw in self.MUTE_KEYWORDS):
-            return True
+        return bool(any(kw in err_str for kw in self.MUTE_KEYWORDS))
 
-        return False
-
-    def is_whole_ban(self, group_info: dict[str, Any]) -> bool:
+    def is_whole_ban(self, group_info: dict[str, object]) -> bool:
         """识别多协议端全群禁言标记。
 
         Args:

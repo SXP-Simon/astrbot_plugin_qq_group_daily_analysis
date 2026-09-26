@@ -10,7 +10,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, ClassVar
 
 from jinja2 import ChoiceLoader, FileSystemLoader, select_autoescape
 from jinja2.sandbox import SandboxedEnvironment
@@ -22,23 +22,14 @@ from .template_installer import (
     validate_template_name,
 )
 
+if TYPE_CHECKING:
+    from ..config.config_manager import ConfigManager
+
 
 class HTMLTemplates:
     """HTML模板管理类"""
 
-    def __init__(self, config_manager):
-        """初始化Jinja2环境"""
-        self.config_manager = config_manager
-        # 设置模板根目录
-        self.base_dir = os.path.join(os.path.dirname(__file__), "templates")
-        self.platform_base_dir = os.path.join(
-            os.path.dirname(__file__), "platform_templates"
-        )
-        # 缓存不同模板的Jinja2环境（多线程安全）
-        self._envs = {}
-        self._env_lock = threading.Lock()
-
-    KNOWN_TEMPLATE_NAMES: dict[str, str] = {
+    KNOWN_TEMPLATE_NAMES: ClassVar[dict[str, str]] = {
         "scrapbook": "手账风格 (Scrapbook / 默认)",
         "ATRI": "亚托莉 (ATRI)",
         "HatsuneMiku": "初音未来 (HatsuneMiku)",
@@ -49,6 +40,24 @@ class HTMLTemplates:
         "simple": "极简黑白 (Simple)",
         "art_nouveau": "新艺术运动 (Art Nouveau)",
     }
+
+    config_manager: ConfigManager
+    base_dir: str
+    platform_base_dir: str
+    _envs: dict[str, SandboxedEnvironment]
+    _env_lock: threading.Lock
+
+    def __init__(self, config_manager: ConfigManager) -> None:
+        """初始化Jinja2环境"""
+        self.config_manager = config_manager
+        # 设置模板根目录
+        self.base_dir = os.path.join(os.path.dirname(__file__), "templates")
+        self.platform_base_dir = os.path.join(
+            os.path.dirname(__file__), "platform_templates"
+        )
+        # 缓存不同模板的Jinja2环境（多线程安全）
+        self._envs = {}
+        self._env_lock = threading.Lock()
 
     def _get_env_sync(self, template_theme: str | None = None) -> SandboxedEnvironment:
         """获取当前配置或指定主题的模板环境（同步版本，供 asyncio.to_thread 调用）"""
@@ -64,13 +73,8 @@ class HTMLTemplates:
         clean_name = validate_template_name(template_name)
 
         template_dir = os.path.join(self.base_dir, clean_name)
-        get_custom_template_dir = getattr(
-            self.config_manager, "get_custom_report_template_dir", None
-        )
-        custom_template_res = (
-            get_custom_template_dir(clean_name)
-            if callable(get_custom_template_dir)
-            else None
+        custom_template_res = self.config_manager.get_custom_report_template_dir(
+            clean_name
         )
         custom_template_dir = (
             Path(str(custom_template_res)) if custom_template_res else None
@@ -118,9 +122,9 @@ class HTMLTemplates:
 
         return env
 
-    def get_available_templates(self) -> list[dict[str, Any]]:
+    def get_available_templates(self) -> list[dict[str, object]]:
         """动态扫描内置与自定义数据目录，返回所有可用的视觉主题模板列表"""
-        found_themes: dict[str, dict[str, Any]] = {}
+        found_themes: dict[str, dict[str, object]] = {}
 
         # 1. 扫描内置模板目录（官方模板始终由源码管理）
         if os.path.isdir(self.base_dir):
@@ -150,15 +154,11 @@ class HTMLTemplates:
                         }
 
         # 2. 扫描用户自定义模板目录（仅登记非官方内置的独立自定义主题）
-        get_custom_dir = getattr(
-            self.config_manager, "get_custom_report_template_dir", None
-        )
+        sample_res = self.config_manager.get_custom_report_template_dir("")
         custom_base: Path | None = None
-        if callable(get_custom_dir):
-            sample_res = get_custom_dir("")
-            if sample_res:
-                p_sample = Path(str(sample_res))
-                custom_base = p_sample if p_sample.is_dir() else p_sample.parent
+        if sample_res:
+            p_sample = Path(str(sample_res))
+            custom_base = p_sample if p_sample.is_dir() else p_sample.parent
 
         if custom_base and custom_base.is_dir():
             for p in sorted(custom_base.iterdir()):
@@ -275,7 +275,7 @@ class HTMLTemplates:
             return ""
 
     def render_template(
-        self, template_name: str, template_theme: str | None = None, **kwargs
+        self, template_name: str, template_theme: str | None = None, **kwargs: object
     ) -> str:
         """渲染指定的模板文件
 
@@ -298,7 +298,7 @@ class HTMLTemplates:
             return ""
 
     def render_platform_template(
-        self, platform_name: str, template_name: str, **kwargs
+        self, platform_name: str, template_name: str, **kwargs: object
     ) -> str:
         """渲染与报告主题解耦的平台专用模板。"""
         try:

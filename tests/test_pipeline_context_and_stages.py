@@ -168,4 +168,3 @@ async def test_pipeline_heartbeat_keeper_refreshes_active_task(tmp_path: Path):
         # 退出 step 后检查 span 完成
         assert len(trace._spans) == 1
         assert trace._spans[0]["status"] == "success"
-

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import aiohttp
 from PIL import Image
 
-from src.domain.models.data_models import (
+from src.domain.value_objects import (
     ActivityVisualization,
     GoldenQuote,
     GroupStatistics,
@@ -34,6 +34,9 @@ class FakeConfig:
 
     def get_qq_official_t2i_summary_dashboard_enabled(self):
         return True
+
+    def get_report_template(self):
+        return "scrapbook"
 
 
 def build_generator_without_io():
@@ -683,13 +686,13 @@ def test_avatar_download_retries_after_transient_network_error(monkeypatch):
         def __init__(self):
             self.requests = 0
 
-        def get(self, _url):
+        def get(self, url: str):
             self.requests += 1
             if self.requests == 1:
                 return FailedRequest()
             return SuccessfulRequest()
 
-    async def no_wait(_seconds):
+    async def no_wait(seconds: float):
         return None
 
     generator = object.__new__(ReportGenerator)
@@ -698,7 +701,7 @@ def test_avatar_download_retries_after_transient_network_error(monkeypatch):
     generator._avatar_session_concurrent_semaphore = asyncio.Semaphore(1)
     monkeypatch.setattr(asyncio, "sleep", no_wait)
 
-    async def avatar_url_getter(_user_id):
+    async def avatar_url_getter(user_id: str):
         return "https://q1.qlogo.cn/g?b=qq&nk=123456&s=100"
 
     avatar = asyncio.run(generator._get_user_avatar_bytes("123456", avatar_url_getter))

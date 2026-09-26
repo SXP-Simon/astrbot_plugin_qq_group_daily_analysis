@@ -46,7 +46,7 @@ astrbot_path.get_astrbot_data_path = lambda: Path(".")
 sys.modules["astrbot.core.utils"] = astrbot_core_utils
 sys.modules["astrbot.core.utils.astrbot_path"] = astrbot_path
 
-from src.domain.models.data_models import (  # noqa: E402
+from src.domain.value_objects import (  # noqa: E402
     ActivityVisualization,
     EmojiStatistics,
     GroupStatistics,

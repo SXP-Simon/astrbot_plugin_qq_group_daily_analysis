@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from ...utils.logger import logger
+
+if TYPE_CHECKING:
+    import asyncio
+    from collections.abc import Awaitable, Callable, Sequence
+
+    from ...domain.value_objects import AnalysisResultPayload, GroupStatistics
+    from ..config.config_manager import ConfigManager
+    from .templates import HTMLTemplates
 
 
 class QQOfficialMarkdownReportGenerator:
@@ -14,16 +22,18 @@ class QQOfficialMarkdownReportGenerator:
 
     def __init__(
         self,
-        config_manager: Any,
-        html_templates: Any = None,
-        render_semaphore: Any = None,
+        config_manager: ConfigManager,
+        html_templates: HTMLTemplates | None = None,
+        render_semaphore: asyncio.Semaphore | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.html_templates = html_templates
         self.render_semaphore = render_semaphore
 
     async def generate(
-        self, analysis_result: dict, html_render_func=None
+        self,
+        analysis_result: AnalysisResultPayload,
+        html_render_func: Callable[..., Awaitable[str | None]] | None = None,
     ) -> tuple[str, str]:
         """Generate QQ Markdown and a URL-free Markdown fallback report."""
         fallback_report = self._generate_markdown_report(analysis_result)
@@ -44,8 +54,12 @@ class QQOfficialMarkdownReportGenerator:
         )
 
     async def _generate_summary_dashboard_url(
-        self, analysis_result: dict, html_render_func
+        self,
+        analysis_result: AnalysisResultPayload,
+        html_render_func: Callable[..., Awaitable[str | None]],
     ) -> str | None:
+        if not self.html_templates:
+            return None
         stats = analysis_result["statistics"]
         hourly_counts = self.get_hourly_counts(stats)
         max_count = max(hourly_counts, default=0)
@@ -112,7 +126,9 @@ class QQOfficialMarkdownReportGenerator:
             return None
 
     def _generate_markdown_report(
-        self, analysis_result: dict, summary_dashboard_url: str | None = None
+        self,
+        analysis_result: AnalysisResultPayload,
+        summary_dashboard_url: str | None = None,
     ) -> str:
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
@@ -146,7 +162,7 @@ class QQOfficialMarkdownReportGenerator:
         for index, topic in enumerate(topics[:max_topics], 1):
             topic_name = self.render_identity_text(topic.topic, analysis_result)
             lines.append(f"### {index}. {topic_name}")
-            contributor_ids = list(getattr(topic, "contributor_ids", []) or [])
+            contributor_ids = list(topic.contributor_ids or [])
             mentions = self.mentions(contributor_ids)
             if mentions:
                 lines.append(f"**参与者**：{mentions}")
@@ -158,9 +174,9 @@ class QQOfficialMarkdownReportGenerator:
         lines.append("## 🏆 群友称号")
         max_user_titles = self.config_manager.get_max_user_titles()
         for title in user_titles[:max_user_titles]:
-            mention = self.mention(getattr(title, "user_id", ""))
+            mention = self.mention(title.user_id)
             title_text = self.render_identity_text(title.title, analysis_result)
-            mbti = f" · {title.mbti}" if getattr(title, "mbti", "") else ""
+            mbti = f" · {title.mbti}" if title.mbti else ""
             prefix = f"{mention} — " if mention else ""
             lines.append(f"- {prefix}**{title_text}**{mbti}")
             reason = self.render_identity_text(title.reason, analysis_result)
@@ -176,7 +192,7 @@ class QQOfficialMarkdownReportGenerator:
             quote_content = self.render_identity_text(
                 golden_quote.content, analysis_result
             )
-            mention = self.mention(getattr(golden_quote, "user_id", ""))
+            mention = self.mention(golden_quote.user_id)
             attribution = f" — {mention}" if mention else ""
             lines.append(f"- **{index}. {quote_content}**{attribution}")
             reason = self.render_identity_text(golden_quote.reason, analysis_result)
@@ -187,9 +203,12 @@ class QQOfficialMarkdownReportGenerator:
         return "\n".join(lines).strip()
 
     @staticmethod
-    def format_metric(value: object) -> str:
+    def format_metric(value: int | float | str | bytes | bytearray | None) -> str:
         try:
-            number = max(0, int(value) if value is not None else 0)  # type: ignore[arg-type]
+            if isinstance(value, (int, float, str, bytes, bytearray)):
+                number = max(0, int(value))
+            else:
+                number = 0
         except (TypeError, ValueError):
             return "0"
         if number >= 1_000_000:
@@ -201,7 +220,7 @@ class QQOfficialMarkdownReportGenerator:
         return f"{number:,}"
 
     @staticmethod
-    def format_peak_period(value: object) -> str:
+    def format_peak_period(value: str | None) -> str:
         text = str(value or "").strip()
         match = re.search(r"(\d{1,2}):\d{2}\s*[-~—至]\s*(\d{1,2}):\d{2}", text)
         if match:
@@ -209,7 +228,9 @@ class QQOfficialMarkdownReportGenerator:
         return text or "—"
 
     @classmethod
-    def build_activity_chart(cls, stats: object, bar_width: int = 12) -> list[str]:
+    def build_activity_chart(
+        cls, stats: GroupStatistics | None, bar_width: int = 12
+    ) -> list[str]:
         hourly_counts = cls.get_hourly_counts(stats)
         max_count = max(hourly_counts, default=0)
         if max_count <= 0:
@@ -230,9 +251,13 @@ class QQOfficialMarkdownReportGenerator:
         return lines
 
     @staticmethod
-    def get_hourly_counts(stats: object) -> list[int]:
+    def get_hourly_counts(stats: GroupStatistics | None) -> list[int]:
+        if stats is None:
+            return [0] * 24
         activity_viz = getattr(stats, "activity_visualization", None)
-        raw_activity = getattr(activity_viz, "hourly_activity", None) or {}
+        if activity_viz is None:
+            return [0] * 24
+        raw_activity = getattr(activity_viz, "hourly_activity", None)
         if not isinstance(raw_activity, dict):
             return [0] * 24
 
@@ -240,19 +265,19 @@ class QQOfficialMarkdownReportGenerator:
         for hour in range(24):
             raw_count = raw_activity.get(hour, raw_activity.get(str(hour), 0))
             try:
-                count = max(0, int(raw_count or 0))
+                count = max(0, int(str(raw_count or 0)))
             except (TypeError, ValueError):
                 count = 0
             hourly_counts.append(count)
         return hourly_counts
 
     @staticmethod
-    def mention(user_id: object) -> str:
+    def mention(user_id: str | int | None) -> str:
         normalized = str(user_id or "").strip().strip("[]")
         return f"<@{normalized}>" if normalized else ""
 
     @classmethod
-    def mentions(cls, user_ids: list[object]) -> str:
+    def mentions(cls, user_ids: Sequence[str | int | None]) -> str:
         unique_ids = list(
             dict.fromkeys(
                 str(user_id or "").strip().strip("[]")
@@ -263,7 +288,9 @@ class QQOfficialMarkdownReportGenerator:
         return " ".join(cls.mention(user_id) for user_id in unique_ids)
 
     @classmethod
-    def render_identity_text(cls, text: object, analysis_result: dict) -> str:
+    def render_identity_text(
+        cls, text: str, analysis_result: AnalysisResultPayload
+    ) -> str:
         """Replace known IDs and display names with QQ mention syntax."""
         source = str(text or "")
         user_analysis = analysis_result.get("user_analysis") or {}
@@ -282,21 +309,22 @@ class QQOfficialMarkdownReportGenerator:
             id_to_names[normalized_id] = names
 
         for title in analysis_result.get("user_titles", []) or []:
-            user_id = str(getattr(title, "user_id", "") or "").strip()
-            name = str(getattr(title, "name", "") or "").strip()
+            user_id = str(title.user_id or "").strip()
+            name = str(title.name or "").strip()
             if user_id:
                 id_to_names.setdefault(user_id, set())
                 if name and name != user_id:
                     id_to_names[user_id].add(name)
 
         stats = analysis_result.get("statistics")
-        for golden_quote in getattr(stats, "golden_quotes", []) or []:
-            user_id = str(getattr(golden_quote, "user_id", "") or "").strip()
-            name = str(getattr(golden_quote, "sender", "") or "").strip()
-            if user_id:
-                id_to_names.setdefault(user_id, set())
-                if name and name != user_id:
-                    id_to_names[user_id].add(name)
+        if stats:
+            for golden_quote in stats.golden_quotes or []:
+                user_id = str(golden_quote.user_id or "").strip()
+                name = str(golden_quote.sender or "").strip()
+                if user_id:
+                    id_to_names.setdefault(user_id, set())
+                    if name and name != user_id:
+                        id_to_names[user_id].add(name)
 
         placeholders: dict[str, str] = {}
 

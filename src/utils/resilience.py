@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import time
 
@@ -108,7 +110,7 @@ class GlobalRateLimiter:
     不会超过设定的最大并发限制（如保护 LLM 账单或避免 API 拥塞）。
     """
 
-    _instance: "GlobalRateLimiter | None" = None
+    _instance: GlobalRateLimiter | None = None
     _semaphore: asyncio.Semaphore | None = None
     _max_concurrency: int | None = None
 
@@ -118,7 +120,7 @@ class GlobalRateLimiter:
         return cls._instance
 
     @classmethod
-    def get_instance(cls, max_concurrency: int | None = None) -> "GlobalRateLimiter":
+    def get_instance(cls, max_concurrency: int | None = None) -> GlobalRateLimiter:
         """
         获取或创建限流器单例。
 

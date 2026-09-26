@@ -97,7 +97,7 @@ def test_importing_factory_does_not_import_sdk_modules():
         text=True,
         env=env,
     )
-    assert result.returncode == 0, f"Subprocess failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Subprocess failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
     assert "OK" in result.stdout
-
-

@@ -10,9 +10,12 @@ import re
 import time
 from collections import deque
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import TYPE_CHECKING, ClassVar
 
 from ...shared.constants import AnalysisStage
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass
@@ -29,7 +32,7 @@ class PluginLogEntry:
     raw: str
     location: str | None = None
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -38,7 +41,7 @@ class PluginLogBuffer(logging.Handler):
     专用插件日志处理器，挂载到 logging 捕获群分析插件全链路日志
     """
 
-    TAG_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
+    TAG_PATTERNS: ClassVar[list[tuple[str, str, re.Pattern[str]]]] = [
         (
             "LLM",
             "大模型调用",
@@ -93,7 +96,7 @@ class PluginLogBuffer(logging.Handler):
         ("Trace", "链路追踪", re.compile(r"(trace|span|context_metric)", re.I)),
     ]
 
-    STAGE_NAMES = {
+    STAGE_NAMES: ClassVar[dict[str, str]] = {
         AnalysisStage.FETCH_MESSAGES.value: "拉取聊天记录",
         AnalysisStage.CLEAN_MESSAGES.value: "消息清洗过滤",
         AnalysisStage.STATS_ANALYSIS.value: "基础统计分析",
@@ -111,13 +114,13 @@ class PluginLogBuffer(logging.Handler):
         self.max_capacity = max_capacity
         self._buffer: deque[PluginLogEntry] = deque(maxlen=max_capacity)
         self._counter = 0
-        self._listeners: set[Any] = set()
+        self._listeners: set[Callable[[PluginLogEntry], object]] = set()
 
-    def register_listener(self, listener: Any) -> None:
+    def register_listener(self, listener: Callable[[PluginLogEntry], object]) -> None:
         """注册日志实时推送监听器"""
         self._listeners.add(listener)
 
-    def unregister_listener(self, listener: Any) -> None:
+    def unregister_listener(self, listener: Callable[[PluginLogEntry], object]) -> None:
         """注销日志实时推送监听器"""
         self._listeners.discard(listener)
 
@@ -242,7 +245,7 @@ class PluginLogBuffer(logging.Handler):
         trace_id: str | None = None,
         tag: str | None = None,
         search: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, object]], int]:
         """按条件多维度筛选日志列表（按时间倒序）"""
         results: list[PluginLogEntry] = []
         target_level = level.upper().strip() if level else None
@@ -257,21 +260,20 @@ class PluginLogBuffer(logging.Handler):
                 continue
             if target_tag and entry.tag.lower() != target_tag.lower():
                 continue
-            if search_kw:
-                if (
-                    search_kw not in entry.message.lower()
-                    and search_kw not in (entry.trace_id or "").lower()
-                    and search_kw not in entry.logger_name.lower()
-                    and search_kw not in (entry.location or "").lower()
-                ):
-                    continue
+            if search_kw and (
+                search_kw not in entry.message.lower()
+                and search_kw not in (entry.trace_id or "").lower()
+                and search_kw not in entry.logger_name.lower()
+                and search_kw not in (entry.location or "").lower()
+            ):
+                continue
             results.append(entry)
 
         total = len(results)
         paged = results[offset : offset + limit]
         return [e.to_dict() for e in paged], total
 
-    def get_trace_logs(self, trace_id: str) -> list[dict[str, Any]]:
+    def get_trace_logs(self, trace_id: str) -> list[dict[str, object]]:
         """获取特定 TraceID 的全部日志记录"""
         return [
             e.to_dict()
