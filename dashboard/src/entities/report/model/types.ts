@@ -1,16 +1,4 @@
-export interface ReportItem {
-  filename: string;
-  size_bytes: number;
-  modified_at: number;
-  absolute_path?: string;
-  data_url?: string;
-  is_html?: boolean;
-  is_comic?: boolean;
-  report_type?: "image" | "html" | "comic";
-  html_content?: string;
-  group_id?: string;
-  group_name?: string;
-  platform?: string;
-  trace_id?: string;
-}
+import type { components } from "../../../shared/api/generated/schema";
 
+export type ReportItem = components["schemas"]["ReportItem"];
+export type ReportTemplateItem = components["schemas"]["ReportTemplateItem"];

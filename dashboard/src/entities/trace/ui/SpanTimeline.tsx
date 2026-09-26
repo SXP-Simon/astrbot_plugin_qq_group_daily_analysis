@@ -177,7 +177,7 @@ export const SpanTimeline: React.FC<SpanTimelineProps> = ({
               <RenderAttemptsTable attempts={renderAttempts} />
 
               {/* LLM 真实提示词 Prompt 检视器 */}
-              {(span.stage_name === "LLM_ANALYSIS" || Boolean(span.payload?.prompts)) && (
+              {(span.stage_name?.toUpperCase() === "LLM_ANALYSIS" || Boolean(span.payload?.prompts)) && (
                 <PromptsInspector
                   prompts={
                     span.payload?.prompts as Record<string, PromptDetail | string> | undefined

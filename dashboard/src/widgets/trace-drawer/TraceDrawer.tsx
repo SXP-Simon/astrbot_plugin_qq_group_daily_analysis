@@ -376,8 +376,8 @@ export const TraceDrawer: React.FC<TraceDrawerProps> = ({
             </div>
             <SpanTimeline
               spans={trace.spans || []}
-              totalDurationMs={trace.duration_ms}
-              currentStage={trace.current_stage}
+              totalDurationMs={trace.duration_ms ?? undefined}
+              currentStage={trace.current_stage ?? undefined}
               taskStatus={trace.status}
             />
           </div>

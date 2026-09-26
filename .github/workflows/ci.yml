@@ -77,12 +77,21 @@ jobs:
 
 
   frontend-check:
-    name: Frontend Lint & Build
+    name: Frontend Lint, Test & Build (with OpenAPI Contract Sync)
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -99,6 +108,20 @@ jobs:
       - name: Install dependencies
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile
+
+      - name: Verify OpenAPI Spec & Type Contract Consistency
+        run: |
+          uv run python scripts/export_openapi.py --check
+          cd dashboard && pnpm generate:types
+          if ! git diff --ignore-space-at-eol --quiet src/shared/api/generated/schema.d.ts; then
+            echo "::error::OpenAPI 规范或前端类型存在未提交漂移！请在本地运行 'pnpm --dir dashboard generate:types' 并提交。"
+            git diff src/shared/api/generated/schema.d.ts
+            exit 1
+          fi
+
+      - name: Unit & Integration Tests (Vitest)
+        working-directory: ./dashboard
+        run: pnpm test
 
       - name: ESLint Check
         working-directory: ./dashboard

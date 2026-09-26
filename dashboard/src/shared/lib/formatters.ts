@@ -56,17 +56,23 @@ export function formatStageName(stage?: string): string {
   if (!stage) return "未指定阶段";
   const stageMap: Record<string, string> = {
     FETCH_MESSAGES: "拉取聊天记录",
+    DATA_FETCHING: "拉取聊天记录",
     CLEAN_MESSAGES: "消息清洗过滤",
+    INCREMENTAL_AGGREGATION: "增量聚类聚合",
     STATS_ANALYSIS: "基础统计分析",
-    LLM_ANALYSIS: "大模型话题与画像分析",
+    LLM_ANALYSIS: "大模型分析",
     SAVE_SUMMARY: "历史记录持久化",
+    REPORT_RENDERING: "报告长图渲染",
     RENDER_REPORT: "报告长图渲染与生成",
+    MESSAGE_DISPATCH: "群聊消息投递",
     DISPATCH_REPORT: "群聊消息投递与分发",
+    COMIC_GENERATION: "漫画生成与投递",
     COMIC_STORYBOARD: "漫画分镜提示词提取",
     COMIC_DRAWING: "漫画长图生成与投递",
     CRASH_RECOVERY: "异常终止恢复",
   };
-  return stageMap[stage] || stage;
+  const key = stage.toUpperCase();
+  return stageMap[key] || stageMap[stage] || stage;
 }
 
 export function formatTriggerType(triggerType?: string): { text: string; color: string } {

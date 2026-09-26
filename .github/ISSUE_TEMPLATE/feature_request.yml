@@ -1,63 +1,67 @@
 name: '✨ 提交新功能建议'
-title: '[Feature Request]'
-description: 提交您希望看到的新功能，帮助我们优化产品。
-labels: [ 'enhancement' ]
+title: '[Feature] '
+description: 提交新功能建议或优化方案，帮助完善群分析插件。
+labels: ['enhancement']
 body:
   - type: markdown
     attributes:
       value: |
-        感谢您提出新功能建议！请详细描述您的需求，这将帮助我们更好地理解您的使用场景。
-
-  - type: textarea
-    attributes:
-      label: 功能描述
-      description: 简明扼要地描述您希望添加的新功能
-      placeholder: >
-        例如："希望增加一个实时统计用户交互数据的仪表盘"
-    validations:
-      required: true
-
-  - type: textarea
-    attributes:
-      label: 动机与需求背景
-      description: 说明为什么需要这个功能以及它能解决什么问题
-      placeholder: >
-        例如："当前需要手动导出数据才能分析用户行为，希望自动化生成可视化报告"
-    validations:
-      required: true
-
-  - type: textarea
-    attributes:
-      label: 使用场景或示例
-      description: 描述该功能可能的使用场景或具体使用案例
-    validations:
-      required: true
+        感谢您提出新功能建议！请详细描述您的需求场景，以协助我们进行技术可行性与优先级评估。
 
   - type: dropdown
     attributes:
-      label: 优先级建议
-      description: 您认为这个功能的优先级如何？
-      multiple: false
+      label: 功能所属模块 (Module)
+      description: 该功能建议主要涉及哪个子系统？
       options:
-        - '高优先级（直接影响核心功能）'
-        - '中优先级（提升使用体验）'
-        - '低优先级（优化性需求）'
+        - 'WebUI 控制台 (Dashboard & Pages)'
+        - '后端数据统计与分析维度 (Analysis Metrics)'
+        - 'LLM 提示词与总结生成 (Prompt & AI Agent)'
+        - '报告模版样式与可视化 (Report Design & Charts)'
+        - '定时调度与多群管理 (Scheduler & Multi-group)'
+        - '链路排错与性能监控 (Trace & Telemetry)'
+        - '其他'
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 功能需求描述 (Feature Description)
+      description: 简明扼要地描述您希望添加的新功能或交互改进。
+      placeholder: >
+        如：希望在 WebUI 控制台的发言排行榜中支持按周/月时间段筛选，并支持一键导出 CSV 数据。
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 需求背景与痛点 (Problem Statement)
+      description: 解释为什么需要此功能，当前在使用中遇到了什么不便？
+      placeholder: >
+        如：目前只能在群内通过指令查看单日数据，群管理员希望在 WebUI 上按更长周期查看群活跃趋势。
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 期望的交互方式或效果 (Expected Behavior)
+      description: 描述您设想的用户操作流程、界面布局或输出报告示例。
+    validations:
+      required: false
+
+  - type: dropdown
+    attributes:
+      label: 优先级评估
+      description: 您认为该需求的紧迫程度如何？
+      options:
+        - '中 / 低优先级（体验优化或锦上添花）'
+        - '高优先级（核心流程缺失或严重影响运营效率）'
     validations:
       required: true
 
   - type: checkboxes
     attributes:
-      label: 愿意参与开发吗？
-      description: |
-        如果您有技术能力，可以选择参与开发。我们将提供必要的指导和文档支持。
+      label: 贡献意愿
+      description: 是否愿意参与该特性的设计与开发？
       options:
-        - label: 是的，我愿意协助开发！
-        - label: 我可以提供详细使用反馈
-    validations:
-      required: false
-
-  - type: markdown
-    attributes:
-      value: |
-        **注意**：如果您有具体实现方案或技术建议，可以在下方补充说明。  
-        我们会根据需求紧迫性和技术可行性进行评估，感谢您的贡献！
+        - label: 是的，我愿意参与设计与提交 PR！
+        - label: 我可以提供测试数据或详细反馈

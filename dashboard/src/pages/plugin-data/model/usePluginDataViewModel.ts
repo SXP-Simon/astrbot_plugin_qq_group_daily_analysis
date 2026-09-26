@@ -242,7 +242,7 @@ export function usePluginDataViewModel() {
       created_at: item.created_at,
       created_at_formatted: item.created_at_formatted,
       data_size_bytes: item.data_size_bytes ?? item.data_size,
-      data: null,
+      data: undefined,
     });
     setLoadingCkptDetail(true);
     try {

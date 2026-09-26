@@ -1,27 +1,8 @@
-export interface PluginLogItem {
-  id: string;
-  timestamp: number;
-  time_str: string;
-  level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
-  logger_name: string;
-  trace_id?: string | null;
-  stage?: string | null;
-  tag: string;
-  message: string;
-  raw: string;
-  location?: string | null;
-}
+import type { components } from "../../../shared/api/generated/schema";
 
-export interface AvailableTag {
-  key: string;
-  label: string;
-}
-
-export interface PluginLogResponse {
-  items: PluginLogItem[];
-  total: number;
-  available_tags: AvailableTag[];
-}
+export type PluginLogItem = components["schemas"]["PluginLogItem"];
+export type AvailableTag = components["schemas"]["AvailableTag"];
+export type PluginLogResponse = components["schemas"]["PluginLogResponse"];
 
 export const TAG_STYLE_MAP: Record<string, { label: string; color: string }> = {
   LLM: { label: "大模型调用", color: "purple" },
