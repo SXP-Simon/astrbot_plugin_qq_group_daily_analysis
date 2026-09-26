@@ -17,6 +17,13 @@ if TYPE_CHECKING:
     from .templates import HTMLTemplates
 
 
+MENTION_STYLE_QQ = "qq"
+"""QQ 官方机器人：身份以 <@user_id> 真提及展示。"""
+
+MENTION_STYLE_NAME = "name"
+"""其它平台（Telegram / Discord 等无 @ 提及能力）：身份降级为昵称文本。"""
+
+
 class QQOfficialMarkdownReportGenerator:
     """Generate QQ Official Markdown without changing other platform reports."""
 
@@ -125,14 +132,120 @@ class QQOfficialMarkdownReportGenerator:
             logger.warning("[QQOfficial] T2I 群聊概览图生成失败: %s", exc)
             return None
 
+    def generate_plain_markdown_report(
+        self,
+        analysis_result: AnalysisResultPayload,
+    ) -> str:
+        """生成与 QQ 官方同款排版、但身份降级为昵称的 Markdown 文本报告。
+
+        供 Telegram / Discord 等无法渲染 <@user_id> 真提及的平台复用同一套排版，
+        避免为每个平台各维护一份文字版模板。
+
+        Args:
+            analysis_result: 分析结果载荷。
+
+        Returns:
+            str: 可直接交给平台适配器转义渲染的 Markdown 文本。
+        """
+        return self._generate_markdown_report(
+            analysis_result, mention_style=MENTION_STYLE_NAME
+        )
+
+    def _collect_identity_names(
+        self, analysis_result: AnalysisResultPayload
+    ) -> dict[str, str]:
+        """收集 user_id -> 展示昵称映射，供无 @ 能力的平台降级展示身份。"""
+        names: dict[str, str] = {}
+
+        def remember(user_id: object, name: object) -> None:
+            normalized_id = str(user_id or "").strip().strip("[]")
+            normalized_name = str(name or "").strip()
+            if normalized_id and normalized_name and normalized_name != normalized_id:
+                names.setdefault(normalized_id, normalized_name)
+
+        user_analysis = analysis_result.get("user_analysis") or {}
+        for user_id, user_data in user_analysis.items():
+            if isinstance(user_data, dict):
+                for key in ("nickname", "name", "card"):
+                    if user_data.get(key):
+                        remember(user_id, user_data.get(key))
+                        break
+
+        for title in analysis_result.get("user_titles", []) or []:
+            remember(getattr(title, "user_id", None), getattr(title, "name", None))
+
+        stats = analysis_result.get("statistics")
+        for golden_quote in getattr(stats, "golden_quotes", None) or []:
+            remember(
+                getattr(golden_quote, "user_id", None),
+                getattr(golden_quote, "sender", None),
+            )
+
+        return names
+
+    # 平台用户 ID 的长度下限：QQ(6~11 位) / Telegram(≤10 位) 等平台的 ID 都是 6 位以上数字，
+    # 用它把「裸数字身份引用」与正文里的普通统计数字（如消息总数 1234）区分开。
+    _MIN_BARE_ID_LENGTH = 6
+
+    # 身份引用匹配：显式形式 [id] / <@id>，以及裸数字 ID（长度下限见 _MIN_BARE_ID_LENGTH）。
+    _IDENTITY_REF_RE = re.compile(
+        r"\[([^\[\]]+)\]|<@([^<>]+)>|(?<![A-Za-z0-9_[<])(\d+)(?![A-Za-z0-9_>])"
+    )
+
+    @classmethod
+    def _render_identity_names(cls, text: str | None, names: dict[str, str]) -> str:
+        """把文本里的用户引用替换为昵称。
+
+        支持两类明确的引用：`[id]`、`<@id>` 形式，以及长度 >= _MIN_BARE_ID_LENGTH 的
+        纯数字裸 ID。**单次遍历原文完成替换**，替换出的昵称不会被再次扫描（避免昵称里
+        恰好含另一个用户 ID 时被二次替换）；不做昵称子串替换（避免"夜"这类短昵称把
+        "深夜"也改掉），也不会把普通统计数字当成身份引用（ID 为 123 的用户不会让
+        "消息总数 123"变成昵称）。
+        """
+
+        def replace(match: re.Match[str]) -> str:
+            explicit = match.group(1) or match.group(2)
+            user_id = explicit or match.group(3)
+            if user_id not in names:
+                return match.group(0)
+            if explicit is None and len(user_id) < cls._MIN_BARE_ID_LENGTH:
+                return match.group(0)
+            return names[user_id]
+
+        return cls._IDENTITY_REF_RE.sub(replace, str(text or "")).strip()
+
     def _generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
         summary_dashboard_url: str | None = None,
+        mention_style: str = MENTION_STYLE_QQ,
     ) -> str:
         stats = analysis_result["statistics"]
         topics = analysis_result["topics"]
         user_titles = analysis_result["user_titles"]
+
+        # QQ 官方走 <@user_id> 真提及；其它平台降级为昵称文本。
+        plain_names = mention_style == MENTION_STYLE_NAME
+        identity_names = (
+            self._collect_identity_names(analysis_result) if plain_names else {}
+        )
+
+        def render_mention(user_id: str | int | None) -> str:
+            if not plain_names:
+                return self.mention(user_id)
+            normalized = str(user_id or "").strip().strip("[]")
+            return identity_names.get(normalized, normalized) if normalized else ""
+
+        def render_mentions(user_ids: Sequence[str | int | None]) -> str:
+            if not plain_names:
+                return self.mentions(user_ids)
+            rendered = [render_mention(user_id) for user_id in user_ids]
+            return "、".join(dict.fromkeys(name for name in rendered if name))
+
+        def render_text(text: str | None) -> str:
+            if not plain_names:
+                return self.render_identity_text(text or "", analysis_result)
+            return self._render_identity_names(text, identity_names)
 
         if summary_dashboard_url:
             lines = [
@@ -160,13 +273,13 @@ class QQOfficialMarkdownReportGenerator:
         lines.append("## 💬 热门话题")
         max_topics = self.config_manager.get_max_topics()
         for index, topic in enumerate(topics[:max_topics], 1):
-            topic_name = self.render_identity_text(topic.topic, analysis_result)
+            topic_name = render_text(topic.topic)
             lines.append(f"### {index}. {topic_name}")
             contributor_ids = list(topic.contributor_ids or [])
-            mentions = self.mentions(contributor_ids)
+            mentions = render_mentions(contributor_ids)
             if mentions:
                 lines.append(f"**参与者**：{mentions}")
-            detail = self.render_identity_text(topic.detail, analysis_result)
+            detail = render_text(topic.detail)
             if detail:
                 lines.append(detail)
             lines.append("")
@@ -174,12 +287,12 @@ class QQOfficialMarkdownReportGenerator:
         lines.append("## 🏆 群友称号")
         max_user_titles = self.config_manager.get_max_user_titles()
         for title in user_titles[:max_user_titles]:
-            mention = self.mention(title.user_id)
-            title_text = self.render_identity_text(title.title, analysis_result)
+            mention = render_mention(title.user_id)
+            title_text = render_text(title.title)
             mbti = f" · {title.mbti}" if title.mbti else ""
             prefix = f"{mention} — " if mention else ""
             lines.append(f"- {prefix}**{title_text}**{mbti}")
-            reason = self.render_identity_text(title.reason, analysis_result)
+            reason = render_text(title.reason)
             if reason:
                 lines.append(f"  > {reason}")
         lines.append("")
@@ -189,13 +302,11 @@ class QQOfficialMarkdownReportGenerator:
         for index, golden_quote in enumerate(
             stats.golden_quotes[:max_golden_quotes], 1
         ):
-            quote_content = self.render_identity_text(
-                golden_quote.content, analysis_result
-            )
-            mention = self.mention(golden_quote.user_id)
+            quote_content = render_text(golden_quote.content)
+            mention = render_mention(golden_quote.user_id)
             attribution = f" — {mention}" if mention else ""
             lines.append(f"- **{index}. {quote_content}**{attribution}")
-            reason = self.render_identity_text(golden_quote.reason, analysis_result)
+            reason = render_text(golden_quote.reason)
             if reason:
                 lines.append(f"  > {reason}")
             lines.append("")
