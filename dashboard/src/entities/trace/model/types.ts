@@ -1,73 +1,7 @@
-export interface TraceSpan {
-  span_id: string;
-  trace_id: string;
-  stage_name: string;
-  status: string;
-  started_at: number;
-  duration_ms?: number | null;
-  start_memory_mb?: number | null;
-  end_memory_mb?: number | null;
-  delta_memory_mb?: number | null;
-  payload: Record<string, unknown>;
-}
+import type { components } from "../../../shared/api/generated/schema";
 
-export interface ContextMetrics {
-  trace_id: string;
-  raw_message_count: number;
-  cleaned_message_count: number;
-  compression_ratio: number;
-  incremental_batches: number;
-  window_size: number;
-}
-
-export interface TokenUsage {
-  trace_id: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  estimated_cost: number;
-  per_analyzer: Record<string, { prompt_tokens: number; completion_tokens: number; total_tokens: number }>;
-}
-
-export interface PerformanceMetrics {
-  trace_id?: string;
-  init_memory_mb: number;
-  peak_memory_mb: number;
-  final_memory_mb: number;
-  delta_memory_mb: number;
-  metrics_extra?: Record<string, unknown>;
-}
-
-export interface TraceRecord {
-  trace_id: string;
-  group_id: string;
-  group_name: string;
-  platform: string;
-  trigger_type: string;
-  status: "running" | "succeeded" | "warning" | "failed" | "aborted" | "skipped";
-  started_at: number;
-  completed_at?: number;
-  duration_ms?: number;
-  error_stage?: string;
-  error_message?: string;
-  stack_trace?: string;
-  extra?: Record<string, unknown>;
-  total_tokens?: number;
-  estimated_cost?: number;
-  raw_message_count?: number;
-  cleaned_message_count?: number;
-  compression_ratio?: number;
-  spans?: TraceSpan[];
-  context_metrics?: ContextMetrics | null;
-  performance_metrics?: PerformanceMetrics | null;
-  token_usage?: TokenUsage | null;
-  current_stage?: string;
-  report_files?: Array<{
-    filename: string;
-    path?: string;
-    format?: string;
-    report_type?: string;
-    size_bytes?: number;
-    created_at?: number;
-  }>;
-}
+export type TraceSpan = components["schemas"]["TraceSpan"];
+export type ContextMetrics = components["schemas"]["ContextMetrics"];
+export type TokenUsage = components["schemas"]["TokenUsage"];
+export type PerformanceMetrics = components["schemas"]["PerformanceMetrics"];
+export type TraceRecord = components["schemas"]["TraceRecord"];

@@ -242,6 +242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/openapi.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get OpenAPI 3.1 specification for the plugin Web API */
+        get: operations["getOpenApiSpec"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -270,7 +287,42 @@ export interface components {
             status: string;
             started_at: number;
             duration_ms?: number | null;
+            start_memory_mb?: number | null;
+            end_memory_mb?: number | null;
+            delta_memory_mb?: number | null;
             payload: {
+                [key: string]: unknown;
+            };
+        };
+        ContextMetrics: {
+            trace_id: string;
+            raw_message_count: number;
+            cleaned_message_count: number;
+            compression_ratio: number;
+            incremental_batches: number;
+            window_size: number;
+        };
+        TokenUsage: {
+            trace_id: string;
+            prompt_tokens: number;
+            completion_tokens: number;
+            total_tokens: number;
+            estimated_cost: number;
+            per_analyzer: {
+                [key: string]: {
+                    prompt_tokens: number;
+                    completion_tokens: number;
+                    total_tokens: number;
+                };
+            };
+        };
+        PerformanceMetrics: {
+            trace_id?: string | null;
+            init_memory_mb: number;
+            peak_memory_mb: number;
+            final_memory_mb: number;
+            delta_memory_mb: number;
+            metrics_extra?: {
                 [key: string]: unknown;
             };
         };
@@ -288,12 +340,27 @@ export interface components {
             error_stage?: string | null;
             error_message?: string | null;
             stack_trace?: string | null;
+            extra?: {
+                [key: string]: unknown;
+            };
             total_tokens?: number | null;
             estimated_cost?: number | null;
             raw_message_count?: number | null;
             cleaned_message_count?: number | null;
             compression_ratio?: number | null;
+            current_stage?: string | null;
             spans?: components["schemas"]["TraceSpan"][];
+            context_metrics?: components["schemas"]["ContextMetrics"];
+            token_usage?: components["schemas"]["TokenUsage"];
+            performance_metrics?: components["schemas"]["PerformanceMetrics"];
+            report_files?: {
+                filename?: string;
+                path?: string;
+                format?: string;
+                report_type?: string;
+                size_bytes?: number;
+                created_at?: number;
+            }[];
         };
         AnalyticsTrendPoint: {
             date: string;
@@ -307,13 +374,23 @@ export interface components {
             total_tokens: number;
             estimated_cost: number;
         };
+        ProviderBreakdownItem: {
+            name: string;
+            total_tokens: number;
+            request_count: number;
+        };
+        ModelBreakdownItem: {
+            name: string;
+            total_tokens: number;
+            request_count: number;
+        };
         AnalyticsTrendsResponse: {
             /** @enum {string} */
             granularity: "day" | "hour";
             range_count: number;
             points: components["schemas"]["AnalyticsTrendPoint"][];
-            provider_breakdown: Record<string, never>[];
-            model_breakdown: Record<string, never>[];
+            provider_breakdown: components["schemas"]["ProviderBreakdownItem"][];
+            model_breakdown: components["schemas"]["ModelBreakdownItem"][];
         };
         MetricsSummary: {
             total_traces: number;
@@ -333,11 +410,17 @@ export interface components {
             filename: string;
             size_bytes: number;
             modified_at: number;
+            absolute_path?: string | null;
+            data_url?: string | null;
+            is_html?: boolean | null;
+            is_comic?: boolean | null;
+            /** @enum {string|null} */
+            report_type?: "image" | "html" | "comic" | null;
+            html_content?: string | null;
             group_id?: string | null;
             group_name?: string | null;
             platform?: string | null;
-            /** @enum {string} */
-            report_type?: "image" | "html" | "comic";
+            trace_id?: string | null;
         };
         ReportTemplateItem: {
             id: string;
@@ -363,11 +446,16 @@ export interface components {
             raw: string;
             trace_id?: string | null;
             stage?: string | null;
+            location?: string | null;
+        };
+        AvailableTag: {
+            key: string;
+            label: string;
         };
         PluginLogResponse: {
             items: components["schemas"]["PluginLogItem"][];
             total: number;
-            available_tags: Record<string, never>[];
+            available_tags: components["schemas"]["AvailableTag"][];
         };
         SectionStats: {
             count: number;
@@ -380,6 +468,113 @@ export interface components {
             config_backups: components["schemas"]["SectionStats"];
             reports: components["schemas"]["SectionStats"];
             temp_files: components["schemas"]["SectionStats"];
+        };
+        IncrementalBatchTopic: {
+            title?: string;
+            summary?: string;
+            description?: string;
+            heat_score?: number;
+            category?: string;
+            keywords?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        ChatQualityDimension: {
+            name?: string;
+            percentage?: number;
+            comment?: string;
+            color?: string;
+        };
+        ChatQualityReviewObject: {
+            title?: string;
+            subtitle?: string;
+            dimensions?: components["schemas"]["ChatQualityDimension"][];
+            summary?: string;
+        };
+        IncrementalBatchGoldenQuote: {
+            content?: string;
+            text?: string;
+            sender_nickname?: string;
+            sender_name?: string;
+            author?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        IncrementalBatchItem: {
+            group_id: string;
+            batch_id: string;
+            timestamp: number;
+            created_at_iso?: string;
+            messages_count: number;
+            characters_count: number;
+            topics_count: number;
+            topics?: components["schemas"]["IncrementalBatchTopic"][];
+            golden_quotes_count?: number;
+            golden_quotes?: components["schemas"]["IncrementalBatchGoldenQuote"][];
+            hourly_msg_counts?: {
+                [key: string]: number;
+            };
+            hourly_char_counts?: {
+                [key: string]: number;
+            };
+            token_usage?: {
+                prompt_tokens?: number;
+                completion_tokens?: number;
+                total_tokens?: number;
+            } & {
+                [key: string]: unknown;
+            };
+            last_message_timestamp?: number;
+            participant_ids?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        IncrementalCursorInfo: {
+            group_id: string;
+            last_analyzed_timestamp: number;
+            last_message_timestamp: number;
+            tracked_message_ids_count: number;
+        };
+        IncrementalBatchesResponse: {
+            group_id: string;
+            cursor: components["schemas"]["IncrementalCursorInfo"];
+            batches: components["schemas"]["IncrementalBatchItem"][];
+        };
+        CheckpointItem: {
+            checkpoint_id?: string;
+            group_id: string;
+            date_str: string;
+            stage_name: string;
+            trace_id?: string;
+            data_size_bytes?: number;
+            data_size?: number;
+            created_at?: number;
+            created_at_formatted?: string;
+            updated_at?: string;
+            expire_at?: number;
+            has_data?: boolean;
+        };
+        CheckpointsListResponse: {
+            items: components["schemas"]["CheckpointItem"][];
+            total: number;
+        };
+        CheckpointDetail: {
+            checkpoint_id?: string;
+            group_id: string;
+            date_str: string;
+            stage_name: string;
+            trace_id?: string;
+            data?: {
+                [key: string]: unknown;
+            };
+            checkpoint_data?: {
+                [key: string]: unknown;
+            };
+            data_size_bytes?: number;
+            data_size?: number;
+            created_at?: number;
+            created_at_formatted?: string;
+            expire_at?: number;
         };
     };
     responses: never;
@@ -455,13 +650,13 @@ export interface operations {
                     group_id: string;
                     group_name?: string;
                     platform?: string;
-                    provider_id?: string | null;
-                    template_name?: string | null;
+                    trigger_type?: string;
+                    template_id?: string;
                 };
             };
         };
         responses: {
-            /** @description Trigger result */
+            /** @description Trigger task result */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -469,7 +664,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         status?: string;
-                        trace_id?: string;
+                        task_id?: string;
                         message?: string;
                     };
                 };
@@ -485,14 +680,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    provider_id?: string | null;
-                    template_name?: string | null;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Resume result */
             200: {
@@ -502,7 +690,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         status?: string;
-                        trace_id?: string;
+                        task_id?: string;
                         message?: string;
                     };
                 };
@@ -753,6 +941,26 @@ export interface operations {
                         status?: string;
                         data?: components["schemas"]["PluginDataOverview"];
                     };
+                };
+            };
+        };
+    };
+    getOpenApiSpec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OpenAPI 3.1 specification JSON */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

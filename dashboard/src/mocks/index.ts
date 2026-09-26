@@ -7,3 +7,4 @@ export * from "./data/reports";
 export * from "./data/configs";
 export * from "./data/logs";
 export * from "./data/pluginData";
+export * from "./mswHandlers";

@@ -106,7 +106,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
               <iframe
                 title={report.filename}
                 srcDoc={report.html_content || undefined}
-                src={!report.html_content ? report.data_url : undefined}
+                src={!report.html_content ? (report.data_url ?? undefined) : undefined}
                 sandbox="allow-scripts allow-same-origin"
                 style={{
                   width: "100%",
@@ -128,7 +128,7 @@ export const ReportPreviewModal: React.FC<ReportPreviewModalProps> = ({
               }}
             >
               <img
-                src={report.data_url}
+                src={report.data_url ?? undefined}
                 alt={report.filename}
                 style={{
                   maxWidth: "100%",

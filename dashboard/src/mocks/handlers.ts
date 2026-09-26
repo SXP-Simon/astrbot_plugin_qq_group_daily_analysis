@@ -15,7 +15,7 @@ import {
  * 结构遵循 RESTful API 规范，完全兼容未来无缝迁移至 MSW (Mock Service Worker)
  */
 export interface MockHandlerResponse<T = unknown> {
-  status?: number;
+  status?: string | number;
   data?: T;
   message?: string;
   [key: string]: unknown;
