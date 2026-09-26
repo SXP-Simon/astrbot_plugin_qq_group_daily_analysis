@@ -580,16 +580,17 @@ class ReportGenerator(IReportGenerator):
             output_dir = Path(self.config_manager.get_html_output_dir())
             await asyncio.to_thread(output_dir.mkdir, parents=True, exist_ok=True)
 
+            effective_trace_id = trace_id or TraceContext.get() or ""
             if custom_filename:
                 html_path = output_dir / custom_filename
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
-            elif trace_id:
+            elif effective_trace_id:
                 ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                 theme_suffix = f"_{template_theme}" if template_theme else ""
                 html_path = (
                     output_dir
-                    / f"report_{group_id}_{ts_str}_{trace_id}{theme_suffix}.html"
+                    / f"report_{group_id}_{ts_str}_{effective_trace_id}{theme_suffix}.html"
                 )
             else:
                 current_date = datetime.now().strftime("%Y%m%d")

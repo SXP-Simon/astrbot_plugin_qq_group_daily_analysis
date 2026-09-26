@@ -206,10 +206,16 @@ class ReportDispatcher:
                 try:
                     reports_dir = self.report_generator.data_dir / "reports"
                     reports_dir.mkdir(parents=True, exist_ok=True)
+                    eff_trace_id = (
+                        trace_id
+                        or (trace_ctx.trace_id if trace_ctx else "")
+                        or TraceContext.get()
+                        or ""
+                    )
                     ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = (
-                        f"report_{group_id}_{ts_str}_{trace_id}.jpg"
-                        if trace_id
+                        f"report_{group_id}_{ts_str}_{eff_trace_id}.jpg"
+                        if eff_trace_id
                         else f"report_{group_id}_{ts_str}.jpg"
                     )
                     dest = reports_dir / filename
