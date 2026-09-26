@@ -1055,25 +1055,11 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
                 return result
 
-            if self.plugin_instance:
+            if self.plugin_instance is not None:
                 try:
-                    comic_handler = getattr(
-                        self.plugin_instance, "comic_command_handler", None
+                    self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
+                        group_id, dispatch_platform_id, analysis_result
                     )
-                    if comic_handler and hasattr(
-                        comic_handler, "try_trigger_comic_generation"
-                    ):
-                        comic_handler.try_trigger_comic_generation(
-                            group_id, dispatch_platform_id, analysis_result
-                        )
-                    else:
-                        raw_trigger = getattr(
-                            self.plugin_instance,
-                            "_try_trigger_comic_generation",
-                            None,
-                        )
-                        if callable(raw_trigger):
-                            raw_trigger(group_id, dispatch_platform_id, analysis_result)
                 except Exception as exc:
                     logger.error(
                         f"群 {group_id} 触发增量报告漫画失败: {exc}",
