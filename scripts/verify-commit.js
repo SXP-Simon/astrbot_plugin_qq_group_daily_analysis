@@ -234,6 +234,7 @@ const SCOPE_PATH_RULES = [
       f.startsWith('.github/') ||
       f.startsWith('scripts/') ||
       f === 'lefthook.yml' ||
+      f === '.gitignore' ||
       f === 'pyrightconfig.json' ||
       f === 'ruff.toml' ||
       f === '.pre-commit-config.yaml' ||
