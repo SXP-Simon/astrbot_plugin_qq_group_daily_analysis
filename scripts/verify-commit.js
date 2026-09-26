@@ -157,12 +157,22 @@ const SCOPE_PATH_RULES = [
   },
   {
     matchScope: (s) => s === 'analysis' || s.endsWith('/analysis'),
-    matchFile: (f) => f.includes('analysis') || f.startsWith('src/domain/value_objects/analysis_results.py'),
+    matchFile: (f) =>
+      f.startsWith('src/infrastructure/analysis/') ||
+      f.startsWith('src/domain/value_objects/analysis_results.py') ||
+      f.startsWith('src/application/services/analysis_') ||
+      f.startsWith('src/application/handlers/analysis_') ||
+      f.startsWith('src/domain/repositories/analysis_'),
     name: 'analysis 分析子域',
   },
   {
     matchScope: (s) => s === 'comic' || s.endsWith('/comic'),
-    matchFile: (f) => f.includes('comic'),
+    matchFile: (f) =>
+      f.startsWith('src/infrastructure/analysis/analyzers/comic_') ||
+      f.startsWith('src/application/services/comic_') ||
+      f.startsWith('src/application/handlers/comic_') ||
+      f.startsWith('src/domain/repositories/comic_') ||
+      (f.startsWith('src/') && f.includes('comic')),
     name: 'comic 漫画子域',
   },
   {
@@ -273,7 +283,7 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
       scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, webui/features`;
       errors.push(scopeHelp.trimEnd());
     } else if (touchedFiles.length > 0) {
-      // 2. 匹配 Scope 与实际文件路径
+      // 2. 匹配 Scope 与实际文件路径（严格原子化校验）
       const matchedRule = SCOPE_PATH_RULES.find((r) => r.matchScope(scope));
       if (matchedRule) {
         const hasMatchingFile = touchedFiles.some((file) => matchedRule.matchFile(file));
@@ -285,6 +295,25 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
             `     -> ${touchedFiles.slice(0, 5).join(', ')}${touchedFiles.length > 5 ? ' 等' : ''}\n` +
             `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
           );
+        } else {
+          // 严格原子化校验：除了配套的单测/文档文件外，所有生产代码必须完全匹配该 Scope！
+          const unmatchedProductionFiles = touchedFiles.filter((file) => {
+            // 允许随行提交配套的单元测试与文档说明
+            if (file.startsWith('tests/') || file.startsWith('docs/') || file.endsWith('.md')) {
+              return false;
+            }
+            return !matchedRule.matchFile(file);
+          });
+
+          if (unmatchedProductionFiles.length > 0) {
+            errors.push(
+              `【跨模块/非原子化提交拦截】\n` +
+              `     您声明的 Scope 为 "${scope}"（对应路径范围: ${matchedRule.name}），\n` +
+              `     但本次提交混入了不属于该 Scope 的异构文件（存在跨层级/跨子域混杂，破坏了原子化）：\n` +
+              `     -> ${unmatchedProductionFiles.slice(0, 5).join('\n     -> ')}${unmatchedProductionFiles.length > 5 ? '\n     -> ...等' : ''}\n` +
+              `     💡 必须保持原子化提交：请使用 git add 仅暂存同一架构模块的文件，将跨层级/跨子域改动拆分为独立的 Commit。`
+            );
+          }
         }
       }
     }
