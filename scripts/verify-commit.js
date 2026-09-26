@@ -168,14 +168,21 @@ const SCOPE_PATH_RULES = [
       s === 'infra/routes' ||
       s === 'infra/api' ||
       s === 'routes' ||
-      s === 'api',
-    matchFile: (f) => f.startsWith('src/infrastructure/webui/'),
-    name: 'infra/webui 后端 Web 控制台路由与适配层 (src/infrastructure/webui/)',
+      s === 'api' ||
+      s === 'openapi',
+    matchFile: (f) =>
+      f.startsWith('src/infrastructure/webui/') ||
+      f === 'openapi.json' ||
+      f === 'dashboard/src/shared/api/generated/schema.d.ts',
+    name: 'infra/webui 后端 Web 控制台路由与适配层 (src/infrastructure/webui/, openapi.json)',
   },
   {
     matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard' || s === 'frontend',
-    matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/'),
-    name: 'dashboard/webui 前端控制台 (dashboard/, pages/)',
+    matchFile: (f) =>
+      f.startsWith('dashboard/') ||
+      f.startsWith('pages/') ||
+      f === 'openapi.json',
+    name: 'dashboard/webui 前端控制台 (dashboard/, pages/, openapi.json)',
   },
   {
     matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
