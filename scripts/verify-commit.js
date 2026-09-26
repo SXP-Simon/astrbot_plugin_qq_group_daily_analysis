@@ -235,8 +235,8 @@ try {
         },
         {
           matchScope: (s) => s === 'ci',
-          matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml',
-          name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml)',
+          matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml' || f === 'pyrightconfig.json' || f === 'ruff.toml' || f === '.pre-commit-config.yaml',
+          name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json)',
         },
         {
           matchScope: (s) => s === 'deps',

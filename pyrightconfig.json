@@ -33,12 +33,14 @@
   "reportUntypedClassDecorator": "error",
   "reportUntypedBaseClass": "error",
   "reportUnusedVariable": "error",
+  "reportUnusedImport": "error",
   "reportUnusedClass": "error",
   "reportUnusedFunction": "error",
   "reportDuplicateImport": "error",
   "reportUnnecessaryIsInstance": "error",
   "reportUnnecessaryComparison": "error",
   "reportUnnecessaryCast": "error",
+  "reportUnnecessaryTypeIgnoreComment": "error",
   "reportMissingParameterType": "error",
   "reportUntypedNamedTuple": "error",
   "reportUnnecessaryContains": "error",
@@ -48,5 +50,6 @@
   "reportUnusedCoroutine": "error",
   "reportCallInDefaultInitializer": "error",
   "reportTypeCommentUsage": "error",
-  "reportConstantRedefinition": "error"
+  "reportConstantRedefinition": "error",
+  "reportMatchNotExhaustive": "error"
 }
