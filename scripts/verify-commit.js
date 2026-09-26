@@ -240,13 +240,14 @@ const SCOPE_PATH_RULES = [
     matchFile: (f) =>
       f.startsWith('.github/') ||
       f.startsWith('scripts/') ||
+      f.startsWith('src/utils/') ||
       f === 'lefthook.yml' ||
       f === '.gitignore' ||
       f === 'pyrightconfig.json' ||
       f === 'ruff.toml' ||
       f === '.pre-commit-config.yaml' ||
       f === 'openapi.json',
-    name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json, openapi.json)',
+    name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json, openapi.json, src/utils/)',
   },
   {
     matchScope: (s) => s === 'deps',
@@ -259,9 +260,16 @@ const SCOPE_PATH_RULES = [
     name: 'docs 文档 (docs/, *.md, metadata.yaml)',
   },
   {
-    matchScope: (s) => s === 'core' || s === 'spec',
-    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml' || f === 'metadata.yaml' || f === 'openapi.json',
-    name: 'core/spec 核心协议与基建',
+    matchScope: (s) => s === 'core' || s === 'spec' || s === 'shared' || s === 'utils' || s === 'logger',
+    matchFile: (f) =>
+      f.startsWith('src/shared/') ||
+      f.startsWith('src/utils/') ||
+      f.startsWith('scripts/') ||
+      f === 'main.py' ||
+      f === 'ruff.toml' ||
+      f === 'metadata.yaml' ||
+      f === 'openapi.json',
+    name: 'core/spec 核心协议与基建 (src/shared/, src/utils/, scripts/, main.py)',
   },
 ];
 
@@ -429,9 +437,12 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
   }
 
   // 3. 检查三点论关键词 (深度兼容中英双语、Markdown 列表符号、标题、粗体 **、方括号与前缀编号)
-  const hasProblem = /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*\s*(?:问题|痛点|Problem|Issue|Root\s*Cause)(?:\s*[\/|&]\s*(?:Problem|Issue|问题))?(?:\s*\(.*?\))?\s*(?:】|\]|\*{1,3}|_{1,3})*\s*[：:]\s*(?:\S+|\n)/i.test(fullText);
-  const hasSolution = /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*\s*(?:解决措施|解决方案|措施|修改方法|Solution|Fix|Approach|Resolution)(?:\s*[\/|&]\s*(?:Solution|措施))?(?:\s*\(.*?\))?\s*(?:】|\]|\*{1,3}|_{1,3})*\s*[：:]\s*(?:\S+|\n)/i.test(fullText);
-  const hasEffect = /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*\s*(?:效果|收益|预期效果|影响|Effect|Impact|Result|Outcome|Value)(?:\s*[\/|&]\s*(?:Effect|Impact|效果))?(?:\s*\(.*?\))?\s*(?:】|\]|\*{1,3}|_{1,3})*\s*[：:]\s*(?:\S+|\n)/i.test(fullText);
+  const hasProblem =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:问题|痛点|Problem|Issue|Root\s*Cause)[^\n]*(?:[：:]|\n)/i.test(fullText);
+  const hasSolution =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:解决措施|解决方案|措施|修改方法|Solution|Fix|Approach|Resolution)[^\n]*(?:[：:]|\n)/i.test(fullText);
+  const hasEffect =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:效果|收益|预期效果|影响|Effect|Impact|Result|Outcome|Value)[^\n]*(?:[：:]|\n)/i.test(fullText);
 
   if (!hasProblem) {
     errors.push('【缺失“问题”说明】Body 必须包含以“问题：”/“Problem:”开头并阐述具体原因的段落');

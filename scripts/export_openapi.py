@@ -6,23 +6,39 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # 确保项目根目录位于 sys.path 中以正确导入 src 内部模块
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-try:
+
+def _load_generator() -> Callable[[], dict[str, Any]]:
+    """加载 openapi_spec 中的规范生成器函数。"""
+    spec_path = ROOT_DIR / "src" / "infrastructure" / "webui" / "openapi_spec.py"
+    if spec_path.exists():
+        spec = importlib.util.spec_from_file_location("openapi_spec_module", spec_path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.generate_openapi_spec
+
     from src.infrastructure.webui.openapi_spec import generate_openapi_spec
-except ImportError:
-    from openapi_spec import generate_openapi_spec  # type: ignore[import-not-found]
+
+    return generate_openapi_spec
 
 
 def main() -> None:
     """生成或校验 openapi.json 规范。"""
+    generate_openapi_spec = _load_generator()
     spec = generate_openapi_spec()
     output_path = ROOT_DIR / "openapi.json"
 
