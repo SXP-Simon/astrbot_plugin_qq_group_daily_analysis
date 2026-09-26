@@ -83,7 +83,17 @@ class TemplateRoutes:
     async def api_get_template_preview(self) -> WebApiResponse:
         """获取自定义模板的预览图（base64 data URL，供 WebUI 画廊等展示）"""
         try:
-            template_name = str(request.query.get("template_name", "")).strip()
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            template_name = str(
+                request.query.get("template_name")
+                or request.query.get("template")
+                or payload.get("template_name")
+                or payload.get("template")
+                or ""
+            ).strip()
             if not template_name:
                 return error_response("缺少模板名 (template_name)", status_code=400)
             try:
@@ -178,7 +188,13 @@ class TemplateRoutes:
             except Exception:
                 body = {}
 
-            name = str(body.get("name") or "").strip()
+            name = str(
+                body.get("name")
+                or body.get("template_name")
+                or request.query.get("name")
+                or request.query.get("template_name")
+                or ""
+            ).strip()
             if not name:
                 return error_response("缺少模板名 (name)", status_code=400)
 

@@ -84,7 +84,9 @@ class TaskRoutes:
                 payload = await request.json()
             except Exception:
                 payload = {}
-            group_id = str(payload.get("group_id", "")).strip()
+            group_id = str(
+                payload.get("group_id") or request.query.get("group_id") or ""
+            ).strip()
             if not group_id:
                 return error_response("group_id is required", status_code=400)
 
@@ -95,23 +97,42 @@ class TaskRoutes:
                     status_code=409,
                 )
 
-            group_name = str(payload.get("group_name", f"群 {group_id}"))
-            platform = str(payload.get("platform", "qq"))
+            group_name = str(
+                payload.get("group_name")
+                or request.query.get("group_name")
+                or f"群 {group_id}"
+            ).strip()
+            platform = str(
+                payload.get("platform") or request.query.get("platform") or "qq"
+            ).strip()
 
             trace_id = TraceContext.generate("web_manual", group_name)
 
-            provider_id = (
-                str(payload.get("provider_id"))
+            provider_id_raw = (
+                payload.get("provider_id")
                 if payload.get("provider_id") is not None
                 else request.query.get("provider_id")
             )
+            provider_id = (
+                str(provider_id_raw).strip()
+                if provider_id_raw is not None
+                and str(provider_id_raw).strip()
+                and str(provider_id_raw).strip() != "auto"
+                else None
+            )
 
+            template_name_raw = (
+                payload.get("template_name")
+                or payload.get("template")
+                or request.query.get("template_name")
+                or request.query.get("template")
+            )
             template_name = (
-                str(payload.get("template_name") or payload.get("template"))
-                if (payload.get("template_name") or payload.get("template"))
-                else (
-                    request.query.get("template_name") or request.query.get("template")
-                )
+                str(template_name_raw).strip()
+                if template_name_raw is not None
+                and str(template_name_raw).strip()
+                and str(template_name_raw).strip() != "auto"
+                else None
             )
 
             asyncio_task = asyncio.create_task(
@@ -268,15 +289,30 @@ class TaskRoutes:
             except Exception:
                 payload = {}
 
-            provider_id = (
-                str(payload.get("provider_id"))
+            provider_id_raw = (
+                payload.get("provider_id")
                 if payload.get("provider_id") is not None
                 else request.query.get("provider_id")
             )
+            provider_id = (
+                str(provider_id_raw).strip()
+                if provider_id_raw is not None
+                and str(provider_id_raw).strip()
+                and str(provider_id_raw).strip() != "auto"
+                else None
+            )
+            template_name_raw = (
+                payload.get("template_name")
+                or payload.get("template")
+                or request.query.get("template_name")
+                or request.query.get("template")
+            )
             template_name = (
-                str(payload.get("template_name"))
-                if payload.get("template_name") is not None
-                else request.query.get("template_name")
+                str(template_name_raw).strip()
+                if template_name_raw is not None
+                and str(template_name_raw).strip()
+                and str(template_name_raw).strip() != "auto"
+                else None
             )
 
             asyncio_task = asyncio.create_task(

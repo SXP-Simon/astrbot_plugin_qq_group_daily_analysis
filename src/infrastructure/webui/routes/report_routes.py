@@ -211,7 +211,13 @@ class ReportRoutes:
     async def api_get_report_content(self) -> WebApiResponse:
         """获取单个历史报告文件（图片或 HTML）的内容用于在线预览与下载"""
         try:
-            filename = request.query.get("filename", "").strip()
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            filename = str(
+                request.query.get("filename") or payload.get("filename") or ""
+            ).strip()
             if not filename:
                 return error_response("Missing filename parameter", status_code=400)
 
@@ -297,20 +303,34 @@ class ReportRoutes:
         except Exception:
             body = {}
 
-        group_id = str(body.get("group_id", "")).strip()
-        date_str = str(body.get("date_str", "")).strip()
-        template_name = str(body.get("template_name", "default")).strip()
+        group_id = str(
+            body.get("group_id") or request.query.get("group_id") or ""
+        ).strip()
+        date_str = str(
+            body.get("date_str") or request.query.get("date_str") or ""
+        ).strip()
+        template_name = str(
+            body.get("template_name")
+            or body.get("template")
+            or request.query.get("template_name")
+            or request.query.get("template")
+            or "default"
+        ).strip()
         try:
             template_name = validate_template_name(template_name)
         except TemplateInstallError:
             return error_response("模板名包含非法字符。", status_code=400)
-        render_format = str(body.get("render_format", "image")).strip()
+        render_format = str(
+            body.get("render_format") or request.query.get("render_format") or "image"
+        ).strip()
         platform_id = (
             str(body.get("platform_id"))
             if body.get("platform_id") is not None
-            else None
+            else request.query.get("platform_id")
         )
-        trace_id = str(body.get("trace_id", "")).strip()
+        trace_id = str(
+            body.get("trace_id") or request.query.get("trace_id") or ""
+        ).strip()
 
         if not group_id:
             return error_response("缺少群号参数 group_id", status_code=400)

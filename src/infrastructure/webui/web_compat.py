@@ -185,11 +185,34 @@ class _RequestProxy:
         if callable(fn):
             import inspect
 
-            res = fn()
-            if inspect.isawaitable(res):
-                res = await res
-            if isinstance(res, dict):
-                return dict(res)
+            try:
+                res = fn()
+                if inspect.isawaitable(res):
+                    res = await res
+                if isinstance(res, dict):
+                    return dict(res)
+            except Exception:
+                pass
+        body_attr = getattr(target, "body", None) or getattr(target, "_body", None)
+        if body_attr is not None:
+            try:
+                import inspect
+                import json
+
+                if callable(body_attr):
+                    b = body_attr()
+                    if inspect.isawaitable(b):
+                        b = await b
+                else:
+                    b = body_attr
+                if isinstance(b, bytes):
+                    b = b.decode("utf-8", errors="replace")
+                if isinstance(b, str) and b.strip():
+                    parsed = json.loads(b)
+                    if isinstance(parsed, dict):
+                        return parsed
+            except Exception:
+                pass
         return {}
 
     def __getattr__(self, name: str) -> object:

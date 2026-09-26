@@ -54,12 +54,21 @@ class LogRoutes:
     async def api_get_plugin_logs(self) -> WebApiResponse:
         """获取群分析专属日志列表"""
         try:
-            limit = int(request.query.get("limit", 100))
-            offset = int(request.query.get("offset", 0))
-            level = request.query.get("level")
-            trace_id = request.query.get("trace_id")
-            tag = request.query.get("tag")
-            search = request.query.get("search")
+            limit_raw = request.query.get("limit", "100")
+            offset_raw = request.query.get("offset", "0")
+            try:
+                limit = int(limit_raw) if str(limit_raw).strip() else 100
+            except (ValueError, TypeError):
+                limit = 100
+            try:
+                offset = int(offset_raw) if str(offset_raw).strip() else 0
+            except (ValueError, TypeError):
+                offset = 0
+
+            level = (request.query.get("level") or "").strip() or None
+            trace_id = (request.query.get("trace_id") or "").strip() or None
+            tag = (request.query.get("tag") or "").strip() or None
+            search = (request.query.get("search") or "").strip() or None
 
             items, total = global_log_buffer.query(
                 limit=limit,

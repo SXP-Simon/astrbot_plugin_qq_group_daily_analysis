@@ -75,19 +75,39 @@ class TraceRoutes:
     async def api_list_traces(self) -> WebApiResponse:
         """分页与条件筛选 Trace 列表"""
         try:
-            limit = int(request.query.get("limit", 20))
-            offset = int(request.query.get("offset", 0))
-            group_id = request.query.get("group_id")
-            status = request.query.get("status")
-            trigger_type = request.query.get("trigger_type")
-            search = request.query.get("search")
-            start_time_raw = request.query.get("start_time")
-            end_time_raw = request.query.get("end_time")
-            sort_by = request.query.get("sort_by", "started_at")
-            sort_order = request.query.get("sort_order", "desc")
+            limit_raw = request.query.get("limit", "20")
+            offset_raw = request.query.get("offset", "0")
+            try:
+                limit = int(limit_raw) if str(limit_raw).strip() else 20
+            except (ValueError, TypeError):
+                limit = 20
+            try:
+                offset = int(offset_raw) if str(offset_raw).strip() else 0
+            except (ValueError, TypeError):
+                offset = 0
 
-            start_time = float(start_time_raw) if start_time_raw else None
-            end_time = float(end_time_raw) if end_time_raw else None
+            group_id = (request.query.get("group_id") or "").strip() or None
+            status = (request.query.get("status") or "").strip() or None
+            trigger_type = (request.query.get("trigger_type") or "").strip() or None
+            search = (request.query.get("search") or "").strip() or None
+            start_time_raw = (request.query.get("start_time") or "").strip()
+            end_time_raw = (request.query.get("end_time") or "").strip()
+            sort_by = (request.query.get("sort_by") or "").strip() or "started_at"
+            sort_order = (request.query.get("sort_order") or "").strip() or "desc"
+
+            start_time = None
+            if start_time_raw:
+                try:
+                    start_time = float(start_time_raw)
+                except (ValueError, TypeError):
+                    start_time = None
+
+            end_time = None
+            if end_time_raw:
+                try:
+                    end_time = float(end_time_raw)
+                except (ValueError, TypeError):
+                    end_time = None
 
             items, total = self.trace_store.list_traces(
                 limit=limit,
@@ -415,13 +435,18 @@ class TraceRoutes:
     async def api_get_analytics_trends(self) -> WebApiResponse:
         """获取时序趋势统计（支持按小时或按天细粒度切换，并包含服务商与模型统计）"""
         try:
-            granularity = request.query.get("granularity", "day")
-            range_count_str = request.query.get("range_count")
-            range_count = (
-                int(range_count_str)
-                if range_count_str
-                else (48 if granularity == "hour" else 14)
-            )
+            granularity = (request.query.get("granularity") or "day").strip().lower()
+            if granularity not in ("hour", "day"):
+                granularity = "day"
+            range_count_str = (request.query.get("range_count") or "").strip()
+            try:
+                range_count = (
+                    int(range_count_str)
+                    if range_count_str
+                    else (48 if granularity == "hour" else 14)
+                )
+            except (ValueError, TypeError):
+                range_count = 48 if granularity == "hour" else 14
 
             trends_data = self.trace_store.get_analytics_trends(
                 granularity=granularity, range_count=range_count

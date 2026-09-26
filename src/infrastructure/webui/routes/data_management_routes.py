@@ -299,7 +299,13 @@ class DataManagementRoutes:
     async def api_get_incremental_batches(self) -> WebApiResponse:
         """获取指定群聊的增量批次列表与当前游标状态"""
         try:
-            group_id = request.query.get("group_id", "").strip()
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            group_id = str(
+                request.query.get("group_id") or payload.get("group_id") or ""
+            ).strip()
             if not group_id:
                 return error_response("Missing group_id parameter", status_code=400)
 
@@ -332,8 +338,16 @@ class DataManagementRoutes:
     async def api_get_incremental_batch_detail(self) -> WebApiResponse:
         """获取单条增量批次完整结构化数据"""
         try:
-            group_id = request.query.get("group_id", "").strip()
-            batch_id = request.query.get("batch_id", "").strip()
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            group_id = str(
+                request.query.get("group_id") or payload.get("group_id") or ""
+            ).strip()
+            batch_id = str(
+                request.query.get("batch_id") or payload.get("batch_id") or ""
+            ).strip()
             if not group_id or not batch_id:
                 return error_response("Missing group_id or batch_id", status_code=400)
 
@@ -429,12 +443,21 @@ class DataManagementRoutes:
     async def api_list_checkpoints(self) -> WebApiResponse:
         """分页条件查询 Checkpoint 列表"""
         try:
-            limit = int(request.query.get("limit", 50))
-            offset = int(request.query.get("offset", 0))
-            group_id = request.query.get("group_id") or None
-            date_str = request.query.get("date_str") or None
-            stage_name = request.query.get("stage_name") or None
-            trace_id = request.query.get("trace_id") or None
+            limit_raw = request.query.get("limit", "50")
+            offset_raw = request.query.get("offset", "0")
+            try:
+                limit = int(limit_raw) if str(limit_raw).strip() else 50
+            except (ValueError, TypeError):
+                limit = 50
+            try:
+                offset = int(offset_raw) if str(offset_raw).strip() else 0
+            except (ValueError, TypeError):
+                offset = 0
+
+            group_id = (request.query.get("group_id") or "").strip() or None
+            date_str = (request.query.get("date_str") or "").strip() or None
+            stage_name = (request.query.get("stage_name") or "").strip() or None
+            trace_id = (request.query.get("trace_id") or "").strip() or None
 
             store = self._checkpoint_store
             if not store:
@@ -474,10 +497,22 @@ class DataManagementRoutes:
     async def api_get_checkpoint_detail(self) -> WebApiResponse:
         """获取单条 Checkpoint 产物 JSON 与元数据"""
         try:
-            group_id = request.query.get("group_id", "").strip()
-            date_str = request.query.get("date_str", "").strip()
-            stage_name = request.query.get("stage_name", "").strip()
-            trace_id = request.query.get("trace_id", "").strip()
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            group_id = str(
+                request.query.get("group_id") or payload.get("group_id") or ""
+            ).strip()
+            date_str = str(
+                request.query.get("date_str") or payload.get("date_str") or ""
+            ).strip()
+            stage_name = str(
+                request.query.get("stage_name") or payload.get("stage_name") or ""
+            ).strip()
+            trace_id = str(
+                request.query.get("trace_id") or payload.get("trace_id") or ""
+            ).strip()
 
             if not group_id or not date_str or not stage_name:
                 return error_response(
