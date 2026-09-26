@@ -315,7 +315,7 @@ class OneBotGroupFileManager:
             )
             return False
 
-        async def do_upload(content: str, _label: str):
+        async def do_upload(content: str, label: str):
             driver = await self._ensure_driver()
             await driver.upload_group_album(
                 bot=self.bot,
@@ -324,6 +324,7 @@ class OneBotGroupFileManager:
                 album_name=album_name,
                 file_content=content,
             )
+            logger.info(f"[群分析相册] 图片上传相册成功 ({label}) (群 {group_id})")
 
         return await self._execute_transmission_strategy(
             image_path, do_upload, "OneBot 相册"

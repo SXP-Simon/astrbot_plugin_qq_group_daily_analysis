@@ -160,6 +160,50 @@ class QualityReview:
             for d in self.dimensions:
                 d.percentage = round((d.percentage / total) * 100.0, 1)
 
+    def to_dict(self) -> dict[str, object]:
+        """将锐评值对象序列化为字典。"""
+        return {
+            "title": self.title,
+            "subtitle": self.subtitle,
+            "dimensions": [
+                {
+                    "name": d.name,
+                    "percentage": d.percentage,
+                    "comment": d.comment,
+                    "color": d.color,
+                }
+                for d in self.dimensions
+            ],
+            "summary": self.summary,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> QualityReview:
+        """从字典反序列化生成 QualityReview 值对象。"""
+        raw_dims = data.get("dimensions", [])
+        dims: list[QualityDimension] = []
+        if isinstance(raw_dims, list):
+            for item in raw_dims:
+                if isinstance(item, dict):
+                    try:
+                        pct = float(str(item.get("percentage", 0.0) or 0.0))
+                    except (TypeError, ValueError):
+                        pct = 0.0
+                    dims.append(
+                        QualityDimension(
+                            name=str(item.get("name", "") or ""),
+                            percentage=pct,
+                            comment=str(item.get("comment", "") or ""),
+                            color=str(item.get("color", "#607d8b") or "#607d8b"),
+                        )
+                    )
+        return cls(
+            title=str(data.get("title", "")),
+            subtitle=str(data.get("subtitle", "")),
+            dimensions=dims,
+            summary=str(data.get("summary", "")),
+        )
+
 
 @dataclass
 class ComicStoryboard:
@@ -228,6 +272,37 @@ class EmojiStatistics:
             + self.bface_count
             + self.sface_count
             + self.other_emoji_count
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """将表情统计值对象序列化为字典。"""
+        return {
+            "face_count": self.face_count,
+            "mface_count": self.mface_count,
+            "bface_count": self.bface_count,
+            "sface_count": self.sface_count,
+            "other_emoji_count": self.other_emoji_count,
+            "face_details": dict(self.face_details),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> EmojiStatistics:
+        """从字典反序列化生成 EmojiStatistics 值对象。"""
+        raw_details = data.get("face_details", {})
+
+        def _to_int(val: object) -> int:
+            try:
+                return int(str(val or 0))
+            except (TypeError, ValueError):
+                return 0
+
+        return cls(
+            face_count=_to_int(data.get("face_count", 0)),
+            mface_count=_to_int(data.get("mface_count", 0)),
+            bface_count=_to_int(data.get("bface_count", 0)),
+            sface_count=_to_int(data.get("sface_count", 0)),
+            other_emoji_count=_to_int(data.get("other_emoji_count", 0)),
+            face_details=dict(raw_details) if isinstance(raw_details, dict) else {},
         )
 
 
@@ -382,11 +457,11 @@ class QQOfficialMemberProfile(TypedDict, total=False):
 class AnalysisExportPayload(TypedDict, total=False):
     """群聊分析导出渲染数据聚合契约"""
 
-    statistics: GroupStatistics | dict[str, object]
-    topics: list[SummaryTopic] | list[dict[str, object]]
-    user_titles: list[UserTitle] | list[dict[str, object]]
+    statistics: GroupStatistics
+    topics: list[SummaryTopic]
+    user_titles: list[UserTitle]
     user_analysis: dict[str, object]
-    chat_quality_review: QualityReview | dict[str, object] | None
+    chat_quality_review: QualityReview | None
     generated_at: str
     group_id: str
     date_str: str
@@ -473,7 +548,7 @@ class ComicAnalysisExecutionResult(TypedDict, total=False):
     success: bool
     reason: str
     error: str
-    topics: list[ComicTopic] | list[dict[str, object]]
+    topics: list[ComicTopic]
     token_usage: TokenUsage
     messages_count: int
     adapter: PlatformAdapterProtocol
