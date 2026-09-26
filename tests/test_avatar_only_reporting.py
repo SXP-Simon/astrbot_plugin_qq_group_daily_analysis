@@ -16,7 +16,8 @@ from src.domain.value_objects import (
     QualityReview,
 )
 from src.infrastructure.reporting.generators import ReportGenerator
-from src.infrastructure.reporting.qq_official_markdown import (
+from src.infrastructure.reporting.markdown_report_generator import (
+    MarkdownReportGenerator,
     QQOfficialMarkdownReportGenerator,
 )
 from src.infrastructure.reporting.templates import HTMLTemplates
@@ -720,3 +721,28 @@ def test_avatar_resize_preserves_transparency():
     with Image.open(BytesIO(resized)) as image:
         assert image.mode == "RGBA"
         assert max(image.size) <= 96
+
+
+def test_markdown_report_generator_plain_markdown_nickname_fallback():
+    generator = build_generator_without_io()
+    analysis_result = {
+        "statistics": SimpleNamespace(
+            message_count=100,
+            participant_count=10,
+            total_characters=5000,
+            emoji_count=50,
+            most_active_period="14:00-15:00",
+            activity_visualization=None,
+            golden_quotes=[],
+        ),
+        "topics": [],
+        "user_titles": [],
+        "user_analysis": {
+            "12345678": {"nickname": "Alice", "name": "Alice"},
+        },
+    }
+    plain_report = generator.generate_plain_markdown_report(analysis_result)
+    assert "# 🎯 群聊日常分析报告" in plain_report
+    assert "## 📊 基础统计" in plain_report
+    assert "<@" not in plain_report  # 确保无 QQ 官方真提及标签，采用昵称/纯文本模式
+
