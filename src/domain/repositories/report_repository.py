@@ -57,20 +57,23 @@ class IReportGenerator(ABC):
     def generate_text_report(self, analysis_result: AnalysisResultPayload) -> str:
         """生成文本报告。"""
 
-    def generate_plain_markdown_report(
-        self, analysis_result: AnalysisResultPayload
-    ) -> str:
-        """生成跨平台 Markdown 文本报告（默认回退为纯文本报告）。"""
-        return self.generate_text_report(analysis_result)
-
-    async def generate_qq_official_markdown_report(
+    @abstractmethod
+    async def generate_markdown_report(
         self,
         analysis_result: AnalysisResultPayload,
         html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
+        mention_style: str = "name",
     ) -> tuple[str, str]:
-        """生成 QQ 官方 Markdown 报告（默认回退为纯文本报告）。"""
-        text = self.generate_text_report(analysis_result)
-        return text, text
+        """生成 Markdown 格式分析报告。
+
+        Args:
+            analysis_result: 分析结果载荷。
+            html_render_func: 可选的 HTML 异步渲染函数。
+            mention_style: 提及展示风格（'name' 为跨平台通用昵称文本，'qq' 为 QQ 官方提及）。
+
+        Returns:
+            tuple[str, str]: (主报告文本, 备用降级文本)。
+        """
 
     @abstractmethod
     async def close(self) -> None:
