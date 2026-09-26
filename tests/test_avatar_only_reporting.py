@@ -18,7 +18,6 @@ from src.domain.value_objects import (
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.markdown_report_generator import (
     MarkdownReportGenerator,
-    QQOfficialMarkdownReportGenerator,
 )
 from src.infrastructure.reporting.templates import HTMLTemplates
 
@@ -48,7 +47,7 @@ def build_generator_without_io():
 
 def generate_qq_markdown(generator, analysis_result):
     markdown_report, _ = asyncio.run(
-        generator.generate_qq_official_markdown_report(analysis_result)
+        generator.generate_markdown_report(analysis_result, mention_style="qq")
     )
     return markdown_report
 
@@ -352,8 +351,8 @@ def test_qq_official_t2i_summary_dashboard_replaces_text_summary():
         return "https://t2i.example/chart.png"
 
     markdown_report, fallback_report = asyncio.run(
-        generator.generate_qq_official_markdown_report(
-            analysis_result, fake_html_render
+        generator.generate_markdown_report(
+            analysis_result, fake_html_render, mention_style="qq"
         )
     )
 
@@ -435,8 +434,8 @@ def test_qq_official_t2i_summary_dashboard_switch_disables_rendering():
         raise AssertionError("T2I should not run when disabled")
 
     markdown_report, fallback_report = asyncio.run(
-        generator.generate_qq_official_markdown_report(
-            analysis_result, unexpected_render
+        generator.generate_markdown_report(
+            analysis_result, unexpected_render, mention_style="qq"
         )
     )
 
@@ -445,10 +444,10 @@ def test_qq_official_t2i_summary_dashboard_switch_disables_rendering():
 
 
 def test_qq_official_summary_dashboard_compacts_large_metrics():
-    assert QQOfficialMarkdownReportGenerator.format_metric(10_000) == "10K"
-    assert QQOfficialMarkdownReportGenerator.format_metric(12_500) == "12.5K"
-    assert QQOfficialMarkdownReportGenerator.format_metric(1_000_000) == "1M"
-    assert QQOfficialMarkdownReportGenerator.format_metric(1_250_000) == "1.2M"
+    assert MarkdownReportGenerator.format_metric(10_000) == "10K"
+    assert MarkdownReportGenerator.format_metric(12_500) == "12.5K"
+    assert MarkdownReportGenerator.format_metric(1_000_000) == "1M"
+    assert MarkdownReportGenerator.format_metric(1_250_000) == "1.2M"
 
 
 def test_non_qq_avatar_mentions_ignore_alphanumeric_bracket_text():
@@ -741,7 +740,11 @@ def test_markdown_report_generator_plain_markdown_nickname_fallback():
             "12345678": {"nickname": "Alice", "name": "Alice"},
         },
     }
-    plain_report = generator.generate_plain_markdown_report(analysis_result)
+    plain_report, _ = asyncio.run(
+        generator.generate_markdown_report(
+            analysis_result, mention_style="name"
+        )
+    )
     assert "# 🎯 群聊日常分析报告" in plain_report
     assert "## 📊 基础统计" in plain_report
     assert "<@" not in plain_report  # 确保无 QQ 官方真提及标签，采用昵称/纯文本模式
