@@ -41,8 +41,41 @@ export const mockTraces: TraceRecord[] = [
         duration_ms: 7850,
         payload: {
           provider: "deepseek-chat",
+          model: "deepseek-chat",
           tokens: 4820,
           temperature: 0.7,
+          llm_attempts: [
+            { area: "topics", provider_id: "deepseek-chat", model: "deepseek-chat", duration_ms: 2800, status: "success" },
+            { area: "user_titles", provider_id: "deepseek-chat", model: "deepseek-chat", duration_ms: 2100, status: "success" },
+            { area: "golden_quotes", provider_id: "deepseek-chat", model: "deepseek-chat", duration_ms: 1550, status: "success" },
+            { area: "chat_quality", provider_id: "deepseek-chat", model: "deepseek-chat", duration_ms: 1400, status: "success" },
+          ],
+          prompts: {
+            topics: {
+              provider_id: "deepseek-chat",
+              model: "deepseek-chat",
+              tokens: 2220,
+              system_prompt: "你是一个专业的群聊总结助手。请分析以下群聊记录，提取出最核心的 3-5 个讨论话题，并生成简明扼要的摘要与讨论热度评分。",
+              prompt: "【群聊消息记录】\n[08:24] 张三: 大家今天看了最新的 LLM 评估基准测试吗？\n[08:26] 李四: 看到了，DeepSeek V3 的代码生成表现非常亮眼。\n[08:30] 王五: 没错，本地跑量化版本体验也很流畅...\n[11:15] 赵六: 关于 React 19 的服务端组件，大家在生产环境试过了吗？",
+              completion: "{\n  \"topics\": [\n    {\n      \"title\": \"DeepSeek V3 评估基准热议\",\n      \"summary\": \"群友热烈探讨了最新开源大模型的代码与推理能力，并分享了本地量化部署经验。\",\n      \"heat_score\": 95\n    },\n    {\n      \"title\": \"前端工程化与全栈架构演进\",\n      \"summary\": \"讨论了 React 19 新特性对复杂工作流的重构提升。\",\n      \"heat_score\": 82\n    }\n  ]\n}",
+            },
+            user_titles: {
+              provider_id: "deepseek-chat",
+              model: "deepseek-chat",
+              tokens: 1500,
+              system_prompt: "请根据群友的发言特点、高频用词和互动模式，赋予独特的趣味群头衔与专属评价。",
+              prompt: "【群成员发言片段】\n- 张三 (发消息 42 条): 热衷分享最新技术论文与基准\n- 李四 (发消息 38 条): 键盘发烧友，极客玩家\n- 王五 (发消息 29 条): 架构设计与性能调优专家",
+              completion: "{\n  \"titles\": [\n    { \"user\": \"张三\", \"title\": \"基准测试雷达\", \"desc\": \"随时掌握第一手开源模型战报\" },\n    { \"user\": \"李四\", \"title\": \"外设极客匠人\", \"desc\": \"对每把机械键盘轴体如数家珍\" },\n    { \"user\": \"王五\", \"title\": \"性能压榨大师\", \"desc\": \"对每毫秒延迟都追求极致优化\" }\n  ]\n}",
+            },
+            golden_quotes: {
+              provider_id: "deepseek-chat",
+              model: "deepseek-chat",
+              tokens: 1100,
+              system_prompt: "挑选群聊中最具启发性、幽默风趣或一针见血的精彩金句。",
+              prompt: "【全天精彩群聊摘录】\n张三: 代码不会骗人，但偶尔会跟你开个小玩笑。\n李四: 换把静音键盘，是程序员给生活最后的温柔。",
+              completion: "{\n  \"quotes\": [\n    { \"speaker\": \"张三\", \"quote\": \"代码不会骗人，但偶尔会跟你开个小玩笑。\", \"context\": \"修复并发死锁讨论\" },\n    { \"speaker\": \"李四\", \"quote\": \"换把静音键盘，是程序员给生活最后的温柔。\", \"context\": \"深夜调优分享\" }\n  ]\n}",
+            },
+          },
         },
       },
       {
@@ -507,7 +540,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
         status: "succeeded",
         started_at: Date.now() - 86400000,
         duration_ms: 2100,
-        payload: { platform: "discord", channel_id: "1082739182374" },
+        payload: { platform: "discord", raw_messages: 2400, retained: 1850, channel_id: "1082739182374" },
       },
       {
         span_id: "span-dc-llm",
@@ -516,7 +549,35 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
         status: "succeeded",
         started_at: Date.now() - 86397900,
         duration_ms: 9200,
-        payload: { provider: "claude-3-5-sonnet", tokens: 6200 },
+        payload: {
+          provider: "claude-3-5-sonnet",
+          model: "claude-3-5-sonnet-20241022",
+          tokens: 6200,
+          temperature: 0.6,
+          llm_attempts: [
+            { area: "topics", provider_id: "claude-3-5-sonnet", model: "claude-3-5-sonnet-20241022", duration_ms: 3600, status: "success" },
+            { area: "user_titles", provider_id: "claude-3-5-sonnet", model: "claude-3-5-sonnet-20241022", duration_ms: 2900, status: "success" },
+            { area: "golden_quotes", provider_id: "claude-3-5-sonnet", model: "claude-3-5-sonnet-20241022", duration_ms: 2700, status: "success" },
+          ],
+          prompts: {
+            topics: {
+              provider_id: "claude-3-5-sonnet",
+              model: "claude-3-5-sonnet-20241022",
+              tokens: 2800,
+              system_prompt: "You are an AI community analyst specialized in indie game development and pixel art discord channels.",
+              prompt: "【Discord Chat History Extract】\nPixelDev: Unity 6 tilemap shader performance tricks\nSpriteMaster: Aseprite new animation layer blend mode...",
+              completion: "{\n  \"topics\": [\n    {\n      \"title\": \"Unity 6 Tilemap 渲染管线优化\",\n      \"summary\": \"探讨了2D像素游戏的批处理渲染与自定义 Shader 性能调优方案。\",\n      \"heat_score\": 90\n    },\n    {\n      \"title\": \"Aseprite 像素分层动画技巧\",\n      \"summary\": \"交流了多图层调色板索引与像素光影表现手法。\",\n      \"heat_score\": 86\n    }\n  ]\n}",
+            },
+            user_titles: {
+              provider_id: "claude-3-5-sonnet",
+              model: "claude-3-5-sonnet-20241022",
+              tokens: 1900,
+              system_prompt: "Extract playful developer personas from discord discussions.",
+              prompt: "【User Interaction Data】...",
+              completion: "{\n  \"titles\": [\n    { \"user\": \"PixelDev\", \"title\": \"着色器魔法师\", \"desc\": \"沉迷于用代码编写极具质感的像素特效\" },\n    { \"user\": \"SpriteMaster\", \"title\": \"帧动画狂热者\", \"desc\": \"追求每一帧动作的绝对流畅与张力\" }\n  ]\n}",
+            },
+          },
+        },
       },
       {
         span_id: "span-dc-render",
@@ -525,7 +586,7 @@ openai.APIConnectionError: Connection timeout to api.openai.com:443 after 20000m
         status: "succeeded",
         started_at: Date.now() - 86388700,
         duration_ms: 3700,
-        payload: { template: "pixel_game", format: "png" },
+        payload: { template: "pixel_game", format: "png", dimensions: "1080x3120", width: 1080, height: 3120 },
       },
     ],
     context_metrics: {
