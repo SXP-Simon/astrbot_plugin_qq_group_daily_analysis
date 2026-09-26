@@ -20,7 +20,14 @@ if TYPE_CHECKING:
 
 
 class StandardOneBotDriver(OneBotDriver):
-    """标准 OneBot v11 驱动。"""
+    """标准 OneBot v11 驱动。
+
+    特性与行为：
+    1. 历史消息拉取：构建包含 group_id, count, reverseOrder: True, message_seq 的标准分页参数。
+    2. 锚点提取：实现四级探测优先级（message_seq > real_id > seq > message_id），兼容各平台对序列号命名的差异。
+    3. 群相册接口：支持轮询调用 upload_image_to_qun_album / upload_group_album / upload_qun_album 等标准接口。
+    4. 全群禁言判定：支持从 group_all_shut、shutup_all、is_whole_ban、whole_ban、shut_up 等多方言字段中识别全员禁言。
+    """
 
     name: str = "standard"
 
