@@ -1,7 +1,6 @@
-"""OpenAPI 3.1 specification provider for AstrBot QQ Group Daily Analysis Web API.
+"""AstrBot QQ群聊分析插件 Web API 的 OpenAPI 3.1 规范提供器。
 
-This module builds and provides the complete OpenAPI 3.1 schema definition
-for all REST and SSE endpoints served by the plugin dashboard.
+本模块构建并提供控制台所需的全量 REST 与 SSE 端点的 OpenAPI 3.1 契约定义。
 """
 
 from __future__ import annotations
@@ -10,10 +9,10 @@ from typing import Any
 
 
 def generate_openapi_spec() -> dict[str, Any]:
-    """Generate OpenAPI 3.1 specification for the plugin web API.
+    """生成插件 Web API 的 OpenAPI 3.1 契约规范字典。
 
     Returns:
-        dict[str, Any]: Complete OpenAPI 3.1 specification dictionary.
+        dict[str, Any]: 完整的 OpenAPI 3.1 契约规范字典对象。
     """
     return {
         "openapi": "3.1.0",
