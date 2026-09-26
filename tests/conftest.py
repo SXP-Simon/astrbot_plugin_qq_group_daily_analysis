@@ -23,6 +23,9 @@ if "astrbot.api" not in sys.modules:
     class AstrMessageEvent:
         pass
 
+    class MessageEventResult:
+        pass
+
     class Context:
         pass
 
@@ -132,6 +135,7 @@ if "astrbot.api" not in sys.modules:
 
     astrbot_api_module.logger = logging.getLogger("astrbot-test")
     astrbot_event_module.AstrMessageEvent = AstrMessageEvent
+    astrbot_event_module.MessageEventResult = MessageEventResult
     astrbot_event_module.filter = filter
     astrbot_provider_module.LLMResponse = LLMResponse
     astrbot_star_module.Context = Context
