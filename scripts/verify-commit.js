@@ -236,8 +236,9 @@ const SCOPE_PATH_RULES = [
       f === 'lefthook.yml' ||
       f === 'pyrightconfig.json' ||
       f === 'ruff.toml' ||
-      f === '.pre-commit-config.yaml',
-    name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json)',
+      f === '.pre-commit-config.yaml' ||
+      f === 'openapi.json',
+    name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json, openapi.json)',
   },
   {
     matchScope: (s) => s === 'deps',
@@ -251,7 +252,7 @@ const SCOPE_PATH_RULES = [
   },
   {
     matchScope: (s) => s === 'core' || s === 'spec',
-    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml' || f === 'metadata.yaml',
+    matchFile: (f) => f.startsWith('src/shared/') || f === 'main.py' || f === 'ruff.toml' || f === 'metadata.yaml' || f === 'openapi.json',
     name: 'core/spec 核心协议与基建',
   },
 ];
