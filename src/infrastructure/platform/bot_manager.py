@@ -67,6 +67,15 @@ class BotManager:
         """设置插件实例引用"""
         self._plugin_instance = plugin_instance
 
+    @property
+    def plugin_instance(self) -> PluginHostProtocol | None:
+        """当前绑定的插件实例。
+
+        适配器创建时会把它注入 config（见 set_bot_instance），供群注册表等
+        需要回查插件状态的能力使用；调度器等外部构造适配器时也应传入同一个实例。
+        """
+        return self._plugin_instance
+
     def set_bot_instance(
         self,
         bot_instance: object,

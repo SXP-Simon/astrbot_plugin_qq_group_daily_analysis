@@ -200,6 +200,9 @@ class ScheduledTargetResolver:
                                     self.config_manager.get_bot_self_ids()
                                 ),
                                 "platform_id": str(platform_id),
+                                # 兜底构造的适配器同样需要插件实例：Telegram 等平台
+                                # 无法通过 API 列出群组，只能回查插件侧的群注册表。
+                                "plugin_instance": self.bot_manager.plugin_instance,
                             },
                         )
 
