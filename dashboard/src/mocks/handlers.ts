@@ -48,6 +48,9 @@ export const mockHandlers = {
     if (params?.group_id && typeof params.group_id === "string") {
       items = items.filter((t) => t.group_id.includes(params.group_id as string));
     }
+    if (params?.platform && typeof params.platform === "string" && params.platform !== "ALL") {
+      items = items.filter((t) => t.platform === params.platform);
+    }
     return {
       status: "ok",
       data: { items, total: items.length },
@@ -65,27 +68,52 @@ export const mockHandlers = {
   },
   "GET groups": () => ({
     status: "ok",
-    data: ["123456789", "987654321", "-1001234567890"],
+    data: [
+      "123456789",
+      "987654321",
+      "8899001122",
+      "-1001987654321",
+      "1082739182374",
+      "9988776655",
+    ],
   }),
   "GET providers": () => ({ status: "ok", data: mockProviders }),
   "GET personas": () => ({ status: "ok", data: mockPersonas }),
 
   // 4. 历史报告与海报模板
-  "GET reports/history": () => ({ status: "ok", data: mockReportHistory }),
-  "GET reports/content": () => ({
-    status: "ok",
-    data: {
-      ...mockReportHistory[0],
-      base64_content:
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'><rect width='100%' height='100%' fill='%231677ff'/><text x='50%' y='50%' fill='white' font-size='20' text-anchor='middle'>Mock Report Preview</text></svg>",
-    },
-  }),
+  "GET reports/history": (params?: Record<string, unknown>) => {
+    let items = [...mockReportHistory];
+    if (params?.group_id && typeof params.group_id === "string") {
+      items = items.filter((r) => r.group_id?.includes(params.group_id as string));
+    }
+    if (params?.report_type && typeof params.report_type === "string") {
+      items = items.filter((r) => r.report_type === params.report_type);
+    }
+    return { status: "ok", data: items };
+  },
+  "GET reports/content": (params?: Record<string, unknown>) => {
+    const filename = (params?.filename as string) || "";
+    const isHtml = filename.endsWith(".html");
+    return {
+      status: "ok",
+      data: {
+        ...mockReportHistory[0],
+        filename,
+        is_html: isHtml,
+        html_content: isHtml
+          ? "<!DOCTYPE html><html><body style='background:#0f172a;color:#f8fafc;padding:24px;font-family:sans-serif;'><h2>Interactive Daily Report</h2><p>This is a simulated interactive HTML daily report for visualization.</p></body></html>"
+          : undefined,
+        data_url:
+          "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='300'><rect width='100%' height='100%' fill='%231677ff'/><text x='50%' y='50%' fill='white' font-size='22' text-anchor='middle'>Mock Daily Analysis Poster Preview</text></svg>",
+      },
+    };
+  },
   "GET reports/templates": () => ({ status: "ok", data: mockReportTemplates }),
   "GET templates/preview": () => ({
     status: "ok",
     data: {
       data_url:
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='150'><rect width='100%' height='100%' fill='%2352c41a'/><text x='50%' y='50%' fill='white' font-size='16' text-anchor='middle'>Template Preview</text></svg>",
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='200'><rect width='100%' height='100%' fill='%2352c41a'/><text x='50%' y='50%' fill='white' font-size='18' text-anchor='middle'>Template Live Preview</text></svg>",
     },
   }),
   "POST templates/install_from_url": () => ({
@@ -111,7 +139,33 @@ export const mockHandlers = {
   }),
 
   // 5. 日志流
-  "GET logs": () => ({ status: "ok", data: mockPluginLogs }),
+  "GET logs": (params?: Record<string, unknown>) => {
+    let items = [...mockPluginLogs];
+    if (params?.level && typeof params.level === "string" && params.level !== "ALL") {
+      items = items.filter((l) => l.level === params.level);
+    }
+    if (params?.tag && typeof params.tag === "string" && params.tag !== "ALL") {
+      items = items.filter((l) => l.tag === params.tag);
+    }
+    if (params?.search && typeof params.search === "string") {
+      const q = (params.search as string).toLowerCase();
+      items = items.filter(
+        (l) =>
+          l.message.toLowerCase().includes(q) ||
+          (l.raw && l.raw.toLowerCase().includes(q)) ||
+          (l.logger_name && l.logger_name.toLowerCase().includes(q))
+      );
+    }
+    const tags = Array.from(new Set(mockPluginLogs.map((l) => l.tag).filter(Boolean)));
+    return {
+      status: "ok",
+      data: {
+        items,
+        total: items.length,
+        available_tags: tags.map((t) => ({ tag: t, count: mockPluginLogs.filter((l) => l.tag === t).length })),
+      },
+    };
+  },
 
   // 6. 配置项
   "GET config": () => ({ status: "ok", data: mockPluginConfig }),
@@ -134,7 +188,7 @@ export const mockHandlers = {
   "POST plugin-data/:section/clear": () => ({ status: "ok", data: { deleted: 10 } }),
   "GET data/incremental/groups": () => ({
     status: "ok",
-    data: { groups: ["123456789", "987654321"] },
+    data: { groups: ["123456789", "8899001122", "987654321", "-1001987654321"] },
   }),
   "GET data/incremental/batches": () => ({ status: "ok", data: mockIncrementalBatches }),
   "GET data/incremental/batch/detail": () => ({
@@ -144,13 +198,19 @@ export const mockHandlers = {
   "POST data/incremental/batch": () => ({ status: "ok", data: { deleted: true } }),
   "POST data/incremental/reset": () => ({
     status: "ok",
-    data: { deleted_batches: 2, message: "已重置增量状态" },
+    data: { deleted_batches: 3, message: "已重置增量状态" },
   }),
   "GET data/checkpoints/groups": () => ({
     status: "ok",
-    data: { groups: ["123456789"] },
+    data: { groups: ["123456789", "8899001122", "987654321"] },
   }),
-  "GET data/checkpoints": () => ({ status: "ok", data: mockCheckpoints }),
+  "GET data/checkpoints": (params?: Record<string, unknown>) => {
+    let items = [...mockCheckpoints.items];
+    if (params?.group_id && typeof params.group_id === "string") {
+      items = items.filter((c) => c.group_id === params.group_id);
+    }
+    return { status: "ok", data: { total: items.length, items } };
+  },
   "GET data/checkpoint/detail": () => ({
     status: "ok",
     data: {

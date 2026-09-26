@@ -109,6 +109,6 @@ describe("UI 拟真数据矩阵与排版弹性测试 (UI Resilience & Layout Str
     expect(mockPluginLogs.some((l) => l.level === "ERROR" && l.message.includes("Traceback"))).toBe(true);
     expect(mockPluginLogs.some((l) => l.level === "CRITICAL")).toBe(true);
     // 包含无 trace_id 的系统启动日志
-    expect(mockPluginLogs.some((l) => l.id === "log-0" && !l.trace_id)).toBe(true);
+    expect(mockPluginLogs.some((l) => l.id.startsWith("log-sys-") && !l.trace_id)).toBe(true);
   });
 });
