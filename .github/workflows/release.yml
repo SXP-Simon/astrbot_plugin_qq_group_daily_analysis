@@ -4,12 +4,16 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
+    paths:
+      - "metadata.yaml"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v5.1.0)"
-        required: true
-        default: "v5.1.0"
+        description: "Release tag (e.g. v5.6.4, leave empty to read from metadata.yaml)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -25,23 +29,140 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve Release Tag
+      - name: Resolve Release Tag & Check Version Change
         id: vars
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          SHOULD_RELEASE="false"
+          TAG_NAME=""
+          OLD_TAG="none"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT_TAG="${{ inputs.tag }}"
+            if [ -n "$INPUT_TAG" ]; then
+              TAG_NAME="$INPUT_TAG"
+            else
+              CURRENT_VERSION=$(grep '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+              if [[ "$CURRENT_VERSION" == v* ]]; then
+                TAG_NAME="$CURRENT_VERSION"
+              else
+                TAG_NAME="v$CURRENT_VERSION"
+              fi
+            fi
+            SHOULD_RELEASE="true"
+            OLD_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+            echo "Workflow dispatch triggered for tag: $TAG_NAME"
+
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG_NAME="${GITHUB_REF_NAME}"
-          else
-            TAG_NAME="${{ inputs.tag }}"
+            SHOULD_RELEASE="true"
+            OLD_TAG=$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || echo "none")
+            echo "Push tag triggered: $TAG_NAME (previous tag: $OLD_TAG)"
+
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            CURRENT_VERSION=$(grep '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+            git checkout HEAD~1 -- metadata.yaml 2>/dev/null || echo "First commit"
+            if [ -f metadata.yaml ]; then
+              PREVIOUS_VERSION=$(grep '^version:' metadata.yaml | awk '{print $2}' | tr -d '"' | tr -d "'")
+              git checkout HEAD -- metadata.yaml
+            else
+              PREVIOUS_VERSION="none"
+            fi
+
+            if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ] && [ -n "$CURRENT_VERSION" ]; then
+              if [[ "$CURRENT_VERSION" == v* ]]; then
+                TAG_NAME="$CURRENT_VERSION"
+              else
+                TAG_NAME="v$CURRENT_VERSION"
+              fi
+              SHOULD_RELEASE="true"
+              OLD_TAG="$PREVIOUS_VERSION"
+              echo "Version in metadata.yaml changed from $PREVIOUS_VERSION to $CURRENT_VERSION -> Target tag: $TAG_NAME"
+            else
+              SHOULD_RELEASE="false"
+              echo "No version change in metadata.yaml detected, skipping release."
+            fi
           fi
+
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "Building Release for Tag: $TAG_NAME"
+          echo "old_tag=$OLD_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Structured Release Notes
+        if: steps.vars.outputs.should_release == 'true'
+        id: release_notes
+        run: |
+          VERSION="${{ steps.vars.outputs.tag }}"
+          OLD_VERSION="${{ steps.vars.outputs.old_tag }}"
+
+          # 1. 尝试从 CHANGELOG.md 提取
+          if [ -f "CHANGELOG.md" ]; then
+            awk -v ver="${VERSION#v}" -v full_ver="$VERSION" '
+              /^## \[?v?/ && (index($0, ver) || index($0, full_ver)) { flag=1 }
+              /^## \[?v?/ && !(index($0, ver) || index($0, full_ver)) { flag=0 }
+              flag
+            ' CHANGELOG.md > release_notes.md
+          fi
+
+          touch release_notes.md
+
+          # 2. 生成 Conventional Commits 分类列表
+          echo "" >> release_notes.md
+          echo "### 🔍 Commits" >> release_notes.md
+
+          process_log() {
+            local range="$1"
+            git log --pretty=format:"%s|%h|%H" "$range" > commits.txt
+
+            print_category() {
+              local marker="$1"
+              local title="$2"
+              local pattern="$3"
+              local commits=$(grep -iE "$pattern" commits.txt || true)
+              if [ -n "$commits" ]; then
+                echo "#### $marker $title" >> release_notes.md
+                echo "$commits" | while IFS='|' read -r msg hash full_hash; do
+                  echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+                done
+                echo "" >> release_notes.md
+              fi
+            }
+
+            print_category "✨" "Features" "^(feat|feature)(\(.*\))?:"
+            print_category "🐛" "Fixes" "^fix(\(.*\))?:"
+            print_category "📚" "Documentation" "^docs(\(.*\))?:"
+            print_category "💄" "Style & Refactor" "^(style|refactor|perf)(\(.*\))?:"
+            print_category "🔧" "Chore & Test" "^(chore|test|ci|build)(\(.*\))?:"
+
+            local others=$(grep -ivE "^(feat|feature|fix|docs|style|refactor|perf|chore|test|ci|build)(\(.*\))?:" commits.txt || true)
+            if [ -n "$others" ]; then
+              echo "#### 📌 Other Changes" >> release_notes.md
+              echo "$others" | while IFS='|' read -r msg hash full_hash; do
+                echo "- $msg ([$hash](https://github.com/${{ github.repository }}/commit/$full_hash))" >> release_notes.md
+              done
+              echo "" >> release_notes.md
+            fi
+
+            rm -f commits.txt
+          }
+
+          if [ "$OLD_VERSION" != "none" ] && git rev-parse "$OLD_VERSION" >/dev/null 2>&1; then
+            process_log "$OLD_VERSION..HEAD"
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$OLD_VERSION...${{ steps.vars.outputs.tag }}" >> release_notes.md
+          else
+            echo "#### 🆕 Recent Commits" >> release_notes.md
+            git log -15 --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" >> release_notes.md
+          fi
+
+          cat release_notes.md
 
       - name: Set up Node.js & pnpm
+        if: steps.vars.outputs.should_release == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
       - name: Set up Node 20
+        if: steps.vars.outputs.should_release == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -49,6 +170,7 @@ jobs:
           cache-dependency-path: "dashboard/pnpm-lock.yaml"
 
       - name: Build WebUI Dashboard
+        if: steps.vars.outputs.should_release == 'true'
         working-directory: ./dashboard
         run: |
           pnpm install --frozen-lockfile
@@ -57,27 +179,34 @@ jobs:
           pnpm build
 
       - name: Verify WebUI Artifacts
+        if: steps.vars.outputs.should_release == 'true'
         run: |
           test -f pages/daily-analysis/index.html || (echo "Missing pages/daily-analysis/index.html" && exit 1)
           test -f pages/daily-analysis/assets/index.js || (echo "Missing pages/daily-analysis/assets/index.js" && exit 1)
           echo "WebUI single-bundle distribution artifacts verified."
 
       - name: Package Plugin ZIP
+        if: steps.vars.outputs.should_release == 'true'
+        id: pkg
         run: |
-          ZIP_NAME="astrbot_plugin_qq_group_daily_analysis_${{ steps.vars.outputs.tag }}.zip"
+          TAG="${{ steps.vars.outputs.tag }}"
+          ZIP_NAME="astrbot_plugin_qq_group_daily_analysis_${TAG}.zip"
           git archive --format=zip -o "$ZIP_NAME" HEAD
+          if command -v zip >/dev/null 2>&1; then
+            zip -u "$ZIP_NAME" pages/daily-analysis/index.html pages/daily-analysis/assets/* 2>/dev/null || true
+          fi
           echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
           ls -lh "$ZIP_NAME"
-        id: pkg
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
+        if: steps.vars.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: "Release ${{ steps.vars.outputs.tag }}"
+          body_path: release_notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
           files: |
             ${{ steps.pkg.outputs.zip_name }}
         env:

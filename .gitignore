@@ -33,7 +33,7 @@ node_modules/
 dist/
 
 # Persistence & temporary test data
-data/
+/data/
 *.db
 *.db-journal
 *.sqlite

@@ -45,7 +45,7 @@ const MetricPill: React.FC<MetricPillProps> = ({
         display: "inline-flex",
         alignItems: "center",
         gap: 4,
-        padding: "1px 6px",
+        padding: "2px 7px",
         fontSize: 11,
         borderRadius: 4,
         background: statusBg,
@@ -61,7 +61,7 @@ const MetricPill: React.FC<MetricPillProps> = ({
           fontFamily: isMono
             ? "'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace"
             : "inherit",
-          color: status !== "default" ? statusColor : (isDark ? "#f0f6fc" : "#0f172a"),
+          color: status !== "default" ? statusColor : isDark ? "#f0f6fc" : "#0f172a",
         }}
       >
         {value}
@@ -94,15 +94,27 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
     return null;
   };
 
-  switch (stageName) {
+  const normStage = (stageName || "").toUpperCase().replace(/-/g, "_");
+
+  switch (normStage) {
     case "FETCH_MESSAGES":
+    case "DATA_FETCHING":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {payload.fetched_count !== undefined && (
-            <MetricPill isDark={isDark} label="抓取消息" value={`${Number(payload.fetched_count)} 条`} />
+          {(payload.fetched_count !== undefined || payload.raw_messages !== undefined) && (
+            <MetricPill
+              isDark={isDark}
+              label="拉取消息"
+              value={`${Number(payload.fetched_count ?? payload.raw_messages).toLocaleString()} 条`}
+            />
           )}
-          {payload.days !== undefined && (
-            <MetricPill isDark={isDark} label="时间跨度" value={`${Number(payload.days)} 天`} />
+          {(payload.retained !== undefined || payload.cleaned_count !== undefined) && (
+            <MetricPill
+              isDark={isDark}
+              label="留存有效"
+              value={`${Number(payload.retained ?? payload.cleaned_count).toLocaleString()} 条`}
+              status="success"
+            />
           )}
           {payload.max_count !== undefined && (
             <MetricPill isDark={isDark} label="最大限制" value={`${Number(payload.max_count)} 条`} />
@@ -110,8 +122,17 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.raw_data_size_kb !== undefined && Number(payload.raw_data_size_kb) > 0 && (
             <MetricPill isDark={isDark} label="原始体量" value={`${Number(payload.raw_data_size_kb)} KB`} />
           )}
-          {Boolean(payload.source) && (
-            <MetricPill isDark={isDark} label="平台源" value={String(payload.source)} isMono={false} />
+          {payload.batch_chunks !== undefined && (
+            <MetricPill isDark={isDark} label="分块批次" value={`${Number(payload.batch_chunks)} 块`} />
+          )}
+          {payload.days !== undefined && (
+            <MetricPill isDark={isDark} label="时间跨度" value={`${Number(payload.days)} 天`} />
+          )}
+          {Boolean(payload.platform || payload.source) && (
+            <MetricPill isDark={isDark} label="平台源" value={String(payload.platform || payload.source)} isMono={false} />
+          )}
+          {Boolean(payload.reason) && (
+            <MetricPill isDark={isDark} label="跳过原因" value={String(payload.reason)} isMono={false} status="warning" />
           )}
           {renderMemoryPill()}
         </div>
@@ -147,6 +168,19 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
         </div>
       );
 
+    case "INCREMENTAL_AGGREGATION":
+      return (
+        <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {payload.aggregated_batches !== undefined && (
+            <MetricPill isDark={isDark} label="聚合批次" value={`${Number(payload.aggregated_batches)} 批`} status="success" />
+          )}
+          {payload.keywords_extracted !== undefined && (
+            <MetricPill isDark={isDark} label="关键词提炼" value={`${Number(payload.keywords_extracted)} 个`} />
+          )}
+          {renderMemoryPill()}
+        </div>
+      );
+
     case "STATS_ANALYSIS":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -159,9 +193,6 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.participant_count !== undefined && (
             <MetricPill isDark={isDark} label="发言人数" value={`${Number(payload.participant_count)} 人`} />
           )}
-          {Boolean(payload.most_active_period) && (
-            <MetricPill isDark={isDark} label="高峰时段" value={String(payload.most_active_period)} isMono={false} />
-          )}
           {payload.emoji_count !== undefined && (
             <MetricPill isDark={isDark} label="表情总数" value={`${Number(payload.emoji_count)} 个`} />
           )}
@@ -170,9 +201,16 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
       );
 
     case "CHECKPOINT_RESTORE":
+    case "CRASH_RECOVERY":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          <MetricPill isDark={isDark} label="快照恢复" value="已恢复前置清洗与基础统计快照，免重复拉取" isMono={false} status="success" />
+          <MetricPill
+            isDark={isDark}
+            label="快照恢复"
+            value={payload.resumed_from ? `从快照 [${payload.resumed_from}] 恢复执行` : "已成功从前置快照恢复"}
+            isMono={false}
+            status="success"
+          />
           {renderMemoryPill()}
         </div>
       );
@@ -186,9 +224,6 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.topics_persisted !== undefined && (
             <MetricPill isDark={isDark} label="话题持久化" value={`${Number(payload.topics_persisted)} 个`} />
           )}
-          {payload.titles_persisted !== undefined && (
-            <MetricPill isDark={isDark} label="称号持久化" value={`${Number(payload.titles_persisted)} 个`} />
-          )}
           {Boolean(payload.checkpoint_saved) && (
             <MetricPill isDark={isDark} label="快照存储" value="成功 (可免 Token 重绘)" isMono={false} status="success" />
           )}
@@ -197,16 +232,32 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
       );
 
     case "RENDER_REPORT":
+    case "REPORT_RENDERING":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {Boolean(payload.format) && (
-            <MetricPill isDark={isDark} label="格式" value={String(payload.format)} isMono={false} />
-          )}
           {Boolean(payload.template) && (
-            <MetricPill isDark={isDark} label="主题" value={String(payload.template)} isMono={false} />
+            <MetricPill isDark={isDark} label="主题模板" value={String(payload.template)} isMono={false} status="success" />
+          )}
+          {(Boolean(payload.format) || Boolean(payload.formats)) && (
+            <MetricPill
+              isDark={isDark}
+              label="输出格式"
+              value={Array.isArray(payload.formats) ? (payload.formats as string[]).join(", ") : String(payload.format || payload.formats)}
+              isMono={false}
+            />
+          )}
+          {(payload.width !== undefined || payload.height !== undefined || payload.resolution !== undefined || payload.dimensions !== undefined) && (
+            <MetricPill
+              isDark={isDark}
+              label="渲染分辨率"
+              value={String(payload.dimensions || payload.resolution || `${payload.width}x${payload.height}`)}
+            />
           )}
           {payload.html_size_kb !== undefined && Number(payload.html_size_kb) > 0 && (
             <MetricPill isDark={isDark} label="HTML源码" value={`${Number(payload.html_size_kb)} KB`} />
+          )}
+          {payload.image_bytes !== undefined && Number(payload.image_bytes) > 0 && (
+            <MetricPill isDark={isDark} label="图片体积" value={`${(Number(payload.image_bytes) / 1024).toFixed(1)} KB`} />
           )}
           {payload.template_render_ms !== undefined && Number(payload.template_render_ms) > 0 && (
             <MetricPill isDark={isDark} label="模板耗时" value={`${Number(payload.template_render_ms)} ms`} />
@@ -214,26 +265,11 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
           {payload.t2i_render_ms !== undefined && Number(payload.t2i_render_ms) > 0 && (
             <MetricPill isDark={isDark} label="T2I耗时" value={`${Number(payload.t2i_render_ms)} ms`} />
           )}
-          {Boolean(payload.dimensions) && (
-            <MetricPill isDark={isDark} label="分辨率" value={String(payload.dimensions)} />
-          )}
-          {payload.image_bytes !== undefined && Number(payload.image_bytes) > 0 && (
-            <MetricPill isDark={isDark} label="图片体积" value={`${(Number(payload.image_bytes) / 1024).toFixed(1)} KB`} />
+          {Boolean(payload.t2i_engine) && (
+            <MetricPill isDark={isDark} label="渲染引擎" value={String(payload.t2i_engine)} isMono={false} />
           )}
           {payload.render_attempt !== undefined && (
-            <MetricPill isDark={isDark} label="轮次" value={`第 ${Number(payload.render_attempt)} 轮`} />
-          )}
-          {Boolean(payload.viewport) && (
-            <MetricPill isDark={isDark} label="视口" value={String(payload.viewport)} />
-          )}
-          {payload.topics_rendered !== undefined && (
-            <MetricPill isDark={isDark} label="话题渲染" value={`${Number(payload.topics_rendered)} 个`} />
-          )}
-          {payload.titles_rendered !== undefined && (
-            <MetricPill isDark={isDark} label="称号渲染" value={`${Number(payload.titles_rendered)} 个`} />
-          )}
-          {payload.avatars_processed !== undefined && Number(payload.avatars_processed) > 0 && (
-            <MetricPill isDark={isDark} label="头像解析" value={`${Number(payload.avatars_processed)} 个`} />
+            <MetricPill isDark={isDark} label="渲染轮次" value={`第 ${Number(payload.render_attempt)} 轮`} />
           )}
           {Boolean(payload.hide_user_names) && (
             <MetricPill isDark={isDark} label="隐私保护" value="匿名模式" isMono={false} />
@@ -243,8 +279,12 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
       );
 
     case "DISPATCH_REPORT":
+    case "MESSAGE_DISPATCH":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {Boolean(payload.target_group || payload.target_channel) && (
+            <MetricPill isDark={isDark} label="目标群/频道" value={String(payload.target_group || payload.target_channel)} />
+          )}
           {Boolean(payload.platform) && (
             <MetricPill isDark={isDark} label="目标平台" value={String(payload.platform)} isMono={false} />
           )}
@@ -278,6 +318,12 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
               isMono={false}
             />
           )}
+          {Boolean(payload.album_uploaded) && (
+            <MetricPill isDark={isDark} label="QQ群相册" value="已同步上传" isMono={false} status="success" />
+          )}
+          {Boolean(payload.html_url_generated) && (
+            <MetricPill isDark={isDark} label="在线交互报告" value="已生成 URL" isMono={false} status="success" />
+          )}
           {payload.success !== undefined && (
             <MetricPill
               isDark={isDark}
@@ -310,28 +356,32 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
       );
 
     case "COMIC_STORYBOARD":
-      return (
-        <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {Boolean(payload.character_name) && (
-            <MetricPill isDark={isDark} label="角色方案" value={String(payload.character_name)} isMono={false} />
-          )}
-          {payload.storyboards_count !== undefined && (
-            <MetricPill isDark={isDark} label="分镜数" value={`${Number(payload.storyboards_count)} 格`} />
-          )}
-          {payload.total_tokens !== undefined && Number(payload.total_tokens) > 0 && (
-            <MetricPill isDark={isDark} label="Token" value={Number(payload.total_tokens).toLocaleString()} />
-          )}
-        </div>
-      );
-
     case "COMIC_DRAWING":
+    case "COMIC_GENERATION":
       return (
         <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {Boolean(payload.backend) && (
-            <MetricPill isDark={isDark} label="绘图后端" value={String(payload.backend)} isMono={false} />
+          {(payload.panels !== undefined || payload.storyboards_count !== undefined) && (
+            <MetricPill
+              isDark={isDark}
+              label="分镜格数"
+              value={`${Number(payload.panels ?? payload.storyboards_count)} 格`}
+              status="success"
+            />
+          )}
+          {Boolean(payload.engine || payload.backend) && (
+            <MetricPill isDark={isDark} label="生图引擎" value={String(payload.engine || payload.backend)} isMono={false} />
+          )}
+          {Boolean(payload.style || payload.character_name) && (
+            <MetricPill isDark={isDark} label="风格/方案" value={String(payload.style || payload.character_name)} isMono={false} />
+          )}
+          {Boolean(payload.resolution) && (
+            <MetricPill isDark={isDark} label="生图分辨率" value={String(payload.resolution)} />
           )}
           {payload.reference_images_count !== undefined && (
             <MetricPill isDark={isDark} label="参考图" value={`${Number(payload.reference_images_count)} 张`} />
+          )}
+          {payload.total_tokens !== undefined && Number(payload.total_tokens) > 0 && (
+            <MetricPill isDark={isDark} label="Token" value={Number(payload.total_tokens).toLocaleString()} />
           )}
           {payload.success !== undefined && (
             <MetricPill
@@ -342,49 +392,60 @@ export const StageMetricsBadges: React.FC<StageMetricsBadgesProps> = ({
               status={payload.success ? "success" : "error"}
             />
           )}
+          {Boolean(payload.warning) && (
+            <MetricPill isDark={isDark} label="降级预警" value={String(payload.warning)} isMono={false} status="warning" />
+          )}
+          {renderMemoryPill()}
         </div>
       );
 
     case "LLM_ANALYSIS":
-      if (
-        payload.enabled_features &&
-        typeof payload.enabled_features === "object"
-      ) {
-        const feats = payload.enabled_features as Record<string, boolean>;
-        return (
-          <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+      return (
+        <div style={{ marginBottom: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {Boolean(payload.provider) && (
+            <MetricPill isDark={isDark} label="推理服务" value={String(payload.provider)} isMono={false} status="success" />
+          )}
+          {Boolean(payload.model) && String(payload.model) !== String(payload.provider) && (
+            <MetricPill isDark={isDark} label="模型版本" value={String(payload.model)} isMono={false} />
+          )}
+          {(payload.tokens !== undefined || payload.total_tokens !== undefined) && (
             <MetricPill
               isDark={isDark}
-              label="话题分析"
-              value={feats.topics !== false ? "开启" : "关闭"}
-              isMono={false}
-              status={feats.topics !== false ? "success" : "default"}
+              label="模型消耗"
+              value={`${Number(payload.tokens ?? payload.total_tokens).toLocaleString()} Tokens`}
+              status="success"
             />
+          )}
+          {payload.cache_hits !== undefined && Number(payload.cache_hits) > 0 && (
             <MetricPill
               isDark={isDark}
-              label="群友画像"
-              value={feats.user_titles !== false ? "开启" : "关闭"}
-              isMono={false}
-              status={feats.user_titles !== false ? "success" : "default"}
+              label="Prompt 缓存命中"
+              value={`${Number(payload.cache_hits).toLocaleString()} Tokens`}
+              status="success"
             />
-            <MetricPill
-              isDark={isDark}
-              label="精彩金句"
-              value={feats.golden_quotes !== false ? "开启" : "关闭"}
-              isMono={false}
-              status={feats.golden_quotes !== false ? "success" : "default"}
-            />
-            <MetricPill
-              isDark={isDark}
-              label="质量锐评"
-              value={feats.chat_quality !== false ? "开启" : "关闭"}
-              isMono={false}
-              status={feats.chat_quality !== false ? "success" : "default"}
-            />
-          </div>
-        );
-      }
-      return null;
+          )}
+          {payload.temperature !== undefined && (
+            <MetricPill isDark={isDark} label="发散度 (temp)" value={String(payload.temperature)} />
+          )}
+          {Boolean(payload.enabled_features && typeof payload.enabled_features === "object") && (
+            <>
+              {(payload.enabled_features as Record<string, boolean>).topics !== false && (
+                <MetricPill isDark={isDark} label="话题分析" value="开启" isMono={false} status="success" />
+              )}
+              {(payload.enabled_features as Record<string, boolean>).user_titles !== false && (
+                <MetricPill isDark={isDark} label="群友画像" value="开启" isMono={false} status="success" />
+              )}
+              {(payload.enabled_features as Record<string, boolean>).golden_quotes !== false && (
+                <MetricPill isDark={isDark} label="精彩金句" value="开启" isMono={false} status="success" />
+              )}
+              {(payload.enabled_features as Record<string, boolean>).chat_quality !== false && (
+                <MetricPill isDark={isDark} label="质量锐评" value="开启" isMono={false} status="success" />
+              )}
+            </>
+          )}
+          {renderMemoryPill()}
+        </div>
+      );
 
     default:
       return null;

@@ -27,6 +27,8 @@ dashboard/                export-ignore
 .ace-tool/                export-ignore
 .vscode/                  export-ignore
 .pre-commit-config.yaml   export-ignore
+lefthook.yml              export-ignore
+openapi.json              export-ignore
 requirements-dev.txt      export-ignore
 pyrightconfig.json        export-ignore
 ruff.toml                 export-ignore

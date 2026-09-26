@@ -53,8 +53,8 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
         group_id: report.group_id || "",
         template_name: values.template_name,
         render_format: values.render_format,
-        platform_id: report.platform,
-        trace_id: report.trace_id,
+        platform_id: report.platform ?? undefined,
+        trace_id: report.trace_id ?? undefined,
       });
       if (res && res.success) {
         message.success("免 Token 切换主题渲染成功！新报告已生成");

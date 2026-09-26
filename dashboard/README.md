@@ -96,18 +96,68 @@ dashboard/src/
 
 ---
 
-## 5. 开发与构建命令
+## 5. 本地开发与调试体验 (Developer Experience)
 
+本项目支持两种本地开发调试模式，提供极速热更新（HMR）：
+
+### 5.1 独立开发模式 (Standalone Mock Mode - 推荐)
+无需启动 AstrBot 后端，前端直接拥有全套模拟数据与实时 SSE 进度流：
 ```bash
-# 进入前端工作目录
 cd dashboard
-
-# 依赖安装
-pnpm install
-
-# 本地热更新开发 (需在 AstrBot 运行环境下访问页面或直接调试)
 pnpm dev
+```
+* 打开 `http://localhost:5175`，页面将自动激活 Mock 适配器并加载全套大盘、链路、任务与日志；
+* 页面右下角提供 **开发工具箱 (DevToolbar)**，可一键切换亮暗主题、切换 Proxy/Mock 模式或注入模拟 SSE 任务流。
 
+### 5.2 代理直连模式 (Proxy Mode)
+若 AstrBot 后端正在运行（`localhost:6185`），前端开发服务器通过反向代理直接对接真实后端与 SQLite：
+* 在页面右下角工具箱中切换至 **Proxy 直连后端 (:6185)**，或在 URL 中添加 `?devMode=proxy`；
+* 享受 Vite 秒级热更新，无需重新打包或进入 AstrBot 网页手动点击。
+
+### 5.3 生产构建
+```bash
 # 生产环境编译 (自动打包为单 Bundle 输出至 ../pages/daily-analysis/)
 pnpm build
 ```
+
+---
+
+## 6. 前端自动化测试与契约体系 (Automated Tests & Contracts)
+
+### 6.1 OpenAPI 契约与类型自动同步
+前端 `src/entities/*/model/types.ts` 中的所有实体类型直接由 `src/shared/api/generated/schema.d.ts` 派生，实现 100% 强类型保护：
+```bash
+# 1. 导出后端最新 OpenAPI 3.1 规范
+python ../scripts/export_openapi.py
+
+# 2. 自动生成前端强类型 schema.d.ts
+pnpm generate:types
+```
+
+### 6.2 自动化测试矩阵 (Vitest + React Testing Library)
+项目内置 8 个测试套件，全面覆盖通信网桥、Mock 路由分发、格式化工具库、原子组件、业务小部件以及全景页面冒烟测试：
+```bash
+pnpm test          # 运行全套自动化测试
+pnpm test:watch    # 开启 TDD 监听模式
+```
+
+### 6.3 MSW (Mock Service Worker) 零成本复用
+在 `src/mocks/mswHandlers.ts` 中提供了标准 MSW Handler 适配器 `createMswHandlerDefinitions()`，可将内部 Mock Handlers 0 成本接入 MSW 的 `http.get` / `http.post`，方便后续编写 Playwright 端到端测试。
+
+---
+
+## 7. 质量门禁与发布流程 (Quality Gates & Release)
+
+### 7.1 本地 Git 提交门禁 (Lefthook)
+在每次 `git commit` 时，Lefthook 将自动触发全套前端门禁，任何失败均会阻止提交：
+1. **类型检查**：`pnpm typecheck`（严格 0 报错）
+2. **代码规范**：`pnpm lint`（ESLint 严格检查）
+3. **自动化测试**：`pnpm test`（28 项单测与冒烟测试 100% 通过）
+4. **生产构建**：`pnpm build`（打包为单 Bundle 同步生成至 `../pages/daily-analysis/`）
+5. **提交信息规范**：`verify-commit.js`（原子化 Scope + 中文三点论门禁）
+
+### 7.2 新版本发布流程
+与原本发布流程保持完全一致且更加自动化：
+* 日常开发提交时，Lefthook 门禁会自动执行 `pnpm build` 将最新的控制台静态页面更新至 `pages/daily-analysis/assets/`；
+* 插件发布新版本（例如修改 `metadata.yaml` 与版本号）时，直接提交代码并打 Tag 即可，无需额外手动构建打包前端。
+

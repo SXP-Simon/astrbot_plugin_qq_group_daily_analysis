@@ -115,7 +115,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
         </Descriptions.Item>
         <Descriptions.Item label="执行总耗时">
           <span style={{ color: "#1677ff", fontWeight: 600 }}>
-            {formatDuration(trace.duration_ms)}
+            {formatDuration(trace.duration_ms ?? undefined)}
           </span>
         </Descriptions.Item>
       </Descriptions>
@@ -177,15 +177,16 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {reportFiles.map((file, idx) => {
+              const filename = file.filename || "";
               const isHtml = Boolean(
                 file.format === "html" ||
-                  file.filename.toLowerCase().endsWith(".html") ||
-                  file.filename.toLowerCase().endsWith(".htm")
+                  filename.toLowerCase().endsWith(".html") ||
+                  filename.toLowerCase().endsWith(".htm")
               );
               const isComic = Boolean(
                 file.report_type === "comic" ||
-                  file.filename.toLowerCase().startsWith("comic_") ||
-                  file.filename.startsWith("漫画_")
+                  filename.toLowerCase().startsWith("comic_") ||
+                  filename.startsWith("漫画_")
               );
               return (
                 <div
@@ -226,7 +227,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                         style={{ color: "#1677ff", flexShrink: 0 }}
                       />
                     )}
-                    <Tooltip title={file.filename} placement="topLeft">
+                    <Tooltip title={filename} placement="topLeft">
                       <span
                         style={{
                           fontSize: 12,
@@ -237,7 +238,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                           minWidth: 0,
                         }}
                       >
-                        {file.filename}
+                        {filename}
                       </span>
                     </Tooltip>
                     <Tag
@@ -273,7 +274,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                       type="primary"
                       ghost
                       icon={<EyeOutlined />}
-                      onClick={() => onPreviewFile(file.filename, isHtml)}
+                      onClick={() => onPreviewFile(filename, isHtml)}
                       style={{ fontSize: 11, height: 24 }}
                     >
                       {isComic
@@ -285,7 +286,7 @@ export const TraceSummaryCard: React.FC<TraceSummaryCardProps> = ({
                     <Button
                       size="small"
                       icon={<DownloadOutlined />}
-                      onClick={() => onDownloadFile(file.filename, isHtml)}
+                      onClick={() => onDownloadFile(filename, isHtml)}
                       style={{ fontSize: 11, height: 24 }}
                     >
                       下载

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
+from .openapi_spec import generate_openapi_spec
 from .routes import (
     ConfigRoutes,
     DataManagementRoutes,
@@ -382,6 +383,13 @@ class PluginPageWebUIBridge:
                 ["DELETE", "POST"],
                 "Delete a specific stage checkpoint or all checkpoints for group and date",
             ),
+            # 8. OpenAPI 契约规范定义
+            (
+                f"/{PLUGIN_NAME}/openapi.json",
+                self.api_get_openapi_spec,
+                ["GET"],
+                "Get OpenAPI 3.1 schema specification for the plugin Web API",
+            ),
         ]
 
         for path, handler, methods, desc in routes:
@@ -540,3 +548,7 @@ class PluginPageWebUIBridge:
 
     async def api_delete_checkpoint(self) -> WebApiResponse:
         return await self.data_management_routes.api_delete_checkpoint()
+
+    def api_get_openapi_spec(self) -> WebApiResponse:
+        """获取插件 Web API 的 OpenAPI 3.1 契约定义。"""
+        return json_response(generate_openapi_spec())

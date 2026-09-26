@@ -17,15 +17,24 @@ pre-commit:
       glob: "*.py"
       run: npx pyright main.py src/
 
+    # --- OpenAPI 契约与前端类型一致性同步门禁 ---
+    openapi-sync:
+      glob: "{src/infrastructure/webui/**/*.py,scripts/export_openapi.py}"
+      run: uv run python scripts/export_openapi.py && pnpm --dir dashboard generate:types
+      stage_fixed: true
+
     # --- WebUI / Dashboard 前端门禁 ---
     webui-typecheck:
-      glob: "dashboard/**/*.{ts,tsx,js,jsx,json,vue,html}"
+      glob: "{dashboard/**/*.{ts,tsx,js,jsx,json,vue,html},openapi.json,src/infrastructure/webui/**/*.py}"
       run: pnpm --dir dashboard typecheck
     webui-lint:
       glob: "dashboard/**/*.{ts,tsx,js,jsx}"
       run: pnpm --dir dashboard lint
+    webui-test:
+      glob: "dashboard/**/*.{ts,tsx,js,jsx,json}"
+      run: pnpm --dir dashboard test
     webui-build:
-      glob: "dashboard/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss}"
+      glob: "{dashboard/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss},openapi.json,src/infrastructure/webui/**/*.py}"
       run: pnpm --dir dashboard build
       stage_fixed: true
 
