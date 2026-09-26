@@ -14,6 +14,9 @@ const SCOPE_CATEGORIES = {
     application: '应用层完整别名 (同 app)',
     infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
     infrastructure: '基础设施层完整别名 (同 infra)',
+    'infra/webui': 'Web 控制台后端路由与通信适配 (src/infrastructure/webui/)',
+    'infra/routes': '后端 WebAPI 路由处理器别名 (同 infra/webui)',
+    'infra/api': '后端 WebAPI 接口协议适配别名 (同 infra/webui)',
   },
   '🎯 后端业务子领域 (Backend Sub-domains)': {
     analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
@@ -25,7 +28,8 @@ const SCOPE_CATEGORIES = {
     config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
   },
   '🎨 前端 FSD 架构分层与切片 (Frontend Feature-Sliced Design)': {
-    webui: '展现层/WebUI 全栈 (前端整体改动或跨切片集成)',
+    dashboard: '前端 Dashboard 全栈 (dashboard/ 整体改动或跨切片集成)',
+    webui: '前端 WebUI 控制台全栈别名 (同 dashboard)',
     'webui/app': 'FSD App 层 (应用根入口, Providers, 全局主题与样式)',
     'webui/pages': 'FSD 页面层 (Overview, Traces, Reports, Config, Logs 等整页编排)',
     'webui/widgets': 'FSD 小部件层 (ActiveTaskBoard, TrendCharts, TraceDrawer, ConfigForm 等)',
@@ -158,9 +162,19 @@ const SCOPE_PATH_RULES = [
     name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
   },
   {
-    matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard',
-    matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/') || f.startsWith('src/infrastructure/webui/'),
-    name: 'webui 展现层 (dashboard/, pages/, src/infrastructure/webui/)',
+    matchScope: (s) =>
+      s === 'infra/webui' ||
+      s === 'infra/routes' ||
+      s === 'infra/api' ||
+      s === 'routes' ||
+      s === 'api',
+    matchFile: (f) => f.startsWith('src/infrastructure/webui/'),
+    name: 'infra/webui 后端 Web 控制台路由与适配层 (src/infrastructure/webui/)',
+  },
+  {
+    matchScope: (s) => s === 'webui' || s.startsWith('webui/') || s === 'dashboard' || s === 'frontend',
+    matchFile: (f) => f.startsWith('dashboard/') || f.startsWith('pages/'),
+    name: 'dashboard/webui 前端控制台 (dashboard/, pages/)',
   },
   {
     matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
