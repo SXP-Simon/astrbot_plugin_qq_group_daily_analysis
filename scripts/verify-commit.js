@@ -39,11 +39,18 @@ const SCOPE_CATEGORIES = {
     'webui/config': 'FSD 配置业务切片 (对应 entities/config, widgets/config-form, features/install-template)',
   },
   '🛠️ 工程与基建 (Engineering & Infrastructure)': {
-    test: '测试 (单元测试, 集成测试, Mock 桩代码)',
-    tests: '测试别名 (同 test)',
-    ci: '持续集成与门禁 (Git hooks, GitHub Actions, Linter 脚本)',
+    'ci/github-actions': 'GitHub Actions 工作流与 CI 配置',
+    'ci/lefthook': 'Lefthook 本地 Git Hooks 门禁配置',
+    'ci/workflow': 'CI/CD 工作流与自动化流水线',
+    'ci/scripts': '工程构建/检查/校验脚本',
+    'ci/pipeline': '持续集成流水线与代码质量门禁',
+    'test/unit': '单元测试与桩代码',
+    'test/e2e': '端到端集成测试',
+    'test/infra': '测试基建与持久化 Mock 桩',
+    'test/webui': 'WebUI 路由与前端桥接单测',
     deps: '依赖管理 (第三方库版本升级, uv/pip/pnpm 依赖锁)',
     docs: '文档 (架构设计, 接口文档, 开发者指南)',
+    'docs/arch': 'DDD/FSD 架构设计文档',
     core: '核心协议与规范 (基础常量, 全局上下文, 通用基建)',
     spec: '设计规范与契约定义',
   },
@@ -52,12 +59,13 @@ const SCOPE_CATEGORIES = {
 // 扁平化所有明确注册的合法 Scope
 const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
 
-// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets）
-const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui'];
+// 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts）
+const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs'];
 const ALLOWED_SUBDOMAINS = [
   'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
-  'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common'
+  'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common',
+  'unit', 'e2e', 'infra', 'mocks', 'github-actions', 'lefthook', 'workflow', 'scripts', 'pipeline', 'pre-commit', 'gate', 'arch'
 ];
 
 function isScopeValid(scope) {
@@ -69,6 +77,10 @@ function isScopeValid(scope) {
     if (ALLOWED_LAYER_PREFIXES.includes(layer) && ALLOWED_SUBDOMAINS.includes(sub)) {
       return true;
     }
+  }
+  // 支持直接传入合法的 DDD/FSD 子域或工程子模块
+  if (ALLOWED_SUBDOMAINS.includes(scope)) {
+    return true;
   }
   return false;
 }
@@ -91,27 +103,27 @@ const SCOPE_PATH_RULES = [
     name: 'platform 平台通信子域 (src/infrastructure/platform/)',
   },
   {
-    matchScope: (s) => s === 'webui/pages',
+    matchScope: (s) => s === 'webui/pages' || s === 'pages',
     matchFile: (f) => f.startsWith('dashboard/src/pages/'),
     name: 'webui/pages 页面层 (dashboard/src/pages/)',
   },
   {
-    matchScope: (s) => s === 'webui/widgets',
+    matchScope: (s) => s === 'webui/widgets' || s === 'widgets',
     matchFile: (f) => f.startsWith('dashboard/src/widgets/'),
     name: 'webui/widgets 小部件层 (dashboard/src/widgets/)',
   },
   {
-    matchScope: (s) => s === 'webui/features',
+    matchScope: (s) => s === 'webui/features' || s === 'features',
     matchFile: (f) => f.startsWith('dashboard/src/features/'),
     name: 'webui/features 特征交互层 (dashboard/src/features/)',
   },
   {
-    matchScope: (s) => s === 'webui/entities',
+    matchScope: (s) => s === 'webui/entities' || s === 'entities',
     matchFile: (f) => f.startsWith('dashboard/src/entities/'),
     name: 'webui/entities 业务实体层 (dashboard/src/entities/)',
   },
   {
-    matchScope: (s) => s === 'webui/shared',
+    matchScope: (s) => s === 'webui/shared' || s === 'shared',
     matchFile: (f) => f.startsWith('dashboard/src/shared/'),
     name: 'webui/shared 共享基建层 (dashboard/src/shared/)',
   },
@@ -121,22 +133,22 @@ const SCOPE_PATH_RULES = [
     name: 'webui/app 应用入口层 (dashboard/src/app/)',
   },
   {
-    matchScope: (s) => s === 'webui/tasks',
+    matchScope: (s) => s === 'webui/tasks' || s === 'tasks',
     matchFile: (f) => f.includes('task') && f.startsWith('dashboard/'),
     name: 'webui/tasks 任务业务切片 (dashboard/src/**/task*)',
   },
   {
-    matchScope: (s) => s === 'webui/traces',
+    matchScope: (s) => s === 'webui/traces' || s === 'traces',
     matchFile: (f) => f.includes('trace') && f.startsWith('dashboard/'),
     name: 'webui/traces 追踪业务切片 (dashboard/src/**/trace*)',
   },
   {
-    matchScope: (s) => s === 'webui/reports',
+    matchScope: (s) => s === 'webui/reports' || s === 'reports',
     matchFile: (f) => f.includes('report') && f.startsWith('dashboard/'),
     name: 'webui/reports 报告业务切片 (dashboard/src/**/report*)',
   },
   {
-    matchScope: (s) => s === 'webui/charts',
+    matchScope: (s) => s === 'webui/charts' || s === 'charts',
     matchFile: (f) => (f.includes('chart') || f.includes('trend')) && f.startsWith('dashboard/'),
     name: 'webui/charts 图表业务切片 (dashboard/src/**/trend-charts*, token-chart*)',
   },
@@ -191,13 +203,25 @@ const SCOPE_PATH_RULES = [
     name: 'config 配置子域',
   },
   {
-    matchScope: (s) => s === 'test' || s === 'tests',
+    matchScope: (s) => s === 'test' || s === 'tests' || s.startsWith('test/') || s === 'unit' || s === 'e2e' || s === 'mocks',
     matchFile: (f) => f.startsWith('tests/'),
     name: 'test 测试套件 (tests/)',
   },
   {
-    matchScope: (s) => s === 'ci',
-    matchFile: (f) => f.startsWith('.github/') || f.startsWith('scripts/') || f === 'lefthook.yml' || f === 'pyrightconfig.json' || f === 'ruff.toml' || f === '.pre-commit-config.yaml',
+    matchScope: (s) =>
+      s === 'ci' ||
+      s.startsWith('ci/') ||
+      s === 'scripts' ||
+      s === 'lefthook' ||
+      s === 'workflow' ||
+      s === 'pipeline',
+    matchFile: (f) =>
+      f.startsWith('.github/') ||
+      f.startsWith('scripts/') ||
+      f === 'lefthook.yml' ||
+      f === 'pyrightconfig.json' ||
+      f === 'ruff.toml' ||
+      f === '.pre-commit-config.yaml',
     name: 'ci 持续集成与门禁 (.github/, scripts/, lefthook.yml, pyrightconfig.json)',
   },
   {
@@ -269,50 +293,89 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
   if (!headerMatch) {
     errors.push('【Header 格式不规范】须符合 Conventional Commits 格式，例如: feat(domain/analysis): 增强分析值对象类型约束');
   } else {
-    const scope = headerMatch[2];
-    if (!scope) {
+    const type = headerMatch[1].toLowerCase();
+    const rawScope = headerMatch[2] || '';
+    const scope = rawScope.trim().toLowerCase();
+
+    // 1.1 禁止同名/同义冗余 Scope（如 ci(ci)、test(test)、feat(feat)、fix(fix) 等）
+    const isRedundant =
+      scope === type ||
+      (type === 'test' && (scope === 'test' || scope === 'tests')) ||
+      (type === 'ci' && scope === 'ci') ||
+      (type === 'chore' && scope === 'chore') ||
+      (type === 'docs' && scope === 'docs') ||
+      (type === 'fix' && scope === 'fix') ||
+      (type === 'feat' && scope === 'feat');
+
+    if (isRedundant) {
+      errors.push(
+        `【禁止同名冗余 Scope "${type}(${rawScope})"】\n` +
+        `     Type 与 Scope 重复会导致提交信息丢失关键模块上下文（如 "${type}(${rawScope})" 属于无意义套套逻辑）。\n` +
+        `     💡 必须使用具体的业务子域、DDD 架构层级或工程切片作为 Scope：\n` +
+        `        • 单测提交推荐: test(webui), test(domain), test(analysis), test(platform), test(scheduler), test(infra) 等\n` +
+        `        • CI 门禁提交推荐: ci(github-actions), ci(lefthook), ci(workflow), ci(scripts), ci(pipeline) 等\n` +
+        `        • 其它规范: 请准确指向实际被测试/修改的具体业务与架构层级。`
+      );
+    } else if (!scope) {
       errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ... 或 feat(webui/widgets): ...');
     } else if (!isScopeValid(scope)) {
-      let scopeHelp = `【Scope "${scope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或前端 FSD 对应的 Scope：\n`;
+      let scopeHelp = `【Scope "${rawScope}" 超出允许范围】请选用以下与 DDD 分层、业务子领域或前端 FSD 对应的 Scope：\n`;
       for (const [catName, scopes] of Object.entries(SCOPE_CATEGORIES)) {
         scopeHelp += `\n     ${catName}:\n`;
         for (const [sKey, sDesc] of Object.entries(scopes)) {
           scopeHelp += `       • ${sKey.padEnd(18)} -> ${sDesc}\n`;
         }
       }
-      scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, webui/features`;
+      scopeHelp += `\n     💡 支持复合层级表达，如: domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts`;
       errors.push(scopeHelp.trimEnd());
     } else if (touchedFiles.length > 0) {
       // 2. 匹配 Scope 与实际文件路径（严格原子化校验）
-      const matchedRule = SCOPE_PATH_RULES.find((r) => r.matchScope(scope));
-      if (matchedRule) {
-        const hasMatchingFile = touchedFiles.some((file) => matchedRule.matchFile(file));
-        if (!hasMatchingFile) {
-          errors.push(
-            `【Scope 与修改文件路径不匹配】\n` +
-            `     您声明的 Scope 为 "${scope}"（预期涉及: ${matchedRule.name}），\n` +
-            `     但本次涉及的文件全部属于其他路径：\n` +
-            `     -> ${touchedFiles.slice(0, 5).join(', ')}${touchedFiles.length > 5 ? ' 等' : ''}\n` +
-            `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
-          );
-        } else {
-          // 严格原子化校验：除了配套的单测/文档文件外，所有生产代码必须完全匹配该 Scope！
-          const unmatchedProductionFiles = touchedFiles.filter((file) => {
-            // 允许随行提交配套的单元测试与文档说明
-            if (file.startsWith('tests/') || file.startsWith('docs/') || file.endsWith('.md')) {
-              return false;
-            }
-            return !matchedRule.matchFile(file);
-          });
+      const isPureTestCommit = touchedFiles.every((file) => file.startsWith('tests/'));
+      const isPureCiCommit = touchedFiles.every(
+        (file) =>
+          file.startsWith('.github/') ||
+          file.startsWith('scripts/') ||
+          file === 'lefthook.yml' ||
+          file === 'pyrightconfig.json' ||
+          file === 'ruff.toml' ||
+          file === '.pre-commit-config.yaml'
+      );
 
-          if (unmatchedProductionFiles.length > 0) {
+      if (isPureTestCommit && (type === 'test' || scope.startsWith('test/') || isScopeValid(scope))) {
+        // 如果是纯单测文件改动，允许声明被测业务模块的 Scope (如 test(webui)) 或 test/unit 复合 Scope
+      } else if (isPureCiCommit && (type === 'ci' || scope.startsWith('ci/'))) {
+        // 如果是纯 CI 脚本/配置文件改动，允许使用 CI 系列具体 Scope (如 ci(lefthook), ci(scripts))
+      } else {
+        const matchedRule = SCOPE_PATH_RULES.find((r) => r.matchScope(scope));
+        if (matchedRule) {
+          const hasMatchingFile = touchedFiles.some((file) => matchedRule.matchFile(file));
+          if (!hasMatchingFile) {
             errors.push(
-              `【跨模块/非原子化提交拦截】\n` +
-              `     您声明的 Scope 为 "${scope}"（对应路径范围: ${matchedRule.name}），\n` +
-              `     但本次提交混入了不属于该 Scope 的异构文件（存在跨层级/跨子域混杂，破坏了原子化）：\n` +
-              `     -> ${unmatchedProductionFiles.slice(0, 5).join('\n     -> ')}${unmatchedProductionFiles.length > 5 ? '\n     -> ...等' : ''}\n` +
-              `     💡 必须保持原子化提交：请使用 git add 仅暂存同一架构模块的文件，将跨层级/跨子域改动拆分为独立的 Commit。`
+              `【Scope 与修改文件路径不匹配】\n` +
+              `     您声明的 Scope 为 "${rawScope}"（预期涉及: ${matchedRule.name}），\n` +
+              `     但本次涉及的文件全部属于其他路径：\n` +
+              `     -> ${touchedFiles.slice(0, 5).join(', ')}${touchedFiles.length > 5 ? ' 等' : ''}\n` +
+              `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
             );
+          } else {
+            // 严格原子化校验：除了配套的单测/文档文件外，所有生产代码必须完全匹配该 Scope！
+            const unmatchedProductionFiles = touchedFiles.filter((file) => {
+              // 允许随行提交配套的单元测试与文档说明
+              if (file.startsWith('tests/') || file.startsWith('docs/') || file.endsWith('.md')) {
+                return false;
+              }
+              return !matchedRule.matchFile(file);
+            });
+
+            if (unmatchedProductionFiles.length > 0) {
+              errors.push(
+                `【跨模块/非原子化提交拦截】\n` +
+                `     您声明的 Scope 为 "${rawScope}"（对应路径范围: ${matchedRule.name}），\n` +
+                `     但本次提交混入了不属于该 Scope 的异构文件（存在跨层级/跨子域混杂，破坏了原子化）：\n` +
+                `     -> ${unmatchedProductionFiles.slice(0, 5).join('\n     -> ')}${unmatchedProductionFiles.length > 5 ? '\n     -> ...等' : ''}\n` +
+                `     💡 必须保持原子化提交：请使用 git add 仅暂存同一架构模块的文件，将跨层级/跨子域改动拆分为独立的 Commit。`
+              );
+            }
           }
         }
       }
