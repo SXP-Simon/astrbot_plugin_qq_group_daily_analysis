@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from ...domain.value_objects import ActivityVisualization, GroupStatistics
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -249,9 +250,19 @@ class QQOfficialMarkdownReportGenerator:
         return lines
 
     @staticmethod
-    def get_hourly_counts(stats: object) -> list[int]:
-        activity_viz = getattr(stats, "activity_visualization", None)
-        raw_activity = getattr(activity_viz, "hourly_activity", None) or {}
+    def get_hourly_counts(stats: GroupStatistics | object) -> list[int]:
+        activity_viz = (
+            stats.activity_visualization
+            if isinstance(stats, GroupStatistics)
+            else getattr(stats, "activity_visualization", None)
+        )
+        if activity_viz is None:
+            return [0] * 24
+        raw_activity = (
+            activity_viz.hourly_activity
+            if isinstance(activity_viz, ActivityVisualization)
+            else getattr(activity_viz, "hourly_activity", None)
+        ) or {}
         if not isinstance(raw_activity, dict):
             return [0] * 24
 

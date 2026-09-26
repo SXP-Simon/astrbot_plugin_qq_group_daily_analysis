@@ -852,19 +852,20 @@ class ReportGenerator(IReportGenerator):
 
     @property
     def _qq_official_markdown_generator(self) -> QQOfficialMarkdownReportGenerator:
-        if self._qq_official_markdown_generator_inst is None:
-            templates = getattr(self, "html_templates", None) or HTMLTemplates(
-                self.config_manager
-            )
-            sem = getattr(self, "_render_semaphore", None) or asyncio.Semaphore(2)
-            self._qq_official_markdown_generator_inst = (
-                QQOfficialMarkdownReportGenerator(
-                    self.config_manager,
-                    templates,
-                    sem,
-                )
-            )
-        return self._qq_official_markdown_generator_inst
+        gen = getattr(self, "_qq_official_markdown_generator_inst", None)
+        if isinstance(gen, QQOfficialMarkdownReportGenerator):
+            return gen
+        templates = getattr(self, "html_templates", None) or HTMLTemplates(
+            self.config_manager
+        )
+        sem = getattr(self, "_render_semaphore", None) or asyncio.Semaphore(2)
+        inst = QQOfficialMarkdownReportGenerator(
+            self.config_manager,
+            templates,
+            sem,
+        )
+        self._qq_official_markdown_generator_inst = inst
+        return inst
 
     @_qq_official_markdown_generator.setter
     def _qq_official_markdown_generator(
@@ -874,23 +875,28 @@ class ReportGenerator(IReportGenerator):
 
     @property
     def _avatar_service(self) -> AvatarService:
-        if self._avatar_service_inst is None:
-            data_dir = getattr(self, "data_dir", None) or Path("./data")
-            inst = AvatarService(data_dir)
-            if self._avatar_cache is not None:
-                inst._avatar_cache = self._avatar_cache
-            if self._avatar_failure_cache is not None:
-                inst._avatar_failure_cache = self._avatar_failure_cache
-            if self._avatar_session is not None:
-                inst._avatar_session = self._avatar_session
-            if self._avatar_session_lock is not None:
-                inst._avatar_session_lock = self._avatar_session_lock
-            if self._avatar_session_concurrent_semaphore is not None:
-                inst._avatar_session_concurrent_semaphore = (
-                    self._avatar_session_concurrent_semaphore
-                )
-            self._avatar_service_inst = inst
-        return self._avatar_service_inst
+        inst = getattr(self, "_avatar_service_inst", None)
+        if isinstance(inst, AvatarService):
+            return inst
+        data_dir = getattr(self, "data_dir", None) or Path("./data")
+        new_inst = AvatarService(data_dir)
+        avatar_cache = getattr(self, "_avatar_cache", None)
+        if avatar_cache is not None:
+            new_inst._avatar_cache = avatar_cache
+        avatar_failure_cache = getattr(self, "_avatar_failure_cache", None)
+        if avatar_failure_cache is not None:
+            new_inst._avatar_failure_cache = avatar_failure_cache
+        avatar_session = getattr(self, "_avatar_session", None)
+        if avatar_session is not None:
+            new_inst._avatar_session = avatar_session
+        avatar_session_lock = getattr(self, "_avatar_session_lock", None)
+        if avatar_session_lock is not None:
+            new_inst._avatar_session_lock = avatar_session_lock
+        avatar_semaphore = getattr(self, "_avatar_session_concurrent_semaphore", None)
+        if avatar_semaphore is not None:
+            new_inst._avatar_session_concurrent_semaphore = avatar_semaphore
+        self._avatar_service_inst = new_inst
+        return new_inst
 
     @_avatar_service.setter
     def _avatar_service(self, val: AvatarService) -> None:
@@ -899,8 +905,9 @@ class ReportGenerator(IReportGenerator):
     @property
     def _preparer_service(self) -> RenderDataPreparer:
         """获取或懒加载 RenderDataPreparer 实例。"""
-        if hasattr(self, "_preparer") and self._preparer:
-            return self._preparer
+        preparer = getattr(self, "_preparer", None)
+        if isinstance(preparer, RenderDataPreparer):
+            return preparer
         profile_manifest = (
             getattr(self, "_profile_asset_manifest", None)
             or load_profile_asset_manifest()
@@ -1078,15 +1085,14 @@ class ReportGenerator(IReportGenerator):
             self._avatar_service._avatar_failure_cache = self._avatar_failure_cache
 
         if "_get_user_avatar_bytes" in self.__dict__:
-            orig = getattr(self._avatar_service, "get_user_avatar_bytes", None)
+            orig = self._avatar_service.get_user_avatar_bytes
             self._avatar_service.get_user_avatar_bytes = self._get_user_avatar_bytes
             try:
                 return await self._avatar_service.get_user_avatar(
                     avatar_id, avatar_url_getter, avatar_cache_namespace
                 )
             finally:
-                if orig is not None:
-                    self._avatar_service.get_user_avatar_bytes = orig
+                self._avatar_service.get_user_avatar_bytes = orig
 
         return await self._avatar_service.get_user_avatar(
             avatar_id, avatar_url_getter, avatar_cache_namespace
