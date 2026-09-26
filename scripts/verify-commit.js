@@ -28,8 +28,8 @@ const SCOPE_CATEGORIES = {
     config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
   },
   '🎨 前端 FSD 架构分层与切片 (Frontend Feature-Sliced Design)': {
-    dashboard: '前端 Dashboard 全栈 (dashboard/ 整体改动或跨切片集成)',
-    webui: '前端 WebUI 控制台全栈别名 (同 dashboard)',
+    dashboard: '前端 Dashboard 全栈 (dashboard/ 源码与 pages/ 静态构建产物)',
+    webui: '前端 WebUI 控制台全栈别名 (同 dashboard，支持 build(webui) 打包构建)',
     'webui/app': 'FSD App 层 (应用根入口, Providers, 全局主题与样式)',
     'webui/pages': 'FSD 页面层 (Overview, Traces, Reports, Config, Logs 等整页编排)',
     'webui/widgets': 'FSD 小部件层 (ActiveTaskBoard, TrendCharts, TraceDrawer, ConfigForm 等)',
@@ -372,10 +372,28 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
               `     💡 请修正 Header 中的 Scope 声明，使其与实际修改的文件模块相符。`
             );
           } else {
-            // 严格原子化校验：除了配套的单测/文档文件外，所有生产代码必须完全匹配该 Scope！
+            // 严格原子化校验：除了配套的单测/文档文件（以及前端源码提交配套的 pages/ 构建产物）外，所有生产代码必须完全匹配该 Scope！
+            const isFrontendScope =
+              scope === 'dashboard' ||
+              scope === 'webui' ||
+              scope.startsWith('webui/') ||
+              scope === 'pages' ||
+              scope === 'widgets' ||
+              scope === 'features' ||
+              scope === 'entities' ||
+              scope === 'shared' ||
+              scope === 'tasks' ||
+              scope === 'traces' ||
+              scope === 'reports' ||
+              scope === 'charts';
+
             const unmatchedProductionFiles = touchedFiles.filter((file) => {
               // 允许随行提交配套的单元测试与文档说明
               if (file.startsWith('tests/') || file.startsWith('docs/') || file.endsWith('.md')) {
+                return false;
+              }
+              // 如果是前端相关 Scope，允许随行提交打包编译生成的 pages/ 静态产物
+              if (isFrontendScope && file.startsWith('pages/')) {
                 return false;
               }
               return !matchedRule.matchFile(file);
