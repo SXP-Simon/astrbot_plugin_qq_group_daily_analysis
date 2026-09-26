@@ -131,15 +131,14 @@ class IncrementalAnalysisService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.debug(
-                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量群分析"
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
+            try:
+                if await adapter.is_group_muted(group_id):
+                    logger.debug(
+                        f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量群分析"
+                    )
+                    return {"success": False, "reason": "muted"}
+            except Exception as e:
+                logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             (
                 last_analyzed_ts,
@@ -519,15 +518,14 @@ class IncrementalAnalysisService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.info(
-                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量最终报告生成"
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
+            try:
+                if await adapter.is_group_muted(group_id):
+                    logger.info(
+                        f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次增量最终报告生成"
+                    )
+                    return {"success": False, "reason": "muted"}
+            except Exception as e:
+                logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             user_titles = []
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
