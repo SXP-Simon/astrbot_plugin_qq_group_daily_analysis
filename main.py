@@ -503,7 +503,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def analyze_group_daily(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """分析群聊日常活动（跨平台支持）"""
         async for result in self.analysis_command_handler.handle_daily_analysis(
             event, days
@@ -514,7 +514,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def generate_group_comic(
         self, event: AstrMessageEvent, days: int | None = None
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """生成群聊趣味漫画（跨平台支持）"""
         async for result in self.comic_command_handler.handle_group_comic(event, days):
             yield result
@@ -523,7 +523,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def set_output_format(
         self, event: AstrMessageEvent, format_input: str = ""
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """设置分析报告输出格式（跨平台支持）"""
         async for result in self.settings_command_handler.handle_set_output_format(
             event, format_input
@@ -534,7 +534,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def set_report_template(
         self, event: AstrMessageEvent, template_input: str = ""
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """设置分析报告模板（跨平台支持）"""
         async for result in self.settings_command_handler.handle_set_report_template(
             event, template_input
@@ -545,7 +545,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def view_templates(
         self, event: AstrMessageEvent
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """查看所有可用的报告模板及预览图（跨平台支持）"""
         platform_id = str(self._get_platform_id_from_event(event) or "")
         async for result in self.settings_command_handler.handle_view_templates(
@@ -557,7 +557,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def analysis_settings(
         self, event: AstrMessageEvent, action: str = "status"
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """管理分析设置（跨平台支持）"""
         group_id = str(self._get_group_id_from_event(event) or "")
         platform_id = str(self._get_platform_id_from_event(event) or "")
@@ -570,7 +570,7 @@ class GroupDailyAnalysis(Star):
     @filter.permission_type(PermissionType.ADMIN)
     async def incremental_status(
         self, event: AstrMessageEvent
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         """查看当前增量分析状态（滑动窗口）"""
         group_id = str(self._get_group_id_from_event(event) or "")
         async for result in self.settings_command_handler.handle_incremental_status(
@@ -586,7 +586,7 @@ class GroupDailyAnalysis(Star):
 
     async def _send_analysis_report(
         self, event: AstrMessageEvent, result: dict[str, object]
-    ) -> AsyncGenerator[MessageEventResult, None]:
+    ) -> AsyncGenerator[MessageEventResult]:
         async for res in self.analysis_command_handler.send_analysis_report(
             event, result
         ):

@@ -274,7 +274,7 @@ class TraceContext:
         self,
         stage_name: AnalysisStage | str,
         payload: Mapping[str, object] | None = None,
-    ) -> Generator[SpanRecord, None, None]:
+    ) -> Generator[SpanRecord]:
         """创建一个细粒度 Span 上下文，自动记录该步骤耗时、内存增量与执行状态。
 
         Args:
