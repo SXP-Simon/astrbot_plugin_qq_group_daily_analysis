@@ -14,6 +14,11 @@ from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import (
+        TaskCancelRequestDTO,
+        TaskResumeRequestDTO,
+        TaskTriggerRequestDTO,
+    )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -62,13 +67,19 @@ class TaskRoutes:
             if not task_id:
                 return error_response("Missing task_id in request", status_code=400)
 
-            success = await self.active_task_manager.cancel_task(task_id)
+            cancel_dto: TaskCancelRequestDTO = {"task_id": task_id}
+
+            success = await self.active_task_manager.cancel_task(cancel_dto["task_id"])
             if success:
                 return json_response(
-                    {"status": "ok", "message": f"Task {task_id} canceled successfully"}
+                    {
+                        "status": "ok",
+                        "message": f"Task {cancel_dto['task_id']} canceled successfully",
+                    }
                 )
             return error_response(
-                f"Task {task_id} not found or already finished", status_code=404
+                f"Task {cancel_dto['task_id']} not found or already finished",
+                status_code=404,
             )
         except Exception as e:
             logger.error(f"取消任务异常: {e}", exc_info=True)
@@ -135,22 +146,30 @@ class TaskRoutes:
                 else None
             )
 
+            trigger_dto: TaskTriggerRequestDTO = {
+                "group_id": group_id,
+                "group_name": group_name,
+                "platform": platform,
+                "provider_id": provider_id,
+                "template_name": template_name,
+            }
+
             asyncio_task = asyncio.create_task(
                 self._run_triggered_task(
                     trace_id=trace_id,
-                    group_id=group_id,
-                    group_name=group_name,
-                    platform=platform,
-                    provider_id=provider_id,
-                    template_name=template_name,
+                    group_id=trigger_dto["group_id"],
+                    group_name=trigger_dto["group_name"],
+                    platform=trigger_dto["platform"],
+                    provider_id=trigger_dto.get("provider_id"),
+                    template_name=trigger_dto.get("template_name"),
                 )
             )
 
             await self.active_task_manager.register_task(
                 task_id=trace_id,
-                group_id=group_id,
-                group_name=group_name,
-                platform=platform,
+                group_id=trigger_dto["group_id"],
+                group_name=trigger_dto["group_name"],
+                platform=trigger_dto["platform"],
                 trigger_type="web_ui",
                 current_stage=AnalysisStage.FETCH_MESSAGES,
                 asyncio_task=asyncio_task,
@@ -161,8 +180,8 @@ class TaskRoutes:
                     "status": "ok",
                     "data": {
                         "trace_id": trace_id,
-                        "group_id": group_id,
-                        "template_name": template_name,
+                        "group_id": trigger_dto["group_id"],
+                        "template_name": trigger_dto.get("template_name"),
                         "message": "Analysis task queued successfully",
                     },
                 }
@@ -315,19 +334,25 @@ class TaskRoutes:
                 else None
             )
 
+            resume_dto: TaskResumeRequestDTO = {
+                "trace_id": trace_id,
+                "provider_id": provider_id,
+                "template_name": template_name,
+            }
+
             asyncio_task = asyncio.create_task(
                 self._run_resumed_task(
-                    trace_id=trace_id,
+                    trace_id=resume_dto["trace_id"],
                     group_id=group_id,
                     group_name=group_name,
                     platform=platform,
-                    provider_id=provider_id,
-                    template_name=template_name,
+                    provider_id=resume_dto.get("provider_id"),
+                    template_name=resume_dto.get("template_name"),
                 )
             )
 
             await self.active_task_manager.register_task(
-                task_id=trace_id,
+                task_id=resume_dto["trace_id"],
                 group_id=group_id,
                 group_name=group_name,
                 platform=platform,
@@ -340,10 +365,10 @@ class TaskRoutes:
                 {
                     "status": "ok",
                     "data": {
-                        "trace_id": trace_id,
+                        "trace_id": resume_dto["trace_id"],
                         "group_id": group_id,
-                        "provider_id": provider_id,
-                        "template_name": template_name,
+                        "provider_id": resume_dto.get("provider_id"),
+                        "template_name": resume_dto.get("template_name"),
                         "message": "Task resume queued successfully",
                     },
                 }

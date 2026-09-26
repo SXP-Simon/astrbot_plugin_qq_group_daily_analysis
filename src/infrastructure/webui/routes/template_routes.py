@@ -24,6 +24,12 @@ from ...reporting.template_installer import (
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import (
+        TemplateInstallFileDTO,
+        TemplateInstallUrlDTO,
+        TemplatePreviewQueryDTO,
+        TemplateUninstallDTO,
+    )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -101,9 +107,11 @@ class TemplateRoutes:
             except TemplateInstallError as e:
                 return error_response(str(e), status_code=400)
 
+            query_dto: TemplatePreviewQueryDTO = {"template_name": template_name}
+
             # 防路径穿越：确认解析后的目标路径仍位于自定义模板根目录内
             store = default_template_store_dir().resolve()
-            custom_dir = store / template_name
+            custom_dir = store / query_dto["template_name"]
             if not is_path_within(custom_dir, store):
                 return error_response("模板名非法", status_code=400)
 
@@ -137,7 +145,11 @@ class TemplateRoutes:
                     "缺少 GitHub 仓库链接 (repo_url)", status_code=400
                 )
 
-            result = await install_template_from_github_url(repo_url, name=name)
+            install_dto: TemplateInstallUrlDTO = {"repo_url": repo_url, "name": name}
+
+            result = await install_template_from_github_url(
+                install_dto["repo_url"], name=install_dto.get("name")
+            )
             return json_response({"status": "ok", "data": result})
         except TemplateInstallError as e:
             return error_response(str(e), status_code=400)
@@ -170,8 +182,14 @@ class TemplateRoutes:
             except Exception:
                 return error_response("压缩包数据不是有效的 Base64", status_code=400)
 
+            install_dto: TemplateInstallFileDTO = {
+                "file_data": file_data,
+                "filename": str(body.get("filename") or "template.zip"),
+                "name": name,
+            }
+
             result = await asyncio.to_thread(
-                install_template_from_zip, zip_bytes, None, name
+                install_template_from_zip, zip_bytes, None, install_dto.get("name")
             )
             return json_response({"status": "ok", "data": result})
         except TemplateInstallError as e:
@@ -198,11 +216,13 @@ class TemplateRoutes:
             if not name:
                 return error_response("缺少模板名 (name)", status_code=400)
 
-            result = await asyncio.to_thread(uninstall_template, name)
+            uninstall_dto: TemplateUninstallDTO = {"name": name}
+
+            result = await asyncio.to_thread(uninstall_template, uninstall_dto["name"])
 
             html_tpls = self._get_html_templates()
             if html_tpls:
-                html_tpls.invalidate_env(name)
+                html_tpls.invalidate_env(uninstall_dto["name"])
 
             return json_response({"status": "ok", "data": result})
         except TemplateInstallError as e:

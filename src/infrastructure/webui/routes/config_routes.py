@@ -19,6 +19,10 @@ from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import (
+        ConfigFileContentQueryDTO,
+        ConfigSaveDTO,
+    )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -116,6 +120,8 @@ class ConfigRoutes:
             if not isinstance(new_config, dict):
                 return error_response("缺少有效的 config 配置数据", status_code=400)
 
+            save_dto: ConfigSaveDTO = {"config": new_config}
+
             cfg_mgr = (
                 self.analysis_service.config_manager
                 if self.analysis_service
@@ -183,9 +189,9 @@ class ConfigRoutes:
                     return {k: _cleanse_reference_images(v) for k, v in val.items()}
                 return val
 
-            new_config = _cleanse_reference_images(new_config)
-            if isinstance(new_config, dict):
-                for k, v in new_config.items():
+            cleansed = _cleanse_reference_images(save_dto["config"])
+            if isinstance(cleansed, dict):
+                for k, v in cleansed.items():
                     config_obj[k] = v
 
             if cfg_mgr:
@@ -346,6 +352,8 @@ class ConfigRoutes:
             if not rel_path:
                 return error_response("Missing path parameter", status_code=400)
 
+            query_dto: ConfigFileContentQueryDTO = {"path": rel_path}
+
             search_roots: list[Path] = []
             try:
                 from astrbot.api.star import StarTools
@@ -362,7 +370,7 @@ class ConfigRoutes:
             search_roots.append(Path.cwd() / "data" / "plugins" / PLUGIN_NAME)
 
             target_file: Path | None = None
-            clean_rel = rel_path.lstrip("/\\")
+            clean_rel = query_dto["path"].lstrip("/\\")
             for root in search_roots:
                 cand = (root / clean_rel).resolve()
                 if cand.is_file() and cand.exists():
@@ -382,7 +390,9 @@ class ConfigRoutes:
                         break
 
             if not target_file or not target_file.is_file():
-                return error_response(f"File {rel_path} not found", status_code=404)
+                return error_response(
+                    f"File {query_dto['path']} not found", status_code=404
+                )
 
             ext = target_file.suffix.lower().lstrip(".")
             mime_type = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
@@ -393,7 +403,7 @@ class ConfigRoutes:
                 {
                     "status": "ok",
                     "data": {
-                        "path": rel_path,
+                        "path": query_dto["path"],
                         "filename": target_file.name,
                         "data_url": f"data:{mime_type};base64,{b64_content}",
                     },

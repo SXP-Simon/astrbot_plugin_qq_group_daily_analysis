@@ -14,6 +14,15 @@ from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import (
+        CheckpointDeleteDTO,
+        CheckpointDetailQueryDTO,
+        CheckpointListQueryDTO,
+        IncrementalBatchDeleteDTO,
+        IncrementalBatchDetailQueryDTO,
+        IncrementalBatchesQueryDTO,
+        IncrementalResetDTO,
+    )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -309,14 +318,18 @@ class DataManagementRoutes:
             if not group_id:
                 return error_response("Missing group_id parameter", status_code=400)
 
+            query_dto: IncrementalBatchesQueryDTO = {"group_id": group_id}
+
             store = self._incremental_store
             if not store:
                 return error_response(
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            batches = await store.get_all_batches_with_details(group_id)
-            cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(group_id)
+            batches = await store.get_all_batches_with_details(query_dto["group_id"])
+            cursor_ts, cursor_msg_ids = await store.get_last_analyzed_cursor(
+                query_dto["group_id"]
+            )
 
             return json_response(
                 {
@@ -351,13 +364,20 @@ class DataManagementRoutes:
             if not group_id or not batch_id:
                 return error_response("Missing group_id or batch_id", status_code=400)
 
+            query_dto: IncrementalBatchDetailQueryDTO = {
+                "group_id": group_id,
+                "batch_id": batch_id,
+            }
+
             store = self._incremental_store
             if not store:
                 return error_response(
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            batch = await store.get_batch_detail(group_id, batch_id)
+            batch = await store.get_batch_detail(
+                query_dto["group_id"], query_dto["batch_id"]
+            )
             if not batch:
                 return error_response(
                     f"Batch {batch_id} not found for group {group_id}", status_code=404
@@ -385,13 +405,20 @@ class DataManagementRoutes:
             if not group_id or not batch_id:
                 return error_response("Missing group_id or batch_id", status_code=400)
 
+            delete_dto: IncrementalBatchDeleteDTO = {
+                "group_id": group_id,
+                "batch_id": batch_id,
+            }
+
             store = self._incremental_store
             if not store:
                 return error_response(
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted = await store.delete_batch(group_id, batch_id)
+            deleted = await store.delete_batch(
+                delete_dto["group_id"], delete_dto["batch_id"]
+            )
             return json_response(
                 {
                     "status": "ok",
@@ -419,13 +446,15 @@ class DataManagementRoutes:
             if not group_id:
                 return error_response("Missing group_id", status_code=400)
 
+            reset_dto: IncrementalResetDTO = {"group_id": group_id}
+
             store = self._incremental_store
             if not store:
                 return error_response(
                     "IncrementalStore not initialized", status_code=503
                 )
 
-            deleted_count = await store.reset_group(group_id)
+            deleted_count = await store.reset_group(reset_dto["group_id"])
             return json_response(
                 {
                     "status": "ok",
@@ -459,6 +488,15 @@ class DataManagementRoutes:
             stage_name = (request.query.get("stage_name") or "").strip() or None
             trace_id = (request.query.get("trace_id") or "").strip() or None
 
+            query_dto: CheckpointListQueryDTO = {
+                "limit": limit,
+                "offset": offset,
+                "group_id": group_id,
+                "date_str": date_str,
+                "stage_name": stage_name,
+                "trace_id": trace_id,
+            }
+
             store = self._checkpoint_store
             if not store:
                 return error_response(
@@ -466,12 +504,12 @@ class DataManagementRoutes:
                 )
 
             items, total = store.list_all_checkpoints(
-                limit=limit,
-                offset=offset,
-                group_id=group_id,
-                date_str=date_str,
-                stage_name=stage_name,
-                trace_id=trace_id,
+                limit=query_dto.get("limit", 50),
+                offset=query_dto.get("offset", 0),
+                group_id=query_dto.get("group_id"),
+                date_str=query_dto.get("date_str"),
+                stage_name=query_dto.get("stage_name"),
+                trace_id=query_dto.get("trace_id"),
             )
             return json_response(
                 {"status": "ok", "data": {"items": items, "total": total}}
@@ -519,6 +557,13 @@ class DataManagementRoutes:
                     "group_id, date_str, stage_name are all required", status_code=400
                 )
 
+            query_dto: CheckpointDetailQueryDTO = {
+                "group_id": group_id,
+                "date_str": date_str,
+                "stage_name": stage_name,
+                "trace_id": trace_id,
+            }
+
             store = self._checkpoint_store
             if not store:
                 return error_response(
@@ -526,7 +571,10 @@ class DataManagementRoutes:
                 )
 
             detail = store.get_checkpoint_detail(
-                group_id, date_str, stage_name, trace_id=trace_id
+                query_dto["group_id"],
+                query_dto["date_str"],
+                query_dto["stage_name"],
+                trace_id=query_dto["trace_id"],
             )
             if not detail:
                 return error_response(
@@ -563,18 +611,28 @@ class DataManagementRoutes:
                     "group_id and date_str are required", status_code=400
                 )
 
+            delete_dto: CheckpointDeleteDTO = {
+                "group_id": group_id,
+                "date_str": date_str,
+                "stage_name": stage_name,
+                "trace_id": trace_id,
+            }
+
             store = self._checkpoint_store
             if not store:
                 return error_response(
                     "CheckpointStore not initialized", status_code=503
                 )
 
-            if stage_name:
+            if delete_dto.get("stage_name"):
                 deleted = store.delete_checkpoint(
-                    group_id, date_str, stage_name, trace_id=trace_id
+                    delete_dto["group_id"],
+                    delete_dto["date_str"],
+                    delete_dto["stage_name"],
+                    trace_id=delete_dto["trace_id"],
                 )
             else:
-                store.clear_checkpoints(group_id, date_str)
+                store.clear_checkpoints(delete_dto["group_id"], delete_dto["date_str"])
                 deleted = True
 
             return json_response(

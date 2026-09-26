@@ -15,6 +15,10 @@ from ...reporting.template_installer import TemplateInstallError, validate_templ
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import (
+        ReportContentQueryDTO,
+        RerenderReportRequestDTO,
+    )
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -221,7 +225,8 @@ class ReportRoutes:
             if not filename:
                 return error_response("Missing filename parameter", status_code=400)
 
-            safe_filename = Path(filename).name
+            query_dto: ReportContentQueryDTO = {"filename": filename}
+            safe_filename = Path(query_dto["filename"]).name
             target_file: Path | None = None
 
             search_dirs = []
@@ -347,17 +352,26 @@ class ReportRoutes:
             except Exception:
                 pass
 
+        rerender_dto: RerenderReportRequestDTO = {
+            "group_id": group_id,
+            "date_str": date_str,
+            "template_name": template_name,
+            "render_format": render_format,
+            "platform_id": platform_id,
+            "trace_id": trace_id,
+        }
+
         if not self.analysis_service:
             return error_response("分析服务未初始化", status_code=500)
 
         try:
             result = await self.analysis_service.rerender_report(
-                group_id=group_id,
-                date_str=date_str,
-                template_name=template_name,
-                platform_id=platform_id,
-                render_format=render_format,
-                trace_id=trace_id if trace_id else None,
+                group_id=rerender_dto["group_id"],
+                date_str=rerender_dto["date_str"],
+                template_name=rerender_dto["template_name"],
+                platform_id=rerender_dto.get("platform_id"),
+                render_format=rerender_dto["render_format"],
+                trace_id=rerender_dto["trace_id"] or None,
             )
             if not result.get("success"):
                 return error_response(

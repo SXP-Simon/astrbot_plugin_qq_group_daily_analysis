@@ -50,6 +50,7 @@ class PersonaMetadataDTO(TypedDict):
 if TYPE_CHECKING:
     from astrbot.api.star import Context
 
+    from ....application.dto.webui_dto import TraceListQueryDTO, TrendsQueryDTO
     from ....application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
@@ -109,17 +110,30 @@ class TraceRoutes:
                 except (ValueError, TypeError):
                     end_time = None
 
+            query_dto: TraceListQueryDTO = {
+                "limit": limit,
+                "offset": offset,
+                "group_id": group_id,
+                "status": status,
+                "trigger_type": trigger_type,
+                "search": search,
+                "start_time": start_time,
+                "end_time": end_time,
+                "sort_by": sort_by,
+                "sort_order": sort_order,
+            }
+
             items, total = self.trace_store.list_traces(
-                limit=limit,
-                offset=offset,
-                group_id=group_id,
-                status=status,
-                trigger_type=trigger_type,
-                search=search,
-                start_time=start_time,
-                end_time=end_time,
-                sort_by=sort_by,
-                sort_order=sort_order,
+                limit=query_dto.get("limit", 20),
+                offset=query_dto.get("offset", 0),
+                group_id=query_dto.get("group_id"),
+                status=query_dto.get("status"),
+                trigger_type=query_dto.get("trigger_type"),
+                search=query_dto.get("search"),
+                start_time=query_dto.get("start_time"),
+                end_time=query_dto.get("end_time"),
+                sort_by=query_dto.get("sort_by", "started_at"),
+                sort_order=query_dto.get("sort_order", "desc"),
             )
             return json_response(
                 {"status": "ok", "data": {"items": items, "total": total}}
@@ -448,8 +462,14 @@ class TraceRoutes:
             except (ValueError, TypeError):
                 range_count = 48 if granularity == "hour" else 14
 
+            trends_query: TrendsQueryDTO = {
+                "granularity": granularity,
+                "range_count": range_count,
+            }
+
             trends_data = self.trace_store.get_analytics_trends(
-                granularity=granularity, range_count=range_count
+                granularity=trends_query.get("granularity", "day"),
+                range_count=trends_query.get("range_count", 14),
             )
             return json_response({"status": "ok", "data": trends_data})
         except Exception as e:

@@ -20,6 +20,7 @@ from ..web_compat import (
 )
 
 if TYPE_CHECKING:
+    from ....application.dto.webui_dto import LogQueryDTO
     from ..active_task_manager import ActiveTaskManager
 
 
@@ -70,13 +71,22 @@ class LogRoutes:
             tag = (request.query.get("tag") or "").strip() or None
             search = (request.query.get("search") or "").strip() or None
 
+            query_dto: LogQueryDTO = {
+                "limit": limit,
+                "offset": offset,
+                "level": level,
+                "trace_id": trace_id,
+                "tag": tag,
+                "search": search,
+            }
+
             items, total = global_log_buffer.query(
-                limit=limit,
-                offset=offset,
-                level=level,
-                trace_id=trace_id,
-                tag=tag,
-                search=search,
+                limit=query_dto.get("limit", 100),
+                offset=query_dto.get("offset", 0),
+                level=query_dto.get("level"),
+                trace_id=query_dto.get("trace_id"),
+                tag=query_dto.get("tag"),
+                search=query_dto.get("search"),
             )
             tags = [
                 {"key": t[0], "label": t[1]} for t in global_log_buffer.TAG_PATTERNS
