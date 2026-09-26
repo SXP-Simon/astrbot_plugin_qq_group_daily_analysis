@@ -52,6 +52,7 @@ class PlatformAdapter(
     _platform_id: str
     bot_self_ids: list[str]
     _capabilities: PlatformCapabilities | None
+    platform_name: str = "unknown"
 
     def __init__(
         self,

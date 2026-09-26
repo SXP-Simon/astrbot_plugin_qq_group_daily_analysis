@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
@@ -19,6 +19,33 @@ from ..web_compat import (
     json_response,
     request,
 )
+
+
+class PlatformMetadataDTO(TypedDict):
+    """平台元数据 DTO"""
+
+    id: str
+    type: str
+    display_name: str
+    label: str
+
+
+class ProviderMetadataDTO(TypedDict):
+    """LLM Provider 元数据 DTO"""
+
+    id: str
+    name: str
+    type: str
+    label: str
+
+
+class PersonaMetadataDTO(TypedDict):
+    """人格元数据 DTO"""
+
+    id: str
+    name: str
+    label: str
+
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
@@ -93,7 +120,7 @@ class TraceRoutes:
     async def api_get_platforms(self) -> WebApiResponse:
         """获取当前 AstrBot 中已注册并就绪的所有聊天平台列表（基于 AstrBot 原生 PlatformMetadata）"""
         try:
-            platforms: list[dict[str, object]] = []
+            platforms: list[PlatformMetadataDTO] = []
             seen_ids = set()
             type_display_map = {
                 "aiocqhttp": "OneBot v11",
@@ -164,12 +191,14 @@ class TraceRoutes:
                         pass
 
             # 2. 兜底补全已在 bot_manager 注册的适配器
-            bot_manager = getattr(self.analysis_service, "bot_manager", None)
-            if bot_manager:
-                for p_id, adp in bot_manager.get_all_adapters().items():
+            if self.analysis_service and self.analysis_service.bot_manager:
+                for (
+                    p_id,
+                    adp,
+                ) in self.analysis_service.bot_manager.get_all_adapters().items():
                     if p_id in seen_ids:
                         continue
-                    p_name = getattr(adp, "platform_name", "unknown")
+                    p_name = adp.platform_name
                     display_name = type_display_map.get(
                         p_name, type(adp).__name__.replace("Adapter", "")
                     )
@@ -194,7 +223,7 @@ class TraceRoutes:
     async def api_get_providers(self) -> WebApiResponse:
         """获取当前 AstrBot 中已就绪的所有 LLM Provider 列表"""
         try:
-            providers: list[dict[str, object]] = []
+            providers: list[ProviderMetadataDTO] = []
             seen_ids = set()
             provider_getter = getattr(self.context, "get_all_providers", None)
             if not callable(provider_getter):
@@ -249,7 +278,7 @@ class TraceRoutes:
     async def api_get_personas(self) -> WebApiResponse:
         """获取当前 AstrBot 中配置的所有人格 (Persona) 列表"""
         try:
-            personas: list[dict[str, object]] = []
+            personas: list[PersonaMetadataDTO] = []
             seen_ids = set()
             pm = getattr(self.context, "persona_manager", None)
             if pm:
