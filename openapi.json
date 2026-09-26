@@ -103,13 +103,11 @@
                   "platform": {
                     "type": "string"
                   },
-                  "provider_id": {
-                    "type": "string",
-                    "nullable": true
+                  "trigger_type": {
+                    "type": "string"
                   },
-                  "template_name": {
-                    "type": "string",
-                    "nullable": true
+                  "template_id": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -121,7 +119,7 @@
         },
         "responses": {
           "200": {
-            "description": "Trigger result",
+            "description": "Trigger task result",
             "content": {
               "application/json": {
                 "schema": {
@@ -130,7 +128,7 @@
                     "status": {
                       "type": "string"
                     },
-                    "trace_id": {
+                    "task_id": {
                       "type": "string"
                     },
                     "message": {
@@ -158,25 +156,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "provider_id": {
-                    "type": "string",
-                    "nullable": true
-                  },
-                  "template_name": {
-                    "type": "string",
-                    "nullable": true
-                  }
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Resume result",
@@ -188,7 +167,7 @@
                     "status": {
                       "type": "string"
                     },
-                    "trace_id": {
+                    "task_id": {
                       "type": "string"
                     },
                     "message": {
@@ -233,7 +212,7 @@
             "in": "query",
             "schema": {
               "type": "integer",
-              "default": 10
+              "default": 20
             }
           },
           {
@@ -366,7 +345,7 @@
             "in": "query",
             "schema": {
               "type": "integer",
-              "default": 14
+              "default": 7
             }
           }
         ],
@@ -582,6 +561,24 @@
           }
         }
       }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get OpenAPI 3.1 specification for the plugin Web API",
+        "operationId": "getOpenApiSpec",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 specification JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -674,6 +671,18 @@
             "type": "number",
             "nullable": true
           },
+          "start_memory_mb": {
+            "type": "number",
+            "nullable": true
+          },
+          "end_memory_mb": {
+            "type": "number",
+            "nullable": true
+          },
+          "delta_memory_mb": {
+            "type": "number",
+            "nullable": true
+          },
           "payload": {
             "type": "object",
             "additionalProperties": true
@@ -686,6 +695,118 @@
           "status",
           "started_at",
           "payload"
+        ]
+      },
+      "ContextMetrics": {
+        "type": "object",
+        "properties": {
+          "trace_id": {
+            "type": "string"
+          },
+          "raw_message_count": {
+            "type": "number"
+          },
+          "cleaned_message_count": {
+            "type": "number"
+          },
+          "compression_ratio": {
+            "type": "number"
+          },
+          "incremental_batches": {
+            "type": "number"
+          },
+          "window_size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "trace_id",
+          "raw_message_count",
+          "cleaned_message_count",
+          "compression_ratio",
+          "incremental_batches",
+          "window_size"
+        ]
+      },
+      "TokenUsage": {
+        "type": "object",
+        "properties": {
+          "trace_id": {
+            "type": "string"
+          },
+          "prompt_tokens": {
+            "type": "number"
+          },
+          "completion_tokens": {
+            "type": "number"
+          },
+          "total_tokens": {
+            "type": "number"
+          },
+          "estimated_cost": {
+            "type": "number"
+          },
+          "per_analyzer": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "prompt_tokens": {
+                  "type": "number"
+                },
+                "completion_tokens": {
+                  "type": "number"
+                },
+                "total_tokens": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens"
+              ]
+            }
+          }
+        },
+        "required": [
+          "trace_id",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "estimated_cost",
+          "per_analyzer"
+        ]
+      },
+      "PerformanceMetrics": {
+        "type": "object",
+        "properties": {
+          "trace_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "init_memory_mb": {
+            "type": "number"
+          },
+          "peak_memory_mb": {
+            "type": "number"
+          },
+          "final_memory_mb": {
+            "type": "number"
+          },
+          "delta_memory_mb": {
+            "type": "number"
+          },
+          "metrics_extra": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "init_memory_mb",
+          "peak_memory_mb",
+          "final_memory_mb",
+          "delta_memory_mb"
         ]
       },
       "TraceRecord": {
@@ -740,6 +861,10 @@
             "type": "string",
             "nullable": true
           },
+          "extra": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "total_tokens": {
             "type": "number",
             "nullable": true
@@ -760,10 +885,52 @@
             "type": "number",
             "nullable": true
           },
+          "current_stage": {
+            "type": "string",
+            "nullable": true
+          },
           "spans": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TraceSpan"
+            }
+          },
+          "context_metrics": {
+            "$ref": "#/components/schemas/ContextMetrics",
+            "nullable": true
+          },
+          "token_usage": {
+            "$ref": "#/components/schemas/TokenUsage",
+            "nullable": true
+          },
+          "performance_metrics": {
+            "$ref": "#/components/schemas/PerformanceMetrics",
+            "nullable": true
+          },
+          "report_files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "format": {
+                  "type": "string"
+                },
+                "report_type": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "type": "number"
+                },
+                "created_at": {
+                  "type": "number"
+                }
+              }
             }
           }
         },
@@ -824,6 +991,44 @@
           "estimated_cost"
         ]
       },
+      "ProviderBreakdownItem": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "total_tokens": {
+            "type": "number"
+          },
+          "request_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "total_tokens",
+          "request_count"
+        ]
+      },
+      "ModelBreakdownItem": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "total_tokens": {
+            "type": "number"
+          },
+          "request_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "total_tokens",
+          "request_count"
+        ]
+      },
       "AnalyticsTrendsResponse": {
         "type": "object",
         "properties": {
@@ -846,13 +1051,13 @@
           "provider_breakdown": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ProviderBreakdownItem"
             }
           },
           "model_breakdown": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/ModelBreakdownItem"
             }
           }
         },
@@ -930,6 +1135,35 @@
           "modified_at": {
             "type": "number"
           },
+          "absolute_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "data_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "is_html": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "is_comic": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "report_type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "html",
+              "comic"
+            ],
+            "nullable": true
+          },
+          "html_content": {
+            "type": "string",
+            "nullable": true
+          },
           "group_id": {
             "type": "string",
             "nullable": true
@@ -942,13 +1176,9 @@
             "type": "string",
             "nullable": true
           },
-          "report_type": {
+          "trace_id": {
             "type": "string",
-            "enum": [
-              "image",
-              "html",
-              "comic"
-            ]
+            "nullable": true
           }
         },
         "required": [
@@ -1045,6 +1275,10 @@
           "stage": {
             "type": "string",
             "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -1056,6 +1290,21 @@
           "tag",
           "message",
           "raw"
+        ]
+      },
+      "AvailableTag": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
         ]
       },
       "PluginLogResponse": {
@@ -1073,7 +1322,7 @@
           "available_tags": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/AvailableTag"
             }
           }
         },
@@ -1127,6 +1376,334 @@
           "config_backups",
           "reports",
           "temp_files"
+        ]
+      },
+      "IncrementalBatchTopic": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "heat_score": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "ChatQualityDimension": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "percentage": {
+            "type": "number"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatQualityReviewObject": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "dimensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatQualityDimension"
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "IncrementalBatchGoldenQuote": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "sender_nickname": {
+            "type": "string"
+          },
+          "sender_name": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "IncrementalBatchItem": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "number"
+          },
+          "created_at_iso": {
+            "type": "string"
+          },
+          "messages_count": {
+            "type": "number"
+          },
+          "characters_count": {
+            "type": "number"
+          },
+          "topics_count": {
+            "type": "number"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncrementalBatchTopic"
+            }
+          },
+          "golden_quotes_count": {
+            "type": "number"
+          },
+          "golden_quotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncrementalBatchGoldenQuote"
+            }
+          },
+          "hourly_msg_counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "hourly_char_counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "token_usage": {
+            "type": "object",
+            "properties": {
+              "prompt_tokens": {
+                "type": "number"
+              },
+              "completion_tokens": {
+                "type": "number"
+              },
+              "total_tokens": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": true
+          },
+          "last_message_timestamp": {
+            "type": "number"
+          },
+          "participant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "group_id",
+          "batch_id",
+          "timestamp",
+          "messages_count",
+          "characters_count",
+          "topics_count"
+        ],
+        "additionalProperties": true
+      },
+      "IncrementalCursorInfo": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "last_analyzed_timestamp": {
+            "type": "number"
+          },
+          "last_message_timestamp": {
+            "type": "number"
+          },
+          "tracked_message_ids_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "group_id",
+          "last_analyzed_timestamp",
+          "last_message_timestamp",
+          "tracked_message_ids_count"
+        ]
+      },
+      "IncrementalBatchesResponse": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "type": "string"
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/IncrementalCursorInfo"
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IncrementalBatchItem"
+            }
+          }
+        },
+        "required": [
+          "group_id",
+          "cursor",
+          "batches"
+        ]
+      },
+      "CheckpointItem": {
+        "type": "object",
+        "properties": {
+          "checkpoint_id": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "date_str": {
+            "type": "string"
+          },
+          "stage_name": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "data_size_bytes": {
+            "type": "number"
+          },
+          "data_size": {
+            "type": "number"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "created_at_formatted": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "expire_at": {
+            "type": "number"
+          },
+          "has_data": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "group_id",
+          "date_str",
+          "stage_name"
+        ]
+      },
+      "CheckpointsListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckpointItem"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CheckpointDetail": {
+        "type": "object",
+        "properties": {
+          "checkpoint_id": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "date_str": {
+            "type": "string"
+          },
+          "stage_name": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "checkpoint_data": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "data_size_bytes": {
+            "type": "number"
+          },
+          "data_size": {
+            "type": "number"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "created_at_formatted": {
+            "type": "string"
+          },
+          "expire_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "group_id",
+          "date_str",
+          "stage_name"
         ]
       }
     }
