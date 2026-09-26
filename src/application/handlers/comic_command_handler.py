@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 
 from ...domain.value_objects.analysis_results import SummaryTopic
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
@@ -230,10 +230,11 @@ class ComicCommandHandler:
                     yield event.plain_result("❌ 漫画话题提取失败，原因未知")
                 return
 
+            raw_topics = result.get("topics", [])
             status = self.try_trigger_comic_generation(
                 group_id,
                 platform_id,
-                {"topics": result.get("topics", [])},
+                cast("AnalysisResultPayload", {"topics": raw_topics}),
                 require_auto_enabled=False,
                 trace=trace,
             )
@@ -301,7 +302,7 @@ class ComicCommandHandler:
         self,
         group_id: str,
         platform_id: str | None,
-        analysis_result: AnalysisResultPayload | dict[str, object],
+        analysis_result: AnalysisResultPayload,
         *,
         require_auto_enabled: bool = True,
         trace: TraceContext | None = None,
@@ -527,9 +528,7 @@ class ComicCommandHandler:
         adapter = (
             self.bot_manager.get_adapter(platform_id) if self.bot_manager else None
         )
-        upload_fn: Any = (
-            getattr(adapter, "upload_group_album", None) if adapter else None
-        )
+        upload_fn = getattr(adapter, "upload_group_album", None)
         if not callable(upload_fn):
             return
 

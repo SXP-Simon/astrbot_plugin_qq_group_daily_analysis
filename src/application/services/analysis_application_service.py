@@ -11,7 +11,11 @@ import time as time_mod
 from typing import TYPE_CHECKING
 
 from ...domain.services.message_cleaner_service import MessageCleanerService
-from ...domain.value_objects import AnalysisResultPayload, TokenUsage
+from ...domain.value_objects import (
+    AnalysisResultPayload,
+    DailyAnalysisExecutionResult,
+    TokenUsage,
+)
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -718,7 +722,7 @@ class AnalysisApplicationService:
 
     async def execute_incremental_final_report(
         self, group_id: str, platform_id: str | None = None
-    ) -> dict[str, object]:
+    ) -> DailyAnalysisExecutionResult | dict[str, object]:
         """合并增量批次生成最终报告（委托 IncrementalAnalysisService）。"""
         return await self._incremental_service.execute_incremental_final_report(
             group_id=group_id,

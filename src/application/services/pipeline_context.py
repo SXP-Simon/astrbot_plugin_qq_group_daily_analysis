@@ -17,7 +17,6 @@ from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable, Mapping
-    from typing import Any
 
     from ...domain.repositories.persistence_repository import ICheckpointStore
     from ...shared.trace_context import (
@@ -114,7 +113,7 @@ class PipelineContext:
         stage: AnalysisStage | str,
         initial_payload: Mapping[str, object] | None = None,
         save_checkpoint: bool = False,
-        serializer: Callable[[Any], dict[str, object]] | None = None,
+        serializer: Callable[..., dict[str, object]] | None = None,
         ttl_seconds: int = 86400 * 30,
     ) -> AsyncGenerator[PipelineStep]:
         """开启一个流水线执行阶段，自动管理 Span 耗时与 Checkpoint 持久化。

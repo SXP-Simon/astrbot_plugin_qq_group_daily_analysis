@@ -6,7 +6,7 @@ Web 控制台请求与响应数据传输对象 (Rest DTOs)
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import TypedDict
 
 
 class TaskTriggerRequestDTO(TypedDict, total=False):
@@ -98,4 +98,4 @@ class ApiResponseDTO(TypedDict, total=False):
 
     code: int
     message: str
-    data: Any
+    data: object

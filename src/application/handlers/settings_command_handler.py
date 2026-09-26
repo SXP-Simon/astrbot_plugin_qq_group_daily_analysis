@@ -69,7 +69,7 @@ class SettingsCommandHandler:
             format_input: 用户输入的格式名称或序号。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         event.should_call_llm(True)
 
@@ -139,7 +139,7 @@ class SettingsCommandHandler:
             template_input: 用户输入的模板名称或序号。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         event.should_call_llm(True)
 
@@ -187,7 +187,7 @@ class SettingsCommandHandler:
             platform_id: 当前平台标识。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         event.should_call_llm(True)
 
@@ -236,7 +236,7 @@ class SettingsCommandHandler:
             platform_id: 当前平台标识。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -355,7 +355,7 @@ class SettingsCommandHandler:
             group_id: 目标群号。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         if not group_id:
             yield event.plain_result("❌ 请在群聊中使用此命令")
@@ -410,7 +410,7 @@ class SettingsCommandHandler:
             group_id: 当前群聊 ID。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         mode = self.config_manager.get_group_list_mode()
         target_id = event.unified_msg_origin or group_id
@@ -457,7 +457,7 @@ class SettingsCommandHandler:
             group_id: 当前群聊 ID。
 
         Returns:
-            AsyncGenerator[Any, None]: 结果消息生成器。
+            AsyncGenerator[MessageEventResult, None]: 结果消息生成器。
         """
         mode = self.config_manager.get_group_list_mode()
         target_id = event.unified_msg_origin or group_id

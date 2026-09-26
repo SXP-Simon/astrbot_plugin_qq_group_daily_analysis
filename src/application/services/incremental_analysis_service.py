@@ -9,11 +9,11 @@ import asyncio
 import datetime as dt
 import hashlib
 import time as time_mod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.services.message_cleaner_service import MessageCleanerService
-from ...domain.value_objects import TokenUsage
+from ...domain.value_objects import DailyAnalysisExecutionResult, TokenUsage
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -95,7 +95,7 @@ class IncrementalAnalysisService:
         self,
         group_id: str,
         platform_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """执行单次增量分析用例（滑动窗口批次架构）。
 
         Args:
@@ -468,12 +468,12 @@ class IncrementalAnalysisService:
                 "batch_summary": batch.get_summary(),
                 "messages_count": len(unified_messages),
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id if adapter else (platform_id or ""),
             }
 
     async def execute_incremental_final_report(
         self, group_id: str, platform_id: str | None = None
-    ) -> dict[str, Any]:
+    ) -> DailyAnalysisExecutionResult | dict[str, object]:
         """基于滑动窗口内的增量批次合并生成最终日报结果。
 
         Args:
