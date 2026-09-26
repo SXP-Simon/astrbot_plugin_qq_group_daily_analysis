@@ -206,7 +206,10 @@ class StandardOneBotDriver(OneBotDriver):
         self,
         earliest_msg: dict[str, object],
     ) -> str | int | None:
-        """从最旧消息提取序号锚点（优先 message_seq）。
+        """从最旧消息提取序号锚点（优先级: message_seq > real_id > seq > message_id）。
+
+        注意：为兼容 NapCat (NTQQ) 离散 Message ID 及 LLOneBot Sequence 模式，
+        此处直接提取原值而不进行 -1 手动偏移，重叠消息由调用方通过 seen_raw_ids 集合自动去重。
 
         Args:
             earliest_msg: 最旧消息字典
