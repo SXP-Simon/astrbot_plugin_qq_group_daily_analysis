@@ -57,6 +57,21 @@ class IReportGenerator(ABC):
     def generate_text_report(self, analysis_result: AnalysisResultPayload) -> str:
         """生成文本报告。"""
 
+    def generate_plain_markdown_report(
+        self, analysis_result: AnalysisResultPayload
+    ) -> str:
+        """生成跨平台 Markdown 文本报告（默认回退为纯文本报告）。"""
+        return self.generate_text_report(analysis_result)
+
+    async def generate_qq_official_markdown_report(
+        self,
+        analysis_result: AnalysisResultPayload,
+        html_render_func: Callable[..., Awaitable[str | bytes | None]] | None = None,
+    ) -> tuple[str, str]:
+        """生成 QQ 官方 Markdown 报告（默认回退为纯文本报告）。"""
+        text = self.generate_text_report(analysis_result)
+        return text, text
+
     @abstractmethod
     async def close(self) -> None:
         """释放资源。"""
