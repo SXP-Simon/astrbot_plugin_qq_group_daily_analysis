@@ -58,6 +58,11 @@ export const mockHandlers = {
     const item = mockTraces.find((t) => t.trace_id === traceId) || mockTraces[0];
     return { status: "ok", data: item };
   },
+  "GET traces/:traceId/logs": (params?: Record<string, unknown>, pathParams?: Record<string, string>) => {
+    const traceId = pathParams?.traceId || (params?.traceId as string);
+    const logs = mockPluginLogs.filter((l) => l.trace_id === traceId);
+    return { status: "ok", data: logs };
+  },
   "GET groups": () => ({
     status: "ok",
     data: ["123456789", "987654321", "-1001234567890"],
