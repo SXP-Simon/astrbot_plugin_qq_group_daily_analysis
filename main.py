@@ -605,8 +605,12 @@ class GroupDailyAnalysis(Star):
                 group_id, image_url, platform_id, is_comic=False
             )
 
-    def _save_report_to_history(self, image_url: str, group_id: str) -> None:
-        self.analysis_command_handler._save_report_to_history(image_url, group_id)
+    def _save_report_to_history(
+        self, image_url: str, group_id: str, trace_id: str | None = None
+    ) -> None:
+        self.analysis_command_handler._save_report_to_history(
+            image_url, group_id, trace_id=trace_id
+        )
 
     async def _send_text_reports(
         self,
