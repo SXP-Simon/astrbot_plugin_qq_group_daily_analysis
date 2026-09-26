@@ -547,10 +547,12 @@ function main() {
   const msgTextIndex = args.indexOf('--msg');
 
   // 模式 A: PR 标题与描述校验模式 (针对 GitHub PR Squash Merge 工作流)
-  if (prTitleIndex !== -1 && args[prTitleIndex + 1]) {
-    const prTitle = args[prTitleIndex + 1];
-    const prBody = prBodyIndex !== -1 && args[prBodyIndex + 1] ? args[prBodyIndex + 1] : '';
-    const rawMessage = `${prTitle}\n\n${prBody}`;
+  // 支持 --pr 标志或命令行参数，优先读取环境变量以杜绝 Bash 参数注入与转义问题
+  const isPrMode = args.includes('--pr') || prTitleIndex !== -1;
+  if (isPrMode) {
+    const prTitle = (prTitleIndex !== -1 && args[prTitleIndex + 1]) || process.env.PR_TITLE || '';
+    const prBody = (prBodyIndex !== -1 && args[prBodyIndex + 1]) || process.env.PR_BODY || '';
+    const rawMessage = prBody ? `${prTitle}\n\n${prBody}` : prTitle;
 
     console.log(`\x1b[36m🔍 [PR Squash Lint] 正在检查 PR 标题与描述规范...\x1b[0m`);
     const result = verifyCommit({ rawMessage });
