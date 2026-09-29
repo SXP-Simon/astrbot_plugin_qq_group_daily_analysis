@@ -1,5 +1,13 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.7.0] - 支持 Satori 通用聊天平台协议
+
+*   **🌐 【跨平台兼容】全面支持 Satori 通用聊天协议 (Chronocat / Koishi / Satori 生态)**：
+    *   **完整消息与事件链路**：新增 `SatoriAdapter` 适配器，支持 Satori 平台的群聊消息拦截、群组注册、本地消息历史拉取与按需分页查询。
+    *   **协议元数据查询**：支持通过 Satori REST API (`/guild.get`, `/guild.member.list`, `/user.get`) 获取群组信息、成员昵称及头像。
+    *   **XML 富文本与报告下发**：严格按照 Satori v1 规范支持纯文本（XML 转义）、图片（`<img src="data:..."/>` Base64 / HTTP 链接）及文件 (`<file src="..." name="..."/>`) 报告的稳定推送。
+    *   **按需动态懒加载**：将 `SatoriAdapter` 注册至 `PlatformAdapterFactory` 与适配器模块懒加载注册表，未启用 Satori 时零依赖、零导入，杜绝内存占用与无用开销。
+
 ## [v5.6.6] - 跨平台 Markdown 报告、平台适配器容灾加固
 
 *   **📊 【领域架构与报告重构】统一跨平台 Markdown 报告生成契约，消除组织异味与平台单点耦合**：
