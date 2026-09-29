@@ -403,10 +403,24 @@ class GroupDailyAnalysis(Star):
             "qq_official",
             "qq_official_webhook",
             "telegram",
+            "satori",
         }:
             return
         if self.auto_scheduler:
             await self.auto_scheduler.record_incremental_message(event)
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.SATORI)
+    async def intercept_satori_messages(self, event: AstrMessageEvent):
+        """拦截 Satori 群消息并存储到本地数据库"""
+        try:
+            stored = await self.message_processing_service.process_message(event)
+            if stored and self.auto_scheduler:
+                await self.auto_scheduler.record_incremental_message(event)
+        except (ValueError, RuntimeError) as e:
+            logger.warning(f"[Satori] 消息存储失败: {e}")
+        except Exception as e:
+            logger.error(f"[Satori] 消息存储异常: {e}", exc_info=True)
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
