@@ -24,6 +24,7 @@ _LAZY_ADAPTER_REGISTRY: dict[str, tuple[str, str]] = {
     "telegram": (".adapters.telegram_adapter", "TelegramAdapter"),
     "qq_official": (".adapters.qq_official_adapter", "QQOfficialAdapter"),
     "qq_official_webhook": (".adapters.qq_official_adapter", "QQOfficialAdapter"),
+    "satori": (".adapters.satori_adapter", "SatoriAdapter"),
 }
 
 
