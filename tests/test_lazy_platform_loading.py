@@ -26,6 +26,7 @@ def test_supported_platforms_registration():
         "discord_bot",
         "qq_official",
         "qq_official_webhook",
+        "satori",
     ]:
         assert name in supported
         assert PlatformAdapterFactory.is_supported(name)
@@ -41,6 +42,10 @@ def test_lazy_adapter_resolution():
     assert onebot_cls is not None
     assert onebot_cls.__name__ == "OneBotAdapter"
 
+    satori_cls = PlatformAdapterFactory.get_adapter_class("satori")
+    assert satori_cls is not None
+    assert satori_cls.__name__ == "SatoriAdapter"
+
 
 def test_lazy_imports_from_platform_package():
     """Verify __getattr__ dynamically resolves exports from platform package."""
@@ -49,8 +54,10 @@ def test_lazy_imports_from_platform_package():
 
     assert hasattr(platform, "OneBotAdapter")
     assert hasattr(platform, "QQOfficialAdapter")
+    assert hasattr(platform, "SatoriAdapter")
     assert hasattr(adapters, "OneBotAdapter")
     assert hasattr(adapters, "QQOfficialAdapter")
+    assert hasattr(adapters, "SatoriAdapter")
 
     with pytest.raises(AttributeError):
         _ = platform.LarkAdapter

@@ -52,6 +52,7 @@ if "astrbot.api" not in sys.modules:
         TELEGRAM = 1
         QQOFFICIAL = 2
         QQOFFICIAL_WEBHOOK = 4
+        SATORI = 8
 
     class filter:
         @staticmethod
