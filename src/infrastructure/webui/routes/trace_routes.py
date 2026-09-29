@@ -162,6 +162,7 @@ class TraceRoutes:
                 "qq_official_webhook": "QQ 官方 Webhook",
                 "telegram": "Telegram",
                 "discord": "Discord",
+                "satori": "Satori 协议",
             }
 
             # 1. 优先从 AstrBot 原生 platform_manager 获取标准元数据
