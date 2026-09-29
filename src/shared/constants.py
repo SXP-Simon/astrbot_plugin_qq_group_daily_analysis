@@ -19,6 +19,8 @@ class Platform(str, Enum):
     TELEGRAM = "telegram"
     DISCORD = "discord"
     SLACK = "slack"
+    SATORI = "satori"
+    QQ_OFFICIAL = "qq_official"
 
 
 class AnalysisStage(str, Enum):
