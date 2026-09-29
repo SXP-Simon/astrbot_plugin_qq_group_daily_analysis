@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .adapters.discord_adapter import DiscordAdapter
     from .adapters.onebot_adapter import OneBotAdapter
     from .adapters.qq_official_adapter import QQOfficialAdapter
+    from .adapters.satori_adapter import SatoriAdapter
     from .adapters.telegram_adapter import TelegramAdapter
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "PlatformAdapter",
     "PlatformAdapterFactory",
     "QQOfficialAdapter",
+    "SatoriAdapter",
     "TelegramAdapter",
 ]
 
@@ -29,6 +31,7 @@ _LAZY_EXPORTS = {
     "QQOfficialAdapter": (".adapters.qq_official_adapter", "QQOfficialAdapter"),
     "TelegramAdapter": (".adapters.telegram_adapter", "TelegramAdapter"),
     "DiscordAdapter": (".adapters.discord_adapter", "DiscordAdapter"),
+    "SatoriAdapter": (".adapters.satori_adapter", "SatoriAdapter"),
 }
 
 
