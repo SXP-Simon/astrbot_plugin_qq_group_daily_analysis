@@ -257,6 +257,31 @@ QQ_OFFICIAL_CAPABILITIES = PlatformCapabilities(
     avatar_sizes=(640,),
 )
 
+# Satori universal protocol API. Message history is backed by local event archive,
+# and member/group information is queried via Satori HTTP API.
+SATORI_CAPABILITIES = PlatformCapabilities(
+    platform_name="satori",
+    platform_version="v1",
+    supports_message_history=True,
+    max_message_history_days=7,
+    max_message_count=10000,
+    supports_group_list=False,
+    supports_group_info=True,
+    supports_member_list=True,
+    supports_member_info=True,
+    supports_text_message=True,
+    supports_image_message=True,
+    supports_file_message=True,
+    supports_forward_message=False,
+    supports_reply_message=True,
+    max_text_length=4000,
+    max_image_size_mb=20.0,
+    supports_user_avatar=True,
+    supports_group_avatar=True,
+    avatar_needs_api_call=False,
+    avatar_sizes=(640,),
+)
+
 # 能力查找表（映射平台标识到能力对象）
 PLATFORM_CAPABILITIES: dict[str, PlatformCapabilities] = {
     "aiocqhttp": ONEBOT_V11_CAPABILITIES,
@@ -266,6 +291,7 @@ PLATFORM_CAPABILITIES: dict[str, PlatformCapabilities] = {
     "slack": SLACK_CAPABILITIES,
     "qq_official": QQ_OFFICIAL_CAPABILITIES,
     "qq_official_webhook": QQ_OFFICIAL_CAPABILITIES,
+    "satori": SATORI_CAPABILITIES,
 }
 
 

@@ -467,3 +467,19 @@ class GroupAlbumSupportProtocol(Protocol):
         album_name: str = "",
         strict_mode: bool = False,
     ) -> bool: ...
+
+
+@runtime_checkable
+class SatoriClientProtocol(Protocol):
+    """Satori 平台客户端通信行为协议。"""
+
+    async def send_http_request(
+        self,
+        method: str,
+        path: str,
+        data: dict | None = None,
+        platform: str | None = None,
+        user_id: str | None = None,
+    ) -> object:
+        """发送 Satori HTTP API 请求。"""
+        ...
