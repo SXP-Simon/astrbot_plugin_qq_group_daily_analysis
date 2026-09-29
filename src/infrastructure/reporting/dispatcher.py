@@ -61,9 +61,9 @@ class ReportDispatcher:
         adapter = self.message_sender.bot_manager.get_adapter(platform_id)
         return bool(adapter and adapter.get_platform_name() == "qq_official")
 
-    # 复用多平台通用 Markdown 结构化排版的平台（如 Telegram、Discord）：
+    # 复用多平台通用 Markdown 结构化排版的平台（如 Telegram、Discord、Satori）：
     # 身份自动降级为昵称文本，排版与结构化报告一致。
-    _SHARED_MARKDOWN_PLATFORMS = frozenset({"telegram", "discord"})
+    _SHARED_MARKDOWN_PLATFORMS = frozenset({"telegram", "discord", "satori"})
 
     def _uses_shared_markdown_report(self, platform_id: str | None) -> bool:
         """平台是否复用 QQ 官方的 Markdown 文本排版。"""
