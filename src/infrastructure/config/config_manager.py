@@ -321,6 +321,15 @@ class ConfigManager:
         """获取LLM请求重试退避基值（秒），实际退避会乘以尝试次数"""
         return self._get_group("llm").get("llm_backoff", 2)
 
+    def get_llm_hard_timeout(self) -> int:
+        """获取 LLM 单次请求硬超时时间（秒），<=0 表示自动遵循 Provider 配置。"""
+        return int(self._get_group("llm").get("llm_hard_timeout", 0))
+
+    def set_llm_hard_timeout(self, timeout_seconds: int) -> None:
+        """设置 LLM 单次请求硬超时时间（秒）。"""
+        self._ensure_group("llm")["llm_hard_timeout"] = max(0, int(timeout_seconds))
+        self.config.save_config()
+
     def get_enable_streaming_llm_call(self) -> bool:
         """获取是否启用流式 LLM 调用"""
         return self._get_group("llm").get("enable_streaming_llm_call", False)
