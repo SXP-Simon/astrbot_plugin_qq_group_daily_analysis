@@ -859,3 +859,204 @@ def test_plugin_log_buffer_strips_duplicate_trace_id_in_message():
     assert entry.trace_id == "test-trace-123"
     assert entry.message == "[群分析插件] [LLM 阻塞诊断] 正在等待上游响应"
     assert not entry.message.startswith("[test-trace-123]")
+
+
+def test_diagnose_llm_task_block_timeout_aborted():
+    """测试硬超时主动截断时的结构化诊断与排查提示。"""
+    from src.infrastructure.analysis.utils.llm_utils import diagnose_llm_task_block
+
+    # 1. 任务为空时的硬超时诊断
+    d_none = diagnose_llm_task_block(None, 300.0, is_timeout_aborted=True)
+    assert d_none.state == "HARD_TIMEOUT_ABORTED"
+    assert "硬超时上限" in d_none.status_title
+
+    # 2. 生成中被硬超时截断 (包含 499 和 llm_hard_timeout 引导)
+    async def mock_llm_generate():
+        await asyncio.sleep(10)
+
+    async def run_gen_abort():
+        task = asyncio.create_task(mock_llm_generate())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 300.0, is_timeout_aborted=True)
+        assert diag.state == "HARD_TIMEOUT_ABORTED"
+        assert "499" in diag.guidance_hint
+        assert "llm_hard_timeout" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_gen_abort())
+
+    # 3. 建连中被硬超时截断 (包含网络代理排查引导)
+    async def mock_connect():
+        await asyncio.Future()
+
+    async def run_conn_abort():
+        task = asyncio.create_task(mock_connect())
+        await asyncio.sleep(0.001)
+        diag = diagnose_llm_task_block(task, 60.0, is_timeout_aborted=True)
+        assert diag.state == "HARD_TIMEOUT_ABORTED"
+        assert "反代" in diag.guidance_hint or "上限" in diag.guidance_hint
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(run_conn_abort())
+
+
+def test_call_provider_with_retry_hard_timeout_triggers_fallback_and_records_trace():
+    """测试单次请求超过硬超时上限时主动掐断并触发重试与惰性降级。"""
+    _reset_global_limiter()
+
+    class FakeProvider:
+        def __init__(self, provider_id: str, timeout: int = 0):
+            self.provider_id = provider_id
+            self.provider_config = {"timeout": timeout, "model": "mock-model"}
+
+    class MockContext:
+        def __init__(self):
+            self.p1 = FakeProvider("kimi-code", timeout=0)
+            self.p2 = FakeProvider("backup-llm", timeout=0)
+            self.called_providers = []
+
+        def get_provider_by_id(self, provider_id: str):
+            if provider_id == "kimi-code":
+                return self.p1
+            if provider_id == "backup-llm":
+                return self.p2
+            return None
+
+        async def get_current_chat_provider_id(self, umo: str | None = None):
+            return "backup-llm"
+
+        async def llm_generate(self, **kwargs):
+            pid = kwargs.get("chat_provider_id")
+            self.called_providers.append(pid)
+            if pid == "kimi-code":
+                # 模拟 Kimi 持续挂起 10 秒
+                await asyncio.sleep(10)
+                return LLMResponse(role="assistant", completion_text="kimi response")
+            # 备用模型快速返回
+            return LLMResponse(role="assistant", completion_text="backup response")
+
+    class MockConfig:
+        def get_llm_retries(self):
+            return 1
+
+        def get_llm_backoff(self):
+            return 0
+
+        def get_llm_hard_timeout(self):
+            # 设置极短硬超时 0.05 秒
+            return 0.05
+
+        def get_enable_streaming_llm_call(self):
+            return False
+
+        def get_golden_quote_provider_id(self):
+            return "kimi-code"
+
+        def get_llm_provider_id(self):
+            return "backup-llm"
+
+    async def scenario():
+        ctx = MockContext()
+        cfg = MockConfig()
+        with TraceContext(trace_id="test-hard-timeout-trace") as trace:
+            resp = await call_provider_with_retry(
+                context=ctx,
+                config_manager=cfg,
+                prompt="测试金句分析",
+                provider_id_key="golden_quote_provider_id",
+                observation_label="金句",
+            )
+            assert resp is not None
+            assert resp.completion_text == "backup response"
+            # 验证 kimi-code 达到硬超时后触发了 backup-llm 降级
+            assert ctx.called_providers == ["kimi-code", "backup-llm"]
+            # 验证 Trace 中记录了失败的 attempt
+            attempts = trace.metadata.get("llm_attempts", [])
+            assert len(attempts) == 2
+            assert attempts[0]["provider_id"] == "kimi-code"
+            assert attempts[0]["status"] == "failed"
+            assert "硬超时上限" in attempts[0]["error"]
+            assert attempts[1]["provider_id"] == "backup-llm"
+            assert attempts[1]["status"] == "success"
+
+    asyncio.run(scenario())
+
+
+def test_call_provider_resolves_timeout_from_provider_config():
+    """测试当插件未配置 llm_hard_timeout (为 0) 时，自动继承 Provider 实例中的 timeout 配置。"""
+    _reset_global_limiter()
+
+    class FakeProvider:
+        def __init__(self, provider_id: str, timeout: float = 0.05):
+            self.provider_id = provider_id
+            self.provider_config = {"timeout": timeout, "model": "mock-model"}
+
+    class MockContext:
+        def __init__(self):
+            self.p1 = FakeProvider("kimi-code", timeout=0.05)
+            self.p2 = FakeProvider("backup-llm", timeout=0.05)
+            self.called_providers = []
+
+        def get_provider_by_id(self, provider_id: str):
+            if provider_id == "kimi-code":
+                return self.p1
+            if provider_id == "backup-llm":
+                return self.p2
+            return None
+
+        async def get_current_chat_provider_id(self, umo: str | None = None):
+            return "backup-llm"
+
+        async def llm_generate(self, **kwargs):
+            pid = kwargs.get("chat_provider_id")
+            self.called_providers.append(pid)
+            if pid == "kimi-code":
+                await asyncio.sleep(10)
+                return LLMResponse(role="assistant", completion_text="kimi response")
+            return LLMResponse(role="assistant", completion_text="backup response")
+
+    class MockConfig:
+        def get_llm_retries(self):
+            return 1
+
+        def get_llm_backoff(self):
+            return 0
+
+        def get_llm_hard_timeout(self):
+            return 0  # 自动继承 Provider 配置
+
+        def get_enable_streaming_llm_call(self):
+            return False
+
+        def get_golden_quote_provider_id(self):
+            return "kimi-code"
+
+        def get_llm_provider_id(self):
+            return "backup-llm"
+
+    async def scenario():
+        ctx = MockContext()
+        cfg = MockConfig()
+        with TraceContext(trace_id="test-prov-timeout-trace") as trace:
+            resp = await call_provider_with_retry(
+                context=ctx,
+                config_manager=cfg,
+                prompt="测试金句分析",
+                provider_id_key="golden_quote_provider_id",
+                observation_label="金句",
+            )
+            assert resp is not None
+            assert resp.completion_text == "backup response"
+            assert ctx.called_providers == ["kimi-code", "backup-llm"]
+
+    asyncio.run(scenario())
+
+

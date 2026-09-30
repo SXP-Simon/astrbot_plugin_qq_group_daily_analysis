@@ -157,11 +157,13 @@ def diagnose_llm_task_block(
     task: asyncio.Task | None,
     elapsed_seconds: float,
     default_block_point: str = "context.llm_generate",
+    is_timeout_aborted: bool = False,
 ) -> LLMBlockDiagnosis:
-    """分析长时间运行的 LLM 任务阻塞点并生成对用户友好的结构化诊断信息。
+    """分析长时间运行或超时的 LLM 任务阻塞点并生成对用户友好的结构化诊断信息。
 
     基于 AstrBot 核心 Provider 调用链（ProviderManager / request_retry / OpenAI / Anthropic / Gemini / httpx）
     的具体协程栈特征进行逐层分类：
+    0. 硬超时主动截断（已达到预设硬超时上限）
     1. 全局限流排队（RateLimiter / Semaphore acquire 等待中）
     2. SDK 故障退避重试（request_retry / tenacity 在异常后处于退避 sleep 中）
     3. 网络建连阻塞（TCP / SSL 握手 / DNS 解析中）
@@ -172,11 +174,21 @@ def diagnose_llm_task_block(
         task: 当前执行中的异步任务。
         elapsed_seconds: 当前请求已消耗的秒数。
         default_block_point: 默认的业务阻塞路径。
+        is_timeout_aborted: 是否已达到硬超时上限被主动截断。
 
     Returns:
         LLMBlockDiagnosis: 结构化诊断对象。
     """
     if task is None:
+        if is_timeout_aborted:
+            return LLMBlockDiagnosis(
+                state="HARD_TIMEOUT_ABORTED",
+                status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                guidance_hint=f"请求已执行 {elapsed_seconds:.0f}s 超过预设上限并主动截断，未获取到有效任务句柄。",
+                is_known=False,
+                await_chain="<无可用任务句柄>",
+                block_point=default_block_point,
+            )
         return LLMBlockDiagnosis(
             state="UNKNOWN",
             status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
@@ -189,6 +201,15 @@ def diagnose_llm_task_block(
     frames = extract_task_await_frames(task)
     await_chain = format_task_await_chain(task)
     if not frames:
+        if is_timeout_aborted:
+            return LLMBlockDiagnosis(
+                state="HARD_TIMEOUT_ABORTED",
+                status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                guidance_hint=f"请求已执行 {elapsed_seconds:.0f}s 超过预设上限并主动截断，详细协程 await 栈见日志。",
+                is_known=False,
+                await_chain=await_chain,
+                block_point=default_block_point,
+            )
         return LLMBlockDiagnosis(
             state="UNKNOWN",
             status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",
@@ -214,6 +235,18 @@ def diagnose_llm_task_block(
         for f in frames
     )
     if is_rate_limiting:
+        if is_timeout_aborted:
+            return LLMBlockDiagnosis(
+                state="HARD_TIMEOUT_ABORTED",
+                status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                guidance_hint=(
+                    f"请求在全局限流排队中耗时已达 {elapsed_seconds:.0f}s 超过上限，已主动取消。"
+                    "建议适当调大 llm_max_concurrent 或排查是否有阻塞任务占用并发槽位。"
+                ),
+                is_known=True,
+                await_chain=await_chain,
+                block_point="limiter.queue",
+            )
         return LLMBlockDiagnosis(
             state="RATE_LIMIT_QUEUE",
             status_title="⏳ 正在排队等待全局大模型并发槽位 (并发排队中)",
@@ -264,6 +297,18 @@ def diagnose_llm_task_block(
             for f in sub_frames
         )
         if not is_querying:
+            if is_timeout_aborted:
+                return LLMBlockDiagnosis(
+                    state="HARD_TIMEOUT_ABORTED",
+                    status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                    guidance_hint=(
+                        f"请求在上游 SDK 故障重试退避中累计耗时已达 {elapsed_seconds:.0f}s 超过上限，已主动截断以释放资源。"
+                        "建议检查上游 Provider 稳定性或配额限制。"
+                    ),
+                    is_known=True,
+                    await_chain=await_chain,
+                    block_point="provider.retry_backoff",
+                )
             return LLMBlockDiagnosis(
                 state="SDK_RETRY_BACKOFF",
                 status_title="🔄 上游请求正在执行自动重试等待 (SDK 故障退避中)",
@@ -306,6 +351,18 @@ def diagnose_llm_task_block(
     )
 
     if is_connecting and not has_entered_reading:
+        if is_timeout_aborted:
+            return LLMBlockDiagnosis(
+                state="HARD_TIMEOUT_ABORTED",
+                status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                guidance_hint=(
+                    f"请求与大模型 API 服务端建立网络连接耗时已达 {elapsed_seconds:.0f}s 超过预设上限，已主动掐断。"
+                    "请排查 API 反代中转站连通性、网络代理配置或 DNS 解析速度。"
+                ),
+                is_known=True,
+                await_chain=await_chain,
+                block_point="network.connect",
+            )
         return LLMBlockDiagnosis(
             state="CONNECTING_NETWORK",
             status_title="🌐 正在尝试与大模型 API 服务端建立网络连接 (TCP/SSL 握手中)",
@@ -350,6 +407,18 @@ def diagnose_llm_task_block(
     )
 
     if is_generating:
+        if is_timeout_aborted:
+            return LLMBlockDiagnosis(
+                state="HARD_TIMEOUT_ABORTED",
+                status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+                guidance_hint=(
+                    f"请求等待大模型服务端生成耗时已达 {elapsed_seconds:.0f}s 超过预设上限，已主动掐断连接（服务端控制台可能会记录 499 context canceled）。"
+                    "若当前任务为金句或长文本分析且模型较慢（如 256k 深度推理），建议在插件配置中调大 llm_hard_timeout，或配置更快速的备用 Provider 自动降级。"
+                ),
+                is_known=True,
+                await_chain=await_chain,
+                block_point=default_block_point,
+            )
         return LLMBlockDiagnosis(
             state="WAITING_UPSTREAM_RESPONSE",
             status_title="⌛ 正在等待大模型服务端生成返回数据 (LLM 推理中)",
@@ -363,6 +432,19 @@ def diagnose_llm_task_block(
         )
 
     # 5. 未知阻塞点（Fallback：不符合已知 LLM/HTTP 链路的普通协程）
+    if is_timeout_aborted:
+        return LLMBlockDiagnosis(
+            state="HARD_TIMEOUT_ABORTED",
+            status_title="🛑 Provider 请求已达硬超时上限并主动截断 (Hard Timeout Aborted)",
+            guidance_hint=(
+                f"请求累计耗时已达 {elapsed_seconds:.0f}s 超过预设硬超时上限，已主动截断以释放资源。"
+                "建议检查网络连通性或适当调大超时时间。"
+            ),
+            is_known=False,
+            await_chain=await_chain,
+            block_point=default_block_point,
+        )
+
     return LLMBlockDiagnosis(
         state="UNKNOWN",
         status_title="⚠️ Provider 请求仍在运行 (未知阻塞点)",

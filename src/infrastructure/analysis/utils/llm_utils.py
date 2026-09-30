@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from astrbot.api.provider import LLMResponse
@@ -24,6 +25,8 @@ from .llm_diagnostics import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from astrbot.api.star import Context
 
     from ....domain.repositories.bot_client_protocol import (
@@ -34,6 +37,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "LLMBlockDiagnosis",
+    "ProviderMetadata",
     "call_provider_with_retry",
     "diagnose_llm_task_block",
     "extract_response_text",
@@ -48,10 +52,113 @@ _LLM_LIMITER_INFO_SECONDS = 1.0
 _LLM_LIMITER_WARN_SECONDS = 15.0
 _LLM_REQUEST_WARN_SECONDS = 120.0
 _LLM_REQUEST_STACK_DUMP_SECONDS = 120.0
+_DEFAULT_LLM_HARD_TIMEOUT_SECONDS = 300.0
 
 # 向后兼容内部私有别名
 _extract_task_await_frames = extract_task_await_frames
 _format_task_await_chain = format_task_await_chain
+
+
+@dataclass(frozen=True)
+class ProviderMetadata:
+    """AstrBot Provider 强类型防腐元数据 (ACL)。
+
+    集中收敛对 AstrBot Provider 实例的跨版本反射与兼容探测，
+    向业务层提供确定的强类型属性与 IDE F12 跳转支持。
+
+    Attributes:
+        provider_id: Provider 唯一标识。
+        model: 标准化后的模型名称。
+        provider_type: 提供商类型（如 openai/gemini/anthropic）。
+        timeout: 提取到的单次请求超时（秒），未配置或无效时为 None。
+    """
+
+    provider_id: str
+    model: str
+    provider_type: str
+    timeout: float | None
+
+    @classmethod
+    def from_provider_id(cls, context: Context, provider_id: str) -> ProviderMetadata:
+        """从 AstrBot Context 与 provider_id 提取标准化 ProviderMetadata。
+
+        Args:
+            context: AstrBot 上下文对象。
+            provider_id: Provider 唯一标识。
+
+        Returns:
+            ProviderMetadata: 强类型元数据值对象。
+        """
+        if not provider_id:
+            return cls(
+                provider_id="",
+                model="default",
+                provider_type="unknown",
+                timeout=None,
+            )
+
+        try:
+            provider_inst = context.get_provider_by_id(provider_id)
+        except Exception:
+            provider_inst = None
+
+        if provider_inst is None:
+            return cls(
+                provider_id=provider_id,
+                model="default",
+                provider_type="unknown",
+                timeout=None,
+            )
+
+        prov_cfg = (
+            getattr(provider_inst, "provider_config", None)
+            or getattr(provider_inst, "config", None)
+            or {}
+        )
+        if isinstance(prov_cfg, dict):
+            raw_model = (
+                prov_cfg.get("model")
+                or getattr(provider_inst, "model", None)
+                or getattr(provider_inst, "model_id", None)
+            )
+            raw_type = prov_cfg.get("type") or getattr(
+                provider_inst, "provider_type", None
+            )
+            raw_timeout = prov_cfg.get("timeout")
+        else:
+            raw_model = getattr(provider_inst, "model", None) or getattr(
+                provider_inst, "model_id", None
+            )
+            raw_type = getattr(provider_inst, "provider_type", None)
+            raw_timeout = None
+
+        if raw_timeout is None:
+            raw_timeout = getattr(provider_inst, "timeout", None)
+
+        parsed_timeout: float | None = None
+        if raw_timeout is not None:
+            try:
+                t_val = float(raw_timeout)
+                if t_val > 0:
+                    parsed_timeout = t_val
+            except (ValueError, TypeError):
+                pass
+
+        return cls(
+            provider_id=provider_id,
+            model=str(raw_model or "default"),
+            provider_type=str(raw_type or "unknown"),
+            timeout=parsed_timeout,
+        )
+
+
+_PROVIDER_KEY_GETTERS: dict[str, Callable[[ConfigManager], str]] = {
+    "topic_provider_id": lambda cfg: cfg.get_topic_provider_id(),
+    "user_title_provider_id": lambda cfg: cfg.get_user_title_provider_id(),
+    "golden_quote_provider_id": lambda cfg: cfg.get_golden_quote_provider_id(),
+    "quality_provider_id": lambda cfg: cfg.get_quality_provider_id(),
+    "drawing_prompt_provider_id": lambda cfg: cfg.get_drawing_prompt_provider_id(),
+}
 
 
 def _is_response_format_unsupported_error(error: Exception) -> bool:
@@ -260,16 +367,23 @@ async def get_provider_id_with_fallback(
 
         # 1. 特定任务的 provider_id
         if provider_id_key:
-            getter_method = f"get_{provider_id_key}"
-            if hasattr(config_manager, getter_method):
-                specific_provider_id = getattr(config_manager, getter_method)()
-                if specific_provider_id:
-                    strategies.append(
-                        lambda pid=specific_provider_id: _try_get_provider_id_by_id(
-                            context, pid, f"配置的 {provider_id_key}"
-                        )
+            getter = _PROVIDER_KEY_GETTERS.get(provider_id_key)
+            if getter is not None:
+                specific_provider_id = getter(config_manager)
+            elif hasattr(config_manager, f"get_{provider_id_key}"):
+                specific_provider_id = getattr(
+                    config_manager, f"get_{provider_id_key}"
+                )()
+            else:
+                specific_provider_id = ""
+
+            if specific_provider_id:
+                strategies.append(
+                    lambda pid=specific_provider_id: _try_get_provider_id_by_id(
+                        context, pid, f"配置的 {provider_id_key}"
                     )
-                    strategy_names.append(f"1. 配置的 {provider_id_key}")
+                )
+                strategy_names.append(f"1. 配置的 {provider_id_key}")
 
         # 2. 主 LLM provider_id
         main_provider_id = config_manager.get_llm_provider_id()
@@ -348,7 +462,7 @@ async def call_provider_with_retry(
     observation_stage = str(trace_metadata.get("llm_stage") or "unknown")
     observation_group = str(
         trace_metadata.get("llm_group_id")
-        or getattr(trace, "group_id", "")
+        or (trace.group_id if trace else "")
         or "unknown"
     )
     observation_area = observation_label or provider_id_key or "未标注"
@@ -426,28 +540,38 @@ async def call_provider_with_retry(
                 f"{limiter.max_concurrency}"
             )
             request_started_at = time.monotonic()
-            actual_model = None
-            actual_provider_type = None
             try:
-                # 提取真实 Provider 实例与模型名称以支撑可观测性
-                try:
-                    provider_inst = context.get_provider_by_id(pid)
-                    if provider_inst:
-                        prov_cfg = (
-                            getattr(provider_inst, "provider_config", None)
-                            or getattr(provider_inst, "config", None)
-                            or {}
-                        )
-                        actual_model = (
-                            prov_cfg.get("model")
-                            or getattr(provider_inst, "model", None)
-                            or getattr(provider_inst, "model_id", None)
-                        )
-                        actual_provider_type = prov_cfg.get("type") or getattr(
-                            provider_inst, "provider_type", None
-                        )
-                except Exception:
-                    pass
+                # 借助强类型 ProviderMetadata (ACL) 提取模型与超时信息
+                meta = ProviderMetadata.from_provider_id(context, pid)
+                actual_model = meta.model
+                actual_provider_type = meta.provider_type
+
+                # 解析硬超时参数与来源
+                configured_hard_timeout = (
+                    config_manager.get_llm_hard_timeout()
+                    if hasattr(config_manager, "get_llm_hard_timeout")
+                    else 0
+                )
+                if configured_hard_timeout > 0:
+                    effective_timeout = float(configured_hard_timeout)
+                    timeout_source = (
+                        f"插件配置 (llm_hard_timeout={configured_hard_timeout}s)"
+                    )
+                elif meta.timeout is not None:
+                    effective_timeout = meta.timeout
+                    timeout_source = f"Provider 配置 (timeout={meta.timeout:g}s)"
+                else:
+                    effective_timeout = _DEFAULT_LLM_HARD_TIMEOUT_SECONDS
+                    timeout_source = (
+                        f"默认安全兜底 ({_DEFAULT_LLM_HARD_TIMEOUT_SECONDS:.0f}s, "
+                        "未检测到 Provider timeout 配置)"
+                    )
+
+                logger.info(
+                    f"[LLM 超时配置] 本次请求硬超时上限: {effective_timeout:.1f}s | "
+                    f"来源: {timeout_source} | provider={pid}, group={observation_group}, "
+                    f"stage={observation_stage}, area={observation_area}, attempt={attempt_num}"
+                )
 
                 if trace:
                     if pid:
@@ -485,7 +609,8 @@ async def call_provider_with_retry(
                     f"group={observation_group}, stage={observation_stage}, "
                     f"area={observation_area}, attempt={attempt_num}, "
                     f"fallback={is_fallback_request}, provider={pid}, "
-                    f"path={call_path}, prompt_len={len(prompt) if prompt else 0}, "
+                    f"path={call_path}, timeout={effective_timeout:.1f}s, "
+                    f"prompt_len={len(prompt) if prompt else 0}, "
                     f"response_format={r_format is not None}, "
                     f"streaming={enable_streaming_llm_call}"
                 )
@@ -511,14 +636,48 @@ async def call_provider_with_retry(
                 next_stack_dump_seconds = _LLM_REQUEST_STACK_DUMP_SECONDS
                 try:
                     while True:
+                        elapsed_seconds = time.monotonic() - request_started_at
+                        remaining_timeout = effective_timeout - elapsed_seconds
+                        if remaining_timeout <= 0:
+                            diagnosis = diagnose_llm_task_block(
+                                request_task,
+                                elapsed_seconds,
+                                default_block_point=call_path,
+                                is_timeout_aborted=True,
+                            )
+                            logger.error(
+                                f"[LLM 硬超时截断] {diagnosis.status_title}: "
+                                f"group={observation_group}, stage={observation_stage}, "
+                                f"area={observation_area}, attempt={attempt_num}, "
+                                f"fallback={is_fallback_request}, provider={pid}, "
+                                f"elapsed={elapsed_seconds:.1f}s >= limit={effective_timeout:.1f}s ({timeout_source}), "
+                                f"block_point={diagnosis.block_point} | "
+                                f"排查提示: {diagnosis.guidance_hint}"
+                            )
+                            if not request_task.done():
+                                request_task.cancel()
+                                try:
+                                    await request_task
+                                except (asyncio.CancelledError, Exception):
+                                    pass
+                            raise TimeoutError(
+                                f"LLM 请求超过硬超时上限 ({effective_timeout:.1f}s, 来源: {timeout_source}), 已主动截断连接"
+                            )
+
+                        slice_timeout = min(
+                            _LLM_REQUEST_WARN_SECONDS, remaining_timeout
+                        )
                         try:
                             resp = await asyncio.wait_for(
                                 asyncio.shield(request_task),
-                                timeout=_LLM_REQUEST_WARN_SECONDS,
+                                timeout=slice_timeout,
                             )
                             break
                         except TimeoutError:
                             elapsed_seconds = time.monotonic() - request_started_at
+                            if elapsed_seconds >= effective_timeout:
+                                continue
+
                             diagnosis = diagnose_llm_task_block(
                                 request_task,
                                 elapsed_seconds,
@@ -530,7 +689,7 @@ async def call_provider_with_retry(
                                 f"stage={observation_stage}, area={observation_area}, "
                                 f"attempt={attempt_num}, "
                                 f"fallback={is_fallback_request}, provider={pid}, "
-                                f"elapsed={elapsed_seconds:.0f}s, "
+                                f"elapsed={elapsed_seconds:.0f}s / limit={effective_timeout:.0f}s, "
                                 f"block_point={diagnosis.block_point} | "
                                 f"提示: {diagnosis.guidance_hint}"
                             )
@@ -712,8 +871,7 @@ async def call_provider_with_retry(
 
 
 def extract_token_usage(response: object) -> dict[str, int]:
-    """
-    从LLM响应中提取token使用统计
+    """从LLM响应中提取token使用统计 (委托 Domain TokenUsage ACL)。
 
     Args:
         response: LLM响应对象
@@ -721,56 +879,18 @@ def extract_token_usage(response: object) -> dict[str, int]:
     Returns:
         Token使用统计字典，包含prompt_tokens, completion_tokens, total_tokens
     """
-    token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    from ....domain.value_objects import TokenUsage
 
-    try:
-        # 1. 尝试直接获取 response.usage
-        usage = getattr(response, "usage", None)
-
-        # 2. 尝试从 response.raw_completion.usage 获取 (兼容旧版)
-        if not usage:
-            raw_comp = getattr(response, "raw_completion", None)
-            if raw_comp:
-                usage = getattr(raw_comp, "usage", None)
-
-        # 3. 如果 response 本身就是 dict (某些特殊情况)
-        if not usage and isinstance(response, dict):
-            usage = response.get("usage")
-
-        if usage:
-            # 优先检查 AstrBot 的 TokenUsage 对象字段 (input, output, total)
-            # AstrBot TokenUsage define: input (prop), output (attr), total (prop)
-            if hasattr(usage, "input") and hasattr(usage, "output"):
-                token_usage["prompt_tokens"] = getattr(usage, "input", 0) or 0
-                token_usage["completion_tokens"] = getattr(usage, "output", 0) or 0
-                token_usage["total_tokens"] = getattr(usage, "total", 0) or 0
-
-            # 处理 usage 是字典的情况
-            elif isinstance(usage, dict):
-                token_usage["prompt_tokens"] = usage.get("prompt_tokens", 0) or 0
-                token_usage["completion_tokens"] = (
-                    usage.get("completion_tokens", 0) or 0
-                )
-                token_usage["total_tokens"] = usage.get("total_tokens", 0) or 0
-
-            # 处理 OpenAI CompletionUsage 等标准对象
-            else:
-                token_usage["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
-                token_usage["completion_tokens"] = (
-                    getattr(usage, "completion_tokens", 0) or 0
-                )
-                token_usage["total_tokens"] = getattr(usage, "total_tokens", 0) or 0
-
-        return token_usage
-
-    except Exception as e:
-        logger.error(f"提取token使用统计失败: {e}")
-        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    usage_vo = TokenUsage.from_llm_response(response)
+    return {
+        "prompt_tokens": usage_vo.prompt_tokens,
+        "completion_tokens": usage_vo.completion_tokens,
+        "total_tokens": usage_vo.total_tokens,
+    }
 
 
 def extract_response_text(response: object) -> str:
-    """
-    从LLM响应中提取文本内容
+    """从LLM响应中提取文本内容 (ACL 防腐)。
 
     Args:
         response: LLM响应对象
@@ -778,6 +898,10 @@ def extract_response_text(response: object) -> str:
     Returns:
         响应文本内容
     """
+    if response is None:
+        return ""
+    if isinstance(response, LLMResponse):
+        return response.completion_text or ""
     try:
         text = getattr(response, "completion_text", None)
         if text is not None:
