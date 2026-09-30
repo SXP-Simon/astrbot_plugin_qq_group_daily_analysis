@@ -401,6 +401,12 @@
                 "default": 2,
                 "hint": "重试之间的基准等待时间（秒）。实际等待时间会随尝试次数指数增长，并加入少量随机抖动；当专用 Provider 失败后，会继续按队列尝试默认 Provider。"
             },
+            "llm_hard_timeout": {
+                "type": "int",
+                "description": "LLM 请求硬超时上限 (秒)",
+                "default": 0,
+                "hint": "单次大模型请求的最大等待耗时（秒）。设为 0 时自动遵循 Provider 配置的 timeout（未配置时默认兜底 300 秒）。超过此时间将主动截断请求并触发重试/降级。"
+            },
             "enable_streaming_llm_call": {
                 "type": "bool",
                 "description": "启用流式 LLM 调用",
