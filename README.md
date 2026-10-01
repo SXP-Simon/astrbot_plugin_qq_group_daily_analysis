@@ -607,6 +607,19 @@ AstrBot 更新插件时会先删除旧插件目录，再解压或移动新目录
   <img src="https://contrib.rocks/image?repo=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&max=200&columns=14" />
 </a>
 
+## ⭐ Star History
+
+> [!TIP]
+> 如果这个项目对你的生活或工作有帮助，或者你对它的未来发展感兴趣，请给这个项目一个 Star。这是维护这个开源项目的动力 <3
+
+<a href="https://www.star-history.com/?repos=SXP-Simon%2Fastrbot_plugin_qq_group_daily_analysis&type=date&releases=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=SXP-Simon/astrbot_plugin_qq_group_daily_analysis&type=date&legend=bottom-right" />
+ </picture>
+</a>
+
 ## 许可证
 
 MIT License
