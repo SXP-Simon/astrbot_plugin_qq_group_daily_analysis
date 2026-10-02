@@ -72,19 +72,14 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
       <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="33.3%" valign="top">
+      <p><b>DeepSeek 鲸鱼女仆娘</b></p>
+      <a href="assets/deepseek_maid-demo.jpg"><img src="assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
+      <p><code>deepseek_maid</code> · <a href="assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
+    </td>
+  </tr>
 </table>
-
-#### DeepSeek 鲸鱼女仆娘
-
-蓝白大肥鱼打工实录主题，支持长图和网页报告。以饭票收据显示真实 Token 消耗，用内心 OS 便签、摸鱼雷达、“嗯哼，这样啊”反应、铁盆锐评和 DeepSleep 交班串起日报。既有身体和表情图层内嵌一次后共享，零消息与高消息可切换角色演出；手机端自动调整卡片布局。
-
-使用 `/设置模板 deepseek_maid`，或在配置页选择「DeepSeek 鲸鱼女仆娘」。本主题的固定栏目标题使用女仆口吻，分析数据与 LLM 提示词沿用现有配置。
-
-角色便签和固定反应属于主题小剧场，群友金句与分析结果按原数据展示。
-
-<a href="assets/deepseek_maid-demo.jpg"><img src="assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
-
-代码沿用项目 MIT；本主题角色美术及其改绘按 CC BY-NC-SA 4.0，署名与范围见 [素材说明](assets/deepseek_maid/SOURCE-NOTICE.md)。
 
 ### 2. **每日群漫画**：将群分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
 
