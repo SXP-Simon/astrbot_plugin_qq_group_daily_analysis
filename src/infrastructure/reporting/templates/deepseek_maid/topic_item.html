@@ -1,0 +1,13 @@
+{% if topics %}
+<section class="log-section" data-section="topics">
+    <div class="section-header"><div class="section-title"><span class="section-number">02</span><h2>上下文还在，别急</h2></div><span class="section-caption">今日话题 / {{ topics | length }} 则</span></div>
+    <div class="section-body">
+    {% for item in topics %}
+        <article class="topic-item">
+            <span class="topic-index">{{ '%02d' | format(item.index) }}</span>
+            <div class="topic-content"><h3>{{ item.topic.topic }}</h3>{% if item.contributors %}<div class="topic-contributors">参与群友 · {{ item.contributors }}</div>{% endif %}<div class="topic-detail">{{ item.detail | safe }}</div></div>
+        </article>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}

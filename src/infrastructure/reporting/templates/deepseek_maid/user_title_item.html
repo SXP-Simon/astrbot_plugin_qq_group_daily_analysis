@@ -1,0 +1,14 @@
+{% if titles %}
+<section class="log-section" data-section="portraits">
+    <div class="section-header"><div class="section-title"><span class="section-number">03</span><h2>今日鱼塘图鉴</h2></div><span class="section-caption">群友画像</span></div>
+    <div class="section-body portrait-grid">
+    {% for item in titles %}
+        <article class="portrait-card">
+            <div class="user-header"><div class="user-avatar">{% if item.avatar_data %}<img src="{{ item.avatar_data }}" alt="群友头像">{% else %}<span aria-hidden="true">✦</span>{% endif %}</div><div class="user-info"><div class="user-name">{{ '匿名群友' if hide_user_names else item.name }}</div><div class="user-badges"><span class="user-badge">{{ item.title }}</span><span class="user-badge personality">{{ item.profile_display or item.mbti }}</span></div></div></div>
+            <div class="user-reason">{% if hide_user_names %}{{ item.reason | safe }}{% else %}{{ item.reason }}{% endif %}</div>
+            {% if item.profile_image %}<img class="profile-watermark" src="{{ item.profile_image }}" alt="" style="object-fit:{{ item.profile_image_size_mode or 'contain' }};opacity:{{ item.profile_image_opacity or 0.12 }}">{% endif %}
+        </article>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
