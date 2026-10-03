@@ -81,15 +81,31 @@ pnpm dev
      ```bash
      npx pyright
      ```
-6. **DDD 领域驱动设计分层准则 (DDD Layering Standards)**：
+6. **DDD 领域驱动设计与领域类型优先 (DDD & Domain Types First)**：
    * **领域层 (`src/domain/`)**：纯业务核心，不依赖具体外部框架与基础设施；
      - `entities/`：专职存放具有生命周期与持久化状态的聚合根（如 `IncrementalBatch`, `IncrementalState`）；
      - `value_objects/`：存放所有不可变值对象（如 `SummaryTopic`, `UserTitle`, `GoldenQuote`, `QualityReview`, `GroupStatistics`, `UnifiedMessage` 等），严禁设立模糊的 `models/` 目录；
      - `repositories/`：定义仓储与外部能力的纯抽象接口（如 `IAnalysisProvider`, `IConfigProvider`）；
      - `services/`：跨实体的纯领域计算规则（如 `IncrementalMergeService`, `StatisticsService`）。
+   * **插件内部严禁不必要的反射 (Zero Unnecessary Internal Reflection)**：
+     - 插件内部业务链路（`domain/`, `application/`, `infrastructure/` 内部各模块）必须 100% 依赖领域实体、值对象、强类型 DTO 与 Protocol 契约；
+     - **严禁**在插件内部模块间使用 `getattr`/`hasattr`/`setattr` 或传递模糊的 `object`/`dict`/`Any`；所有属性与方法调用必须在静态分析期确定且支持 IDE F12 追踪。
    * **应用服务层 (`src/application/services/`)**：编排核心用例，杜绝上帝类（如将增量分析、断点恢复拆分至独立用例服务）；
    * **基础设施层 (`src/infrastructure/`)**：具体技术实现（适配器、渲染器、LLM 分析器、配置迁移器、持久化仓储等）。
-7. **一键格式化、自动修复 Lint 与单元测试**：
+7. **防腐层 (ACL) 规范与 AstrBot F12 直达开发体验 (Disciplined ACL & Seamless DX)**：
+   * **只做“必要的反射”**：反射仅允许出现在基础设施层（如 `infrastructure/platform/`, `infrastructure/webui/`）与 AstrBot 宿主框架交互的防腐边界处，用于兼容 AstrBot 跨版本 API 变动、单测 Mock 桩及框架未初始化场景；
+   * **兼顾运行时防腐与开发期 F12 直达**：**严禁因为使用了 `getattr` 防腐就放弃静态类型**。必须在 `if TYPE_CHECKING:` 下引入 AstrBot 官方核心类型（如 `Context`, `AstrBotConfigManager`, `PlatformManager`, `ProviderManager`, `PersonaManager` 等），并在调用处为局部变量显式声明强类型：
+     ```python
+     if TYPE_CHECKING:
+         from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+
+     # 运行时防腐隔离 + 开发期 F12 源码直达：
+     acm: AstrBotConfigManager | None = getattr(self._context, "astrbot_config_mgr", None)
+     if acm is not None and hasattr(acm, "get_conf"):
+         conf = acm.get_conf(umo)  # 开发者按 F12 即可无缝跳转至 AstrBot 源码定义
+     ```
+   * 这一实践在保证插件运行期弹性解耦与容错的同时，实现了插件与 AstrBot 底层交互时 100% 强类型智能提示与源码直达跳转。
+8. **一键格式化、自动修复 Lint 与单元测试**：
    * 强烈推荐使用一键格式化与自动修复指令（自动消除未使用的 import、调整 import 顺序及代码风格），提交前保证静态类型检查与测试全部通过：
      ```bash
      uv run ruff format . ; uv run ruff check . --fix

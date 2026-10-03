@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ..platform.factory import PlatformAdapterFactory
 
@@ -54,6 +55,13 @@ class ScheduledTargetResolver:
             )
             for platform_id, adapter in adapters.items():
                 try:
+                    if not self.bot_manager.is_plugin_enabled(
+                        str(platform_id), PLUGIN_NAME, group_id=str(group_id)
+                    ):
+                        logger.debug(
+                            f"平台 {platform_id} 对应的配置文件未启用插件，跳过群 {group_id} 探测"
+                        )
+                        continue
                     if adapter:
                         info = await adapter.get_group_info(str(group_id))
                         if info:
@@ -128,8 +136,20 @@ class ScheduledTargetResolver:
             group_id = str(group_id_orig)
             umo = f"{platform_id}:GroupMessage:{group_id}"
 
+            # 检查该群聊所属的会话/配置文件是否启用了本插件
+            if not self.bot_manager.is_plugin_enabled(
+                platform_id, PLUGIN_NAME, group_id=group_id
+            ):
+                logger.debug(
+                    f"[调度决策] 群聊 {umo} 所在 AstrBot 配置文件未启用此插件，跳过计划分析"
+                )
+                continue
+
             # 配置管理器统一处理基础名单与定时 inherit/白黑名单
             if not self.config_manager.is_scheduled_group_allowed(umo):
+                logger.debug(
+                    f"[调度决策] 群聊 {umo} 未通过定时分析名单过滤 (scheduled_groups)，跳过计划分析"
+                )
                 continue
 
             # 配置管理器统一处理增量 inherit/白黑名单
@@ -139,8 +159,14 @@ class ScheduledTargetResolver:
                 effective_mode = "traditional"
 
             if mode_filter and effective_mode != mode_filter:
+                logger.debug(
+                    f"[调度决策] 群聊 {umo} (模式: {effective_mode}) 与当前执行的模式过滤 '{mode_filter}' 不符，跳过"
+                )
                 continue
 
+            logger.debug(
+                f"[调度决策] 群聊 {umo} 准入通过，决议执行模式: {effective_mode}"
+            )
             target_key = (group_id, platform_id, effective_mode)
             if target_key not in seen_targets:
                 seen_targets.add(target_key)
@@ -179,12 +205,6 @@ class ScheduledTargetResolver:
         logger.info(f"[AutoScheduler] 正在扫描 {len(bot_ids)} 个平台的群聊资源...")
 
         for platform_id, bot_instance in bot_instances.items():
-            if not self.bot_manager.is_plugin_enabled(
-                platform_id, "astrbot_plugin_qq_group_daily_analysis"
-            ):
-                logger.debug(f"平台 {platform_id} 未启用此插件，跳过获取群列表")
-                continue
-
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if not adapter:
@@ -225,11 +245,20 @@ class ScheduledTargetResolver:
                             except Exception:
                                 p_name = None
 
+                        enabled_count = 0
                         for group_id in groups:
-                            all_groups.add((actual_platform_id, str(group_id)))
+                            if self.bot_manager.is_plugin_enabled(
+                                actual_platform_id, PLUGIN_NAME, group_id=group_id
+                            ):
+                                all_groups.add((actual_platform_id, str(group_id)))
+                                enabled_count += 1
+                            else:
+                                logger.debug(
+                                    f"群组 {actual_platform_id}:{group_id} 所在 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过"
+                                )
 
                         logger.info(
-                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 成功获取 {len(groups)} 个群组"
+                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 扫描到 {len(groups)} 个群组 (启用插件: {enabled_count} 个)"
                         )
                         continue
 

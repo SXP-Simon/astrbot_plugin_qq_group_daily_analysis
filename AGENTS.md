@@ -52,11 +52,17 @@
 
 ---
 
-## 4. 架构与设计原则
+## 4. 架构与设计原则 (Good Taste 架构准则)
 
-1. **领域驱动设计 (DDD)**：
+1. **领域驱动设计 (DDD) 与领域类型优先**：
    - 保持分层清晰：`domain`（核心业务实体与值对象）、`application`（用例服务）、`infrastructure`（平台适配、持久化、WebUI 路由）、`interfaces`（契约协议）。
-2. **KISS 原则与实用主义 (Inline-First)**：
+   - **插件内部纯强类型化**：插件业务链路（`domain/`, `application/`, `infrastructure/` 内部各模块）必须 100% 使用明确的领域实体（Entities）、不可变值对象（Value Objects）、强类型 DTO 与 Protocol 契约，严禁设立模糊的 `models/` 目录。
+   - **插件内部严禁不必要反射**：严禁在插件内部模块间使用 `getattr`/`hasattr`/`setattr` 或传递模糊的 `object`/`dict`/`Any`；所有调用在静态类型期必须清晰可解析。
+2. **防腐层 (ACL) 规范与 AstrBot F12 直达开发体验**：
+   - **只做“必要的反射”**：反射仅允许出现在基础设施防腐层（如 `infrastructure/platform/`, `infrastructure/webui/`）与 AstrBot 宿主框架交互的边界处，用于防御跨版本 API 变动、单测 Mock 桩及框架未初始化场景。
+   - **兼顾运行时防腐与开发期 F12 直达**：严禁因为使用 `getattr` 防腐就放弃静态类型。必须在 `if TYPE_CHECKING:` 下引入 AstrBot 官方类型（如 `Context`, `AstrBotConfigManager`, `PlatformManager`, `ProviderManager`, `PersonaManager` 等），并在局部变量上显式声明强类型（如 `acm: AstrBotConfigManager | None = getattr(self._context, "astrbot_config_mgr", None)`）。
+   - 确保开发者在 IDE 中对宿主属性或方法按 **F12** 可以 100% 直达 AstrBot 官方源码与类型签名。
+3. **KISS 原则与实用主义 (Inline-First)**：
    - 优先在线性主流程中实现紧凑逻辑，避免无意义的过度抽象，非必要不设立单次使用的 Helper 函数。
-3. **文件与报告规则**：
+4. **文件与报告规则**：
    - 严禁在仓库中生成如 `xxx_SUMMARY.md` 等冗余报告文件。

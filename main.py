@@ -399,6 +399,10 @@ class GroupDailyAnalysis(Star):
     )
     async def count_incremental_group_message(self, event: AstrMessageEvent):
         """记录目标群消息，达到配置阈值后触发增量分析。"""
+        if not self.bot_manager.is_plugin_enabled(
+            event.get_platform_id(), PLUGIN_NAME, group_id=event.get_group_id()
+        ):
+            return
         if str(event.get_platform_name() or "").strip().lower() in {
             "qq_official",
             "qq_official_webhook",
@@ -413,6 +417,10 @@ class GroupDailyAnalysis(Star):
     @filter.platform_adapter_type(filter.PlatformAdapterType.SATORI)
     async def intercept_satori_messages(self, event: AstrMessageEvent):
         """拦截 Satori 群消息并存储到本地数据库"""
+        if not self.bot_manager.is_plugin_enabled(
+            event.get_platform_id(), PLUGIN_NAME, group_id=event.get_group_id()
+        ):
+            return
         try:
             stored = await self.message_processing_service.process_message(event)
             if stored and self.auto_scheduler:
@@ -426,6 +434,10 @@ class GroupDailyAnalysis(Star):
     @filter.platform_adapter_type(filter.PlatformAdapterType.TELEGRAM)
     async def intercept_telegram_messages(self, event: AstrMessageEvent):
         """拦截 Telegram 群消息并存储到数据库"""
+        if not self.bot_manager.is_plugin_enabled(
+            event.get_platform_id(), PLUGIN_NAME, group_id=event.get_group_id()
+        ):
+            return
         try:
             stored = await self.message_processing_service.process_message(event)
             if stored and self.auto_scheduler:
@@ -442,6 +454,10 @@ class GroupDailyAnalysis(Star):
     )
     async def intercept_qq_official_messages(self, event: AstrMessageEvent):
         """缓存 QQ 官方机器人群消息"""
+        if not self.bot_manager.is_plugin_enabled(
+            event.get_platform_id(), PLUGIN_NAME, group_id=event.get_group_id()
+        ):
+            return
         msg_obj = event.message_obj
         raw_message = msg_obj.raw_message if msg_obj else None
         if isinstance(raw_message, dict):

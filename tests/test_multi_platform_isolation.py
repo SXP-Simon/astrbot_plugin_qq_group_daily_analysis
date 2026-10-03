@@ -407,3 +407,162 @@ def test_platform_adapter_time_window_calculation_boundaries():
     )
     assert dt_naive.tzinfo is None
     assert int(dt_naive.timestamp()) == one_day_ago_ts
+
+
+@pytest.mark.asyncio
+async def test_multi_bot_profile_isolation_scheduled_and_incremental():
+    """验证同群多 QQ 机器人下，未开启插件的 Bot 配置文件（如亚托莉2号）不会触发定时群分析。"""
+    config_mgr = FakeConfigManager(whitelist=["*"])
+    bot_mgr = BotManager(config_mgr)
+
+    # 1. 模拟两个 QQ 机器人（例如账号1和亚托莉2号）
+    bot1_client = MagicMock()
+    bot1_client.call_action = AsyncMock()
+    bot2_client = MagicMock()
+    bot2_client.call_action = AsyncMock()
+
+    bot1_platform = FakePlatform("aiocqhttp_bot1", "aiocqhttp", bot1_client)
+    bot2_platform = FakePlatform("aiocqhttp_bot2_atri2", "aiocqhttp", bot2_client)
+
+    # 2. 模拟 AstrBotConfigManager (ACM)，bot1 使用 default 开启插件，bot2 使用 atri2 配置文件未开启
+    class FakeACM:
+        def __init__(self):
+            self.confs = {
+                "default": {"plugin_set": ["*"]},
+                "atri2_profile": {"plugin_set": ["astrbot_plugin_other"]},
+            }
+
+        def get_conf(self, umo: str | None) -> dict:
+            if not umo:
+                return self.confs["default"]
+            if umo.startswith("aiocqhttp_bot2_atri2:"):
+                return self.confs["atri2_profile"]
+            return self.confs["default"]
+
+    fake_context = MagicMock()
+    fake_context.platform_manager = MagicMock()
+    fake_context.platform_manager.get_insts.return_value = [
+        bot1_platform,
+        bot2_platform,
+    ]
+    fake_context.astrbot_config_mgr = FakeACM()
+
+    bot_mgr.set_context(fake_context)
+    await bot_mgr.auto_discover_bot_instances()
+
+    adapter1 = bot_mgr.get_adapter("aiocqhttp_bot1")
+    adapter2 = bot_mgr.get_adapter("aiocqhttp_bot2_atri2")
+    assert adapter1 is not None
+    assert adapter2 is not None
+
+    # 两个 Bot 都在群 888111 和 888222 中
+    adapter1.get_group_list = AsyncMock(return_value=["888111", "888222"])
+    adapter2.get_group_list = AsyncMock(return_value=["888111", "888222"])
+
+    scheduler = AutoScheduler(
+        config_manager=config_mgr,
+        analysis_service=MagicMock(),
+        bot_manager=bot_mgr,
+    )
+
+    # 3. 验证 _get_all_groups 严格跳过了未开启插件的 Bot2
+    all_groups = await scheduler._get_all_groups()
+    assert len(all_groups) == 2
+    assert ("aiocqhttp_bot1", "888111") in all_groups
+    assert ("aiocqhttp_bot1", "888222") in all_groups
+    # bot2 绝对不能被扫描进来
+    assert ("aiocqhttp_bot2_atri2", "888111") not in all_groups
+    assert ("aiocqhttp_bot2_atri2", "888222") not in all_groups
+
+    # 4. 验证计划分析调度目标 target 列表
+    targets = await scheduler._get_scheduled_targets()
+    assert len(targets) == 2
+    assert ("888111", "aiocqhttp_bot1", "traditional") in targets
+    assert ("888222", "aiocqhttp_bot1", "traditional") in targets
+
+    # 5. 验证增量消息记录：Bot2 的消息被忽略，Bot1 的消息被正常记录
+    event_bot2 = MagicMock()
+    event_bot2.get_platform_id.return_value = "aiocqhttp_bot2_atri2"
+    event_bot2.get_group_id.return_value = "888111"
+    event_bot2.get_sender_id.return_value = "user_1"
+    event_bot2.get_self_id.return_value = "bot_2"
+    event_bot2.unified_msg_origin = "aiocqhttp_bot2_atri2:GroupMessage:888111"
+
+    scheduler.incremental_trigger = MagicMock()
+    scheduler.incremental_trigger.record_message = AsyncMock(return_value=True)
+
+    result_bot2 = await scheduler.record_incremental_message(event_bot2)
+    assert result_bot2 is False
+    scheduler.incremental_trigger.record_message.assert_not_called()
+
+    event_bot1 = MagicMock()
+    event_bot1.get_platform_id.return_value = "aiocqhttp_bot1"
+    event_bot1.get_group_id.return_value = "888111"
+    event_bot1.get_sender_id.return_value = "user_1"
+    event_bot1.get_self_id.return_value = "bot_1"
+    event_bot1.unified_msg_origin = "aiocqhttp_bot1:GroupMessage:888111"
+
+    result_bot1 = await scheduler.record_incremental_message(event_bot1)
+    assert result_bot1 is True
+    scheduler.incremental_trigger.record_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_group_level_profile_override_when_platform_disabled():
+    """Verify group-level Profile enables analysis even if platform default is disabled."""
+    config_mgr = FakeConfigManager()
+    bot_mgr = BotManager(config_mgr)
+
+    mock_acm = MagicMock()
+
+    # 模拟路由：
+    # aiocqhttp_bot:GroupMessage:1001 -> 启用插件
+    # aiocqhttp_bot:GroupMessage:1002 -> 继承平台默认 (未启用)
+    # aiocqhttp_bot:: -> 未启用插件
+    def acm_router(umo: str | None = None):
+        if umo == "aiocqhttp_bot:GroupMessage:1001":
+            return {"plugin_set": ["astrbot_plugin_qq_group_daily_analysis"]}
+        elif umo == "aiocqhttp_bot:GroupMessage:1002":
+            return {"plugin_set": []}
+        elif umo == "aiocqhttp_bot::":
+            return {"plugin_set": []}
+        return {"plugin_set": []}
+
+    mock_acm.get_conf.side_effect = acm_router
+
+    mock_client = MagicMock()
+    mock_client.call_action = AsyncMock()
+
+    fake_platform = FakePlatform("aiocqhttp_bot", "aiocqhttp", mock_client)
+    mock_platform_manager = MagicMock()
+    mock_platform_manager.get_insts.return_value = [fake_platform]
+
+    fake_context = MagicMock()
+    fake_context.platform_manager = mock_platform_manager
+    fake_context.astrbot_config_mgr = mock_acm
+
+    bot_mgr.set_context(fake_context)
+    await bot_mgr.auto_discover_bot_instances()
+
+    adapter = bot_mgr.get_adapter("aiocqhttp_bot")
+    assert adapter is not None
+    adapter.get_group_list = AsyncMock(return_value=["1001", "1002"])
+
+    scheduler = AutoScheduler(
+        config_manager=config_mgr,
+        analysis_service=MagicMock(),
+        bot_manager=bot_mgr,
+    )
+
+    # 1. 扫描群聊：只有 1001 被包含进来，1002 被跳过
+    all_groups = await scheduler._get_all_groups()
+    assert len(all_groups) == 1
+    assert ("aiocqhttp_bot", "1001") in all_groups
+    assert ("aiocqhttp_bot", "1002") not in all_groups
+
+    # 2. 定时分析目标：只有 1001 生成目标
+    targets = await scheduler._get_scheduled_targets()
+    assert len(targets) == 1
+    assert targets[0] == ("1001", "aiocqhttp_bot", "traditional")
+
+
