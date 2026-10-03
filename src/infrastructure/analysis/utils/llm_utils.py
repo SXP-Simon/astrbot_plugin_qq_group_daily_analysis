@@ -179,6 +179,44 @@ def _is_response_format_unsupported_error(error: Exception) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
+def _is_content_risk_error(error: Exception) -> bool:
+    """
+    判断是否为模型提供商的内容安全审查/敏感词风控拦截 (Content Risk / Moderation Filter)。
+    覆盖: DeepSeek (Content Exists Risk), OpenAI/Azure (content_filter), GLM, 通义千问, 百度千帆, 月之暗面, Gemini 等。
+    """
+    text = str(error).lower()
+    patterns = [
+        # DeepSeek 典型错误标识
+        "content exists risk",
+        # OpenAI, Azure 及聚合中转网关标准标识
+        "content_filter",
+        "content management policy",
+        "content_policy_violation",
+        "sensitive_words",
+        "triggering azure openai",
+        # 国内大模型服务商特征（GLM、通义千问、百度千帆、Moonshot）
+        "datainspectionfailed",
+        "inappropriate content",
+        "安全风险",
+        "敏感词",
+        "安全策略",
+        # Gemini 与通用安全评级
+        "harm_category",
+        "safety rating",
+    ]
+    if any(pattern in text for pattern in patterns):
+        return True
+
+    # 结构化错误码识别（GLM 1301/1302, 百度千帆 336003/336100 等）
+    import re
+
+    code_pattern = re.compile(
+        r"(?:code['\":\s]+|error_code['\":\s]+|\b)(?:1301|1302|336003|336100)\b",
+        re.I,
+    )
+    return bool(code_pattern.search(text))
+
+
 def get_provider_circuit_breaker(provider_id: str) -> CircuitBreaker:
     if provider_id not in _circuit_breakers:
         _circuit_breakers[provider_id] = CircuitBreaker(name=f"provider_{provider_id}")
@@ -784,6 +822,11 @@ async def call_provider_with_retry(
                         break
             if r_format is not None and _is_response_format_unsupported_error(err):
                 raise err
+            if _is_content_risk_error(err):
+                logger.debug(
+                    f"[LLM 熔断保护] 请求命中了上游内容风控拦截，不计入 Provider[{pid}] 熔断器失败计数。"
+                )
+                raise err
             cb.record_failure()
             raise err
 
@@ -796,8 +839,10 @@ async def call_provider_with_retry(
     # 惰性降级标记：仅在 primary provider 重试用尽后才 resolve fallback
     needs_fallback = provider_id_key is not None
 
-    for i, (current_pid, is_fallback) in enumerate(attempt_queue):
-        attempt_num = i + 1
+    queue_index = 0
+    while queue_index < len(attempt_queue):
+        current_pid, is_fallback = attempt_queue[queue_index]
+        attempt_num = queue_index + 1
 
         # 修复状态污染：如果切换了全新的 Provider，必须重置 response_format 约束
         if current_pid != previous_pid:
@@ -846,9 +891,52 @@ async def call_provider_with_retry(
                 except Exception as inner_e:
                     last_exc = inner_e
 
+            # 处理上游内容安全审查/敏感词风控拦截 (Content Risk / Moderation Filter)
+            if _is_content_risk_error(last_exc):
+                logger.warning(
+                    f"{prefix}[LLM 内容风控拦截] 上游模型服务商触发了安全审查拒绝 (Content Risk / Moderation Filter)！\n"
+                    f"  - 错误详情: {last_exc}\n"
+                    f"  - 影响说明: 当前 Provider [{current_pid}] 无法处理含有受限/敏感词的群聊上下文，已快速短路跳过当前模型的重复重试。\n"
+                    f"  - 排查与解决建议:\n"
+                    f"    1. 更换为安全审核策略更宽松、中立或本地部署的模型 (如 Ollama / 海外模型)，并配置备用 Provider；\n"
+                    f"    2. 为当前分析模型配置学术研究/客观数据观察者视角的分析人格 (Persona) 或 Jailbreak 提示词；\n"
+                    f"    3. 检查并适当调整分析提示词模板 (Prompt)，避免出现易被上游安全审查误杀的引导词；\n"
+                    f"    4. 在插件设置中配置群消息过滤词，过滤群内特定违规发言。"
+                )
+
+                # 惰性降级：若主 Provider 遭遇风控且存在未注入的 fallback，立即注入 fallback 并切换
+                if not is_fallback and needs_fallback:
+                    fallback_provider_id = await get_provider_id_with_fallback(
+                        context, config_manager, None, umo
+                    )
+                    if (
+                        fallback_provider_id
+                        and fallback_provider_id != specific_provider_id
+                    ):
+                        needs_fallback = False
+                        # 剔除当前主 Provider 的所有后续同质重试
+                        attempt_queue = [
+                            item
+                            for idx, item in enumerate(attempt_queue)
+                            if idx <= queue_index or item[0] != current_pid
+                        ]
+                        for _ in range(retries):
+                            attempt_queue.append((fallback_provider_id, True))
+                        queue_index += 1
+                        continue
+
+                # 若无 fallback 或 fallback 同样遭遇风控，立即跳过所有属于当前 Provider 的重试
+                attempt_queue = [
+                    item
+                    for idx, item in enumerate(attempt_queue)
+                    if idx <= queue_index or item[0] != current_pid
+                ]
+                queue_index += 1
+                continue
+
             logger.warning(f"{prefix}请求失败: {last_exc}")
             # 惰性降级：仅当所有 primary provider 的重试都耗尽后才 resolve 并注入 fallback
-            if not is_fallback and i == retries - 1 and needs_fallback:
+            if not is_fallback and queue_index == retries - 1 and needs_fallback:
                 fallback_provider_id = await get_provider_id_with_fallback(
                     context, config_manager, None, umo
                 )
@@ -859,12 +947,14 @@ async def call_provider_with_retry(
                     for _ in range(retries):
                         attempt_queue.append((fallback_provider_id, True))
 
-            is_last_attempt = i == len(attempt_queue) - 1
+            is_last_attempt = queue_index == len(attempt_queue) - 1
             if not is_last_attempt:
                 # Exponential backoff with jitter: backoff * (2 ^ (attempt_num - 1)) + random jitter
                 sleep_time = backoff * (2 ** (attempt_num - 1)) + random.uniform(0, 1)
                 logger.debug(f"等待 {sleep_time:.2f} 秒后重试...")
                 await asyncio.sleep(sleep_time)
+
+            queue_index += 1
 
     logger.error(f"LLM请求队列全部耗尽，最终失败: {last_exc}")
     return None
