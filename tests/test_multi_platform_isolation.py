@@ -506,3 +506,63 @@ async def test_multi_bot_profile_isolation_scheduled_and_incremental():
     assert result_bot1 is True
     scheduler.incremental_trigger.record_message.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_group_level_profile_override_when_platform_disabled():
+    """Verify group-level Profile enables analysis even if platform default is disabled."""
+    config_mgr = FakeConfigManager()
+    bot_mgr = BotManager(config_mgr)
+
+    mock_acm = MagicMock()
+
+    # 模拟路由：
+    # aiocqhttp_bot:GroupMessage:1001 -> 启用插件
+    # aiocqhttp_bot:GroupMessage:1002 -> 继承平台默认 (未启用)
+    # aiocqhttp_bot:: -> 未启用插件
+    def acm_router(umo: str | None = None):
+        if umo == "aiocqhttp_bot:GroupMessage:1001":
+            return {"plugin_set": ["astrbot_plugin_qq_group_daily_analysis"]}
+        elif umo == "aiocqhttp_bot:GroupMessage:1002":
+            return {"plugin_set": []}
+        elif umo == "aiocqhttp_bot::":
+            return {"plugin_set": []}
+        return {"plugin_set": []}
+
+    mock_acm.get_conf.side_effect = acm_router
+
+    mock_client = MagicMock()
+    mock_client.call_action = AsyncMock()
+
+    fake_platform = FakePlatform("aiocqhttp_bot", "aiocqhttp", mock_client)
+    mock_platform_manager = MagicMock()
+    mock_platform_manager.get_insts.return_value = [fake_platform]
+
+    fake_context = MagicMock()
+    fake_context.platform_manager = mock_platform_manager
+    fake_context.astrbot_config_mgr = mock_acm
+
+    bot_mgr.set_context(fake_context)
+    await bot_mgr.auto_discover_bot_instances()
+
+    adapter = bot_mgr.get_adapter("aiocqhttp_bot")
+    assert adapter is not None
+    adapter.get_group_list = AsyncMock(return_value=["1001", "1002"])
+
+    scheduler = AutoScheduler(
+        config_manager=config_mgr,
+        analysis_service=MagicMock(),
+        bot_manager=bot_mgr,
+    )
+
+    # 1. 扫描群聊：只有 1001 被包含进来，1002 被跳过
+    all_groups = await scheduler._get_all_groups()
+    assert len(all_groups) == 1
+    assert ("aiocqhttp_bot", "1001") in all_groups
+    assert ("aiocqhttp_bot", "1002") not in all_groups
+
+    # 2. 定时分析目标：只有 1001 生成目标
+    targets = await scheduler._get_scheduled_targets()
+    assert len(targets) == 1
+    assert targets[0] == ("1001", "aiocqhttp_bot", "traditional")
+
+

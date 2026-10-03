@@ -196,12 +196,6 @@ class ScheduledTargetResolver:
         logger.info(f"[AutoScheduler] 正在扫描 {len(bot_ids)} 个平台的群聊资源...")
 
         for platform_id, bot_instance in bot_instances.items():
-            if not self.bot_manager.is_plugin_enabled(platform_id, PLUGIN_NAME):
-                logger.info(
-                    f"平台 {platform_id} 所属的 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过获取群列表"
-                )
-                continue
-
             try:
                 adapter = self.bot_manager.get_adapter(platform_id)
                 if not adapter:
@@ -242,11 +236,20 @@ class ScheduledTargetResolver:
                             except Exception:
                                 p_name = None
 
+                        enabled_count = 0
                         for group_id in groups:
-                            all_groups.add((actual_platform_id, str(group_id)))
+                            if self.bot_manager.is_plugin_enabled(
+                                actual_platform_id, PLUGIN_NAME, group_id=group_id
+                            ):
+                                all_groups.add((actual_platform_id, str(group_id)))
+                                enabled_count += 1
+                            else:
+                                logger.debug(
+                                    f"群组 {actual_platform_id}:{group_id} 所在 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过"
+                                )
 
                         logger.info(
-                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 成功获取 {len(groups)} 个群组"
+                            f"平台 {actual_platform_id} ({p_name or 'unknown'}) 扫描到 {len(groups)} 个群组 (启用插件: {enabled_count} 个)"
                         )
                         continue
 
