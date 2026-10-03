@@ -1060,3 +1060,172 @@ def test_call_provider_resolves_timeout_from_provider_config():
     asyncio.run(scenario())
 
 
+def test_is_content_risk_error_patterns():
+    """验证 _is_content_risk_error 对主流模型风控报错的模式识别准确性。"""
+    from src.infrastructure.analysis.utils.llm_utils import _is_content_risk_error
+
+    # DeepSeek 400 Content Exists Risk
+    err_deepseek = RuntimeError("Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: 3f16-9-fbf)', 'type': 'invalid_request_error'}}")
+    assert _is_content_risk_error(err_deepseek) is True
+
+    # OpenAI / Azure content_filter
+    err_openai = RuntimeError("Error code: 400 - The response was filtered due to the prompt triggering Azure OpenAI's content management policy.")
+    assert _is_content_risk_error(err_openai) is True
+
+    err_cf_code = RuntimeError("{'code': 'content_filter', 'message': 'sensitive_words_detected'}")
+    assert _is_content_risk_error(err_cf_code) is True
+
+    # 通义千问 / DashScope
+    err_qwen = RuntimeError("DataInspectionFailed: Input data may contain inappropriate content.")
+    assert _is_content_risk_error(err_qwen) is True
+
+    # 智谱 / 百度千帆
+    err_glm = RuntimeError("1301: 系统检测到输入内容存在安全风险")
+    assert _is_content_risk_error(err_glm) is True
+
+    # 常规错误不应误判
+    err_timeout = TimeoutError("Request timed out after 30s")
+    assert _is_content_risk_error(err_timeout) is False
+
+    err_500 = RuntimeError("500 Internal Server Error")
+    assert _is_content_risk_error(err_500) is False
+
+
+def test_content_risk_fast_fails_without_retrying_same_provider_and_protects_circuit_breaker():
+    """验证当模型抛出风控异常时，不记录熔断器失败，且立即短路跳过当前 Provider 的后续同质重试。"""
+    from src.infrastructure.analysis.utils.llm_utils import get_provider_circuit_breaker
+
+    class FakeProvider:
+        def __init__(self, pid: str):
+            self.id = pid
+            self.provider_config = {"model": "deepseek-chat"}
+
+    class MockContext:
+        def __init__(self):
+            self.call_count = 0
+            self.p1 = FakeProvider("deepseek-primary")
+
+        def get_provider_by_id(self, provider_id: str):
+            if provider_id == "deepseek-primary":
+                return self.p1
+            return None
+
+        async def get_current_chat_provider_id(self, umo: str | None = None):
+            return "deepseek-primary"
+
+        async def llm_generate(self, **kwargs):
+            self.call_count += 1
+            raise RuntimeError("Error code: 400 - {'error': {'message': 'Content Exists Risk (request_id: mock-123)'}}")
+
+    class MockConfig:
+        def get_llm_retries(self):
+            return 5  # 配置了 5 次重试
+
+        def get_llm_backoff(self):
+            return 0
+
+        def get_llm_hard_timeout(self):
+            return 30
+
+        def get_enable_streaming_llm_call(self):
+            return False
+
+        def get_topic_provider_id(self):
+            return "deepseek-primary"
+
+        def get_llm_provider_id(self):
+            return "deepseek-primary"
+
+    async def scenario():
+        ctx = MockContext()
+        cfg = MockConfig()
+        cb = get_provider_circuit_breaker("deepseek-primary")
+        initial_failures = cb.failure_count
+
+        resp = await call_provider_with_retry(
+            context=ctx,
+            config_manager=cfg,
+            prompt="包含敏感测试内容的群聊记录",
+            provider_id_key="topic_provider_id",
+            observation_label="话题分析",
+        )
+
+        assert resp is None
+        # 1. 验证短路：虽然配置了 5 次重试，但只调用了 1 次即快速失败退出
+        assert ctx.call_count == 1
+        # 2. 验证熔断保护：风控错误未增加熔断器的 failure_count
+        assert cb.failure_count == initial_failures
+
+    asyncio.run(scenario())
+
+
+def test_content_risk_switches_to_fallback_provider_when_available():
+    """验证当主 Provider 遭遇内容风控时，能够快速短路并切换至备用 Fallback Provider。"""
+    class FakeProvider:
+        def __init__(self, pid: str, model: str):
+            self.id = pid
+            self.provider_config = {"model": model}
+
+    class MockContext:
+        def __init__(self):
+            self.called_providers = []
+            self.p_main = FakeProvider("main-deepseek", "deepseek-chat")
+            self.p_fallback = FakeProvider("fallback-ollama", "llama3")
+
+        def get_provider_by_id(self, provider_id: str):
+            if provider_id == "main-deepseek":
+                return self.p_main
+            if provider_id == "fallback-ollama":
+                return self.p_fallback
+            return None
+
+        async def get_current_chat_provider_id(self, umo: str | None = None):
+            return "fallback-ollama"
+
+        async def llm_generate(self, **kwargs):
+            pid = kwargs.get("chat_provider_id")
+            self.called_providers.append(pid)
+            if pid == "main-deepseek":
+                raise RuntimeError("400 Content Exists Risk: sensitive keywords detected")
+            return LLMResponse(role="assistant", completion_text="fallback success")
+
+    class MockConfig:
+        def get_llm_retries(self):
+            return 3  # 每次重试 3 次
+
+        def get_llm_backoff(self):
+            return 0
+
+        def get_llm_hard_timeout(self):
+            return 30
+
+        def get_enable_streaming_llm_call(self):
+            return False
+
+        def get_topic_provider_id(self):
+            return "main-deepseek"
+
+        def get_llm_provider_id(self):
+            return "fallback-ollama"
+
+    async def scenario():
+        ctx = MockContext()
+        cfg = MockConfig()
+
+        resp = await call_provider_with_retry(
+            context=ctx,
+            config_manager=cfg,
+            prompt="测试话题",
+            provider_id_key="topic_provider_id",
+            observation_label="话题分析",
+        )
+
+        assert resp is not None
+        assert resp.completion_text == "fallback success"
+        # 主 provider 仅尝试 1 次就短路切换至 fallback，而不是盲目重试 3 次 main
+        assert ctx.called_providers == ["main-deepseek", "fallback-ollama"]
+
+    asyncio.run(scenario())
+
+
+
