@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from ..platform.factory import PlatformAdapterFactory
 
@@ -54,6 +55,13 @@ class ScheduledTargetResolver:
             )
             for platform_id, adapter in adapters.items():
                 try:
+                    if not self.bot_manager.is_plugin_enabled(
+                        str(platform_id), PLUGIN_NAME, group_id=str(group_id)
+                    ):
+                        logger.debug(
+                            f"平台 {platform_id} 对应的配置文件未启用插件，跳过群 {group_id} 探测"
+                        )
+                        continue
                     if adapter:
                         info = await adapter.get_group_info(str(group_id))
                         if info:
@@ -128,6 +136,15 @@ class ScheduledTargetResolver:
             group_id = str(group_id_orig)
             umo = f"{platform_id}:GroupMessage:{group_id}"
 
+            # 检查该群聊所属的会话/配置文件是否启用了本插件
+            if not self.bot_manager.is_plugin_enabled(
+                platform_id, PLUGIN_NAME, group_id=group_id
+            ):
+                logger.debug(
+                    f"群聊 {umo} 所在 AstrBot 配置文件未启用此插件，跳过计划分析"
+                )
+                continue
+
             # 配置管理器统一处理基础名单与定时 inherit/白黑名单
             if not self.config_manager.is_scheduled_group_allowed(umo):
                 continue
@@ -179,10 +196,10 @@ class ScheduledTargetResolver:
         logger.info(f"[AutoScheduler] 正在扫描 {len(bot_ids)} 个平台的群聊资源...")
 
         for platform_id, bot_instance in bot_instances.items():
-            if not self.bot_manager.is_plugin_enabled(
-                platform_id, "astrbot_plugin_qq_group_daily_analysis"
-            ):
-                logger.debug(f"平台 {platform_id} 未启用此插件，跳过获取群列表")
+            if not self.bot_manager.is_plugin_enabled(platform_id, PLUGIN_NAME):
+                logger.info(
+                    f"平台 {platform_id} 所属的 AstrBot 配置文件未启用插件 {PLUGIN_NAME}，跳过获取群列表"
+                )
                 continue
 
             try:
