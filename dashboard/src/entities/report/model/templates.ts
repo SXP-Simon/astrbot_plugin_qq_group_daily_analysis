@@ -90,6 +90,13 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
     tagColor: "gold",
   },
   {
+    key: "deepseek_maid",
+    name: "DeepSeek 鲸鱼女仆娘",
+    desc: "大肥鱼打工实录：饭票账单、内心OS、摸鱼雷达与DeepSleep交班",
+    tag: "蓝白女仆",
+    tagColor: "blue",
+  },
+  {
     key: "format",
     name: "Format (标准卡片)",
     desc: "标准规范报表卡片，商务整洁",
@@ -118,6 +125,7 @@ export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
   { id: "BlueArchive", label: "蔚蓝档案 (BlueArchive)", is_custom: false },
   { id: "simple", label: "极简黑白 (Simple)", is_custom: false },
   { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false },
+  { id: "deepseek_maid", label: "DeepSeek 鲸鱼女仆娘", is_custom: false },
   { id: "format", label: "标准卡片 (Format)", is_custom: false },
 ];
 

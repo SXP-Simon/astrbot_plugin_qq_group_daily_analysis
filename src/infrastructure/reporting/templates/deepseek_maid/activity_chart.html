@@ -1,0 +1,6 @@
+<section class="log-section" data-section="activity">
+    <div class="section-header"><div class="section-title"><span class="section-number">01</span><h2>摸鱼雷达</h2></div><span class="section-caption">24H 群聊活跃度</span></div>
+    <div class="section-body"><p class="section-note">本鱼巡逻过了：群里在哪些时段最热闹？<span class="chart-clarification">柱高按当天消息峰值归一化</span></p><div class="chart-bars" role="img" aria-label="24小时群聊消息活跃度">
+    {% for item in chart_data %}<div class="chart-column" title="{{ item.hour }} 时：{{ item.count }} 条"><span class="chart-bar{% if item.percentage >= 90 %} peak{% endif %}" style="height:{{ item.percentage | float }}%"></span></div>{% endfor %}
+    </div><div class="chart-axis">{% for item in chart_data %}<span>{{ '%02d' | format(item.hour) if item.hour % 4 == 0 or item.hour == 23 else '' }}</span>{% endfor %}</div></div>
+</section>

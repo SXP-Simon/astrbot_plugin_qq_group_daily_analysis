@@ -39,6 +39,7 @@ class HTMLTemplates:
         "BlueArchive": "蔚蓝档案 (BlueArchive)",
         "simple": "极简黑白 (Simple)",
         "art_nouveau": "新艺术运动 (Art Nouveau)",
+        "deepseek_maid": "DeepSeek 鲸鱼女仆娘",
     }
 
     config_manager: ConfigManager
