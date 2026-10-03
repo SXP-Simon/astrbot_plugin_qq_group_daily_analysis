@@ -1079,9 +1079,15 @@ def test_is_content_risk_error_patterns():
     err_qwen = RuntimeError("DataInspectionFailed: Input data may contain inappropriate content.")
     assert _is_content_risk_error(err_qwen) is True
 
-    # 智谱 / 百度千帆
+    # 智谱 / 百度千帆 (含文本或纯数字代码)
     err_glm = RuntimeError("1301: 系统检测到输入内容存在安全风险")
     assert _is_content_risk_error(err_glm) is True
+
+    err_glm_code_only = RuntimeError("API error code: 1302")
+    assert _is_content_risk_error(err_glm_code_only) is True
+
+    err_baidu_code = RuntimeError("{'error_code': 336003, 'error_msg': 'custom error'}")
+    assert _is_content_risk_error(err_baidu_code) is True
 
     # 常规错误不应误判
     err_timeout = TimeoutError("Request timed out after 30s")
@@ -1089,6 +1095,9 @@ def test_is_content_risk_error_patterns():
 
     err_500 = RuntimeError("500 Internal Server Error")
     assert _is_content_risk_error(err_500) is False
+
+    err_random_number = RuntimeError("User ID 1301456 is not found")
+    assert _is_content_risk_error(err_random_number) is False
 
 
 def test_content_risk_fast_fails_without_retrying_same_provider_and_protects_circuit_breaker():

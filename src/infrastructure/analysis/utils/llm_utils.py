@@ -204,7 +204,17 @@ def _is_content_risk_error(error: Exception) -> bool:
         "harm_category",
         "safety rating",
     ]
-    return any(pattern in text for pattern in patterns)
+    if any(pattern in text for pattern in patterns):
+        return True
+
+    # 结构化错误码识别（GLM 1301/1302, 百度千帆 336003/336100 等）
+    import re
+
+    code_pattern = re.compile(
+        r"(?:code['\":\s]+|error_code['\":\s]+|\b)(?:1301|1302|336003|336100)\b",
+        re.I,
+    )
+    return bool(code_pattern.search(text))
 
 
 def get_provider_circuit_breaker(provider_id: str) -> CircuitBreaker:
