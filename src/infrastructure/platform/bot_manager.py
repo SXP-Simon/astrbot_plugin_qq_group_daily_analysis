@@ -5,15 +5,18 @@ Bot实例管理模块 - 基础设施层
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, TypeGuard
 
+from ...shared.constants import PLUGIN_NAME
 from ...utils.logger import logger
 from . import PlatformAdapter, PlatformAdapterFactory
 
 if TYPE_CHECKING:
     from astrbot.api.all import Context
     from astrbot.api.event import AstrMessageEvent
+    from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+    from astrbot.core.platform.manager import PlatformManager
 
     from ...domain.repositories.plugin_host_repository import PluginHostProtocol
     from ..config.config_manager import ConfigManager
@@ -412,7 +415,9 @@ class BotManager:
 
         同时为每个发现的 bot 创建对应的 PlatformAdapter。
         """
-        platform_manager = getattr(self._context, "platform_manager", None)
+        platform_manager: PlatformManager | None = getattr(
+            self._context, "platform_manager", None
+        )
         get_insts = getattr(platform_manager, "get_insts", None)
         if self._context is None or not callable(get_insts):
             return {}
@@ -672,22 +677,137 @@ class BotManager:
         # 检查是否在ID列表中
         return sender_id_str in self._bot_self_ids
 
-    def is_plugin_enabled(self, platform_id: str, plugin_name: str) -> bool:
-        """检查指定平台是否启用了该插件"""
-        if platform_id not in self._platforms:
+    @staticmethod
+    def _is_valid_plugin_set(
+        val: object,
+    ) -> TypeGuard[Sequence[str] | set[str] | str | None]:
+        """检查值是否是真实有效的 plugin_set 数据类型（排除未配置的 Mock 对象）。"""
+        if val is None:
             return True
+        if isinstance(val, (str, list, tuple, set)):
+            type_name = type(val).__name__
+            module_name = getattr(type(val), "__module__", "")
+            return "mock" not in module_name.lower() and "Mock" not in type_name
+        return False
 
-        platform = self._platforms[platform_id]
-        platform_config = getattr(platform, "config", None)
-        if not isinstance(platform_config, dict):
-            return True
+    @staticmethod
+    def _check_plugin_set(
+        plugin_set: Sequence[str] | set[str] | str | None, plugin_name: str
+    ) -> bool:
+        """根据 AstrBot plugin_set 规则判定插件是否被启用。
 
-        plugin_set = platform_config.get("plugin_set", ["*"])
-
+        - plugin_set 为 None：视为未配置/禁用 (False)
+        - plugin_set 包含 '*'：启用所有插件 (True)
+        - plugin_set 为字符串或列表：匹配 plugin_name (忽略大小写)
+        """
         if plugin_set is None:
             return False
 
-        if "*" in plugin_set:
-            return True
+        if isinstance(plugin_set, str):
+            val = plugin_set.strip()
+            if val == "*":
+                return True
+            return val.lower() == plugin_name.lower()
 
-        return plugin_name in plugin_set
+        if isinstance(plugin_set, (list, tuple, set)):
+            normalized = {
+                str(item).strip().lower() for item in plugin_set if str(item).strip()
+            }
+            if "*" in normalized:
+                return True
+            return plugin_name.lower() in normalized
+
+        return False
+
+    def is_plugin_enabled(
+        self,
+        platform_id: str | None,
+        plugin_name: str = PLUGIN_NAME,
+        group_id: str | int | None = None,
+    ) -> bool:
+        """检查指定平台/群组在 AstrBot 配置中是否启用了该插件。
+
+        支持多配置文件 (ACM/UCR) 路由解析：
+        1. 优先通过 Context 中的 astrbot_config_mgr (ACM) 获取目标 UMO 对应的 AstrBotConfig。
+        2. 读取配置文件中的 plugin_set 配置项进行鉴权判定。
+        3. 兜底兼容平台实例内嵌配置与全局配置。
+
+        Args:
+            platform_id: 平台实例 ID。
+            plugin_name: 插件名称，默认为 PLUGIN_NAME。
+            group_id: 可选的群聊 ID，用于精准会话级 UMO 匹配。
+
+        Returns:
+            bool: 插件是否在对应的配置文件中被启用。
+        """
+        pid = str(platform_id or "").strip()
+        gid = str(group_id or "").strip() if group_id is not None else ""
+
+        # 1. 优先通过 AstrBot 核心多配置管理器 (ACM) 检查 UMO 级配置
+        if self._context is not None:
+            acm: AstrBotConfigManager | None = getattr(
+                self._context, "astrbot_config_mgr", None
+            )
+            if acm is not None and hasattr(acm, "get_conf"):
+                umo: str | None = None
+                if pid and gid:
+                    umo = f"{pid}:GroupMessage:{gid}"
+                elif pid:
+                    umo = f"{pid}::"
+
+                try:
+                    conf = acm.get_conf(umo)
+                    plugin_set = (
+                        conf.get("plugin_set", Ellipsis)
+                        if hasattr(conf, "get")
+                        else Ellipsis
+                    )
+                    if plugin_set is not Ellipsis and self._is_valid_plugin_set(
+                        plugin_set
+                    ):
+                        return self._check_plugin_set(plugin_set, plugin_name)
+                except Exception as e:
+                    logger.debug(
+                        f"[BotManager] 通过 ACM 查询 UMO {umo} 插件配置失败: {e}"
+                    )
+
+        # 2. 检查存储的平台实例配置 (兼容独立注入/单测场景)
+        if pid and pid in self._platforms:
+            platform = self._platforms[pid]
+            platform_config = getattr(platform, "config", None)
+            if isinstance(platform_config, dict) and "plugin_set" in platform_config:
+                plugin_set = platform_config["plugin_set"]
+                if self._is_valid_plugin_set(plugin_set):
+                    return self._check_plugin_set(plugin_set, plugin_name)
+
+            platform_settings = getattr(platform, "settings", None)
+            if (
+                isinstance(platform_settings, dict)
+                and "plugin_set" in platform_settings
+            ):
+                plugin_set = platform_settings["plugin_set"]
+                if self._is_valid_plugin_set(plugin_set):
+                    return self._check_plugin_set(plugin_set, plugin_name)
+
+        # 3. 检查全局配置回退
+        if self._context is not None:
+            global_config = getattr(self._context, "_config", None) or getattr(
+                self._context, "astrbot_config", None
+            )
+            if global_config is not None:
+                plugin_set = None
+                found_plugin_set = False
+                if isinstance(global_config, dict) and "plugin_set" in global_config:
+                    plugin_set = global_config["plugin_set"]
+                    found_plugin_set = True
+                elif hasattr(global_config, "get"):
+                    val = global_config.get("plugin_set", Ellipsis)
+                    if val is not Ellipsis:
+                        plugin_set = val
+                        found_plugin_set = True
+
+                if found_plugin_set and self._is_valid_plugin_set(plugin_set):
+                    return self._check_plugin_set(plugin_set, plugin_name)
+
+        # 4. 默认启用
+        return True

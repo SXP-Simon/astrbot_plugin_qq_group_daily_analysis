@@ -254,6 +254,94 @@ def test_is_plugin_enabled(mock_config_manager):
     assert bm.is_plugin_enabled("p_whitelist", "disallowed_plugin") is False
 
 
+def test_is_plugin_enabled_with_acm_multi_profile(mock_config_manager):
+    """验证通过 AstrBot 核心 AstrBotConfigManager (ACM) 进行多配置文件与 UMO 路由鉴权。"""
+    bm = BotManager(mock_config_manager)
+
+    class FakeACM:
+        def __init__(self):
+            self.confs = {
+                "default": {"plugin_set": ["*"]},
+                "atri_profile_2": {"plugin_set": ["astrbot_plugin_chat_history"]},
+                "custom_group_profile": {
+                    "plugin_set": ["astrbot_plugin_qq_group_daily_analysis"]
+                },
+            }
+
+        def get_conf(self, umo: str | None) -> dict:
+            if not umo:
+                return self.confs["default"]
+            if umo.startswith("qq_bot_2:"):
+                # 机器人2号绑定了 atri_profile_2
+                return self.confs["atri_profile_2"]
+            if umo == "qq_bot_1:GroupMessage:999":
+                # 群999单独配置
+                return self.confs["custom_group_profile"]
+            return self.confs["default"]
+
+    fake_context = SimpleNamespace(astrbot_config_mgr=FakeACM())
+    bm.set_context(fake_context)
+
+    # 1. 默认机器人 (qq_bot_1) 启用了所有插件
+    assert bm.is_plugin_enabled("qq_bot_1", "astrbot_plugin_qq_group_daily_analysis") is True
+    assert (
+        bm.is_plugin_enabled(
+            "qq_bot_1", "astrbot_plugin_qq_group_daily_analysis", group_id="123"
+        )
+        is True
+    )
+
+    # 2. 机器人2号 (qq_bot_2 / 亚托莉2号) 未开启该插件
+    assert (
+        bm.is_plugin_enabled("qq_bot_2", "astrbot_plugin_qq_group_daily_analysis") is False
+    )
+    assert (
+        bm.is_plugin_enabled(
+            "qq_bot_2", "astrbot_plugin_qq_group_daily_analysis", group_id="123"
+        )
+        is False
+    )
+
+    # 3. 群级会话精准路由覆盖
+    assert (
+        bm.is_plugin_enabled(
+            "qq_bot_1", "astrbot_plugin_qq_group_daily_analysis", group_id="999"
+        )
+        is True
+    )
+
+
+def test_is_plugin_enabled_various_data_types(mock_config_manager):
+    """测试 plugin_set 支持 tuple, set, 大小写不敏感及空配置。"""
+    bm = BotManager(mock_config_manager)
+
+    # tuple
+    bm._platforms["p_tuple"] = SimpleNamespace(
+        config={"plugin_set": ("astrbot_plugin_qq_group_daily_analysis",)}
+    )
+    assert bm.is_plugin_enabled("p_tuple", "astrbot_plugin_qq_group_daily_analysis") is True
+
+    # set
+    bm._platforms["p_set"] = SimpleNamespace(
+        config={"plugin_set": {"astrbot_plugin_qq_group_daily_analysis"}}
+    )
+    assert bm.is_plugin_enabled("p_set", "astrbot_plugin_qq_group_daily_analysis") is True
+
+    # Case-insensitive match
+    bm._platforms["p_case"] = SimpleNamespace(
+        config={"plugin_set": ["ASTRBOT_PLUGIN_QQ_GROUP_DAILY_ANALYSIS"]}
+    )
+    assert (
+        bm.is_plugin_enabled("p_case", "astrbot_plugin_qq_group_daily_analysis") is True
+    )
+
+    # Empty list (disabled all)
+    bm._platforms["p_empty"] = SimpleNamespace(config={"plugin_set": []})
+    assert (
+        bm.is_plugin_enabled("p_empty", "astrbot_plugin_qq_group_daily_analysis") is False
+    )
+
+
 def test_should_filter_bot_message(mock_config_manager):
     bm = BotManager(mock_config_manager)
     bm.set_bot_self_ids(["12345", "67890"])
