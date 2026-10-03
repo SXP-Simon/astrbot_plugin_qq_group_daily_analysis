@@ -1,6 +1,10 @@
 # 更新日志 (CHANGELOG)
 
-## [Unreleased]
+## [v5.7.2] - 新增 DeepSeek 鲸鱼女仆娘模板，支持图片与网页报告
+
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
+<p><code>deepseek_maid</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
+
 
 - 新增 DeepSeek 鲸鱼女仆娘模板（`deepseek_maid`），支持图片与网页报告。
 
@@ -18,6 +22,11 @@
     *   **协议元数据查询**：支持通过 Satori REST API (`/guild.get`, `/guild.member.list`, `/user.get`) 获取群组信息、成员昵称及头像。
     *   **XML 富文本与报告下发**：严格按照 Satori v1 规范支持纯文本（XML 转义）、图片（`<img src="data:..."/>` Base64 / HTTP 链接）及文件 (`<file src="..." name="..."/>`) 报告的稳定推送。
     *   **按需动态懒加载**：将 `SatoriAdapter` 注册至 `PlatformAdapterFactory` 与适配器模块懒加载注册表，未启用 Satori 时零依赖、零导入，杜绝内存占用与无用开销。
+
+---
+
+<details>
+<summary>📋 点击查看历史更新日志</summary>
 
 ## [v5.6.6] - 跨平台 Markdown 报告、平台适配器容灾加固
 
@@ -466,11 +475,6 @@
 
 *   **✨ 并行触发**：群分析结果构建完成后即后台启动漫画任务，报告渲染和发送不再等待出图。手动分析、定时传统分析、定时增量最终报告与即时增量报告均可触发。
 *   **⚙️ 话题前置条件**：漫画只使用有效的话题总结作为分镜素材。话题功能关闭、未产出结果或标题为空时，插件会静默跳过本次漫画，避免生成与真实讨论无关的内容。
-
----
-
-<details>
-<summary>📋 点击查看历史更新日志</summary>
 
 ## [v4.11.9] - 🛠️ 解耦即时报告与批次结算，渲染、发送失败或超时不会阻塞计数扣减和后续增量批次
 *   **🛠️ 增量批次逻辑优化**：增量批次成功保存并完成待处理计数结算后，才通知调度器安排即时报告。报告不再处于分析回调的等待链中，因此渲染、发送失败或超时不会阻塞计数扣减和后续增量批次。
