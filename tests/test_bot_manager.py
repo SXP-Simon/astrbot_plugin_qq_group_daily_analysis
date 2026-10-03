@@ -335,6 +335,28 @@ def test_is_plugin_enabled_various_data_types(mock_config_manager):
         bm.is_plugin_enabled("p_case", "astrbot_plugin_qq_group_daily_analysis") is True
     )
 
+    # Wildcard prefix patterns
+    bm._platforms["p_wildcard_prefix"] = SimpleNamespace(
+        config={"plugin_set": ["astrbot_plugin_*"]}
+    )
+    assert (
+        bm.is_plugin_enabled("p_wildcard_prefix", "astrbot_plugin_qq_group_daily_analysis")
+        is True
+    )
+    assert (
+        bm.is_plugin_enabled("p_wildcard_prefix", "other_plugin")
+        is False
+    )
+
+    # Wildcard substring patterns
+    bm._platforms["p_wildcard_sub"] = SimpleNamespace(
+        config={"plugin_set": ["*group_daily*"]}
+    )
+    assert (
+        bm.is_plugin_enabled("p_wildcard_sub", "astrbot_plugin_qq_group_daily_analysis")
+        is True
+    )
+
     # Empty list (disabled all)
     bm._platforms["p_empty"] = SimpleNamespace(config={"plugin_set": []})
     assert (

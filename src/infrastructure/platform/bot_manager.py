@@ -5,6 +5,7 @@ Bot实例管理模块 - 基础设施层
 
 from __future__ import annotations
 
+import fnmatch
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -700,22 +701,22 @@ class BotManager:
         - plugin_set 包含 '*'：启用所有插件 (True)
         - plugin_set 为字符串或列表：匹配 plugin_name (忽略大小写)
         """
-        if plugin_set is None:
-            return False
-
+        target_name = plugin_name.strip().lower()
         if isinstance(plugin_set, str):
-            val = plugin_set.strip()
-            if val == "*":
+            val = plugin_set.strip().lower()
+            if not val:
+                return False
+            if val == "*" or fnmatch.fnmatchcase(target_name, val):
                 return True
-            return val.lower() == plugin_name.lower()
+            return val == target_name
 
         if isinstance(plugin_set, (list, tuple, set)):
-            normalized = {
-                str(item).strip().lower() for item in plugin_set if str(item).strip()
-            }
-            if "*" in normalized:
-                return True
-            return plugin_name.lower() in normalized
+            for item in plugin_set:
+                pat = str(item).strip().lower()
+                if not pat:
+                    continue
+                if pat == "*" or fnmatch.fnmatchcase(target_name, pat):
+                    return True
 
         return False
 
