@@ -766,7 +766,12 @@ class BotManager:
                     if plugin_set is not Ellipsis and self._is_valid_plugin_set(
                         plugin_set
                     ):
-                        return self._check_plugin_set(plugin_set, plugin_name)
+                        enabled = self._check_plugin_set(plugin_set, plugin_name)
+                        logger.debug(
+                            f"[BotManager鉴权] UMO '{umo}' 通过 AstrBotConfigManager 匹配到 Profile 配置: "
+                            f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                        )
+                        return enabled
                 except Exception as e:
                     logger.debug(
                         f"[BotManager] 通过 ACM 查询 UMO {umo} 插件配置失败: {e}"
@@ -779,7 +784,12 @@ class BotManager:
             if isinstance(platform_config, dict) and "plugin_set" in platform_config:
                 plugin_set = platform_config["plugin_set"]
                 if self._is_valid_plugin_set(plugin_set):
-                    return self._check_plugin_set(plugin_set, plugin_name)
+                    enabled = self._check_plugin_set(plugin_set, plugin_name)
+                    logger.debug(
+                        f"[BotManager鉴权] 平台 '{pid}' 通过平台实例 config 匹配: "
+                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    )
+                    return enabled
 
             platform_settings = getattr(platform, "settings", None)
             if (
@@ -788,7 +798,12 @@ class BotManager:
             ):
                 plugin_set = platform_settings["plugin_set"]
                 if self._is_valid_plugin_set(plugin_set):
-                    return self._check_plugin_set(plugin_set, plugin_name)
+                    enabled = self._check_plugin_set(plugin_set, plugin_name)
+                    logger.debug(
+                        f"[BotManager鉴权] 平台 '{pid}' 通过平台实例 settings 匹配: "
+                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    )
+                    return enabled
 
         # 3. 检查全局配置回退
         if self._context is not None:
@@ -808,7 +823,15 @@ class BotManager:
                         found_plugin_set = True
 
                 if found_plugin_set and self._is_valid_plugin_set(plugin_set):
-                    return self._check_plugin_set(plugin_set, plugin_name)
+                    enabled = self._check_plugin_set(plugin_set, plugin_name)
+                    logger.debug(
+                        f"[BotManager鉴权] 平台 '{pid}' 通过全局 AstrBot 配置兜底匹配: "
+                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    )
+                    return enabled
 
         # 4. 默认启用
+        logger.debug(
+            f"[BotManager鉴权] 平台 '{pid}' / 群 '{gid}' 未命中任何限制性配置，默认启用"
+        )
         return True
