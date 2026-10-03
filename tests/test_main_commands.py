@@ -762,6 +762,31 @@ async def test_count_incremental_group_message_skips_qq_and_telegram(plugin):
 
 
 @pytest.mark.asyncio
+async def test_count_incremental_and_interceptors_skip_when_profile_disabled(plugin):
+    """验证当 BotManager 判定当前 Bot/群未启用本插件时，消息监听器直接短路跳过。"""
+    event = MockEvent(platform_name="aiocqhttp", platform_id="aiocqhttp_disabled", group_id="999")
+    plugin.bot_manager.is_plugin_enabled = Mock(return_value=False)
+    plugin.auto_scheduler.record_incremental_message = AsyncMock()
+    plugin.message_processing_service.process_message = AsyncMock()
+
+    # 1. 增量消息计数拦截器
+    await plugin.count_incremental_group_message(event)
+    plugin.auto_scheduler.record_incremental_message.assert_not_called()
+
+    # 2. Satori 拦截器
+    await plugin.intercept_satori_messages(event)
+    plugin.message_processing_service.process_message.assert_not_called()
+
+    # 3. Telegram 拦截器
+    await plugin.intercept_telegram_messages(event)
+    plugin.message_processing_service.process_message.assert_not_called()
+
+    # 4. QQ Official 拦截器
+    await plugin.intercept_qq_official_messages(event)
+    plugin.message_processing_service.process_message.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_intercept_telegram_messages(plugin):
     event = MockEvent(platform_name="telegram", platform_id="tg_1")
     plugin.message_processing_service.process_message = AsyncMock(return_value=True)
