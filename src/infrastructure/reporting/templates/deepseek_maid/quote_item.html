@@ -1,0 +1,12 @@
+{% from 'inline_assets.html' import maid_character %}
+{% if quotes %}
+<section class="log-section" data-section="quotes">
+    <div class="section-header"><div class="section-title"><span class="section-number">04</span><h2>今日名言收藏</h2></div><span class="section-caption">精选群聊金句</span></div>
+    <div class="section-body">
+        <div class="fish-reaction" data-meme="mmhm">{{ maid_character('open', detail='head') }}<div><span>大肥鱼看完这些金句：</span><strong>嗯哼，这样啊。</strong></div><span class="reaction-tail">本鱼先记下来</span></div>
+    {% for item in quotes %}
+        <article class="quote-item"><div class="quote-user">{% if item.avatar_url %}<img src="{{ item.avatar_url }}" alt="群友头像">{% endif %}<span>{{ '匿名群友' if hide_user_names else item.sender }}</span></div><blockquote class="quote-content">{{ item.content }}</blockquote>{% if item.reason %}<div class="quote-reason">女仆的小注 · {{ item.reason | safe }}</div>{% endif %}</article>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}

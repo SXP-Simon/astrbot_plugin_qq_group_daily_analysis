@@ -50,8 +50,8 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
       <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
-      <p><b>Retro Futurism</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/retro_futurism-demo.jpg" alt="Retro Futurism 示例" height="520"></a>
+      <p><b>art_nouveau</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>HatsuneMiku</b></p>
@@ -68,8 +68,9 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
       <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/ATRI-demo.jpg" alt="ATRI 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
-      <p><b>art_nouveau</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
+      <p><b>DeepSeek 鲸鱼女仆娘</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
+      <p><code>deepseek_maid</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
     </td>
   </tr>
 </table>

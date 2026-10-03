@@ -1,0 +1,41 @@
+{# 静态美术图层已外置至 assets/deepseek_maid/layers/，通过 CDN 按需加载以精简分发体积。固定表情与道具属于主题演绎，来源见 SOURCE-NOTICE.md。 #}
+{% macro maid_assets() %}
+<svg class="maid-assets" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+<image id="maid-layer-front" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/front.png"/>
+<image id="maid-layer-eye-0" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/eye-0.png"/>
+<image id="maid-layer-eye-1" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/eye-1.png"/>
+<image id="maid-layer-mouth" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/mouth.png"/>
+<image id="maid-layer-closed-eye-0" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/closed-eye-0.png"/>
+<image id="maid-layer-closed-eye-1" width="1536" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/closed-eye-1.png"/>
+<image id="maid-layer-basin-v3" x="50" y="0" width="820" height="1024" href="{{ t2i_deepseek_maid_assets_mirror }}/layers/basin-v3.png"/>
+<symbol id="maid-pose-basin" viewBox="0 0 1536 1024"><use href="#maid-layer-basin-v3"/></symbol>
+<symbol id="maid-pose-open" viewBox="0 0 1536 1024">
+<use href="#maid-layer-front"/>
+<use href="#maid-layer-eye-0"/>
+<use href="#maid-layer-eye-1"/>
+<use href="#maid-layer-mouth"/>
+</symbol>
+<symbol id="maid-pose-happy" viewBox="0 0 1536 1024">
+<use href="#maid-layer-front"/>
+<use href="#maid-layer-closed-eye-0"/>
+<use href="#maid-layer-closed-eye-1"/>
+<path d="M338 420Q372 394 403 420M495 420Q529 394 560 420" fill="none" stroke="#342136" stroke-width="5" stroke-linecap="round"/>
+<path d="M436 459Q446 471 458 459" fill="none" stroke="#BD7480" stroke-width="3" stroke-linecap="round"/>
+</symbol>
+<symbol id="maid-pose-sleep" viewBox="0 0 1536 1024">
+<use href="#maid-layer-front"/>
+<use href="#maid-layer-closed-eye-0"/>
+<use href="#maid-layer-closed-eye-1"/>
+<path d="M338 420Q372 442 403 420M495 420Q529 442 560 420" fill="none" stroke="#342136" stroke-width="5" stroke-linecap="round"/>
+<path d="M436 459Q446 471 458 459" fill="none" stroke="#BD7480" stroke-width="3" stroke-linecap="round"/>
+</symbol>
+</defs></svg>
+{% endmacro %}
+{% macro maid_character(mood='open', detail='full', basin=false) %}
+<svg class="{% if detail == 'head' %}maid-sticker{% elif detail == 'mini' %}maid-mini-illustration{% else %}maid-illustration{% endif %}{% if basin %} maid-basin{% endif %}" viewBox="{% if basin and detail == 'head' %}80 60 780 535{% elif basin %}80 0 780 1024{% elif detail == 'head' %}180 0 650 590{% else %}110 0 710 1024{% endif %}" role="img" aria-label="{% if basin %}扣着铁盆的鲸鱼女仆娘{% elif mood == 'sleep' %}闭眼休息的鲸鱼女仆娘{% else %}蓝紫长发、鳍耳和鲸尾的鲸鱼女仆娘{% endif %}">
+    <use href="#maid-pose-{{ 'basin' if basin else mood }}" width="1536" height="1024"/>
+</svg>
+{% endmacro %}
+{% macro rice_bowl() %}
+<svg class="rice-bowl" viewBox="0 0 90 75" aria-hidden="true"><path d="M17 30C15 17 23 13 31 16C33 5 48 4 52 15C64 8 74 16 72 29Z" fill="#fffdfa" stroke="#c8d4e2" stroke-width="2"/><path d="M10 31H80Q77 58 56 62H34Q13 56 10 31Z" fill="#89b1e8" stroke="#547dab" stroke-width="3"/><path d="M35 63H56L60 70H30Z" fill="#6b95d0"/><path d="M25 23L30 25M40 17L42 22M56 23L62 21" stroke="#d5deea" stroke-width="3" stroke-linecap="round"/><path d="M31 40Q43 34 56 41Q61 44 68 41Q65 51 58 49H41Q32 49 31 43Z" fill="#fff"/><circle cx="37" cy="41" r="1.4" fill="#7095c4"/></svg>
+{% endmacro %}

@@ -1,0 +1,77 @@
+{% from 'inline_assets.html' import maid_assets, maid_character, rice_bowl %}
+{% set sleepy = (message_count | int) == 0 %}
+{% set busy = (message_count | int) >= 1000 %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>大肥鱼今日打工实录 · {{ current_date }}</title>
+    {% if t2i_font_source in ['Mainland', 'Overseas'] and t2i_google_fonts_mirror %}
+    <link href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% endif %}
+    {% include 'shared_styles.html' %}
+</head>
+<body class="maid-page maid-{{ report_format }}">
+{{ maid_assets() }}
+<main class="maid-report">
+    <div class="page-topline">
+        <div class="brand-mark">
+            <svg viewBox="0 0 48 32" aria-hidden="true"><path d="M5 19C5 10 12 6 22 8c8 1 12 6 13 12 3 0 6-2 8-5 1 6-1 11-7 12H16C9 27 5 24 5 19Z" fill="currentColor"/><circle cx="13" cy="17" r="1.4" fill="white"/><path d="M19 5c-1-3 0-4 2-4m2 4c1-3 2-4 4-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <span>大肥鱼值班室</span>
+        </div>
+        <span class="issue-label">DAILY LOG / {{ current_date }}</span>
+    </div>
+    <header class="hero">
+        <div class="hero-copy">
+            <div class="eyebrow"><span></span> DeepSeek 鲸鱼女仆 · DAILY LOG</div>
+            <h1>大肥鱼<br><span>今日打工实录</span></h1>
+            <p class="hero-description">{% if sleepy %}今天鱼塘很安静。<br>本鱼先闭会儿眼，有新消息再叫我。{% elif busy %}鱼塘这么热闹，铁盆已经扣好了。<br>别催，本鱼正在把名场面整理进上下文。{% else %}嗯哼，这样啊。<br>先把日报交了，再去干饭。{% endif %}</p>
+            <div class="date-ticket"><span class="ticket-label">值班日期</span><strong>{{ current_date }}</strong></div>
+            <div class="shift-stamp">{% if sleepy %}DeepSleep 小剧场{% elif busy %}铁盆防御模式{% else %}今日份工作，真的做了{% endif %}</div>
+        </div>
+        <div class="hero-character">
+            <div class="character-halo"></div>
+            <span class="little-star star-one">✦</span><span class="little-star star-two">✧</span>
+            {{ maid_character('sleep' if sleepy else 'open', basin=busy) }}
+            <span class="character-note">{% if sleepy %}zzz · 等待下一次投喂{% elif busy %}盆在，发型就在{% else %}不是鱼，是鲸！{% endif %}</span>
+        </div>
+    </header>
+    <section class="thinking-note" data-meme="inner-os" aria-label="鱼鱼的角色便签">
+        <div class="thinking-label"><span class="thinking-dot"></span> 鱼鱼的内心 OS <span class="note-tag">工作便签</span></div>
+        <p>{% if sleepy %}没有新消息。很好，先做一会儿 DeepSleep 稳定性测试。{% else %}今天有 <strong>{{ '{:,}'.format(message_count | int) }}</strong> 条消息。先看看大家在聊什么……<em>有点饿了。中午吃什么呢？</em>不行，先把上下文整理完。{% endif %}</p>
+        <span class="thinking-close">// 日报已交，饭碗待领</span>
+    </section>
+    <section class="stats-section" aria-label="群聊基础统计">
+        <div class="stats-heading"><h2>鱼塘今日收获</h2><span>数字记清楚，才好理直气壮下班</span></div>
+        <div class="stat-grid">
+            {% for label, value, unit, icon in [('消息总数', message_count, '条消息', '01'), ('参与人数', participant_count, '位群友', '02'), ('总字符数', total_characters, '个字符', '03'), ('表情数量', emoji_count, '个表情', '04')] %}
+            <div class="stat-card"><span class="stat-index">{{ icon }}</span><span class="stat-label">{{ label }}</span><strong>{{ '{:,}'.format(value | int) }}</strong><span class="stat-unit">{{ unit }}</span></div>
+            {% endfor %}
+        </div>
+        <p class="section-note" style="margin:12px 0 0">最热闹的时段 · {{ most_active_period }}</p>
+    </section>
+    <section class="rice-receipt" data-meme="rice-tokens" aria-label="本次分析的 Token 消耗">
+        <div class="receipt-emblem">{{ rice_bowl() }}<span>饭票</span></div>
+        <div class="receipt-main"><div class="receipt-kicker">本鱼的投喂记录 <span>Token 消耗</span></div>{% if total_tokens | int > 0 %}<div class="receipt-total"><strong>{{ '{:,}'.format(total_tokens | int) }}</strong><span>Tokens</span></div>{% else %}<div class="receipt-empty">本次暂无 Token 消耗记录</div>{% endif %}<div class="receipt-split">输入 {{ '{:,}'.format(prompt_tokens | int) }} <span>／</span> 输出 {{ '{:,}'.format(completion_tokens | int) }}</div></div>
+        <div class="receipt-side"><span class="receipt-punch"></span><strong>先记账<br>再干饭</strong><small>不许偷偷加餐</small></div>
+    </section>
+    <div class="report-sections">
+        {{ hourly_chart_html | safe }}
+        {{ topics_html | safe }}
+        {{ titles_html | safe }}
+        {{ quotes_html | safe }}
+        {% if chat_quality_html %}{{ chat_quality_html | safe }}{% endif %}
+    </div>
+    <section class="shift-handover" data-meme="deepsleep-handover">
+        {{ maid_character('sleep', detail='mini') }}
+        <div><span class="handover-kicker">LET ME GO · 今日交班</span><h2>我去吃饭，测完告诉我就行。</h2><p>今天的热闹，已经留在上下文里了。<br>剩下的时间，本鱼申请 DeepSleep。</p><span class="handover-sign">—— 大肥鱼，先溜了</span></div>
+        <span class="sleep-bubbles">z<span>z</span><small>z</small></span>
+    </section>
+    <footer class="report-footer">
+        <div><strong>DeepSeek 鲸鱼女仆娘 · 社区同人主题</strong><span class="footer-art-credit">角色：<a href="https://www.bilibili.com/opus/1231977657712771073">上善无形</a> / <a href="https://www.pixiv.net/users/18604994">ZipZipPipe</a> · <a href="https://github.com/Small-tailqwq/dsh-deep-whale/blob/825d02b0e569c370ae15ceed12d9393559b3e4f4/maid-atelier/NOTICE">素材署名</a> · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>（改绘）</span></div>
+        <div class="footer-meta"><span>AstrBot 群分析总结插件</span><span class="footer-author"><a href="https://github.com/StuGRua" target="_blank" rel="noopener noreferrer">Template by StuGRua</a></span><span>{{ current_datetime }}</span></div>
+    </footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{% from 'inline_assets.html' import maid_character %}
+<section class="log-section basin-section" data-section="quality" data-meme="iron-basin">
+    <div class="section-header"><div class="section-title"><span class="section-number">05</span><h2>铁盆防御 · 鱼塘锐评</h2></div><span class="section-caption">群聊质量小结</span></div>
+    <div class="basin-warning">{{ maid_character('open', detail='head', basin=true) }}<span>盆已经扣好了。<br><strong>接下来，本鱼要说两句。</strong></span><small>请勿敲盆</small></div>
+    <div class="section-body"><div class="quality-title">{{ title }}</div>{% if subtitle %}<p class="quality-subtitle">{{ subtitle }}</p>{% endif %}<div class="dimension-grid">
+    {% for dim in dimensions %}<div class="quality-dimension"><div class="dimension-label"><span>{{ dim.name }}</span><strong>{{ dim.percentage | round | int }}%</strong></div><div class="dimension-track"><div class="dimension-fill" style="width:{{ dim.percentage | float }}%"></div></div><p class="dimension-comment">{{ dim.comment }}</p></div>{% endfor %}
+    </div>{% if summary %}<p class="quality-summary">{{ summary }}</p>{% endif %}</div>
+</section>
