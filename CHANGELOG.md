@@ -1,12 +1,26 @@
 # 更新日志 (CHANGELOG)
 
-## [v5.7.2] - 新增 DeepSeek 鲸鱼女仆娘模板，支持图片与网页报告
+## [v5.7.2] - DeepSeek 女仆娘主题、同群多 Bot Profile 隔离与模型内容安全风控拦截识别
 
 <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>
 <p><code>deepseek_maid</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid/SOURCE-NOTICE.md">素材署名与许可</a></p>
 
+*   **🎨 【视觉呈现与全新主题】新增 DeepSeek 鲸鱼女仆娘日报主题 (#248)**：
+    *   **双模式全景渲染**：新增 `deepseek_maid` 日报模板，同步支持图片长图（T2I）与独立交互网页报告（HTML）模式。
+    *   **专属插画与版式设计**：配备专属鲸鱼女仆娘装饰元素、版式网格系统与响应式移动端排版。
 
-- 新增 DeepSeek 鲸鱼女仆娘模板（`deepseek_maid`），支持图片与网页报告。
+*   **🛡️ 【多账号与权限隔离】接入 AstrBot 多 Profile 鉴权隔离与 UMO 物理寻址路由 (#250)**：
+    *   **同群多 Bot 精准隔离**：当多个 Bot 实例处于同一群聊时，若某 Bot 对应的 AstrBot Profile (`plugin_set`) 未启用本插件，全链路短路拦截该 Bot 的定时调度、群列表扫描与实时消息增量统计，杜绝多账号误跑与重复触发。
+    *   **宿主物理寻址与 UMO 路由委派**：通过 AstrBot 核心 `AstrBotConfigManager.get_conf(umo)` 解析精准会话级 Profile，完整支持用户在 AstrBot 路由表中设置的任意前缀、中缀、后缀通配模式与群级独立 Profile 覆盖。
+    *   **`plugin_set` 模糊通配支持**：内置 `fnmatch` 通配匹配，支持 `astrbot_plugin_*`、`*group_daily*` 等灵活写法与 `[]` 空列表显式禁用校验。
+    *   **强类型 F12 直达与防腐层设计**：完善插件基础设施层与 WebUI 路由对 AstrBot 核心管理器（`AstrBotConfigManager`, `PlatformManager`, `ProviderManager`, `PersonaManager` 等）的强类型注解与防腐层封装，打通 IDE 下按 F12 直达宿主源码的流畅开发体验。
+    *   **全链路可观测诊断日志**：规范输出 `[BotManager鉴权]`、`[调度决策]`、`[消息拦截]` 诊断日志，支持在 WebUI 控制台按标签（Tag）或关键词一键过滤排查。
+
+*   **⚡ 【LLM 容灾韧性与风控拦截】大模型内容安全审查识别、快速短路与熔断旁路保护 (#249, #251)**：
+    *   **多厂商安全风控异常归一化**：内置零外部依赖的 `_is_content_risk_error` 识别引擎，精准覆盖 DeepSeek (`400 Content Exists Risk`)、OpenAI/Azure (`content_filter` / `content management policy`)、智谱 GLM (`1301/1302`)、通义千问 (`DataInspectionFailed`)、百度千帆 (`336003/336100`) 及各类聚合中转网关的敏感词风控拦截。
+    *   **短路快速失败 (Fast-Fail) 与平滑降级**：遇上游风控拦截时立即剥离当前 Provider 的后续同质重试，避免盲目重复请求浪费 API 配额；若配置了备用 Provider 则即刻平滑切换至 Fallback。
+    *   **熔断器旁路保护 (Bypass CircuitBreaker)**：风控错误属于上下文敏感内容原因而非上游服务宕机，跳过 `cb.record_failure()` 计数，杜绝因单群敏感词导致整个 Provider 被误熔断 60 秒并连带波及其他正常群聊的问题。
+    *   **友好排障指引日志**：输出结构化诊断警告，提供更换模型/设置备用 Provider、配置学术中立分析人格 (Persona) / Jailbreak 提示词、优化 Prompt 以及配置群消息过滤等 4 步可落地解决建议。
 
 ## [v5.7.1] - LLM 单次请求硬超时熔断、LLM 链路防腐层与强类型重构
 
