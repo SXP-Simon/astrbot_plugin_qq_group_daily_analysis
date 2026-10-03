@@ -141,12 +141,15 @@ class ScheduledTargetResolver:
                 platform_id, PLUGIN_NAME, group_id=group_id
             ):
                 logger.debug(
-                    f"群聊 {umo} 所在 AstrBot 配置文件未启用此插件，跳过计划分析"
+                    f"[调度决策] 群聊 {umo} 所在 AstrBot 配置文件未启用此插件，跳过计划分析"
                 )
                 continue
 
             # 配置管理器统一处理基础名单与定时 inherit/白黑名单
             if not self.config_manager.is_scheduled_group_allowed(umo):
+                logger.debug(
+                    f"[调度决策] 群聊 {umo} 未通过定时分析名单过滤 (scheduled_groups)，跳过计划分析"
+                )
                 continue
 
             # 配置管理器统一处理增量 inherit/白黑名单
@@ -156,8 +159,14 @@ class ScheduledTargetResolver:
                 effective_mode = "traditional"
 
             if mode_filter and effective_mode != mode_filter:
+                logger.debug(
+                    f"[调度决策] 群聊 {umo} (模式: {effective_mode}) 与当前执行的模式过滤 '{mode_filter}' 不符，跳过"
+                )
                 continue
 
+            logger.debug(
+                f"[调度决策] 群聊 {umo} 准入通过，决议执行模式: {effective_mode}"
+            )
             target_key = (group_id, platform_id, effective_mode)
             if target_key not in seen_targets:
                 seen_targets.add(target_key)
