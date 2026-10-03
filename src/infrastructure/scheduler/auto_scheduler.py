@@ -13,6 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from ...application.services.analysis_application_service import DuplicateGroupTaskError
 from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
+from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from ..messaging.message_sender import MessageSender
@@ -604,6 +605,14 @@ class AutoScheduler:
             return False
         if str(event.get_sender_id()) == str(event.get_self_id()):
             return False
+
+        platform_id = str(event.get_platform_id() or "").strip()
+        group_id = str(event.get_group_id() or "").strip()
+        if not self.bot_manager.is_plugin_enabled(
+            platform_id, PLUGIN_NAME, group_id=group_id
+        ):
+            return False
+
         message_obj = getattr(event, "message_obj", None)
         message_id = (
             str(message_obj.message_id)
@@ -611,8 +620,8 @@ class AutoScheduler:
             else ""
         )
         return await self.incremental_trigger.record_message(
-            platform_id=event.get_platform_id(),
-            group_id=event.get_group_id(),
+            platform_id=platform_id,
+            group_id=group_id,
             unified_msg_origin=event.unified_msg_origin,
             message_id=message_id,
         )

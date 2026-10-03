@@ -49,6 +49,9 @@ class PersonaMetadataDTO(TypedDict):
 
 if TYPE_CHECKING:
     from astrbot.api.star import Context
+    from astrbot.core.persona_mgr import PersonaManager
+    from astrbot.core.platform.manager import PlatformManager
+    from astrbot.core.provider.manager import ProviderManager
 
     from ....application.dto.webui_dto import TraceListQueryDTO, TrendsQueryDTO
     from ....application.services.analysis_application_service import (
@@ -166,7 +169,9 @@ class TraceRoutes:
             }
 
             # 1. 优先从 AstrBot 原生 platform_manager 获取标准元数据
-            platform_manager = getattr(self.context, "platform_manager", None)
+            platform_manager: PlatformManager | None = getattr(
+                self.context, "platform_manager", None
+            )
             if platform_manager and hasattr(platform_manager, "get_insts"):
                 insts = platform_manager.get_insts() or []
                 for inst in insts:
@@ -262,8 +267,14 @@ class TraceRoutes:
             seen_ids = set()
             provider_getter = getattr(self.context, "get_all_providers", None)
             if not callable(provider_getter):
-                provider_mgr = getattr(self.context, "provider_manager", None)
-                provider_getter = getattr(provider_mgr, "get_all_providers", None)
+                provider_mgr: ProviderManager | None = getattr(
+                    self.context, "provider_manager", None
+                )
+                provider_getter = (
+                    getattr(provider_mgr, "get_all_providers", None)
+                    if provider_mgr
+                    else None
+                )
 
             if callable(provider_getter):
                 raw_list = provider_getter()
@@ -315,7 +326,7 @@ class TraceRoutes:
         try:
             personas: list[PersonaMetadataDTO] = []
             seen_ids = set()
-            pm = getattr(self.context, "persona_manager", None)
+            pm: PersonaManager | None = getattr(self.context, "persona_manager", None)
             if pm:
                 for p in getattr(pm, "personas_v3", []) or []:
                     p_name = (
