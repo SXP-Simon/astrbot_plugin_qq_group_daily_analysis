@@ -26,7 +26,7 @@ class ReportQueryService:
     """
 
     MAX_DATE_SPAN_DAYS = 30
-    DEFAULT_MAX_CHARACTERS = 4000
+    DEFAULT_MAX_CHARACTERS = 40000
 
     def __init__(
         self,
@@ -475,30 +475,64 @@ class ReportQueryService:
                     else None
                 )
                 if isinstance(quotes_raw, list) and quotes_raw:
-                    day_block.append("\n**【群友金句】**")
-                    for idx, q in enumerate(quotes_raw, 1):
+                    formatted_quotes = []
+                    for q in quotes_raw:
                         if isinstance(q, dict):
-                            quote_text = q.get("quote", "") or q.get("text", "")
-                            author = q.get("author", "") or q.get("user", "")
-                            ctx = q.get("context", "")
+                            quote_text = str(
+                                q.get("quote", "")
+                                or q.get("content", "")
+                                or q.get("text", "")
+                            ).strip()
+                            if not quote_text:
+                                continue
+                            author = str(
+                                q.get("author", "")
+                                or q.get("sender", "")
+                                or q.get("user", "")
+                                or q.get("user_id", "")
+                            ).strip()
+                            ctx = str(
+                                q.get("context", "") or q.get("reason", "")
+                            ).strip()
                             author_desc = f" —— {author}" if author else ""
-                            day_block.append(f'{idx}. "{quote_text}"{author_desc}')
+                            item_str = f'{len(formatted_quotes) + 1}. "{quote_text}"{author_desc}'
                             if ctx:
-                                day_block.append(f"   - 语境: {ctx}")
+                                item_str += f"\n   - 语境/评述: {ctx}"
+                            formatted_quotes.append(item_str)
+                    if formatted_quotes:
+                        day_block.append("\n**【群友金句】**")
+                        day_block.extend(formatted_quotes)
 
             # 3. 用户称号
             if "user_titles" in sections:
                 titles_raw = data_obj.get("user_titles")
                 if isinstance(titles_raw, list) and titles_raw:
-                    day_block.append("\n**【群友称号画像】**")
-                    for idx, ut in enumerate(titles_raw, 1):
+                    formatted_titles = []
+                    for ut in titles_raw:
                         if isinstance(ut, dict):
-                            uname = ut.get("user_name", "") or ut.get("nickname", "")
-                            title = ut.get("title", "")
-                            reason = ut.get("reason", "")
-                            day_block.append(f"{idx}. {uname}: [{title}]")
+                            uname = (
+                                str(
+                                    ut.get("user_name", "")
+                                    or ut.get("name", "")
+                                    or ut.get("nickname", "")
+                                    or ut.get("user_id", "")
+                                ).strip()
+                            ) or "群友"
+                            title = str(ut.get("title", "")).strip()
+                            reason = str(ut.get("reason", "")).strip()
+                            mbti = str(ut.get("mbti", "")).strip()
+                            title_display = f"[{title}]" if title else ""
+                            if mbti:
+                                title_display = (
+                                    f"[{title} | {mbti}]" if title else f"[{mbti}]"
+                                )
+                            item_str = f"{len(formatted_titles) + 1}. {uname}: {title_display}".rstrip()
                             if reason:
-                                day_block.append(f"   - 理由: {reason}")
+                                item_str += f"\n   - 理由: {reason}"
+                            formatted_titles.append(item_str)
+                    if formatted_titles:
+                        day_block.append("\n**【群友称号画像】**")
+                        day_block.extend(formatted_titles)
 
             # 4. 聊天质量分析
             if "chat_quality_review" in sections:

@@ -146,7 +146,7 @@ async def get_daily_report(
 - **优先轨 (CheckpointStore)**：读取 `stage_checkpoints` 中 `stage_name = 'llm_analysis'`，同日多次分析**按 `date_str` 分组取 `MAX(created_at)`**，永远只向 LLM 呈现当天最新一份报告。
 - **降级轨 (HistoryManager)**：Checkpoint 清理后，自动回退读取 AstrBot KV 中的轻量摘要。
 - **邻近自愈探测**：目标日缺失时探测 ±1 天，命中时附带时间戳自愈标注。
-- **字段投影与截断**：按请求模块裁剪无关字段，输出严格限制在 **4000 字符以内**。
+- **字段投影与截断**：按请求模块裁剪无关字段，输出限制在 **40,000 字符以内**（防止极极端长跨度检索溢出上下文，默认充裕覆盖 30 天完整报告细节）。
 
 ---
 

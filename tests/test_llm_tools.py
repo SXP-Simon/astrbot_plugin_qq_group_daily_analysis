@@ -330,7 +330,7 @@ async def test_trigger_success_async_fire_and_forget(trigger_service, mock_analy
 
 @pytest.mark.asyncio
 async def test_truncation_strictly_under_limit(report_query_service, mock_checkpoint_store):
-    # 模拟超长内容，检验截断后是否绝对 <= 4000 字符
+    # 模拟超长内容，检验截断后是否绝对 <= 40000 字符
     mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
         {
             "checkpoint_id": "cp_long",
@@ -339,7 +339,7 @@ async def test_truncation_strictly_under_limit(report_query_service, mock_checkp
             "stage_name": "LLM_ANALYSIS",
             "data": {
                 "topics": [
-                    {"topic": f"超长讨论话题_{i}", "detail": "内容" * 300}
+                    {"topic": f"超长讨论话题_{i}", "detail": "内容" * 3000}
                     for i in range(15)
                 ]
             },
@@ -352,8 +352,46 @@ async def test_truncation_strictly_under_limit(report_query_service, mock_checkp
         end_date="2026-10-02",
         report_section="话题",
     )
-    assert len(res) <= 4000
+    assert len(res) <= 40000
     assert "内容较长已自动截断" in res
+
+
+@pytest.mark.asyncio
+async def test_quotes_and_titles_robust_formatting(report_query_service, mock_checkpoint_store):
+    # 验证多样化字段键名支持、空金句过滤与昵称/MBTI兜底
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_fmt",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "golden_quotes": [
+                    {"content": "这是金句内容", "sender": "发言人A", "reason": "幽默"},
+                    {"quote": "这是第二条金句", "author": "作者B"},
+                    {"quote": "", "content": "   ", "author": "幽灵"},  # 空金句应被过滤
+                ],
+                "user_titles": [
+                    {"name": "群友小明", "title": "水群狂魔", "mbti": "ENTP", "reason": "话多"},
+                    {"user_id": "999888", "title": "潜水员"},  # 无昵称，降级为 user_id
+                ],
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="金句,用户称号",
+    )
+    # 验证金句内容
+    assert '1. "这是金句内容" —— 发言人A' in res
+    assert '2. "这是第二条金句" —— 作者B' in res
+    assert "幽灵" not in res
+    # 验证称号内容
+    assert "1. 群友小明: [水群狂魔 | ENTP]" in res
+    assert "2. 999888: [潜水员]" in res
 
 
 @pytest.mark.asyncio
