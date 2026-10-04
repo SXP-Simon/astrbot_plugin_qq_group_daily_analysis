@@ -281,6 +281,7 @@ class GroupDailyAnalysis(Star):
             report_query_service=self.report_query_service,
             active_task_manager=self.active_task_manager,
             trace_store=self.trace_store,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
         )
 
         # 同步全局限流并进行初始化配置
@@ -734,13 +735,14 @@ class GroupDailyAnalysis(Star):
         analysis_sections: str = "全部",
         days: int = 1,
         group: str = "",
+        render_to_chat: bool = True,
     ) -> str:
-        """按需触发群聊聊天记录分析流水线（后台静默计算入库，不直接向群内发图）。
+        """按需触发群聊聊天记录分析流水线（默认在分析完成后自动渲染长图并发送至群聊）。
 
         【触发准则 (Trigger Rule)】
         - 仅当管理员明确要求“重新分析”、“更新日报”、“提取最新群聊金句/话题”等主动执行后台计算的意图时调用。
         - 【重要交互原则】普通查询历史事实请严格调用 get_report 工具，严禁随意触发本工具！在群聊中触发时 group 必须留空。
-        - 【交互提示】本工具仅在后台异步运行并静默落盘入库，不会向群内主动发送长图。完成提示后请告知用户分析已在后台计算，稍后可通过查询获取结果。
+        - 【交互提示】本工具在后台异步执行，默认（render_to_chat=True）会在计算完成后自动将精美长图发送到群里。受理成功后请明确告知用户分析已启动、长图稍后会自动发群，切勿虚构假分析结果。若用户明确要求“静默更新/后台计算不发群”，可将 render_to_chat 设为 False。
         - 【负向禁令】严禁用于闲聊、单纯询问已有数据；仅管理员具备触发权限。
 
         【参数规范 (Arguments)】:
@@ -748,17 +750,20 @@ class GroupDailyAnalysis(Star):
             analysis_sections (string): 本次需要执行的分析模块：'全部'（默认）、'话题'、'用户称号'、'金句'、'聊天质量分析'。多选逗号分隔。
             days (number): 分析回溯天数，默认 1（当天或最近24小时），最大允许 7。
             group (string): 目标群聊标识。默认留空（自动定位当前群聊）。私聊中可填数字群号或群名称。
+            render_to_chat (boolean): 是否在分析完成后自动渲染并向群聊发送长图报告。默认为 True。仅当用户明确要求静默入库时设为 False。
 
         【调用示范 (Few-Shot)】:
-        - 管理员在群里：“重新分析一下今天的群聊” -> analysis_sections="全部", days=1, group=""
-        - 管理员在群里：“帮我提取一下今天群里的金句” -> analysis_sections="金句", days=1, group=""
-        - 管理员在私聊：“更新一下开发交流群的日报” -> analysis_sections="全部", days=1, group="开发交流群"
+        - 管理员在群里：“重新分析一下今天的群聊” -> analysis_sections="全部", days=1, group="", render_to_chat=True
+        - 管理员在群里：“帮我提取一下今天群里的金句” -> analysis_sections="金句", days=1, group="", render_to_chat=True
+        - 管理员在群里：“静默更新一下日报数据库，不要发图” -> analysis_sections="全部", days=1, group="", render_to_chat=False
+        - 管理员在私聊：“更新一下开发交流群的日报” -> analysis_sections="全部", days=1, group="开发交流群", render_to_chat=True
         """
         return await self.analysis_trigger_service.trigger_analysis(
             event=event,
             analysis_sections=analysis_sections,
             days=days,
             group=group,
+            render_to_chat=render_to_chat,
         )
 
     # ==================== 兼容性私有方法代理转发 ====================
