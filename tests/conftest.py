@@ -75,6 +75,10 @@ if "astrbot.api" not in sys.modules:
         def platform_adapter_type(*args, **kwargs):
             return lambda fn: fn
 
+        @staticmethod
+        def llm_tool(*args, **kwargs):
+            return lambda fn: fn
+
         PermissionType = PermissionType
         EventMessageType = EventMessageType
         PlatformAdapterType = PlatformAdapterType
