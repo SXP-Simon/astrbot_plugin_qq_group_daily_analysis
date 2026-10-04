@@ -6,7 +6,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Ask DeepWiki](https://img.shields.io/badge/Ask_DeepWiki-AI_知识库-8A2BE2?style=for-the-badge&logo=gitbook&logoColor=white)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask_DeepWiki-AI_知识库-1877F2?style=for-the-badge&logo=data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAAgACADASIAAhEBAxEB/8QAFwABAQEBAAAAAAAAAAAAAAAAAAYHCP/EACIQAAEDBAIDAQEAAAAAAAAAAAECAwQABQYHERIxMkFxCP/EABcBAQEBAQAAAAAAAAAAAAAAAAABAgP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDkylK2r+f9b64zbDckn5fmaLJdYZ6Q2lzWY6UApBS6oOe4Kz148D9IroyxWlW+w9UZ5gFot91yqyiFEnqLbLiJLboC+CequhPBIBI8gj78qIqhW1aA2LrTC8NySDmWGt3u6yz3hOrgtSErSEgJZUV+gCx258H9AFYrSoLjYm2M72BaLfacqvKJkSAouNNtxm2QV8EdldAOSASkeAB8+1D0pVH/2Q==)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 
 <table align="center" style="border: none;">
   <tr>
