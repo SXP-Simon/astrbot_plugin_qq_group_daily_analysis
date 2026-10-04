@@ -1,4 +1,10 @@
 ﻿{% if quotes %}
+{# 报告语言（i18n 骨架 · POC）：core 传入 report_language 才生效，不传时保持简体原样 #}
+{% set _RL = report_language if (report_language is defined and report_language) else '' %}
+{% set REPORT_LANG = _RL or 'zh-Hans' %}
+{% set PT = {
+    'miku_review': {'zh-Hans': 'Miku 锐评', 'zh-Hant': 'Miku 銳評', 'en': "Miku's Take", 'ja': 'ミクの辛口コメント'}
+} %}
     {% for quote in quotes %}
     <div class="miku-quote-row" style="margin-bottom: 25px; display: flex; flex-direction: column; align-items: {% if loop.index0 is even %}flex-start{% else %}flex-end{% endif %};">
         <div class="miku-quote-wrap" style="display: flex; gap: 15px; max-width: 85%; {% if loop.index0 is odd %}flex-direction: row-reverse;{% endif %}">
@@ -18,7 +24,7 @@
                             <path d="M9 18V5l12-2v13"/>
                             <circle cx="6" cy="18" r="3"/>
                             <circle cx="18" cy="16" r="3"/>
-                        </svg>                        <span style="font-weight: bold; color: var(--miku-dark); font-size: 0.95rem;">Miku 锐评</span>
+                        </svg>                        <span style="font-weight: bold; color: var(--miku-dark); font-size: 0.95rem;">{{ PT.miku_review[REPORT_LANG] }}</span>
                     </div>
                     <div style="font-size: 0.9rem; color: var(--text-sub); line-height: 1.6;">{{ quote.reason | safe }}</div>
                 </div>

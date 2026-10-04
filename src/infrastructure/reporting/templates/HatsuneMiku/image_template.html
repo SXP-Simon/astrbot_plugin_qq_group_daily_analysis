@@ -1,18 +1,40 @@
-{% import "inline_assets.html" as inline_assets %}
+{% import "inline_assets.html" as inline_assets with context %}
+{# ================= 报告语言（i18n 骨架 · POC，长图版） =================
+   与 html_template.html 同一套约定：core 传入 report_language 才接管，
+   不传时文案仍是简体、lang 仍沿用 t2i_font_source 的地区逻辑 —— 即渲染结果与改造前一致。
+   两份模板的字典要保持同步（后续 core 落地时建议抽到共享文件）。 #}
+{% set _RL = report_language if (report_language is defined and report_language) else '' %}
+{% set REPORT_LANG = _RL or 'zh-Hans' %}
+{% set _EXPLICIT = _RL != '' %}
+{% set _TC_FIRST = (_RL == 'zh-Hant') or (_RL == '' and t2i_font_source != 'Mainland') %}
+{% set T = {
+    'title': {'zh-Hans': '群聊日常分析看板', 'zh-Hant': '群聊日常分析看板', 'en': 'Group Chat Daily Report', 'ja': 'グループチャット日報'},
+    'log': {'zh-Hans': '分析日志', 'zh-Hant': '分析日誌', 'en': 'Analysis Log', 'ja': '分析ログ'},
+    'k_msgs': {'zh-Hans': '今日消息数', 'zh-Hant': '今日訊息數', 'en': 'Messages Today', 'ja': '今日のメッセージ数'},
+    'k_members': {'zh-Hans': '活跃成员数', 'zh-Hant': '活躍成員數', 'en': 'Active Members', 'ja': 'アクティブメンバー数'},
+    'k_emoji': {'zh-Hans': '表情互动', 'zh-Hant': '表情互動', 'en': 'Emoji Reactions', 'ja': '絵文字リアクション'},
+    'k_chars': {'zh-Hans': '今日字数累计', 'zh-Hant': '今日字數累計', 'en': 'Characters Today', 'ja': '今日の累計文字数'},
+    'k_peak': {'zh-Hans': '峰值活跃时间段', 'zh-Hant': '峰值活躍時段', 'en': 'Peak Activity Window', 'ja': 'ピーク時間帯'},
+    's_24h': {'zh-Hans': '24小时活动', 'zh-Hant': '24 小時活動', 'en': '24-Hour Activity', 'ja': '24時間のアクティビティ'},
+    's_topics': {'zh-Hans': '话题总结', 'zh-Hant': '話題總結', 'en': 'Topics', 'ja': 'トピックまとめ'},
+    's_users': {'zh-Hans': '群友画像', 'zh-Hant': '群友畫像', 'en': 'Member Portraits', 'ja': 'メンバープロフィール'},
+    's_bible': {'zh-Hans': '今日圣经', 'zh-Hant': '今日聖經', 'en': 'Quote of the Day', 'ja': '今日の聖書'},
+    's_review': {'zh-Hans': '群聊锐评', 'zh-Hant': '群聊銳評', 'en': 'Chat Review', 'ja': 'グループ辛口レビュー'}
+} %}
 <!DOCTYPE html>
-<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
+<html lang="{{ REPORT_LANG if _EXPLICIT else ('zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant') }}">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>群聊日常分析看板 · {{current_date}}</title>
+    <meta name="viewport" content="width=940, initial-scale=1.0">
+    <title>{{ T.title[REPORT_LANG] }} · {{current_date}}</title>
     <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
     <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
     <link
-        href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono&display=swap"
+        href="{{ t2i_google_fonts_mirror }}/css2?family=Noto+Sans+TC:wght@400;500;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+JP:wght@400;700&family=Outfit:wght@400;600;800&family=Share+Tech+Mono{# 英文报告才加载 Inter（拉丁正文字体）：中文/繁体报告一个字节都不多下 #}{% if REPORT_LANG == 'en' %}&family=Inter:wght@400;500;600;700{% endif %}&display=swap"
         rel="stylesheet">
     <!-- cjkfonts font-face removed for T2I rendering performance; uses Noto Sans SC fallback -->
-    <script src="{{ t2i_npm_mirror }}/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- 图标已内联为 SVG（11 个），不再依赖 lucide CDN -->
     <style>
         :root {
             --miku-base: #39C5BB;
@@ -29,8 +51,9 @@
             --accent-dark: #2C3E50;
 
             --radius: 12px;
-            --font-main: {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
-            --font-title: 'cjkfonts AllSeto', {% if t2i_font_source == 'Mainland' %}'Noto Sans SC', 'Noto Sans TC'{% else %}'Noto Sans TC', 'Noto Sans SC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
+            {# 未传语言时 _TC_FIRST 等价于原来的地区判断，输出不变 #}
+            --font-main: {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', sans-serif;
+            --font-title: 'cjkfonts AllSeto', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'Microsoft JhengHei', 'PingFang TC', 'Heiti TC', 'Noto Sans CJK TC', 'Source Han Sans TC', cursive;
             --font-num: 'Outfit', sans-serif;
             --font-mono: 'Share Tech Mono', monospace;
 
@@ -1456,6 +1479,40 @@
         }
         /* MOBILE_QUOTE_DENSE_V4_END */
 
+        /* 按语言分组渲染：日文/韩文片段走各自字体，避免中日文共用码位导致的字形互撞
+           （lang 标记由文末脚本在渲染时打上；纯中文内容命中 0 处，像素不受影响，
+           字体缺失时回落到本地区的 --font-main 栈） */
+        :lang(ja) { font-family: 'Noto Sans JP', var(--font-main) !important; }
+
+        /* ---------- 11c. 日文报告的排版（页面 lang=ja 时才命中） ----------
+           日文和中文共用同一批汉字码位，靠字体才能分开字形：
+           · 标题原本走 'cjkfonts AllSeto'（中文展示字体，假名覆盖不全）→ 日文报告改走 Noto Sans JP；
+           · 正文原本是中文字体栈 → 日文报告改成日文字体栈（本机/容器都装了 Noto Sans JP，不会出豆腐块）；
+           · 数字仍由 --font-num（Outfit）出，不受影响；
+           · 上面的 :lang(ja) 单条规则是给"中文/英文报告里的日文片段"换字体的，保持原样不动；
+           · 日文全角字宽和中文字号体系一致，行高/字距沿用原值即可，不做英文那种负字距。 */
+        :lang(ja) {
+            --font-main: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+            --font-title: 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Noto Sans SC', 'Noto Sans TC', sans-serif;
+        }
+
+        /* ---------- 11b. 英文报告的针对性排版（只在 REPORT_LANG=en 时命中，中文/繁体版一行不动） ----------
+           ① 拉丁字母不再交给中文字体渲染：标题用 Outfit（模板自己的拉丁展示字形）、正文用 Inter，
+              中文引用（金句原文 / 昵称 / 群名）仍由后面的 CJK 字体兜底，不会变豆腐块；
+           ② 字距：原来的 +1px 是给方块字调的，拉丁字母要轻微负字距才不散；
+           ③ 小标签（统计卡 / 峰值时段）走英文报表惯例的大写 + 字距，信息量不变、视觉更齐整；
+           ④ 行高：原 1.8 是给中文调的，拉丁字母 1.62 更耐读（partial 里是内联样式，只能 !important 覆盖）。 */
+        :lang(en) {
+            --font-main: 'Inter', 'Outfit', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --font-title: 'Outfit', 'Inter', {% if _TC_FIRST %}'Noto Sans TC', 'Noto Sans SC'{% else %}'Noto Sans SC', 'Noto Sans TC'{% endif %}, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        :lang(en) h1 { font-weight: 800; letter-spacing: -0.018em; }
+        :lang(en) .section-title-text { letter-spacing: -0.011em !important; }
+        :lang(en) .stat-txt,
+        :lang(en) .peak-label { text-transform: uppercase; letter-spacing: 0.045em; }
+        :lang(en) .miku-topic-card [style*="line-height"],
+        :lang(en) .miku-quality-summary { line-height: 1.62 !important; }
+
 </style>
 {{ inline_assets.peak_activity_image_css() | safe }}
 </head>
@@ -1468,36 +1525,36 @@
         <div class="deco-image"></div>
 
         <div class="header">
-            <h1>群聊日常分析看板</h1>
-            <div class="date-line">分析日志 // {{current_date}}</div>
+            <h1>{{ T.title[REPORT_LANG] }}</h1>
+            <div class="date-line">{{ T.log[REPORT_LANG] }} // {{current_date}}</div>
         </div>
 
         <div class="stats-row">
             <div class="stat-box">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
-                    <i data-lucide="message-square" class="stat-icon"></i>
-                    <div class="stat-txt" style="margin: 0;">今日消息数</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="message-square" aria-hidden="true" class="lucide lucide-message-square stat-icon"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path></svg>
+                    <div class="stat-txt" style="margin: 0;">{{ T.k_msgs[REPORT_LANG] }}</div>
                 </div>
                 <div class="stat-num">{{message_count}}</div>
             </div>
             <div class="stat-box">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
-                    <i data-lucide="users" class="stat-icon"></i>
-                    <div class="stat-txt" style="margin: 0;">活跃成员数</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="users" aria-hidden="true" class="lucide lucide-users stat-icon"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                    <div class="stat-txt" style="margin: 0;">{{ T.k_members[REPORT_LANG] }}</div>
                 </div>
                 <div class="stat-num">{{participant_count}}</div>
             </div>
             <div class="stat-box">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
-                    <i data-lucide="smile" class="stat-icon"></i>
-                    <div class="stat-txt" style="margin: 0;">表情互动</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="smile" aria-hidden="true" class="lucide lucide-smile stat-icon"><path d="M15 10V9"></path><path d="M16.472 15a6 6 0 01-8.943 0"></path><path d="M9 10V9"></path><circle cx="12" cy="12" r="10"></circle></svg>
+                    <div class="stat-txt" style="margin: 0;">{{ T.k_emoji[REPORT_LANG] }}</div>
                 </div>
                 <div class="stat-num">{{emoji_count}}</div>
             </div>
             <div class="stat-box">
                 <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 5px;">
-                    <i data-lucide="type" class="stat-icon"></i>
-                    <div class="stat-txt" style="margin: 0;">今日字数累计</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="type" aria-hidden="true" class="lucide lucide-type stat-icon"><path d="M12 4v16"></path><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"></path><path d="M9 20h6"></path></svg>
+                    <div class="stat-txt" style="margin: 0;">{{ T.k_chars[REPORT_LANG] }}</div>
                 </div>
                 <div class="stat-num">{{total_characters}}</div>
             </div>
@@ -1506,8 +1563,8 @@
         <div class="active-peak-block">
             <div>
                 <div class="peak-label">
-                    <i data-lucide="trending-up" style="width: 20px; height: 20px;"></i>
-                    峰值活跃时间段
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="trending-up" aria-hidden="true" class="lucide lucide-trending-up" style="width: 20px; height: 20px;"><path d="M16 7h6v6"></path><path d="m22 7-8.5 8.5-5-5L2 17"></path></svg>
+                    {{ T.k_peak[REPORT_LANG] }}
                 </div>
                 <div class="peak-time-text">{{most_active_period}}</div>
             </div>
@@ -1523,8 +1580,8 @@
             <div class="section-header">
                 <div class="v-bar"></div>
                 <div class="section-title-text">
-                    <i data-lucide="line-chart" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    24小时活动
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="line-chart" aria-hidden="true" class="lucide lucide-line-chart" style="width: 24px; height: 24px; color: var(--miku-dark);"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+                    {{ T.s_24h[REPORT_LANG] }}
                 </div>
             </div>
             <div class="card-common" style="padding: 20px 10px;">
@@ -1539,8 +1596,8 @@
             <div class="section-header">
                 <div class="v-bar" style="background: var(--miku-pink-light);"></div>
                 <div class="section-title-text">
-                    <i data-lucide="message-square" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    话题总结
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="message-square" aria-hidden="true" class="lucide lucide-message-square" style="width: 24px; height: 24px; color: var(--miku-dark);"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path></svg>
+                    {{ T.s_topics[REPORT_LANG] }}
                 </div>
             </div>
             {{topics_html | safe}}
@@ -1553,8 +1610,8 @@
             <div class="section-header">
                 <div class="v-bar"></div>
                 <div class="section-title-text">
-                    <i data-lucide="users" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    群友画像
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="users" aria-hidden="true" class="lucide lucide-users" style="width: 24px; height: 24px; color: var(--miku-dark);"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                    {{ T.s_users[REPORT_LANG] }}
                 </div>
             </div>
             {{titles_html | safe}}
@@ -1567,8 +1624,8 @@
             <div class="section-header">
                 <div class="v-bar" style="background: var(--miku-pink-light);"></div>
                 <div class="section-title-text">
-                    <i data-lucide="quote" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    今日圣经
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="quote" aria-hidden="true" class="lucide lucide-quote" style="width: 24px; height: 24px; color: var(--miku-dark);"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path></svg>
+                    {{ T.s_bible[REPORT_LANG] }}
                 </div>
             </div>
             {{quotes_html | safe}}
@@ -1581,8 +1638,8 @@
             <div class="section-header">
                 <div class="v-bar"></div>
                 <div class="section-title-text">
-                    <i data-lucide="award" style="width: 24px; height: 24px; color: var(--miku-dark);"></i>
-                    群聊锐评
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="award" aria-hidden="true" class="lucide lucide-award" style="width: 24px; height: 24px; color: var(--miku-dark);"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"></path><circle cx="12" cy="8" r="6"></circle></svg>
+                    {{ T.s_review[REPORT_LANG] }}
                 </div>
             </div>
             {{chat_quality_html | safe}}
@@ -1597,28 +1654,199 @@
                         target="_blank">SXP-Simon/astrbot_plugin_qq_group_daily_analysis</a>
                 </div>
                 <div class="token-data">
-                    <i data-lucide="cpu"
-                        style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: var(--text-sub);"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cpu" aria-hidden="true" class="lucide lucide-cpu" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: var(--text-sub);"><path d="M12 20v2"></path><path d="M12 2v2"></path><path d="M17 20v2"></path><path d="M17 2v2"></path><path d="M2 12h2"></path><path d="M2 17h2"></path><path d="M2 7h2"></path><path d="M20 12h2"></path><path d="M20 17h2"></path><path d="M20 7h2"></path><path d="M7 20v2"></path><path d="M7 2v2"></path><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="8" y="8" width="8" height="8" rx="1"></rect></svg>
                     Token usage: <span style="font-weight: 800;">{{total_tokens}}</span> <span class="token-sub">( P:
                         {{prompt_tokens}} | C: {{completion_tokens}} )</span>
                 </div>
             </div>
             <div class="footer-bottom">
                 <div class="footer-time">
-                    <i data-lucide="clock"
-                        style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: var(--text-sub);"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="clock" aria-hidden="true" class="lucide lucide-clock" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: var(--text-sub);"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
                     Generated at {{current_datetime}}
                 </div>
                 <div class="footer-author">
-                    <i data-lucide="heart"
-                        style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: #ff85a2;"></i>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="heart" aria-hidden="true" class="lucide lucide-heart" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px; color: #ff85a2;"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path></svg>
                     <a href="https://github.com/shiitin" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">Template by shiitin</a>
                 </div>
             </div>
         </div>
     </div>
-    <script>
-        lucide.createIcons();
+    <!-- lucide.createIcons() 已移除：图标在模板里就是 SVG，不再需要运行时 -->
+    <!-- ================= 按语言分组渲染（长图版） ================= -->
+    <!-- 给日文片段打 lang 标记，让 :lang(ja) 换字体栈。
+         为什么必须这么做：中日文共用同一批 Unicode 码位（U+76F4「直」中日都是这个码位），
+         CSS 的 unicode-range 分不开，只能靠 lang 属性区分字形。规则：
+           · 含假名（含半角）且整段没有中文特征字 → 整段 lang="ja"（日文句子连汉字一起走日文字形）
+           · 否则只标假名/谚文本身 → "我最喜欢初音ミク的歌"里只有「ミク」换字体，中文不受影响
+           · 纯中文内容命中 0 处，DOM/像素都不变
+         与 html_template 版逻辑一致，改一处要同时改另一边。 -->
+<script>
+    (function () {
+        "use strict";
+        var RE_KANA = /[\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff66-\uff9f]/;
+        var RE_CN_MARK = /[的了吗呢吧这那们你我没啥呗哦啊]/;
+        var RE_TOKEN = /[\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff66-\uff9f]+/g;
+
+        function buildFragment(text, wholeJa) {
+            var frag = document.createDocumentFragment();
+            if (wholeJa) {
+                var s = document.createElement("span");
+                s.lang = "ja";
+                s.className = "miku-lang-run";
+                s.textContent = text;
+                frag.appendChild(s);
+                return frag;
+            }
+            var last = 0, m;
+            RE_TOKEN.lastIndex = 0;
+            while ((m = RE_TOKEN.exec(text)) !== null) {
+                if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+                var sp = document.createElement("span");
+                sp.lang = "ja";
+                sp.className = "miku-lang-run";
+                sp.textContent = m[0];
+                frag.appendChild(sp);
+                last = m.index + m[0].length;
+            }
+            if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+            return frag;
+        }
+
+        function tagScriptRuns() {
+            if (!document.body) return 0;
+            var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+            var targets = [], n;
+            while ((n = walker.nextNode()) !== null) {
+                var p = n.parentNode;
+                if (!p) continue;
+                var pn = p.nodeName;
+                if (pn === "SCRIPT" || pn === "STYLE" || pn === "NOSCRIPT" || pn === "TEXTAREA") continue;
+                if (p.closest && p.closest("style, .miku-lang-run")) continue;
+                var t = n.nodeValue;
+                if (!t) continue;
+                if (!RE_KANA.test(t)) continue;
+                targets.push(n);
+            }
+            for (var i = 0; i < targets.length; i++) {
+                var text = targets[i].nodeValue;
+                var wholeJa = RE_KANA.test(text) && !RE_CN_MARK.test(text);
+                targets[i].parentNode.replaceChild(buildFragment(text, wholeJa), targets[i]);
+            }
+            return targets.length;
+        }
+        tagScriptRuns();
+        window.mikuTagScriptRuns = tagScriptRuns;
+    })();
+</script>
+    <!-- ================= 按语言分组渲染 END ================= -->
+<script id="miku-fit-oneline">
+    /* ---------- 标题/标签尽量不折成两行：只有确实折了才逐档缩字号 ----------
+       同一套模板要服务简体/繁体/英文，英文串普遍更长（Group Chat Daily Report、
+       CHARACTERS TODAY 这类），按中文调好的字号会折成两行。
+       判据是"实际渲染行数"（Range 量文本节点，忽略装饰图标），不是宽度——
+       这些元素宽度会随内容自适应，比宽度会误判。
+       本来就一行 → 完全不介入（中文/繁体因此零影响，长图产物与改造前逐字节一致）；
+       缩到原字号 78% 仍放不下就还原，宁可折行也不缩成蚂蚁字。
+       计时：字体加载会换宽度，页面自己的脚本也会改布局，所以分多轮重算
+       （每轮都先清掉上一轮的内联字号，从 CSS 原值重来，结果确定）。 */
+    (function () {
+        var MIN_RATIO = 0.78;
+        var MIN_RATIO_H1 = 0.68; /* 大标题专用下限 */
+        var FIT_SEL = ["h1", ".section-title-text", ".stat-txt", ".peak-label"];
+        var JOINED = FIT_SEL.join(",");
+
+        /* 只统计文本节点的 rect：装饰图标与文字顶边不一致，会把单行误判成两行 */
+        function lineCount(el) {
+            var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+            var tops = [], node, i;
+            while ((node = walker.nextNode())) {
+                if (!node.nodeValue || !node.nodeValue.trim()) continue;
+                var r = document.createRange();
+                r.selectNodeContents(node);
+                var rects = r.getClientRects();
+                for (i = 0; i < rects.length; i++) {
+                    if (rects[i].width < 1 || rects[i].height < 1) continue;
+                    tops.push(rects[i].top);
+                }
+            }
+            if (tops.length < 2) return 1;
+            var size = parseFloat(getComputedStyle(el).fontSize) || 16;
+            var tol = size * 0.5; /* 同一行内的微小抖动并掉 */
+            tops.sort(function (a, b) { return a - b; });
+            var n = 1, last = tops[0];
+            for (i = 1; i < tops.length; i++) {
+                if (tops[i] - last > tol) { n++; last = tops[i]; }
+            }
+            return n;
+        }
+
+        function fitOneLine(el) {
+            if (lineCount(el) <= 1) return; /* 本来一行：不介入 */
+            var base = parseFloat(getComputedStyle(el).fontSize);
+            if (!base) return;
+            /* 大标题额外放宽下限：它是最显眼的元素，宁可小一点也不折成两行 */
+            var min = base * (el.tagName === "H1" ? MIN_RATIO_H1 : MIN_RATIO), size = base;
+            while (size > min) {
+                size -= 0.5;
+                /* 必须带 important：模板里有带 !important 的密度/媒体查询规则，
+                   普通内联字号会被它们压住，缩了等于没缩 */
+                el.style.setProperty("font-size", size + "px", "important");
+                if (lineCount(el) <= 1) {
+                    el.dataset.mikuFit = size.toFixed(1);
+                    return;
+                }
+            }
+            el.style.removeProperty("font-size"); /* 缩到下限仍放不下：还原，让它自然折行 */
+        }
+
+        function resetAndRun() {
+            var els = document.querySelectorAll(JOINED);
+            Array.prototype.forEach.call(els, function (el) {
+                el.style.removeProperty("font-size");
+                el.removeAttribute("data-miku-fit");
+            });
+            Array.prototype.forEach.call(els, fitOneLine);
+        }
+
+        function schedule() {
+            resetAndRun();
+            /* 字体换上来、页面自己的脚本改完布局后，再补几轮 */
+            [60, 300, 1000, 2500, 5000].forEach(function (ms) {
+                setTimeout(resetAndRun, ms);
+            });
+        }
+
+        if (document.fonts) {
+            /* 字体是陆续加载的（Inter / 思源各字重），每加载完一批宽度就变了，必须重算；
+               fonts.ready 会在"当前没有在下载的字体"时就提前 resolve，单靠它不够。 */
+            if (document.fonts.addEventListener) {
+                document.fonts.addEventListener("loadingdone", resetAndRun);
+                document.fonts.addEventListener("loadingerror", resetAndRun);
+            }
+            if (document.fonts.ready) document.fonts.ready.then(resetAndRun);
+        }
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", schedule);
+        } else {
+            schedule();
+        }
+        window.addEventListener("load", resetAndRun);
+        /* 布局变化（窗口缩放 / 折叠展开 / 密度切换）时重算 */
+        var rt = null;
+        function debounced() {
+            if (rt) clearTimeout(rt);
+            rt = setTimeout(resetAndRun, 180);
+        }
+        window.addEventListener("resize", debounced);
+        if (window.ResizeObserver) {
+            var lastW = document.documentElement.clientWidth;
+            new ResizeObserver(function () {
+                var w = document.documentElement.clientWidth;
+                if (w !== lastW) { lastW = w; debounced(); }
+            }).observe(document.documentElement);
+        }
+        window.mikuFitOneLine = resetAndRun;
+    })();
     </script>
 </body>
 

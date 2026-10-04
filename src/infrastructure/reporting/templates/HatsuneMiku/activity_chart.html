@@ -1,4 +1,11 @@
 ﻿<div class="miku-activity-chart" style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+    {# 报告语言（i18n 骨架 · POC）：core 传入 report_language 才生效，不传时保持简体原样
+       （Jinja 的 set 是文件级作用域，放在容器开头一次即可） #}
+    {% set _RL = report_language if (report_language is defined and report_language) else '' %}
+    {% set REPORT_LANG = _RL or 'zh-Hans' %}
+    {% set PT = {
+        'hour_unit': {'zh-Hans': '时', 'zh-Hant': '時', 'en': 'h', 'ja': '時'}
+    } %}
     {# 柱状图主体层：确保底部对齐 #}
     <div style="display: flex; align-items: flex-end; justify-content: space-between; height: 160px; gap: 4px; padding-bottom: 5px; border-bottom: 2px solid rgba(57, 197, 187, 0.1);">
         {% set chart_colors = [
@@ -37,7 +44,7 @@
         {% for item in chart_data %}
         <div style="flex: 1; text-align: center;">
             <span style="font-family: var(--font-num); font-size: 0.7rem; color: var(--text-sub); font-weight: bold; white-space: nowrap; display: inline-block;">
-                {{ "%02d"|format(item.hour) }}{% if loop.index0 % 4 == 0 or loop.last %}<span class="miku-hour-unit">时</span>{% endif %}
+                {{ "%02d"|format(item.hour) }}{% if loop.index0 % 4 == 0 or loop.last %}<span class="miku-hour-unit">{{ PT.hour_unit[REPORT_LANG] }}</span>{% endif %}
             </span>
         </div>
         {% endfor %}

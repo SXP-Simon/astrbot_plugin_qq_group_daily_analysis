@@ -1,3 +1,9 @@
+{# 报告语言（i18n 骨架 · POC）：core 传入 report_language 才生效，不传时保持简体原样 #}
+{% set _RL = report_language if (report_language is defined and report_language) else '' %}
+{% set REPORT_LANG = _RL or 'zh-Hans' %}
+{% set PT = {
+    'miku_summary': {'zh-Hans': 'Miku 综合点评', 'zh-Hant': 'Miku 綜合點評', 'en': "Miku's Verdict", 'ja': 'ミクの総評'}
+} %}
 <div class="card-common miku-chat-quality" style="padding: 30px;">
         <div class="miku-chat-quality-head" style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 25px; border-bottom: 2px dashed var(--miku-blue); padding-bottom: 15px;">
             <div style="font-family: var(--font-title); font-size: 1.6rem; color: var(--miku-dark);">{{ title }}</div>
@@ -30,7 +36,7 @@
                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
                         <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
                         <line x1="12" x2="12" y1="19" y2="22"/>
-                    </svg>                    <span style="font-weight: bold; font-size: 1.1rem;">Miku 综合点评</span>
+                    </svg>                    <span style="font-weight: bold; font-size: 1.1rem;">{{ PT.miku_summary[REPORT_LANG] }}</span>
                 </div>
                 <div style="line-height: 1.8; font-size: 1rem; opacity: 0.95;">{{ summary }}</div>
             </div>
