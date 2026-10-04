@@ -216,6 +216,77 @@ class CheckpointStore(ICheckpointStore):
                 for row in rows
             ]
 
+    def get_checkpoints_by_date_range(
+        self,
+        group_id: str,
+        start_date: str,
+        end_date: str,
+        stage_name: str = "LLM_ANALYSIS",
+    ) -> list[dict[str, object]]:
+        """按日期范围查询指定群在各自然日最新有效的一份阶段 Checkpoint 详情列表。
+
+        采用 SQL 窗口去重，同一天存在多份时取 MAX(created_at)，按日期升序返回。
+
+        Args:
+            group_id: 群号。
+            start_date: 起始日期（YYYY-MM-DD）。
+            end_date: 截止日期（YYYY-MM-DD）。
+            stage_name: 阶段名称（默认为 LLM_ANALYSIS）。
+
+        Returns:
+            list[dict[str, object]]: 包含 checkpoint_id, date_str, created_at, data 的详情字典列表。
+        """
+        now = time.time()
+        with self._get_connection() as conn:
+            query = """
+                WITH ranked_checkpoints AS (
+                    SELECT checkpoint_id, group_id, date_str, stage_name, data_json, created_at, expire_at, trace_id,
+                           ROW_NUMBER() OVER (PARTITION BY date_str ORDER BY created_at DESC) AS rn
+                    FROM stage_checkpoints
+                    WHERE (group_id = ? OR group_id LIKE ?)
+                      AND date_str >= ? AND date_str <= ?
+                      AND stage_name = ?
+                      AND expire_at >= ?
+                )
+                SELECT checkpoint_id, group_id, date_str, stage_name, data_json, created_at, expire_at, trace_id
+                FROM ranked_checkpoints
+                WHERE rn = 1
+                ORDER BY date_str ASC;
+            """
+            rows = conn.execute(
+                query,
+                (
+                    str(group_id),
+                    f"%:{group_id}",
+                    str(start_date),
+                    str(end_date),
+                    stage_name,
+                    now,
+                ),
+            ).fetchall()
+
+            results: list[dict[str, object]] = []
+            for row in rows:
+                try:
+                    data = json.loads(row["data_json"])
+                except Exception:
+                    data = row["data_json"]
+                results.append(
+                    {
+                        "checkpoint_id": row["checkpoint_id"],
+                        "group_id": row["group_id"],
+                        "date_str": row["date_str"],
+                        "stage_name": row["stage_name"],
+                        "trace_id": row["trace_id"] or "",
+                        "created_at": row["created_at"],
+                        "created_at_formatted": time.strftime(
+                            "%Y-%m-%d %H:%M:%S", time.localtime(row["created_at"])
+                        ),
+                        "data": data,
+                    }
+                )
+            return results
+
     def delete_checkpoint(
         self,
         group_id: str,
