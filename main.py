@@ -648,7 +648,7 @@ class GroupDailyAnalysis(Star):
 
     # ==================== LLM Tool 函数调用注册 ====================
 
-    @filter.llm_tool("qq_group_daily_analysis_get_report")
+    @filter.llm_tool("group_daily_analysis_get_report")
     async def get_daily_report(
         self,
         event: AstrMessageEvent,
@@ -727,7 +727,7 @@ class GroupDailyAnalysis(Star):
             report_section=report_section,
         )
 
-    @filter.llm_tool("qq_group_daily_analysis_trigger")
+    @filter.llm_tool("group_daily_analysis_trigger")
     async def trigger_daily_analysis(
         self,
         event: AstrMessageEvent,
@@ -735,11 +735,12 @@ class GroupDailyAnalysis(Star):
         days: int = 1,
         group: str = "",
     ) -> str:
-        """按需触发群聊聊天记录分析与报告生成流水线。
+        """按需触发群聊聊天记录分析流水线（后台静默计算入库，不直接向群内发图）。
 
         【触发准则 (Trigger Rule)】
-        - 仅当用户明确要求“重新分析”、“更新日报”、“提取最新群聊金句/话题”等主动执行计算的意图时调用。
+        - 仅当管理员明确要求“重新分析”、“更新日报”、“提取最新群聊金句/话题”等主动执行后台计算的意图时调用。
         - 【重要交互原则】普通查询历史事实请严格调用 get_report 工具，严禁随意触发本工具！在群聊中触发时 group 必须留空。
+        - 【交互提示】本工具仅在后台异步运行并静默落盘入库，不会向群内主动发送长图。完成提示后请告知用户分析已在后台计算，稍后可通过查询获取结果。
         - 【负向禁令】严禁用于闲聊、单纯询问已有数据；仅管理员具备触发权限。
 
         【参数规范 (Arguments)】:
