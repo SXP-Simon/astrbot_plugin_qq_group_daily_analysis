@@ -276,8 +276,15 @@ class TelegramMessageConverter:
             sender_id = str(record.sender_id or "")
             sender_name = str(record.sender_name or "").strip() or "Unknown"
 
+            # 优先读取持久化在 content 中的原生 Telegram 消息 ID；
+            # 对未持久化原生 ID 的旧版历史记录，平滑回退至数据库自增主键。
+            raw_message_id = content.get("message_id")
+            message_id = str(raw_message_id or getattr(record, "id", "") or "")
+            if not message_id:
+                message_id = f"local:{getattr(record, 'id', '') or ''}"
+
             return UnifiedMessage(
-                message_id=str(record.id),
+                message_id=message_id,
                 sender_id=sender_id,
                 sender_name=sender_name,
                 sender_card=None,

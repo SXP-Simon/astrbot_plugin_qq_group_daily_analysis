@@ -1,5 +1,13 @@
 # 更新日志 (CHANGELOG)
 
+## [Unreleased]
+
+*   **🛡️ 【消息摄入可靠性与幂等加固】消息持久化两阶段预占锁扩展至多平台、命名空间隔离与持久化重启防重放**：
+    *   **入库前预占锁扩展至多平台**：将原本仅针对 QQ 官方平台的两阶段预占去重机制（In-flight 并发预占 + 内存 LRU 归档 + 异常自动回滚释放）扩展至 Telegram、Satori 等所有事件驱动平台，杜绝网关断线重连与 Webhook 重试导致的无效数据库重复写入与磁盘 I/O 开销。
+    *   **复合键命名空间防撞**：升级去重键生成规则为 `{platform_id}:{group_id}:{event_message_id}`，消除 Telegram 递增整数 ID 与其它平台 UUID/哈希之间的跨群或跨平台撞键误杀风险。
+    *   **真实原生 Message ID 统一下沉**：在所有平台入库历史记录的 `content` 中统一固化原生 `message_id`，下游适配器（Telegram、QQ 官方等）出库转换时优先读取真实事件 ID，自动向下兼容旧版历史数据；修复了 Telegram 增量分析游标对齐和贴表情回应（`set_message_reaction` 强依赖真实消息 ID）的历史潜在缺陷。
+    *   **SQLite WAL 本地持久化去重仓储（重启记忆恢复）**：引入轻量级 `EventDeduplicationStore`（基于 SQLite WAL 模式），重启时自动预热最近 4096 条已处理去重键，彻底解决以往 Bot 重启后内存 LRU 清空、导致积压 Webhook 瞬间重放重复入库的失忆痛点；支持保留期自动清理过期记录。
+
 ## [v5.7.2] - DeepSeek 女仆娘主题、同群多 Bot Profile 隔离与模型内容安全风控拦截识别
 
 <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/deepseek_maid-demo.jpg" alt="DeepSeek 鲸鱼女仆娘报告示例" height="520"></a>

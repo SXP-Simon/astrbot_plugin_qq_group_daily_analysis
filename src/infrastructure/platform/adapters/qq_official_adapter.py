@@ -278,7 +278,9 @@ class QQOfficialAdapter(PlatformAdapter["QQOfficialBotProtocol"]):
                             )
                         )
 
-            message_id = str(metadata.get("message_id", "") or "")
+            message_id = str(
+                metadata.get("message_id", "") or content.get("message_id", "") or ""
+            )
             if not message_id:
                 message_id = f"local:{record.id or ''}"
             timestamp = int(metadata.get("timestamp", 0) or 0)

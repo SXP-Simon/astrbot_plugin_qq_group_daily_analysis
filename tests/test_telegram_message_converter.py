@@ -93,3 +93,48 @@ def test_format_forward_nodes_to_text_single_source_and_multi_source():
     )
     assert "**[Alice]**\nAlice 的发言" in formatted_multi
     assert "**[Bob]**\nBob 的发言" in formatted_multi
+
+
+def test_to_unified_message_prefers_content_message_id():
+    """验证 to_unified_message 优先读取 content 中持久化的真实 Telegram 消息 ID。"""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    record = SimpleNamespace(
+        id=999,
+        sender_id="TG_USER_1",
+        sender_name="Alice",
+        created_at=datetime.fromtimestamp(1710000000, timezone.utc),
+        content={
+            "type": "user",
+            "message": [{"type": "plain", "text": "Hello TG"}],
+            "message_id": "REAL_TG_MSG_12345",
+        },
+    )
+
+    msg = TelegramMessageConverter.to_unified_message(record, group_id="-100123")
+    assert msg is not None
+    assert msg.message_id == "REAL_TG_MSG_12345"
+    assert msg.sender_id == "TG_USER_1"
+    assert msg.text_content == "Hello TG"
+
+
+def test_to_unified_message_falls_back_to_record_id_for_legacy_records():
+    """验证未包含原生 message_id 的旧版历史记录平滑回退至 record.id。"""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    legacy_record = SimpleNamespace(
+        id=888,
+        sender_id="TG_USER_2",
+        sender_name="Bob",
+        created_at=datetime.fromtimestamp(1710000000, timezone.utc),
+        content={
+            "type": "user",
+            "message": [{"type": "plain", "text": "Old message"}],
+        },
+    )
+
+    msg = TelegramMessageConverter.to_unified_message(legacy_record, group_id="-100123")
+    assert msg is not None
+    assert msg.message_id == "888"
