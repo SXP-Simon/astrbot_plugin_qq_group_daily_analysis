@@ -50,6 +50,7 @@ class AnalysisTriggerService:
         self.active_task_manager = active_task_manager
         self.trace_store = trace_store
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self._pending_groups: set[str] = set()
 
     async def trigger_analysis(
         self,
@@ -112,8 +113,11 @@ class AnalysisTriggerService:
         if not self.config_manager.is_group_allowed(target_group_id):
             return f"群聊 {matched_name or target_group_id} 未在群分析启用名单中，已拒绝触发分析。"
 
-        # 4. 并发排他锁防重入
-        if self.analysis_service.is_group_running(target_group_id, "daily"):
+        # 4. 并发排他锁防重入与原子预占
+        if (
+            target_group_id in self._pending_groups
+            or self.analysis_service.is_group_running(target_group_id, "daily")
+        ):
             return (
                 f"[任务冲突] 群聊 {matched_name or target_group_id} ({target_group_id}) "
                 f"当前已有日常分析任务正在执行中，请勿重复触发！待后台完成后可直接查询结果。"
@@ -145,7 +149,8 @@ class AnalysisTriggerService:
             else AnalysisStage.LLM_ANALYSIS.value
         )
 
-        # 8. 派发异步任务并生成 TraceID
+        # 8. 预占群锁、派发异步任务并生成 TraceID
+        self._pending_groups.add(target_group_id)
         trace_id = TraceContext.generate(prefix="tool_trigger", group_name=matched_name)
         platform_id = str(event.get_platform_id() or "")
 
@@ -203,18 +208,18 @@ class AnalysisTriggerService:
             except Exception:
                 pass
 
-        if self.active_task_manager:
-            await self.active_task_manager.register_task(
-                task_id=trace_id,
-                group_id=group_id,
-                group_name=group_name,
-                platform=platform_id,
-                trigger_type="llm_tool",
-                current_stage=AnalysisStage.FETCH_MESSAGES,
-                asyncio_task=asyncio.current_task(),
-            )
-
         try:
+            if self.active_task_manager:
+                await self.active_task_manager.register_task(
+                    task_id=trace_id,
+                    group_id=group_id,
+                    group_name=group_name,
+                    platform=platform_id,
+                    trigger_type="llm_tool",
+                    current_stage=AnalysisStage.FETCH_MESSAGES,
+                    asyncio_task=asyncio.current_task(),
+                )
+
             logger.info(
                 f"[LLM Tool Trigger] 异步任务启动: 群 {group_id}, trace={trace_id}, sections={effective_sections}"
             )
@@ -253,13 +258,17 @@ class AnalysisTriggerService:
                 exc_info=True,
             )
         finally:
+            self._pending_groups.discard(group_id)
             if self.trace_store:
                 try:
                     self.trace_store.save_trace(trace.to_dict())
                 except Exception:
                     pass
             if self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
+                try:
+                    await self.active_task_manager.finish_task(trace_id)
+                except Exception:
+                    pass
 
     def _check_admin_permission(self, event: AstrMessageEvent) -> bool:
         """检查调用者是否具备管理员权限。"""

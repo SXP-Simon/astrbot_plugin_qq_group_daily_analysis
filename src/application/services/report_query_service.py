@@ -203,14 +203,18 @@ class ReportQueryService:
         group_name = self._get_cached_group_name(group_id)
         sections = self._parse_sections(report_section)
 
-        # 1. 查询热轨：CheckpointStore
+        # 1. 查询热轨：CheckpointStore (优先常规分析 LLM_ANALYSIS，若无则尝试按需分析 ON_DEMAND_ANALYSIS)
         reports_data: list[dict[str, object]] = []
         is_latest_query = not bool(start_date and end_date)
 
         if self.checkpoint_store:
             if is_latest_query:
-                # 获取最新一份 LLM_ANALYSIS Checkpoint
-                latest_cp = self._get_latest_checkpoint(group_id)
+                # 获取最新一份 Checkpoint (LLM_ANALYSIS 优先，兜底 ON_DEMAND_ANALYSIS)
+                latest_cp = self._get_latest_checkpoint(
+                    group_id, stage_name=AnalysisStage.LLM_ANALYSIS.value
+                ) or self._get_latest_checkpoint(
+                    group_id, stage_name=AnalysisStage.ON_DEMAND_ANALYSIS.value
+                )
                 if latest_cp:
                     reports_data.append(latest_cp)
             else:
@@ -220,6 +224,13 @@ class ReportQueryService:
                     end_date=end_date,
                     stage_name=AnalysisStage.LLM_ANALYSIS.value,
                 )
+                if not reports_data:
+                    reports_data = self.checkpoint_store.get_checkpoints_by_date_range(
+                        group_id=group_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        stage_name=AnalysisStage.ON_DEMAND_ANALYSIS.value,
+                    )
 
         # 2. 检查单日临近探测 (若指定了单日但未命中任何报告)
         probe_notice = ""
@@ -234,11 +245,11 @@ class ReportQueryService:
 
         # 3. 若热轨仍为空，尝试冷轨降级：HistoryManager (KV)
         if not reports_data and self.history_manager:
-            kv_report = await self._query_history_kv(
+            kv_reports = await self._query_history_kv(
                 group_id, start_date, end_date, is_latest_query
             )
-            if kv_report:
-                reports_data.append(kv_report)
+            if kv_reports:
+                reports_data.extend(kv_reports)
 
         if not reports_data:
             range_desc = f"{start_date} 至 {end_date}" if start_date else "近期"
@@ -281,14 +292,18 @@ class ReportQueryService:
             "chat_quality_review",
         }
 
-    def _get_latest_checkpoint(self, group_id: str) -> dict[str, object] | None:
+    def _get_latest_checkpoint(
+        self,
+        group_id: str,
+        stage_name: str = "LLM_ANALYSIS",
+    ) -> dict[str, object] | None:
         if not self.checkpoint_store:
             return None
         items, _total = self.checkpoint_store.list_all_checkpoints(
             limit=1,
             offset=0,
             group_id=group_id,
-            stage_name=AnalysisStage.LLM_ANALYSIS.value,
+            stage_name=stage_name,
         )
         if not items:
             return None
@@ -296,7 +311,7 @@ class ReportQueryService:
         detail = self.checkpoint_store.get_checkpoint_detail(
             group_id=group_id,
             date_str=str(latest_summary.get("date_str", "")),
-            stage_name=AnalysisStage.LLM_ANALYSIS.value,
+            stage_name=stage_name,
             trace_id=str(latest_summary.get("trace_id", "")),
         )
         if detail and detail.get("data"):
@@ -322,27 +337,33 @@ class ReportQueryService:
         except ValueError:
             return None
 
-        # 探测 ±1 天
+        # 探测 ±1 天，优先 LLM_ANALYSIS，兜底 ON_DEMAND_ANALYSIS
         prev_date = (target_date - dt.timedelta(days=1)).strftime("%Y-%m-%d")
         next_date = (target_date + dt.timedelta(days=1)).strftime("%Y-%m-%d")
 
-        for d_str in (prev_date, next_date):
-            detail = self.checkpoint_store.get_checkpoint_detail(
-                group_id=group_id,
-                date_str=d_str,
-                stage_name=AnalysisStage.LLM_ANALYSIS.value,
-            )
-            if detail and detail.get("data"):
-                return {
-                    "checkpoint_id": str(detail.get("checkpoint_id", "")),
-                    "group_id": str(detail.get("group_id", "")),
-                    "date_str": str(detail.get("date_str", "")),
-                    "stage_name": str(detail.get("stage_name", "")),
-                    "trace_id": str(detail.get("trace_id", "")),
-                    "created_at": float(detail.get("created_at", 0.0)),
-                    "created_at_formatted": str(detail.get("created_at_formatted", "")),
-                    "data": detail.get("data"),
-                }
+        for stage in (
+            AnalysisStage.LLM_ANALYSIS.value,
+            AnalysisStage.ON_DEMAND_ANALYSIS.value,
+        ):
+            for d_str in (prev_date, next_date):
+                detail = self.checkpoint_store.get_checkpoint_detail(
+                    group_id=group_id,
+                    date_str=d_str,
+                    stage_name=stage,
+                )
+                if detail and detail.get("data"):
+                    return {
+                        "checkpoint_id": str(detail.get("checkpoint_id", "")),
+                        "group_id": str(detail.get("group_id", "")),
+                        "date_str": str(detail.get("date_str", "")),
+                        "stage_name": str(detail.get("stage_name", "")),
+                        "trace_id": str(detail.get("trace_id", "")),
+                        "created_at": float(detail.get("created_at", 0.0)),
+                        "created_at_formatted": str(
+                            detail.get("created_at_formatted", "")
+                        ),
+                        "data": detail.get("data"),
+                    }
         return None
 
     async def _query_history_kv(
@@ -351,22 +372,59 @@ class ReportQueryService:
         start_date: str,
         end_date: str,
         is_latest_query: bool,
-    ) -> dict[str, object] | None:
+    ) -> list[dict[str, object]]:
         if not self.history_manager:
-            return None
-        target_date = start_date or dt.date.today().strftime("%Y-%m-%d")
-        data = await self.history_manager.get_analysis(group_id, target_date)
-        if data:
-            return {
-                "checkpoint_id": f"kv_{group_id}_{target_date}",
-                "group_id": group_id,
-                "date_str": target_date,
-                "stage_name": "KV_SUMMARY",
-                "created_at": 0,
-                "created_at_formatted": str(data.get("generated_at", "")),
-                "data": data,
-            }
-        return None
+            return []
+
+        results: list[dict[str, object]] = []
+
+        if is_latest_query:
+            # 倒查最近 7 天的每日摘要，取最新命中
+            today = dt.date.today()
+            for offset in range(7):
+                cur_date = (today - dt.timedelta(days=offset)).strftime("%Y-%m-%d")
+                data = await self.history_manager.get_analysis(group_id, cur_date)
+                if data:
+                    results.append(
+                        {
+                            "checkpoint_id": f"kv_{group_id}_{cur_date}",
+                            "group_id": group_id,
+                            "date_str": cur_date,
+                            "stage_name": "KV_SUMMARY",
+                            "created_at": 0,
+                            "created_at_formatted": str(data.get("generated_at", "")),
+                            "data": data,
+                        }
+                    )
+                    break
+            return results
+
+        # 日期范围查询：按日期区间逐日检索
+        try:
+            cur = dt.date.fromisoformat(start_date)
+            end = dt.date.fromisoformat(end_date)
+        except ValueError:
+            cur = dt.date.today()
+            end = cur
+
+        while cur <= end:
+            d_str = cur.strftime("%Y-%m-%d")
+            data = await self.history_manager.get_analysis(group_id, d_str)
+            if data:
+                results.append(
+                    {
+                        "checkpoint_id": f"kv_{group_id}_{d_str}",
+                        "group_id": group_id,
+                        "date_str": d_str,
+                        "stage_name": "KV_SUMMARY",
+                        "created_at": 0,
+                        "created_at_formatted": str(data.get("generated_at", "")),
+                        "data": data,
+                    }
+                )
+            cur += dt.timedelta(days=1)
+
+        return results
 
     def _format_reports_output(
         self,
@@ -461,14 +519,15 @@ class ReportQueryService:
 
         full_content = "\n\n---\n\n".join(body_blocks)
 
-        # Truncate content safely if exceeding threshold
+        # Truncate content safely if exceeding threshold (strictly reserving suffix length)
         if len(full_content) > self.DEFAULT_MAX_CHARACTERS:
-            truncated = full_content[: self.DEFAULT_MAX_CHARACTERS]
-            return (
-                f"{truncated}\n\n"
-                f"[... 内容较长已自动截断，已返回前 {self.DEFAULT_MAX_CHARACTERS} 字符。"
-                f"建议通过缩小查询日期范围或指定特定模块（如 report_section='话题'）获取完整细节]"
+            suffix = (
+                "\n\n[... 内容较长已自动截断，已返回前部分字符。"
+                "建议通过缩小查询日期范围或指定特定模块（如 report_section='话题'）获取完整细节]"
             )
+            avail_len = max(0, self.DEFAULT_MAX_CHARACTERS - len(suffix))
+            truncated = full_content[:avail_len]
+            return f"{truncated}{suffix}"
 
         return full_content
 
