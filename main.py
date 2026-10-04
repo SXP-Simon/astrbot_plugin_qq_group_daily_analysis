@@ -176,6 +176,10 @@ class GroupDailyAnalysis(Star):
 
         # 1.15 事件去重持久化仓储
         self.event_dedup_store = EventDeduplicationStore(plugin_data_dir / "dedup.db")
+        try:
+            self.event_dedup_store.prune_older_than(days=7)
+        except Exception as e:
+            logger.warning(f"[事件去重] 启动清理过期记录失败: {e}")
 
         # 消息处理服务
         self.message_processing_service = MessageProcessingService(
@@ -394,6 +398,10 @@ class GroupDailyAnalysis(Star):
                 await self.report_generator.close()
 
             if hasattr(self, "event_dedup_store"):
+                try:
+                    self.event_dedup_store.prune_older_than(days=7)
+                except Exception:
+                    pass
                 self.event_dedup_store.close()
 
             logger.info("群日常分析插件资源清理完成")
