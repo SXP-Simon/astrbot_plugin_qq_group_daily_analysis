@@ -6,7 +6,7 @@
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask_DeepWiki-AI_文档-00D26A?style=for-the-badge&logo=googledocs&logoColor=white)](https://deepwiki.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 
 <table align="center" style="border: none;">
   <tr>
