@@ -142,17 +142,10 @@ class TopicAnalyzer(BaseAnalyzer[SummaryTopic, list[dict]]):
             return ""
 
         # 构建消息文本
-        # 附带昵称与用户ID: [HH:MM] 昵称(用户ID): 消息内容，若无昵称则回退 [用户ID]
-        def _format_msg_sender(msg_item: dict) -> str:
-            s_name = str(msg_item.get("sender") or "").strip()
-            u_id = str(msg_item.get("user_id") or "").strip()
-            if s_name and s_name != u_id:
-                return f"{s_name}({u_id})"
-            return f"[{u_id}]"
-
+        # 使用用户提供的 ID-Only 格式: [HH:MM] [用户ID]: 消息内容
         messages_text = "\n".join(
             [
-                f"[{msg['time']}] {_format_msg_sender(msg)}: {msg['content']}"
+                f"[{msg['time']}] [{msg['user_id']}]: {msg['content']}"
                 for msg in text_messages
             ]
         )
