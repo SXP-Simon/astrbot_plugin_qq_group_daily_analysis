@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/当前版本-v5.7.2-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Plugin Version](https://img.shields.io/badge/当前版本-v5.7.3-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
@@ -34,6 +34,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - [配置选项](#配置选项)
 - [每日群漫画配置](#每日群漫画配置)
 - [使用方法](#使用方法)
+- [大模型原生函数调用 (LLM Tools)](#-大模型原生函数调用-llm-tools)
 - [平台支持与要求](#平台支持与要求)
 - [增量分析模式](#增量分析模式-beta)
 - [HTML报告与自建外链](#HTML-报告与自建外链)
@@ -95,6 +96,7 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - **用户画像**: 基于聊天行为分析用户特征，分配个性化称号
 - **圣经识别**: 自动筛选出群聊中的精彩发言
 - **每日群漫画**: 将本次分析结果改编为趣味连环漫画，支持图生图参考图和独立绘图服务
+- **🤖 LLM 函数调用**: 提供 AstrBot 原生 Tool Calling 的群聊分析工具，支持自然语言只读报告检索与按需异步分析触发
 
 ### 🎛️ WebUI 控制台
 
@@ -359,6 +361,48 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 - `/设置模板`: 查看当前模板和可用模板列表
 - `/设置模板 [序号]`: 切换到指定序号的模板
 - 例如：`/设置模板 1` 或 `/设置模板 scrapbook`
+
+### 🤖 大模型原生函数调用 (LLM Tools)
+
+插件原生接入 AstrBot `@filter.llm_tool` 规范，为宿主大模型（Agent）注入群聊分析记忆与调度能力。用户无需记忆任何 `/` 斜杠指令，在日常自然语言对话中即可与 AI 助手无缝交互：
+
+```text
+群友: "今天群里聊了什么？大家都在讨论什么热点话题？"
+AI:   (自动调用 group_daily_analysis_get_report)
+      "今天群里主要讨论了两个话题：1. Docker 容器网络配置... 2. 新番讨论..."
+
+管理员: "帮我重新分析一下今天的群聊，发到群里"
+AI:     (自动调用 group_daily_analysis_trigger)
+        "已为您提交今日群聊的异步重算任务（预计耗时约 1 分钟）。分析完成后将自动把长图推送到本群！"
+```
+
+#### 原生工具矩阵
+
+| 工具标识 (Tool Name) | 操作类型 | 调用权限 | 响应时延 | 默认行为 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`group_daily_analysis_get_report`**<br>群日报只读检索 | 纯只读检索 | **全体成员** | 毫秒级直出 | 提取历史快照，组装为紧凑 Markdown 返回给模型回答，**0 额外 Token 消耗** |
+| **`group_daily_analysis_trigger`**<br>按需分析异步触发 | 重型分析流水线 | **仅管理员** | ~500ms 异步受理 | 启动后台分析流水线（预计 1 分钟左右完成），**默认自动渲染长图推送至群聊** |
+
+#### 工具特性与设计亮点
+
+1. **只读报告检索 (`group_daily_analysis_get_report`)**：
+   - **4 级群目标自适应解析（防反问）**：群聊环境中调用时**自动精准绑定当前群**；私聊中支持**群名模糊搜索**；出现重名时返回候选列表引导用户。大模型无需反复向用户追问群号。
+   - **弹性自然语言日期**：无缝支持 `今天`、`昨天`、`前天` 以及标准 `YYYY-MM-DD` 格式；当指定日期尚无报告时，自动向后滑动探测最近一天的有效快照。
+   - **同日多版本窗口去重**：底层基于 SQL 窗口函数，即使一天内手动或定时多次触发，永远仅返回最新生成的一份有效报告。
+   - **跨平台脱敏与格式清洗**：自动将话题发言人中的纯数字 ID / OpenID 清洗替换为真实群昵称；过滤空称号与无效空行。
+   - **防爆流安全截断**：文本输出上限严格控制在 40,000 字符以内，防止超长记录击穿模型上下文窗口。
+
+2. **按需异步触发 (`group_daily_analysis_trigger`)**：
+   - **严格管理员双重鉴权**：仅限群主、群管理员、Bot 全局管理员及配置白名单用户触发，普通成员越权触发时秒级拦截并引导其使用只读检索工具，防止昂贵分析流水线被闲聊误刷。
+   - **异步非阻塞受理（Fire-and-Forget）**：群分析全量流水线通常需要约 1 分钟，触发工具在 500ms 内向大模型返回 Trace 受理凭证，将计算任务转交后台协程异步执行，**彻底消除对话端 30s HTTP 阻塞超时与 504 网关中断隐患**。
+   - **长图推送与静默模式双轨 (`render_to_chat`)**：
+     - **默认发图 (`render_to_chat=True`)**：符合用户自然期待，分析完成后自动调用派发器将渲染出的高清日报长图发送至目标群聊。
+     - **静默入库 (`render_to_chat=False`)**：当明确要求“后台更新不要发群”时，仅完成数据持久化落库，不打扰群友。
+   - **群级并发排他锁**：群粒度互斥锁保护，防止同一群聊并发重复触发分析任务。
+
+> [!TIP]
+> 📖 想要了解工具调用协议细节、上下文防反问设计与 8 大 Corner Cases 边界规范？请参阅 **[《大模型工具 (LLM Tools) 技术规格与开发指南》](docs/llm_tools_development_guide.md)**。
+
 
 ## 平台支持与要求
 
