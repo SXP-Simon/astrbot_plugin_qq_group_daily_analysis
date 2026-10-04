@@ -17,6 +17,7 @@ assets/*.jpg              export-ignore
 assets/*.png              export-ignore
 assets/HatsuneMiku/       export-ignore
 assets/ATRI/              export-ignore
+assets/deepseek_maid/     export-ignore
 
 ### 前端开发源码 — 运行时只需要已编译的 pages/ 单 Bundle 产物
 dashboard/                export-ignore
