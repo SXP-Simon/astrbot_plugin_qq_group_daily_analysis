@@ -452,6 +452,34 @@ class ReportQueryService:
 
             day_block = [f"#### 📅 报告日期: {d_str}"]
 
+            # 建立本报告中的 user_id -> 昵称映射字典，用于替换话题正文中的裸数字 ID 引用
+            id_to_name: dict[str, str] = {}
+            user_analysis = data_obj.get("user_analysis")
+            if isinstance(user_analysis, dict):
+                for uid, udata in user_analysis.items():
+                    if isinstance(udata, dict):
+                        for k in ("nickname", "name", "card"):
+                            if udata.get(k):
+                                id_to_name[str(uid).strip()] = str(udata[k]).strip()
+                                break
+            for ut in data_obj.get("user_titles") or []:
+                if isinstance(ut, dict):
+                    uid = str(ut.get("user_id") or "").strip()
+                    uname = str(
+                        ut.get("name")
+                        or ut.get("user_name")
+                        or ut.get("nickname")
+                        or ""
+                    ).strip()
+                    if uid and uname and uname != uid:
+                        id_to_name.setdefault(uid, uname)
+            for gq in data_obj.get("golden_quotes") or []:
+                if isinstance(gq, dict):
+                    uid = str(gq.get("user_id") or "").strip()
+                    uname = str(gq.get("sender") or gq.get("author") or "").strip()
+                    if uid and uname and uname != uid:
+                        id_to_name.setdefault(uid, uname)
+
             # 1. 话题提取
             if "topics" in sections:
                 topics_raw = data_obj.get("topics")
@@ -463,9 +491,15 @@ class ReportQueryService:
                             t_desc = t.get("detail", "") or t.get("description", "")
                             t_heat = t.get("heat") or t.get("hot", "")
                             heat_suffix = f" (热度: {t_heat})" if t_heat else ""
+                            # 替换详情中出现的裸 QQ 号为 昵称(QQ号)
+                            t_desc_clean = (
+                                self._replace_id_refs(str(t_desc), id_to_name)
+                                if t_desc
+                                else ""
+                            )
                             day_block.append(f"{idx}. {t_title}{heat_suffix}")
-                            if t_desc:
-                                day_block.append(f"   - 详情: {t_desc}")
+                            if t_desc_clean:
+                                day_block.append(f"   - 详情: {t_desc_clean}")
 
             # 2. 金句提取
             if "golden_quotes" in sections:
@@ -576,3 +610,17 @@ class ReportQueryService:
         except Exception:
             pass
         return ""
+
+    @staticmethod
+    def _replace_id_refs(text: str, id_to_name: dict[str, str]) -> str:
+        """将文本中的裸数字 ID 引用 (形如 [123456] 或 @123456) 替换为 昵称(ID)。"""
+        if not text or not id_to_name:
+            return text
+
+        def _rep(m: re.Match[str]) -> str:
+            uid = m.group(1) or m.group(2)
+            if uid in id_to_name:
+                return f"{id_to_name[uid]}({uid})"
+            return m.group(0)
+
+        return re.sub(r"\[(\d{5,12})\]|@(\d{5,12})", _rep, text)
