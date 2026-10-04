@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -17,8 +18,10 @@ from ...utils.logger import logger
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
 
+    from ...domain.value_objects import AnalysisResultPayload
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from ...infrastructure.reporting.dispatcher import ReportDispatcher
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from .analysis_application_service import AnalysisApplicationService
     from .report_query_service import ReportQueryService
@@ -34,6 +37,7 @@ class AnalysisTriggerService:
         report_query_service: ReportQueryService,
         active_task_manager: ActiveTaskManager | None = None,
         trace_store: TraceSQLiteStore | None = None,
+        report_dispatcher: ReportDispatcher | None = None,
     ) -> None:
         """初始化触发服务。
 
@@ -43,12 +47,14 @@ class AnalysisTriggerService:
             report_query_service: 报告查询服务（用于群号解析）。
             active_task_manager: 活跃任务管理器。
             trace_store: 追踪仓储。
+            report_dispatcher: 报告分发器（用于自动向群内发送渲染长图报告）。
         """
         self.config_manager = config_manager
         self.analysis_service = analysis_service
         self.report_query_service = report_query_service
         self.active_task_manager = active_task_manager
         self.trace_store = trace_store
+        self.report_dispatcher = report_dispatcher
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._pending_groups: set[str] = set()
 
@@ -58,6 +64,7 @@ class AnalysisTriggerService:
         analysis_sections: str = "全部",
         days: int = 1,
         group: str = "",
+        render_to_chat: bool = True,
     ) -> str:
         """执行按需分析任务派发。
 
@@ -66,6 +73,7 @@ class AnalysisTriggerService:
             analysis_sections: 请求分析的模块。
             days: 分析回溯天数。
             group: 目标群聊标识（群号/群名/空）。
+            render_to_chat: 分析完成后是否直接渲染并向群聊发送长图报告，默认 True。
 
         Returns:
             str: 格式化的任务受理状态回执或拦截提示。
@@ -163,6 +171,7 @@ class AnalysisTriggerService:
                 effective_sections=effective_sections,
                 target_stage_name=target_stage_name,
                 trace_id=trace_id,
+                render_to_chat=render_to_chat,
             )
         )
         self._background_tasks.add(task)
@@ -173,6 +182,17 @@ class AnalysisTriggerService:
         skipped_text = (
             f"\n- 跳过模块: {', '.join(skipped_notes)}" if skipped_notes else ""
         )
+        if render_to_chat:
+            dispatch_note = (
+                "1. 本任务正在后台执行分析，计算完成后将**自动渲染并直接将报告长图发送至本群**。\n"
+                "2. 请明确告知用户分析流水线已在后台启动，报告长图稍后（约 15~35 秒后）会自动发到群里，请用户耐心稍候，切勿虚构假分析结果。"
+            )
+        else:
+            dispatch_note = (
+                "1. 本任务在后台静默执行并将结果持久化入库，**不会**向群聊发送长图。\n"
+                "2. 请明确告知用户分析已在后台静默计算中，待稍后（约 15~35 秒后）通过询问或调用查询工具即可查验最新结果，切勿虚构假分析结果。"
+            )
+
         return (
             f"[分析任务已成功在后台启动]\n"
             f"- 目标群聊: {matched_name or target_group_id} ({target_group_id})\n"
@@ -181,8 +201,7 @@ class AnalysisTriggerService:
             f"- 分析跨度: 最近 {days_int} 天\n"
             f"- 预计耗时: 约 15~35 秒\n\n"
             f"【系统重要提示】\n"
-            f"1. 本任务在后台静默执行并将结果持久化入库，**不会**直接向群聊发送长图。\n"
-            f"2. 请明确告知用户分析已在后台计算中，待稍后（约 15~35 秒后）通过询问或调用查询工具即可查验最新结果，切勿虚构假分析结果。"
+            f"{dispatch_note}"
         )
 
     async def _run_async_analysis(
@@ -194,8 +213,9 @@ class AnalysisTriggerService:
         effective_sections: set[str],
         target_stage_name: str,
         trace_id: str,
+        render_to_chat: bool = True,
     ) -> None:
-        """后台异步分析执行流程（绑定生命周期管理与静默落库）。"""
+        """后台异步分析执行流程（绑定生命周期管理、静默落库与自动发图）。"""
         trace = TraceContext.set(
             trace_id=trace_id,
             group_id=group_id,
@@ -222,7 +242,7 @@ class AnalysisTriggerService:
                 )
 
             logger.info(
-                f"[LLM Tool Trigger] 异步任务启动: 群 {group_id}, trace={trace_id}, sections={effective_sections}"
+                f"[LLM Tool Trigger] 异步任务启动: 群 {group_id}, trace={trace_id}, sections={effective_sections}, render_to_chat={render_to_chat}"
             )
             res = await self.analysis_service.execute_daily_analysis(
                 group_id=group_id,
@@ -234,9 +254,40 @@ class AnalysisTriggerService:
             )
             success = bool(res.get("success", False))
             if success:
+                # 若需要向群聊派发报告长图，调用报告分发器
+                if render_to_chat and self.report_dispatcher:
+                    raw_analysis = res.get("analysis_result")
+                    analysis_result = cast(
+                        "AnalysisResultPayload",
+                        raw_analysis if isinstance(raw_analysis, dict) else {},
+                    )
+                    adapter = res.get("adapter")
+                    dispatch_platform_id = (
+                        adapter.platform_id
+                        if isinstance(adapter, PlatformAdapterProtocol)
+                        else (platform_id or None)
+                    )
+                    logger.info(
+                        f"[LLM Tool Trigger] 分析完成，开始渲染并派发报告长图: 群 {group_id}, trace={trace_id}"
+                    )
+                    try:
+                        await self.report_dispatcher.dispatch(
+                            group_id=group_id,
+                            analysis_result=analysis_result,
+                            platform_id=dispatch_platform_id,
+                        )
+                        logger.info(
+                            f"[LLM Tool Trigger] 报告长图已成功派发至群 {group_id}"
+                        )
+                    except Exception as dispatch_err:
+                        logger.error(
+                            f"[LLM Tool Trigger] 报告派发异常: 群 {group_id}, 错误: {dispatch_err}",
+                            exc_info=True,
+                        )
+
                 trace.finish(status="succeeded")
                 logger.info(
-                    f"[LLM Tool Trigger] 异步任务执行成功并已静默落库: 群 {group_id}, trace={trace_id}"
+                    f"[LLM Tool Trigger] 异步任务执行成功: 群 {group_id}, trace={trace_id}"
                 )
             else:
                 reason = str(res.get("reason", "unknown"))
