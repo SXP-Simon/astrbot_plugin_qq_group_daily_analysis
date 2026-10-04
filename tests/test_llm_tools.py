@@ -326,3 +326,72 @@ async def test_trigger_success_async_fire_and_forget(trigger_service, mock_analy
     assert call_kwargs["analysis_sections"] == {"topics"}
     # 部分模块触发，阶段隔离为 ON_DEMAND_ANALYSIS
     assert call_kwargs["checkpoint_stage_name"] == AnalysisStage.ON_DEMAND_ANALYSIS.value
+
+
+@pytest.mark.asyncio
+async def test_truncation_strictly_under_limit(report_query_service, mock_checkpoint_store):
+    # 模拟超长内容，检验截断后是否绝对 <= 4000 字符
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_long",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {"topic": f"超长讨论话题_{i}", "detail": "内容" * 300}
+                    for i in range(15)
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert len(res) <= 4000
+    assert "内容较长已自动截断" in res
+
+
+@pytest.mark.asyncio
+async def test_trigger_preemption_lock(trigger_service):
+    # 验证两次几乎同时到达的请求不会产生竞争
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    # 人工占用预占集合
+    trigger_service._pending_groups.add("123456")
+    msg = await trigger_service.trigger_analysis(event=event, group="123456")
+    assert "[任务冲突]" in msg
+    trigger_service._pending_groups.clear()
+
+
+@pytest.mark.asyncio
+async def test_query_reports_on_demand_stage_fallback(report_query_service, mock_checkpoint_store):
+    # LLM_ANALYSIS 为空，但存在 ON_DEMAND_ANALYSIS
+    def mock_date_range(group_id, start_date, end_date, stage_name="LLM_ANALYSIS"):
+        if stage_name == AnalysisStage.ON_DEMAND_ANALYSIS.value:
+            return [
+                {
+                    "checkpoint_id": "cp_ondemand",
+                    "group_id": group_id,
+                    "date_str": start_date,
+                    "stage_name": stage_name,
+                    "data": {"topics": [{"topic": "按需话题", "detail": "金句测试"}]},
+                }
+            ]
+        return []
+
+    mock_checkpoint_store.get_checkpoints_by_date_range.side_effect = mock_date_range
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert "按需话题" in res
