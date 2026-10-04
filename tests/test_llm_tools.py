@@ -258,12 +258,20 @@ def mock_active_task_manager():
 
 
 @pytest.fixture
+def mock_report_dispatcher():
+    disp = MagicMock()
+    disp.dispatch = AsyncMock(return_value=True)
+    return disp
+
+
+@pytest.fixture
 def trigger_service(
     mock_config_manager,
     mock_analysis_service,
     report_query_service,
     mock_active_task_manager,
     mock_trace_store,
+    mock_report_dispatcher,
 ):
     return AnalysisTriggerService(
         config_manager=mock_config_manager,
@@ -271,6 +279,7 @@ def trigger_service(
         report_query_service=report_query_service,
         active_task_manager=mock_active_task_manager,
         trace_store=mock_trace_store,
+        report_dispatcher=mock_report_dispatcher,
     )
 
 
@@ -299,25 +308,36 @@ async def test_trigger_conflict_lock(trigger_service, mock_analysis_service):
 
 
 @pytest.mark.asyncio
-async def test_trigger_success_async_fire_and_forget(trigger_service, mock_analysis_service):
+async def test_trigger_success_async_fire_and_forget_with_render(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
     event = MagicMock()
     event.is_admin.return_value = True
     event.get_group_id.return_value = "123456"
     event.get_platform_id.return_value = "aiocqhttp"
 
+    # 返回带 analysis_result 的有效字典
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试话题"}]},
+    }
+
+    # 默认 render_to_chat=True
     msg = await trigger_service.trigger_analysis(
         event=event,
         analysis_sections="话题,聊天质量分析",  # 质量分析被配置关闭
         days=2,
         group="",
+        render_to_chat=True,
     )
 
-    # 500ms 内收到受理回执
+    # 500ms 内收到受理回执且提示自动发群
     assert "[分析任务已成功在后台启动]" in msg
+    assert "自动渲染并直接将报告长图发送至本群" in msg
     assert "topics" in msg or "话题" in msg
     assert "跳过模块: 聊天质量分析" in msg
 
-    # 等待后台任务执行一小会儿确保 create_task 运行
+    # 等待后台任务执行
     await asyncio.sleep(0.05)
     mock_analysis_service.execute_daily_analysis.assert_called_once()
     call_kwargs = mock_analysis_service.execute_daily_analysis.call_args.kwargs
@@ -326,6 +346,45 @@ async def test_trigger_success_async_fire_and_forget(trigger_service, mock_analy
     assert call_kwargs["analysis_sections"] == {"topics"}
     # 部分模块触发，阶段隔离为 ON_DEMAND_ANALYSIS
     assert call_kwargs["checkpoint_stage_name"] == AnalysisStage.ON_DEMAND_ANALYSIS.value
+
+    # 验证报告分发器被调用
+    mock_report_dispatcher.dispatch.assert_awaited_once_with(
+        group_id="123456",
+        analysis_result={"topics": [{"topic": "测试话题"}]},
+        platform_id="aiocqhttp",
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_silent_mode_no_dispatch(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试话题"}]},
+    }
+
+    # 显式 render_to_chat=False 静默入库
+    msg = await trigger_service.trigger_analysis(
+        event=event,
+        analysis_sections="全部",
+        days=1,
+        group="",
+        render_to_chat=False,
+    )
+
+    assert "[分析任务已成功在后台启动]" in msg
+    assert "**不会**向群聊发送长图" in msg
+
+    await asyncio.sleep(0.05)
+    mock_analysis_service.execute_daily_analysis.assert_called_once()
+    # 验证静默模式下未调用 report_dispatcher
+    mock_report_dispatcher.dispatch.assert_not_called()
 
 
 @pytest.mark.asyncio
