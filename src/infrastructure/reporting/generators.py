@@ -167,9 +167,12 @@ class ReportGenerator(IReportGenerator):
         filename_format: str,
         group_id: str,
         date: str,
+        trace_id: str | None = None,
     ) -> Path:
         """构建安全的报告输出文件路径。"""
-        return build_safe_report_path(output_dir, filename_format, group_id, date)
+        return build_safe_report_path(
+            output_dir, filename_format, group_id, date, trace_id
+        )
 
     @staticmethod
     def _resolve_t2i_viewport_options(
@@ -558,7 +561,7 @@ class ReportGenerator(IReportGenerator):
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             template_theme: 模板主题名称。
             custom_filename: 自定义文件名。
-            trace_id: 追踪 Trace ID。
+            trace_id: 追踪 Trace ID，用于渲染文件名格式中的 ${trace_id} 变量（未提供时取当前 TraceContext）。
 
         Returns:
             元组 (html_file_path, json_file_path)。
@@ -585,22 +588,15 @@ class ReportGenerator(IReportGenerator):
                 html_path = output_dir / custom_filename
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
-            elif effective_trace_id:
-                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                theme_suffix = f"_{template_theme}" if template_theme else ""
-                html_path = (
-                    output_dir
-                    / f"report_{group_id}_{ts_str}_{effective_trace_id}{theme_suffix}.html"
-                )
             else:
                 current_date = datetime.now().strftime("%Y%m%d")
-                base_html_path = self._build_safe_report_path(
+                html_path = self._build_safe_report_path(
                     output_dir,
                     self.config_manager.get_html_filename_format(),
                     group_id=group_id,
                     date=current_date,
+                    trace_id=effective_trace_id,
                 )
-                html_path = base_html_path
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
 

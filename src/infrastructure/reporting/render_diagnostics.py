@@ -168,6 +168,7 @@ def build_safe_report_path(
     filename_format: str,
     group_id: str,
     date: str,
+    trace_id: str | None = None,
 ) -> Path:
     """根据模板安全构建报告文件输出路径，防止目录穿越。
 
@@ -176,6 +177,7 @@ def build_safe_report_path(
         filename_format: 文件名格式模板字符串。
         group_id: 群组 ID。
         date: 当前日期字符串。
+        trace_id: 显式指定的链路追踪 ID，用于渲染 ${trace_id} 变量；未提供时回退到当前 TraceContext。
 
     Returns:
         生成的安全输出 Path 对象。
@@ -188,7 +190,7 @@ def build_safe_report_path(
         "group_id": group_id,
         "date": date,
         "ulid": generated_ulid,
-        "trace_id": str(TraceContext.get() or ""),
+        "trace_id": str(trace_id or TraceContext.get() or ""),
     }
 
     try:
