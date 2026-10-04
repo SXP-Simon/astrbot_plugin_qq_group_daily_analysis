@@ -395,6 +395,41 @@ async def test_quotes_and_titles_robust_formatting(report_query_service, mock_ch
 
 
 @pytest.mark.asyncio
+async def test_topic_details_id_to_nickname_mapping(report_query_service, mock_checkpoint_store):
+    # 验证话题详情中的裸 QQ 号如 [2995519244] 会被自动替换为 昵称(QQ号)
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_topic_id",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {
+                        "topic": "机子赠送讨论",
+                        "detail": "[2995519244] 发现某平台送机子，而 @1686582748 觉得是假的。",
+                        "heat": 80,
+                    }
+                ],
+                "user_analysis": {
+                    "2995519244": {"nickname": "凉雨"},
+                    "1686582748": {"name": "玲喵"},
+                },
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert "凉雨(2995519244) 发现某平台送机子" in res
+    assert "玲喵(1686582748) 觉得是假的" in res
+
+
+@pytest.mark.asyncio
 async def test_trigger_preemption_lock(trigger_service):
     # 验证两次几乎同时到达的请求不会产生竞争
     event = MagicMock()
