@@ -70,20 +70,39 @@ class MockConfigManager:
         profile_mode: str = "mbti",
         profile_image_opacity: float = 0.20,
         profile_mapping_config: str = "",
+        report_language: str = "auto",
     ) -> None:
         self.template_name = template_name
         self.profile_mode = profile_mode
         self.profile_image_opacity = profile_image_opacity
         self.profile_mapping_config = profile_mapping_config
+        self.report_language = report_language
 
     def get_report_template(self) -> str:
         return self.template_name
+
+    def get_custom_report_template_dir(self, template_name: str = "") -> None:
+        # 离线调试不加载自定义模板目录，只渲染内置模板
+        return None
 
     def get_max_topics(self) -> int:
         return 8
 
     def get_max_user_titles(self) -> int:
         return 16
+
+    def get_t2i_font_source(self) -> str:
+        # 离线渲染默认 Overseas；要复现大陆部署的产物（页面声明 zh-CN）可加环境变量：
+        #   DEBUG_T2I_FONT_SOURCE=Mainland .venv-render/bin/python scripts/debug_render.py ...
+        return os.environ.get("DEBUG_T2I_FONT_SOURCE", "Overseas")
+
+    def get_report_language(self) -> str:
+        # 语言优先取 --language 参数；未给时回退环境变量 DEBUG_REPORT_LANGUAGE，再回退 auto。
+        return (
+            (self.report_language or "").strip()
+            or os.environ.get("DEBUG_REPORT_LANGUAGE", "auto").strip()
+            or "auto"
+        )
 
     def get_max_golden_quotes(self) -> int:
         return 8
@@ -134,9 +153,6 @@ class MockConfigManager:
     def get_t2i_gstatic_mirror(self) -> str:
         return "https://fonts.gstatic.com"
 
-    def get_t2i_font_source(self) -> str:
-        return "Overseas"
-
     def get_t2i_rendering_strategies(self) -> list:
         return []
 
@@ -150,11 +166,14 @@ async def debug_render(
     template_name: str,
     output_file: str = "debug_output.html",
     profile_mode: str = "mbti",
+    template_file: str = "image_template.html",
+    report_language: str = "auto",
 ) -> None:
     # 1. Setup Mock Data
     config_manager = MockConfigManager(
         template_name=template_name,
         profile_mode=profile_mode,
+        report_language=report_language,
     )
 
     # 2. Mock Analysis Result using Data Models
@@ -322,9 +341,12 @@ async def debug_render(
         avatar_url_getter=mock_get_user_avatar,
     )
 
+    # 报告语言：由 DEBUG_REPORT_LANGUAGE 驱动 Mock 配置（见 MockConfigManager.get_report_language），
+    # 因此 report_language 与 current_date 都由核心逻辑产出，离线产物与线上走同一条路。
+
     # Use Jinja2 renderer
     final_html = generator.html_templates.render_template(
-        "image_template.html", template_theme=template_name, **render_payload
+        template_file, template_theme=template_name, **render_payload
     )
 
     # 复用最终 HTML 中所有内联头像资源，并注入复用样式
@@ -347,9 +369,141 @@ async def debug_render(
     print("You can now open this file with your browser to debug your HTML/CSS.")
 
 
+def _print_detection_report(texts: list[str], source: str) -> None:
+    """打印一次 auto 语言判定的完整过程（票数 / 占比 / 简繁分数 / 命中的词）。
+
+    这就是「判据检视器」：判错了、想调阈值、想解释给用户听，都跑它，不用另写脚本。
+
+    Args:
+        texts: 群聊正文（每条消息一条）。
+        source: 数据来源说明（打印用）。
+    """
+    from src.shared.report_language import (
+        _MIN_LANGUAGE_CHARS,
+        _MIN_VARIANT_EVIDENCE,
+        _MIN_VOTING_MESSAGES,
+        _SIMP_SIDE_PATTERN,
+        _SIMPLIFIED_ONLY,
+        _TRAD_SIDE_PATTERN,
+        _TRAD_TO_SIMP,
+        _TRADITIONAL_ONLY,
+        _WORD_HIT_WEIGHT,
+        _count_scripts,
+        _vote_language,
+        clean_message_body,
+        detect_language_from_messages,
+    )
+
+    print("=" * 72)
+    print(f"报告语言 auto 判据检视（来源：{source}，消息 {len(texts)} 条）")
+    print("=" * 72)
+
+    votes = {"zh": 0, "en": 0, "ja": 0}
+    bodies: list[str] = []
+    lang_chars = 0
+    for index, raw in enumerate(texts, 1):
+        body = clean_message_body(raw or "")
+        if not body:
+            if (raw or "").strip():
+                print(f"  #{index:<3} 噪音整条丢弃  {raw.strip()[:48]!r}")
+            continue
+        counts = _count_scripts(body)
+        chunk = sum(counts.values())
+        if chunk == 0:
+            continue
+        lang_chars += chunk
+        bodies.append(body)
+        vote = _vote_language(counts)
+        if vote:
+            votes[vote] += 1
+        mark = {"zh": "中文票", "en": "英文票", "ja": "日文票"}.get(
+            vote or "", "不投票"
+        )
+        print(
+            f"  #{index:<3} {mark:6s} 假名{counts['kana']:<3d} 汉字{counts['cjk']:<4d} "
+            f"拉丁{counts['latin']:<4d} 正文={body[:40]!r}"
+        )
+
+    voting = sum(votes.values())
+    print("-" * 72)
+    print(
+        f"  投票合计: zh={votes['zh']} en={votes['en']} ja={votes['ja']}（有效票 {voting}）"
+    )
+    if voting:
+        share = max(votes.values()) / voting * 100
+        print(f"  最高占比: {share:.1f}%（要求 > 70%）")
+    print(
+        f"  样本门槛: 正文条数 {len(bodies)}（要求 ≥{_MIN_VOTING_MESSAGES}）"
+        f"、语言字符 {lang_chars}（要求 ≥{_MIN_LANGUAGE_CHARS}）"
+    )
+
+    joined = "".join(bodies)
+    simplified = sum(1 for ch in joined if ch in _SIMPLIFIED_ONLY)
+    traditional = sum(1 for ch in joined if ch in _TRADITIONAL_ONLY)
+    normalized = joined.translate(_TRAD_TO_SIMP)
+    trad_hits = _TRAD_SIDE_PATTERN.findall(normalized) if _TRAD_SIDE_PATTERN else []
+    simp_hits = _SIMP_SIDE_PATTERN.findall(normalized) if _SIMP_SIDE_PATTERN else []
+    trad_score = traditional + _WORD_HIT_WEIGHT * len(trad_hits)
+    simp_score = simplified + _WORD_HIT_WEIGHT * len(simp_hits)
+    print(
+        f"  简繁合议（词命中 ×{_WORD_HIT_WEIGHT} 分）: 繁体侧 {trad_score} 分"
+        f"（字形 {traditional} + 用词 {len(trad_hits)}）= 简体侧 {simp_score} 分"
+        f"（字形 {simplified} + 用词 {len(simp_hits)}）；要求繁体 ≥{_MIN_VARIANT_EVIDENCE} 分且更高"
+    )
+    if trad_hits:
+        print(f"    繁中侧命中: {'、'.join(dict.fromkeys(trad_hits))[:80]}")
+    if simp_hits:
+        print(f"    大陆侧命中: {'、'.join(dict.fromkeys(simp_hits))[:80]}")
+
+    verdict = detect_language_from_messages(texts)
+    print("-" * 72)
+    print(f"  最终判定: {verdict or '不干预（走历史行为：骨架简体、解说跟随群消息）'}")
+    print("=" * 72)
+
+
+def _load_detect_texts(path: str) -> list[str]:
+    """读取待检测文本：一行一条消息；文件不存在时报错退出。"""
+    p = Path(path)
+    if not p.exists():
+        raise SystemExit(f"找不到检测样本文件: {path}")
+    return [line.rstrip("\n") for line in p.read_text(encoding="utf-8").splitlines()]
+
+
+def _run_language_cases(path: str) -> int:
+    """跑 golden 用例（tests/data/language_cases.json），返回失败数。
+
+    与 tests/test_report_language.py 共用同一份用例数据：测试器先跑一遍，contributor 不用装
+    pytest 也能确认自己没把判据改坏。
+    """
+    import json
+
+    from src.shared.report_language import detect_language_from_messages
+
+    cases_path = Path(path)
+    if not cases_path.exists():
+        raise SystemExit(f"找不到用例文件: {path}")
+    cases = json.loads(cases_path.read_text(encoding="utf-8")).get("cases", [])
+    failed = 0
+    for case in cases:
+        got = detect_language_from_messages(case.get("messages") or [])
+        want = case.get("expect")
+        ok = got == want
+        print(
+            f"[{'PASS' if ok else 'FAIL'}] {case.get('name')}: 期望 {want} 实得 {got}"
+        )
+        if not ok:
+            failed += 1
+            _print_detection_report(case.get("messages") or [], case.get("name") or "")
+    print(f"\n共 {len(cases)} 例，失败 {failed}")
+    return failed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Debug render tool for astrbot_plugin_qq_group_daily_analysis report templates."
+        description=(
+            "Debug render tool for astrbot_plugin_qq_group_daily_analysis report templates. "
+            "也可用 --detect 检视「报告语言 auto」的判据过程。"
+        )
     )
     parser.add_argument(
         "-t",
@@ -373,9 +527,81 @@ def main() -> None:
         choices=["mbti", "sbti", "acgti"],
         help="Profile display mode to render (default: mbti)",
     )
+    parser.add_argument(
+        "-f",
+        "--template-file",
+        type=str,
+        default="image_template.html",
+        help="Main template file to render (default: image_template.html)",
+    )
+    parser.add_argument(
+        "-l",
+        "--language",
+        type=str,
+        default=None,
+        choices=["auto", "zh-Hans", "zh-Hant", "en", "ja"],
+        help="报告语言（默认 auto；未给时回退环境变量 DEBUG_REPORT_LANGUAGE）",
+    )
+    parser.add_argument(
+        "--all-languages",
+        action="store_true",
+        help="一次渲染全部语言（产出 <输出名>.<语言>.html），方便检查各语言排版",
+    )
+    parser.add_argument(
+        "--detect",
+        nargs="*",
+        default=None,
+        metavar="消息",
+        help="只做语言判据检视：把这些消息当群聊正文，打印判定过程后退出（不渲染）",
+    )
+    parser.add_argument(
+        "--detect-file",
+        type=str,
+        default=None,
+        help="从文件读检测样本（一行一条消息），与 --detect 效果相同",
+    )
+    parser.add_argument(
+        "--cases",
+        type=str,
+        default=None,
+        metavar="用例文件",
+        help="跑 golden 用例（默认 tests/data/language_cases.json），逐例打印 PASS/FAIL 后退出",
+    )
     args = parser.parse_args()
 
-    asyncio.run(debug_render(args.template, args.output, args.mode))
+    if args.cases:
+        raise SystemExit(_run_language_cases(args.cases))
+
+    if args.detect is not None or args.detect_file:
+        texts = list(args.detect or [])
+        if args.detect_file:
+            texts.extend(_load_detect_texts(args.detect_file))
+        if not texts:
+            parser.error("--detect / --detect-file 需要至少一条消息")
+        _print_detection_report(texts, args.detect_file or "命令行参数")
+        return
+
+    languages = (
+        ["auto", "zh-Hans", "zh-Hant", "en", "ja"]
+        if args.all_languages
+        else [args.language]
+    )
+    for language in languages:
+        output = args.output
+        if args.all_languages:
+            base = Path(args.output)
+            output = str(
+                base.with_name(f"{base.stem}.{language}{base.suffix or '.html'}")
+            )
+        asyncio.run(
+            debug_render(
+                args.template,
+                output,
+                args.mode,
+                args.template_file,
+                report_language=language or "auto",
+            )
+        )
 
 
 if __name__ == "__main__":
