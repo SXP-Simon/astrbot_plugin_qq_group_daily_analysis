@@ -167,3 +167,30 @@ def test_trace_id_meta_escapes_attribute_value():
     injected = ReportGenerator._inject_trace_id_meta("<head></head>", 'a&b"c<d')
 
     assert 'content="a&amp;b&quot;c&lt;d"' in injected
+
+
+def test_trace_id_meta_skipped_for_header_only_document():
+    """只有 header 元素（无 head）的文档不得被注入 meta，保持结构不变。"""
+    html = "<html><body><header>标题</header><p>正文</p></body></html>"
+
+    assert ReportGenerator._inject_trace_id_meta(html, "trace-1") == html
+
+
+def test_trace_id_meta_not_blocked_by_plain_text_occurrence():
+    """正文里出现同名文字不应阻止注入，产物仍需带上可反查的 meta。"""
+    html = "<head></head><body>说明：astrbot-trace-id 会写进 head</body>"
+
+    injected = ReportGenerator._inject_trace_id_meta(html, "trace-1")
+
+    assert injected.count('<meta name="astrbot-trace-id"') == 1
+
+
+def test_trace_id_meta_replaced_when_trace_id_changes():
+    """同一文件被另一任务复用时，旧追踪号应被改写为当前追踪号。"""
+    html = '<head><meta name="astrbot-trace-id" content="stale"></head>'
+
+    injected = ReportGenerator._inject_trace_id_meta(html, "fresh")
+
+    assert 'content="fresh"' in injected
+    assert "stale" not in injected
+    assert injected.count("astrbot-trace-id") == 1

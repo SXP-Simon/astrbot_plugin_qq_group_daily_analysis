@@ -50,6 +50,14 @@ from .render_diagnostics import (
 )
 from .templates import HTMLTemplates
 
+# 产物内嵌追踪号的 meta 名称与匹配模式（注入与自愈共用同一套定义）
+_TRACE_META_ATTR = "astrbot-trace-id"
+_TRACE_META_PATTERN = re.compile(
+    rf'<meta[^>]*\bname=["\']{_TRACE_META_ATTR}["\'][^>]*>',
+    re.IGNORECASE,
+)
+_HTML_HEAD_PATTERN = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
@@ -189,20 +197,30 @@ class ReportGenerator(IReportGenerator):
             trace_id: 本次分析的链路追踪 ID。
 
         Returns:
-            注入元数据后的 HTML 文本；追踪号为空、模板无 head 或已注入过时原样返回。
+            注入元数据后的 HTML 文本；追踪号为空、模板无 head 时原样返回；已存在同名 meta 时
+            按追踪号自愈（值相同则原样返回，值不同则改写为当前追踪号）。
         """
-        if not trace_id or "astrbot-trace-id" in html_content:
+        if not trace_id:
             return html_content
-        head_match = re.search(r"<head[^>]*>", html_content, re.IGNORECASE)
+        escaped_trace_id = html_module.escape(trace_id, quote=True)
+        meta = f'<meta name="{_TRACE_META_ATTR}" content="{escaped_trace_id}">'
+
+        existing = _TRACE_META_PATTERN.search(html_content)
+        if existing:
+            if f'content="{escaped_trace_id}"' in existing.group(0):
+                return html_content
+            return (
+                html_content[: existing.start()] + meta + html_content[existing.end() :]
+            )
+
+        head_match = _HTML_HEAD_PATTERN.search(html_content)
         if not head_match:
             logger.debug("模板未包含 head 节点，跳过追踪号元数据注入")
             return html_content
-        meta = (
-            '\n    <meta name="astrbot-trace-id" content="'
-            f'{html_module.escape(trace_id, quote=True)}">'
-        )
         return (
-            html_content[: head_match.end()] + meta + html_content[head_match.end() :]
+            html_content[: head_match.end()]
+            + f"\n    {meta}"
+            + html_content[head_match.end() :]
         )
 
     @staticmethod
