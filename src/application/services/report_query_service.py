@@ -613,7 +613,10 @@ class ReportQueryService:
 
     @staticmethod
     def _replace_id_refs(text: str, id_to_name: dict[str, str]) -> str:
-        """将文本中的裸数字 ID 引用 (形如 [123456] 或 @123456) 替换为 昵称(ID)。"""
+        """将文本中的裸用户 ID 引用 (如 [123456], [openid_xxx], @123456) 替换为 昵称(ID)。
+
+        兼容多平台用户标识：支持纯数字 ID (QQ/Telegram) 及带字母下划线的 OpenID (QQ官方/Discord)。
+        """
         if not text or not id_to_name:
             return text
 
@@ -623,4 +626,5 @@ class ReportQueryService:
                 return f"{id_to_name[uid]}({uid})"
             return m.group(0)
 
-        return re.sub(r"\[(\d{5,12})\]|@(\d{5,12})", _rep, text)
+        # 匹配形如 [用户ID] 或 @用户ID，ID 长度 5~64 位字符
+        return re.sub(r"\[([A-Za-z0-9_-]{5,64})\]|@([A-Za-z0-9_-]{5,64})", _rep, text)
