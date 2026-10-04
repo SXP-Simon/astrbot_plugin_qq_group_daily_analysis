@@ -209,10 +209,26 @@ uv run scripts/debug_render.py -t your_theme_name -o debug_output.html
 # 指定人格卡片模式渲染 (支持 mbti | sbti | acgti)
 uv run scripts/debug_render.py -t your_theme_name -o debug_output.html -m acgti
 
+# 指定报告语言渲染（多语言模板改排版时逐个看）
+uv run scripts/debug_render.py -t HatsuneMiku -f html_template.html -o out.html -l ja
+
+# 一次渲染全部语言，产出 out.auto.html / out.zh-Hans.html / out.zh-Hant.html / out.en.html / out.ja.html
+uv run scripts/debug_render.py -t HatsuneMiku -f html_template.html -o out.html --all-languages
+
+# 查看「报告语言 auto」是怎么判的：逐条消息的票、占比、简繁字形/用词分数与命中的词
+uv run scripts/debug_render.py --detect "我在用应用程式" "我查一下资讯" "软体更新完了"
+uv run scripts/debug_render.py --detect-file messages.txt   # 一行一条消息
+
+# 跑语言判定 golden 用例（与 pytest 共用 tests/data/language_cases.json）
+uv run scripts/debug_render.py --cases tests/data/language_cases.json
+
 # 查看全部调试参数
 uv run scripts/debug_render.py -h
 ```
 在浏览器或 VSCode Live Server 中打开生成的 `debug_output.html` 即可实时热调 CSS 样式！
+
+> 语言也可以走环境变量（老写法仍兼容）：`DEBUG_REPORT_LANGUAGE=en`；命令行 `-l/--language` 优先。
+> 同一份 golden 用例在单测里也会跑：`pytest tests/test_report_language.py -k golden`。
 
 ---
 
