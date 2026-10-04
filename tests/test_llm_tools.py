@@ -527,3 +527,187 @@ async def test_query_reports_on_demand_stage_fallback(report_query_service, mock
         report_section="话题",
     )
     assert "按需话题" in res
+
+
+# ==================== 5. 针对用户反馈现场与 Corner Cases 的深度专项测试 ====================
+
+
+@pytest.mark.asyncio
+async def test_topic_details_alphanumeric_openid_mapping(report_query_service, mock_checkpoint_store):
+    """Corner Case: 跨平台字母数字 OpenID、带下划线 ID 与 @ 语法的昵称替换。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_openid",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {
+                        "topic": "跨平台讨论",
+                        "detail": (
+                            "[open_id_user_998] 提到了机器人架构，"
+                            "@discord_member_77 赞同了看法，"
+                            "而 [unknown_id_00000] 没有在映射表中。"
+                        ),
+                    }
+                ],
+                "user_analysis": {
+                    "open_id_user_998": {"card": "西蒙"},
+                    "discord_member_77": {"nickname": "小可"},
+                },
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    # 命中映射表的被替换为 昵称(ID)
+    assert "西蒙(open_id_user_998) 提到了机器人架构" in res
+    assert "小可(discord_member_77) 赞同了看法" in res
+    # 未命中的保留原始标识不破坏文本
+    assert "[unknown_id_00000] 没有在映射表中" in res
+
+
+@pytest.mark.asyncio
+async def test_user_titles_all_empty_fallback(report_query_service, mock_checkpoint_store):
+    """Corner Case: 字段键名缺失、昵称为全空格时，兜底显示为“群友”且格式不出现空冒号。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_titles_empty",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "user_titles": [
+                    {"user_name": "  ", "name": "", "title": "预算守门员"},
+                    {"title": "龙王", "mbti": "INTJ"},
+                    {"user_id": "10086", "title": ""},  # 称号为空
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="用户称号",
+    )
+    # 彻底杜绝空冒号 "1. : [预算守门员]"
+    assert "1. : " not in res
+    assert "1. 群友: [预算守门员]" in res
+    assert "2. 群友: [龙王 | INTJ]" in res
+    assert "3. 10086:" in res
+
+
+@pytest.mark.asyncio
+async def test_golden_quotes_whitespace_and_empty_filtering(report_query_service, mock_checkpoint_store):
+    """Corner Case: 历史提取产物中含连续换行、全空格等假条目，必须严格过滤不产出空序号。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_quotes_empty",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "golden_quotes": [
+                    {"quote": "   \n\t  ", "author": "有人"},
+                    {"content": "", "sender": "幽灵"},
+                    {"text": "真正的金句在这里", "author": "哲学家"},
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="金句",
+    )
+    assert '1. "真正的金句在这里" —— 哲学家' in res
+    assert '2. "' not in res  # 不存在第二个序号
+    assert "有人" not in res
+    assert "幽灵" not in res
+
+
+@pytest.mark.asyncio
+async def test_trigger_dispatch_failure_resilience(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
+    """Corner Case: 异步派发长图异常时，不导致后台协程崩溃，保证任务正常终结。"""
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试"}]},
+    }
+    # 模拟派发时网络断开抛出异常
+    mock_report_dispatcher.dispatch.side_effect = RuntimeError("网络发送超时")
+
+    msg = await trigger_service.trigger_analysis(
+        event=event,
+        analysis_sections="全部",
+        days=1,
+        group="",
+        render_to_chat=True,
+    )
+    assert "[分析任务已成功在后台启动]" in msg
+    # 等待后台任务执行完成
+    await asyncio.sleep(0.05)
+    # 验证群排他锁已正常释放
+    assert "123456" not in trigger_service._pending_groups
+
+
+@pytest.mark.asyncio
+async def test_main_llm_tool_integration_flow(
+    mock_config_manager, mock_analysis_service, report_query_service, mock_report_dispatcher
+):
+    """Corner Case: main.py 工具方法参数透传与端到端链路贯通测试。"""
+    import sys
+    from pathlib import Path
+
+    plugin_root = Path(__file__).resolve().parents[1]
+    if str(plugin_root.parent) not in sys.path:
+        sys.path.insert(0, str(plugin_root.parent))
+
+    from astrbot_plugin_qq_group_daily_analysis.main import GroupDailyAnalysis
+
+    plugin = MagicMock(spec=GroupDailyAnalysis)
+    plugin.config_manager = mock_config_manager
+    plugin.analysis_service = mock_analysis_service
+    plugin.report_query_service = report_query_service
+    plugin.analysis_trigger_service = AnalysisTriggerService(
+        config_manager=mock_config_manager,
+        analysis_service=mock_analysis_service,
+        report_query_service=report_query_service,
+        report_dispatcher=mock_report_dispatcher,
+    )
+
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    # 1. 调用 get_daily_report 代理（通过 mock query_reports 验证委托穿透）
+    with patch.object(
+        report_query_service, "query_reports", AsyncMock(return_value="### 群聊日常分析报告\n- 话题: 测试话题")
+    ):
+        get_res = await GroupDailyAnalysis.get_daily_report(plugin, event=event, group="123456", report_section="话题")
+        assert "### 群聊日常分析报告" in get_res
+
+    # 2. 调用 trigger_daily_analysis 代理
+    trig_res = await GroupDailyAnalysis.trigger_daily_analysis(
+        plugin, event=event, analysis_sections="话题", days=1, group="", render_to_chat=True
+    )
+    assert "[分析任务已成功在后台启动]" in trig_res
+    assert "约 1 分钟左右" in trig_res
+
