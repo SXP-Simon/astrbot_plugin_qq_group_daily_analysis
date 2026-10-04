@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, cast
 from astrbot.api.provider import LLMResponse
 
 from ....shared.constants import AnalysisStage
+from ....shared.report_language import apply_report_language
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
 from ....utils.resilience import CircuitBreaker, GlobalRateLimiter
@@ -492,6 +493,8 @@ async def call_provider_with_retry(
     """
     # 注意: 超时由 AstrBot Provider 内部配置控制，不再使用插件层 asyncio.wait_for
     # 用户可在 AstrBot WebUI 中为每个 Provider 配置 timeout 参数
+    # 报告语言：显式配置时给提示词追加语言指令（auto 时原样返回，保持历史行为）
+    prompt = apply_report_language(prompt, config_manager)
     retries = config_manager.get_llm_retries()
     backoff = config_manager.get_llm_backoff()
     enable_streaming_llm_call = config_manager.get_enable_streaming_llm_call()

@@ -17,6 +17,7 @@ from ...domain.value_objects import (
     TokenUsage,
 )
 from ...shared.constants import AnalysisStage
+from ...shared.report_language import apply_auto_language_detection
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 from .analysis_recovery_service import AnalysisRecoveryService
@@ -322,6 +323,11 @@ class AnalysisApplicationService:
                 unified_messages = cleaner.clean_messages(
                     raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
                 )
+                # 报告语言 auto：按清洗后的群聊消息自动判断（写进上下文，本次任务的
+                # LLM 提示词注入与模板渲染共用同一结果；证据不足时写入 None=不干预）
+                detected_language = apply_auto_language_detection(
+                    getattr(m, "text_content", "") or "" for m in unified_messages
+                )
                 clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
                 cleaned_data_size_kb = round(
                     sum(
@@ -363,6 +369,10 @@ class AnalysisApplicationService:
                 actual_platform or platform_id or "unknown",
                 len(unified_messages),
                 max(len(raw_messages) - len(unified_messages), 0),
+            )
+            logger.info(
+                "报告语言自动判断(auto): %s（按群聊正文投票，某语言占比 >70%% 才判；未命中则不干预）",
+                detected_language or "未命中",
             )
 
             threshold = self.config_manager.get_min_messages_threshold()
