@@ -16,8 +16,8 @@
 
 | 工具标识 (Tool Identifier) | 中文命名与功能定位 | 交互模式与耗时 | 交付状态 | 架构决策与职责边界 (First Principles) |
 | :--- | :--- | :--- | :--- | :--- |
-| **`qq_group_daily_analysis_get_report`** | **读取群分析报告**<br>只读查询指定/当前群的历史日报、话题总结、群友称号、金句与统计指标 | **同步直出 (RPC)**<br>耗时 < 50ms | **【核心交付·优先落地】<br>(In-Scope)** | **轻量幂等只读通道**：纯读本地持久化快照（SQLite Checkpoint / AstrBot KV），零远端网络 I/O，无并发副作用，安全无害。 |
-| **`qq_group_daily_analysis_trigger`** | **按需触发群分析**<br>用户明确要求“重新分析”、“更新日报”、“提取最近金句”时按需执行分析流水线 | **异步受理 (Async Task)**<br>响应 < 500ms<br>后台 15~40s | **【核心交付·严格门禁】<br>(In-Scope)** | **重型状态变更任务**：严禁同步阻塞！采用“异步提交即确认”模式；受严格管理员鉴权与群分析锁保护；执行模块做配置交集过滤与独立 Checkpoint 隔离，默认静默执行不扰民。 |
+| **`group_daily_analysis_get_report`** | **读取群分析报告**<br>只读查询指定/当前群的历史日报、话题总结、群友称号、金句与统计指标 | **同步直出 (RPC)**<br>耗时 < 50ms | **【核心交付·优先落地】<br>(In-Scope)** | **轻量幂等只读通道**：纯读本地持久化快照（SQLite Checkpoint / AstrBot KV），零远端网络 I/O，无并发副作用，安全无害。 |
+| **`group_daily_analysis_trigger`** | **按需触发群分析**<br>用户明确要求“重新分析”、“更新日报”、“提取最近金句”时按需执行分析流水线 | **异步受理 (Async Task)**<br>响应 < 500ms<br>后台 15~40s | **【核心交付·严格门禁】<br>(In-Scope)** | **重型状态变更任务**：严禁同步阻塞！采用“异步提交即确认”模式；受严格管理员鉴权与群分析锁保护；执行模块做配置交集过滤与独立 Checkpoint 隔离，默认静默执行不扰民。 |
 
 ---
 
@@ -87,14 +87,14 @@
 
 ---
 
-## 4. 工具一技术规格：读取群分析报告 (`qq_group_daily_analysis_get_report`)
+## 4. 工具一技术规格：读取群分析报告 (`group_daily_analysis_get_report`)
 
 ### 4.1 接口契约与 Docstring / Few-Shot
 
 AstrBot 底层使用 `docstring_parser` 自动将 Docstring 解析为 OpenAI Tool Schema。为了确保模型精准理解并根除反问群号的问题，必须严格遵循以下 Docstring 规范：
 
 ```python
-@filter.llm_tool("qq_group_daily_analysis_get_report")
+@filter.llm_tool("group_daily_analysis_get_report")
 async def get_daily_report(
     self,
     event: AstrMessageEvent,
@@ -150,12 +150,12 @@ async def get_daily_report(
 
 ---
 
-## 5. 工具二技术规格：按需触发群分析 (`qq_group_daily_analysis_trigger`)
+## 5. 工具二技术规格：按需触发群分析 (`group_daily_analysis_trigger`)
 
 ### 5.1 接口契约与 Docstring / Few-Shot
 
 ```python
-@filter.llm_tool("qq_group_daily_analysis_trigger")
+@filter.llm_tool("group_daily_analysis_trigger")
 async def trigger_daily_analysis(
     self,
     event: AstrMessageEvent,
@@ -241,7 +241,7 @@ async def trigger_daily_analysis(
 | :--- | :--- | :--- |
 | `src/application/services/report_query_service.py` | **新建** | 封装报告**查询**完整用例：目标群 4 级漏斗解析、弹性日期清洗与 30 天熔断、Checkpoint 与 KV 双轨检索、同日去重、字段投影与 4000 字符截断。 |
 | `src/application/services/analysis_trigger_service.py` | **新建** | 封装报告**触发**完整用例：管理员权限鉴权、群分析锁排他检查、配置交集计算、异步任务派发、ON_DEMAND Checkpoint 隔离写入、静默模式控制。 |
-| `main.py` | **修改** | 声明并挂载两个 LLM 工具：<br>1. `@filter.llm_tool("qq_group_daily_analysis_get_report")`<br>2. `@filter.llm_tool("qq_group_daily_analysis_trigger")` |
+| `main.py` | **修改** | 声明并挂载两个 LLM 工具：<br>1. `@filter.llm_tool("group_daily_analysis_get_report")`<br>2. `@filter.llm_tool("group_daily_analysis_trigger")` |
 | `tests/test_llm_tools.py` | **新建** | 单元测试套件：覆盖查询工具漏斗回退与投影截断、触发工具权限拦截、群锁并发拦截、异步受理回执格式验证。 |
 
 ---
