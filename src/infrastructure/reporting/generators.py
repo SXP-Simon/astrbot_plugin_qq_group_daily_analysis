@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import html as html_module
 import json
 import os
+import re
 import time
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
@@ -172,6 +174,35 @@ class ReportGenerator(IReportGenerator):
         """构建安全的报告输出文件路径。"""
         return build_safe_report_path(
             output_dir, filename_format, group_id, date, trace_id
+        )
+
+    @staticmethod
+    def _inject_trace_id_meta(html_content: str, trace_id: str) -> str:
+        """在 HTML 产物头部注入不可见的追踪号元数据。
+
+        文件名格式可由用户自定义（例如 ${group_id}/${date}.html），此时文件名不再携带
+        追踪号，产物一旦脱离数据库或日志，就难以反查属于哪次分析任务。因此把追踪号写入
+        HTML 头部 meta，配合 grep 即可在原文件上定位任务。
+
+        Args:
+            html_content: 渲染完成的 HTML 文本。
+            trace_id: 本次分析的链路追踪 ID。
+
+        Returns:
+            注入元数据后的 HTML 文本；追踪号为空、模板无 head 或已注入过时原样返回。
+        """
+        if not trace_id or "astrbot-trace-id" in html_content:
+            return html_content
+        head_match = re.search(r"<head[^>]*>", html_content, re.IGNORECASE)
+        if not head_match:
+            logger.debug("模板未包含 head 节点，跳过追踪号元数据注入")
+            return html_content
+        meta = (
+            '\n    <meta name="astrbot-trace-id" content="'
+            f'{html_module.escape(trace_id, quote=True)}">'
+        )
+        return (
+            html_content[: head_match.end()] + meta + html_content[head_match.end() :]
         )
 
     @staticmethod
@@ -649,6 +680,8 @@ class ReportGenerator(IReportGenerator):
 
             logger.debug(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
+            html_content = self._inject_trace_id_meta(html_content, effective_trace_id)
+
             await asyncio.to_thread(
                 html_path.write_text, html_content, encoding="utf-8"
             )
@@ -678,6 +711,7 @@ class ReportGenerator(IReportGenerator):
                 ),
                 "group_id": group_id,
                 "generated_at": datetime.now().isoformat(),
+                "trace_id": effective_trace_id,
             }
             await asyncio.to_thread(
                 json_path.write_text,

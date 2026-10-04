@@ -1,11 +1,13 @@
-"""验证 HTML 报告产物命名始终遵循 html_filename_format 配置。
+"""验证 HTML 报告产物命名始终遵循 html_filename_format 配置，且产物可凭追踪号定位。
 
 回归背景：TraceContext.get() 在无任务上下文时也会返回随机 ID，
 generators.generate_html_report 里「有追踪 ID 就用固定命名」的分支因此恒真，
 用户配置的 html_filename_format（含其默认值）成了不可达代码。
+命名交给用户配置后，产物改为在 HTML 头部内嵌 astrbot-trace-id，保证仍可按追踪号反查文件。
 """
 
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +17,14 @@ from src.shared.trace_context import TraceContext
 ANALYSIS_RESULT = {"topics": [], "user_titles": [], "statistics": None}
 
 AMBIENT_TRACE = "web_manual_20261005_012347_e79b1bd4dc63"
+
+NO_HEAD_HTML = "<html>naming</html>"
+
+WITH_HEAD_HTML = (
+    '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n'
+    '    <meta charset="UTF-8">\n    <title>群聊日常分析看板</title>\n</head>\n'
+    "<body>ok</body>\n</html>\n"
+)
 
 
 class FakeConfig:
@@ -34,12 +44,10 @@ class FakeConfig:
         return "HatsuneMiku"
 
 
-def build_generator(output_dir, filename_format):
+def build_generator(output_dir, filename_format, html=NO_HEAD_HTML):
     generator = object.__new__(ReportGenerator)
     generator.config_manager = FakeConfig(output_dir, filename_format)
-    generator.html_templates = SimpleNamespace(
-        render_template=lambda *args, **kwargs: "<html>naming</html>"
-    )
+    generator.html_templates = SimpleNamespace(render_template=lambda *a, **k: html)
     generator._reuse_avatars_in_final_html = lambda html_content, *args: html_content
 
     async def fake_prepare_render_data(*args, **kwargs):
@@ -85,9 +93,7 @@ def test_explicit_trace_id_wins_over_ambient_context(tmp_path):
     """续跑/重绘显式传入的 trace_id 应优先于当前环境上下文。"""
     generator = build_generator(tmp_path, "报告_${trace_id}.html")
 
-    _, (html_path, _) = run_html_report(
-        generator, trace_id="report_source_trace"
-    )
+    _, (html_path, _) = run_html_report(generator, trace_id="report_source_trace")
 
     assert html_path is not None
     assert Path(html_path).name == "报告_report_source_trace.html"
@@ -117,3 +123,47 @@ def test_path_traversal_protection_still_blocks_unsafe_format(tmp_path):
     assert html_path is None
     assert json_path is None
     assert not (tmp_path / "escaped").exists()
+
+
+def test_html_artifact_embeds_trace_id_meta(tmp_path):
+    """自定义命名后，产物仍内嵌追踪号，可凭追踪号反查文件。"""
+    generator = build_generator(tmp_path, "${group_id}/${date}.html", WITH_HEAD_HTML)
+
+    trace, (html_path, json_path) = run_html_report(generator)
+
+    assert html_path is not None
+    assert json_path is not None
+    content = Path(html_path).read_text(encoding="utf-8")
+    assert f'<meta name="astrbot-trace-id" content="{trace.trace_id}">' in content
+    assert content.count("astrbot-trace-id") == 1
+    assert content.startswith("<!DOCTYPE html>")
+    assert "<title>群聊日常分析看板</title>" in content
+
+    exported = json.loads(Path(json_path).read_text(encoding="utf-8"))
+    assert exported["trace_id"] == trace.trace_id
+
+
+def test_trace_id_meta_skipped_when_template_has_no_head(tmp_path):
+    """模板不含 head 节点时跳过注入，不破坏原有产物。"""
+    generator = build_generator(tmp_path, "${group_id}/${date}.html", NO_HEAD_HTML)
+
+    _, (html_path, _) = run_html_report(generator)
+
+    assert html_path is not None
+    assert Path(html_path).read_text(encoding="utf-8") == NO_HEAD_HTML
+
+
+def test_trace_id_meta_injection_is_idempotent():
+    """重复注入同一份产物时保持幂等，不产生第二份 meta。"""
+    once = ReportGenerator._inject_trace_id_meta(WITH_HEAD_HTML, "trace-1")
+    twice = ReportGenerator._inject_trace_id_meta(once, "trace-1")
+
+    assert once == twice
+    assert once.count("astrbot-trace-id") == 1
+
+
+def test_trace_id_meta_escapes_attribute_value():
+    """追踪号进入 HTML 属性前必须转义，避免破坏文档结构。"""
+    injected = ReportGenerator._inject_trace_id_meta("<head></head>", 'a&b"c<d')
+
+    assert 'content="a&amp;b&quot;c&lt;d"' in injected
