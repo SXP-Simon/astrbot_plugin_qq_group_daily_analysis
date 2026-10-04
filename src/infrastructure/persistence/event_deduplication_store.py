@@ -58,6 +58,62 @@ class EventDeduplicationStore:
                 """
             )
 
+    def try_claim(self, dedup_key: str) -> bool:
+        """原子尝试预占去重键（基于 SQLite 唯一主键冲突拦截）。
+
+        提供进程级与并发原子预占，杜绝查询与写入间隙导致的重复入库。
+
+        Args:
+            dedup_key: 包含平台 ID、群组 ID 与事件消息 ID 的唯一标识键。
+
+        Returns:
+            bool: 若预占成功（新记录成功写入）返回 True；若已存在则返回 False。
+        """
+        if not dedup_key:
+            return False
+        now_ts = time.time()
+        for attempt in range(2):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.execute(
+                        """
+                        INSERT INTO event_dedup (dedup_key, created_at)
+                        VALUES (?, ?)
+                        ON CONFLICT(dedup_key) DO NOTHING;
+                        """,
+                        (dedup_key, now_ts),
+                    )
+                    return cursor.rowcount > 0
+            except sqlite3.OperationalError as exc:
+                if "locked" in str(exc).lower() and attempt == 0:
+                    time.sleep(0.05)
+                    continue
+                logger.warning(
+                    "[事件去重] 尝试原子预占去重键锁超时 %s: %s", dedup_key, exc
+                )
+                return False
+            except Exception as exc:
+                logger.warning("[事件去重] 原子预占去重键失败 %s: %s", dedup_key, exc)
+                return False
+        return False
+
+    def release(self, dedup_key: str) -> None:
+        """释放已预占的去重键（持久化失败时回滚释放）。
+
+        Args:
+            dedup_key: 包含平台 ID、群组 ID 与事件消息 ID 的唯一标识键。
+        """
+        if not dedup_key:
+            return
+        try:
+            with self._get_connection() as conn:
+                conn.execute(
+                    "DELETE FROM event_dedup WHERE dedup_key = ?;",
+                    (dedup_key,),
+                )
+        except Exception as exc:
+            logger.warning("[事件去重] 释放去重键失败 %s: %s", dedup_key, exc)
+
     def is_seen(self, dedup_key: str) -> bool:
         """检查指定的去重键是否已被记录。
 

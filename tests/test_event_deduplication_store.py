@@ -102,7 +102,31 @@ def test_event_deduplication_store_handles_empty_and_invalid_keys(tmp_path: Path
     store = EventDeduplicationStore(db_file)
 
     assert store.is_seen("") is False
+    assert store.try_claim("") is False
     store.record("")
+    store.release("")
     assert store.is_seen("") is False
+
+    store.close()
+
+
+def test_event_deduplication_store_try_claim_and_release(tmp_path: Path):
+    """测试原子 try_claim 预占拦截与 release 回滚释放。"""
+    db_file = tmp_path / "test_dedup.db"
+    store = EventDeduplicationStore(db_file)
+
+    key = "tg:group-1:msg-1"
+
+    # 首次预占成功
+    assert store.try_claim(key) is True
+    assert store.is_seen(key) is True
+
+    # 再次并发预占被原子拦截
+    assert store.try_claim(key) is False
+
+    # 回滚释放后可再次预占
+    store.release(key)
+    assert store.is_seen(key) is False
+    assert store.try_claim(key) is True
 
     store.close()

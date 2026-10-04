@@ -257,8 +257,15 @@ class TelegramAdapter(PlatformAdapter):
                 for record in history_records:
                     if before_id_int is not None:
                         try:
-                            rec_id = getattr(record, "id", None)
-                            if rec_id is not None and int(rec_id) >= before_id_int:
+                            # 优先比对 content 中持久化的原生 Telegram 消息 ID，兼容旧记录回退至数据库自增主键
+                            content = getattr(record, "content", None)
+                            raw_mid = (
+                                content.get("message_id")
+                                if isinstance(content, dict)
+                                else None
+                            )
+                            rec_id = raw_mid or getattr(record, "id", None)
+                            if rec_id is not None and int(str(rec_id)) >= before_id_int:
                                 continue
                         except (TypeError, ValueError):
                             pass
