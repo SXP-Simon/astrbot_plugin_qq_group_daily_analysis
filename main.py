@@ -43,6 +43,9 @@ from .src.infrastructure.config.config_manager import ConfigManager
 from .src.infrastructure.drawing.drawing_client import DrawingClient
 from .src.infrastructure.messaging.message_sender import MessageSender
 from .src.infrastructure.persistence.checkpoint_store import CheckpointStore
+from .src.infrastructure.persistence.event_deduplication_store import (
+    EventDeduplicationStore,
+)
 from .src.infrastructure.persistence.history_manager import HistoryManager
 from .src.infrastructure.persistence.incremental_store import IncrementalStore
 from .src.infrastructure.persistence.platform_group_registry import (
@@ -95,6 +98,7 @@ class GroupDailyAnalysis(Star):
     auto_scheduler: AutoScheduler
     message_sender: MessageSender
     trace_store: TraceSQLiteStore
+    event_dedup_store: EventDeduplicationStore
     checkpoint_store: CheckpointStore
     active_task_manager: ActiveTaskManager
     webui_bridge: PluginPageWebUIBridge
@@ -170,9 +174,12 @@ class GroupDailyAnalysis(Star):
             context=context,
         )
 
+        # 1.15 事件去重持久化仓储
+        self.event_dedup_store = EventDeduplicationStore(plugin_data_dir / "dedup.db")
+
         # 消息处理服务
         self.message_processing_service = MessageProcessingService(
-            context, self.platform_group_registry
+            context, self.platform_group_registry, dedup_store=self.event_dedup_store
         )
 
         self.template_command_service = TemplateCommandService(
@@ -385,6 +392,9 @@ class GroupDailyAnalysis(Star):
 
             if self.report_generator:
                 await self.report_generator.close()
+
+            if hasattr(self, "event_dedup_store"):
+                self.event_dedup_store.close()
 
             logger.info("群日常分析插件资源清理完成")
 
