@@ -162,12 +162,14 @@ async def trigger_daily_analysis(
     analysis_sections: str = "全部",
     days: int = 1,
     group: str = "",
+    render_to_chat: bool = True,
 ) -> str:
-    """按需触发群聊聊天记录分析与报告生成流水线。
+    """按需触发群聊聊天记录分析与报告生成流水线（默认在分析完成后自动渲染长图并发送至群聊）。
 
     【触发准则 (Trigger Rule)】
     - 仅当用户明确要求“重新分析”、“更新日报”、“提取最新群聊金句/话题”等主动执行计算的意图时调用。
     - 【重要交互原则】普通查询历史事实请严格调用 get_report 工具，严禁随意触发本工具！在群聊中触发时 group 必须留空。
+    - 【交互提示】本工具在后台异步执行，默认（render_to_chat=True）会在计算完成后自动将精美长图发送到群里。受理成功后请明确告知用户分析已启动、长图稍后会自动发群，切勿虚构假分析结果。若用户明确要求“静默更新/后台计算不发群”，可将 render_to_chat 设为 False。
     - 【负向禁令】严禁用于闲聊、单纯询问已有数据；仅管理员具备触发权限。
 
     【参数规范 (Arguments)】:
@@ -175,11 +177,13 @@ async def trigger_daily_analysis(
         analysis_sections (string): 本次需要执行的分析模块：'全部'（默认）、'话题'、'用户称号'、'金句'、'聊天质量分析'。多选逗号分隔。
         days (integer): 分析回溯天数，默认 1（当天或最近24小时），最大允许 7。
         group (string): 目标群聊标识。默认留空（自动定位当前群聊）。私聊中可填数字群号或群名称。
+        render_to_chat (boolean): 是否在分析完成后自动渲染并向群聊发送长图报告。默认为 True。仅当用户明确要求静默入库时设为 False。
 
     【调用示范 (Few-Shot)】:
-    - 管理员在群里：“重新分析一下今天的群聊” -> analysis_sections="全部", days=1, group=""
-    - 管理员在群里：“帮我提取一下今天群里的金句” -> analysis_sections="金句", days=1, group=""
-    - 管理员在私聊：“更新一下开发交流群的日报” -> analysis_sections="全部", days=1, group="开发交流群"
+    - 管理员在群里：“重新分析一下今天的群聊” -> analysis_sections="全部", days=1, group="", render_to_chat=True
+    - 管理员在群里：“帮我提取一下今天群里的金句” -> analysis_sections="金句", days=1, group="", render_to_chat=True
+    - 管理员在群里：“静默更新一下日报数据库，不要发图” -> analysis_sections="全部", days=1, group="", render_to_chat=False
+    - 管理员在私聊：“更新一下开发交流群的日报” -> analysis_sections="全部", days=1, group="开发交流群", render_to_chat=True
     """
 ```
 
@@ -207,7 +211,7 @@ async def trigger_daily_analysis(
   - 任务编号：{trace_id}
   - 执行模块：{effective_sections}
   - 预计耗时：约 20~40 秒
-  【系统指令】后台流水线正在执行，分析完成后将自动沉淀为数据存档。请简要告知用户任务已启动，无需猜测或输出虚构的分析结果。
+  【系统指令】后台流水线正在执行，分析完成后将自动渲染并直接将报告长图发送至本群。请明确告知用户任务已启动、长图稍后会自动发群，切勿猜测或输出虚构的分析结果。
   ```
 
 #### 4. 配置交集过滤 (Config Intersection Filter)
@@ -219,10 +223,10 @@ async def trigger_daily_analysis(
 - 若请求为全量模块且 `days == 1`：归档为标准 `llm_analysis` Checkpoint，供日后查询。
 - 若为部分轻量模块（如仅提取金句）：写入专属阶段 `AnalysisStage.ON_DEMAND_ANALYSIS`，**严禁污染或覆盖当天的完整全量日报快照**！
 
-#### 6. 静默执行原则 (Silent Execution)
-- LLM 工具触发的后台任务遵循**静默执行原则**：
-  - 仅执行分析、结构化数据持久化与 Trace 审计；
-  - 默认**不在群内公开广播大图或推送卡片**，避免突发打扰全群成员。分析产物静默落库后，用户可随时通过 `get_report` 查询。
+#### 6. 报告自动派发与静默入库分流 (Dispatch vs Silent Execution)
+- 依据用户的自然期待，**默认行为 (`render_to_chat=True`) 为自动渲染长图发群**：
+  - 后台异步协程在 `execute_daily_analysis` 计算成功后，自动调用 `report_dispatcher.dispatch(group_id, analysis_result, platform_id)`，将排版精美的图片报告直接推送到群聊；
+  - 若调用方显式指定 `render_to_chat=False`（如“静默更新数据库”），则只执行分析、数据入库与 Trace 审计，不向群内推图。分析产物静默落库后，用户可随时通过 `group_daily_analysis_get_report` 查询。
 
 #### 7. 消息量不足秒级熔断 (Message Threshold Guard)
 - 针对 QQ 官方/Telegram 等本地库，若检测到该群自上次分析以来的有效消息数 `< 20` 条，直接秒级拒绝：
