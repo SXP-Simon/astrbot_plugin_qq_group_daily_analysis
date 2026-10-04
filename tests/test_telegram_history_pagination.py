@@ -213,3 +213,43 @@ def test_telegram_message_converter_format_forward_nodes():
     assert "📊 **分析报告**" in formatted
     assert "**[Bot1]**\n第一条信息" in formatted
     assert "**[Bot2]**\n图表分析结果" in formatted
+
+
+def test_telegram_history_pagination_before_id_with_native_message_id():
+    """验证 fetch_messages 的 before_id 游标正确与 content 中的原生 message_id 对齐。"""
+    rec1 = SimpleNamespace(
+        id=901,
+        sender_id="USER-1",
+        sender_name="Alice",
+        created_at=datetime.fromtimestamp(100, timezone.utc),
+        content={"message": [{"type": "plain", "text": "first"}], "message_id": "10"},
+    )
+    rec2 = SimpleNamespace(
+        id=902,
+        sender_id="USER-2",
+        sender_name="Bob",
+        created_at=datetime.fromtimestamp(200, timezone.utc),
+        content={"message": [{"type": "plain", "text": "second"}], "message_id": "20"},
+    )
+    rec3 = SimpleNamespace(
+        id=903,
+        sender_id="USER-3",
+        sender_name="Charlie",
+        created_at=datetime.fromtimestamp(300, timezone.utc),
+        content={"message": [{"type": "plain", "text": "third"}], "message_id": "30"},
+    )
+
+    history_manager = OffsetHistoryManager({1: [rec3, rec2, rec1]})
+    adapter = TelegramAdapter(
+        SimpleNamespace(),
+        {"platform_id": "telegram-main", "bot_self_ids": []},
+    )
+    adapter.set_context(SimpleNamespace(message_history_manager=history_manager))
+
+    # 传入原生 message_id 游标 "25"（应滤掉 message_id >= 25 的 rec3）
+    messages = asyncio.run(
+        adapter.fetch_messages("-10001", days=36500, max_count=5, before_id="25")
+    )
+    assert len(messages) == 2
+    assert messages[0].message_id == "10"
+    assert messages[1].message_id == "20"
