@@ -371,6 +371,25 @@ def test_namespace_isolation_allows_same_message_id_across_groups_or_platforms()
     assert asyncio.run(service.process_message(event_platform_c)) is True
     assert len(history_manager.calls) == 3
 
+    # 包含冒号的平台名与群名（如 a + b:c vs a:b + c）由于长度前缀编码不发生撞键
+    event_colon_1 = FakePlatformEvent(
+        platform_id="a",
+        platform_name="telegram",
+        group_id="b:c",
+        message_id="d",
+        text="colon 1",
+    )
+    event_colon_2 = FakePlatformEvent(
+        platform_id="a:b",
+        platform_name="telegram",
+        group_id="c",
+        message_id="d",
+        text="colon 2",
+    )
+    assert asyncio.run(service.process_message(event_colon_1)) is True
+    assert asyncio.run(service.process_message(event_colon_2)) is True
+    assert len(history_manager.calls) == 5
+
 
 def test_universal_message_id_is_stored_in_content_for_all_platforms():
     """验证所有平台的持久化 content 均统一固化原生 message_id 字段。"""

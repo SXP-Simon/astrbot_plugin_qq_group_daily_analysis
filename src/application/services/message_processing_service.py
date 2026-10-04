@@ -123,7 +123,11 @@ class MessageProcessingService:
         reserved_event_id = False
         dedup_key = ""
         if event_message_id:
-            dedup_key = f"{platform_id}:{group_id}:{event_message_id}"
+            dedup_key = (
+                f"{len(platform_id)}:{platform_id}|"
+                f"{len(group_id)}:{group_id}|"
+                f"{len(event_message_id)}:{event_message_id}"
+            )
             reserved_event_id = await self._reserve_event_id(dedup_key)
             if not reserved_event_id:
                 logger.debug(
@@ -156,7 +160,7 @@ class MessageProcessingService:
             )
         except BaseException:
             if reserved_event_id and dedup_key:
-                self._release_event_id(dedup_key)
+                await self._release_event_id(dedup_key)
             raise
         else:
             if reserved_event_id and dedup_key:
@@ -550,8 +554,9 @@ class MessageProcessingService:
         self._inflight_event_ids.add(dedup_key)
 
         if self.dedup_store is not None:
-            is_seen = await asyncio.to_thread(self.dedup_store.is_seen, dedup_key)
-            if is_seen:
+            # 在 SQLite 中原子执行 claim 预占（基于唯一主键冲突拦截，杜绝竞态）
+            is_claimed = await asyncio.to_thread(self.dedup_store.try_claim, dedup_key)
+            if not is_claimed:
                 self._inflight_event_ids.discard(dedup_key)
                 self._seen_event_ids[dedup_key] = None
                 if len(self._seen_event_ids) > self._seen_event_ids_limit:
@@ -574,13 +579,12 @@ class MessageProcessingService:
         if len(self._seen_event_ids) > self._seen_event_ids_limit:
             self._seen_event_ids.popitem(last=False)
 
-        if self.dedup_store is not None:
-            await asyncio.to_thread(self.dedup_store.record, dedup_key)
-
-    def _release_event_id(self, dedup_key: str) -> None:
+    async def _release_event_id(self, dedup_key: str) -> None:
         """释放事件消息 ID：持久化失败或取消时清理预占状态。
 
         Args:
             dedup_key: 平台群组事件消息的唯一幂等标识键。
         """
         self._inflight_event_ids.discard(dedup_key)
+        if self.dedup_store is not None:
+            await asyncio.to_thread(self.dedup_store.release, dedup_key)
