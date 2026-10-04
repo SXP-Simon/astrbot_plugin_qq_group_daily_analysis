@@ -114,6 +114,16 @@ class ICheckpointStore(ABC):
         """获取指定群在指定日期的所有有效 Checkpoint 快照摘要列表"""
 
     @abstractmethod
+    def get_checkpoints_by_date_range(
+        self,
+        group_id: str,
+        start_date: str,
+        end_date: str,
+        stage_name: str = "LLM_ANALYSIS",
+    ) -> list[dict[str, object]]:
+        """按日期范围查询指定群在各自然日最新有效的一份阶段 Checkpoint 详情列表（同日取 MAX(created_at)）"""
+
+    @abstractmethod
     def delete_checkpoint(
         self,
         group_id: str,

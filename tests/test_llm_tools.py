@@ -1,0 +1,713 @@
+"""单元测试：群分析插件 LLM Tools (读取报告与按需触发).
+
+覆盖：
+1. ReportQueryService:
+   - 目标群 4 级漏斗解析（留空继承当前群、纯数字提取、群名模糊匹配、歧义列表、未找到）
+   - 弹性日期解析（今天/昨天/前天、单日补零、范围、>30天超限拦截、逆序拦截）
+   - CheckpointStore 与 HistoryManager 双轨检索
+   - 同日取最新 MAX(created_at) 窗口去重
+   - 临近日期自愈探测
+   - 模块投影过滤（topics, golden_quotes 等）与 4000 字符截断
+2. AnalysisTriggerService:
+   - 管理员权限校验与普通用户拒绝
+   - 目标群白名单校验
+   - 群分析锁正在运行冲突防重入
+   - 配置交集过滤与跳过提示
+   - 异步任务派发与 500ms 受理回执
+   - ON_DEMAND_ANALYSIS 独立阶段隔离
+3. main.py 集成测试:
+   - get_daily_report 与 trigger_daily_analysis 链路贯通
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from src.application.services.analysis_trigger_service import AnalysisTriggerService
+from src.application.services.report_query_service import ReportQueryService
+from src.shared.constants import AnalysisStage
+
+
+@pytest.fixture
+def mock_config_manager():
+    cfg = MagicMock()
+    cfg.is_group_allowed.return_value = True
+    cfg.get_analysis_days.return_value = 1
+    cfg.get_topic_analysis_enabled.return_value = True
+    cfg.get_user_title_analysis_enabled.return_value = True
+    cfg.get_golden_quote_analysis_enabled.return_value = True
+    cfg.get_chat_quality_analysis_enabled.return_value = False  # 默认关闭质量分析测试配置交集
+    cfg._get_group.return_value = {"admin_users": ["99999"]}
+    return cfg
+
+
+@pytest.fixture
+def mock_checkpoint_store():
+    store = MagicMock()
+    store.get_checkpoints_by_date_range.return_value = []
+    store.list_all_checkpoints.return_value = ([], 0)
+    store.get_checkpoint_detail.return_value = None
+    return store
+
+
+@pytest.fixture
+def mock_history_manager():
+    mgr = MagicMock()
+    mgr.get_analysis = AsyncMock(return_value=None)
+    return mgr
+
+
+@pytest.fixture
+def mock_trace_store():
+    store = MagicMock()
+    store.find_groups_by_name.return_value = []
+    store.get_distinct_groups.return_value = [
+        {"group_id": "123456", "group_name": "测试交流群", "platform": "aiocqhttp"}
+    ]
+    return store
+
+
+@pytest.fixture
+def report_query_service(mock_config_manager, mock_checkpoint_store, mock_history_manager, mock_trace_store):
+    return ReportQueryService(
+        config_manager=mock_config_manager,
+        checkpoint_store=mock_checkpoint_store,
+        history_manager=mock_history_manager,
+        trace_store=mock_trace_store,
+    )
+
+
+# ==================== 1. ReportQueryService 目标群解析测试 ====================
+
+
+def test_resolve_target_group_empty_with_current(report_query_service):
+    # 留空且有当前群事件：自动绑定当前群
+    gid, name, cand = report_query_service.resolve_target_group("", current_event_group_id="123456")
+    assert gid == "123456"
+    assert name == "测试交流群"
+    assert cand == []
+
+
+def test_resolve_target_group_pure_number(report_query_service):
+    # 纯数字群号
+    gid, name, cand = report_query_service.resolve_target_group("888888")
+    assert gid == "888888"
+    assert cand == []
+
+
+def test_resolve_target_group_with_umo(report_query_service):
+    # UMO 格式解构提取
+    gid, name, cand = report_query_service.resolve_target_group("aiocqhttp:GroupMessage:888888")
+    assert gid == "888888"
+
+
+def test_resolve_target_group_by_name_single_match(report_query_service, mock_trace_store):
+    # 按名称单一匹配
+    mock_trace_store.find_groups_by_name.return_value = [
+        {"group_id": "123456", "group_name": "测试交流群", "platform": "aiocqhttp"}
+    ]
+    gid, name, cand = report_query_service.resolve_target_group("交流群")
+    assert gid == "123456"
+    assert name == "测试交流群"
+    assert cand == []
+
+
+def test_resolve_target_group_by_name_ambiguous(report_query_service, mock_trace_store):
+    # 按名称歧义返回候选
+    mock_trace_store.find_groups_by_name.return_value = [
+        {"group_id": "111", "group_name": "开黑一队"},
+        {"group_id": "222", "group_name": "开黑二队"},
+    ]
+    gid, name, cand = report_query_service.resolve_target_group("开黑")
+    assert gid is None
+    assert len(cand) == 2
+
+
+# ==================== 2. ReportQueryService 弹性日期解析测试 ====================
+
+
+def test_parse_date_range_relative(report_query_service):
+    start, end, err = report_query_service.parse_date_range("今天")
+    assert err is None
+    assert start == end
+
+    start_y, end_y, err_y = report_query_service.parse_date_range("昨天")
+    assert err_y is None
+    assert start_y == end_y
+
+    start_latest, end_latest, err_latest = report_query_service.parse_date_range("")
+    assert err_latest is None
+    assert start_latest == ""
+    assert end_latest == ""
+
+
+def test_parse_date_range_formats(report_query_service):
+    # 补零与分隔符
+    start, end, err = report_query_service.parse_date_range("2026/10/2")
+    assert err is None
+    assert start == "2026-10-02"
+    assert end == "2026-10-02"
+
+    # 波浪线范围
+    start_r, end_r, err_r = report_query_service.parse_date_range("2026-10-01~2026-10-05")
+    assert err_r is None
+    assert start_r == "2026-10-01"
+    assert end_r == "2026-10-05"
+
+
+def test_parse_date_range_errors(report_query_service):
+    # 超过 30 天拦截
+    _, _, err_overflow = report_query_service.parse_date_range("2026-10-01~2026-11-15")
+    assert err_overflow is not None
+    assert "超过了最大支持的 30 天" in err_overflow
+
+    # 逆序拦截
+    _, _, err_reverse = report_query_service.parse_date_range("2026-10-05~2026-10-01")
+    assert err_reverse is not None
+    assert "不能晚于" in err_reverse
+
+
+# ==================== 3. 报告检索与模块投影测试 ====================
+
+
+@pytest.mark.asyncio
+async def test_query_reports_projection_and_format(report_query_service, mock_checkpoint_store):
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_1",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [{"topic": "二手车讨论", "detail": "推荐卡罗拉", "heat": 95}],
+                "golden_quotes": [{"quote": "车到山前必有路", "author": "老张"}],
+                "user_titles": [{"user_name": "小李", "title": "预算守门员"}],
+                "chat_quality_review": {"atmosphere": "热烈", "depth": "深入"},
+            },
+        }
+    ]
+
+    # 1. 仅请求话题
+    res_topics = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert "二手车讨论" in res_topics
+    assert "推荐卡罗拉" in res_topics
+    assert "车到山前必有路" not in res_topics
+    assert "预算守门员" not in res_topics
+
+    # 2. 请求话题 + 金句
+    res_multi = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题,金句",
+    )
+    assert "二手车讨论" in res_multi
+    assert "车到山前必有路" in res_multi
+    assert "预算守门员" not in res_multi
+
+
+@pytest.mark.asyncio
+async def test_query_reports_sliding_probe(report_query_service, mock_checkpoint_store):
+    # 精确命中为空，但临近日期存在
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = []
+    mock_checkpoint_store.get_checkpoint_detail.return_value = {
+        "checkpoint_id": "cp_prev",
+        "group_id": "123456",
+        "date_str": "2026-10-01",
+        "stage_name": "LLM_ANALYSIS",
+        "trace_id": "t1",
+        "created_at": 1000,
+        "data": {"topics": [{"topic": "前天话题", "detail": "测试"}]},
+    }
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="全部",
+    )
+    assert "自动匹配最临近于 2026-10-01" in res
+    assert "前天话题" in res
+
+
+# ==================== 4. AnalysisTriggerService 触发测试 ====================
+
+
+@pytest.fixture
+def mock_analysis_service():
+    srv = MagicMock()
+    srv.is_group_running.return_value = False
+    srv.execute_daily_analysis = AsyncMock(return_value={"success": True})
+    return srv
+
+
+@pytest.fixture
+def mock_active_task_manager():
+    mgr = MagicMock()
+    mgr.register_task = AsyncMock()
+    mgr.unregister_task = AsyncMock()
+    return mgr
+
+
+@pytest.fixture
+def mock_report_dispatcher():
+    disp = MagicMock()
+    disp.dispatch = AsyncMock(return_value=True)
+    return disp
+
+
+@pytest.fixture
+def trigger_service(
+    mock_config_manager,
+    mock_analysis_service,
+    report_query_service,
+    mock_active_task_manager,
+    mock_trace_store,
+    mock_report_dispatcher,
+):
+    return AnalysisTriggerService(
+        config_manager=mock_config_manager,
+        analysis_service=mock_analysis_service,
+        report_query_service=report_query_service,
+        active_task_manager=mock_active_task_manager,
+        trace_store=mock_trace_store,
+        report_dispatcher=mock_report_dispatcher,
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_permission_denied(trigger_service):
+    event = MagicMock()
+    event.is_admin.return_value = False
+    event.role = "member"
+    event.get_sender_id.return_value = "10001"  # 不在 admin_users 中
+
+    msg = await trigger_service.trigger_analysis(event, group="123456")
+    assert "[权限不足]" in msg
+
+
+@pytest.mark.asyncio
+async def test_trigger_conflict_lock(trigger_service, mock_analysis_service):
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+
+    # 模拟正在运行
+    mock_analysis_service.is_group_running.return_value = True
+
+    msg = await trigger_service.trigger_analysis(event, group="")
+    assert "[任务冲突]" in msg
+
+
+@pytest.mark.asyncio
+async def test_trigger_success_async_fire_and_forget_with_render(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    # 返回带 analysis_result 的有效字典
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试话题"}]},
+    }
+
+    # 默认 render_to_chat=True
+    msg = await trigger_service.trigger_analysis(
+        event=event,
+        analysis_sections="话题,聊天质量分析",  # 质量分析被配置关闭
+        days=2,
+        group="",
+        render_to_chat=True,
+    )
+
+    # 500ms 内收到受理回执且提示自动发群
+    assert "[分析任务已成功在后台启动]" in msg
+    assert "自动渲染并直接将报告长图发送至本群" in msg
+    assert "topics" in msg or "话题" in msg
+    assert "跳过模块: 聊天质量分析" in msg
+
+    # 等待后台任务执行
+    await asyncio.sleep(0.05)
+    mock_analysis_service.execute_daily_analysis.assert_called_once()
+    call_kwargs = mock_analysis_service.execute_daily_analysis.call_args.kwargs
+    assert call_kwargs["group_id"] == "123456"
+    assert call_kwargs["days"] == 2
+    assert call_kwargs["analysis_sections"] == {"topics"}
+    # 部分模块触发，阶段隔离为 ON_DEMAND_ANALYSIS
+    assert call_kwargs["checkpoint_stage_name"] == AnalysisStage.ON_DEMAND_ANALYSIS.value
+
+    # 验证报告分发器被调用
+    mock_report_dispatcher.dispatch.assert_awaited_once_with(
+        group_id="123456",
+        analysis_result={"topics": [{"topic": "测试话题"}]},
+        platform_id="aiocqhttp",
+    )
+
+
+@pytest.mark.asyncio
+async def test_trigger_silent_mode_no_dispatch(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试话题"}]},
+    }
+
+    # 显式 render_to_chat=False 静默入库
+    msg = await trigger_service.trigger_analysis(
+        event=event,
+        analysis_sections="全部",
+        days=1,
+        group="",
+        render_to_chat=False,
+    )
+
+    assert "[分析任务已成功在后台启动]" in msg
+    assert "**不会**向群聊发送长图" in msg
+
+    await asyncio.sleep(0.05)
+    mock_analysis_service.execute_daily_analysis.assert_called_once()
+    # 验证静默模式下未调用 report_dispatcher
+    mock_report_dispatcher.dispatch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_truncation_strictly_under_limit(report_query_service, mock_checkpoint_store):
+    # 模拟超长内容，检验截断后是否绝对 <= 40000 字符
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_long",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {"topic": f"超长讨论话题_{i}", "detail": "内容" * 3000}
+                    for i in range(15)
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert len(res) <= 40000
+    assert "内容较长已自动截断" in res
+
+
+@pytest.mark.asyncio
+async def test_quotes_and_titles_robust_formatting(report_query_service, mock_checkpoint_store):
+    # 验证多样化字段键名支持、空金句过滤与昵称/MBTI兜底
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_fmt",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "golden_quotes": [
+                    {"content": "这是金句内容", "sender": "发言人A", "reason": "幽默"},
+                    {"quote": "这是第二条金句", "author": "作者B"},
+                    {"quote": "", "content": "   ", "author": "幽灵"},  # 空金句应被过滤
+                ],
+                "user_titles": [
+                    {"name": "群友小明", "title": "水群狂魔", "mbti": "ENTP", "reason": "话多"},
+                    {"user_id": "999888", "title": "潜水员"},  # 无昵称，降级为 user_id
+                ],
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="金句,用户称号",
+    )
+    # 验证金句内容
+    assert '1. "这是金句内容" —— 发言人A' in res
+    assert '2. "这是第二条金句" —— 作者B' in res
+    assert "幽灵" not in res
+    # 验证称号内容
+    assert "1. 群友小明: [水群狂魔 | ENTP]" in res
+    assert "2. 999888: [潜水员]" in res
+
+
+@pytest.mark.asyncio
+async def test_topic_details_id_to_nickname_mapping(report_query_service, mock_checkpoint_store):
+    # 验证话题详情中的裸 QQ 号如 [2995519244] 会被自动替换为 昵称(QQ号)
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_topic_id",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {
+                        "topic": "机子赠送讨论",
+                        "detail": "[2995519244] 发现某平台送机子，而 @1686582748 觉得是假的。",
+                        "heat": 80,
+                    }
+                ],
+                "user_analysis": {
+                    "2995519244": {"nickname": "凉雨"},
+                    "1686582748": {"name": "玲喵"},
+                },
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert "凉雨(2995519244) 发现某平台送机子" in res
+    assert "玲喵(1686582748) 觉得是假的" in res
+
+
+@pytest.mark.asyncio
+async def test_trigger_preemption_lock(trigger_service):
+    # 验证两次几乎同时到达的请求不会产生竞争
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    # 人工占用预占集合
+    trigger_service._pending_groups.add("123456")
+    msg = await trigger_service.trigger_analysis(event=event, group="123456")
+    assert "[任务冲突]" in msg
+    trigger_service._pending_groups.clear()
+
+
+@pytest.mark.asyncio
+async def test_query_reports_on_demand_stage_fallback(report_query_service, mock_checkpoint_store):
+    # LLM_ANALYSIS 为空，但存在 ON_DEMAND_ANALYSIS
+    def mock_date_range(group_id, start_date, end_date, stage_name="LLM_ANALYSIS"):
+        if stage_name == AnalysisStage.ON_DEMAND_ANALYSIS.value:
+            return [
+                {
+                    "checkpoint_id": "cp_ondemand",
+                    "group_id": group_id,
+                    "date_str": start_date,
+                    "stage_name": stage_name,
+                    "data": {"topics": [{"topic": "按需话题", "detail": "金句测试"}]},
+                }
+            ]
+        return []
+
+    mock_checkpoint_store.get_checkpoints_by_date_range.side_effect = mock_date_range
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    assert "按需话题" in res
+
+
+# ==================== 5. 针对用户反馈现场与 Corner Cases 的深度专项测试 ====================
+
+
+@pytest.mark.asyncio
+async def test_topic_details_alphanumeric_openid_mapping(report_query_service, mock_checkpoint_store):
+    """Corner Case: 跨平台字母数字 OpenID、带下划线 ID 与 @ 语法的昵称替换。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_openid",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "topics": [
+                    {
+                        "topic": "跨平台讨论",
+                        "detail": (
+                            "[open_id_user_998] 提到了机器人架构，"
+                            "@discord_member_77 赞同了看法，"
+                            "而 [unknown_id_00000] 没有在映射表中。"
+                        ),
+                    }
+                ],
+                "user_analysis": {
+                    "open_id_user_998": {"card": "西蒙"},
+                    "discord_member_77": {"nickname": "小可"},
+                },
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="话题",
+    )
+    # 命中映射表的被替换为 昵称(ID)
+    assert "西蒙(open_id_user_998) 提到了机器人架构" in res
+    assert "小可(discord_member_77) 赞同了看法" in res
+    # 未命中的保留原始标识不破坏文本
+    assert "[unknown_id_00000] 没有在映射表中" in res
+
+
+@pytest.mark.asyncio
+async def test_user_titles_all_empty_fallback(report_query_service, mock_checkpoint_store):
+    """Corner Case: 字段键名缺失、昵称为全空格时，兜底显示为“群友”且格式不出现空冒号。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_titles_empty",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "user_titles": [
+                    {"user_name": "  ", "name": "", "title": "预算守门员"},
+                    {"title": "龙王", "mbti": "INTJ"},
+                    {"user_id": "10086", "title": ""},  # 称号为空
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="用户称号",
+    )
+    # 彻底杜绝空冒号 "1. : [预算守门员]"
+    assert "1. : " not in res
+    assert "1. 群友: [预算守门员]" in res
+    assert "2. 群友: [龙王 | INTJ]" in res
+    assert "3. 10086:" in res
+
+
+@pytest.mark.asyncio
+async def test_golden_quotes_whitespace_and_empty_filtering(report_query_service, mock_checkpoint_store):
+    """Corner Case: 历史提取产物中含连续换行、全空格等假条目，必须严格过滤不产出空序号。"""
+    mock_checkpoint_store.get_checkpoints_by_date_range.return_value = [
+        {
+            "checkpoint_id": "cp_quotes_empty",
+            "group_id": "123456",
+            "date_str": "2026-10-02",
+            "stage_name": "LLM_ANALYSIS",
+            "data": {
+                "golden_quotes": [
+                    {"quote": "   \n\t  ", "author": "有人"},
+                    {"content": "", "sender": "幽灵"},
+                    {"text": "真正的金句在这里", "author": "哲学家"},
+                ]
+            },
+        }
+    ]
+
+    res = await report_query_service.query_reports(
+        group_id="123456",
+        start_date="2026-10-02",
+        end_date="2026-10-02",
+        report_section="金句",
+    )
+    assert '1. "真正的金句在这里" —— 哲学家' in res
+    assert '2. "' not in res  # 不存在第二个序号
+    assert "有人" not in res
+    assert "幽灵" not in res
+
+
+@pytest.mark.asyncio
+async def test_trigger_dispatch_failure_resilience(
+    trigger_service, mock_analysis_service, mock_report_dispatcher
+):
+    """Corner Case: 异步派发长图异常时，不导致后台协程崩溃，保证任务正常终结。"""
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    mock_analysis_service.execute_daily_analysis.return_value = {
+        "success": True,
+        "analysis_result": {"topics": [{"topic": "测试"}]},
+    }
+    # 模拟派发时网络断开抛出异常
+    mock_report_dispatcher.dispatch.side_effect = RuntimeError("网络发送超时")
+
+    msg = await trigger_service.trigger_analysis(
+        event=event,
+        analysis_sections="全部",
+        days=1,
+        group="",
+        render_to_chat=True,
+    )
+    assert "[分析任务已成功在后台启动]" in msg
+    # 等待后台任务执行完成
+    await asyncio.sleep(0.05)
+    # 验证群排他锁已正常释放
+    assert "123456" not in trigger_service._pending_groups
+
+
+@pytest.mark.asyncio
+async def test_main_llm_tool_integration_flow(
+    mock_config_manager, mock_analysis_service, report_query_service, mock_report_dispatcher
+):
+    """Corner Case: main.py 工具方法参数透传与端到端链路贯通测试。"""
+    import sys
+    from pathlib import Path
+
+    plugin_root = Path(__file__).resolve().parents[1]
+    if str(plugin_root.parent) not in sys.path:
+        sys.path.insert(0, str(plugin_root.parent))
+
+    from astrbot_plugin_qq_group_daily_analysis.main import GroupDailyAnalysis
+
+    plugin = MagicMock(spec=GroupDailyAnalysis)
+    plugin.config_manager = mock_config_manager
+    plugin.analysis_service = mock_analysis_service
+    plugin.report_query_service = report_query_service
+    plugin.analysis_trigger_service = AnalysisTriggerService(
+        config_manager=mock_config_manager,
+        analysis_service=mock_analysis_service,
+        report_query_service=report_query_service,
+        report_dispatcher=mock_report_dispatcher,
+    )
+
+    event = MagicMock()
+    event.is_admin.return_value = True
+    event.get_group_id.return_value = "123456"
+    event.get_platform_id.return_value = "aiocqhttp"
+
+    # 1. 调用 get_daily_report 代理（通过 mock query_reports 验证委托穿透）
+    with patch.object(
+        report_query_service, "query_reports", AsyncMock(return_value="### 群聊日常分析报告\n- 话题: 测试话题")
+    ):
+        get_res = await GroupDailyAnalysis.get_daily_report(plugin, event=event, group="123456", report_section="话题")
+        assert "### 群聊日常分析报告" in get_res
+
+    # 2. 调用 trigger_daily_analysis 代理
+    trig_res = await GroupDailyAnalysis.trigger_daily_analysis(
+        plugin, event=event, analysis_sections="话题", days=1, group="", render_to_chat=True
+    )
+    assert "[分析任务已成功在后台启动]" in trig_res
+    assert "约 1 分钟左右" in trig_res
+

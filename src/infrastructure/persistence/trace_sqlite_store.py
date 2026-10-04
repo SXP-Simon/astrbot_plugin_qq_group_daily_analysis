@@ -555,6 +555,49 @@ class TraceSQLiteStore:
                 for r in rows
             ]
 
+    def find_groups_by_name(
+        self, name_query: str, limit: int = 5
+    ) -> list[dict[str, str]]:
+        """按群聊名称模糊检索匹配的历史群组列表。
+
+        Args:
+            name_query: 待搜索的群名称关键词。
+            limit: 最大返回条数。
+
+        Returns:
+            list[dict[str, str]]: 包含 group_id, group_name, platform 的去重列表。
+        """
+        clean_query = str(name_query).strip()
+        if not clean_query:
+            return []
+
+        with self._get_connection() as conn:
+            query = """
+                WITH ranked_traces AS (
+                    SELECT group_id, group_name, platform, started_at,
+                           ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY started_at DESC) AS rn
+                    FROM analysis_traces
+                    WHERE group_id != ''
+                      AND group_name LIKE ?
+                      AND group_name != ''
+                      AND group_name != '未知群'
+                )
+                SELECT group_id, group_name, platform
+                FROM ranked_traces
+                WHERE rn = 1
+                ORDER BY started_at DESC
+                LIMIT ?;
+            """
+            rows = conn.execute(query, (f"%{clean_query}%", limit)).fetchall()
+            return [
+                {
+                    "group_id": str(r["group_id"]),
+                    "group_name": str(r["group_name"]),
+                    "platform": str(r["platform"] or ""),
+                }
+                for r in rows
+            ]
+
     def list_traces(
         self,
         limit: int = 20,

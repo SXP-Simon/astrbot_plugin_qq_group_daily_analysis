@@ -27,11 +27,13 @@ from .src.application.handlers.settings_command_handler import (
 from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
+from .src.application.services.analysis_trigger_service import AnalysisTriggerService
 from .src.application.services.comic_application_service import ComicApplicationService
 from .src.application.services.crash_recovery_service import CrashRecoveryService
 from .src.application.services.message_processing_service import (
     MessageProcessingService,
 )
+from .src.application.services.report_query_service import ReportQueryService
 from .src.application.services.template_command_service import (
     TemplateCommandService,
 )
@@ -106,6 +108,8 @@ class GroupDailyAnalysis(Star):
     settings_command_handler: SettingsCommandHandler
     comic_command_handler: ComicCommandHandler
     analysis_command_handler: AnalysisCommandHandler
+    report_query_service: ReportQueryService
+    analysis_trigger_service: AnalysisTriggerService
     _initialized: bool
     _terminating: bool
     _init_lock: asyncio.Lock
@@ -262,6 +266,22 @@ class GroupDailyAnalysis(Star):
             comic_handler=self.comic_command_handler,
             plugin_data_dir=plugin_data_dir,
             plugin_instance=self,
+        )
+
+        # 6. LLM Tool 业务服务
+        self.report_query_service = ReportQueryService(
+            config_manager=self.config_manager,
+            checkpoint_store=self.checkpoint_store,
+            history_manager=self.history_manager,
+            trace_store=self.trace_store,
+        )
+        self.analysis_trigger_service = AnalysisTriggerService(
+            config_manager=self.config_manager,
+            analysis_service=self.analysis_service,
+            report_query_service=self.report_query_service,
+            active_task_manager=self.active_task_manager,
+            trace_store=self.trace_store,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
         )
 
         # 同步全局限流并进行初始化配置
@@ -626,6 +646,125 @@ class GroupDailyAnalysis(Star):
     async def _refresh_incremental_target_states(self) -> None:
         """在插件内修改名单后立即同步增量状态。"""
         await self.settings_command_handler._refresh_incremental_target_states()
+
+    # ==================== LLM Tool 函数调用注册 ====================
+
+    @filter.llm_tool("group_daily_analysis_get_report")
+    async def get_daily_report(
+        self,
+        event: AstrMessageEvent,
+        report_section: str = "全部",
+        date_range: str = "",
+        group: str = "",
+    ) -> str:
+        """查询指定群聊的历史日常分析报告、话题总结与金句统计归档。
+
+        【触发准则 (Trigger Rule)】
+        - 仅当用户明确询问群聊总结、群日报、历史讨论话题、群友称号画像、群金句、发言活跃度等已有分析记录时调用。
+        - 【重要交互原则】在群聊环境中查询时，大模型切勿反问用户群号，直接留空 group 参数发起查询！
+        - 【负向禁令】严禁用于普通闲聊、询问当前即时消息、实时天气或要求重新生成/更新报告的操作；若用户要求重新分析请调用 trigger 工具。
+
+        【参数规范 (Arguments)】:
+        Args:
+            report_section (string): 需要检索的报告模块，必须严格为以下枚举项或组合：'全部'（默认）、'话题'、'用户称号'、'金句'、'聊天质量分析'。多选使用逗号分隔，例如 '话题,金句'。
+            date_range (string): 报告查询日期。格式规范：留空或 '最新'（获取最新一份）；单日 'YYYY-MM-DD'（如 '2026-10-02'）；相对日期如 '今天'、'昨天'；范围 'YYYY-MM-DD~YYYY-MM-DD'（如 '2026-10-01~2026-10-03'，最大跨度30天）。
+            group (string): 目标群聊标识。默认留空（群聊场景下务必留空，系统将自动定位当前群）。仅在私聊或明确要求跨群查询时，填写数字群号（如 '680787260'）或群名称关键字（如 '开发交流群'）。
+
+        【调用示范 (Few-Shot)】:
+        - 群友在群里：“今天群里聊了些啥？” -> report_section="全部", date_range="", group=""
+        - 群友在群里：“看看昨天的群金句和精彩语录” -> report_section="金句", date_range="昨天", group=""
+        - 群友在群里：“前天群里有人聊买车吗？” -> report_section="话题", date_range="前天", group=""
+        - 群友在群里：“国庆前三天群里讨论了什么话题？” -> report_section="话题", date_range="2026-10-01~2026-10-03", group=""
+        - 用户在私聊：“帮我看看开发交流群昨天的日报” -> report_section="全部", date_range="昨天", group="开发交流群"
+        - 用户在私聊：“查一下群 680787260 最新报告” -> report_section="全部", date_range="", group="680787260"
+        """
+        # 1. 目标群聊智能解析
+        current_event_group_id = (
+            str(event.get_group_id())
+            if hasattr(event, "get_group_id") and event.get_group_id()
+            else None
+        )
+        target_group_id, matched_name, candidates = (
+            self.report_query_service.resolve_target_group(
+                group_input=group,
+                current_event_group_id=current_event_group_id,
+            )
+        )
+
+        if candidates:
+            cand_lines = [
+                f"{i}. {c.get('group_name', '未知')} ({c.get('group_id')})"
+                for i, c in enumerate(candidates, 1)
+            ]
+            return (
+                f"检测到多个名称匹配 '{group}' 的群聊，请指明具体群号或准确名称重试：\n"
+                + "\n".join(cand_lines)
+            )
+
+        if not target_group_id:
+            if not group and not current_event_group_id:
+                return (
+                    "[提示] 当前处于私聊会话中，请在提问时指明目标群聊名称或群号"
+                    "（例如：“帮我看看开发交流群昨天的日报”）。"
+                )
+            return f"未能定位到群聊 '{group}'。建议直接提供纯数字群号重新查询。"
+
+        # 2. 群权限白名单校验
+        if not self.config_manager.is_group_allowed(target_group_id):
+            return f"群聊 {matched_name or target_group_id} 未在群分析启用名单中，暂无分析数据。"
+
+        # 3. 日期范围解析
+        start_date, end_date, err = self.report_query_service.parse_date_range(
+            date_range
+        )
+        if err:
+            return f"[参数错误] {err}"
+
+        # 4. 执行多维检索
+        return await self.report_query_service.query_reports(
+            group_id=target_group_id,
+            start_date=start_date,
+            end_date=end_date,
+            report_section=report_section,
+        )
+
+    @filter.llm_tool("group_daily_analysis_trigger")
+    async def trigger_daily_analysis(
+        self,
+        event: AstrMessageEvent,
+        analysis_sections: str = "全部",
+        days: int = 1,
+        group: str = "",
+        render_to_chat: bool = True,
+    ) -> str:
+        """按需触发群聊聊天记录分析流水线（默认在分析完成后自动渲染长图并发送至群聊）。
+
+        【触发准则 (Trigger Rule)】
+        - 仅当管理员明确要求“重新分析”、“更新日报”、“提取最新群聊金句/话题”等主动执行后台计算的意图时调用。
+        - 【重要交互原则】普通查询历史事实请严格调用 get_report 工具，严禁随意触发本工具！在群聊中触发时 group 必须留空。
+        - 【交互提示】本工具在后台异步执行，默认（render_to_chat=True）会在计算完成后自动将精美长图发送到群里。受理成功后请明确告知用户分析已启动、长图稍后会自动发群，切勿虚构假分析结果。若用户明确要求“静默更新/后台计算不发群”，可将 render_to_chat 设为 False。
+        - 【负向禁令】严禁用于闲聊、单纯询问已有数据；仅管理员具备触发权限。
+
+        【参数规范 (Arguments)】:
+        Args:
+            analysis_sections (string): 本次需要执行的分析模块：'全部'（默认）、'话题'、'用户称号'、'金句'、'聊天质量分析'。多选逗号分隔。
+            days (number): 分析回溯天数，默认 1（当天或最近24小时），最大允许 7。
+            group (string): 目标群聊标识。默认留空（自动定位当前群聊）。私聊中可填数字群号或群名称。
+            render_to_chat (boolean): 是否在分析完成后自动渲染并向群聊发送长图报告。默认为 True。仅当用户明确要求静默入库时设为 False。
+
+        【调用示范 (Few-Shot)】:
+        - 管理员在群里：“重新分析一下今天的群聊” -> analysis_sections="全部", days=1, group="", render_to_chat=True
+        - 管理员在群里：“帮我提取一下今天群里的金句” -> analysis_sections="金句", days=1, group="", render_to_chat=True
+        - 管理员在群里：“静默更新一下日报数据库，不要发图” -> analysis_sections="全部", days=1, group="", render_to_chat=False
+        - 管理员在私聊：“更新一下开发交流群的日报” -> analysis_sections="全部", days=1, group="开发交流群", render_to_chat=True
+        """
+        return await self.analysis_trigger_service.trigger_analysis(
+            event=event,
+            analysis_sections=analysis_sections,
+            days=days,
+            group=group,
+            render_to_chat=render_to_chat,
+        )
 
     # ==================== 兼容性私有方法代理转发 ====================
 

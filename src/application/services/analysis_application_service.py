@@ -177,14 +177,19 @@ class AnalysisApplicationService:
         platform_id: str | None = None,
         manual: bool = False,
         days: int | None = None,
+        analysis_sections: list[str] | set[str] | None = None,
+        checkpoint_stage_name: str | None = None,
     ) -> dict[str, object]:
-        """执行每日全量分析核心用例。
+        """执行每日全量或按需分析核心用例。
 
         Args:
             group_id: 群组 ID。
             platform_id: 平台实例标识。
             manual: 是否为手动触发。
             days: 分析回溯天数。
+            analysis_sections: 指定本次需要执行的分析模块集合。为 None 时执行全量。
+            checkpoint_stage_name: 持久化 Checkpoint 阶段名称（默认为 LLM_ANALYSIS，按需可传 ON_DEMAND_ANALYSIS）。
+
 
         Returns:
             包含执行状态与 analysis_result 产物的字典。
@@ -425,14 +430,40 @@ class AnalysisApplicationService:
                 except Exception as e:
                     logger.warning(f"保存前置 Checkpoint 失败: {e}")
 
+            # 计算实际执行模块：用户请求模块 ∩ 配置已启用模块
+            req_sections = (
+                set(analysis_sections) if analysis_sections is not None else None
+            )
+
             topic_enabled = self.config_manager.get_topic_analysis_enabled()
+            if req_sections is not None:
+                topic_enabled = topic_enabled and bool(
+                    req_sections.intersection({"topics", "话题", "topic"})
+                )
+
             user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
+            if req_sections is not None:
+                user_title_enabled = user_title_enabled and bool(
+                    req_sections.intersection({"user_titles", "用户称号", "称号"})
+                )
+
             golden_quote_enabled = (
                 self.config_manager.get_golden_quote_analysis_enabled()
             )
+            if req_sections is not None:
+                golden_quote_enabled = golden_quote_enabled and bool(
+                    req_sections.intersection({"golden_quotes", "金句", "quotes"})
+                )
+
             chat_quality_enabled = (
                 self.config_manager.get_chat_quality_analysis_enabled()
             )
+            if req_sections is not None:
+                chat_quality_enabled = chat_quality_enabled and bool(
+                    req_sections.intersection(
+                        {"chat_quality_review", "聊天质量分析", "质量"}
+                    )
+                )
 
             topics = []
             user_titles = []
@@ -538,10 +569,13 @@ class AnalysisApplicationService:
                 if self.checkpoint_store:
                     try:
                         cur_trace_id = trace.trace_id if trace else ""
+                        target_stage = (
+                            checkpoint_stage_name or AnalysisStage.LLM_ANALYSIS.value
+                        )
                         self.checkpoint_store.save_checkpoint(
                             group_id=group_id,
                             date_str=date_str,
-                            stage_name=AnalysisStage.LLM_ANALYSIS.value,
+                            stage_name=target_stage,
                             data=self._serialize_analysis_result(analysis_result),
                             trace_id=cur_trace_id,
                         )
