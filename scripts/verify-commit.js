@@ -9,6 +9,8 @@ import { execSync } from 'node:child_process';
 // ============================================================================
 const SCOPE_CATEGORIES = {
   '🏛️ 后端 DDD 架构分层 (Backend DDD Architectural Layers)': {
+    entrypoints: '插件接入与指令入口层 (main.py, src/entrypoints/)',
+    entry: '插件接入层别名 (同 entrypoints)',
     domain: '领域层核心 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
     app: '应用层 (用例编排, Application Services, Handlers, DTO)',
     application: '应用层完整别名 (同 app)',
@@ -19,12 +21,15 @@ const SCOPE_CATEGORIES = {
     'infra/webui': 'Web 控制台后端路由与通信适配 (src/infrastructure/webui/)',
     'infra/routes': '后端 WebAPI 路由处理器别名 (同 infra/webui)',
     'infra/api': '后端 WebAPI 接口协议适配别名 (同 infra/webui)',
+    'infra/drawing': 'AI 绘图引擎与图像生成驱动 (src/infrastructure/drawing/)',
+    'infra/messaging': '内部事件总线与消息广播 (src/infrastructure/messaging/)',
   },
   '🎯 后端业务子领域 (Backend Sub-domains)': {
     analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
     comic: '漫画子域 (分镜解析, 提示词引擎, 图像生成与相册流转)',
     reporting: '报告渲染子域 (HTML/Image 渲染引擎, 主题模板, 排版系统)',
     render: '渲染引擎别名 (同 reporting)',
+    drawing: '绘图引擎子域别名 (同 infra/drawing)',
     platform: '多平台通信子域 (OneBot, QQOfficial, Telegram, Discord 适配)',
     scheduler: '调度与恢复子域 (Cron 任务, 增量分析, 熔断恢复, TaskGuard)',
     config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
@@ -43,6 +48,11 @@ const SCOPE_CATEGORIES = {
     'webui/reports': 'FSD 报告业务切片 (对应 entities/report, features/rerender-report, widgets/report-preview-modal)',
     'webui/charts': 'FSD 图表业务切片 (对应 widgets/trend-charts, widgets/token-chart-widget)',
     'webui/config': 'FSD 配置业务切片 (对应 entities/config, widgets/config-form, features/install-template)',
+    'webui/logs': 'FSD 日志业务切片 (对应 pages/logs, entities/log, features/filter-logs)',
+    'webui/plugin-data': 'FSD 插件数据与检查点切片 (对应 pages/plugin-data, entities/plugin-data)',
+    'webui/data': 'FSD 数据管理切片别名 (同 webui/plugin-data)',
+    'webui/insight': 'FSD 上下文洞察切片 (对应 pages/context-insight, widgets/context-funnel-widget)',
+    'webui/overview': 'FSD 概览大盘切片 (对应 pages/overview)',
   },
   '🛠️ 工程与基建 (Engineering & Infrastructure)': {
     'ci/github-actions': 'GitHub Actions 工作流与 CI 配置',
@@ -67,11 +77,12 @@ const SCOPE_CATEGORIES = {
 const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.keys(cat));
 
 // 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts, docs/release）
-const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs'];
+const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs', 'entrypoints'];
 const ALLOWED_SUBDOMAINS = [
-  'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence',
+  'analysis', 'comic', 'reporting', 'render', 'drawing', 'messaging', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence',
+  'entrypoints', 'entry',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
-  'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common',
+  'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'plugin-data', 'data', 'insight', 'overview', 'components', 'common',
   'unit', 'e2e', 'infra', 'mocks', 'github-actions', 'lefthook', 'workflow', 'scripts', 'pipeline', 'pre-commit', 'gate', 'arch', 'release'
 ];
 
@@ -163,6 +174,41 @@ const SCOPE_PATH_RULES = [
     matchScope: (s) => s === 'webui/config',
     matchFile: (f) => f.includes('config') && f.startsWith('dashboard/'),
     name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/logs' || s === 'logs',
+    matchFile: (f) => f.includes('log') && f.startsWith('dashboard/'),
+    name: 'webui/logs 日志业务切片 (dashboard/src/**/log*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/plugin-data' || s === 'webui/data' || s === 'plugin-data' || s === 'data',
+    matchFile: (f) => (f.includes('plugin-data') || f.includes('data')) && f.startsWith('dashboard/'),
+    name: 'webui/plugin-data 插件数据与检查点切片 (dashboard/src/**/plugin-data*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/insight' || s === 'insight' || s === 'context-insight',
+    matchFile: (f) => (f.includes('insight') || f.includes('funnel')) && f.startsWith('dashboard/'),
+    name: 'webui/insight 上下文洞察切片 (dashboard/src/**/context-insight*, *funnel*)',
+  },
+  {
+    matchScope: (s) => s === 'webui/overview' || s === 'overview',
+    matchFile: (f) => f.includes('overview') && f.startsWith('dashboard/'),
+    name: 'webui/overview 概览大盘切片 (dashboard/src/**/overview*)',
+  },
+  {
+    matchScope: (s) => s === 'entrypoints' || s === 'entry' || s.startsWith('entrypoints/'),
+    matchFile: (f) => f.startsWith('src/entrypoints/') || f === 'main.py',
+    name: 'entrypoints 插件接入层与指令入口 (main.py, src/entrypoints/)',
+  },
+  {
+    matchScope: (s) => s === 'infra/drawing' || s === 'drawing',
+    matchFile: (f) => f.startsWith('src/infrastructure/drawing/'),
+    name: 'infra/drawing AI 绘图引擎与图像生成驱动 (src/infrastructure/drawing/)',
+  },
+  {
+    matchScope: (s) => s === 'infra/messaging' || s === 'messaging',
+    matchFile: (f) => f.startsWith('src/infrastructure/messaging/'),
+    name: 'infra/messaging 内部事件总线与消息广播 (src/infrastructure/messaging/)',
   },
   {
     matchScope: (s) => s === 'infra/storage' || s === 'infra/db' || s === 'storage' || s === 'db',
@@ -451,7 +497,12 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
               scope === 'tasks' ||
               scope === 'traces' ||
               scope === 'reports' ||
-              scope === 'charts';
+              scope === 'charts' ||
+              scope === 'logs' ||
+              scope === 'plugin-data' ||
+              scope === 'data' ||
+              scope === 'insight' ||
+              scope === 'overview';
 
             const unmatchedProductionFiles = touchedFiles.filter((file) => {
               // 允许随行提交配套的单元测试与文档说明
