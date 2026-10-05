@@ -293,6 +293,28 @@ const SCOPE_PATH_RULES = [
     name: 'infra/config 配置管理与 Schema (src/infrastructure/config/, _conf_schema.json)',
   },
   {
+    matchScope: (s) =>
+      s === 'infra/reporting' ||
+      s === 'infra/render' ||
+      s === 'reporting' ||
+      s === 'render' ||
+      s.endsWith('/reporting') ||
+      s.endsWith('/render'),
+    matchFile: (f) =>
+      f.startsWith('src/infrastructure/reporting/') ||
+      f.startsWith('assets/') ||
+      f === 'src/shared/constants.py',
+    name: 'infra/reporting 渲染子域与模板素材 (src/infrastructure/reporting/, assets/)',
+  },
+  {
+    matchScope: (s) =>
+      s === 'infra/scheduler' ||
+      s === 'scheduler' ||
+      s.endsWith('/scheduler'),
+    matchFile: (f) => f.startsWith('src/infrastructure/scheduler/'),
+    name: 'infra/scheduler 调度子域 (src/infrastructure/scheduler/)',
+  },
+  {
     matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
     matchFile: (f) => f.startsWith('src/infrastructure/'),
     name: 'infra 基础设施层 (src/infrastructure/)',
@@ -316,16 +338,6 @@ const SCOPE_PATH_RULES = [
       f.startsWith('src/domain/repositories/comic_') ||
       (f.startsWith('src/') && f.includes('comic')),
     name: 'comic 漫画子域',
-  },
-  {
-    matchScope: (s) => s === 'reporting' || s === 'render' || s.endsWith('/reporting') || s.endsWith('/render'),
-    matchFile: (f) => f.startsWith('src/infrastructure/reporting/'),
-    name: 'reporting/render 渲染子域 (src/infrastructure/reporting/)',
-  },
-  {
-    matchScope: (s) => s === 'scheduler' || s.endsWith('/scheduler'),
-    matchFile: (f) => f.startsWith('src/infrastructure/scheduler/'),
-    name: 'scheduler 调度子域 (src/infrastructure/scheduler/)',
   },
   {
     matchScope: (s) => s === 'config' || s.endsWith('/config'),
