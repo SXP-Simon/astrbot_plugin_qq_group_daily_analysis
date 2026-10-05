@@ -1,4 +1,4 @@
-{% from 'inline_assets.html' import maid_assets, maid_character, rice_bowl %}
+{% from 'inline_assets.html' import maid_assets, maid_character, rice_bowl with context %}
 {% set sleepy = (message_count | int) == 0 %}
 {% set busy = (message_count | int) >= 1000 %}
 <!DOCTYPE html>

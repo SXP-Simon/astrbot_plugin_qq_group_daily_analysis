@@ -23,6 +23,7 @@ from markupsafe import Markup
 
 from ...shared.constants import (
     DEFAULT_ASSETS_CDN_URL,
+    DEFAULT_DEEPSEEK_MAID_ASSETS_CDN_URL,
     DEFAULT_MIKU_ASSETS_CDN_URL,
     DEFAULT_NPM_CDN_URL,
 )
@@ -310,6 +311,7 @@ class RenderDataPreparer:
             "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
             "t2i_atri_font_mirror": (self.config_manager.get_t2i_atri_font_mirror()),
             "t2i_miku_assets_mirror": DEFAULT_MIKU_ASSETS_CDN_URL,
+            "t2i_deepseek_maid_assets_mirror": DEFAULT_DEEPSEEK_MAID_ASSETS_CDN_URL,
             "t2i_npm_mirror": DEFAULT_NPM_CDN_URL,
             "cdn_assets_base": DEFAULT_ASSETS_CDN_URL,
         }
@@ -521,6 +523,7 @@ class RenderDataPreparer:
             "t2i_gstatic_mirror": self.config_manager.get_t2i_gstatic_mirror(),
             "t2i_atri_font_mirror": (self.config_manager.get_t2i_atri_font_mirror()),
             "t2i_miku_assets_mirror": DEFAULT_MIKU_ASSETS_CDN_URL,
+            "t2i_deepseek_maid_assets_mirror": DEFAULT_DEEPSEEK_MAID_ASSETS_CDN_URL,
             "t2i_npm_mirror": DEFAULT_NPM_CDN_URL,
             "cdn_assets_base": DEFAULT_ASSETS_CDN_URL,
             "current_date": format_report_date(report_language, datetime.now()),

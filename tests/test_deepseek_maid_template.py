@@ -51,23 +51,47 @@ def test_maid_identity_visibility_and_plain_text_escaping(hide_names):
 
 
 def test_maid_character_is_self_contained_and_has_all_face_layers():
-    """原角色图层与完整扣盆造型均内嵌有效 PNG，不依赖远程图片。"""
+    """原角色图层与完整扣盆造型均外置为有效静态文件，并通过 CDN / 镜像变量引用。"""
     templates = HTMLTemplates(MockConfigManager("deepseek_maid"))
     character = templates.render_template(
-        "image_template.html", template_theme="deepseek_maid",
-        current_date="2026年10月3日", current_datetime="2026-10-03 12:00:00",
-        message_count=10, participant_count=2, total_characters=100, emoji_count=3,
-        most_active_period="12:00", total_tokens=0, prompt_tokens=0, completion_tokens=0,
+        "image_template.html",
+        template_theme="deepseek_maid",
+        t2i_deepseek_maid_assets_mirror="https://cdn.example.com/assets/deepseek_maid",
+        current_date="2026年10月3日",
+        current_datetime="2026-10-03 12:00:00",
+        message_count=10,
+        participant_count=2,
+        total_characters=100,
+        emoji_count=3,
+        most_active_period="12:00",
+        total_tokens=0,
+        prompt_tokens=0,
+        completion_tokens=0,
     )
     root = Path(__file__).resolve().parents[1]
-    source = (root / "src/infrastructure/reporting/templates/deepseek_maid/inline_assets.html").read_text(encoding="utf-8")
-    layers = re.findall(r'href="data:image/png;base64,([^"]+)"', source)
-    assert len(layers) == 7
-    assert all(base64.b64decode(layer).startswith(b"\x89PNG\r\n\x1a\n") for layer in layers)
-    assert "https://" not in source
+    layers_dir = root / "assets/deepseek_maid/layers"
+    expected_layers = [
+        "front.png",
+        "eye-0.png",
+        "eye-1.png",
+        "mouth.png",
+        "closed-eye-0.png",
+        "closed-eye-1.png",
+        "basin-v3.png",
+    ]
+    for layer in expected_layers:
+        layer_file = layers_dir / layer
+        assert layer_file.exists()
+        assert layer_file.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    source = (
+        root
+        / "src/infrastructure/reporting/templates/deepseek_maid/inline_assets.html"
+    ).read_text(encoding="utf-8")
     assert "<script" not in source
     assert character.startswith("<!DOCTYPE html>")
-    assert len(re.findall(r'href="data:image/png;base64,', character)) == 7
+    assert "https://cdn.example.com/assets/deepseek_maid/layers/front.png" in character
+    assert "https://cdn.example.com/assets/deepseek_maid/layers/basin-v3.png" in character
     assert 'href="#maid-pose-open"' in character
 
 
