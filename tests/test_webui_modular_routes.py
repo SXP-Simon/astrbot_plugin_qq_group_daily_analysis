@@ -320,7 +320,10 @@ async def test_report_routes_subdirectory_support(
         else res
     )
     assert body.get("status") == "ok"
-    items = body.get("data", [])
+    data_payload = body.get("data", {})
+    items = (
+        data_payload.get("items") if isinstance(data_payload, dict) else data_payload
+    )
     assert len(items) == 1
     assert items[0]["filename"] == "20261005.html"
     assert items[0]["group_id"] == "344184506"
@@ -344,7 +347,7 @@ async def test_report_routes_subdirectory_support(
 async def test_report_routes_database_first_querying_and_migration(
     mock_trace_store: TraceSQLiteStore, tmp_path
 ):
-    """测试 ReportRoutes 优先从 report_artifacts 表极速拉取并关联 trace_id"""
+    """测试 ReportRoutes 优先从 report_artifacts 表极速拉取并关联 trace_id，且支持分页"""
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     report_file = reports_dir / "report_112233_20261005.html"
@@ -373,7 +376,11 @@ async def test_report_routes_database_first_querying_and_migration(
         else res
     )
     assert body.get("status") == "ok"
-    items = body.get("data", [])
+    data_payload = body.get("data", {})
+    items = (
+        data_payload.get("items") if isinstance(data_payload, dict) else data_payload
+    )
+    assert data_payload.get("total") == 1
     assert len(items) == 1
     assert items[0]["filename"] == "report_112233_20261005.html"
     assert items[0]["trace_id"] == "trace_target_test"

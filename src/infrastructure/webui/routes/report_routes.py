@@ -65,6 +65,28 @@ class ReportRoutes:
     async def api_get_report_history(self) -> WebApiResponse:
         """获取历史生成的报告文件列表（支持图片与 HTML 报告，包含群号、群名与平台归属精准解析）"""
         try:
+            # 解析服务端分页与过滤参数
+            query_limit = 20
+            query_offset = 0
+            query_group_id: str | None = None
+            query_search: str | None = None
+
+            try:
+                raw_limit = request.query.get("limit")
+                if raw_limit:
+                    query_limit = max(1, min(100, int(raw_limit)))
+                raw_offset = request.query.get("offset")
+                if raw_offset:
+                    query_offset = max(0, int(raw_offset))
+                raw_group = request.query.get("group_id")
+                if raw_group and str(raw_group).strip():
+                    query_group_id = str(raw_group).strip()
+                raw_search = request.query.get("search")
+                if raw_search and str(raw_search).strip():
+                    query_search = str(raw_search).strip()
+            except Exception:
+                pass
+
             reports: list[ReportHistoryItemDTO] = []
             group_info_map = {
                 str(g["group_id"]): {
@@ -98,9 +120,18 @@ class ReportRoutes:
             valid_exts = {".png", ".jpg", ".jpeg", ".html"}
 
             # 1. Level 1: 优先走数据库 report_artifacts 索引极速查询
+            total_count = 0
             db_artifacts: list[dict[str, object]] = []
             try:
-                db_artifacts = self.trace_store.query_report_artifacts(limit=150)
+                total_count = self.trace_store.count_report_artifacts(
+                    group_id=query_group_id, search=query_search
+                )
+                db_artifacts = self.trace_store.query_report_artifacts(
+                    group_id=query_group_id,
+                    search=query_search,
+                    limit=query_limit,
+                    offset=query_offset,
+                )
             except Exception:
                 pass
 
@@ -288,7 +319,20 @@ class ReportRoutes:
                             pass
                     except Exception:
                         pass
-            return json_response({"status": "ok", "data": reports})
+
+            # 响应数据：标准分页结构 { items, total }，同时顶层保留 items 键兼容部分直接读取
+            effective_total = total_count if total_count > 0 else len(reports)
+            return json_response(
+                {
+                    "status": "ok",
+                    "data": {
+                        "items": reports,
+                        "total": effective_total,
+                        "limit": query_limit,
+                        "offset": query_offset,
+                    },
+                }
+            )
         except Exception as e:
             logger.error(f"查询历史报告异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)

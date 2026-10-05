@@ -369,6 +369,28 @@ def generate_openapi_spec() -> dict[str, Any]:
                 "get": {
                     "summary": "Get generated report image history",
                     "operationId": "getReportHistory",
+                    "parameters": [
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "schema": {"type": "integer", "default": 20},
+                        },
+                        {
+                            "name": "offset",
+                            "in": "query",
+                            "schema": {"type": "integer", "default": 0},
+                        },
+                        {
+                            "name": "group_id",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "search",
+                            "in": "query",
+                            "schema": {"type": "string"},
+                        },
+                    ],
                     "responses": {
                         "200": {
                             "description": "List of reports",
@@ -379,10 +401,19 @@ def generate_openapi_spec() -> dict[str, Any]:
                                         "properties": {
                                             "status": {"type": "string"},
                                             "data": {
-                                                "type": "array",
-                                                "items": {
-                                                    "$ref": "#/components/schemas/ReportItem"
+                                                "type": "object",
+                                                "properties": {
+                                                    "items": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/components/schemas/ReportItem"
+                                                        },
+                                                    },
+                                                    "total": {"type": "integer"},
+                                                    "limit": {"type": "integer"},
+                                                    "offset": {"type": "integer"},
                                                 },
+                                                "required": ["items", "total"],
                                             },
                                         },
                                     }
