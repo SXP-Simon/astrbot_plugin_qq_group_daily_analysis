@@ -338,3 +338,43 @@ async def test_report_routes_subdirectory_support(
         )
         assert c_body.get("status") == "ok"
         assert c_body["data"]["html_content"] == "<html>hello</html>"
+
+
+@pytest.mark.asyncio
+async def test_report_routes_database_first_querying_and_migration(
+    mock_trace_store: TraceSQLiteStore, tmp_path
+):
+    """测试 ReportRoutes 优先从 report_artifacts 表极速拉取并关联 trace_id"""
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_file = reports_dir / "report_112233_20261005.html"
+    report_file.write_text("<html>fast</html>", encoding="utf-8")
+
+    # 手动登记入库
+    mock_trace_store.register_report_artifact(
+        filename="report_112233_20261005.html",
+        group_id="112233",
+        file_format="html",
+        relative_path="report_112233_20261005.html",
+        created_at=1700000000.0,
+        trace_id="trace_target_test",
+    )
+
+    report_routes = ReportRoutes(
+        trace_store=mock_trace_store,
+        analysis_service=None,
+        report_output_dir=reports_dir,
+    )
+
+    res = await report_routes.api_get_report_history()
+    body = (
+        res.get("data")
+        if isinstance(res.get("data"), dict) and "status" in res.get("data", {})
+        else res
+    )
+    assert body.get("status") == "ok"
+    items = body.get("data", [])
+    assert len(items) == 1
+    assert items[0]["filename"] == "report_112233_20261005.html"
+    assert items[0]["trace_id"] == "trace_target_test"
+    assert items[0]["group_id"] == "112233"
