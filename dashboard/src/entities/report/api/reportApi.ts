@@ -2,11 +2,35 @@ import { apiGet, apiPost, extractData } from "../../../shared/api/bridge";
 import { ReportItem } from "../model/types";
 import { ReportTemplateItem } from "../model/templates";
 
-export async function fetchReportHistory(): Promise<ReportItem[]> {
-  const res = await apiGet<ReportItem[]>("reports/history");
-  const data = extractData<ReportItem[]>(res);
-  if (Array.isArray(data)) return data;
-  return [];
+export interface ListReportsParams {
+  limit?: number;
+  offset?: number;
+  group_id?: string;
+  search?: string;
+  [key: string]: unknown;
+}
+
+export async function fetchReportHistory(
+  params?: ListReportsParams
+): Promise<{ items: ReportItem[]; total: number }> {
+  const res = await apiGet<{ items: ReportItem[]; total: number } | ReportItem[]>(
+    "reports/history",
+    params as Record<string, unknown>
+  );
+  const data = extractData<{ items: ReportItem[]; total: number } | ReportItem[]>(res);
+  if (data && typeof data === "object" && "items" in data && Array.isArray(data.items)) {
+    return {
+      items: data.items,
+      total: typeof data.total === "number" ? data.total : data.items.length,
+    };
+  }
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      total: data.length,
+    };
+  }
+  return { items: [], total: 0 };
 }
 
 export async function fetchReportContent(filename: string): Promise<ReportItem | null> {

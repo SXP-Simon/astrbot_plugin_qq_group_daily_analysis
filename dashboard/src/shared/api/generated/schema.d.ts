@@ -851,7 +851,12 @@ export interface operations {
     };
     getReportHistory: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                offset?: number;
+                group_id?: string;
+                search?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -866,7 +871,12 @@ export interface operations {
                 content: {
                     "application/json": {
                         status?: string;
-                        data?: components["schemas"]["ReportItem"][];
+                        data?: {
+                            items: components["schemas"]["ReportItem"][];
+                            total: number;
+                            limit?: number;
+                            offset?: number;
+                        };
                     };
                 };
             };

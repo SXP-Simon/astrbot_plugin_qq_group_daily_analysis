@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { message } from "antd";
 import { fetchReportHistory, fetchReportContent } from "../../../entities/report/api/reportApi";
 import { fetchDistinctGroups } from "../../../entities/group/api/groupApi";
@@ -7,6 +7,9 @@ import { GroupItem } from "../../../entities/group/model/types";
 
 export function useReportsViewModel() {
   const [reports, setReports] = useState<ReportItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -20,20 +23,38 @@ export function useReportsViewModel() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState<ReportItem | null>(null);
 
-  const loadReports = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const [reportList, groupList] = await Promise.all([
-        fetchReportHistory(),
-        fetchDistinctGroups().catch(() => []),
-      ]);
-      setReports(reportList);
-      setGroups(groupList);
-    } catch {
-      // 忽略加载异常
-    } finally {
-      if (!silent) setLoading(false);
-    }
+  const loadReports = useCallback(
+    async (targetPage = page, targetPageSize = pageSize, silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const [res, groupList] = await Promise.all([
+          fetchReportHistory({
+            limit: targetPageSize,
+            offset: (targetPage - 1) * targetPageSize,
+            group_id: selectedGroup,
+            search: search.trim() || undefined,
+          }),
+          groups.length === 0
+            ? fetchDistinctGroups().catch(() => [])
+            : Promise.resolve(groups),
+        ]);
+        setReports(res.items);
+        setTotal(res.total);
+        if (groups.length === 0) setGroups(groupList);
+      } catch {
+        // 忽略加载异常
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [page, pageSize, selectedGroup, search, groups]
+  );
+
+  const handlePageChange = (newPage: number, newPageSize?: number) => {
+    const nextSize = newPageSize || pageSize;
+    setPage(newPage);
+    setPageSize(nextSize);
+    loadReports(newPage, nextSize);
   };
 
   const openPreview = async (report: ReportItem) => {
@@ -162,8 +183,10 @@ export function useReportsViewModel() {
   }, [groups, reports]);
 
   useEffect(() => {
-    loadReports();
-  }, []);
+    setPage(1);
+    loadReports(1, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroup, search]);
 
   return {
     reports: filteredReports,
@@ -176,7 +199,11 @@ export function useReportsViewModel() {
     setSelectedGroup,
     dateRange,
     setDateRange,
-    refresh: (silent = true) => loadReports(silent),
+    page,
+    pageSize,
+    total,
+    handlePageChange,
+    refresh: (silent = true) => loadReports(page, pageSize, silent),
     previewOpen,
     previewLoading,
     selectedReport,

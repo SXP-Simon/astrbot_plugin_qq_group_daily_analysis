@@ -46,6 +46,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
     selectedGroup,
     setSelectedGroup,
     setDateRange,
+    page,
+    pageSize,
+    total,
+    handlePageChange,
     refresh,
     previewOpen,
     previewLoading,
@@ -309,7 +313,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
           rowKey="filename"
           loading={loading}
           scroll={{ x: 1200 }}
-          pagination={{ pageSize: 10 }}
+          pagination={{
+            current: page,
+            pageSize: pageSize,
+            total: total,
+            showSizeChanger: true,
+            pageSizeOptions: ["10", "20", "50"],
+            showTotal: (t) => `共 ${t} 份历史报告`,
+            onChange: handlePageChange,
+          }}
         />
       )}
 
