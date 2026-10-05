@@ -11,11 +11,20 @@ const SCOPE_CATEGORIES = {
   '🏛️ 后端 DDD 架构分层 (Backend DDD Architectural Layers)': {
     entrypoints: '插件接入与指令入口层 (main.py, src/entrypoints/)',
     entry: '插件接入层别名 (同 entrypoints)',
-    domain: '领域层核心 (Entities, Value Objects, 仓储抽象契约, 领域事件)',
-    app: '应用层 (用例编排, Application Services, Handlers, DTO)',
+    domain: '领域层顶层 ⚠️ 须用复合 Scope: domain/entities, domain/repositories 等',
+    'domain/entities': '领域实体层 (src/domain/entities/)',
+    'domain/repositories': '领域仓储抽象契约层 (src/domain/repositories/)',
+    'domain/services': '领域服务层 (src/domain/services/)',
+    'domain/value_objects': '领域值对象层 (src/domain/value_objects/)',
+    app: '应用层顶层 ⚠️ 须用复合 Scope: app/services, app/handlers 等',
     application: '应用层完整别名 (同 app)',
-    infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
+    'app/services': '应用服务编排层 (src/application/services/)',
+    'app/handlers': '应用处理器层 (src/application/handlers/)',
+    'app/commands': '应用命令层 (src/application/commands/)',
+    'app/dto': '应用数据传输层 (src/application/dto/)',
+    infra: '基础设施层顶层 ⚠️ 须用复合 Scope: infra/config, infra/storage 等',
     infrastructure: '基础设施层完整别名 (同 infra)',
+    'infra/config': '配置管理与 Schema 校验 (src/infrastructure/config/, _conf_schema.json)',
     'infra/storage': '持久化与存储适配器 (src/infrastructure/persistence/)',
     'infra/db': '数据库与 SQLite 仓储实现别名 (同 infra/storage)',
     'infra/webui': 'Web 控制台后端路由与通信适配 (src/infrastructure/webui/)',
@@ -32,7 +41,7 @@ const SCOPE_CATEGORIES = {
     drawing: '绘图引擎子域别名 (同 infra/drawing)',
     platform: '多平台通信子域 (OneBot, QQOfficial, Telegram, Discord 适配)',
     scheduler: '调度与恢复子域 (Cron 任务, 增量分析, 熔断恢复, TaskGuard)',
-    config: '配置子域 (配置项管理, 动态热重载, Schema 校验)',
+    config: '配置子域 ⚠️ 须用复合 Scope: infra/config 或 webui/config',
   },
   '🎨 前端 FSD 架构分层与切片 (Frontend Feature-Sliced Design)': {
     dashboard: '前端 Dashboard 全栈 (dashboard/ 源码与 pages/ 静态构建产物)',
@@ -80,6 +89,7 @@ const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.k
 const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs', 'entrypoints'];
 const ALLOWED_SUBDOMAINS = [
   'analysis', 'comic', 'reporting', 'render', 'drawing', 'messaging', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence',
+  'services', 'handlers', 'commands', 'dto', 'repositories', 'value_objects',
   'entrypoints', 'entry',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
   'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'plugin-data', 'data', 'insight', 'overview', 'components', 'common',
@@ -106,9 +116,49 @@ function isScopeValid(scope) {
 // 路径匹配规则集（精确对齐 DDD 与 FSD 物理目录）
 const SCOPE_PATH_RULES = [
   {
+    matchScope: (s) => s === 'domain/entities',
+    matchFile: (f) => f.startsWith('src/domain/entities/'),
+    name: 'domain/entities 领域实体层 (src/domain/entities/)',
+  },
+  {
+    matchScope: (s) => s === 'domain/repositories',
+    matchFile: (f) => f.startsWith('src/domain/repositories/'),
+    name: 'domain/repositories 领域仓储契约层 (src/domain/repositories/)',
+  },
+  {
+    matchScope: (s) => s === 'domain/services',
+    matchFile: (f) => f.startsWith('src/domain/services/'),
+    name: 'domain/services 领域服务层 (src/domain/services/)',
+  },
+  {
+    matchScope: (s) => s === 'domain/value_objects',
+    matchFile: (f) => f.startsWith('src/domain/value_objects/'),
+    name: 'domain/value_objects 领域值对象层 (src/domain/value_objects/)',
+  },
+  {
     matchScope: (s) => s === 'domain' || s.startsWith('domain/'),
     matchFile: (f) => f.startsWith('src/domain/'),
     name: 'domain 领域层 (src/domain/)',
+  },
+  {
+    matchScope: (s) => s === 'app/services' || s === 'application/services',
+    matchFile: (f) => f.startsWith('src/application/services/'),
+    name: 'app/services 应用服务编排层 (src/application/services/)',
+  },
+  {
+    matchScope: (s) => s === 'app/handlers' || s === 'application/handlers',
+    matchFile: (f) => f.startsWith('src/application/handlers/'),
+    name: 'app/handlers 应用处理器层 (src/application/handlers/)',
+  },
+  {
+    matchScope: (s) => s === 'app/commands' || s === 'application/commands',
+    matchFile: (f) => f.startsWith('src/application/commands/'),
+    name: 'app/commands 应用命令层 (src/application/commands/)',
+  },
+  {
+    matchScope: (s) => s === 'app/dto' || s === 'application/dto',
+    matchFile: (f) => f.startsWith('src/application/dto/'),
+    name: 'app/dto 应用数据传输层 (src/application/dto/)',
   },
   {
     matchScope: (s) => s === 'app' || s === 'application' || s.startsWith('app/') || s.startsWith('application/'),
@@ -236,6 +286,11 @@ const SCOPE_PATH_RULES = [
       f.startsWith('pages/') ||
       f === 'openapi.json',
     name: 'dashboard/webui 前端控制台 (dashboard/, pages/, openapi.json)',
+  },
+  {
+    matchScope: (s) => s === 'infra/config' || s === 'infrastructure/config',
+    matchFile: (f) => f.startsWith('src/infrastructure/config/') || f === '_conf_schema.json',
+    name: 'infra/config 配置管理与 Schema (src/infrastructure/config/, _conf_schema.json)',
   },
   {
     matchScope: (s) => s === 'infra' || s === 'infrastructure' || s.startsWith('infra/'),
@@ -403,11 +458,13 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
       (type === 'fix' && scope === 'fix') ||
       (type === 'feat' && scope === 'feat');
 
-    // 1.2 严格门禁：禁止使用过粗、宽泛的顶层 Scope（如 dashboard, webui, frontend, infra, infrastructure）
+    // 1.2 严格门禁：禁止使用过粗、宽泛的顶层 Scope（必须使用 <layer>/<subdomain> 复合形式）
     const isOverlyBroad =
       (type !== 'build' && (scope === 'dashboard' || scope === 'webui' || scope === 'frontend')) ||
-      scope === 'infra' ||
-      scope === 'infrastructure';
+      scope === 'app' || scope === 'application' ||
+      scope === 'domain' ||
+      scope === 'infra' || scope === 'infrastructure' ||
+      scope === 'config';
 
     if (isRedundant) {
       errors.push(
@@ -431,10 +488,36 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
           `        • 静态打包产物提交: build(webui)\n` +
           `        • FSD 分层: webui/pages, webui/widgets, webui/entities, webui/shared`
         );
+      } else if (scope === 'app' || scope === 'application') {
+        errors.push(
+          `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用顶层应用层 Scope！\n` +
+          `     💡 请使用具体的应用层子目录复合 Scope：\n` +
+          `        • 应用服务编排: app/services\n` +
+          `        • 应用处理器: app/handlers\n` +
+          `        • 应用命令: app/commands\n` +
+          `        • 数据传输对象: app/dto`
+        );
+      } else if (scope === 'domain') {
+        errors.push(
+          `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用顶层领域层 Scope！\n` +
+          `     💡 请使用具体的领域层子目录复合 Scope：\n` +
+          `        • 领域实体: domain/entities\n` +
+          `        • 仓储抽象契约: domain/repositories\n` +
+          `        • 领域服务: domain/services\n` +
+          `        • 值对象: domain/value_objects`
+        );
+      } else if (scope === 'config') {
+        errors.push(
+          `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用顶层配置 Scope！\n` +
+          `     💡 请使用复合层级明确归属：\n` +
+          `        • 后端配置基建: infra/config\n` +
+          `        • 前端配置业务: webui/config`
+        );
       } else {
         errors.push(
           `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用粗粒度基建 Scope！\n` +
           `     💡 请使用具体的后端基础设施子模块：\n` +
+          `        • 配置管理与 Schema: infra/config\n` +
           `        • 持久化存储与数据库: infra/storage (或 infra/db)\n` +
           `        • 控制台路由适配: infra/webui (或 infra/routes)\n` +
           `        • 报告渲染引擎: infra/reporting\n` +
