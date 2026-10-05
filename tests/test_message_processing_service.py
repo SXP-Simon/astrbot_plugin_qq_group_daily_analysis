@@ -497,7 +497,11 @@ def test_failed_insert_on_telegram_releases_dedup_lock_for_retry():
 def test_message_processing_service_uses_configured_history_max_messages():
     """验证消息处理服务动态读取 config_manager 的 local_history_max_messages 配置。"""
     history_manager = RecordingHistoryManager()
-    config_manager = SimpleNamespace(get_local_history_max_messages=lambda: 25000)
+    config_manager = SimpleNamespace(
+        get_local_history_max_messages=lambda: 25000,
+        get_persist_only_allowed_groups=lambda: False,
+        is_group_allowed=lambda _umo: True,
+    )
     service = MessageProcessingService(
         SimpleNamespace(message_history_manager=history_manager),
         FakeGroupRegistry(),
@@ -516,3 +520,64 @@ def test_message_processing_service_uses_configured_history_max_messages():
     assert len(history_manager.calls) == 1
     assert history_manager.calls[0]["max_messages"] == 25000
 
+
+def test_message_processing_service_skips_unallowed_group_when_persist_only_enabled():
+    """验证开启 persist_only_allowed_groups 时，未通过权限校验的群消息被跳过入库。"""
+    history_manager = RecordingHistoryManager()
+    config_manager = SimpleNamespace(
+        get_local_history_max_messages=lambda: 10000,
+        get_persist_only_allowed_groups=lambda: True,
+        is_group_allowed=lambda umo: "allowed" in umo,
+    )
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager),
+        FakeGroupRegistry(),
+        config_manager=config_manager,
+    )
+
+    unallowed_event = FakePlatformEvent(
+        platform_id="tg-bot",
+        platform_name="telegram",
+        group_id="-100_blocked",
+        message_id="MSG-BLOCKED-1",
+        text="blocked group message",
+    )
+    allowed_event = FakePlatformEvent(
+        platform_id="tg-bot",
+        platform_name="telegram",
+        group_id="-100_allowed",
+        message_id="MSG-ALLOWED-1",
+        text="allowed group message",
+    )
+
+    assert asyncio.run(service.process_message(unallowed_event)) is False
+    assert len(history_manager.calls) == 0
+
+    assert asyncio.run(service.process_message(allowed_event)) is True
+    assert len(history_manager.calls) == 1
+
+
+def test_message_processing_service_persists_all_groups_by_default():
+    """验证默认关闭 persist_only_allowed_groups 时，即便群不在白名单也正常入库缓存。"""
+    history_manager = RecordingHistoryManager()
+    config_manager = SimpleNamespace(
+        get_local_history_max_messages=lambda: 10000,
+        get_persist_only_allowed_groups=lambda: False,
+        is_group_allowed=lambda _umo: False,
+    )
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager),
+        FakeGroupRegistry(),
+        config_manager=config_manager,
+    )
+
+    event = FakePlatformEvent(
+        platform_id="tg-bot",
+        platform_name="telegram",
+        group_id="-100_unallowed_but_persisted",
+        message_id="MSG-DEFAULT-1",
+        text="message stored in default mode",
+    )
+
+    assert asyncio.run(service.process_message(event)) is True
+    assert len(history_manager.calls) == 1
