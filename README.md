@@ -2,7 +2,7 @@
 
 # 群聊日常分析插件
 
-[![Plugin Version](https://img.shields.io/badge/当前版本-v5.7.3-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
+[![Plugin Version](https://img.shields.io/badge/当前版本-v5.7.4-blue.svg?style=for-the-badge&color=76bad9)](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件市场入口-ff69b4?style=for-the-badge)](https://cloud.astrbot.app/plugin/SXP-Simon/astrbot_plugin_qq_group_daily_analysis)
 [![AstrBot Version](https://img.shields.io/badge/AstrBot-%3E%3D4.24.1-orange.svg?style=for-the-badge)](https://github.com/AstrBotDevs/AstrBot)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
@@ -47,16 +47,16 @@ _✨ 一个基于 AstrBot 的智能群聊分析插件，支持 **OneBot** ( [Nap
 <table align="center" width="100%">
   <tr>
     <td align="center" width="33.3%" valign="top">
-      <p><b>Scrapbook (默认)</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
+      <p><b>HatsuneMiku (默认)</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
       <p><b>art_nouveau</b></p>
       <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/art_nouveau-demo.jpg" alt="art_nouveau 示例" height="520"></a>
     </td>
     <td align="center" width="33.3%" valign="top">
-      <p><b>HatsuneMiku</b></p>
-      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/HatsuneMiku-demo.jpg" alt="HatsuneMiku 示例" height="520"></a>
+      <p><b>Scrapbook</b></p>
+      <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/scrapbook-demo.jpg" alt="Scrapbook 示例" height="520"></a>
     </td>
   </tr>
   <tr>
