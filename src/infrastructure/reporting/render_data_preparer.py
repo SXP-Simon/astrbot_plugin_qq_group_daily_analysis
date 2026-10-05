@@ -26,6 +26,10 @@ from ...shared.constants import (
     DEFAULT_MIKU_ASSETS_CDN_URL,
     DEFAULT_NPM_CDN_URL,
 )
+from ...shared.report_language import (
+    format_report_date,
+    resolve_report_language,
+)
 from ...utils.logger import logger
 from .profile_mappings import resolve_profile_info
 
@@ -298,6 +302,7 @@ class RenderDataPreparer:
 
         common_context = {
             "hide_user_names": hide_user_names,
+            "report_language": resolve_report_language(self.config_manager),
             "t2i_font_source": self.config_manager.get_t2i_font_source(),
             "t2i_google_fonts_mirror": (
                 self.config_manager.get_t2i_google_fonts_mirror()
@@ -506,7 +511,9 @@ class RenderDataPreparer:
             )
             logger.debug(f"聊天质量锐评HTML生成完成，长度: {len(chat_quality_html)}")
 
+        report_language = resolve_report_language(self.config_manager)
         render_data = {
+            "report_language": report_language,
             "t2i_font_source": self.config_manager.get_t2i_font_source(),
             "t2i_google_fonts_mirror": (
                 self.config_manager.get_t2i_google_fonts_mirror()
@@ -516,7 +523,7 @@ class RenderDataPreparer:
             "t2i_miku_assets_mirror": DEFAULT_MIKU_ASSETS_CDN_URL,
             "t2i_npm_mirror": DEFAULT_NPM_CDN_URL,
             "cdn_assets_base": DEFAULT_ASSETS_CDN_URL,
-            "current_date": datetime.now().strftime("%Y年%m月%d日"),
+            "current_date": format_report_date(report_language, datetime.now()),
             "current_datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message_count": stats.message_count,
             "participant_count": stats.participant_count,

@@ -379,6 +379,18 @@ class ConfigManager:
         """获取 T2I 字体源 (Mainland/Overseas)"""
         return self._get_group("t2i_rendering").get("t2i_font_source", "Overseas")
 
+    def get_report_language(self) -> str:
+        """获取报告语言 (auto/zh-Hans/zh-Hant/en/ja)
+
+        配置项位于「基础设置」的「报告模板」下方：仅当报告模板为已适配多语言的模板
+        （当前仅 HatsuneMiku）时才出现并生效。auto 表示不干预：模板骨架与 LLM 输出语言
+        均保持历史行为。为兼容曾把该项存放在 t2i_rendering 组的旧配置，读取时做一次回退。
+        """
+        value = self._get_group("basic").get("report_language")
+        if value is None:
+            value = self._get_group("t2i_rendering").get("report_language", "auto")
+        return value
+
     def get_t2i_google_fonts_mirror(self) -> str:
         """根据环境选择获取 Google Fonts 镜像地址"""
         source = self.get_t2i_font_source()

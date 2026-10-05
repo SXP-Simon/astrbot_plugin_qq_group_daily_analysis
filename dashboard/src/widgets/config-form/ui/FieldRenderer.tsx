@@ -25,6 +25,7 @@ import {
   EyeOutlined,
   ExclamationCircleFilled,
 } from "@ant-design/icons";
+import { resolveOptionLabel } from "../../../entities/config/model/optionLabel";
 import { SchemaFieldItem } from "../../../entities/config/model/types";
 import {
   AvailableProvider,
@@ -202,7 +203,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           }}
         >
           {Object.entries(subItems).map(([subKey, subField]) => {
-            if (subField.invisible || subField.hidden) return null;
+            if (subField.invisible) return null;
             const subValue =
               objVal[subKey] !== undefined ? objVal[subKey] : subField.default;
             const subKeyPath = `${fullKeyPath || fieldKey}.${subKey}`;
@@ -380,16 +381,21 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
           : typeof defaultValue === "string"
           ? defaultValue
           : "";
+      // 显示名走官方键 labels（与 options 顺序一一对应）；缺标签时回退显示原始值
+      const labels = fieldSchema.labels;
       return (
         <Select
           value={currentVal}
           onChange={(v) => onChange(v)}
           style={{ width: "100%" }}
           status={error ? "error" : undefined}
-          options={options.map((opt) => ({
-            label: String(opt),
-            value: String(opt),
-          }))}
+          options={options.map((opt) => {
+            const raw = String(opt);
+            return {
+              label: resolveOptionLabel(raw, options, labels),
+              value: raw,
+            };
+          })}
         />
       );
     }

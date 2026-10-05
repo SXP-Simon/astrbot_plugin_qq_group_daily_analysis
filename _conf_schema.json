@@ -77,7 +77,9 @@
                     "text",
                     "html"
                 ],
-                "default": ["image"],
+                "default": [
+                    "image"
+                ],
                 "hint": "选择分析报告的输出方式（可多选）。image=图片、text=纯文本摘要、html=可交互式网页文件。多选仅在定时分析发送时时报告按顺序依次发送，手动触发时只发送第一个选中的格式，例如 image+html 会发送图片并通过外链提供 HTML 报告。QQ 官方图片/HTML 报告优先显示事件昵称，昵称缺失时使用群内稳定匿名名；文本报告由独立 Markdown 模块使用成员艾特展示身份。其他平台保持原有昵称文本格式。"
             },
             "report_template": {
@@ -98,6 +100,29 @@
                 ],
                 "default": "scrapbook",
                 "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
+            },
+            "report_language": {
+                "type": "string",
+                "description": "报告语言",
+                "options": [
+                    "auto",
+                    "zh-Hans",
+                    "zh-Hant",
+                    "en",
+                    "ja"
+                ],
+                "labels": [
+                    "自动（按群聊判断）",
+                    "简体中文",
+                    "繁體中文",
+                    "ENGLISH",
+                    "日本語"
+                ],
+                "default": "auto",
+                "condition": {
+                    "report_template": "HatsuneMiku"
+                },
+                "hint": "群分析报告使用的语言。auto（默认）= 按本次分析的群聊消息正文自动判断，判断标准：某一语言占比超过 70% 且样本足够才判定，否则默认使用简体中文模板且不干预LLM生成内容，中文再按简繁特征字区分简体/繁体。选定某一语言则强制使用该语言。语言同时作用于三处：① 报告模板骨架文案、页面语言声明与字体优先级；② 报告日期格式；③ LLM 撰写的解说文案（标题、点评、总结等）。引用群友的原话与昵称不受影响，始终保留原文，不会被翻译或改写。本项仅作用于 HatsuneMiku[葱绿音乐] 模板。"
             },
             "profile_display_mode": {
                 "type": "string",
@@ -181,7 +206,10 @@
             "t2i_r1_type": {
                 "type": "string",
                 "description": "第一轮：图片格式",
-                "options": ["jpeg", "png"],
+                "options": [
+                    "jpeg",
+                    "png"
+                ],
                 "default": "png",
                 "hint": "建议：PNG 格式无损但体积较大；JPEG 格式体积较小。"
             },
@@ -199,7 +227,11 @@
             "t2i_r1_device_scale": {
                 "type": "string",
                 "description": "第一轮：分辨率等级",
-                "options": ["normal", "high", "ultra"],
+                "options": [
+                    "normal",
+                    "high",
+                    "ultra"
+                ],
                 "default": "ultra",
                 "hint": "影响图片清晰度。normal=1.0x, high=1.3x, ultra=1.8x。高质量日报建议 ultra。"
             },
@@ -239,7 +271,10 @@
             "t2i_r2_type": {
                 "type": "string",
                 "description": "第二轮 (回退)：图片格式",
-                "options": ["jpeg", "png"],
+                "options": [
+                    "jpeg",
+                    "png"
+                ],
                 "default": "jpeg",
                 "hint": "回退策略建议使用 jpeg 以减少渲染压力。"
             },
@@ -257,7 +292,11 @@
             "t2i_r2_device_scale": {
                 "type": "string",
                 "description": "第二轮 (回退)：分辨率等级",
-                "options": ["normal", "high", "ultra"],
+                "options": [
+                    "normal",
+                    "high",
+                    "ultra"
+                ],
                 "default": "high",
                 "hint": "回退建议使用 high/normal 以降低复杂页面的内存消耗和超时概率。"
             },
@@ -275,7 +314,10 @@
             "t2i_font_source": {
                 "type": "string",
                 "description": "t2i 渲染环境切换",
-                "options": ["Mainland", "Overseas"],
+                "options": [
+                    "Mainland",
+                    "Overseas"
+                ],
                 "default": "Overseas",
                 "hint": "字体和静态资源的访问环境，内地（Mainland）、海外（Overseas），切换环境会自动应用下方对应的镜像站地址、语言标识(简体中文/繁体中文)及字体优先级。（实测 Overseas 也可以正常渲染简体中文，没有特殊的情况都建议使用 Overseas，Mainland 配置下建议检查镜像站可用性，或者配置可靠的站点）"
             },
@@ -559,7 +601,12 @@
                                 "description": "角色参考图",
                                 "type": "file",
                                 "default": [],
-                                "file_types": ["jpg", "jpeg", "png", "webp"],
+                                "file_types": [
+                                    "jpg",
+                                    "jpeg",
+                                    "png",
+                                    "webp"
+                                ],
                                 "hint": "上传后点击 + 加入此角色方案。Images、Chat 和 Gemini 协议会按顺序传入全部参考图；Grok 协议仅使用第一张。"
                             },
                             "storyboard_prompt": {
@@ -578,14 +625,23 @@
                 "description": "旧版漫画参考图（兼容迁移）",
                 "type": "file",
                 "default": [],
-                "file_types": ["jpg", "jpeg", "png", "webp"],
+                "file_types": [
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "webp"
+                ],
                 "invisible": true,
                 "hint": "旧版配置仅用于自动迁移，不再在面板中显示。"
             },
             "drawing_backend": {
                 "description": "绘图后端",
                 "type": "string",
-                "options": ["builtin", "general_plugin", "big_banana"],
+                "options": [
+                    "builtin",
+                    "general_plugin",
+                    "big_banana"
+                ],
                 "default": "builtin",
                 "hint": "builtin=使用本插件内置绘图客户端；general_plugin=调用已安装的「通用生图」插件（https://cloud.astrbot.app/plugin/railgun19457/astrbot_plugin_image_generation）的公共 API；big_banana=调用已安装的「大香蕉」插件（https://cloud.astrbot.app/plugin/sukafon/astrbot_plugin_big_banana）的绘图管线（支持 Gemini、SiliconFlow 等多家服务）。使用外部后端时，需先在对应插件中配置其自身的 API/提供商；未安装、未激活或调用失败时自动回退内置后端。"
             },
@@ -832,7 +888,10 @@
                             "output_format": {
                                 "description": "响应格式",
                                 "type": "string",
-                                "options": ["url", "b64_json"],
+                                "options": [
+                                    "url",
+                                    "b64_json"
+                                ],
                                 "default": "url"
                             },
                             "timeout": {
@@ -885,7 +944,10 @@
                             "output_format": {
                                 "description": "响应格式",
                                 "type": "string",
-                                "options": ["url", "b64_json"],
+                                "options": [
+                                    "url",
+                                    "b64_json"
+                                ],
                                 "default": "url"
                             },
                             "timeout": {
@@ -938,7 +1000,10 @@
                             "output_format": {
                                 "description": "响应格式",
                                 "type": "string",
-                                "options": ["url", "b64_json"],
+                                "options": [
+                                    "url",
+                                    "b64_json"
+                                ],
                                 "default": "url"
                             },
                             "timeout": {
@@ -1086,27 +1151,44 @@
                                 "description": "图像质量",
                                 "type": "string",
                                 "hint": "OpenAI Images 的 quality 参数。GPT Image 模型通常支持 auto、low、medium、high；不兼容的中转服务可改为 auto。",
-                                "options": ["auto", "low", "medium", "high"],
+                                "options": [
+                                    "auto",
+                                    "low",
+                                    "medium",
+                                    "high"
+                                ],
                                 "default": "high"
                             },
                             "background": {
                                 "description": "背景模式",
                                 "type": "string",
                                 "hint": "仅 GPT Image 模型支持。auto 不发送该参数；transparent 适合透明背景素材，opaque 使用不透明背景。",
-                                "options": ["auto", "transparent", "opaque"],
+                                "options": [
+                                    "auto",
+                                    "transparent",
+                                    "opaque"
+                                ],
                                 "default": "auto"
                             },
                             "output_format": {
                                 "description": "输出格式",
                                 "type": "string",
-                                "options": ["png", "jpeg", "webp"],
+                                "options": [
+                                    "png",
+                                    "jpeg",
+                                    "webp"
+                                ],
                                 "default": "png"
                             },
                             "response_format": {
                                 "description": "响应图片格式",
                                 "type": "string",
                                 "hint": "留空由服务端决定；url 返回图片链接，b64_json 返回 Base64。部分 OpenAI 兼容服务只支持其中一种。",
-                                "options": ["", "url", "b64_json"],
+                                "options": [
+                                    "",
+                                    "url",
+                                    "b64_json"
+                                ],
                                 "default": ""
                             },
                             "output_compression": {
@@ -1119,7 +1201,10 @@
                                 "description": "审核模式",
                                 "type": "string",
                                 "hint": "仅 GPT Image 模型支持。留空不传；选择 low 时使用较低的审核强度。",
-                                "options": ["", "low"],
+                                "options": [
+                                    "",
+                                    "low"
+                                ],
                                 "default": ""
                             },
                             "max_reference_images": {
@@ -1158,7 +1243,10 @@
                             "endpoint_mode": {
                                 "description": "端点模式",
                                 "type": "string",
-                                "options": ["official", "agent_plan"],
+                                "options": [
+                                    "official",
+                                    "agent_plan"
+                                ],
                                 "default": "official"
                             },
                             "api_url": {
@@ -1187,14 +1275,20 @@
                                 "description": "模型能力标记",
                                 "type": "string",
                                 "hint": "使用无法从 Endpoint ID 判断能力的自建接入点时，标记为 Seedream 5.0 Pro 可正确限制参考图并禁用组图。",
-                                "options": ["auto", "seedream_5_pro"],
+                                "options": [
+                                    "auto",
+                                    "seedream_5_pro"
+                                ],
                                 "default": "auto"
                             },
                             "size_mode": {
                                 "description": "尺寸模式",
                                 "type": "string",
                                 "hint": "preset 使用图像分辨率；custom 直接发送自定义尺寸。",
-                                "options": ["preset", "custom"],
+                                "options": [
+                                    "preset",
+                                    "custom"
+                                ],
                                 "default": "preset"
                             },
                             "image_size": {
@@ -1206,21 +1300,34 @@
                                 "description": "预设尺寸",
                                 "type": "string",
                                 "hint": "仅 preset 模式生效，支持 1K、2K、3K、4K；具体模型支持范围以火山方舟文档为准。",
-                                "options": ["1K", "2K", "3K", "4K"],
+                                "options": [
+                                    "1K",
+                                    "2K",
+                                    "3K",
+                                    "4K"
+                                ],
                                 "default": "2K",
-                                "condition": {"size_mode": "preset"}
+                                "condition": {
+                                    "size_mode": "preset"
+                                }
                             },
                             "custom_size": {
                                 "description": "自定义尺寸",
                                 "type": "string",
                                 "hint": "仅 custom 模式生效，格式 WxH，例如 2048x2048 或 2304x1728。",
                                 "default": "2048x2048",
-                                "condition": {"size_mode": "custom"}
+                                "condition": {
+                                    "size_mode": "custom"
+                                }
                             },
                             "output_format": {
                                 "description": "输出格式",
                                 "type": "string",
-                                "options": ["png", "jpeg", "webp"],
+                                "options": [
+                                    "png",
+                                    "jpeg",
+                                    "webp"
+                                ],
                                 "default": "png"
                             },
                             "watermark": {
@@ -1233,14 +1340,21 @@
                                 "description": "提示词优化模式",
                                 "type": "string",
                                 "hint": "standard 偏向生成质量，fast 偏向更快的请求速度；留空不传。",
-                                "options": ["", "standard", "fast"],
+                                "options": [
+                                    "",
+                                    "standard",
+                                    "fast"
+                                ],
                                 "default": "standard"
                             },
                             "sequential_image_generation": {
                                 "description": "组图生成模式",
                                 "type": "string",
                                 "hint": "auto 允许模型自主生成连续组图；Seedream 5.0 Pro 不支持该能力，会自动忽略。",
-                                "options": ["disabled", "auto"],
+                                "options": [
+                                    "disabled",
+                                    "auto"
+                                ],
                                 "default": "disabled"
                             },
                             "sequential_max_images": {
@@ -1301,7 +1415,19 @@
                                 "description": "默认图像尺寸",
                                 "type": "string",
                                 "hint": "宽高比无法映射时使用。必须为 SenseNova U1 Fast 官方支持的尺寸。",
-                                "options": ["2048x2048", "2752x1536", "1536x2752", "2368x1760", "1760x2368", "2496x1664", "1664x2496", "2272x1824", "1824x2272", "3072x1376", "1344x3136"],
+                                "options": [
+                                    "2048x2048",
+                                    "2752x1536",
+                                    "1536x2752",
+                                    "2368x1760",
+                                    "1760x2368",
+                                    "2496x1664",
+                                    "1664x2496",
+                                    "2272x1824",
+                                    "1824x2272",
+                                    "3072x1376",
+                                    "1344x3136"
+                                ],
                                 "default": "2752x1536"
                             },
                             "n": {
@@ -1334,7 +1460,10 @@
                             "endpoint_mode": {
                                 "description": "端点模式",
                                 "type": "string",
-                                "options": ["dashscope", "token_plan"],
+                                "options": [
+                                    "dashscope",
+                                    "token_plan"
+                                ],
                                 "default": "dashscope"
                             },
                             "api_url": {
@@ -1373,7 +1502,10 @@
                                 "description": "尺寸模式",
                                 "type": "string",
                                 "hint": "preset 根据分辨率和宽高比换算官方建议尺寸；custom 直接发送自定义尺寸。",
-                                "options": ["preset", "custom"],
+                                "options": [
+                                    "preset",
+                                    "custom"
+                                ],
                                 "default": "preset"
                             },
                             "custom_size": {
@@ -1381,7 +1513,9 @@
                                 "type": "string",
                                 "hint": "仅 custom 模式生效。支持 WxH、W*H、W×H，或 wan2.7 的 1K、2K、4K 简写。",
                                 "default": "2048*2048",
-                                "condition": {"size_mode": "custom"}
+                                "condition": {
+                                    "size_mode": "custom"
+                                }
                             },
                             "n": {
                                 "description": "单次生成数量",
@@ -1443,7 +1577,12 @@
                             "api_protocol": {
                                 "description": "API 协议类型",
                                 "type": "string",
-                                "options": ["images", "chat", "grok", "gemini"],
+                                "options": [
+                                    "images",
+                                    "chat",
+                                    "grok",
+                                    "gemini"
+                                ],
                                 "default": "images"
                             },
                             "api_key": {
@@ -1501,7 +1640,9 @@
             "drawing_output_exception_retry_keywords": {
                 "description": "输出异常触发关键词",
                 "type": "list",
-                "items": { "type": "string" },
+                "items": {
+                    "type": "string"
+                },
                 "default": [],
                 "hint": "当绘图错误信息包含任一关键词时，将其视为内容生成或安全审核异常，并使用同一接口配置重试；重试耗尽后可由 LLM 改写 Prompt。留空则不执行此类内容重试和 Prompt 改写。"
             },
