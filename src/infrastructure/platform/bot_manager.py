@@ -6,6 +6,7 @@ Bot实例管理模块 - 基础设施层
 from __future__ import annotations
 
 import fnmatch
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, TypeGuard
 
@@ -31,6 +32,8 @@ class BotManager:
     实现跨平台支持。
     """
 
+    MAX_AUTH_LOG_CACHE_SIZE: int = 512
+
     config_manager: ConfigManager
     _bot_instances: dict[str, object]
     _adapters: dict[str, PlatformAdapter]
@@ -40,6 +43,7 @@ class BotManager:
     _is_initialized: bool
     _default_platform: str
     _plugin_instance: PluginHostProtocol | None
+    _auth_log_cache: OrderedDict[str, tuple[bool, str]]
 
     def __init__(self, config_manager: ConfigManager) -> None:
         self.config_manager = config_manager
@@ -57,6 +61,9 @@ class BotManager:
         self._plugin_instance: PluginHostProtocol | None = (
             None  # 插件实例引用，用于适配器回调
         )
+        self._auth_log_cache = (
+            OrderedDict()
+        )  # {cache_key: (enabled, rule)} 生命周期去重日志缓存 (FIFO 淘汰防膨胀)
 
     def set_context(self, context: Context | None) -> None:
         """设置AstrBot上下文，并传递给所有支持的适配器"""
@@ -720,6 +727,31 @@ class BotManager:
 
         return False
 
+    def _log_auth_decision_once(
+        self,
+        cache_key: str,
+        enabled: bool,
+        rule: str,
+        plugin_name: str = PLUGIN_NAME,
+    ) -> None:
+        """在插件生命周期内对同一目标仅在首次判定或规则/状态改变时输出精简日志。
+
+        采用有界 OrderedDict 进行 FIFO 淘汰，严格限制内存占用不超过数十 KB。
+        """
+        full_key = f"{cache_key}::{plugin_name}"
+        last_entry = self._auth_log_cache.get(full_key)
+        if last_entry == (enabled, rule):
+            return
+
+        self._auth_log_cache[full_key] = (enabled, rule)
+        if len(self._auth_log_cache) > self.MAX_AUTH_LOG_CACHE_SIZE:
+            self._auth_log_cache.popitem(last=False)
+
+        status_text = "启用" if enabled else "禁用"
+        logger.debug(
+            f"[BotManager鉴权] {cache_key} (插件: {plugin_name}) -> 判定: {status_text} (生效规则: {rule})"
+        )
+
     def is_plugin_enabled(
         self,
         platform_id: str | None,
@@ -743,8 +775,13 @@ class BotManager:
         """
         pid = str(platform_id or "").strip()
         gid = str(group_id or "").strip() if group_id is not None else ""
+        target_desc = (
+            f"平台 '{pid}' / 群 '{gid}'"
+            if pid and gid
+            else (f"平台 '{pid}'" if pid else "全局上下文")
+        )
 
-        # 1. 优先通过 AstrBot 核心多配置管理器 (ACM) 检查 UMO 级配置
+        # 1. 优先通过 AstrBot 核心多配置管理器 (ACM) 检查 UMO 级会话专属 Profile 配置
         if self._context is not None:
             acm: AstrBotConfigManager | None = getattr(
                 self._context, "astrbot_config_mgr", None
@@ -767,9 +804,11 @@ class BotManager:
                         plugin_set
                     ):
                         enabled = self._check_plugin_set(plugin_set, plugin_name)
-                        logger.debug(
-                            f"[BotManager鉴权] UMO '{umo}' 通过 AstrBotConfigManager 匹配到 Profile 配置: "
-                            f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                        self._log_auth_decision_once(
+                            cache_key=target_desc,
+                            enabled=enabled,
+                            rule=f"会话专属 Profile 配置 (UMO: {umo})",
+                            plugin_name=plugin_name,
                         )
                         return enabled
                 except Exception as e:
@@ -785,9 +824,11 @@ class BotManager:
                 plugin_set = platform_config["plugin_set"]
                 if self._is_valid_plugin_set(plugin_set):
                     enabled = self._check_plugin_set(plugin_set, plugin_name)
-                    logger.debug(
-                        f"[BotManager鉴权] 平台 '{pid}' 通过平台实例 config 匹配: "
-                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    self._log_auth_decision_once(
+                        cache_key=target_desc,
+                        enabled=enabled,
+                        rule=f"平台适配器实例配置 (平台: {pid})",
+                        plugin_name=plugin_name,
                     )
                     return enabled
 
@@ -799,13 +840,15 @@ class BotManager:
                 plugin_set = platform_settings["plugin_set"]
                 if self._is_valid_plugin_set(plugin_set):
                     enabled = self._check_plugin_set(plugin_set, plugin_name)
-                    logger.debug(
-                        f"[BotManager鉴权] 平台 '{pid}' 通过平台实例 settings 匹配: "
-                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    self._log_auth_decision_once(
+                        cache_key=target_desc,
+                        enabled=enabled,
+                        rule=f"平台管理面板设置 (平台: {pid})",
+                        plugin_name=plugin_name,
                     )
                     return enabled
 
-        # 3. 检查全局配置回退
+        # 3. 检查全局主配置文件 (data/config.json) 兜底
         if self._context is not None:
             global_config = getattr(self._context, "_config", None) or getattr(
                 self._context, "astrbot_config", None
@@ -824,14 +867,19 @@ class BotManager:
 
                 if found_plugin_set and self._is_valid_plugin_set(plugin_set):
                     enabled = self._check_plugin_set(plugin_set, plugin_name)
-                    logger.debug(
-                        f"[BotManager鉴权] 平台 '{pid}' 通过全局 AstrBot 配置兜底匹配: "
-                        f"plugin_set={plugin_set} -> 判定结果: {'启用' if enabled else '禁用'}"
+                    self._log_auth_decision_once(
+                        cache_key=target_desc,
+                        enabled=enabled,
+                        rule="全局主配置文件 (data/config.json)",
+                        plugin_name=plugin_name,
                     )
                     return enabled
 
-        # 4. 默认启用
-        logger.debug(
-            f"[BotManager鉴权] 平台 '{pid}' / 群 '{gid}' 未命中任何限制性配置，默认启用"
+        # 4. 默认启用 (未配置任何黑白名单限制)
+        self._log_auth_decision_once(
+            cache_key=target_desc,
+            enabled=True,
+            rule="未设置插件限制规则 (缺省默认启用)",
+            plugin_name=plugin_name,
         )
         return True

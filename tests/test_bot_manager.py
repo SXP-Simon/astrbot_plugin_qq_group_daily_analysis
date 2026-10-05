@@ -393,3 +393,44 @@ def test_update_from_event(mock_config_manager):
     assert ok is True
     assert "event_platform_1" in bm.get_platform_ids()
     assert bm.should_filter_bot_message("54321") is True
+
+
+def test_is_plugin_enabled_deduplicated_logging_and_fifo_cache(
+    mock_config_manager, monkeypatch
+):
+    """验证鉴权日志去重输出机制与 FIFO 淘汰防内存膨胀。"""
+    bm = BotManager(mock_config_manager)
+    bm.MAX_AUTH_LOG_CACHE_SIZE = 3  # 缩小上限以便测试 FIFO 淘汰
+
+    log_records = []
+    monkeypatch.setattr(
+        "src.infrastructure.platform.bot_manager.logger.debug",
+        lambda msg: log_records.append(msg),
+    )
+
+    # 1. 首次调用 -> 记录日志并写入缓存
+    assert bm.is_plugin_enabled("p1", "plugin_a", group_id="1001") is True
+    assert len(log_records) == 1
+    assert "[BotManager鉴权]" in log_records[0]
+    assert "生效规则: 未设置插件限制规则 (缺省默认启用)" in log_records[0]
+
+    # 2. 第二次相同目标相同规则 -> 静默，不再产生日志
+    assert bm.is_plugin_enabled("p1", "plugin_a", group_id="1001") is True
+    assert len(log_records) == 1
+
+    # 3. 填入其他群组填满缓存并触发 FIFO 淘汰
+    bm.is_plugin_enabled("p2", "plugin_a", group_id="1002")  # 2nd
+    bm.is_plugin_enabled("p3", "plugin_a", group_id="1003")  # 3rd
+    assert len(log_records) == 3
+    assert len(bm._auth_log_cache) == 3
+
+    # 第 4 个加入，使最旧的 p1/1001 被逐出
+    bm.is_plugin_enabled("p4", "plugin_a", group_id="1004")  # 4th
+    assert len(log_records) == 4
+    assert len(bm._auth_log_cache) == 3
+    assert "平台 'p1' / 群 '1001'::plugin_a" not in bm._auth_log_cache
+
+    # 再次访问 p1/1001，由于已被逐出，会重新触发一次日志记录
+    bm.is_plugin_enabled("p1", "plugin_a", group_id="1001")
+    assert len(log_records) == 5
+
