@@ -492,3 +492,27 @@ def test_failed_insert_on_telegram_releases_dedup_lock_for_retry():
     # 第二次重试命中成功提交的去重记录，直接跳过
     assert asyncio.run(service.process_message(event)) is False
     assert history_manager.insert_calls == 2
+
+
+def test_message_processing_service_uses_configured_history_max_messages():
+    """验证消息处理服务动态读取 config_manager 的 local_history_max_messages 配置。"""
+    history_manager = RecordingHistoryManager()
+    config_manager = SimpleNamespace(get_local_history_max_messages=lambda: 25000)
+    service = MessageProcessingService(
+        SimpleNamespace(message_history_manager=history_manager),
+        FakeGroupRegistry(),
+        config_manager=config_manager,
+    )
+
+    event = FakePlatformEvent(
+        platform_id="tg-bot",
+        platform_name="telegram",
+        group_id="-100999",
+        message_id="MSG-CFG-LIMIT",
+        text="custom limit test",
+    )
+
+    assert asyncio.run(service.process_message(event)) is True
+    assert len(history_manager.calls) == 1
+    assert history_manager.calls[0]["max_messages"] == 25000
+

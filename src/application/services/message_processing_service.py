@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
     from astrbot.api.star import Context
 
+    from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.event_deduplication_store import (
         EventDeduplicationStore,
     )
@@ -41,6 +42,7 @@ class MessageProcessingService:
     context: Context
     group_registry: PlatformGroupRegistry
     dedup_store: EventDeduplicationStore | None
+    config_manager: ConfigManager | None
     _seen_event_ids: OrderedDict[str, None]
     _inflight_event_ids: set[str]
     _seen_event_ids_limit: int
@@ -51,6 +53,7 @@ class MessageProcessingService:
         context: Context,
         group_registry: PlatformGroupRegistry,
         dedup_store: EventDeduplicationStore | None = None,
+        config_manager: ConfigManager | None = None,
     ) -> None:
         """初始化消息处理服务。
 
@@ -58,10 +61,12 @@ class MessageProcessingService:
             context: AstrBot 核心上下文对象。
             group_registry: 事件驱动平台群组注册表。
             dedup_store: 可选的本地持久化事件去重仓储（用于重启记忆恢复）。
+            config_manager: 可选的配置管理器（用于动态获取保留消息上限）。
         """
         self.context = context
         self.group_registry = group_registry
         self.dedup_store = dedup_store
+        self.config_manager = config_manager
         self._seen_event_ids = OrderedDict()
         self._inflight_event_ids = set()
         self._seen_event_ids_limit = 4096
@@ -218,8 +223,14 @@ class MessageProcessingService:
             await insert(**insert_kwargs)
             return
 
+        max_messages = (
+            self.config_manager.get_local_history_max_messages()
+            if self.config_manager is not None
+            else _LOCAL_HISTORY_MAX_MESSAGES
+        )
+
         try:
-            await insert(**insert_kwargs, max_messages=_LOCAL_HISTORY_MAX_MESSAGES)
+            await insert(**insert_kwargs, max_messages=max_messages)
         except TypeError as exc:
             if "unexpected keyword argument 'max_messages'" not in str(exc):
                 raise
