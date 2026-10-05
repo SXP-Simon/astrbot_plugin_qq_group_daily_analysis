@@ -564,30 +564,63 @@ class TraceSQLiteStore:
     def query_report_artifacts(
         self,
         group_id: str | None = None,
+        search: str | None = None,
         limit: int = 150,
         offset: int = 0,
     ) -> list[dict[str, object]]:
-        """从数据库高效分页拉取历史报告产物（纯索引有序扫描）"""
+        """从数据库高效分页拉取历史报告产物（纯索引有序扫描，支持按群过滤与模糊检索）"""
         with self._get_connection() as conn:
-            if group_id:
-                query = """
-                    SELECT filename, trace_id, group_id, file_format, relative_path, created_at
-                    FROM report_artifacts
-                    WHERE group_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT ? OFFSET ?
-                """
-                rows = conn.execute(query, (group_id, limit, offset)).fetchall()
-            else:
-                query = """
-                    SELECT filename, trace_id, group_id, file_format, relative_path, created_at
-                    FROM report_artifacts
-                    ORDER BY created_at DESC
-                    LIMIT ? OFFSET ?
-                """
-                rows = conn.execute(query, (limit, offset)).fetchall()
+            conditions: list[str] = []
+            params: list[object] = []
 
+            if group_id:
+                conditions.append("group_id = ?")
+                params.append(group_id)
+
+            if search and search.strip():
+                kw = f"%{search.strip()}%"
+                conditions.append(
+                    "(filename LIKE ? OR trace_id LIKE ? OR group_id LIKE ?)"
+                )
+                params.extend([kw, kw, kw])
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            query = f"""
+                SELECT filename, trace_id, group_id, file_format, relative_path, created_at
+                FROM report_artifacts
+                {where_clause}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            """
+            params.extend([limit, offset])
+            rows = conn.execute(query, tuple(params)).fetchall()
             return [dict(r) for r in rows]
+
+    def count_report_artifacts(
+        self,
+        group_id: str | None = None,
+        search: str | None = None,
+    ) -> int:
+        """获取满足筛选条件的产物总记录数"""
+        with self._get_connection() as conn:
+            conditions: list[str] = []
+            params: list[object] = []
+
+            if group_id:
+                conditions.append("group_id = ?")
+                params.append(group_id)
+
+            if search and search.strip():
+                kw = f"%{search.strip()}%"
+                conditions.append(
+                    "(filename LIKE ? OR trace_id LIKE ? OR group_id LIKE ?)"
+                )
+                params.extend([kw, kw, kw])
+
+            where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            query = f"SELECT COUNT(*) FROM report_artifacts {where_clause}"
+            row = conn.execute(query, tuple(params)).fetchone()
+            return int(row[0]) if row else 0
 
     def register_report_artifact(
         self,
