@@ -357,6 +357,12 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
       (type === 'fix' && scope === 'fix') ||
       (type === 'feat' && scope === 'feat');
 
+    // 1.2 严格门禁：禁止使用过粗、宽泛的顶层 Scope（如 dashboard, webui, frontend, infra, infrastructure）
+    const isOverlyBroad =
+      (type !== 'build' && (scope === 'dashboard' || scope === 'webui' || scope === 'frontend')) ||
+      scope === 'infra' ||
+      scope === 'infrastructure';
+
     if (isRedundant) {
       errors.push(
         `【禁止同名冗余 Scope "${type}(${rawScope})"】\n` +
@@ -366,6 +372,30 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
         `        • CI 门禁提交推荐: ci(github-actions), ci(lefthook), ci(workflow), ci(scripts), ci(pipeline) 等\n` +
         `        • 其它规范: 请准确指向实际被测试/修改的具体业务与架构层级。`
       );
+    } else if (isOverlyBroad) {
+      if (scope === 'dashboard' || scope === 'webui' || scope === 'frontend') {
+        errors.push(
+          `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用粗粒度全栈 Scope！\n` +
+          `     💡 请使用精准的 FSD 架构分层或垂直业务切片：\n` +
+          `        • 报告业务: webui/reports\n` +
+          `        • 任务看板: webui/tasks\n` +
+          `        • 追踪抽屉: webui/traces\n` +
+          `        • 配置表单: webui/config\n` +
+          `        • 趋势图表: webui/charts\n` +
+          `        • 静态打包产物提交: build(webui)\n` +
+          `        • FSD 分层: webui/pages, webui/widgets, webui/entities, webui/shared`
+        );
+      } else {
+        errors.push(
+          `【拒绝粗粒度 Scope "${type}(${rawScope})"】为保持原子化提交与清晰追溯，严禁使用粗粒度基建 Scope！\n` +
+          `     💡 请使用具体的后端基础设施子模块：\n` +
+          `        • 持久化存储与数据库: infra/storage (或 infra/db)\n` +
+          `        • 控制台路由适配: infra/webui (或 infra/routes)\n` +
+          `        • 报告渲染引擎: infra/reporting\n` +
+          `        • 定时任务调度: infra/scheduler\n` +
+          `        • 多平台协议通信: infra/platform`
+        );
+      }
     } else if (!scope) {
       errors.push('【缺失改动 Scope】根据原子化提交原则，必须在括号内注明所属模块，例如: feat(domain): ... 或 feat(webui/widgets): ...');
     } else if (!isScopeValid(scope)) {
@@ -477,8 +507,9 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
   // 4. 针对过于宽泛的 Scope 给出友好的细粒度优化建议（非阻塞性 Warning）
   const warnings = [];
   if (headerMatch) {
+    const type = headerMatch[1].toLowerCase();
     const rawScope = (headerMatch[2] || '').trim().toLowerCase();
-    if (rawScope === 'dashboard' || rawScope === 'webui' || rawScope === 'frontend') {
+    if (type !== 'build' && (rawScope === 'dashboard' || rawScope === 'webui' || rawScope === 'frontend')) {
       warnings.push(
         `[Scope 优化建议] 当前使用的 "${rawScope}" 属于粗粒度全栈 Scope。\n` +
         `     💡 建议优先使用更准确的 FSD 细粒度业务切片或层级：\n` +
