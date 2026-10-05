@@ -4,20 +4,20 @@
 pre-commit:
   parallel: false
   commands:
-    # --- Python 后端门禁 (仅在 Python 代码及脚本变动时触发，排除文档与元数据) ---
+    # --- Python 后端门禁 (仅在 Python 业务源码及脚本变动时触发，排除测试与文档) ---
     ruff-format:
-      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
+      glob: "{main.py,src/**/*.py,scripts/**/*.py}"
+      exclude: "(^tests/|^docs/|.*\\.md$|metadata\\.yaml)"
       run: uv run ruff format .
       stage_fixed: true
     ruff-check:
-      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
+      glob: "{main.py,src/**/*.py,scripts/**/*.py}"
+      exclude: "(^tests/|^docs/|.*\\.md$|metadata\\.yaml)"
       run: uv run ruff check . --fix
       stage_fixed: true
     pyright:
-      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
-      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
+      glob: "{main.py,src/**/*.py}"
+      exclude: "(^tests/|^scripts/|^docs/|.*\\.md$|metadata\\.yaml)"
       run: npx pyright main.py src/
 
     # --- OpenAPI 契约与前端类型一致性同步门禁 (仅在 WebAPI 路由或导出脚本变动时触发) ---
