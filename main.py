@@ -187,7 +187,10 @@ class GroupDailyAnalysis(Star):
 
         # 消息处理服务
         self.message_processing_service = MessageProcessingService(
-            context, self.platform_group_registry, dedup_store=self.event_dedup_store
+            context,
+            self.platform_group_registry,
+            dedup_store=self.event_dedup_store,
+            config_manager=self.config_manager,
         )
 
         self.template_command_service = TemplateCommandService(
