@@ -8,6 +8,43 @@ on:
   workflow_dispatch:
 
 jobs:
+  detect-changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter Changed Paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters:
+            python:
+              - 'main.py'
+              - 'src/**'
+              - 'tests/**'
+              - 'scripts/**/*.py'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - '_conf_schema.json'
+              - 'ruff.toml'
+              - 'pyrightconfig.json'
+            frontend:
+              - 'dashboard/**'
+              - 'pages/**'
+              - 'openapi.json'
+              - 'src/infrastructure/webui/**'
+              - 'scripts/export_openapi.py'
+            ci:
+              - '.github/workflows/ci.yml'
+              - 'scripts/verify-commit.js'
+              - 'lefthook.yml'
+
   commit-lint:
     name: Verify Commit Messages (STAR Standard)
     runs-on: ubuntu-latest
@@ -44,8 +81,14 @@ jobs:
   python-lint:
     name: Python Lint, Type Check & Test
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.python == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -84,6 +127,11 @@ jobs:
   frontend-check:
     name: Frontend Lint, Test & Build (with OpenAPI Contract Sync)
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.frontend == 'true' ||
+      needs.detect-changes.outputs.ci == 'true'
 
     steps:
       - name: Checkout repository
@@ -151,3 +199,34 @@ jobs:
             git diff --ignore-space-at-eol pages/
             exit 1
           fi
+
+  ci-status:
+    name: CI Completion Gate
+    runs-on: ubuntu-latest
+    needs: [detect-changes, commit-lint, python-lint, frontend-check]
+    if: always()
+    steps:
+      - name: Evaluate CI Gate Results
+        run: |
+          echo "Evaluating CI Results..."
+          echo "commit-lint: ${{ needs.commit-lint.result }}"
+          echo "python-lint: ${{ needs.python-lint.result }}"
+          echo "frontend-check: ${{ needs.frontend-check.result }}"
+
+          if [ "${{ needs.commit-lint.result }}" = "failure" ] || [ "${{ needs.commit-lint.result }}" = "cancelled" ]; then
+            echo "::error::commit-lint failed or was cancelled"
+            exit 1
+          fi
+
+          if [ "${{ needs.python-lint.result }}" = "failure" ] || [ "${{ needs.python-lint.result }}" = "cancelled" ]; then
+            echo "::error::python-lint failed or was cancelled"
+            exit 1
+          fi
+
+          if [ "${{ needs.frontend-check.result }}" = "failure" ] || [ "${{ needs.frontend-check.result }}" = "cancelled" ]; then
+            echo "::error::frontend-check failed or was cancelled"
+            exit 1
+          fi
+
+          echo "✅ All required checks passed or were safely skipped according to path filters!"
+
