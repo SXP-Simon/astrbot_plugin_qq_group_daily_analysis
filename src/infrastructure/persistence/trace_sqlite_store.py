@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
-from ...shared.constants import AnalysisStage
+from ...shared.constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
     from ...shared.trace_context import TraceContextSnapshot
@@ -59,7 +59,9 @@ class TraceSQLiteStore:
                     error_stage TEXT,
                     error_message TEXT,
                     stack_trace TEXT,
-                    extra_json TEXT DEFAULT '{}'
+                    extra_json TEXT DEFAULT '{}',
+                    pid INTEGER DEFAULT 0,
+                    boot_id TEXT DEFAULT ''
                 );
 
                 CREATE TABLE IF NOT EXISTS trace_spans (
@@ -123,6 +125,25 @@ class TraceSQLiteStore:
                 CREATE INDEX IF NOT EXISTS idx_artifacts_trace_id ON report_artifacts(trace_id);
                 """
             )
+            # 兼容性防御迁移：确保 analysis_traces 包含 pid 与 boot_id 字段
+            try:
+                cols_traces = [
+                    row[1]
+                    for row in conn.execute(
+                        "PRAGMA table_info(analysis_traces)"
+                    ).fetchall()
+                ]
+                if cols_traces and "pid" not in cols_traces:
+                    conn.execute(
+                        "ALTER TABLE analysis_traces ADD COLUMN pid INTEGER DEFAULT 0;"
+                    )
+                if cols_traces and "boot_id" not in cols_traces:
+                    conn.execute(
+                        "ALTER TABLE analysis_traces ADD COLUMN boot_id TEXT DEFAULT '';"
+                    )
+            except Exception:
+                pass
+
             # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
             try:
                 cols = [
@@ -235,14 +256,23 @@ class TraceSQLiteStore:
                 if isinstance(started_raw, (int, float))
                 else time.time()
             )
+            pid_raw = trace_dict.get("pid")
+            pid_val = (
+                int(pid_raw)
+                if isinstance(pid_raw, (int, str)) and str(pid_raw).isdigit()
+                else PROCESS_PID
+            )
+            boot_id_raw = trace_dict.get("boot_id")
+            boot_id_val = str(boot_id_raw) if boot_id_raw else PROCESS_BOOT_ID
 
             conn.execute(
                 """
                 INSERT INTO analysis_traces (
                     trace_id, group_id, group_name, platform, trigger_type,
                     status, started_at, completed_at, duration_ms,
-                    error_stage, error_message, stack_trace, extra_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    error_stage, error_message, stack_trace, extra_json,
+                    pid, boot_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(trace_id) DO UPDATE SET
                     group_id=CASE WHEN excluded.group_id != '' THEN excluded.group_id ELSE analysis_traces.group_id END,
                     group_name=CASE WHEN excluded.group_name != '' AND excluded.group_name != '未知群' THEN excluded.group_name ELSE analysis_traces.group_name END,
@@ -254,7 +284,9 @@ class TraceSQLiteStore:
                     error_stage=excluded.error_stage,
                     error_message=excluded.error_message,
                     stack_trace=excluded.stack_trace,
-                    extra_json=excluded.extra_json;
+                    extra_json=excluded.extra_json,
+                    pid=CASE WHEN excluded.pid != 0 THEN excluded.pid ELSE analysis_traces.pid END,
+                    boot_id=CASE WHEN excluded.boot_id != '' THEN excluded.boot_id ELSE analysis_traces.boot_id END;
                 """,
                 (
                     trace_id,
@@ -270,6 +302,8 @@ class TraceSQLiteStore:
                     trace_dict.get("error_message"),
                     trace_dict.get("stack_trace"),
                     json.dumps(extra_payload, ensure_ascii=False),
+                    pid_val,
+                    boot_id_val,
                 ),
             )
 
@@ -642,18 +676,34 @@ class TraceSQLiteStore:
                 (filename, trace_id, group_id, file_format, relative_path, created_at),
             )
 
-    def get_crashed_traces_on_startup(self) -> list[dict[str, object]]:
-        """获取开机前因系统异常终止而遗留的 running 任务列表。"""
+    def get_crashed_traces_on_startup(
+        self, current_boot_id: str | None = None
+    ) -> list[dict[str, object]]:
+        """获取开机前因系统异常终止而遗留的 running 任务列表。
+
+        若指定 current_boot_id，则仅返回属于历史死亡进程实例（真正崩溃）的 running 任务，
+        安全跳过当前正在热重载运行的同一进程协程。
+        """
         with self._get_connection() as conn:
-            rows = conn.execute(
+            if current_boot_id:
+                query = """
+                    SELECT trace_id, group_id, group_name, platform, trigger_type,
+                           started_at, pid, boot_id, extra_json
+                    FROM analysis_traces
+                    WHERE status = 'running'
+                      AND (boot_id != ? OR boot_id = '' OR boot_id IS NULL)
+                    ORDER BY started_at ASC
                 """
-                SELECT trace_id, group_id, group_name, platform, trigger_type,
-                       started_at, extra_json
-                FROM analysis_traces
-                WHERE status = 'running'
-                ORDER BY started_at ASC
+                rows = conn.execute(query, (current_boot_id,)).fetchall()
+            else:
+                query = """
+                    SELECT trace_id, group_id, group_name, platform, trigger_type,
+                           started_at, pid, boot_id, extra_json
+                    FROM analysis_traces
+                    WHERE status = 'running'
+                    ORDER BY started_at ASC
                 """
-            ).fetchall()
+                rows = conn.execute(query).fetchall()
             result = []
             for r in rows:
                 item = dict(r)
@@ -664,19 +714,38 @@ class TraceSQLiteStore:
                 result.append(item)
             return result
 
-    def reconcile_crashed_traces_on_startup(self) -> int:
-        """开机对账扫描：将上次因系统异常终止/重启而未正常收尾的 running 任务标记为 aborted。"""
+    def reconcile_crashed_traces_on_startup(
+        self, current_boot_id: str | None = None
+    ) -> int:
+        """开机对账扫描：将上次因系统异常终止/重启而未正常收尾的 running 任务标记为 aborted。
+
+        若指定 current_boot_id，则仅回收真正死亡的历史进程任务，不碰当前进程热重载存活任务。
+        """
         with self._get_connection() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE analysis_traces
-                SET status = 'aborted',
-                    error_stage = 'CRASH_RECOVERY',
-                    error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
-                    completed_at = strftime('%s', 'now')
-                WHERE status = 'running'
-                """
-            )
+            if current_boot_id:
+                cursor = conn.execute(
+                    """
+                    UPDATE analysis_traces
+                    SET status = 'aborted',
+                        error_stage = 'CRASH_RECOVERY',
+                        error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
+                        completed_at = strftime('%s', 'now')
+                    WHERE status = 'running'
+                      AND (boot_id != ? OR boot_id = '' OR boot_id IS NULL)
+                    """,
+                    (current_boot_id,),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    UPDATE analysis_traces
+                    SET status = 'aborted',
+                        error_stage = 'CRASH_RECOVERY',
+                        error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
+                        completed_at = strftime('%s', 'now')
+                    WHERE status = 'running'
+                    """
+                )
             return cursor.rowcount
 
     def get_distinct_groups(self) -> list[dict[str, str]]:

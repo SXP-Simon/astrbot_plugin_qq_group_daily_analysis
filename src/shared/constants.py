@@ -4,7 +4,14 @@
 
 from __future__ import annotations
 
+import os
+import time
+import uuid
 from enum import Enum
+
+# 当前 Python 进程与实例生命周期唯一凭据 (用于区分进程崩溃与热重载)
+PROCESS_PID: int = os.getpid()
+PROCESS_BOOT_ID: str = f"{PROCESS_PID}:{uuid.uuid4().hex[:8]}:{int(time.time())}"
 
 
 class Platform(str, Enum):

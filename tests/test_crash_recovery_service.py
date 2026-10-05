@@ -183,3 +183,77 @@ async def test_recover_crashed_tasks_no_checkpoint_aborted(
     saved_payload = mock_trace_store.save_trace.call_args[0][0]
     assert saved_payload["trace_id"] == "trace_no_cp"
     assert saved_payload["status"] == TaskStatus.ABORTED.value
+
+
+@pytest.mark.asyncio
+async def test_recover_crashed_tasks_passes_current_boot_id(
+    mock_trace_store, mock_checkpoint_store, mock_analysis_service, mock_dispatcher
+):
+    """验证 recover_crashed_tasks 会将当前 PROCESS_BOOT_ID 传递给 trace_store 进行过滤。"""
+    service = CrashRecoveryService(
+        mock_trace_store, mock_checkpoint_store, mock_analysis_service, mock_dispatcher
+    )
+    custom_boot_id = "test_pid_1234:boot_uuid_999"
+    await service.recover_crashed_tasks(current_boot_id=custom_boot_id)
+
+    mock_trace_store.get_crashed_traces_on_startup.assert_called_once_with(
+        current_boot_id=custom_boot_id
+    )
+
+
+def test_sqlite_store_boot_id_filtering_and_migration(tmp_path):
+    """集成验证 SQLite 仓储中的 pid / boot_id 持久化、自动增量迁移以及开机对账过滤。"""
+    from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+    from src.shared.constants import PROCESS_BOOT_ID, PROCESS_PID
+
+    db_file = tmp_path / "test_trace.db"
+    store = TraceSQLiteStore(db_file)
+
+    current_boot = PROCESS_BOOT_ID
+    dead_boot = "99999:dead_uuid_0000:100000"
+
+    # 1. 插入一条属于当前进程（热重载中）的 running 任务
+    store.save_trace(
+        {
+            "trace_id": "hot_reload_task_1",
+            "group_id": "111",
+            "status": "running",
+            "pid": PROCESS_PID,
+            "boot_id": current_boot,
+        }
+    )
+
+    # 2. 插入一条属于已死亡历史进程的 running 任务
+    store.save_trace(
+        {
+            "trace_id": "dead_process_task_2",
+            "group_id": "222",
+            "status": "running",
+            "pid": 99999,
+            "boot_id": dead_boot,
+        }
+    )
+
+    # 3. 验证 get_crashed_traces_on_startup(current_boot_id=current_boot)
+    #    应精准过滤掉 hot_reload_task_1，只返回 dead_process_task_2！
+    crashed = store.get_crashed_traces_on_startup(current_boot_id=current_boot)
+    assert len(crashed) == 1
+    assert crashed[0]["trace_id"] == "dead_process_task_2"
+    assert crashed[0]["pid"] == 99999
+    assert crashed[0]["boot_id"] == dead_boot
+
+    # 4. 验证 reconcile_crashed_traces_on_startup(current_boot_id=current_boot)
+    #    仅将 dead_process_task_2 标记为 aborted，绝不篡改 hot_reload_task_1！
+    reconciled = store.reconcile_crashed_traces_on_startup(current_boot_id=current_boot)
+    assert reconciled == 1
+
+    # 5. 验证数据库中两者的最终状态
+    trace_hot = store.get_trace("hot_reload_task_1")
+    trace_dead = store.get_trace("dead_process_task_2")
+
+    assert trace_hot is not None
+    assert trace_hot["status"] == "running"  # 保持 running，旧协程可正常跑完发图！
+
+    assert trace_dead is not None
+    assert trace_dead["status"] == "aborted"  # 死亡进程任务被正确回收
+

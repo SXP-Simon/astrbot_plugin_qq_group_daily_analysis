@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar, ParamSpec, TypedDict, TypeVar
 
-from .constants import AnalysisStage
+from .constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine, Generator, Mapping
@@ -116,6 +116,8 @@ class TraceContextSnapshot(TypedDict, total=False):
     performance_metrics: TracePerformanceMetrics
     token_usage: TraceTokenUsage
     checkpoints: dict[str, str]
+    pid: int
+    boot_id: str
 
 
 class ActiveTaskSnapshot(TypedDict):
@@ -182,6 +184,10 @@ class TraceContext:
     started_at: float = field(default_factory=time.time)
     completed_at: float | None = None
     duration_ms: float | None = None
+
+    # 进程与生命周期凭据
+    pid: int = field(default_factory=lambda: PROCESS_PID)
+    boot_id: str = field(default_factory=lambda: PROCESS_BOOT_ID)
 
     # 错误归因
     error_stage: str | None = None
@@ -506,6 +512,8 @@ class TraceContext:
             "status": self.status,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "pid": self.pid,
+            "boot_id": self.boot_id,
             "duration_ms": (
                 self.duration_ms
                 if self.duration_ms is not None

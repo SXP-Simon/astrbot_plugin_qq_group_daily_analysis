@@ -218,7 +218,7 @@ class GroupDailyAnalysis(Star):
         # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
         self.active_task_manager = ActiveTaskManager(trace_store=self.trace_store)
         TraceContext.set_active_task_manager(self.active_task_manager)
-        self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=180)
+        self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=300)
         self.webui_bridge = PluginPageWebUIBridge(
             context=context,
             trace_store=self.trace_store,

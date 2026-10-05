@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING, cast
 
-from ...shared.constants import AnalysisStage, TaskStatus
+from ...shared.constants import PROCESS_BOOT_ID, AnalysisStage, TaskStatus
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -44,8 +44,14 @@ class CrashRecoveryService:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
 
-    async def recover_crashed_tasks(self) -> dict[str, int]:
+    async def recover_crashed_tasks(
+        self, current_boot_id: str | None = None
+    ) -> dict[str, int]:
         """开机扫描并执行未完成任务自愈对账。
+
+        Args:
+            current_boot_id: 当前进程实例凭据。默认取全局 PROCESS_BOOT_ID。
+                             仅扫描非当前进程（真正因断电/崩溃死亡）的历史遗留任务。
 
         Returns:
             dict[str, int]: 自愈结果统计字典，包含 recovered, archived, aborted。
@@ -53,8 +59,12 @@ class CrashRecoveryService:
         if not self.trace_store or not self.analysis_service:
             return {"recovered": 0, "archived": 0, "aborted": 0}
 
+        effective_boot_id = current_boot_id or PROCESS_BOOT_ID
+
         try:
-            crashed_traces = self.trace_store.get_crashed_traces_on_startup()
+            crashed_traces = self.trace_store.get_crashed_traces_on_startup(
+                current_boot_id=effective_boot_id
+            )
         except Exception as e:
             logger.error(f"[CrashRecovery] 读取开机遗留崩溃任务失败: {e}")
             return {"recovered": 0, "archived": 0, "aborted": 0}

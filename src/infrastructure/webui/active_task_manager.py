@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ...shared.constants import AnalysisStage
+from ...shared.constants import PROCESS_BOOT_ID, AnalysisStage
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -241,14 +241,24 @@ class ActiveTaskManager:
     # ── Task Reaper 守护线程 ──
 
     def start_reaper(
-        self, interval_seconds: int = 30, timeout_seconds: int = 180
+        self,
+        interval_seconds: int = 30,
+        timeout_seconds: int = 180,
+        boot_id: str | None = None,
     ) -> None:
-        """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录"""
+        """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录。
+
+        仅对属于已死亡历史进程（boot_id != current_boot_id）的任务进行开机对账回收，
+        安全跳过当前进程热重载期间活跃运行的旧协程任务。
+        """
         if self.trace_store and hasattr(
             self.trace_store, "reconcile_crashed_traces_on_startup"
         ):
             try:
-                reconciled = self.trace_store.reconcile_crashed_traces_on_startup()
+                effective_boot_id = boot_id or PROCESS_BOOT_ID
+                reconciled = self.trace_store.reconcile_crashed_traces_on_startup(
+                    current_boot_id=effective_boot_id
+                )
                 if reconciled > 0:
                     logger.info(
                         f"[TaskReaper] 开机自愈对账：已回收 {reconciled} 条异常中断的幽灵任务"
