@@ -4,37 +4,45 @@
 pre-commit:
   parallel: false
   commands:
-    # --- Python 后端门禁 ---
+    # --- Python 后端门禁 (仅在 Python 代码及脚本变动时触发，排除文档与元数据) ---
     ruff-format:
-      glob: "*.py"
+      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: uv run ruff format .
       stage_fixed: true
     ruff-check:
-      glob: "*.py"
+      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: uv run ruff check . --fix
       stage_fixed: true
     pyright:
-      glob: "*.py"
+      glob: "{main.py,src/**/*.py,tests/**/*.py,scripts/**/*.py}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: npx pyright main.py src/
 
-    # --- OpenAPI 契约与前端类型一致性同步门禁 ---
+    # --- OpenAPI 契约与前端类型一致性同步门禁 (仅在 WebAPI 路由或导出脚本变动时触发) ---
     openapi-sync:
       glob: "{src/infrastructure/webui/**/*.py,scripts/export_openapi.py}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: uv run python scripts/export_openapi.py && pnpm --dir dashboard generate:types
       stage_fixed: true
 
-    # --- WebUI / Dashboard 前端门禁 ---
+    # --- WebUI / Dashboard 前端门禁 (仅在前端代码或涉及接口协议时触发) ---
     webui-typecheck:
       glob: "{dashboard/**/*.{ts,tsx,js,jsx,json,vue,html},openapi.json,src/infrastructure/webui/**/*.py}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: pnpm --dir dashboard typecheck
     webui-lint:
       glob: "dashboard/**/*.{ts,tsx,js,jsx}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: pnpm --dir dashboard lint
     webui-test:
       glob: "dashboard/**/*.{ts,tsx,js,jsx,json}"
+      exclude: "(^docs/|.*\\.md$|metadata\\.yaml)"
       run: pnpm --dir dashboard test
     webui-build:
-      glob: "{dashboard/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss},openapi.json,src/infrastructure/webui/**/*.py}"
+      glob: "{dashboard/src/**/*.{ts,tsx,js,jsx,json,vue,html,css,scss},dashboard/index.html,dashboard/vite.config.ts,openapi.json,src/infrastructure/webui/**/*.py}"
+      exclude: "(.*\\.test\\.[jt]sx?$|.*\\.spec\\.[jt]sx?$|__tests__/|^docs/|.*\\.md$|metadata\\.yaml)"
       run: pnpm --dir dashboard build
       stage_fixed: true
 
@@ -42,3 +50,4 @@ commit-msg:
   commands:
     verify-commit:
       run: node scripts/verify-commit.js {1}
+
