@@ -94,18 +94,24 @@ class ReportRoutes:
                     if p.exists() and p not in candidate_dirs:
                         candidate_dirs.append(p)
 
-            seen_paths = set()
+            seen_paths: set[Path] = set()
             all_files: list[Path] = []
+            valid_exts = {".png", ".jpg", ".jpeg", ".html"}
             for d in candidate_dirs:
-                for p in d.iterdir():
+                if not d.exists() or not d.is_dir():
+                    continue
+                for p in d.rglob("*"):
                     if (
                         p.is_file()
-                        and p.suffix.lower()
-                        in {".jpg", ".jpeg", ".png", ".webp", ".html", ".htm"}
-                        and p.resolve() not in seen_paths
+                        and p.suffix.lower() in valid_exts
+                        and not any(
+                            part.startswith(".") for part in p.relative_to(d).parts
+                        )
                     ):
-                        seen_paths.add(p.resolve())
-                        all_files.append(p)
+                        resolved = p.resolve()
+                        if resolved not in seen_paths:
+                            seen_paths.add(resolved)
+                            all_files.append(p)
 
             report_trace_map: dict[str, str] = {}
             try:
@@ -121,7 +127,7 @@ class ReportRoutes:
                 try:
                     stat = file_path.stat()
                     stem = file_path.stem
-                    is_html = file_path.suffix.lower() in {".html", ".htm"}
+                    is_html = file_path.suffix.lower() == ".html"
                     is_comic = stem.lower().startswith("comic_") or stem.startswith(
                         "漫画_"
                     )
@@ -166,6 +172,13 @@ class ReportRoutes:
                                     re.IGNORECASE,
                                 )
                                 group_id = m.group(1) if m else stem
+
+                    # 若位于子目录且 stem 未匹配到已知群，从父目录识别群号
+                    if (not group_id or group_id == stem) and (
+                        file_path.parent.name in group_info_map
+                        or re.match(r"^\d{5,12}$", file_path.parent.name)
+                    ):
+                        group_id = file_path.parent.name
 
                     # 3. 兜底获取 trace_id
                     if not trace_id:
@@ -253,6 +266,10 @@ class ReportRoutes:
                 if cand.is_file() and cand.exists():
                     target_file = cand
                     break
+                sub_matches = [p for p in d.rglob(safe_filename) if p.is_file()]
+                if sub_matches:
+                    target_file = sub_matches[0]
+                    break
 
             if not target_file:
                 return error_response(
@@ -260,7 +277,7 @@ class ReportRoutes:
                 )
 
             ext = target_file.suffix.lower().lstrip(".")
-            is_html = ext in ("html", "htm")
+            is_html = ext == "html"
             stat = target_file.stat()
 
             if is_html:

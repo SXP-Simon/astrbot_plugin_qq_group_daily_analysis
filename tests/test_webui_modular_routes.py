@@ -6,13 +6,9 @@ WebUI 模块化路由单元测试 (WebUI Modular Routes Tests)
 
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.persistence.trace_sqlite_store import (
     TraceSQLiteStore,
 )
@@ -20,7 +16,6 @@ from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.active_task
     ActiveTaskManager,
 )
 from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.routes import (
-    ConfigRoutes,
     DataManagementRoutes,
     LogRoutes,
     ReportRoutes,
@@ -31,7 +26,7 @@ from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.routes impo
 
 
 @pytest.fixture
-def mock_trace_store(tmp_path: Path):
+def mock_trace_store(tmp_path):
     db_path = tmp_path / "test_modular_routes.db"
     return TraceSQLiteStore(db_path)
 
@@ -122,7 +117,7 @@ async def test_log_routes_direct(mock_active_mgr: ActiveTaskManager):
 
 @pytest.mark.asyncio
 async def test_data_management_checkpoint_and_report_query_parsing(
-    mock_trace_store: TraceSQLiteStore, tmp_path: Path
+    mock_trace_store: TraceSQLiteStore, tmp_path
 ):
     """测试 DataManagementRoutes 与 ReportRoutes 正确解析 PluginMultiDict 查询参数"""
     from astrbot.api.web import PluginMultiDict
@@ -159,7 +154,11 @@ async def test_data_management_checkpoint_and_report_query_parsing(
     with patch.object(proxy_request, "_get_target", return_value=mock_target):
         res = await data_routes.api_get_checkpoint_detail()
         assert res.get("status_code", 200) == 200
-        body = res.get("data") if isinstance(res.get("data"), dict) and "status" in res.get("data", {}) else res
+        body = (
+            res.get("data")
+            if isinstance(res.get("data"), dict) and "status" in res.get("data", {})
+            else res
+        )
         assert body.get("status") == "ok"
         detail_data = body.get("data") or body.get("detail")
         assert detail_data is not None
@@ -178,14 +177,16 @@ async def test_data_management_checkpoint_and_report_query_parsing(
     )
 
     mock_report_target = MagicMock()
-    mock_report_target.query = PluginMultiDict(
-        [("filename", report_file.name)]
-    )
+    mock_report_target.query = PluginMultiDict([("filename", report_file.name)])
 
     with patch.object(proxy_request, "_get_target", return_value=mock_report_target):
         res = await report_routes.api_get_report_content()
         assert res.get("status_code", 200) == 200
-        body = res.get("data") if isinstance(res.get("data"), dict) and "status" in res.get("data", {}) else res
+        body = (
+            res.get("data")
+            if isinstance(res.get("data"), dict) and "status" in res.get("data", {})
+            else res
+        )
         assert body.get("status") == "ok"
         report_data = body.get("data")
         assert report_data is not None
@@ -289,3 +290,51 @@ async def test_incremental_and_checkpoint_routes_resilience(
         assert ckpt_res.get("status_code", 200) == 200
 
 
+@pytest.mark.asyncio
+async def test_report_routes_subdirectory_support(
+    mock_trace_store: TraceSQLiteStore, tmp_path
+):
+    """测试 ReportRoutes 递归扫描子目录中的 HTML 报告与预览读取"""
+    from astrbot.api.web import PluginMultiDict
+    from astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.web_compat import (
+        request as proxy_request,
+    )
+
+    reports_dir = tmp_path / "reports"
+    sub_dir = reports_dir / "344184506"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    report_file = sub_dir / "20261005.html"
+    report_file.write_text("<html>hello</html>", encoding="utf-8")
+
+    report_routes = ReportRoutes(
+        trace_store=mock_trace_store,
+        analysis_service=None,
+        report_output_dir=reports_dir,
+    )
+
+    # 1. 列表能发现子目录中的报告，且群号识别为父目录名
+    res = await report_routes.api_get_report_history()
+    body = (
+        res.get("data")
+        if isinstance(res.get("data"), dict) and "status" in res.get("data", {})
+        else res
+    )
+    assert body.get("status") == "ok"
+    items = body.get("data", [])
+    assert len(items) == 1
+    assert items[0]["filename"] == "20261005.html"
+    assert items[0]["group_id"] == "344184506"
+
+    # 2. 预览能正确定位到子目录中的文件
+    mock_target = MagicMock()
+    mock_target.query = PluginMultiDict([("filename", "20261005.html")])
+    with patch.object(proxy_request, "_get_target", return_value=mock_target):
+        content_res = await report_routes.api_get_report_content()
+        c_body = (
+            content_res.get("data")
+            if isinstance(content_res.get("data"), dict)
+            and "status" in content_res.get("data", {})
+            else content_res
+        )
+        assert c_body.get("status") == "ok"
+        assert c_body["data"]["html_content"] == "<html>hello</html>"
