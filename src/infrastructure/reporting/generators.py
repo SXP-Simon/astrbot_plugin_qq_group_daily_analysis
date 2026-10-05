@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import html as html_module
 import json
 import os
+import re
 import time
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
@@ -47,6 +49,14 @@ from .render_diagnostics import (
     sanitize_path_component,
 )
 from .templates import HTMLTemplates
+
+# 产物内嵌追踪号的 meta 名称与匹配模式（注入与自愈共用同一套定义）
+_TRACE_META_ATTR = "astrbot-trace-id"
+_TRACE_META_PATTERN = re.compile(
+    rf'<meta[^>]*\bname=["\']{_TRACE_META_ATTR}["\'][^>]*>',
+    re.IGNORECASE,
+)
+_HTML_HEAD_PATTERN = re.compile(r"<head(?:\s[^>]*)?>", re.IGNORECASE)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -167,9 +177,51 @@ class ReportGenerator(IReportGenerator):
         filename_format: str,
         group_id: str,
         date: str,
+        trace_id: str | None = None,
     ) -> Path:
         """构建安全的报告输出文件路径。"""
-        return build_safe_report_path(output_dir, filename_format, group_id, date)
+        return build_safe_report_path(
+            output_dir, filename_format, group_id, date, trace_id
+        )
+
+    @staticmethod
+    def _inject_trace_id_meta(html_content: str, trace_id: str) -> str:
+        """在 HTML 产物头部注入不可见的追踪号元数据。
+
+        文件名格式可由用户自定义（例如 ${group_id}/${date}.html），此时文件名不再携带
+        追踪号，产物一旦脱离数据库或日志，就难以反查属于哪次分析任务。因此把追踪号写入
+        HTML 头部 meta，配合 grep 即可在原文件上定位任务。
+
+        Args:
+            html_content: 渲染完成的 HTML 文本。
+            trace_id: 本次分析的链路追踪 ID。
+
+        Returns:
+            注入元数据后的 HTML 文本；追踪号为空、模板无 head 时原样返回；已存在同名 meta 时
+            按追踪号自愈（值相同则原样返回，值不同则改写为当前追踪号）。
+        """
+        if not trace_id:
+            return html_content
+        escaped_trace_id = html_module.escape(trace_id, quote=True)
+        meta = f'<meta name="{_TRACE_META_ATTR}" content="{escaped_trace_id}">'
+
+        existing = _TRACE_META_PATTERN.search(html_content)
+        if existing:
+            if f'content="{escaped_trace_id}"' in existing.group(0):
+                return html_content
+            return (
+                html_content[: existing.start()] + meta + html_content[existing.end() :]
+            )
+
+        head_match = _HTML_HEAD_PATTERN.search(html_content)
+        if not head_match:
+            logger.debug("模板未包含 head 节点，跳过追踪号元数据注入")
+            return html_content
+        return (
+            html_content[: head_match.end()]
+            + f"\n    {meta}"
+            + html_content[head_match.end() :]
+        )
 
     @staticmethod
     def _resolve_t2i_viewport_options(
@@ -558,7 +610,7 @@ class ReportGenerator(IReportGenerator):
             allow_alphanumeric_user_ids: 是否允许字母数字用户 ID。
             template_theme: 模板主题名称。
             custom_filename: 自定义文件名。
-            trace_id: 追踪 Trace ID。
+            trace_id: 追踪 Trace ID，用于渲染文件名格式中的 ${trace_id} 变量（未提供时取当前 TraceContext）。
 
         Returns:
             元组 (html_file_path, json_file_path)。
@@ -585,22 +637,15 @@ class ReportGenerator(IReportGenerator):
                 html_path = output_dir / custom_filename
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
-            elif effective_trace_id:
-                ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-                theme_suffix = f"_{template_theme}" if template_theme else ""
-                html_path = (
-                    output_dir
-                    / f"report_{group_id}_{ts_str}_{effective_trace_id}{theme_suffix}.html"
-                )
             else:
                 current_date = datetime.now().strftime("%Y%m%d")
-                base_html_path = self._build_safe_report_path(
+                html_path = self._build_safe_report_path(
                     output_dir,
                     self.config_manager.get_html_filename_format(),
                     group_id=group_id,
                     date=current_date,
+                    trace_id=effective_trace_id,
                 )
-                html_path = base_html_path
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
 
@@ -653,6 +698,8 @@ class ReportGenerator(IReportGenerator):
 
             logger.debug(f"HTML 内容生成完成，长度: {len(html_content)} 字符")
 
+            html_content = self._inject_trace_id_meta(html_content, effective_trace_id)
+
             await asyncio.to_thread(
                 html_path.write_text, html_content, encoding="utf-8"
             )
@@ -682,6 +729,7 @@ class ReportGenerator(IReportGenerator):
                 ),
                 "group_id": group_id,
                 "generated_at": datetime.now().isoformat(),
+                "trace_id": effective_trace_id,
             }
             await asyncio.to_thread(
                 json_path.write_text,
