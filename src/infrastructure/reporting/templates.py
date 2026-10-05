@@ -30,9 +30,9 @@ class HTMLTemplates:
     """HTML模板管理类"""
 
     KNOWN_TEMPLATE_NAMES: ClassVar[dict[str, str]] = {
-        "scrapbook": "手账风格 (Scrapbook / 默认)",
+        "HatsuneMiku": "初音未来 (HatsuneMiku / 默认)",
+        "scrapbook": "手账风格 (Scrapbook)",
         "ATRI": "亚托莉 (ATRI)",
-        "HatsuneMiku": "初音未来 (HatsuneMiku)",
         "spring_festival": "新春佳节 (Spring Festival)",
         "retro_futurism": "复古未来 (Retro Futurism)",
         "hack": "黑客赛博 (Hack)",
@@ -199,10 +199,10 @@ class HTMLTemplates:
                             "can_uninstall": (p / INSTALL_MARKER_FILENAME).is_file(),
                         }
 
-        # 确保默认的 scrapbook 始终位于第一个
+        # 确保默认的 HatsuneMiku 始终位于第一个
         result = []
-        if "scrapbook" in found_themes:
-            result.append(found_themes.pop("scrapbook"))
+        if "HatsuneMiku" in found_themes:
+            result.append(found_themes.pop("HatsuneMiku"))
         result.extend(found_themes.values())
         return result
 
