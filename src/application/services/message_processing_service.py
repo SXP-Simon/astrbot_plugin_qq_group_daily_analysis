@@ -111,6 +111,24 @@ class MessageProcessingService:
         if not platform_id:
             raise ValueError(f"群 {group_id}: 无法获取平台 ID，拒绝存储消息")
 
+        # 检查是否开启“仅对已启用分析的群进行持久化”过滤
+        if (
+            self.config_manager is not None
+            and self.config_manager.get_persist_only_allowed_groups()
+        ):
+            umo = (
+                event.unified_msg_origin
+                if hasattr(event, "unified_msg_origin") and event.unified_msg_origin
+                else f"{platform_id}:GroupMessage:{group_id}"
+            )
+            if not self.config_manager.is_group_allowed(umo):
+                logger.debug(
+                    "[%s] 群 %s 未通过群权限白名单校验且开启了严格持久化过滤，跳过消息存储",
+                    platform_id,
+                    group_id,
+                )
+                return False
+
         # 5. 提取消息内容
         message_parts = self._extract_message_parts(event)
         if not message_parts:
