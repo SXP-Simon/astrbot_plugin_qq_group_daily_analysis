@@ -228,6 +228,19 @@ class ConfigManager:
         """获取最大消息数量"""
         return self._get_group("basic").get("max_messages", 1000)
 
+    def get_local_history_max_messages(self) -> int:
+        """获取本地群消息历史缓存保留上限（单群最大保留条数）。
+
+        Returns:
+            int: 保留上限条数，约束在 10,000 至 100,000 条之间，默认 10,000。
+        """
+        raw = self._get_group("basic").get("local_history_max_messages", 10000)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = 10000
+        return max(10000, min(100000, val))
+
     def get_analysis_days(self) -> int:
         """获取分析天数"""
         return self._get_group("basic").get("analysis_days", 1)
@@ -652,6 +665,17 @@ class ConfigManager:
     def set_max_messages(self, count: int):
         """设置最大消息数量"""
         self._ensure_group("basic")["max_messages"] = count
+        self.config.save_config()
+
+    def set_local_history_max_messages(self, count: int) -> None:
+        """设置本地群消息历史缓存保留上限。
+
+        Args:
+            count: 目标保留条数，约束在 10,000 至 100,000 条之间。
+        """
+        self._ensure_group("basic")["local_history_max_messages"] = max(
+            10000, min(100000, int(count))
+        )
         self.config.save_config()
 
     def set_analysis_days(self, days: int):

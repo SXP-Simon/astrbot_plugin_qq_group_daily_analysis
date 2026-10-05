@@ -28,13 +28,24 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 及 Telegram 无历史拉取接口，只能分析本地库缓存的消息。若需回溯更长时间，请同步调大 AstrBot 的 group_message_history_max_cnt（进入 AstrBot 控制台 -> 设置 -> 找到群消息历史记录设置）。"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 及 Telegram 无历史拉取接口，只能分析本地库缓存的消息。"
             },
             "max_messages": {
                 "type": "int",
                 "description": "单次分析的获取最大消息条数基准",
                 "default": 1000,
                 "hint": "单次分析的获取最大消息条数基准值，如果当天群聊消息过多，已经获取到足够的消息(达到 max_messages)，停止获取，获取到的消息数量是最新一次获取到的超过 max_messages 的消息数量，建议500-2000"
+            },
+            "local_history_max_messages": {
+                "type": "int",
+                "description": "本地群消息历史缓存上限 (条/群)",
+                "default": 10000,
+                "hint": "适用于无法拉取历史记录的平台（Telegram、QQ 官方机器人、Satori 等）。单群最多保留的历史消息条数，超出后自动修剪最旧消息。范围 10,000 ~ 100,000 条。",
+                "slider": {
+                    "min": 10000,
+                    "max": 100000,
+                    "step": 1000
+                }
             },
             "min_messages_threshold": {
                 "type": "int",
