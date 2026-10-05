@@ -28,7 +28,7 @@
                 "type": "int",
                 "description": "默认分析天数",
                 "default": 1,
-                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 无历史拉取接口，只能分析插件启用后实时缓存到 AstrBot 本地库的消息。"
+                "hint": "默认分析最近几天的消息，增量分析也基于此数据保存分析情况。QQ 官方 API 及 Telegram 无历史拉取接口，只能分析本地库缓存的消息。若需回溯更长时间，请同步调大 AstrBot 的 group_message_history_max_cnt（进入 AstrBot 控制台 -> 设置 -> 找到群消息历史记录设置）。"
             },
             "max_messages": {
                 "type": "int",
@@ -98,7 +98,7 @@
                     "deepseek_maid",
                     "format"
                 ],
-                "default": "scrapbook",
+                "default": "HatsuneMiku",
                 "hint": "分析报告使用的HTML模板名称，QQ 端可以使用 `/设置模板` 查看使用指南，使用`/查看模板` 命令查看模板样式效果。其他平台不支持合并转发，可以到 [模板](https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis/tree/main/assets) 文件夹中查看模板样式效果"
             },
             "report_language": {

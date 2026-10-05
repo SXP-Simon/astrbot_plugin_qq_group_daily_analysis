@@ -805,7 +805,7 @@ class ConfigManager:
         val = self._get_group("basic").get("report_template")
         if not val:
             val = self.config.get("report_template")
-        return str(val).strip() if val else "scrapbook"
+        return str(val).strip() if val else "HatsuneMiku"
 
     def set_report_template(self, template_name: str):
         """设置报告模板名称"""
