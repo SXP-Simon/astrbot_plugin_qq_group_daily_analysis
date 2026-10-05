@@ -1,5 +1,16 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.7.6] - 引入进程实例凭证与自愈优先机制彻底解决热重载幽灵对账冲突，BotManager 鉴权多层级规则去重日志与有界缓存
+
+*   **🛡️ 【调度与任务生命周期】引入进程实例凭证（Boot ID）与自愈优先机制，解决热重载幽灵任务误收尸**：
+    *   **热重载与协程存活感知**：针对 AstrBot 插件热重载不杀 Python 进程及正在排队/执行中异步协程的特性，引入不可变常量 `PROCESS_PID` 与 `PROCESS_BOOT_ID` 绑定机制，并在持久化数据中全程记录进程启动凭证。
+    *   **同进程任务免扰保护**：`TaskReaper` 与 `CrashRecoveryService` 在开机对账时引入 `current_boot_id` 过滤，同进程内热重载的活跃分析协程不再被当成“死掉的幽灵任务”误标为 `aborted`，保障长耗时 LLM 思考与排队任务顺畅跑完并正常发图。
+    *   **精准冷启动自愈与收尸时序**：仅在物理断电/强杀冷重启（`boot_id != current_boot_id`）时优先触发 `CrashRecoveryService` 进行断点续跑自愈，超时孤儿任务再由 Reaper 标记回收，并将 Reaper 超时安全阈值调整为 180 秒。
+    *   **数据库增量迁移**：`analysis_traces` 表平滑新增 `pid` 与 `boot_id` 字段并支持自动增量迁移，完善单测与集成验证。
+
+*   **🪵 【日志与鉴权观测优化】BotManager 鉴权多层级规则去重日志与有界 LRU 缓存**：
+    *   **消除高频冗余刷屏**：对 `BotManager` 处理群聊消息时的 4 级鉴权规则判定（单群 Profile / 平台实例配置 / 平台面板设置 / 全局配置文件）引入有界去重缓存（`MAX_AUTH_LOG_CACHE_SIZE = 512`），实现生命周期内仅在首次判定或配置变更时打印单条精简日志。
+
 ## [v5.7.5] - 外置 deepseek_maid 模板图层至 CDN 大幅精简分发体积，使用 git-filter-repo 清理云端仓库
 
 *   **📦 【分发体积优化】外置 deepseek_maid 模板图层至 CDN**：

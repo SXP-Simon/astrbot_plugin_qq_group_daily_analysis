@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from contextvars import ContextVar
 from datetime import datetime
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 #: 简繁判定用的字表 / 词表（OpenCC 生成，见 scripts/gen_zh_variant_tables.py）
+from ..utils.logger import logger
 from .zh_variant_tables import (
     SIMP_SIDE_WORDS,
     TRAD_SIDE_WORDS,
@@ -36,8 +36,6 @@ from .zh_variant_tables import (
     VARIANT_SIMPLIFIED,
     VARIANT_TRADITIONAL,
 )
-
-logger = logging.getLogger(__name__)
 
 #: 默认值：保持历史行为（骨架简体、页面声明跟随渲染环境、LLM 自由发挥）
 AUTO = "auto"
