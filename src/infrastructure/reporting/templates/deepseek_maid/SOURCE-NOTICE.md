@@ -6,7 +6,7 @@
 
 ## 许可范围
 
-本主题的鲸鱼女仆角色图像及其改绘沿用 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)。范围包括 `inline_assets.html` 中的角色 PNG、`assets/deepseek_maid/character-basin-v3.png`，以及预览图和生成报告中的角色部分。分发时须保留署名与来源，遵守非商业性使用和相同方式共享条件。
+本主题的鲸鱼女仆角色图像及其改绘沿用 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)。范围包括 `inline_assets.html` 中的角色 PNG、`assets/deepseek_maid/layers/basin-v3.png`，以及预览图和生成报告中的角色部分。分发时须保留署名与来源，遵守非商业性使用和相同方式共享条件。
 
 模板代码、CSS 和独立绘制的饭碗等图形沿用项目 MIT 许可；上述美术条款不改变仓库其他代码和资源的许可。
 
