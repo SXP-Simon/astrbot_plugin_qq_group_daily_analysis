@@ -14,6 +14,8 @@ const SCOPE_CATEGORIES = {
     application: '应用层完整别名 (同 app)',
     infra: '基础设施层 (平台适配器, 防腐层 ACL, 数据库/存储, LLM 驱动)',
     infrastructure: '基础设施层完整别名 (同 infra)',
+    'infra/storage': '持久化与存储适配器 (src/infrastructure/persistence/)',
+    'infra/db': '数据库与 SQLite 仓储实现别名 (同 infra/storage)',
     'infra/webui': 'Web 控制台后端路由与通信适配 (src/infrastructure/webui/)',
     'infra/routes': '后端 WebAPI 路由处理器别名 (同 infra/webui)',
     'infra/api': '后端 WebAPI 接口协议适配别名 (同 infra/webui)',
@@ -67,7 +69,7 @@ const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.k
 // 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts, docs/release）
 const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs'];
 const ALLOWED_SUBDOMAINS = [
-  'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config',
+  'analysis', 'comic', 'reporting', 'render', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
   'dashboard', 'tasks', 'traces', 'reports', 'charts', 'settings', 'templates', 'logs', 'components', 'common',
   'unit', 'e2e', 'infra', 'mocks', 'github-actions', 'lefthook', 'workflow', 'scripts', 'pipeline', 'pre-commit', 'gate', 'arch', 'release'
@@ -161,6 +163,11 @@ const SCOPE_PATH_RULES = [
     matchScope: (s) => s === 'webui/config',
     matchFile: (f) => f.includes('config') && f.startsWith('dashboard/'),
     name: 'webui/config 配置业务切片 (dashboard/src/**/config*)',
+  },
+  {
+    matchScope: (s) => s === 'infra/storage' || s === 'infra/db' || s === 'storage' || s === 'db',
+    matchFile: (f) => f.startsWith('src/infrastructure/persistence/'),
+    name: 'infra/storage 持久化存储与 SQLite 仓储 (src/infrastructure/persistence/)',
   },
   {
     matchScope: (s) =>
@@ -467,12 +474,42 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
     errors.push(`【字数不足门禁】提交内容去空格后当前仅 ${nonWhitespaceCount} 字，要求不少于 40 字`);
   }
 
+  // 4. 针对过于宽泛的 Scope 给出友好的细粒度优化建议（非阻塞性 Warning）
+  const warnings = [];
+  if (headerMatch) {
+    const rawScope = (headerMatch[2] || '').trim().toLowerCase();
+    if (rawScope === 'dashboard' || rawScope === 'webui' || rawScope === 'frontend') {
+      warnings.push(
+        `[Scope 优化建议] 当前使用的 "${rawScope}" 属于粗粒度全栈 Scope。\n` +
+        `     💡 建议优先使用更准确的 FSD 细粒度业务切片或层级：\n` +
+        `        • 报告模块: webui/reports\n` +
+        `        • 任务看板: webui/tasks\n` +
+        `        • 追踪抽屉: webui/traces\n` +
+        `        • 配置表单: webui/config\n` +
+        `        • 趋势图表: webui/charts\n` +
+        `        • 静态打包产物: build(webui)\n` +
+        `        • 页面/部件/实体分层: webui/pages, webui/widgets, webui/entities, webui/shared`
+      );
+    } else if (rawScope === 'infra' || rawScope === 'infrastructure') {
+      warnings.push(
+        `[Scope 优化建议] 当前使用的 "${rawScope}" 属于粗粒度基础设施 Scope。\n` +
+        `     💡 建议优先使用更精准的后端基础设施子模块：\n` +
+        `        • 存储与数据库: infra/storage (或 infra/db)\n` +
+        `        • 控制台路由适配: infra/webui (或 infra/routes)\n` +
+        `        • 报告渲染引擎: infra/reporting\n` +
+        `        • 定时调度器: infra/scheduler\n` +
+        `        • 多平台协议通信: infra/platform`
+      );
+    }
+  }
+
   return {
     isSkipped: false,
     header,
     commitSha,
     commitAuthor,
     errors,
+    warnings,
   };
 }
 
@@ -580,6 +617,10 @@ function main() {
       printFailureGuide([result]);
       process.exit(1);
     }
+    if (result.warnings && result.warnings.length > 0) {
+      console.warn('\x1b[33m\n⚠️  Scope 粒度提示：\x1b[0m');
+      result.warnings.forEach((w) => console.warn(`\x1b[33m${w}\x1b[0m\n`));
+    }
     console.log('\x1b[32;1m[PASS] Commit 消息文本规范校验通过！\x1b[0m');
     process.exit(0);
   }
@@ -682,6 +723,11 @@ function main() {
   if (result.errors.length > 0) {
     printFailureGuide([result]);
     process.exit(1);
+  }
+
+  if (result.warnings && result.warnings.length > 0) {
+    console.warn('\x1b[33m\n⚠️  Scope 粒度提示：\x1b[0m');
+    result.warnings.forEach((w) => console.warn(`\x1b[33m${w}\x1b[0m\n`));
   }
 
   console.log('\x1b[32;1m[PASS] Git 提交规范校验通过（原子化 Scope + 路径一致性 + 中文三点论 + 40字门禁已达标）\x1b[0m');
