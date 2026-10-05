@@ -1,5 +1,11 @@
 # 更新日志 (CHANGELOG)
 
+## [v5.7.5] - 外置 deepseek_maid 模板图层至 CDN 大幅精简分发体积，使用 git-filter-repo 清理云端仓库
+
+*   **📦 【分发体积优化】外置 deepseek_maid 模板图层至 CDN**：
+    *   **CDN 分发策略**：将 `deepseek_maid` 模板的图层资源全部迁移至 CDN，大幅减少本地分发的体积与带宽消耗。
+    *   **git-filter-repo 清理**：使用 `git-filter-repo` 工具清理云端仓库，移除不必要的历史数据与大文件，生成了体积更小的新 Pack 数据包。其他协作者本地存有旧的分支，在拉取时需执行 `git fetch origin && git reset --hard origin/main`（或直接重新 `git clone` 一份最新仓库）即可无缝同步。
+
 ## [v5.7.4] - HatsuneMiku 初音未来日报模板设置为默认模板、模板交互重塑、新增插件本地消息历史库消息保存上限 (条/群)配置项、查询调优、冗余归档产物方法清除
 
 *   **🎨 【视觉呈现与排版革新】HatsuneMiku 初音未来日报模板设置为默认模板，全面重构与多语言支持 (#254, #256)**：
