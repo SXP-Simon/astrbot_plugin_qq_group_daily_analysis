@@ -27,10 +27,17 @@ export interface TemplateVisualInfo {
 
 export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
   {
+    key: "HatsuneMiku",
+    name: "HatsuneMiku (初音未来 / 默认)",
+    desc: "初音未来葱绿配色与音乐律动设计，支持多语言动态自适应",
+    tag: "默认主题",
+    tagColor: "green",
+  },
+  {
     key: "scrapbook",
-    name: "Scrapbook (默认手账)",
+    name: "Scrapbook (手账风格)",
     desc: "手账贴纸风格，丰富拼贴与涂鸦设计，温馨可爱",
-    tag: "默认手账",
+    tag: "手账贴纸",
     tagColor: "orange",
   },
   {
@@ -116,9 +123,9 @@ export function getTemplateCdnUrl(templateKey: string): string {
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
-  { id: "scrapbook", label: "手账风格 (Scrapbook / 默认)", is_custom: false },
+  { id: "HatsuneMiku", label: "初音未来 (HatsuneMiku / 默认)", is_custom: false },
+  { id: "scrapbook", label: "手账风格 (Scrapbook)", is_custom: false },
   { id: "ATRI", label: "亚托莉 (ATRI)", is_custom: false },
-  { id: "HatsuneMiku", label: "初音未来 (HatsuneMiku)", is_custom: false },
   { id: "spring_festival", label: "新春佳节 (Spring Festival)", is_custom: false },
   { id: "retro_futurism", label: "复古未来 (Retro Futurism)", is_custom: false },
   { id: "hack", label: "黑客赛博 (Hack)", is_custom: false },

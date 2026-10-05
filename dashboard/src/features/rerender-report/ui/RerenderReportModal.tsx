@@ -38,7 +38,7 @@ export const RerenderReportModal: React.FC<RerenderReportModalProps> = ({
     }
     if (open && report) {
       form.setFieldsValue({
-        template_name: "scrapbook",
+        template_name: "HatsuneMiku",
         render_format: report.is_html ? "html" : "image",
       });
     }

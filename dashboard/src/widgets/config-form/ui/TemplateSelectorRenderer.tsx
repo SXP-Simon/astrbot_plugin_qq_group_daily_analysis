@@ -116,7 +116,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       ? value
       : typeof defaultValue === "string" && defaultValue
       ? defaultValue
-      : "scrapbook";
+      : "HatsuneMiku";
 
   // 模板切换/卸载回退后重置预览弹层状态，避免预览残留叠加（如与画廊弹窗同开）
   useEffect(() => {
@@ -232,7 +232,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
           void refreshRemoteTemplates();
           // 若卸载的正是当前选中模板，回退到内置默认，避免表单值指向已删除模板
           if (currentTemplate === name) {
-            onChange("scrapbook");
+            onChange("HatsuneMiku");
           }
         }}
       />
