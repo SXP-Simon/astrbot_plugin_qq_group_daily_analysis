@@ -241,6 +241,17 @@ class ConfigManager:
             val = 10000
         return max(10000, min(100000, val))
 
+    def get_persist_only_allowed_groups(self) -> bool:
+        """获取是否仅对已启用分析的群进行消息持久化。
+
+        Returns:
+            bool: 是否开启仅持久化白名单/允许群，默认 False（全量缓存入库）。
+        """
+        raw = self._get_group("basic").get("persist_only_allowed_groups", False)
+        if isinstance(raw, str):
+            return raw.strip().lower() in ("true", "1", "yes", "on")
+        return bool(raw)
+
     def get_analysis_days(self) -> int:
         """获取分析天数"""
         return self._get_group("basic").get("analysis_days", 1)

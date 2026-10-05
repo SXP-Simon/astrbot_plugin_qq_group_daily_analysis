@@ -38,7 +38,7 @@
             },
             "local_history_max_messages": {
                 "type": "int",
-                "description": "本地群消息历史缓存上限 (条/群)",
+                "description": "插件本地消息历史库消息保存上限 (条/群)",
                 "default": 10000,
                 "hint": "适用于无法拉取历史记录的平台（Telegram、QQ 官方机器人、Satori 等）。单群最多保留的历史消息条数，超出后自动修剪最旧消息。范围 10,000 ~ 100,000 条。",
                 "slider": {
@@ -46,6 +46,12 @@
                     "max": 100000,
                     "step": 1000
                 }
+            },
+            "persist_only_allowed_groups": {
+                "type": "bool",
+                "description": "仅对已启用分析的群进行消息持久化",
+                "default": false,
+                "hint": "开启后，若群组权限模式设置为白名单或黑名单，未通过群权限校验的群聊消息将直接被忽略，不写入本地消息历史库，节省磁盘与数据库资源；默认关闭（即所有启用插件的群均正常缓存消息，方便后续加入白名单时立即可分析历史）。"
             },
             "min_messages_threshold": {
                 "type": "int",
