@@ -12,9 +12,7 @@ import json
 import os
 import re
 import time
-from dataclasses import asdict, is_dataclass
-from datetime import date, datetime
-from enum import Enum
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -649,7 +647,6 @@ class ReportGenerator(IReportGenerator):
                 if not html_path.suffix:
                     html_path = html_path.with_suffix(".html")
 
-            json_path = html_path.with_suffix(".json")
             html_path.parent.mkdir(parents=True, exist_ok=True)
 
             render_data = await self._prepare_render_data(
@@ -704,44 +701,6 @@ class ReportGenerator(IReportGenerator):
                 html_path.write_text, html_content, encoding="utf-8"
             )
             logger.info(f"HTML 报告已保存: {html_path}")
-
-            def json_default_encoder(obj: object) -> object:
-                to_dict_fn = getattr(obj, "to_dict", None)
-                if callable(to_dict_fn):
-                    return to_dict_fn()
-                if is_dataclass(obj) and not isinstance(obj, type):
-                    return asdict(obj)
-                if isinstance(obj, (datetime, date)):
-                    return obj.isoformat()
-                if isinstance(obj, Enum):
-                    return obj.value
-                if isinstance(obj, (set, tuple)):
-                    return list(obj)
-                raise TypeError(
-                    f"Object of type {type(obj).__name__} is not JSON serializable"
-                )
-
-            json_data = {
-                "analysis_result": (
-                    self._sanitize_analysis_result_for_export(analysis_result)
-                    if hide_user_names or allow_alphanumeric_user_ids
-                    else analysis_result
-                ),
-                "group_id": group_id,
-                "generated_at": datetime.now().isoformat(),
-                "trace_id": effective_trace_id,
-            }
-            await asyncio.to_thread(
-                json_path.write_text,
-                json.dumps(
-                    json_data,
-                    ensure_ascii=False,
-                    indent=2,
-                    default=json_default_encoder,
-                ),
-                encoding="utf-8",
-            )
-            logger.info(f"JSON 数据已保存: {json_path}")
 
             trace_ctx = TraceContext.current()
             if trace_ctx:
@@ -799,7 +758,7 @@ class ReportGenerator(IReportGenerator):
                     except Exception:
                         pass
 
-            return str(html_path.absolute()), str(json_path.absolute())
+            return str(html_path.absolute()), None
 
         except Exception as e:
             logger.error(f"生成 HTML 报告失败: {e}", exc_info=True)

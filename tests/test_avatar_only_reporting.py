@@ -629,7 +629,7 @@ def test_qq_official_html_sidecar_uses_identity_sanitizer(tmp_path):
         "summary": f"{openid} 最活跃",
     }
 
-    _, json_path = asyncio.run(
+    html_path, _ = asyncio.run(
         generator.generate_html_report(
             analysis_result,
             "GROUP_OPENID",
@@ -637,9 +637,9 @@ def test_qq_official_html_sidecar_uses_identity_sanitizer(tmp_path):
         )
     )
 
-    assert json_path is not None
-    exported = Path(json_path).read_text(encoding="utf-8")
-    assert openid not in exported
+    assert html_path is not None
+    assert Path(html_path).exists()
+    assert not Path(html_path).with_suffix(".json").exists()
 
 
 def test_avatar_failure_is_cached_briefly_to_avoid_repeated_downloads():
@@ -741,11 +741,8 @@ def test_markdown_report_generator_plain_markdown_nickname_fallback():
         },
     }
     plain_report, _ = asyncio.run(
-        generator.generate_markdown_report(
-            analysis_result, mention_style="name"
-        )
+        generator.generate_markdown_report(analysis_result, mention_style="name")
     )
     assert "# 🎯 群聊日常分析报告" in plain_report
     assert "## 📊 基础统计" in plain_report
     assert "<@" not in plain_report  # 确保无 QQ 官方真提及标签，采用昵称/纯文本模式
-

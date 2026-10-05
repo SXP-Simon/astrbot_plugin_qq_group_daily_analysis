@@ -7,7 +7,6 @@ generators.generate_html_report 里「有追踪 ID 就用固定命名」的分�
 """
 
 import asyncio
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -72,9 +71,8 @@ def test_filename_format_applies_when_trace_context_active(tmp_path):
     _, (html_path, json_path) = run_html_report(generator)
 
     assert html_path is not None
-    assert json_path is not None
+    assert json_path is None
     assert Path(html_path).parent == tmp_path / "344184506"
-    assert Path(json_path).parent == tmp_path / "344184506"
     assert Path(html_path).name.endswith(".html")
     assert "report_344184506_" not in Path(html_path).name
 
@@ -108,9 +106,9 @@ def test_custom_filename_still_has_highest_priority(tmp_path):
     )
 
     assert html_path is not None
-    assert json_path is not None
+    assert json_path is None
     assert Path(html_path) == tmp_path / "report_344184506_20261005_rerender.html"
-    assert Path(json_path) == tmp_path / "report_344184506_20261005_rerender.json"
+    assert not (tmp_path / "report_344184506_20261005_rerender.json").exists()
 
 
 def test_path_traversal_protection_still_blocks_unsafe_format(tmp_path):
@@ -132,15 +130,12 @@ def test_html_artifact_embeds_trace_id_meta(tmp_path):
     trace, (html_path, json_path) = run_html_report(generator)
 
     assert html_path is not None
-    assert json_path is not None
+    assert json_path is None
     content = Path(html_path).read_text(encoding="utf-8")
     assert f'<meta name="astrbot-trace-id" content="{trace.trace_id}">' in content
     assert content.count("astrbot-trace-id") == 1
     assert content.startswith("<!DOCTYPE html>")
     assert "<title>群聊日常分析看板</title>" in content
-
-    exported = json.loads(Path(json_path).read_text(encoding="utf-8"))
-    assert exported["trace_id"] == trace.trace_id
 
 
 def test_trace_id_meta_skipped_when_template_has_no_head(tmp_path):
