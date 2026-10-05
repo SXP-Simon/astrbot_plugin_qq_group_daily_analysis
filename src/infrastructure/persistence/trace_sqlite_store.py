@@ -105,8 +105,22 @@ class TraceSQLiteStore:
 
                 CREATE INDEX IF NOT EXISTS idx_traces_started_at ON analysis_traces(started_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_traces_group_id ON analysis_traces(group_id);
+                CREATE INDEX IF NOT EXISTS idx_traces_group_started ON analysis_traces(group_id, started_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_traces_status ON analysis_traces(status);
                 CREATE INDEX IF NOT EXISTS idx_spans_trace_id ON trace_spans(trace_id);
+
+                CREATE TABLE IF NOT EXISTS report_artifacts (
+                    filename TEXT PRIMARY KEY,
+                    trace_id TEXT DEFAULT '',
+                    group_id TEXT NOT NULL,
+                    file_format TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON report_artifacts(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_group_created ON report_artifacts(group_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_artifacts_trace_id ON report_artifacts(trace_id);
                 """
             )
             # 兼容性防御迁移：确保 performance_metrics 表若从早期版本升级拥有 metrics_json 字段
@@ -121,6 +135,38 @@ class TraceSQLiteStore:
                     conn.execute(
                         "ALTER TABLE performance_metrics ADD COLUMN metrics_json TEXT DEFAULT '{}';"
                     )
+            except Exception:
+                pass
+
+            # 兼容性平滑迁移：将旧 extra_json 中的 report_files 数据一次性导入 report_artifacts 表
+            try:
+                artifact_count = conn.execute(
+                    "SELECT COUNT(*) FROM report_artifacts"
+                ).fetchone()[0]
+                if artifact_count == 0:
+                    rows = conn.execute(
+                        "SELECT trace_id, group_id, started_at, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%'"
+                    ).fetchall()
+                    for r in rows:
+                        t_id = str(r["trace_id"] or "")
+                        g_id = str(r["group_id"] or "")
+                        c_at = float(r["started_at"] or time.time())
+                        extra_obj = json.loads(r["extra_json"] or "{}")
+                        for rf in extra_obj.get("report_files", []):
+                            if isinstance(rf, dict) and rf.get("filename"):
+                                fn = str(rf["filename"])
+                                fmt = str(
+                                    rf.get("format")
+                                    or ("html" if fn.endswith(".html") else "image")
+                                )
+                                conn.execute(
+                                    """
+                                    INSERT OR IGNORE INTO report_artifacts (
+                                        filename, trace_id, group_id, file_format, relative_path, created_at
+                                    ) VALUES (?, ?, ?, ?, ?, ?)
+                                    """,
+                                    (fn, t_id, g_id, fmt, fn, c_at),
+                                )
             except Exception:
                 pass
 
@@ -341,6 +387,28 @@ class TraceSQLiteStore:
                     ),
                 )
 
+            # 6. 同步写入结构化产物关联表 report_artifacts
+            raw_rfiles = extra_payload.get("report_files")
+            if isinstance(raw_rfiles, list):
+                grp_id = str(trace_dict.get("group_id", ""))
+                now_ts = float(started_val) if started_val else time.time()
+                for rf in raw_rfiles:
+                    if isinstance(rf, dict) and rf.get("filename"):
+                        fn = str(rf["filename"])
+                        fmt = str(
+                            rf.get("format")
+                            or ("html" if fn.endswith(".html") else "image")
+                        )
+                        rel_path = str(rf.get("path") or fn)
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO report_artifacts (
+                                filename, trace_id, group_id, file_format, relative_path, created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (fn, trace_id, grp_id, fmt, rel_path, now_ts),
+                        )
+
     def get_trace(self, trace_id: str) -> dict[str, object] | None:
         """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
         with self._get_connection() as conn:
@@ -463,23 +531,83 @@ class TraceSQLiteStore:
             return trace_data
 
     def get_report_trace_map(self) -> dict[str, str]:
-        """获取已生成的报告文件名与 trace_id 的双向映射"""
+        """获取已生成的报告文件名与 trace_id 的双向映射（优先走结构化表索引）"""
         mapping: dict[str, str] = {}
         with self._get_connection() as conn:
+            # 优先从结构化产物表拉取（毫秒级 B-Tree 索引）
             rows = conn.execute(
-                "SELECT trace_id, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%'"
+                "SELECT filename, trace_id FROM report_artifacts WHERE trace_id != ''"
             ).fetchall()
             for r in rows:
+                fn = str(r["filename"])
                 t_id = str(r["trace_id"])
-                try:
-                    extra = json.loads(r["extra_json"] or "{}")
-                    for rf in extra.get("report_files", []):
-                        fn = rf.get("filename")
-                        if fn:
-                            mapping[fn] = t_id
-                except Exception:
-                    pass
+                if fn and t_id:
+                    mapping[fn] = t_id
+
+            # 若新表为空（冷启动未迁移），回退兼容旧 extra_json
+            if not mapping:
+                old_rows = conn.execute(
+                    "SELECT trace_id, extra_json FROM analysis_traces WHERE extra_json LIKE '%report_files%' ORDER BY started_at DESC LIMIT 500"
+                ).fetchall()
+                for r in old_rows:
+                    t_id = str(r["trace_id"])
+                    try:
+                        extra = json.loads(r["extra_json"] or "{}")
+                        for rf in extra.get("report_files", []):
+                            fn = rf.get("filename")
+                            if fn:
+                                mapping[fn] = t_id
+                    except Exception:
+                        pass
         return mapping
+
+    def query_report_artifacts(
+        self,
+        group_id: str | None = None,
+        limit: int = 150,
+        offset: int = 0,
+    ) -> list[dict[str, object]]:
+        """从数据库高效分页拉取历史报告产物（纯索引有序扫描）"""
+        with self._get_connection() as conn:
+            if group_id:
+                query = """
+                    SELECT filename, trace_id, group_id, file_format, relative_path, created_at
+                    FROM report_artifacts
+                    WHERE group_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """
+                rows = conn.execute(query, (group_id, limit, offset)).fetchall()
+            else:
+                query = """
+                    SELECT filename, trace_id, group_id, file_format, relative_path, created_at
+                    FROM report_artifacts
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """
+                rows = conn.execute(query, (limit, offset)).fetchall()
+
+            return [dict(r) for r in rows]
+
+    def register_report_artifact(
+        self,
+        filename: str,
+        group_id: str,
+        file_format: str,
+        relative_path: str,
+        created_at: float,
+        trace_id: str = "",
+    ) -> None:
+        """登记或更新单个产物文件索引（用于自愈或后台同步）"""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO report_artifacts (
+                    filename, trace_id, group_id, file_format, relative_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (filename, trace_id, group_id, file_format, relative_path, created_at),
+            )
 
     def get_crashed_traces_on_startup(self) -> list[dict[str, object]]:
         """获取开机前因系统异常终止而遗留的 running 任务列表。"""
