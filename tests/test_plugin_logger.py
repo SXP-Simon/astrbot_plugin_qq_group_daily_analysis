@@ -39,18 +39,14 @@ def test_plugin_logger_records_business_call_site(monkeypatch):
     assert f"[test_plugin_logger.py:{expected_line}]" in latest["raw"]
 
 
-def test_plugin_log_buffer_emit_extracts_location():
+def test_plugin_log_buffer_record_log_extracts_location():
     buf = PluginLogBuffer()
-    record = logging.LogRecord(
-        name="astrbot_plugin_qq_group_daily_analysis.test",
-        level=logging.INFO,
-        pathname="c:/path/to/some_service.py",
-        lineno=42,
+    buf.record_log(
+        level="INFO",
         msg="测试消息",
-        args=(),
-        exc_info=None,
+        logger_name="test",
+        location="some_service.py:42",
     )
-    buf.emit(record)
     items, total = buf.query(limit=10)
     assert total == 1
     assert items[0]["location"] == "some_service.py:42"

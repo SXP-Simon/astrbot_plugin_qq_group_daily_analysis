@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 import time
 from collections import deque
@@ -36,10 +35,8 @@ class PluginLogEntry:
         return asdict(self)
 
 
-class PluginLogBuffer(logging.Handler):
-    """
-    专用插件日志处理器，挂载到 logging 捕获群分析插件全链路日志
-    """
+class PluginLogBuffer:
+    """专用插件日志处理器，捕获群分析插件全链路日志并提供内存环形队列缓冲"""
 
     TAG_PATTERNS: ClassVar[list[tuple[str, str, re.Pattern[str]]]] = [
         (
@@ -202,40 +199,6 @@ class PluginLogBuffer(logging.Handler):
                 pass
 
         return entry
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = record.getMessage()
-            logger_name = record.name
-
-            # 仅捕获群分析插件内部日志或带标识日志
-            is_plugin_log = (
-                "astrbot_plugin_qq_group_daily_analysis" in logger_name
-                or "daily_analysis" in logger_name
-                or "[群分析插件]" in msg
-                or hasattr(record, "trace_id")
-            )
-            if not is_plugin_log:
-                return
-
-            trace_id = getattr(record, "trace_id", None)
-            location = None
-            if record.pathname and record.lineno:
-                import os
-
-                location = f"{os.path.basename(record.pathname)}:{record.lineno}"
-
-            self.record_log(
-                level=record.levelname,
-                msg=msg,
-                trace_id=trace_id,
-                logger_name=logger_name.split(".")[-1]
-                if "." in logger_name
-                else logger_name,
-                location=location,
-            )
-        except Exception:
-            self.handleError(record)
 
     def query(
         self,
