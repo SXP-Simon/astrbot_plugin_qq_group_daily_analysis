@@ -1,6 +1,20 @@
 # 更新日志 (CHANGELOG)
 
-## [v5.7.7] - 代码质量修复
+## [v5.7.8] - 新增圣母在上 (Maria / 山百合会) 古典日报模板、省察窗双角色互动彩蛋与专属分析人格指南
+
+<a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg"><img src="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria-demo.jpg" alt="圣母在上 (Maria · 山百合会) 报告示例" height="520"></a>
+<p><code>maria</code> · <a href="https://cdn.jsdmirror.com/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria/persona.md">专属人格与提示词配置指南</a></p>
+
+*   **🌹 【视觉呈现与全新主题】新增「圣母在上 (Maria · 山百合会)」古典学园日报模板 (#257)**：
+    *   **古典学院与新艺术运动美学**：全新上线 `maria` 报告模板，融入羊皮纸信札质感、红黄白三色蔷薇花语切片、烫金饰边与穆夏式同心复合圣光光环，支持长图渲染（T2I）与独立交互网页报告（HTML）双模式。
+    *   **省察窗双角色互动彩蛋**：在群聊质感评定模块构建「窓辺の静かな省察 / 黄薔薇の戯れ」双图层互动彩蛋，支持在静思（`sei_window_observation.png`）与打趣私语（「捕まえた、祐巳ちゃん」/ `yumi_and_sei.png`）之间丝滑交叉淡入过渡，并附带浮动花瓣与微光微粒。
+    *   **全篇插画与卡片高亮动效**：为顶部圣母像拱门、四大指标卡蔷薇徽标、学园寄语姐妹肖像、成员称号暗纹立绘及底部黄蔷薇家族账单插图赋予平滑的暖金景深光晕与悬浮交互（`cubic-bezier(0.16, 1, 0.3, 1)`）。
+    *   **图层外置与 CDN 镜像分发**：在 `.gitattributes` 中配置 `assets/maria/` 忽略打包以控制分发体积，在渲染数据准备器中接入 `DEFAULT_MARIA_ASSETS_CDN_URL` 并在离线时自动回退为本地素材。
+    *   **Web 控制台画廊与配置注册**：在 Web 控制台模板模型 (`entities/report`) 与画廊中注册 `maria` 主题的视觉信息与标签，并在 `_conf_schema.json` 中同步注册选项。
+    *   **专属人格与提示词配置指南**：新增 `assets/maria/persona.md`，提供开箱即用的山百合会专属人格 (System Prompt) 及全套分析提示词模板（话题学园日志、蔷薇礼赞称号、闪耀金句与晚祷省察），使生成文风与古典视觉高度统一。
+    *   **自动化测试与安全防护**：新增 `tests/test_maria_template.py`，覆盖模板注册、隐私脱敏（`hide_user_names` 纯头像模式）、XSS 转义与静态素材完整性。
+
+## [v5.7.7] - 代码质量修复，同步 TraceContext 与 PluginLogger 日志架构文档
 
 ## [v5.7.6] - 引入进程实例凭证与自愈优先机制彻底解决热重载幽灵对账冲突，BotManager 鉴权多层级规则去重日志与有界缓存
 
