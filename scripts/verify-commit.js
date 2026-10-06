@@ -388,7 +388,7 @@ const SCOPE_PATH_RULES = [
     name: 'deps 依赖文件 (package.json, pnpm-lock.yaml, pyproject.toml, uv.lock)',
   },
   {
-    matchScope: (s) => s === 'docs',
+    matchScope: (s) => s === 'docs' || s.startsWith('docs/') || s === 'arch',
     matchFile: (f) => f.startsWith('docs/') || f.endsWith('.md') || f === 'metadata.yaml',
     name: 'docs 文档 (docs/, *.md, metadata.yaml)',
   },
