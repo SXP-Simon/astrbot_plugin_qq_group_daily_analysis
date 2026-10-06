@@ -1,457 +1,152 @@
-﻿# TraceID 日志增强指南 + AstrBot 日志查看
+# 日志与链路追踪 (TraceContext) 架构与使用指南
 
-> **核心观点**：`contextvars + logging.Filter` 方案是对 AstrBot logger 的增强，不是替换。日志仍通过 AstrBot 输出，只是自动注入 trace_id。
+> **核心设计理念**：基于 **透明代理模式 (PluginLogger)** + **轻量上下文变量 (TraceContext)**，在严格遵守 AstrBot 插件市场规范（**仅从 `astrbot.api` 导入 `logger`，完全不依赖 Python 内置 `logging` 模块**）的前提下，实现全链路 TraceID 自动注入、调用栈精准回溯、内存环形缓冲 (PluginLogBuffer) 与插件 WebUI 控制台 SSE 实时推流。
 
 ---
 
 ## 🔍 日志查看入口（三种方式）
 
-### 1️⃣ 控制台输出（最简单，开发环境推荐）
+### 1️⃣ 插件 WebUI 控制台（最直观，推荐）
 
-**启动 AstrBot 后，直接在终端看日志**
+访问 AstrBot WebUI 插件专属控制台：
+```
+http://localhost:6185/#/plugin-page/astrbot_plugin_qq_group_daily_analysis
+→ 点击「运行日志」标签页
+```
+
+**特性**：
+- ✅ **实时推流**：基于 SSE (Server-Sent Events) 长连接秒级同步，支持「实时自动刷新」开关
+- ✅ **链路追踪关联**：点击任意日志条目的 `[TraceID]` 标签，可一键过滤全链路生命周期
+- ✅ **多维过滤**：支持关键词全文检索、日志级别 (DEBUG/INFO/WARN/ERROR) 与功能分类筛选
+- ✅ **快捷操作**：支持单键复制过滤后日志与清空视图
+
+### 2️⃣ 终端控制台（开发调试推荐）
+
+直接启动 AstrBot 即可在终端查看彩色结构化输出：
 
 ```bash
-python main.py
+uv run main.py
 
 # 输出示例：
-[10:30:45] [Plug] [INFO ] [group_daily:45]: [123456789-1707292800] 开始分析群
-[10:30:46] [Plug] [INFO ] [group_daily:46]: [123456789-1707292800] 获取 256 条消息
-[10:30:47] [Plug] [INFO ] [group_daily:47]: [123456789-1707292800] 话题分析完成
-[10:30:48] [Plug] [ERROR] [group_daily:50]: [123456789-1707292800] LLM 超时
-                                            ↑
-                                      TraceID（自动注入）
+[10:30:45] [Core] [INFO] [astrbot_plugin_qq_group_daily_analysis.main:205]: [群分析插件] 插件初始化完成
+[10:30:46] [astrbot_plugin_qq_group_daily_analysis] [INFO] [topic_analysis_service:88]: [c478a610] [群分析插件] 话题聚合完成: 共 12 个话题
+[10:30:48] [astrbot_plugin_qq_group_daily_analysis] [ERRO] [llm_client:120]: [c478a610] [群分析插件] LLM 调用超时，准备重试
+                                                                             ↑
+                                                                       TraceID (自动注入)
 ```
 
-**优点**：
-- ✅ 零配置，启动即可看
-- ✅ 实时显示，彩色输出
-- ✅ 容易识别错误
+### 3️⃣ 日志文件（生产持久化归档）
 
-### 2️⃣ 日志文件（生产环境标配）
-
-**在 `astrbot_config.yml` 中启用文件日志**
-
-```yaml
-log_file_enable: true
-log_file_path: "logs/astrbot.log"    # 日志文件路径
-log_file_max_mb: 20                  # 文件大小限制（轮转）
-```
-
-**查看方式**
+AstrBot 主程序运行日志保存于 `data/logs/astrbot.log`，所有插件日志均统一汇聚在此：
 
 ```bash
-# Linux/Mac 实时查看
-tail -f logs/astrbot.log
+# Linux/macOS 实时查看
+tail -f data/logs/astrbot.log
 
-# Windows PowerShell 实时查看
-Get-Content -Path logs/astrbot.log -Wait
+# PowerShell 实时查看
+Get-Content -Path data/logs/astrbot.log -Wait
 
-# 搜索特定群的所有日志
-grep "123456789" logs/astrbot.log
-
-# 查看最后 100 行
-tail -100 logs/astrbot.log
+# 检索特定群或 TraceID 的日志
+grep "c478a610" data/logs/astrbot.log
 ```
-
-**优点**：
-- ✅ 永久保存
-- ✅ 支持搜索和分析
-- ✅ 生产环境必须
-
-### 3️⃣ AstrBot Dashboard（最舒服，Web 界面）
-
-**方式 A：AstrBot 内置 Dashboard（如果启用了）**
-
-```
-访问：http://localhost:8000
-→ 日志 / Logs 菜单
-→ 可看实时日志流
-```
-
-**方式 B：Astrbot-dashboard 独立工具**
-
-```bash
-# 安装独立的 dashboard 包
-pip install astrbot-dashboard
-
-# 启动（连接本地 AstrBot）
-astrbot-dashboard
-
-# 浏览器打开
-# http://localhost:6185/#/console
-```
-
-**优点**：
-- ✅ Web 界面直观
-- ✅ 实时流式显示
-- ✅ 支持过滤和搜索
 
 ---
 
-## ✅ 为什么使用 contextvars + logging.Filter？
-
-### 核心原因：**自动 TraceID 注入**
+## 🏗️ 插件日志系统架构
 
 ```
-现状问题：                          使用 contextvars 后：
-────────────────────────────────────────────────────
-logger.info("开始")                logger.info("开始")
-logger.info("获取消息")     →      logger.info("获取消息")
-logger.error("超时")               logger.error("超时")
-
-输出：                              输出：
-[INFO] 开始                        [trace_id:123] [INFO] 开始
-[INFO] 获取消息                    [trace_id:123] [INFO] 获取消息
-[ERROR] 超时                       [trace_id:123] [ERROR] 超时
-
-❌ 100 个群并发时看不出            ✅ 清晰看出所有日志属于
-谁的日志在哪里                     同一个分析任务！
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     插件代码 (Plugin Codebase)                          │
+│                                                                         │
+│   with TraceContext(trace_id="c478a610"):                               │
+│       logger.info("开始生成日报")                                       │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│             src.utils.logger.PluginLogger (统一代理层)                  │
+│                                                                         │
+│  1. 自动从 TraceContext 获取当前协程的 trace_id                         │
+│  2. 格式化前缀: "[trace_id] [群分析插件] 消息"                          │
+│  3. 调用栈回溯: 精准获取实际调用方代码位置 (如 topic_service.py:45)      │
+└───────────────────┬─────────────────────────────────┬───────────────────┘
+                    │                                 │
+                    ▼                                 ▼
+┌──────────────────────────────────────┐  ┌───────────────────────────────┐
+│     astrbot.api.logger (宿主通道)    │  │ PluginLogBuffer (插件环形队列)│
+│                                      │  │                               │
+│  - 控制台格式化与标准输出 (stdout)   │  │  - 纯 Python 内存环形缓冲区    │
+│  - 宿主主日志文件写入 (data/logs/)   │  │  - maxlen=500 自动 FIFO 淘汰   │
+│  - AstrBot 全局 Dashboard 日志广播   │  │  - 订阅者队列 (Subscriber)     │
+└──────────────────────────────────────┘  └───────────────┬───────────────┘
+                                                          │
+                                                          ▼ SSE 实时推送
+                                          ┌───────────────────────────────┐
+                                          │ 插件控制台「运行日志」WebUI    │
+                                          └───────────────────────────────┘
 ```
 
-### 有没有利用 AstrBot 现有日志？
+---
 
-**完全利用了！** 这是在 AstrBot logger 上添加一层装饰器：
+## 💻 插件开发中如何使用
 
-```
-你的代码: logger.info("message")
-        ↓
-    [TraceIDFilter]（新增）← 自动注入 trace_id
-        ↓
-    [AstrBot Logger]（已有）
-        ├─ ColoredFormatter
-        ├─ StreamHandler（控制台）
-        └─ RotatingFileHandler（文件）
-```
+### 1. 常规日志输出
 
-### 代码实现（简化版）
+在插件内部任何模块中，直接从 `src.utils.logger` 导入 `logger` 即可：
 
 ```python
-# src/utils/trace.py
-import contextvars
-import logging
-from astrbot.api import logger
+from src.utils.logger import logger
 
-# 全局 ContextVar
-_trace_id: contextvars.ContextVar[str] = contextvars.ContextVar('trace_id', default='')
+logger.debug("调试数据: payload=%s", payload)
+logger.info("群配置已更新: group_id=%s", group_id)
+logger.warning("发现网络波动，准备重试: attempt=2")
+logger.error("生成群日报失败: %s", exc)
+```
 
-# 自定义 Filter
-class TraceIDFilter(logging.Filter):
-    def filter(self, record):
-        record.trace_id = _trace_id.get('') or 'no-trace'
-        return True
+> **注意**：禁止直接使用 `import logging` 或 `logging.getLogger()`。统一使用 `src.utils.logger.logger` 以确保日志能被 WebUI 捕获并携带统一前缀。
 
-# 注册到 AstrBot logger（在插件初始化时）
-logger.addFilter(TraceIDFilter())
+### 2. 注入与管理 TraceID（链路追踪）
 
-# 使用（在分析开始处）
-async def analyze_group(group_id: str):
-    import time
+使用 `TraceContext` 上下文管理器，在其范围内的所有日志、异步协程与子任务调用都将**自动携带相同的 TraceID**：
+
+```python
+from src.shared.trace_context import TraceContext
+from src.utils.logger import logger
+
+async def run_daily_analysis(group_id: str):
+    # 生成或指定 8 位短 TraceID / ULID
+    trace_id = "c478a610"
     
-    # 设置 trace_id
-    _trace_id.set(f"{group_id}-{int(time.time())}")
-    
-    try:
-        logger.info("开始分析")  # 自动包含 trace_id
-        # ... 分析逻辑
-    finally:
-        _trace_id.set('')  # 清理
+    with TraceContext(trace_id=trace_id):
+        logger.info("开始群分析任务")        # 输出: [c478a610] [群分析插件] 开始群分析任务
+        await step_fetch_messages(group_id) # 子调用中 logger 输出同样自动携带 [c478a610]
+        await step_generate_report()       # 无需在每个函数中显式传递 trace_id 参数
+        logger.info("群分析任务完成")        # 输出: [c478a610] [群分析插件] 群分析任务完成
 ```
 
-### 输出效果
+### 3. 上下文透传与多协程边界
 
-```bash
-$ tail -f logs/astrbot.log | grep trace_id
-
-[123456789-1707292800] [10:30:45] [Plug] [INFO ] [group_daily:45]: 开始分析群
-[123456789-1707292800] [10:30:46] [Plug] [INFO ] [group_daily:46]: 获取 256 条消息
-[123456789-1707292800] [10:30:47] [Plug] [INFO ] [group_daily:47]: 话题分析完成
-[123456789-1707292800] [10:30:48] [Plug] [ERROR] [group_daily:50]: LLM 超时
-```
-
----
-
-## 🏗️ 架构流程图
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    AstrBot 应用                              │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  核心组件/插件                                                │
-│  │                                                            │
-│  ├─→ logger.info("message")                                 │
-│      └─→ logger.error("error")                              │
-│                                                               │
-│          ▼                                                    │
-│  ┌──────────────────────────────────────┐                   │
-│  │  LogQueueHandler (日志处理器)        │                   │
-│  │  接收 logging.LogRecord              │                   │
-│  └──────────────────────────────────────┘                   │
-│          ▼                                                    │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         LogBroker (日志代理)                          │   │
-│  │  - log_cache: deque(maxlen=500)  [环形缓冲区]       │   │
-│  │  - subscribers: List[Queue]      [订阅者队列]       │   │
-│  │                                                       │   │
-│  │  publish(log_entry):                                │   │
-│  │    1. 添加到 log_cache                             │   │
-│  │    2. 分发给所有 subscribers                       │   │
-│  └──────────────────────────────────────────────────────┘   │
-│          │                                                    │
-│          ├──────────────────┬─────────────────────────────┐  │
-│          ▼                  ▼                             ▼  │
-│   ┌─────────────┐  ┌───────────────┐    ┌──────────────┐   │
-│   │ Dashboard   │  │ Trace Logger  │    │ 其他订阅者   │   │
-│   │ SSE 连接    │  │ (可选)        │    │ (可选)       │   │
-│   │ (实时推送)  │  │ (文件/内存)   │    │              │   │
-│   └─────────────┘  └───────────────┘    └──────────────┘   │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 数据输出                                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│ 1. Dashboard UI (/:console)                                 │
-│    - 实时日志显示                                            │
-│    - 级别过滤                                               │
-│                                                               │
-│ 2. 日志文件 (可选)                                           │
-│    - data/logs/astrbot.log                                 │
-│    - data/logs/astrbot.trace.log                           │
-│                                                               │
-│ 3. 浏览器 Memory                                            │
-│    - SSE 缓存 (断网重连补发)                               │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📁 文件位置速查
-
-| 类型 | 位置 | 启用方式 |
-|------|------|--------|
-| **普通日志** | `data/logs/astrbot.log` | `log_file_enable: true` |
-| **Trace 日志** | `data/logs/astrbot.trace.log` | `trace_log_enable: true` |
-| **配置文件** | `data/cmd_config.json` | 直接编辑 |
-| **数据目录** | `data/` | 环境变量 `ASTRBOT_ROOT` |
-
----
-
-## 🔧 配置项清单
-
-### 日志配置（最常用）
-
-```json
-{
-  "log_level": "INFO",                           // DEBUG|INFO|WARNING|ERROR|CRITICAL
-  "log_file_enable": false,                      // 启用文件日志
-  "log_file_path": "logs/astrbot.log",          // 相对于 data/ 目录
-  "log_file_max_mb": 20,                         // 单个文件最大大小
-  
-  "trace_enable": false,                         // 启用 Trace 记录
-  "trace_log_enable": false,                     // 启用 Trace 文件日志
-  "trace_log_path": "logs/astrbot.trace.log",   // Trace 文件位置
-  "trace_log_max_mb": 20
-}
-```
-
----
-
-## 💻 代码使用速查
-
-### 记录日志（最常用）
+`TraceContext` 基于 Python 标准 `contextvars.ContextVar` 实现，天生支持 `asyncio` 协程环境隔离。
+在创建后台并发任务时，`asyncio.create_task` 会自动继承当前上下文变量：
 
 ```python
-from astrbot.core import logger
-
-logger.debug("Debug message")
-logger.info("Info message")
-logger.warning("Warning message")
-logger.error("Error message")
-logger.critical("Critical error")
-```
-
-### Trace 追踪（链路追踪）
-
-```python
-from astrbot.core.utils.trace import TraceSpan
-
-span = TraceSpan(
-    name="operation_name",
-    sender_name="ComponentA",
-    message_outline="Brief description"
-)
-
-span.record("stage1", key1="value1")
-span.record("stage2", key2="value2")
-```
-
-### 订阅日志流（高级）
-
-```python
-import asyncio
-
-async def listen_logs(log_broker):
-    queue = log_broker.register()
-    try:
-        while True:
-            log_entry = await queue.get()
-            print(f"{log_entry['level']}: {log_entry['data']}")
-    finally:
-        log_broker.unregister(queue)
+# 父协程
+with TraceContext("task-1001"):
+    # 子协程 task 将自动继承 "task-1001"
+    asyncio.create_task(background_work())
 ```
 
 ---
 
-## 🚀 常见操作
+## 🛡️ 上架合规与性能设计
 
-### ❓ 如何启用文件日志？
-
-1. 打开 `data/cmd_config.json`
-2. 修改：
-   ```json
-   "log_file_enable": true,
-   "log_file_path": "logs/astrbot.log"
-   ```
-3. 重启应用
-
-### ❓ 如何查看特定群的日志？
-
-```bash
-# 方式 1: Dashboard 中搜索 group_id
-http://localhost:6185/#/console
-
-# 方式 2: 命令行查询
-grep "QQGroup:123456789" data/logs/astrbot.log
-```
-
-### ❓ 如何用 span_id 追踪完整请求？
-
-```bash
-# Trace 日志包含 span_id，可追踪单个请求的全生命周期
-grep "span_id.*abc-123-def" data/logs/astrbot.trace.log
-
-# 或在 Dashboard 的 /trace 页面实时查看
-```
-
-### ❓ 日志缓存大小是多少？
-
-- **内存缓存**: 最近 500 条日志（deque with maxlen=500）
-- **Dashboard 前端缓存**: 最近 1000 条日志
-- **文件日志**: 单个文件 20MB，自动轮转（3 个备份）
-
-### ❓ 日志是否会自动删除？
-
-- **内存缓存**: 自动淘汰（先进先出，保持最近 500 条）
-- **文件日志**: 不自动删除，需手动管理或配置轮转
-- **Dashboard 前端**: 页面关闭后清空
+1. **零内置 logging 依赖**：
+   - 彻底废弃早期设计中的 `logging.Filter` 与 `logging.Handler` 继承，插件运行时 100% 仅依赖 `astrbot.api.logger`，完全符合 AstrBot 市场安全审查。
+2. **有界内存与零内存泄露**：
+   - `PluginLogBuffer` 严格限定最大容量（默认 500 条），新日志推入时超限记录自动从队首逐出，绝不占用多余内存。
+3. **鉴权日志去重缓存 (FIFO)**：
+   - `BotManager` 鉴权针对高频消息判定采用 LRU/FIFO 去重，同一群组与规则仅在状态变更或首次判定时记录 1 次 DEBUG 日志，杜绝高并发消息刷屏。
 
 ---
 
-## 📊 日志格式示例
-
-### Console 日志输出
-
-```
-[12:34:56] [Core] [INFO] [astrbot.py:123]: Application started successfully
-[12:34:57] [Plug] [WARN] [plugin.py:45]: Missing dependency: requests
-[12:35:00] [Core] [ERRO] [error.py:78]: Connection timeout to server [v4.14.4]
-```
-
-格式：`[时间] [来源] [级别] [文件:行号]: 消息`
-
-### Trace JSON 日志
-
-```json
-[2024-01-01 12:34:56] {"type":"trace","span_id":"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx","name":"group_analysis","sender_name":"QQGroup:123456789","action":"start","fields":{"group_id":"123456789","step":"initialization"}}
-```
-
----
-
-## 🎨 日志级别和颜色
-
-| 级别 | 缩写 | 颜色 | 含义 |
-|------|------|------|------|
-| DEBUG | DBUG | 🟢 绿色 | 调试信息 |
-| INFO | INFO | 🔵 青色 | 一般信息 |
-| WARNING | WARN | 🟡 黄色 | 警告信息 |
-| ERROR | ERRO | 🔴 红色 | 错误信息 |
-| CRITICAL | CRIT | 🟣 紫色 | 严重错误 |
-
----
-
-## 📈 性能指标
-
-| 项目 | 值 | 说明 |
-|------|-----|------|
-| 日志缓存大小 | 500 条 | 环形缓冲区 |
-| Dashboard 前端缓存 | 1000 条 | 浏览器内存 |
-| SSE 队列大小 | 510 条 | maxsize = CACHED_SIZE + 10 |
-| 日志文件大小 | 20MB | 单个文件，可配置 |
-| 备份文件数 | 3 个 | 自动轮转 |
-| SSE 连接超时 | None | 永不超时 |
-
----
-
-## 🔐 安全相关
-
-### 日志中的敏感信息
-
-```python
-# ❌ 不要直接记录密钥
-logger.info(f"API key: {api_key}")
-
-# ✅ 使用脱敏
-logger.info(f"API key: {api_key[:8]}...")
-
-# ✅ 或使用占位符
-logger.info(f"Using API key: ***")
-```
-
-### Dashboard 访问认证
-
-- 默认用户名：`astrbot`
-- 默认密码：（MD5 哈希，需在配置中修改）
-- JWT Token：用于 API 认证
-
----
-
-## 🔗 相关链接
-
-| 资源 | 位置 |
-|------|------|
-| 完整文档 | `LOG_VIEWING_RESEARCH.md` |
-| 日志实现 | `astrbot/core/log.py` |
-| Trace 系统 | `astrbot/core/utils/trace.py` |
-| Dashboard API | `astrbot/dashboard/routes/log.py` |
-| 前端组件 | `dashboard/src/components/shared/ConsoleDisplayer.vue` |
-| 默认配置 | `astrbot/core/config/default.py` |
-
----
-
-## ✅ 检查清单
-
-### 开发调试
-
-- [ ] Dashboard 可以实时看到日志
-- [ ] 日志级别设置为 DEBUG
-- [ ] Trace 追踪已启用（if needed）
-
-### 生产部署
-
-- [ ] 日志级别设置为 INFO
-- [ ] 文件日志已启用（for persistence）
-- [ ] 日志轮转已配置
-- [ ] 监控系统已连接
-
-### 问题诊断
-
-- [ ] 日志中包含 span_id（for tracing）
-- [ ] 时间戳正确（for correlation）
-- [ ] 日志级别适当（not too verbose）
-
----
-
-*最后更新：2024年 | AstrBot v4.14.4*
+*最后更新：2026年10月 | 适配 AstrBot v4.27+ 与插件市场安全规范*
