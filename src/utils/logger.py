@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import logging
 import os
 import sys
-from typing import Any
 
-try:
-    from astrbot.api import logger as astrbot_logger
-except ImportError:
-    astrbot_logger: Any = logging.getLogger("astrbot")
+from astrbot.api import logger as astrbot_logger
 
 from ..infrastructure.logging.plugin_log_buffer import global_log_buffer
 from ..shared.trace_context import TraceContext

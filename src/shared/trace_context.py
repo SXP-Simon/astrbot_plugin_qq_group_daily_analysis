@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import functools
-import logging
 import re
 import time
 import uuid
@@ -643,12 +642,6 @@ class TraceContext:
     @classmethod
     def get(cls) -> str:
         return get_trace_id()
-
-
-class TraceLogFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.trace_id = get_trace_id()
-        return True
 
 
 def get_trace_id() -> str:
