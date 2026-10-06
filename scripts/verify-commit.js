@@ -32,6 +32,7 @@ const SCOPE_CATEGORIES = {
     'infra/api': '后端 WebAPI 接口协议适配别名 (同 infra/webui)',
     'infra/drawing': 'AI 绘图引擎与图像生成驱动 (src/infrastructure/drawing/)',
     'infra/messaging': '内部事件总线与消息广播 (src/infrastructure/messaging/)',
+    'infra/logging': '专用日志缓冲与遥测管道 (src/infrastructure/logging/)',
   },
   '🎯 后端业务子领域 (Backend Sub-domains)': {
     analysis: '分析子域 (LLM 分析器, 文本聚合, 情绪/质量/统计分析)',
@@ -88,7 +89,7 @@ const ALLOWED_SCOPES = Object.values(SCOPE_CATEGORIES).flatMap((cat) => Object.k
 // 合法层级前缀（用于支持复合层级/子域表达，如 domain/analysis, infra/platform, app/comic, webui/widgets, test/unit, ci/scripts, docs/release）
 const ALLOWED_LAYER_PREFIXES = ['domain', 'app', 'application', 'infra', 'infrastructure', 'webui', 'test', 'tests', 'ci', 'docs', 'entrypoints'];
 const ALLOWED_SUBDOMAINS = [
-  'analysis', 'comic', 'reporting', 'render', 'drawing', 'messaging', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence',
+  'analysis', 'comic', 'reporting', 'render', 'drawing', 'messaging', 'platform', 'scheduler', 'config', 'storage', 'db', 'persistence', 'logging',
   'services', 'handlers', 'commands', 'dto', 'repositories', 'value_objects',
   'entrypoints', 'entry',
   'app', 'pages', 'widgets', 'features', 'entities', 'shared',
@@ -259,6 +260,11 @@ const SCOPE_PATH_RULES = [
     matchScope: (s) => s === 'infra/messaging' || s === 'messaging',
     matchFile: (f) => f.startsWith('src/infrastructure/messaging/'),
     name: 'infra/messaging 内部事件总线与消息广播 (src/infrastructure/messaging/)',
+  },
+  {
+    matchScope: (s) => s === 'infra/logging' || s === 'infrastructure/logging',
+    matchFile: (f) => f.startsWith('src/infrastructure/logging/'),
+    name: 'infra/logging 专用日志缓冲与遥测管道 (src/infrastructure/logging/)',
   },
   {
     matchScope: (s) => s === 'infra/storage' || s === 'infra/db' || s === 'storage' || s === 'db',
