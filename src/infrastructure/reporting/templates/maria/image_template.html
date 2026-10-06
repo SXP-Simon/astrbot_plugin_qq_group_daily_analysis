@@ -104,6 +104,180 @@
             page-break-inside: avoid;
         }
 
+        /* ==================== Art Nouveau Dynamic Motion & Keyframes ==================== */
+        @keyframes maria-vine-sway {
+            0%, 100% {
+                transform: rotate(-1.2deg) scale(1);
+            }
+            50% {
+                transform: rotate(1.2deg) scale(1.012);
+            }
+        }
+
+        @keyframes maria-gold-pulse {
+            0%, 100% {
+                opacity: 0.55;
+                filter: drop-shadow(0 0 2px rgba(197, 160, 89, 0.3));
+            }
+            50% {
+                opacity: 0.95;
+                filter: drop-shadow(0 0 7px rgba(197, 160, 89, 0.7));
+            }
+        }
+
+        @keyframes maria-float-gentle {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-4px);
+            }
+        }
+
+        @keyframes maria-halo-breathe {
+            0%, 100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 0.45;
+            }
+            50% {
+                transform: scale(1.04) rotate(180deg);
+                opacity: 0.75;
+            }
+        }
+
+        @keyframes maria-sparkle-float {
+            0% {
+                opacity: 0;
+                transform: translateY(6px) scale(0.6) rotate(0deg);
+            }
+            50% {
+                opacity: 0.95;
+                transform: translateY(-12px) scale(1.1) rotate(18deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-24px) scale(0.8) rotate(35deg);
+            }
+        }
+
+        @keyframes maria-hint-pulse {
+            0%, 100% {
+                opacity: 0.65;
+                transform: translateY(0);
+            }
+            50% {
+                opacity: 1;
+                transform: translateY(-2px);
+            }
+        }
+
+        @keyframes maria-fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(18px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Ambient Botanical Animations on Flourishes */
+        .maria-header-flourish-left,
+        .maria-header-flourish-right {
+            animation: maria-vine-sway 7s ease-in-out infinite;
+            transform-origin: center center;
+        }
+        .maria-header-flourish-right {
+            animation-delay: -3.5s;
+        }
+
+        .maria-hero-statue-img {
+            animation: maria-float-gentle 6s ease-in-out infinite;
+        }
+
+        .maria-mucha-halo {
+            animation: maria-halo-breathe 14s linear infinite;
+        }
+
+        /* Card Interactive Transitions & Gold Glow */
+        .maria-topic-card,
+        .maria-title-card,
+        .maria-quote-card,
+        .maria-stat-card,
+        .maria-token-receipt,
+        .maria-dimension-card,
+        .maria-quality-summary-box {
+            transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                        box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+                        border-color 0.45s ease,
+                        background-color 0.45s ease;
+        }
+
+        .maria-topic-card:hover,
+        .maria-title-card:hover,
+        .maria-quote-card:hover,
+        .maria-stat-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--maria-gold);
+            box-shadow:
+                0 12px 26px -4px rgba(35, 58, 41, 0.09),
+                0 0 16px rgba(197, 160, 89, 0.24);
+        }
+
+        .maria-topic-bg-rose,
+        .maria-quote-bg-rose,
+        .maria-stat-icon-bg {
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
+        }
+
+        .maria-topic-card:hover .maria-topic-bg-rose,
+        .maria-quote-card:hover .maria-quote-bg-rose,
+        .maria-stat-card:hover .maria-stat-icon-bg {
+            transform: scale(1.08) rotate(3deg);
+            opacity: 0.28;
+        }
+
+        .maria-topic-card:hover .maria-corner-tl,
+        .maria-title-card:hover .maria-corner-tl,
+        .maria-quote-card:hover .maria-corner-tl {
+            border-color: #d4a94a;
+            transform: translate(-1px, -1px);
+        }
+        .maria-topic-card:hover .maria-corner-tr,
+        .maria-title-card:hover .maria-corner-tr,
+        .maria-quote-card:hover .maria-corner-tr {
+            border-color: #d4a94a;
+            transform: translate(1px, -1px);
+        }
+        .maria-topic-card:hover .maria-corner-bl,
+        .maria-title-card:hover .maria-corner-bl,
+        .maria-quote-card:hover .maria-corner-bl {
+            border-color: #d4a94a;
+            transform: translate(-1px, 1px);
+        }
+        .maria-topic-card:hover .maria-corner-br,
+        .maria-title-card:hover .maria-corner-br,
+        .maria-quote-card:hover .maria-corner-br {
+            border-color: #d4a94a;
+            transform: translate(1px, 1px);
+        }
+
+        .maria-title-card:hover .maria-cameo-frame {
+            transform: scale(1.04);
+            box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--maria-gold), 0 6px 14px rgba(197, 160, 89, 0.3);
+        }
+
+        .maria-badge-title,
+        .maria-topic-num-badge {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .maria-badge-title:hover,
+        .maria-topic-num-badge:hover {
+            transform: scale(1.03);
+            box-shadow: 0 2px 8px rgba(197, 160, 89, 0.3);
+        }
+
         /* 页面外围四角花纹 */
         .maria-page-corner {
             position: absolute;
@@ -1035,7 +1209,7 @@
             filter: drop-shadow(0 2px 4px rgba(35, 58, 41, 0.05));
         }
 
-        /* ==================== 8. Chat Quality Section ==================== */
+        /* ==================== 8. Chat Quality Cameo & Easter Egg ==================== */
         .maria-quality-layout {
             display: grid;
             grid-template-columns: 190px 1fr;
@@ -1048,7 +1222,13 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
         }
 
         .maria-quality-arch {
@@ -1067,6 +1247,7 @@
             justify-content: center;
             overflow: hidden;
             padding: 8px;
+            transition: all 0.65s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .maria-quality-halo {
@@ -1078,15 +1259,96 @@
             border: 1px dashed var(--maria-gold);
             opacity: 0.45;
             pointer-events: none;
+            transition: all 0.65s ease;
+            animation: maria-halo-breathe 12s linear infinite;
         }
 
+        .maria-easter-aura {
+            position: absolute;
+            inset: 0;
+            border-radius: 85px 85px 12px 12px;
+            background: radial-gradient(circle at 50% 40%, rgba(242, 226, 196, 0.6) 0%, rgba(184, 134, 40, 0.18) 60%, transparent 85%);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.65s ease, transform 0.65s ease;
+        }
+
+        /* Dual illustration crossfade layers */
         .maria-quality-img {
-            position: relative;
+            position: absolute;
             z-index: 2;
             width: 90%;
             max-height: 195px;
             object-fit: contain;
+        }
+
+        .maria-quality-img-calm {
+            opacity: 1;
+            transform: scale(1) translateY(0);
             filter: drop-shadow(0 4px 8px rgba(35, 58, 41, 0.15));
+            transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        filter 0.65s ease;
+        }
+
+        .maria-quality-img-banter {
+            opacity: 0;
+            transform: scale(0.92) translateY(8px) rotate(-1.5deg);
+            filter: blur(2.5px);
+            pointer-events: none;
+            transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        filter 0.65s ease;
+        }
+
+        /* Floating sparkles / petals */
+        .maria-easter-sparkles {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        .maria-sparkle {
+            position: absolute;
+            font-size: 0.9rem;
+            color: var(--maria-rose-yellow);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .maria-sparkle.s1 { top: 30%; left: 15%; font-size: 0.85rem; }
+        .maria-sparkle.s2 { top: 20%; right: 18%; font-size: 1rem; color: var(--maria-gold); }
+        .maria-sparkle.s3 { bottom: 35%; left: 20%; font-size: 0.95rem; color: var(--maria-rose-red); }
+        .maria-sparkle.s4 { bottom: 25%; right: 15%; font-size: 0.8rem; }
+
+        /* Corner seal mark */
+        .maria-cameo-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(253, 251, 247, 0.85);
+            border: 1px solid var(--maria-border-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.72rem;
+            color: var(--maria-gold-dark);
+            z-index: 5;
+            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Caption Container & Dual Text */
+        .maria-caption-container {
+            position: relative;
+            width: 100%;
+            min-height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .maria-quality-caption {
@@ -1096,6 +1358,129 @@
             color: var(--maria-primary);
             letter-spacing: 0.08em;
             text-align: center;
+            white-space: nowrap;
+            transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), color 0.5s ease;
+        }
+
+        .maria-caption-calm {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .maria-caption-banter {
+            position: absolute;
+            opacity: 0;
+            transform: translateY(8px);
+            color: var(--maria-gold-dark);
+            font-style: italic;
+            letter-spacing: 0.04em;
+            pointer-events: none;
+        }
+
+        /* Interactive Hint */
+        .maria-easter-touch-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.68rem;
+            color: var(--maria-text-muted);
+            opacity: 0.65;
+            transition: opacity 0.4s ease, color 0.4s ease;
+            animation: maria-hint-pulse 3.5s ease-in-out infinite;
+        }
+
+        .maria-touch-icon {
+            font-size: 0.65rem;
+            color: var(--maria-gold);
+        }
+
+        /* ==================== Active / Hover Easter Egg State ==================== */
+        .maria-quality-cameo:hover,
+        .maria-quality-cameo:focus-visible,
+        .maria-quality-cameo.is-active {
+            transform: translateY(-2px);
+        }
+
+        .maria-quality-cameo:hover .maria-quality-arch,
+        .maria-quality-cameo:focus-visible .maria-quality-arch,
+        .maria-quality-cameo.is-active .maria-quality-arch {
+            border-color: #d4a94a;
+            box-shadow:
+                0 0 0 2px #fff,
+                0 0 0 5px var(--maria-gold),
+                0 12px 28px rgba(197, 160, 89, 0.32),
+                inset 0 0 24px rgba(197, 160, 89, 0.28);
+            background: radial-gradient(circle at 50% 38%, #fff 0%, #faefe0 75%, #f2dcbf 100%);
+        }
+
+        .maria-quality-cameo:hover .maria-quality-img-calm,
+        .maria-quality-cameo:focus-visible .maria-quality-img-calm,
+        .maria-quality-cameo.is-active .maria-quality-img-calm {
+            opacity: 0;
+            transform: scale(1.06) translateY(-4px);
+            filter: blur(2px);
+        }
+
+        .maria-quality-cameo:hover .maria-quality-img-banter,
+        .maria-quality-cameo:focus-visible .maria-quality-img-banter,
+        .maria-quality-cameo.is-active .maria-quality-img-banter {
+            opacity: 1;
+            transform: scale(1.03) translateY(-1px) rotate(0.8deg);
+            filter: drop-shadow(0 6px 14px rgba(184, 134, 40, 0.25));
+            pointer-events: auto;
+        }
+
+        .maria-quality-cameo:hover .maria-easter-aura,
+        .maria-quality-cameo:focus-visible .maria-easter-aura,
+        .maria-quality-cameo.is-active .maria-easter-aura {
+            opacity: 1;
+        }
+
+        .maria-quality-cameo:hover .maria-caption-calm,
+        .maria-quality-cameo:focus-visible .maria-caption-calm,
+        .maria-quality-cameo.is-active .maria-caption-calm {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
+
+        .maria-quality-cameo:hover .maria-caption-banter,
+        .maria-quality-cameo:focus-visible .maria-caption-banter,
+        .maria-quality-cameo.is-active .maria-caption-banter {
+            opacity: 1;
+            transform: translateY(0);
+            color: #8c6014;
+            text-shadow: 0 1px 3px rgba(197, 160, 89, 0.35);
+        }
+
+        .maria-quality-cameo:hover .maria-sparkle.s1,
+        .maria-quality-cameo.is-active .maria-sparkle.s1 {
+            animation: maria-sparkle-float 2.2s ease-in-out infinite;
+        }
+        .maria-quality-cameo:hover .maria-sparkle.s2,
+        .maria-quality-cameo.is-active .maria-sparkle.s2 {
+            animation: maria-sparkle-float 2.5s ease-in-out infinite 0.4s;
+        }
+        .maria-quality-cameo:hover .maria-sparkle.s3,
+        .maria-quality-cameo.is-active .maria-sparkle.s3 {
+            animation: maria-sparkle-float 2.1s ease-in-out infinite 0.8s;
+        }
+        .maria-quality-cameo:hover .maria-sparkle.s4,
+        .maria-quality-cameo.is-active .maria-sparkle.s4 {
+            animation: maria-sparkle-float 2.4s ease-in-out infinite 1.2s;
+        }
+
+        .maria-quality-cameo:hover .maria-cameo-badge,
+        .maria-quality-cameo.is-active .maria-cameo-badge {
+            transform: rotate(180deg) scale(1.15);
+            border-color: var(--maria-gold);
+            color: var(--maria-rose-yellow);
+            box-shadow: 0 0 8px rgba(197, 160, 89, 0.4);
+        }
+
+        .maria-quality-cameo:hover .maria-easter-touch-hint,
+        .maria-quality-cameo.is-active .maria-easter-touch-hint {
+            opacity: 0.95;
+            color: var(--maria-gold-dark);
         }
 
         .maria-quality-content {
@@ -1834,6 +2219,34 @@
             </div>
         </footer>
     </div>
+
+    <!-- ==================== Interactive Scripts (Easter Egg & Touch) ==================== -->
+    <script>
+        (function() {
+            try {
+                const cameo = document.getElementById('mariaEasterCameo');
+                if (!cameo) return;
+
+                function toggleEasterEgg(e) {
+                    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+                    if (e.type === 'keydown') e.preventDefault();
+                    cameo.classList.toggle('is-active');
+                }
+
+                cameo.addEventListener('click', toggleEasterEgg);
+                cameo.addEventListener('keydown', toggleEasterEgg);
+
+                // Optional: click outside to restore calm state smoothly on touch devices
+                document.addEventListener('click', function(e) {
+                    if (!cameo.contains(e.target) && cameo.classList.contains('is-active')) {
+                        cameo.classList.remove('is-active');
+                    }
+                });
+            } catch (err) {
+                // Graceful degradation
+            }
+        })();
+    </script>
 </body>
 
 </html>

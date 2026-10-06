@@ -26,12 +26,37 @@
     </div>
 
     <div class="maria-quality-layout">
-        <div class="maria-quality-cameo">
+        <div class="maria-quality-cameo" id="mariaEasterCameo" tabindex="0" role="button" aria-label="山百合会 · 窓辺の省察 (点击/悬停互动)">
             <div class="maria-quality-arch">
-                <img src="{{ maria_cdn_base }}/sei_window_observation.png" alt="山百合会·省察" class="maria-quality-img">
+                <!-- 默认：窓辺の静かな省察 (圣 窗边俯瞰) -->
+                <img src="{{ maria_cdn_base }}/sei_window_observation.png" alt="山百合会·省察" class="maria-quality-img maria-quality-img-calm">
+                <!-- 彩蛋互动：由乃与圣的活泼打趣 -->
+                <img src="{{ maria_cdn_base }}/yumi_and_sei.png" alt="山百合会·由乃与圣" class="maria-quality-img maria-quality-img-banter">
+                
                 <div class="maria-quality-halo"></div>
+                <div class="maria-easter-aura"></div>
+                
+                <div class="maria-easter-sparkles" aria-hidden="true">
+                    <span class="maria-sparkle s1">✿</span>
+                    <span class="maria-sparkle s2">✦</span>
+                    <span class="maria-sparkle s3">✿</span>
+                    <span class="maria-sparkle s4">✦</span>
+                </div>
+                
+                <div class="maria-cameo-badge" aria-hidden="true">
+                    <span class="maria-cameo-badge-icon">❦</span>
+                </div>
             </div>
-            <span class="maria-quality-caption">『窓辺の静かな省察』</span>
+            
+            <div class="maria-caption-container">
+                <span class="maria-quality-caption maria-caption-calm">『窓辺の静かな省察』</span>
+                <span class="maria-quality-caption maria-caption-banter">『「ごきげんよう、由乃さん」 「もう、聖さまったら！」』</span>
+            </div>
+            
+            <div class="maria-easter-touch-hint" aria-hidden="true">
+                <span class="maria-touch-icon">✿</span>
+                <span class="maria-touch-text">触碰 · 私语</span>
+            </div>
         </div>
 
         <div class="maria-quality-content">
