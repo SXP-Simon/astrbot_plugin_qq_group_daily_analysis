@@ -264,8 +264,42 @@
         }
 
         .maria-title-card:hover .maria-cameo-frame {
-            transform: scale(1.04);
-            box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--maria-gold), 0 6px 14px rgba(197, 160, 89, 0.3);
+            transform: scale(1.025);
+            border-color: #d4a94a;
+            box-shadow:
+                0 0 0 1.5px #fff,
+                0 0 0 3px rgba(197, 160, 89, 0.75),
+                0 4px 12px rgba(197, 160, 89, 0.18);
+        }
+
+        .maria-title-card:hover .maria-user-avatar {
+            transform: scale(1.03);
+            filter: contrast(1.02) brightness(1.02);
+        }
+
+        /* Character Illustration Hover Highlights */
+        .maria-hero-statue-img,
+        .maria-receipt-illust,
+        .maria-profile-watermark img {
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        filter 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 0.65s ease;
+        }
+
+        .maria-mucha-arch:hover .maria-hero-statue-img {
+            transform: translateY(-3px) scale(1.025);
+            filter: drop-shadow(0 10px 22px rgba(197, 160, 89, 0.35)) brightness(1.03);
+        }
+
+        .maria-token-receipt:hover .maria-receipt-illust {
+            transform: scale(1.035) rotate(0.8deg);
+            filter: drop-shadow(0 6px 14px rgba(197, 160, 89, 0.3)) brightness(1.03);
+        }
+
+        .maria-title-card:hover .maria-profile-watermark img {
+            opacity: 0.3;
+            transform: scale(1.04) translateY(-2px);
+            filter: drop-shadow(0 4px 12px rgba(197, 160, 89, 0.25)) brightness(1.04);
         }
 
         .maria-badge-title,
@@ -970,6 +1004,9 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        box-shadow 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        border-color 0.65s ease;
         }
 
         .maria-cameo-border {
@@ -986,6 +1023,8 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        filter 0.65s ease;
         }
 
         .maria-avatar-placeholder {
@@ -1377,16 +1416,22 @@
             pointer-events: none;
         }
 
-        /* Interactive Hint */
+        /* Subtle Interactive Flourish Hint */
         .maria-easter-touch-hint {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            font-size: 0.68rem;
+            gap: 3px;
+            font-size: 0.65rem;
             color: var(--maria-text-muted);
-            opacity: 0.65;
-            transition: opacity 0.4s ease, color 0.4s ease;
-            animation: maria-hint-pulse 3.5s ease-in-out infinite;
+            opacity: 0.45;
+            letter-spacing: 0.08em;
+            transition: opacity 0.5s ease, color 0.5s ease, transform 0.5s ease;
+        }
+
+        .maria-touch-icon {
+            font-size: 0.55rem;
+            color: var(--maria-gold);
+            transition: transform 0.4s ease;
         }
 
         .maria-touch-icon {
@@ -1479,8 +1524,14 @@
 
         .maria-quality-cameo:hover .maria-easter-touch-hint,
         .maria-quality-cameo.is-active .maria-easter-touch-hint {
-            opacity: 0.95;
+            opacity: 0.85;
             color: var(--maria-gold-dark);
+            transform: translateY(-1px);
+        }
+
+        .maria-quality-cameo:hover .maria-touch-icon,
+        .maria-quality-cameo.is-active .maria-touch-icon {
+            transform: scale(1.15) rotate(45deg);
         }
 
         .maria-quality-content {
