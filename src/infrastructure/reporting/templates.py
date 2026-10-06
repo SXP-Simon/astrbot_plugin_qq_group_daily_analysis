@@ -40,6 +40,7 @@ class HTMLTemplates:
         "simple": "极简黑白 (Simple)",
         "art_nouveau": "新艺术运动 (Art Nouveau)",
         "deepseek_maid": "DeepSeek 鲸鱼女仆娘",
+        "maria": "圣母在上 (Maria)",
     }
 
     config_manager: ConfigManager

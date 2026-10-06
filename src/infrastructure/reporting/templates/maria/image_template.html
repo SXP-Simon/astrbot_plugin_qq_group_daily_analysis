@@ -1,0 +1,1839 @@
+{% set maria_cdn_base = t2i_maria_assets_mirror if (t2i_maria_assets_mirror is defined and t2i_maria_assets_mirror) else 'assets/maria' %}
+<!DOCTYPE html>
+<html lang="{{ 'zh-CN' if t2i_font_source == 'Mainland' else 'zh-Hant' }}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>私立莉莉安女学园 · 茶会公报 · {{ current_date }}</title>
+    {% if t2i_google_fonts_mirror %}
+    <link rel="preconnect" href="{{ t2i_google_fonts_mirror }}">
+    <link rel="preconnect" href="{{ t2i_gstatic_mirror }}" crossorigin>
+    <link href="{{ t2i_google_fonts_mirror }}/css2?family=Cinzel:wght@600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Serif+TC:wght@400;500;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    {% endif %}
+
+    <style>
+        :root {
+            /* ================= Maria / Lillian Academy Color System ================= */
+            --maria-bg: #f6f1e6;
+            --maria-bg-card: #fdfbf7;
+            --maria-bg-subtle: #f4ede1;
+            --maria-bg-parchment: #ece2ce;
+            --maria-bg-alt: #eee5d4;
+
+            /* Lillian Academy Deep Green (莉莉安深墨绿) */
+            --maria-primary: #233a29;
+            --maria-primary-dark: #15251a;
+            --maria-primary-light: #38553f;
+            --maria-primary-subtle: rgba(35, 58, 41, 0.08);
+
+            /* Antique Academy Gold (黄铜雕金与画框金) */
+            --maria-gold: #c5a059;
+            --maria-gold-light: #e2c78a;
+            --maria-gold-dark: #8c6c2e;
+            --maria-gold-dim: rgba(197, 160, 89, 0.18);
+
+            /* Three Roses of Yamayurikai */
+            --maria-rose-red: #9e3447;
+            --maria-rose-white: #5a7288;
+            --maria-rose-yellow: #b88628;
+
+            /* Typography & Borders */
+            --maria-text-main: #1d3022;
+            --maria-text-muted: #5e7063;
+            --maria-text-gold: #93712e;
+            --maria-border-gold: rgba(197, 160, 89, 0.55);
+            --maria-border-thin: rgba(197, 160, 89, 0.32);
+
+            --maria-radius-sm: 0.5rem;
+            --maria-radius-md: 0.85rem;
+            --maria-radius-lg: 1.25rem;
+            --maria-radius-xl: 1.6rem;
+
+            --maria-font-display: 'Cinzel', {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, serif;
+            --maria-font-body: 'Cormorant Garamond', {% if t2i_font_source == 'Mainland' %}'Noto Serif SC', 'Noto Serif TC'{% else %}'Noto Serif TC', 'Noto Serif SC'{% endif %}, Georgia, serif;
+            --maria-font-mono: 'JetBrains Mono', 'Cinzel', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        body {
+            font-family: var(--maria-font-body);
+            color: var(--maria-text-main);
+            background-color: var(--maria-bg);
+            background-image:
+                radial-gradient(ellipse at top left, rgba(197, 160, 89, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at bottom right, rgba(35, 58, 41, 0.08) 0%, transparent 60%),
+                radial-gradient(#c5a059 0.75px, transparent 0.75px);
+            background-size: 100% 100%, 100% 100%, 30px 30px;
+            min-height: 100vh;
+            padding: 36px 18px;
+            line-height: 1.65;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .maria-page-wrapper {
+            max-width: 980px;
+            margin: 0 auto;
+            position: relative;
+            background: var(--maria-bg-card);
+            border: 2px solid var(--maria-gold);
+            border-radius: var(--maria-radius-xl);
+            padding: 40px 36px;
+            box-shadow:
+                0 0 0 4px var(--maria-bg),
+                0 0 0 6px var(--maria-border-gold),
+                0 20px 45px -8px rgba(35, 58, 41, 0.14),
+                0 4px 18px rgba(197, 160, 89, 0.16);
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .avoid-break {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        /* 页面外围四角花纹 */
+        .maria-page-corner {
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .maria-page-tl {
+            top: 8px;
+            left: 8px;
+            border-top: 3px double var(--maria-gold);
+            border-left: 3px double var(--maria-gold);
+            border-top-left-radius: 12px;
+        }
+
+        .maria-page-tr {
+            top: 8px;
+            right: 8px;
+            border-top: 3px double var(--maria-gold);
+            border-right: 3px double var(--maria-gold);
+            border-top-right-radius: 12px;
+        }
+
+        .maria-page-bl {
+            bottom: 8px;
+            left: 8px;
+            border-bottom: 3px double var(--maria-gold);
+            border-left: 3px double var(--maria-gold);
+            border-bottom-left-radius: 12px;
+        }
+
+        .maria-page-br {
+            bottom: 8px;
+            right: 8px;
+            border-bottom: 3px double var(--maria-gold);
+            border-right: 3px double var(--maria-gold);
+            border-bottom-right-radius: 12px;
+        }
+
+        /* ==================== 1. Header / Hero Section ==================== */
+        .maria-header {
+            position: relative;
+            padding-bottom: 24px;
+            border-bottom: 2px solid var(--maria-border-gold);
+        }
+
+        .maria-top-ribbon {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 14px;
+            border-bottom: 1px dashed var(--maria-border-thin);
+            margin-bottom: 20px;
+        }
+
+        .maria-academy-brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--maria-primary);
+            font-family: var(--maria-font-display);
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+        }
+
+        .maria-cross-symbol {
+            color: var(--maria-gold);
+            font-size: 1.2rem;
+        }
+
+        .maria-greeting-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 14px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-gold);
+            border-radius: 9999px;
+            color: var(--maria-primary-light);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .maria-hero-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .maria-hero-content {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .maria-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--maria-text-gold);
+            font-family: var(--maria-font-display);
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .maria-eyebrow-line {
+            width: 30px;
+            height: 1px;
+            background: var(--maria-gold);
+        }
+
+        .maria-main-title {
+            font-family: var(--maria-font-display);
+            font-size: 2.35rem;
+            font-weight: 800;
+            color: var(--maria-primary);
+            line-height: 1.25;
+            letter-spacing: 0.04em;
+            text-shadow: 1px 1px 0 rgba(197, 160, 89, 0.35);
+        }
+
+        .maria-title-sub {
+            display: block;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--maria-gold-dark);
+            letter-spacing: 0.12em;
+            margin-top: 4px;
+        }
+
+        .maria-hero-quote {
+            font-size: 0.98rem;
+            line-height: 1.8;
+            color: var(--maria-text-muted);
+            border-left: 2.5px solid var(--maria-gold);
+            padding-left: 14px;
+            font-style: italic;
+        }
+
+        .maria-date-ticket {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 18px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            width: fit-content;
+            margin-top: 4px;
+            box-shadow: 0 2px 6px rgba(35, 58, 41, 0.03);
+        }
+
+        .maria-ticket-label {
+            font-size: 0.78rem;
+            color: var(--maria-text-muted);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .maria-ticket-value {
+            font-family: var(--maria-font-display);
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        /* Hero 右侧拱门：圣母玛利亚像宏大开篇 */
+        .maria-hero-figure-wrap {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .maria-mucha-arch {
+            position: relative;
+            width: 100%;
+            max-width: 350px;
+            height: 320px;
+            border-radius: 175px 175px 16px 16px;
+            border: 2px solid var(--maria-gold);
+            box-shadow:
+                0 0 0 3px var(--maria-bg-card),
+                0 0 0 5px var(--maria-border-gold),
+                inset 0 0 25px rgba(197, 160, 89, 0.15);
+            background:
+                radial-gradient(circle at 50% 35%, #fff 0%, #f7f1e4 70%, #eddcc2 100%);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+        }
+
+        .maria-mucha-halo {
+            position: absolute;
+            top: 25px;
+            width: 230px;
+            height: 230px;
+            border-radius: 50%;
+            border: 1px dashed var(--maria-gold);
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .maria-hero-statue-img {
+            position: relative;
+            z-index: 2;
+            width: 90%;
+            max-height: 275px;
+            object-fit: contain;
+            filter: drop-shadow(0 8px 16px rgba(35, 58, 41, 0.2));
+        }
+
+        .maria-arch-banner {
+            position: absolute;
+            bottom: -10px;
+            z-index: 3;
+            background: linear-gradient(180deg, #fdfbf7 0%, #f5efe4 100%);
+            border: 1px solid var(--maria-gold);
+            padding: 4px 20px;
+            border-radius: 9999px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            box-shadow: 0 3px 8px rgba(35, 58, 41, 0.1);
+            letter-spacing: 0.06em;
+        }
+
+        /* ==================== 2. Key Statistics Grid ==================== */
+        .maria-stats-section {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .maria-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+
+        .maria-stat-card {
+            background: var(--maria-bg-subtle);
+            border: 1.5px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 16px 14px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 3px 10px rgba(35, 58, 41, 0.04);
+            overflow: hidden;
+        }
+
+        .maria-stat-icon-bg {
+            position: absolute;
+            right: -6px;
+            bottom: -6px;
+            width: 48px;
+            height: 48px;
+            opacity: 0.16;
+            pointer-events: none;
+        }
+
+        .maria-stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .maria-stat-num-tag {
+            font-family: var(--maria-font-display);
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--maria-gold-dark);
+            letter-spacing: 0.1em;
+        }
+
+        .maria-stat-emblem {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+        }
+
+        .maria-stat-label {
+            font-size: 0.85rem;
+            color: var(--maria-text-muted);
+            font-weight: 600;
+        }
+
+        .maria-stat-val {
+            font-family: var(--maria-font-display);
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            line-height: 1.2;
+            margin: 4px 0 2px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .maria-stat-unit {
+            font-size: 0.76rem;
+            color: var(--maria-text-gold);
+            font-weight: 600;
+        }
+
+        /* 峰值活跃提示条 */
+        .maria-peak-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #fdfbf7 0%, var(--maria-bg-subtle) 100%);
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 10px 18px;
+            font-size: 0.88rem;
+            color: var(--maria-text-main);
+        }
+
+        .maria-peak-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .maria-clock-icon {
+            color: var(--maria-gold);
+            font-size: 1.1rem;
+        }
+
+        .maria-peak-highlight {
+            font-family: var(--maria-font-display);
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        /* ==================== 3. General Section Styling ==================== */
+        .maria-section {
+            background: var(--maria-bg-card);
+            border: 1.5px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-lg);
+            padding: 24px 22px;
+            box-shadow: 0 4px 16px rgba(35, 58, 41, 0.05);
+            position: relative;
+        }
+
+        .maria-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            text-align: center;
+            margin-bottom: 22px;
+            position: relative;
+        }
+
+        .maria-header-flourish-left,
+        .maria-header-flourish-right {
+            flex: 1;
+            max-width: 140px;
+            display: flex;
+            align-items: center;
+        }
+
+        .maria-section-title-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .maria-section-badge {
+            font-family: var(--maria-font-display);
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--maria-gold-dark);
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+
+        .maria-section-title {
+            font-family: var(--maria-font-display);
+            font-size: 1.45rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            letter-spacing: 0.03em;
+        }
+
+        .maria-section-subtitle {
+            font-family: var(--maria-font-display);
+            font-size: 0.75rem;
+            color: var(--maria-text-muted);
+            letter-spacing: 0.12em;
+        }
+
+        /* 统一卡片四角装饰 */
+        .maria-card-corner {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            pointer-events: none;
+        }
+
+        .maria-corner-tl {
+            top: 4px;
+            left: 4px;
+            border-top: 1.5px solid var(--maria-gold);
+            border-left: 1.5px solid var(--maria-gold);
+            border-top-left-radius: 4px;
+        }
+
+        .maria-corner-tr {
+            top: 4px;
+            right: 4px;
+            border-top: 1.5px solid var(--maria-gold);
+            border-right: 1.5px solid var(--maria-gold);
+            border-top-right-radius: 4px;
+        }
+
+        .maria-corner-bl {
+            bottom: 4px;
+            left: 4px;
+            border-bottom: 1.5px solid var(--maria-gold);
+            border-left: 1.5px solid var(--maria-gold);
+            border-bottom-left-radius: 4px;
+        }
+
+        .maria-corner-br {
+            bottom: 4px;
+            right: 4px;
+            border-bottom: 1.5px solid var(--maria-gold);
+            border-right: 1.5px solid var(--maria-gold);
+            border-bottom-right-radius: 4px;
+        }
+
+        /* ==================== 4. Activity Chart ==================== */
+        .maria-chart-container {
+            display: grid;
+            grid-template-columns: repeat(24, 1fr);
+            gap: 6px;
+            align-items: flex-end;
+            height: 160px;
+            padding: 10px 6px 0;
+        }
+
+        .maria-chart-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+            position: relative;
+        }
+
+        .maria-chart-val {
+            font-family: var(--maria-font-mono);
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            margin-bottom: 3px;
+        }
+
+        .maria-stem-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1;
+        }
+
+        .maria-flower-bud {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #f2e2c4 0%, #caa05a 60%, #997532 100%);
+            border: 1px solid #b88d3e;
+            box-shadow: 0 1px 3px rgba(35, 58, 41, 0.12);
+            margin-bottom: -3px;
+            z-index: 2;
+        }
+
+        .maria-stem-bar {
+            width: 6px;
+            border-radius: 3px 3px 1px 1px;
+            transition: height 0.3s ease;
+        }
+
+        .maria-chart-axis-label {
+            font-family: var(--maria-font-display);
+            font-size: 0.68rem;
+            color: var(--maria-text-muted);
+            margin-top: 6px;
+            font-weight: 600;
+        }
+
+        /* ==================== 5. Topics Section ==================== */
+        .maria-topics-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .maria-topic-card {
+            background: #fff;
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 18px 20px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(35, 58, 41, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .maria-topic-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        .maria-topic-num-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: var(--maria-font-display);
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-gold);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .maria-topic-rose-icon {
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
+        }
+
+        .maria-badge-sym {
+            font-size: 0.95rem;
+            color: var(--maria-gold-dark);
+        }
+
+        .maria-topic-heading {
+            font-family: var(--maria-font-display);
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            line-height: 1.35;
+        }
+
+        .maria-topic-narrative {
+            font-size: 0.94rem;
+            line-height: 1.8;
+            color: var(--maria-text-main);
+            border-top: 1px dashed var(--maria-border-thin);
+            padding-top: 10px;
+        }
+
+        .maria-topic-footer-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 4px;
+        }
+
+        .maria-topic-participants {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.82rem;
+            color: var(--maria-text-muted);
+            flex-wrap: wrap;
+        }
+
+        .maria-participant-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-thin);
+            padding: 1px 8px;
+            border-radius: 9999px;
+            color: var(--maria-primary);
+            font-weight: 600;
+            font-size: 0.76rem;
+        }
+
+        .maria-tag-icon {
+            width: 12px;
+            height: 12px;
+            color: var(--maria-gold);
+        }
+
+        .maria-topic-bg-rose {
+            position: absolute;
+            right: 14px;
+            bottom: 10px;
+            width: 58px;
+            height: 58px;
+            object-fit: contain;
+            opacity: 0.16;
+            pointer-events: none;
+            z-index: 1;
+            filter: drop-shadow(0 2px 4px rgba(35, 58, 41, 0.05));
+        }
+
+        /* 提及胶囊与头像 */
+        .mention-pill, .mention-capsule {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-gold);
+            border-radius: 9999px;
+            padding: 0 6px;
+            margin: 0 2px;
+            font-size: 0.85em;
+            vertical-align: middle;
+            color: var(--maria-primary);
+            font-weight: 600;
+        }
+
+        .mention-avatar {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--maria-gold);
+        }
+
+        /* ==================== 6. User Portraits (Titles) ==================== */
+        .maria-titles-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .maria-title-card {
+            background: #fff;
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 16px 18px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(35, 58, 41, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow: hidden;
+        }
+
+        .maria-portrait-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Cameo 浮雕肖像框 */
+        .maria-cameo-frame {
+            position: relative;
+            width: 58px;
+            height: 68px;
+            border-radius: 50% / 50%;
+            border: 2px solid var(--maria-gold);
+            box-shadow:
+                0 0 0 2px #fff,
+                0 0 0 3px var(--maria-border-gold),
+                0 4px 10px rgba(35, 58, 41, 0.12);
+            padding: 2px;
+            background: var(--maria-bg-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .maria-cameo-border {
+            width: 100%;
+            height: 100%;
+            border-radius: 50% / 50%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .maria-user-avatar {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .maria-avatar-placeholder {
+            font-size: 1.4rem;
+            color: var(--maria-gold-dark);
+        }
+
+        .maria-member-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+        }
+
+        .maria-member-name {
+            font-family: var(--maria-font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .maria-member-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .maria-badge-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #fdf6e6 0%, #f7ecd2 100%);
+            border: 1px solid var(--maria-gold);
+            color: var(--maria-gold-dark);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .maria-title-rose-micro {
+            width: 12px;
+            height: 12px;
+            object-fit: contain;
+        }
+
+        .maria-badge-mbti {
+            background: #fff;
+            border: 1px solid rgba(90, 114, 136, 0.35);
+            color: var(--maria-rose-white);
+            font-family: var(--maria-font-mono);
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .maria-badge-character {
+            background: #fff;
+            border: 1px solid rgba(158, 52, 71, 0.35);
+            color: var(--maria-rose-red);
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .maria-member-reason {
+            font-size: 0.88rem;
+            line-height: 1.75;
+            color: var(--maria-text-muted);
+            position: relative;
+            z-index: 2;
+            border-top: 1px dashed var(--maria-border-thin);
+            padding-top: 8px;
+        }
+
+        .maria-profile-watermark {
+            position: absolute;
+            right: 4px;
+            bottom: 4px;
+            width: 38%;
+            max-height: 75%;
+            z-index: 1;
+            opacity: 0.18;
+            pointer-events: none;
+        }
+
+        .maria-profile-watermark img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* ==================== 7. Quotes Section ==================== */
+        .maria-quotes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .maria-quote-card {
+            background: #fff;
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 18px 22px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(35, 58, 41, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .maria-quote-main {
+            display: flex;
+            gap: 10px;
+            position: relative;
+        }
+
+        .maria-quote-mark {
+            font-family: var(--maria-font-display);
+            font-size: 2.2rem;
+            color: var(--maria-gold);
+            line-height: 1;
+            opacity: 0.7;
+            user-select: none;
+        }
+
+        .maria-quote-text {
+            flex: 1;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            color: var(--maria-primary);
+            font-weight: 600;
+            font-style: italic;
+        }
+
+        .maria-quote-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-top: 1px dashed var(--maria-border-thin);
+            padding-top: 10px;
+        }
+
+        .maria-quote-left-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .maria-quote-speaker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .maria-quote-rose-badge {
+            width: 16px;
+            height: 16px;
+            object-fit: contain;
+        }
+
+        .maria-speaker-avatar {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--maria-gold);
+        }
+
+        .maria-speaker-avatar-fallback {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: var(--maria-gold-dark);
+        }
+
+        .maria-speaker-name {
+            font-family: var(--maria-font-display);
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        .maria-quote-reason {
+            font-size: 0.82rem;
+            color: var(--maria-text-muted);
+            font-style: italic;
+        }
+
+        .maria-reason-flourish {
+            color: var(--maria-gold);
+            margin-right: 4px;
+        }
+
+        .maria-quote-bg-rose {
+            position: absolute;
+            right: 16px;
+            bottom: 10px;
+            width: 54px;
+            height: 54px;
+            object-fit: contain;
+            opacity: 0.16;
+            pointer-events: none;
+            z-index: 1;
+            filter: drop-shadow(0 2px 4px rgba(35, 58, 41, 0.05));
+        }
+
+        /* ==================== 8. Chat Quality Section ==================== */
+        .maria-quality-layout {
+            display: grid;
+            grid-template-columns: 190px 1fr;
+            gap: 22px;
+            align-items: center;
+        }
+
+        .maria-quality-cameo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .maria-quality-arch {
+            position: relative;
+            width: 170px;
+            height: 220px;
+            border-radius: 85px 85px 12px 12px;
+            border: 2px solid var(--maria-gold);
+            box-shadow:
+                0 0 0 2px #fff,
+                0 0 0 4px var(--maria-border-gold),
+                inset 0 0 16px rgba(197, 160, 89, 0.2);
+            background: radial-gradient(circle at 50% 30%, #fff 0%, #f4ede1 80%, #eadbc5 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 8px;
+        }
+
+        .maria-quality-halo {
+            position: absolute;
+            top: 20px;
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 1px dashed var(--maria-gold);
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .maria-quality-img {
+            position: relative;
+            z-index: 2;
+            width: 90%;
+            max-height: 195px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 8px rgba(35, 58, 41, 0.15));
+        }
+
+        .maria-quality-caption {
+            font-family: var(--maria-font-display);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            letter-spacing: 0.08em;
+            text-align: center;
+        }
+
+        .maria-quality-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .maria-dimensions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px 18px;
+        }
+
+        .maria-dimension-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .maria-dim-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--maria-primary);
+        }
+
+        .maria-dim-val {
+            font-family: var(--maria-font-mono);
+            font-weight: 700;
+            color: var(--maria-gold-dark);
+        }
+
+        .maria-dim-track {
+            height: 8px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-thin);
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .maria-dim-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #c5a059 0%, #38553f 100%);
+            border-radius: 9999px;
+        }
+
+        .maria-dim-comment {
+            font-size: 0.8rem;
+            color: var(--maria-text-muted);
+            line-height: 1.6;
+        }
+
+        .maria-quality-summary-box {
+            display: flex;
+            gap: 12px;
+            background: var(--maria-bg-subtle);
+            border: 1px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 14px 16px;
+            align-items: flex-start;
+        }
+
+        .maria-summary-icon {
+            font-size: 1.2rem;
+            color: var(--maria-gold);
+            line-height: 1;
+        }
+
+        .maria-summary-text {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .maria-summary-heading {
+            font-family: var(--maria-font-display);
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        .maria-summary-text p {
+            font-size: 0.86rem;
+            line-height: 1.7;
+            color: var(--maria-text-main);
+        }
+
+        /* ==================== 9. Token Receipt ==================== */
+        .maria-token-receipt {
+            display: grid;
+            grid-template-columns: 80px 1fr auto 110px;
+            align-items: center;
+            gap: 16px;
+            background: var(--maria-bg-subtle);
+            border: 1.5px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-md);
+            padding: 12px 20px;
+            box-shadow: 0 2px 8px rgba(35, 58, 41, 0.03);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .maria-receipt-illust-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 68px;
+            flex-shrink: 0;
+        }
+
+        .maria-receipt-illust {
+            height: 100%;
+            width: auto;
+            max-width: 90px;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 6px rgba(35, 58, 41, 0.08));
+        }
+
+        .maria-receipt-emblem {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            color: var(--maria-gold-dark);
+            font-family: var(--maria-font-display);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+
+        .maria-receipt-emblem-icon {
+            font-size: 1.6rem;
+            color: var(--maria-gold);
+        }
+
+        .maria-receipt-main {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .maria-receipt-kicker {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--maria-text-muted);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .maria-receipt-total {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .maria-receipt-total strong {
+            font-family: var(--maria-font-display);
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        .maria-receipt-total span {
+            font-size: 0.8rem;
+            color: var(--maria-gold-dark);
+            font-weight: 600;
+        }
+
+        .maria-receipt-split {
+            font-size: 0.78rem;
+            color: var(--maria-text-muted);
+        }
+
+        .maria-receipt-side {
+            border-left: 1px dashed var(--maria-border-gold);
+            padding-left: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            text-align: center;
+            color: var(--maria-primary-light);
+        }
+
+        .maria-receipt-side strong {
+            font-family: var(--maria-font-display);
+            font-size: 0.88rem;
+            letter-spacing: 0.08em;
+        }
+
+        .maria-receipt-side small {
+            font-size: 0.72rem;
+            color: var(--maria-text-muted);
+        }
+
+        /* ==================== 10. Handover Outro & Footer ==================== */
+        .maria-handover-banner {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            background: linear-gradient(135deg, #fdfbf7 0%, var(--maria-bg-subtle) 100%);
+            border: 1.5px solid var(--maria-border-gold);
+            border-radius: var(--maria-radius-lg);
+            padding: 18px 26px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(35, 58, 41, 0.04);
+        }
+
+        .maria-handover-cameo {
+            width: 86px;
+            height: 86px;
+            border-radius: 50%;
+            border: 2px solid var(--maria-gold);
+            padding: 2px;
+            background: #fff;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(35, 58, 41, 0.1);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .maria-handover-cameo img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .maria-handover-text {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .maria-handover-kicker {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--maria-gold-dark);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .maria-handover-title {
+            font-family: var(--maria-font-display);
+            font-size: 1.08rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+        }
+
+        .maria-handover-desc {
+            font-size: 0.88rem;
+            line-height: 1.7;
+            color: var(--maria-text-muted);
+            font-style: italic;
+        }
+
+        .maria-handover-watermark {
+            position: absolute;
+            right: 12px;
+            bottom: -15px;
+            width: 170px;
+            opacity: 0.16;
+            pointer-events: none;
+            z-index: 1;
+            filter: saturate(1.1);
+        }
+
+        /* 页脚 Colophon & Atelier 艺术链接 */
+        .maria-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 22px;
+            border-top: 1.5px solid var(--maria-border-gold);
+            font-size: 0.82rem;
+            color: var(--maria-text-muted);
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .maria-footer-brand {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .maria-footer-brand strong {
+            font-family: var(--maria-font-display);
+            font-size: 0.92rem;
+            color: var(--maria-primary);
+            letter-spacing: 0.04em;
+        }
+
+        .maria-footer-brand span {
+            font-size: 0.75rem;
+            color: var(--maria-text-gold);
+        }
+
+        .maria-footer-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .maria-repo-seal {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            background: linear-gradient(135deg, #fff 0%, var(--maria-bg-subtle) 100%);
+            border: 1px solid var(--maria-gold);
+            padding: 6px 18px;
+            border-radius: 9999px;
+            box-shadow: 0 2px 6px rgba(197, 160, 89, 0.15);
+            transition: all 0.25s ease;
+            text-decoration: none;
+            color: var(--maria-primary);
+        }
+
+        .maria-repo-seal:hover {
+            border-color: var(--maria-gold-dark);
+            box-shadow: 0 3px 10px rgba(197, 160, 89, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .maria-gh-icon {
+            width: 15px;
+            height: 15px;
+            color: var(--maria-primary);
+            flex-shrink: 0;
+            opacity: 0.85;
+        }
+
+        .maria-repo-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1.25;
+        }
+
+        .maria-repo-title {
+            font-family: var(--maria-font-display);
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--maria-primary);
+            letter-spacing: 0.08em;
+        }
+
+        .maria-repo-subtitle {
+            font-size: 0.68rem;
+            color: var(--maria-text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .maria-repo-flourish {
+            color: var(--maria-gold);
+            font-size: 0.9rem;
+        }
+
+        .maria-footer-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            font-size: 0.78rem;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 720px) {
+            body {
+                padding: 12px 6px;
+            }
+            .maria-page-wrapper {
+                padding: 24px 14px;
+                border-radius: var(--maria-radius-lg);
+                box-shadow:
+                    0 0 0 2px var(--maria-bg),
+                    0 0 0 3px var(--maria-border-gold),
+                    0 10px 25px rgba(35, 58, 41, 0.12);
+                gap: 22px;
+            }
+            .maria-main-title {
+                font-size: 1.85rem;
+            }
+            .maria-title-sub {
+                font-size: 0.88rem;
+            }
+            .maria-hero-grid {
+                grid-template-columns: 1fr;
+                gap: 18px;
+            }
+            .maria-mucha-arch {
+                max-width: 240px;
+                height: 220px;
+            }
+            .maria-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            .maria-stat-card {
+                padding: 12px 10px;
+            }
+            .maria-header-flourish-left,
+            .maria-header-flourish-right {
+                display: none;
+            }
+            .maria-chart-container {
+                gap: 2px;
+                padding: 10px 0 0;
+            }
+            .maria-flower-bud {
+                width: 4px;
+                height: 4px;
+            }
+            .maria-stem-bar {
+                width: 4px;
+            }
+            .maria-chart-val {
+                font-size: 0.55rem;
+                transform: scale(0.9);
+            }
+            .maria-chart-axis-label {
+                font-size: 0.55rem;
+                transform: scale(0.9);
+            }
+            .maria-handover-banner {
+                padding: 16px 14px;
+                gap: 14px;
+            }
+            .maria-handover-cameo {
+                width: 70px;
+                height: 70px;
+            }
+            .maria-titles-grid {
+                grid-template-columns: 1fr;
+            }
+            .maria-dimensions-grid {
+                grid-template-columns: 1fr;
+            }
+            .maria-quality-layout {
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+            .maria-quality-cameo {
+                margin-bottom: 6px;
+            }
+            .maria-token-receipt {
+                grid-template-columns: 1fr;
+                text-align: center;
+                padding: 16px 14px;
+                gap: 14px;
+                justify-items: center;
+            }
+            .maria-receipt-main {
+                align-items: center;
+                text-align: center;
+            }
+            .maria-receipt-total {
+                justify-content: center;
+            }
+            .maria-receipt-side {
+                border-left: none;
+                border-top: 1px dashed var(--maria-border-gold);
+                padding-top: 10px;
+                padding-left: 0;
+                width: 100%;
+            }
+            .maria-footer {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+                gap: 12px;
+            }
+            .maria-footer-brand {
+                align-items: center;
+                text-align: center;
+            }
+            .maria-footer-meta {
+                align-items: center;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="maria-page-wrapper">
+        <!-- 页面四角装饰 -->
+        <div class="maria-page-corner maria-page-tl"></div>
+        <div class="maria-page-corner maria-page-tr"></div>
+        <div class="maria-page-corner maria-page-bl"></div>
+        <div class="maria-page-corner maria-page-br"></div>
+
+        <!-- 1. 顶部学园题头 (圣母玛利亚像 宏大开篇) -->
+        <header class="maria-header">
+            <div class="maria-top-ribbon">
+                <div class="maria-academy-brand">
+                    <span class="maria-cross-symbol">✝</span>
+                    <span>LILLIAN GIRLS' ACADEMY · YAMAYURIKAI</span>
+                </div>
+                <div class="maria-greeting-badge">
+                    <span>✿ ごきげんよう</span>
+                </div>
+            </div>
+
+            <div class="maria-hero-grid">
+                <div class="maria-hero-content">
+                    <div class="maria-eyebrow">
+                        <span class="maria-eyebrow-line"></span>
+                        <span>MARIA-SAMA GA MITERU · DAILY SALON</span>
+                        <span class="maria-eyebrow-line"></span>
+                    </div>
+
+                    <h1 class="maria-main-title">
+                        莉莉安茶会 · 今日群聊公报
+                        <span class="maria-title-sub">BULLETIN DU SALON DES ROSES</span>
+                    </h1>
+
+                    <p class="maria-hero-quote">
+                        「ごきげんよう。今日もマリア様が見守ってくださる庭園で、心穏やかな時間をお過ごしください。」
+                    </p>
+
+                    <div class="maria-date-ticket">
+                        <span class="maria-ticket-label">公报日期</span>
+                        <strong class="maria-ticket-value">{{ current_date }}</strong>
+                    </div>
+                </div>
+
+                <div class="maria-hero-figure-wrap">
+                    <div class="maria-mucha-arch">
+                        <div class="maria-mucha-halo"></div>
+                        <img src="{{ maria_cdn_base }}/statue_virgin_mary.png" alt="圣母玛利亚像" class="maria-hero-statue-img">
+                    </div>
+                    <div class="maria-arch-banner">
+                        <span>『マリア様がみてる』</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 2. 群聊核心基础统计 -->
+        <section class="maria-stats-section avoid-break" aria-label="群聊基础统计">
+            <div class="maria-stats-grid">
+                <div class="maria-stat-card">
+                    <div class="maria-card-corner maria-corner-tl"></div>
+                    <div class="maria-card-corner maria-corner-tr"></div>
+                    <div class="maria-card-corner maria-corner-bl"></div>
+                    <div class="maria-card-corner maria-corner-br"></div>
+
+                    <img src="{{ maria_cdn_base }}/rose_red.png" alt="" class="maria-stat-icon-bg">
+                    <div class="maria-stat-header">
+                        <span class="maria-stat-num-tag">№ 01</span>
+                        <img src="{{ maria_cdn_base }}/rose_red.png" alt="" class="maria-stat-emblem">
+                    </div>
+                    <span class="maria-stat-label">消息总数</span>
+                    <strong class="maria-stat-val">{{ '{:,}'.format(message_count | int) }}</strong>
+                    <span class="maria-stat-unit">条温存私语</span>
+                </div>
+
+                <div class="maria-stat-card">
+                    <div class="maria-card-corner maria-corner-tl"></div>
+                    <div class="maria-card-corner maria-corner-tr"></div>
+                    <div class="maria-card-corner maria-corner-bl"></div>
+                    <div class="maria-card-corner maria-corner-br"></div>
+
+                    <img src="{{ maria_cdn_base }}/rose_white.png" alt="" class="maria-stat-icon-bg">
+                    <div class="maria-stat-header">
+                        <span class="maria-stat-num-tag">№ 02</span>
+                        <img src="{{ maria_cdn_base }}/rose_white.png" alt="" class="maria-stat-emblem">
+                    </div>
+                    <span class="maria-stat-label">登校群友</span>
+                    <strong class="maria-stat-val">{{ '{:,}'.format(participant_count | int) }}</strong>
+                    <span class="maria-stat-unit">位出席淑女</span>
+                </div>
+
+                <div class="maria-stat-card">
+                    <div class="maria-card-corner maria-corner-tl"></div>
+                    <div class="maria-card-corner maria-corner-tr"></div>
+                    <div class="maria-card-corner maria-corner-bl"></div>
+                    <div class="maria-card-corner maria-corner-br"></div>
+
+                    <img src="{{ maria_cdn_base }}/rose_yellow.png" alt="" class="maria-stat-icon-bg">
+                    <div class="maria-stat-header">
+                        <span class="maria-stat-num-tag">№ 03</span>
+                        <img src="{{ maria_cdn_base }}/rose_yellow.png" alt="" class="maria-stat-emblem">
+                    </div>
+                    <span class="maria-stat-label">交流字数</span>
+                    <strong class="maria-stat-val">{{ '{:,}'.format(total_characters | int) }}</strong>
+                    <span class="maria-stat-unit">字优雅谈吐</span>
+                </div>
+
+                <div class="maria-stat-card">
+                    <div class="maria-card-corner maria-corner-tl"></div>
+                    <div class="maria-card-corner maria-corner-tr"></div>
+                    <div class="maria-card-corner maria-corner-bl"></div>
+                    <div class="maria-card-corner maria-corner-br"></div>
+
+                    <div class="maria-stat-header">
+                        <span class="maria-stat-num-tag">№ 04</span>
+                        <span style="color: var(--maria-gold); font-size: 1.1rem;">❧</span>
+                    </div>
+                    <span class="maria-stat-label">表情互动</span>
+                    <strong class="maria-stat-val">{{ '{:,}'.format(emoji_count | int) }}</strong>
+                    <span class="maria-stat-unit">次嫣然笑颜</span>
+                </div>
+            </div>
+
+            {% if most_active_period %}
+            <div class="maria-peak-bar">
+                <div class="maria-peak-left">
+                    <span class="maria-clock-icon">❦</span>
+                    <span>学园最喧闹时刻：</span>
+                    <strong class="maria-peak-highlight">{{ most_active_period }}</strong>
+                </div>
+                <span style="font-size: 0.8rem; color: var(--maria-text-muted);">微风吹拂的午后庭院</span>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- 3. 学园寄语 / Handover -->
+        <section class="maria-handover-banner avoid-break">
+            <div class="maria-handover-cameo">
+                <img src="{{ maria_cdn_base }}/rosa_gigantea_sei_shimako.png" alt="莉莉安姐妹">
+            </div>
+            <div class="maria-handover-text">
+                <span class="maria-handover-kicker">LILLIAN HERITAGE · 学园寄语</span>
+                <h3 class="maria-handover-title">『タイが曲がっていてよ』</h3>
+                <p class="maria-handover-desc">
+                    「无论何时，都要保持整洁与优雅。愿今日茶会中的每一次相逢，皆如蔷薇盛放般恒久芬芳。」
+                </p>
+            </div>
+            <img src="{{ maria_cdn_base }}/rosa_chinensis_sachiko_yumi.png" alt="" class="maria-handover-watermark">
+        </section>
+
+        <!-- 4. 钟楼时刻表（24小时活跃度） -->
+        <section class="maria-section maria-chart-section avoid-break">
+            <div class="maria-section-header">
+                <div class="maria-header-flourish-left">
+                    <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                        <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+                    </svg>
+                </div>
+                <div class="maria-section-title-wrap">
+                    <span class="maria-section-badge">HORLOGE DE L'ACADÉMIE</span>
+                    <h2 class="maria-section-title">钟楼时刻 · 24小时作息</h2>
+                    <span class="maria-section-subtitle">24-HOUR ACTIVITY DISTRIBUTION</span>
+                </div>
+                <div class="maria-header-flourish-right">
+                    <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                        <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+                    </svg>
+                </div>
+            </div>
+
+            {{ hourly_chart_html | safe }}
+        </section>
+
+        <!-- 4. 核心话题 (含角色装饰插图) -->
+        {{ topics_html | safe }}
+
+        <!-- 5. 成员肖像 / 称号 -->
+        {{ titles_html | safe }}
+
+        <!-- 6. 今日金句 (含角色装饰插图) -->
+        {{ quotes_html | safe }}
+
+        <!-- 7. 聊天质量评定 -->
+        {% if chat_quality_html %}
+        {{ chat_quality_html | safe }}
+        {% endif %}
+
+        <!-- 8. 茶会账单 / Token 消耗 -->
+        <section class="maria-token-receipt avoid-break" aria-label="Token 消耗记录">
+            <div class="maria-receipt-emblem">
+                <span class="maria-receipt-emblem-icon">⚜</span>
+                <span>MEMOIRE</span>
+            </div>
+
+            <div class="maria-receipt-main">
+                <div class="maria-receipt-kicker">茶会纪要消耗 · Token Consommation</div>
+                {% if total_tokens | int > 0 %}
+                <div class="maria-receipt-total">
+                    <strong>{{ '{:,}'.format(total_tokens | int) }}</strong>
+                    <span>Tokens</span>
+                </div>
+                <div class="maria-receipt-split">
+                    输入 {{ '{:,}'.format(prompt_tokens | int) }} <span>／</span> 输出 {{ '{:,}'.format(completion_tokens | int) }}
+                </div>
+                {% else %}
+                <div style="font-size: 0.9rem; color: var(--maria-text-muted);">本次茶会未产生额外消耗</div>
+                {% endif %}
+            </div>
+
+            <div class="maria-receipt-illust-wrap">
+                <img src="{{ maria_cdn_base }}/rosa_foetida_yoshino_rei.png" alt="黄蔷薇家族" class="maria-receipt-illust">
+            </div>
+
+            <div class="maria-receipt-side">
+                <strong>莉莉安之苑</strong>
+                <small>纯洁与典雅</small>
+            </div>
+        </section>
+
+        <!-- 10. 页脚 (古典藏书印章 & GitHub 艺术链接) -->
+        <footer class="maria-footer">
+            <div class="maria-footer-brand">
+                <strong>私立莉莉安女学园 · 山百合会公报</strong>
+                <span>Maria-sama ga Miteru Theme · <a href="https://github.com/sxp-simon" target="_blank" rel="noopener noreferrer" style="color: var(--maria-text-gold); text-decoration: underline; text-underline-offset: 2px;">Templated by @HelianNuits</a></span>
+            </div>
+
+            <div class="maria-footer-center">
+                <a href="https://github.com/SXP-Simon/astrbot_plugin_qq_group_daily_analysis" target="_blank" rel="noopener noreferrer" class="maria-repo-seal" title="AstrBot QQ群聊分析插件">
+                    <svg class="maria-gh-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>
+                    <div class="maria-repo-info">
+                        <span class="maria-repo-title">LILLIAN ATELIER</span>
+                        <span class="maria-repo-subtitle">astrbot_plugin_qq_group_daily_analysis</span>
+                    </div>
+                    <span class="maria-repo-flourish">❦</span>
+                </a>
+            </div>
+
+            <div class="maria-footer-meta">
+                <span>AstrBot 群聊日常分析总结插件</span>
+                <span>{{ current_datetime }}</span>
+            </div>
+        </footer>
+    </div>
+</body>
+
+</html>

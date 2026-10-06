@@ -1,0 +1,73 @@
+{% if quotes %}
+{% set maria_cdn_base = t2i_maria_assets_mirror if (t2i_maria_assets_mirror is defined and t2i_maria_assets_mirror) else 'assets/maria' %}
+<section class="maria-section maria-quotes-section avoid-break">
+    <div class="maria-section-header">
+        <div class="maria-header-flourish-left">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+        <div class="maria-section-title-wrap">
+            <span class="maria-section-badge">WORDS OF ROSES</span>
+            <h2 class="maria-section-title">蔷薇私语 · 今日金句</h2>
+            <span class="maria-section-subtitle">PENSÉES & CITATIONS D'OR</span>
+        </div>
+        <div class="maria-header-flourish-right">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="maria-quotes-list">
+        {% for quote in quotes %}
+        {% set rose_type = loop.index0 % 3 %}
+        {% if rose_type == 0 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_red.png' %}
+        {% elif rose_type == 1 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_white.png' %}
+        {% else %}
+            {% set rose_img = maria_cdn_base ~ '/rose_yellow.png' %}
+        {% endif %}
+
+        <div class="maria-quote-card avoid-break">
+            <div class="maria-card-corner maria-corner-tl"></div>
+            <div class="maria-card-corner maria-corner-tr"></div>
+            <div class="maria-card-corner maria-corner-bl"></div>
+            <div class="maria-card-corner maria-corner-br"></div>
+            <img src="{{ rose_img }}" alt="" class="maria-quote-bg-rose">
+
+            <div class="maria-quote-main">
+                <div class="maria-quote-mark maria-quote-mark-open">“</div>
+                <div class="maria-quote-text">
+                    <p>{{ quote.content }}</p>
+                </div>
+                <div class="maria-quote-mark maria-quote-mark-close">”</div>
+            </div>
+
+            <div class="maria-quote-meta">
+                <div class="maria-quote-left-meta">
+                    <div class="maria-quote-speaker">
+                        {% if quote.avatar_url %}
+                        <img src="{{ quote.avatar_url }}" alt="{{ quote.sender }}" class="maria-speaker-avatar">
+                        {% else %}
+                        <div class="maria-speaker-avatar-fallback">✿</div>
+                        {% endif %}
+                        <span class="maria-speaker-name">{{ '匿名群友' if hide_user_names else quote.sender }}</span>
+                    </div>
+
+                    {% if quote.reason %}
+                    <div class="maria-quote-reason">
+                        <span class="maria-reason-flourish">——</span>
+                        {{ quote.reason | safe }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
