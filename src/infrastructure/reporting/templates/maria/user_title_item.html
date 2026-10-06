@@ -1,0 +1,87 @@
+{% if titles %}
+{% set maria_cdn_base = t2i_maria_assets_mirror if (t2i_maria_assets_mirror is defined and t2i_maria_assets_mirror) else 'assets/maria' %}
+<section class="maria-section maria-titles-section avoid-break">
+    <div class="maria-section-header">
+        <div class="maria-header-flourish-left">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+        <div class="maria-section-title-wrap">
+            <span class="maria-section-badge">PORTRAITS OF SŒURS</span>
+            <h2 class="maria-section-title">学园名册 · 淑女风采</h2>
+            <span class="maria-section-subtitle">TABLEAU DES PERSONNALITÉS DU SALON</span>
+        </div>
+        <div class="maria-header-flourish-right">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="maria-titles-grid">
+        {% for item in titles %}
+        {% set rose_type = loop.index0 % 3 %}
+        {% if rose_type == 0 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_red.png' %}
+        {% elif rose_type == 1 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_white.png' %}
+        {% else %}
+            {% set rose_img = maria_cdn_base ~ '/rose_yellow.png' %}
+        {% endif %}
+
+        <div class="maria-title-card avoid-break">
+            <div class="maria-card-corner maria-corner-tl"></div>
+            <div class="maria-card-corner maria-corner-tr"></div>
+            <div class="maria-card-corner maria-corner-bl"></div>
+            <div class="maria-card-corner maria-corner-br"></div>
+
+            <div class="maria-portrait-top">
+                <div class="maria-cameo-frame">
+                    <div class="maria-cameo-border">
+                        {% if item.avatar_data %}
+                        <img src="{{ item.avatar_data }}" alt="{{ item.name }}" class="maria-user-avatar">
+                        {% else %}
+                        <div class="maria-avatar-placeholder">{{ item.name[:1] if item.name else '✿' }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="maria-member-info">
+                    <div class="maria-member-name-row">
+                        <span class="maria-member-name">{{ '匿名群友' if hide_user_names else item.name }}</span>
+                    </div>
+
+                    <div class="maria-member-badges">
+                        <span class="maria-badge-title">
+                            <img src="{{ rose_img }}" alt="" class="maria-title-rose-micro">
+                            {{ item.title }}
+                        </span>
+                        {% if item.mbti %}
+                        <span class="maria-badge-mbti">{{ item.mbti }}</span>
+                        {% endif %}
+                        {% if item.profile_title %}
+                        <span class="maria-badge-character">{{ item.profile_title }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if item.reason %}
+            <div class="maria-member-reason">
+                <p>{{ item.reason | safe }}</p>
+            </div>
+            {% endif %}
+
+            {% if item.profile_image %}
+            <div class="maria-profile-watermark">
+                <img src="{{ item.profile_image }}" alt="" loading="lazy">
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

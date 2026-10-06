@@ -1,0 +1,92 @@
+{% if dimensions or summary %}
+{% set maria_cdn_base = t2i_maria_assets_mirror if (t2i_maria_assets_mirror is defined and t2i_maria_assets_mirror) else 'assets/maria' %}
+<section class="maria-section maria-quality-section avoid-break">
+    <div class="maria-section-header">
+        <div class="maria-header-flourish-left">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+                <circle cx="50" cy="12" r="1.5" fill="#9e3447"/>
+                <circle cx="70" cy="12" r="1.5" fill="#5a7288"/>
+            </svg>
+        </div>
+        <div class="maria-section-title-wrap">
+            <span class="maria-section-badge">SALON EVALUATION & HARMONIE</span>
+            <h2 class="maria-section-title">{{ title or '学园庭园的省察 · 群聊质感' }}</h2>
+            <span class="maria-section-subtitle">{{ subtitle or 'REVUE DE LA QUALITÉ DU SALON' }}</span>
+        </div>
+        <div class="maria-header-flourish-right">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+                <circle cx="50" cy="12" r="1.5" fill="#b88628"/>
+                <circle cx="70" cy="12" r="1.5" fill="#b88628"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="maria-quality-layout">
+        <div class="maria-quality-cameo" id="mariaEasterCameo" tabindex="0" role="button" aria-label="山百合会 · 窓辺の省察 (点击/悬停互动)">
+            <div class="maria-quality-arch">
+                <!-- 默认：窓辺の静かな省察 (圣 窗边俯瞰) -->
+                <img src="{{ maria_cdn_base }}/sei_window_observation.png" alt="山百合会·省察" class="maria-quality-img maria-quality-img-calm">
+                <!-- 彩蛋互动：圣与祐巳的活泼打趣 -->
+                <img src="{{ maria_cdn_base }}/yumi_and_sei.png" alt="山百合会·祐巳与圣" class="maria-quality-img maria-quality-img-banter">
+                
+                <div class="maria-quality-halo"></div>
+                <div class="maria-easter-aura"></div>
+                
+                <div class="maria-easter-sparkles" aria-hidden="true">
+                    <span class="maria-sparkle s1">✿</span>
+                    <span class="maria-sparkle s2">✦</span>
+                    <span class="maria-sparkle s3">✿</span>
+                    <span class="maria-sparkle s4">✦</span>
+                </div>
+            </div>
+            
+            <div class="maria-caption-container">
+                <span class="maria-quality-caption maria-caption-calm">『窓辺の静かな省察』</span>
+                <span class="maria-quality-caption maria-caption-banter">「捕まえた、祐巳ちゃん」</span>
+            </div>
+            
+            <div class="maria-easter-touch-hint" aria-hidden="true">
+                <span class="maria-touch-icon">✦</span>
+                <span class="maria-touch-text">私語</span>
+            </div>
+        </div>
+
+        <div class="maria-quality-content">
+            {% if dimensions %}
+            <div class="maria-dimensions-grid">
+                {% for dim in dimensions %}
+                <div class="maria-dimension-card avoid-break">
+                    <div class="maria-dim-header">
+                        <span class="maria-dim-name">{{ dim.name }}</span>
+                        <span class="maria-dim-val">{{ dim.percentage }}%</span>
+                    </div>
+
+                    <div class="maria-dim-track">
+                        <div class="maria-dim-fill" style="width: {{ dim.percentage }}%;"></div>
+                    </div>
+
+                    {% if dim.comment %}
+                    <p class="maria-dim-comment">{{ dim.comment }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if summary %}
+            <div class="maria-quality-summary-box avoid-break">
+                <div class="maria-summary-icon">✿</div>
+                <div class="maria-summary-text">
+                    <h4 class="maria-summary-heading">总评纪要 · Conclusion du Salon</h4>
+                    <p>{{ summary }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}

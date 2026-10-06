@@ -1,0 +1,49 @@
+<div class="maria-chart-container">
+    {% for item in chart_data %}
+    {% set bar_percentage = item.percentage | float %}
+    {% if bar_percentage < 0 %}
+    {% set bar_percentage = 0 %}
+    {% elif bar_percentage > 100 %}
+    {% set bar_percentage = 100 %}
+    {% endif %}
+
+    {% set stem_bg = '#d6cca8' %}
+    {% set stem_height = '4px' %}
+    {% set stem_opacity = '0.45' %}
+    {% set bud_display = 'none' %}
+
+    {% if item.count == 0 %}
+    {% set stem_bg = 'rgba(197, 160, 89, 0.25)' %}
+    {% set stem_height = '4px' %}
+    {% set stem_opacity = '0.35' %}
+    {% elif bar_percentage >= 70 %}
+    {% set stem_bg = 'linear-gradient(180deg, #ba6f7c 0%, #caa96e 45%, #344d3b 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '0.95' %}
+    {% set bud_display = 'block' %}
+    {% elif bar_percentage >= 35 %}
+    {% set stem_bg = 'linear-gradient(180deg, #caa96e 0%, #46634d 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '0.88' %}
+    {% set bud_display = 'block' %}
+    {% else %}
+    {% set stem_bg = 'linear-gradient(180deg, #8ba891 0%, #46634d 100%)' %}
+    {% set stem_height = bar_percentage ~ '%' %}
+    {% set stem_opacity = '0.8' %}
+    {% set bud_display = 'block' %}
+    {% endif %}
+
+    <div class="maria-chart-col">
+        {% if item.count > 0 %}
+        <div class="maria-chart-val">{{ item.count }}</div>
+        {% endif %}
+
+        <div class="maria-stem-wrapper">
+            <div class="maria-flower-bud" style="display: {{ bud_display }};"></div>
+            <div class="maria-stem-bar" style="height: {{ stem_height }}; background: {{ stem_bg }}; opacity: {{ stem_opacity }};"></div>
+        </div>
+
+        <div class="maria-chart-axis-label">{{ "%02d" | format(item.hour) }}</div>
+    </div>
+    {% endfor %}
+</div>

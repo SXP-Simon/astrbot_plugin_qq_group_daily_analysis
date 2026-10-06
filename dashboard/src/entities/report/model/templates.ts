@@ -104,6 +104,13 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
     tagColor: "blue",
   },
   {
+    key: "maria",
+    name: "Maria (圣母在上 · 山百合会)",
+    desc: "私立莉莉安女子学园山百合会风格，典雅蔷薇纹样、法文花体与复古羊皮纸信札质感",
+    tag: "圣母在上",
+    tagColor: "magenta",
+  },
+  {
     key: "format",
     name: "Format (标准卡片)",
     desc: "标准规范报表卡片，商务整洁",
@@ -133,6 +140,7 @@ export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [
   { id: "simple", label: "极简黑白 (Simple)", is_custom: false },
   { id: "art_nouveau", label: "新艺术运动 (Art Nouveau)", is_custom: false },
   { id: "deepseek_maid", label: "DeepSeek 鲸鱼女仆娘", is_custom: false },
+  { id: "maria", label: "圣母在上 (Maria)", is_custom: false },
   { id: "format", label: "标准卡片 (Format)", is_custom: false },
 ];
 

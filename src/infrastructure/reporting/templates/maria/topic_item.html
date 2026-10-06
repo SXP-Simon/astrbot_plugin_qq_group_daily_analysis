@@ -1,0 +1,75 @@
+{% if topics %}
+{% set maria_cdn_base = t2i_maria_assets_mirror if (t2i_maria_assets_mirror is defined and t2i_maria_assets_mirror) else 'assets/maria' %}
+<section class="maria-section maria-topics-section avoid-break">
+    <div class="maria-section-header">
+        <div class="maria-header-flourish-left">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+        <div class="maria-section-title-wrap">
+            <span class="maria-section-badge">YAMAYURIKAI CHRONICLES</span>
+            <h2 class="maria-section-title">花语拾遗 · 核心议题</h2>
+            <span class="maria-section-subtitle">LES DISCUSSIONS DU SALON DES ROSES</span>
+        </div>
+        <div class="maria-header-flourish-right">
+            <svg viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 12C30 12 40 2 60 12C80 22 90 12 120 12" stroke="#c5a059" stroke-width="1.2"/>
+                <circle cx="60" cy="12" r="3" fill="#c5a059"/>
+            </svg>
+        </div>
+    </div>
+
+    <div class="maria-topics-list">
+        {% for topic in topics %}
+        {% set rose_type = (topic.index - 1) % 3 %}
+        {% if rose_type == 0 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_red.png' %}
+            {% set rose_tag = '红蔷薇' %}
+        {% elif rose_type == 1 %}
+            {% set rose_img = maria_cdn_base ~ '/rose_white.png' %}
+            {% set rose_tag = '白蔷薇' %}
+        {% else %}
+            {% set rose_img = maria_cdn_base ~ '/rose_yellow.png' %}
+            {% set rose_tag = '黄蔷薇' %}
+        {% endif %}
+
+        <div class="maria-topic-card avoid-break">
+            <div class="maria-card-corner maria-corner-tl"></div>
+            <div class="maria-card-corner maria-corner-tr"></div>
+            <div class="maria-card-corner maria-corner-bl"></div>
+            <div class="maria-card-corner maria-corner-br"></div>
+            <img src="{{ rose_img }}" alt="" class="maria-topic-bg-rose">
+
+            <div class="maria-topic-header">
+                <div class="maria-topic-num-badge">
+                    <img src="{{ rose_img }}" alt="{{ rose_tag }}" class="maria-topic-rose-icon">
+                    <span class="maria-badge-sym">№</span> {{ "%02d"|format(topic.index) }}
+                </div>
+                <h3 class="maria-topic-heading">{{ topic.topic.topic }}</h3>
+            </div>
+
+            <div class="maria-topic-narrative">
+                {{ topic.detail | safe }}
+            </div>
+
+            {% if topic.contributors %}
+            <div class="maria-topic-footer-row">
+                <div class="maria-topic-participants">
+                    <span class="maria-participant-tag">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="maria-tag-icon">
+                            <circle cx="12" cy="7" r="4"/>
+                            <path d="M5.5 21C5.5 16.5 8.5 14 12 14C15.5 14 18.5 16.5 18.5 21"/>
+                        </svg>
+                        出席讨论
+                    </span>
+                    <span class="maria-participant-names">{{ topic.contributors }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
