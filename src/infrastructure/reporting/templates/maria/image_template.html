@@ -207,77 +207,214 @@
         .maria-stat-card,
         .maria-token-receipt,
         .maria-dimension-card,
-        .maria-quality-summary-box {
-            transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-                        box-shadow 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-                        border-color 0.45s ease,
-                        background-color 0.45s ease;
+        .maria-quality-summary-box,
+        .maria-handover-banner,
+        .maria-mucha-arch {
+            cursor: pointer;
+            transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                        box-shadow 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                        border-color 0.55s ease,
+                        background-color 0.55s ease;
         }
 
         .maria-topic-card:hover,
         .maria-title-card:hover,
         .maria-quote-card:hover,
-        .maria-stat-card:hover {
-            transform: translateY(-3px);
-            border-color: var(--maria-gold);
+        .maria-stat-card:hover,
+        .maria-dimension-card:hover,
+        .maria-quality-summary-box:hover {
+            transform: translateY(-4px);
+            border-color: #d4a94a;
             box-shadow:
-                0 12px 26px -4px rgba(35, 58, 41, 0.09),
-                0 0 16px rgba(197, 160, 89, 0.24);
+                0 14px 30px -4px rgba(35, 58, 41, 0.12),
+                0 0 20px rgba(197, 160, 89, 0.32);
+        }
+
+        /* 1. 顶部圣母像拱门与圣光浮雕交互 */
+        .maria-mucha-arch:hover {
+            transform: translateY(-5px);
+            border-color: #d4a94a;
+            box-shadow:
+                0 0 0 3px #fff,
+                0 0 0 6px var(--maria-gold),
+                0 18px 40px rgba(197, 160, 89, 0.38),
+                inset 0 0 35px rgba(197, 160, 89, 0.28);
+        }
+
+        .maria-mucha-halo {
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 0.65s ease,
+                        box-shadow 0.65s ease;
+        }
+
+        .maria-mucha-arch:hover .maria-mucha-halo {
+            opacity: 1;
+            transform: scale(1.05);
+            box-shadow:
+                0 0 0 4px rgba(253, 251, 247, 0.95),
+                0 0 0 6.5px rgba(197, 160, 89, 0.45),
+                inset 0 0 42px rgba(197, 160, 89, 0.25),
+                0 0 32px rgba(226, 199, 138, 0.45);
+        }
+
+        .maria-mucha-arch:hover .maria-hero-statue-img {
+            transform: translateY(-6px) scale(1.045);
+            filter: drop-shadow(0 14px 28px rgba(197, 160, 89, 0.52)) drop-shadow(0 0 18px rgba(255, 235, 175, 0.65)) brightness(1.07);
+        }
+
+        .maria-mucha-arch:hover .maria-arch-banner {
+            border-color: var(--maria-gold-dark);
+            box-shadow: 0 4px 14px rgba(197, 160, 89, 0.35);
+            transform: translateY(-2px);
+        }
+        .maria-arch-banner {
+            transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+        }
+
+        /* 2. 指标卡微标与背景蔷薇浮起 */
+        .maria-stat-emblem {
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s ease;
+        }
+        .maria-stat-card:hover .maria-stat-emblem {
+            transform: scale(1.25) rotate(12deg);
+            filter: drop-shadow(0 0 8px rgba(197, 160, 89, 0.7));
         }
 
         .maria-topic-bg-rose,
         .maria-quote-bg-rose,
         .maria-stat-icon-bg {
-            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s ease, filter 0.65s ease;
         }
 
         .maria-topic-card:hover .maria-topic-bg-rose,
         .maria-quote-card:hover .maria-quote-bg-rose,
         .maria-stat-card:hover .maria-stat-icon-bg {
-            transform: scale(1.08) rotate(3deg);
-            opacity: 0.28;
+            transform: scale(1.22) rotate(12deg);
+            opacity: 0.42;
+            filter: drop-shadow(0 0 10px rgba(197, 160, 89, 0.5));
         }
 
+        /* 3. 学园寄语横幅与姐妹微章交互 */
+        .maria-handover-banner:hover {
+            transform: translateY(-3px);
+            border-color: var(--maria-gold);
+            box-shadow: 0 10px 28px rgba(197, 160, 89, 0.22);
+        }
+        .maria-handover-banner:hover .maria-handover-cameo {
+            transform: scale(1.08) rotate(1.5deg);
+            border-color: #d4a94a;
+            box-shadow:
+                0 0 0 2px #fff,
+                0 0 0 5px var(--maria-gold),
+                0 8px 20px rgba(197, 160, 89, 0.38);
+        }
+        .maria-handover-cameo {
+            transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.55s ease, border-color 0.55s ease;
+        }
+        .maria-handover-cameo img {
+            transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), filter 0.55s ease;
+        }
+        .maria-handover-banner:hover .maria-handover-cameo img {
+            transform: scale(1.06);
+            filter: brightness(1.06) contrast(1.03);
+        }
+        .maria-handover-watermark {
+            transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s ease, filter 0.65s ease;
+        }
+        .maria-handover-banner:hover .maria-handover-watermark {
+            opacity: 0.35;
+            transform: scale(1.08) rotate(-2deg);
+            filter: drop-shadow(0 4px 16px rgba(197, 160, 89, 0.42)) brightness(1.08);
+        }
+
+        /* 4. 四角烫金包角微交互 */
         .maria-topic-card:hover .maria-corner-tl,
         .maria-title-card:hover .maria-corner-tl,
         .maria-quote-card:hover .maria-corner-tl {
             border-color: #d4a94a;
-            transform: translate(-1px, -1px);
+            transform: translate(-1.5px, -1.5px);
         }
         .maria-topic-card:hover .maria-corner-tr,
         .maria-title-card:hover .maria-corner-tr,
         .maria-quote-card:hover .maria-corner-tr {
             border-color: #d4a94a;
-            transform: translate(1px, -1px);
+            transform: translate(1.5px, -1.5px);
         }
         .maria-topic-card:hover .maria-corner-bl,
         .maria-title-card:hover .maria-corner-bl,
         .maria-quote-card:hover .maria-corner-bl {
             border-color: #d4a94a;
-            transform: translate(-1px, 1px);
+            transform: translate(-1.5px, 1.5px);
         }
         .maria-topic-card:hover .maria-corner-br,
         .maria-title-card:hover .maria-corner-br,
         .maria-quote-card:hover .maria-corner-br {
             border-color: #d4a94a;
-            transform: translate(1px, 1px);
+            transform: translate(1.5px, 1.5px);
         }
 
+        /* 5. 成员肖像框、头像与水印立绘互动 */
         .maria-title-card:hover .maria-cameo-frame {
-            transform: scale(1.025);
+            transform: scale(1.06);
             border-color: #d4a94a;
             box-shadow:
-                0 0 0 1.5px #fff,
-                0 0 0 3px rgba(197, 160, 89, 0.75),
-                0 4px 12px rgba(197, 160, 89, 0.18);
+                0 0 0 2px #fff,
+                0 0 0 4.5px rgba(197, 160, 89, 0.85),
+                0 6px 18px rgba(197, 160, 89, 0.32);
         }
 
         .maria-title-card:hover .maria-user-avatar {
-            transform: scale(1.03);
-            filter: contrast(1.02) brightness(1.02);
+            transform: scale(1.06);
+            filter: brightness(1.06) contrast(1.04);
         }
 
-        /* Character Illustration Hover Highlights */
+        .maria-title-rose-micro {
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+        }
+        .maria-title-card:hover .maria-title-rose-micro {
+            transform: scale(1.3) rotate(14deg);
+            filter: drop-shadow(0 0 5px rgba(197, 160, 89, 0.65));
+        }
+
+        .maria-title-card:hover .maria-profile-watermark img {
+            opacity: 0.38;
+            transform: scale(1.08) translateY(-3px);
+            filter: drop-shadow(0 6px 16px rgba(197, 160, 89, 0.38)) brightness(1.08);
+        }
+
+        /* 6. 话题与金句装饰小蔷薇动效 */
+        .maria-topic-flower-icon,
+        .maria-quote-rose-icon {
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), filter 0.5s ease;
+        }
+        .maria-topic-card:hover .maria-topic-flower-icon,
+        .maria-quote-card:hover .maria-quote-rose-icon {
+            transform: scale(1.22) rotate(14deg);
+            filter: drop-shadow(0 0 8px rgba(197, 160, 89, 0.7)) brightness(1.1);
+        }
+
+        /* 7. 底部茶会账单收据与黄蔷薇家族插图 */
+        .maria-token-receipt:hover {
+            transform: translateY(-4px);
+            border-color: var(--maria-gold);
+            box-shadow: 0 12px 28px rgba(197, 160, 89, 0.28);
+        }
+
+        .maria-token-receipt:hover .maria-receipt-illust {
+            transform: scale(1.1) translateY(-3px) rotate(1.5deg);
+            filter: drop-shadow(0 8px 18px rgba(197, 160, 89, 0.48)) drop-shadow(0 0 14px rgba(255, 235, 175, 0.45)) brightness(1.09);
+        }
+
+        .maria-token-receipt:hover .maria-receipt-emblem-icon {
+            transform: scale(1.2) rotate(8deg);
+            color: #d4a94a;
+            filter: drop-shadow(0 0 8px rgba(197, 160, 89, 0.6));
+        }
+        .maria-receipt-emblem-icon {
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), color 0.5s ease, filter 0.5s ease;
+        }
+
+        /* 通用插画过渡基础属性 */
         .maria-hero-statue-img,
         .maria-receipt-illust,
         .maria-profile-watermark img {
@@ -286,30 +423,14 @@
                         opacity 0.65s ease;
         }
 
-        .maria-mucha-arch:hover .maria-hero-statue-img {
-            transform: translateY(-3px) scale(1.025);
-            filter: drop-shadow(0 10px 22px rgba(197, 160, 89, 0.35)) brightness(1.03);
-        }
-
-        .maria-token-receipt:hover .maria-receipt-illust {
-            transform: scale(1.035) rotate(0.8deg);
-            filter: drop-shadow(0 6px 14px rgba(197, 160, 89, 0.3)) brightness(1.03);
-        }
-
-        .maria-title-card:hover .maria-profile-watermark img {
-            opacity: 0.3;
-            transform: scale(1.04) translateY(-2px);
-            filter: drop-shadow(0 4px 12px rgba(197, 160, 89, 0.25)) brightness(1.04);
-        }
-
         .maria-badge-title,
         .maria-topic-num-badge {
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         .maria-badge-title:hover,
         .maria-topic-num-badge:hover {
-            transform: scale(1.03);
-            box-shadow: 0 2px 8px rgba(197, 160, 89, 0.3);
+            transform: scale(1.04);
+            box-shadow: 0 2px 8px rgba(197, 160, 89, 0.35);
         }
 
         /* 页面外围四角花纹 */
