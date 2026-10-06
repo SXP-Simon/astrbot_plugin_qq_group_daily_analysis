@@ -87,3 +87,42 @@ def test_maria_assets_exist_and_cdn_mirror_fallback():
     )
     assert rendered.startswith("<!DOCTYPE html>")
     assert "https://cdn.example.com/assets/maria/statue_virgin_mary.png" in rendered
+
+
+@pytest.mark.asyncio
+async def test_maria_render_data_preparer_injects_maria_cdn_mirror():
+    """验证 RenderDataPreparer 正确向主渲染字典注入 t2i_maria_assets_mirror。"""
+    from types import SimpleNamespace
+    from src.domain.value_objects import GroupStatistics, TokenUsage
+    from src.infrastructure.reporting.render_data_preparer import RenderDataPreparer
+    from src.shared.constants import DEFAULT_MARIA_ASSETS_CDN_URL
+
+    from unittest.mock import MagicMock
+    cfg = MockConfigManager("maria")
+    templates = HTMLTemplates(cfg)
+    avatar_service = MagicMock()
+    visualizer = MagicMock()
+    visualizer.render_hourly_chart = MagicMock(return_value="<svg></svg>")
+    preparer = RenderDataPreparer(cfg, avatar_service, templates, visualizer)
+
+    stats = GroupStatistics(
+        message_count=10,
+        total_characters=100,
+        participant_count=2,
+        most_active_period="12:00 - 13:00",
+        golden_quotes=[],
+        emoji_count=1,
+        token_usage=TokenUsage(total_tokens=100, prompt_tokens=50, completion_tokens=50),
+    )
+    analysis_result = {
+        "statistics": stats,
+        "topics": [],
+        "user_titles": [],
+    }
+
+    render_data = await preparer.prepare_render_data(
+        analysis_result=analysis_result,
+        template_theme="maria",
+    )
+    assert "t2i_maria_assets_mirror" in render_data
+    assert render_data["t2i_maria_assets_mirror"] == DEFAULT_MARIA_ASSETS_CDN_URL
