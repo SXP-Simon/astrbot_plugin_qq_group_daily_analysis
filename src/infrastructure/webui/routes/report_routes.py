@@ -32,6 +32,7 @@ class ReportHistoryItemDTO(TypedDict):
     filename: str
     size_bytes: int
     modified_at: float
+    created_at: float
     absolute_path: str
     is_html: bool
     is_comic: bool
@@ -170,11 +171,19 @@ class ReportRoutes:
                             "漫画_"
                         )
                         g_info = group_info_map.get(g_id, {})
+                        raw_created = art.get("created_at")
+                        art_ts: float = (
+                            float(raw_created)
+                            if isinstance(raw_created, (int, float, str))
+                            and str(raw_created).strip()
+                            else stat.st_mtime
+                        )
                         reports.append(
                             {
                                 "filename": matched_file.name,
                                 "size_bytes": stat.st_size,
-                                "modified_at": stat.st_mtime,
+                                "modified_at": art_ts,
+                                "created_at": art_ts,
                                 "absolute_path": str(res_p),
                                 "is_html": is_html,
                                 "is_comic": is_comic,
@@ -291,6 +300,7 @@ class ReportRoutes:
                                 "filename": file_path.name,
                                 "size_bytes": stat.st_size,
                                 "modified_at": stat.st_mtime,
+                                "created_at": stat.st_mtime,
                                 "absolute_path": str(file_path.resolve()),
                                 "is_html": is_html,
                                 "is_comic": is_comic,

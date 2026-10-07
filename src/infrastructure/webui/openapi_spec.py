@@ -843,6 +843,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "filename": {"type": "string"},
                         "size_bytes": {"type": "number"},
                         "modified_at": {"type": "number"},
+                        "created_at": {"type": "number", "nullable": True},
                         "absolute_path": {"type": "string", "nullable": True},
                         "data_url": {"type": "string", "nullable": True},
                         "is_html": {"type": "boolean", "nullable": True},

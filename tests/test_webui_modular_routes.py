@@ -385,3 +385,5 @@ async def test_report_routes_database_first_querying_and_migration(
     assert items[0]["filename"] == "report_112233_20261005.html"
     assert items[0]["trace_id"] == "trace_target_test"
     assert items[0]["group_id"] == "112233"
+    assert items[0]["modified_at"] == 1700000000.0
+    assert items[0]["created_at"] == 1700000000.0
