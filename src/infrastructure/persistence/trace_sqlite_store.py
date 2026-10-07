@@ -425,7 +425,7 @@ class TraceSQLiteStore:
             raw_rfiles = extra_payload.get("report_files")
             if isinstance(raw_rfiles, list):
                 grp_id = str(trace_dict.get("group_id", ""))
-                now_ts = float(started_val) if started_val else time.time()
+                fallback_ts = time.time()
                 for rf in raw_rfiles:
                     if isinstance(rf, dict) and rf.get("filename"):
                         fn = str(rf["filename"])
@@ -434,13 +434,25 @@ class TraceSQLiteStore:
                             or ("html" if fn.endswith(".html") else "image")
                         )
                         rel_path = str(rf.get("path") or fn)
+                        rf_ts_raw = rf.get("created_at")
+                        rf_ts = (
+                            float(rf_ts_raw)
+                            if isinstance(rf_ts_raw, (int, float)) and rf_ts_raw > 0
+                            else fallback_ts
+                        )
                         conn.execute(
                             """
-                            INSERT OR REPLACE INTO report_artifacts (
+                            INSERT INTO report_artifacts (
                                 filename, trace_id, group_id, file_format, relative_path, created_at
                             ) VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(filename) DO UPDATE SET
+                                trace_id=excluded.trace_id,
+                                group_id=excluded.group_id,
+                                file_format=excluded.file_format,
+                                relative_path=excluded.relative_path,
+                                created_at=COALESCE(report_artifacts.created_at, excluded.created_at);
                             """,
-                            (fn, trace_id, grp_id, fmt, rel_path, now_ts),
+                            (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
                         )
 
     def get_trace(self, trace_id: str) -> dict[str, object] | None:
