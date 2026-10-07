@@ -223,6 +223,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
       dataIndex: "modified_at",
       key: "modified_at",
       width: 160,
+      sorter: (a: ReportItem, b: ReportItem) =>
+        (a.modified_at || a.created_at || 0) -
+        (b.modified_at || b.created_at || 0),
+      defaultSortOrder: "descend" as const,
       render: (ts: number) => (
         <span style={{ fontSize: 12 }}>{formatTimestamp(ts)}</span>
       ),
@@ -342,7 +346,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ viewModel, onViewTrace
           setRerenderModalOpen(false);
           setRerenderingReport(null);
         }}
-        onSuccess={refresh}
+        onSuccess={() => refresh(false, true)}
       />
     </Card>
   );

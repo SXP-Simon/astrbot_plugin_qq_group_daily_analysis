@@ -132,7 +132,7 @@ export function useReportsViewModel() {
 
   // 综合计算筛选后的报告列表
   const filteredReports = useMemo(() => {
-    return reports.filter((item) => {
+    const list = reports.filter((item) => {
       // 1. 群聊筛选
       if (selectedGroup) {
         if (item.group_id !== selectedGroup && !item.filename.includes(selectedGroup)) {
@@ -140,9 +140,10 @@ export function useReportsViewModel() {
         }
       }
 
-      // 2. 日期范围筛选 (基于 modified_at 时间戳)
+      // 2. 日期范围筛选 (基于 modified_at / created_at 时间戳)
       if (dateRange && dateRange[0] && dateRange[1]) {
-        if (item.modified_at < dateRange[0] || item.modified_at > dateRange[1]) {
+        const itemTime = item.modified_at || item.created_at || 0;
+        if (itemTime < dateRange[0] || itemTime > dateRange[1]) {
           return false;
         }
       }
@@ -161,6 +162,13 @@ export function useReportsViewModel() {
       }
 
       return true;
+    });
+
+    // 严格降序排序兜底：确保界面列表始终按生成时间从新到旧排列
+    return list.sort((a, b) => {
+      const timeA = a.modified_at || a.created_at || 0;
+      const timeB = b.modified_at || b.created_at || 0;
+      return timeB - timeA;
     });
   }, [reports, selectedGroup, dateRange, search]);
 
@@ -188,6 +196,15 @@ export function useReportsViewModel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGroup, search]);
 
+  const refresh = useCallback(
+    (silent = true, resetPage = false) => {
+      const targetPage = resetPage ? 1 : page;
+      if (resetPage) setPage(1);
+      return loadReports(targetPage, pageSize, silent);
+    },
+    [page, pageSize, loadReports]
+  );
+
   return {
     reports: filteredReports,
     rawReports: reports,
@@ -203,7 +220,7 @@ export function useReportsViewModel() {
     pageSize,
     total,
     handlePageChange,
-    refresh: (silent = true) => loadReports(page, pageSize, silent),
+    refresh,
     previewOpen,
     previewLoading,
     selectedReport,
