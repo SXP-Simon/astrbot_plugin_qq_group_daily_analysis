@@ -410,6 +410,7 @@ export interface components {
             filename: string;
             size_bytes: number;
             modified_at: number;
+            created_at?: number | null;
             absolute_path?: string | null;
             data_url?: string | null;
             is_html?: boolean | null;

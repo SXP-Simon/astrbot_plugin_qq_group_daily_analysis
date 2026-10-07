@@ -1185,6 +1185,10 @@
           "modified_at": {
             "type": "number"
           },
+          "created_at": {
+            "type": "number",
+            "nullable": true
+          },
           "absolute_path": {
             "type": "string",
             "nullable": true
