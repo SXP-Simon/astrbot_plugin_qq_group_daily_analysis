@@ -633,23 +633,27 @@ function verifyCommit({ rawMessage, touchedFiles = [], commitSha = null, commitA
   }
 
   // 3. 检查三点论关键词 (深度兼容中英双语、Markdown 列表符号、标题、粗体 **、方括号与前缀编号)
-  const hasProblem =
-    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:问题|痛点|Problem|Issue|Root\s*Cause)[^\n]*(?:[：:]|\n)/i.test(fullText);
-  const hasSolution =
-    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:解决措施|解决方案|措施|修改方法|Solution|Fix|Approach|Resolution)[^\n]*(?:[：:]|\n)/i.test(fullText);
-  const hasEffect =
-    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:效果|收益|预期效果|影响|Effect|Impact|Result|Outcome|Value)[^\n]*(?:[：:]|\n)/i.test(fullText);
+  // 兼顾 Bug 修复（问题/痛点/Root Cause）与 新功能/重构（背景/需求/动机/Background/Motivation/Context）
+  const hasProblemOrContext =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:问题|痛点|背景|需求|动机|优化点|Problem|Issue|Root\s*Cause|Context|Background|Motivation|Requirement)[^\n]*(?:[：:]|\n)/i.test(fullText);
+  const hasSolutionOrImplementation =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:解决措施|解决方案|措施|修改方法|实现方案|设计方案|落地细节|Solution|Fix|Approach|Resolution|Implementation|Design)[^\n]*(?:[：:]|\n)/i.test(fullText);
+  const hasEffectOrValue =
+    /(?:^|\n)\s*(?:[-*•#>_~]|\d+[.、]|\(\d+\)|【|\[|\*{1,3}|#{1,6})*[^\n]*?(?:效果|收益|预期效果|影响|价值|功能成效|Effect|Impact|Result|Outcome|Value)[^\n]*(?:[：:]|\n)/i.test(fullText);
 
-  if (!hasProblem) {
-    errors.push('【缺失“问题”说明】Body 必须包含以“问题：”/“Problem:”开头并阐述具体原因的段落');
+  if (!hasProblemOrContext) {
+    errors.push(
+      '【缺失“背景/问题”说明】Body 必须阐述本次改动的背景或解决的问题（支持“背景：/问题：/需求：/动机：/Problem:/Background:”等开头）\n' +
+      '     💡 提示：新功能/新模板/文档无需生硬编造负面 Bug 问题，直接阐明真实的业务需求、设计意图或新增背景即可！'
+    );
   }
 
-  if (!hasSolution) {
-    errors.push('【缺失“解决措施”说明】Body 必须包含以“解决措施：”/“Solution:”开头并阐述修改方法的段落');
+  if (!hasSolutionOrImplementation) {
+    errors.push('【缺失“实现方案/解决措施”说明】Body 必须包含以“实现方案：/解决措施：/Solution:/Implementation:”等开头阐述具体方案的段落');
   }
 
-  if (!hasEffect) {
-    errors.push('【缺失“效果”说明】Body 必须包含以“效果：”/“Effect:”/“Result:”开头并说明预期结果/量化数据的段落');
+  if (!hasEffectOrValue) {
+    errors.push('【缺失“效果/收益/价值”说明】Body 必须包含以“效果：/收益：/价值：/Effect:/Result:/Value:”等开头阐明预期收益或验证结果的段落');
   }
 
   if (nonWhitespaceCount < 40) {
@@ -718,37 +722,32 @@ function printFailureGuide(failedResults) {
   });
 
   console.error('\n' + '-'.repeat(74));
-  console.error('\x1b[36;1m💡【STAR 原则与问题导向提交指南 (Problem-Oriented Commit Guide)】\x1b[0m');
-  console.error('\x1b[90m  提交信息应清晰回答：为什么改(痛点根因) -> 怎么改(设计手段) -> 带来什么价值(量化收益)。\x1b[0m');
-  console.error('\x1b[90m  避免无信息量的流水账（如“修改了某文件”），应注重技术决策与实际工程影响。\x1b[0m\n');
+  console.error('\x1b[36;1m💡【三段论提交指引 (STAR & Context-Oriented Commit Guide)】\x1b[0m');
+  console.error('\x1b[90m  提交信息应清晰回答：为什么做(背景/痛点) -> 怎么做(技术方案) -> 带来什么价值(量化收益/效果)。\x1b[0m');
+  console.error('\x1b[90m  注意：新功能/新特性/文档请如实阐述业务背景与设计动机，严禁为了硬套格式而生硬编造虚假 Bug 问题！\x1b[0m\n');
 
-  console.error('\x1b[33;1m📐 编写结构要点：\x1b[0m');
-  console.error('  \x1b[33m• 问题：\x1b[0m阐明业务/架构痛点、触发场景与根本原因（如并发竞态、内存膨胀、类型黑洞、阻塞延迟等）。');
-  console.error('  \x1b[33m• 解决措施：\x1b[0m阐述架构设计意图、核心技术方案与防腐隔离手段（说明为什么选该方案，如何根治）。');
-  console.error('  \x1b[33m• 效果：\x1b[0m提供量化的工程/业务指标、性能提升幅度或确定性收益（如耗时下降、内存优化、覆盖率、0报错等）。\n');
+  console.error('\x1b[33;1m📐 编写结构要点（支持以下两类场景自然表达）：\x1b[0m');
+  console.error('  \x1b[33m• 背景/问题：\x1b[0m');
+  console.error('    - 新功能/重构(feat/refactor/docs): 阐明业务背景、新增需求或设计动机（如“背景：...”、“需求：...”）。');
+  console.error('    - 缺陷修复(fix): 阐明真实故障场景与根本原因（如并发竞态、死锁、时间戳覆盖等）（如“问题：...”、“痛点：...”）。');
+  console.error('  \x1b[33m• 实现方案/解决措施：\x1b[0m阐述架构设计意图、核心技术手段与防腐隔离措施（如“实现方案：...”、“解决措施：...”）。');
+  console.error('  \x1b[33m• 效果/收益：\x1b[0m提供量化的工程指标、业务成效或验证结论（如“效果：...”、“收益：...”）。\n');
 
   console.error('\x1b[32;1m📚 高质量提交范例（供参考与代入）：\x1b[0m');
   console.error('\x1b[32m');
-  console.error('【示例 1 - 领域层/后端架构】');
-  console.error('feat(domain/analysis): 重塑群分析聚合根与增量快照状态机');
+  console.error('【示例 1 - 新功能/新模板 (feat) - 自然阐述背景，无需编造假问题】');
+  console.error('feat(infra/reporting): 新增圣母在上 (Maria) 复古报纸风格报告模板与控制台画廊预览');
   console.error('');
-  console.error('问题：高并发分析场景下，无状态的散装字典导致历史游标与聚合统计产生脏读，且 LLM 重试时发生状态污染与内存无序膨胀。');
-  console.error('解决措施：建立 GroupAnalysisAggregate 聚合根并引入不可变增量快照状态机，结合 Checkpoint 防腐隔离重试逻辑与领域状态。');
-  console.error('效果：消除并发读写冲突，内存峰值下降 45%，异常断点恢复成功率达 100%，Pyright 严格类型检查 0 报错。');
+  console.error('背景：为了满足群聊对温润古典与学院风排版的审美需求，拓展日报主题库，引入圣母在上（山百合会）风格模板。');
+  console.error('实现方案：引入新艺术运动 (Art Nouveau) 羊皮纸视觉组件，支持双角色互动微动效，并在控制台模板画廊接入卡片预览。');
+  console.error('效果：成功丰富报告主题选择，自适应移动端与图片/HTML 多模式输出，相关组件单测与前端构建全部通过。');
   console.error('');
-  console.error('【示例 2 - 前端 FSD 小部件/性能优化】');
-  console.error('perf(webui/widgets): 重构 TrendCharts 趋势看板，引入 Web Worker 与分片渲染');
+  console.error('【示例 2 - 缺陷修复 (fix) - 准确定位真实痛点根因】');
+  console.error('fix(infra/storage): 修复历史任务重绘时产物创建时间被任务启动时间覆盖的问题');
   console.error('');
-  console.error('问题：单群历史消息超 50,000 条时，控制台全量挂载 ECharts 与交互表格造成主线程阻塞超 1.8s，低端设备频繁卡顿掉帧。');
-  console.error('解决措施：基于 Web Worker 异步计算词频权重，看板图表采用 requestAnimationFrame 分片渲染，并对历史数据表接入虚拟滚动。');
-  console.error('效果：页面首次可交互时间 (TTI) 由 2.1s 缩短至 280ms (提升 86%)，滚动 FPS 稳定在 60 帧，前端编译与打包全绿。');
-  console.error('');
-  console.error('【示例 3 - 平台适配/网络容灾】');
-  console.error('fix(infra/platform): 统一跨平台头像拉取重试熔断与 Negative Cache 机制');
-  console.error('');
-  console.error('问题：三方平台 CDN 在弱网或限流下频繁抛出 429 与连接超时，导致主分析链路被级联阻塞长达 30 秒以上。');
-  console.error('解决措施：在 PlatformAdapter 抽象层引入指数退避并发限流器，并对失败 OpenID 建立 10 分钟负缓存 (Negative Cache) 实施熔断。');
-  console.error('效果：彻底切断外部抖动对核心链路的阻塞传播，单次报告生成 P99 耗时从 35s 下降至 6.2s，网络异常率下降 98%。');
+  console.error('问题：历史任务换模板重绘时，后端直接沿用历史任务的 started_at 作为产物落库时间，导致新报告在列表时序中被沉底。');
+  console.error('解决措施：提取产物渲染时的真实生成时间戳，并在 SQLite UPSERT 中使用 COALESCE 保留已有创建时间。');
+  console.error('效果：历史报告重绘后即时置顶于列表第 1 行，时序查询性能维持在 <1ms，相关时序单测全部通过。');
   console.error('\x1b[0m');
   console.error('='.repeat(74) + '\n');
 }
