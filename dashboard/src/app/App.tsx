@@ -133,7 +133,7 @@ export const App: React.FC = () => {
           } else if (currentTab === "context") {
             currentVMs.contextInsightVM.refresh(true);
           } else if (currentTab === "reports") {
-            currentVMs.reportsVM.refresh(true);
+            currentVMs.reportsVM.refresh(true, true);
           } else if (currentTab === "logs") {
             currentVMs.logsVM.refresh(true);
           }
