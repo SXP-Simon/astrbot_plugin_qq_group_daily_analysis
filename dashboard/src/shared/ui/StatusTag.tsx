@@ -7,7 +7,14 @@ interface StatusTagProps {
 
 export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
   switch (status) {
+    case "pending":
+      return (
+        <Tag color="default" className="text-xs font-semibold">
+          待处理
+        </Tag>
+      );
     case "succeeded":
+    case "completed":
       return (
         <Tag color="success" className="text-xs font-semibold">
           成功
@@ -38,6 +45,7 @@ export const StatusTag: React.FC<StatusTagProps> = ({ status }) => {
         </Tag>
       );
     case "aborted":
+    case "cancelled":
       return (
         <Tag color="default" className="text-xs font-semibold">
           已中止

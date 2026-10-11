@@ -18,4 +18,19 @@ describe("状态标签组件 (StatusTag Component)", () => {
     render(<StatusTag status="running" />);
     expect(screen.getByText(/运行中|执行中|running/i)).toBeInTheDocument();
   });
+
+  it("应当将历史 completed 状态显示为成功", () => {
+    render(<StatusTag status="completed" />);
+    expect(screen.getByText("成功")).toBeInTheDocument();
+  });
+
+  it("应当将历史 cancelled 状态显示为中止", () => {
+    render(<StatusTag status="cancelled" />);
+    expect(screen.getByText("已中止")).toBeInTheDocument();
+  });
+
+  it("应当将兼容 pending 状态显示为待处理", () => {
+    render(<StatusTag status="pending" />);
+    expect(screen.getByText("待处理")).toBeInTheDocument();
+  });
 });
