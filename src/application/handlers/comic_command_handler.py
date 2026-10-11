@@ -286,9 +286,12 @@ class ComicCommandHandler:
             yield event.plain_result("🎨 该群的漫画话题提取任务正在执行，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.ABORT, error_message="Task cancelled by system"
-                )
+                try:
+                    trace.finish(
+                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    )
+                except RuntimeError as transition_error:
+                    logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             logger.info("手动漫画任务被取消（插件正在关闭或重载）")

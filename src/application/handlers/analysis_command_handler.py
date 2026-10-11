@@ -261,9 +261,12 @@ class AnalysisCommandHandler:
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
-                trace.finish(
-                    event=TaskEvent.ABORT, error_message="Task cancelled by system"
-                )
+                try:
+                    trace.finish(
+                        event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                    )
+                except RuntimeError as transition_error:
+                    logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
             logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             if trace and trace.status == "running":
