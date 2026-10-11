@@ -25,6 +25,7 @@ from ...domain.repositories.platform_adapter_repository import (
     GroupFileSupportProtocol,
     PlatformAdapterProtocol,
 )
+from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -219,7 +220,7 @@ class AnalysisCommandHandler:
                         else f"Analysis skipped/failed: {reason}"
                     )
                     trace.finish(
-                        status="failed",
+                        event=TaskEvent.FAIL,
                         error_message=err_msg,
                     )
                 if reason == "no_messages":
@@ -250,21 +251,23 @@ class AnalysisCommandHandler:
                 yield res
 
             if trace and trace.status == "running":
-                trace.finish(status="succeeded")
+                trace.finish(event=TaskEvent.SUCCEED)
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
-                    status="aborted", error_message="Task already running in group"
+                    event=TaskEvent.ABORT, error_message="Task already running in group"
                 )
             yield event.plain_result("📊 该群的分析任务正在执行中，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
-                trace.finish(status="aborted", error_message="Task cancelled by system")
+                trace.finish(
+                    event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                )
             logger.info("群分析任务被取消 (插件重载或卸载)")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
+                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"群分析失败: {e}", exc_info=True)
             yield event.plain_result(
                 f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"

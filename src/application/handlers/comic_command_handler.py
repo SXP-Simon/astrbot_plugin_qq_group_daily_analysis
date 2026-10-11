@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from ...domain.value_objects.analysis_results import SummaryTopic
+from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -216,7 +217,8 @@ class ComicCommandHandler:
                 reason = result.get("reason")
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="failed", error_message=f"提取漫画话题失败: {reason}"
+                        event=TaskEvent.FAIL,
+                        error_message=f"提取漫画话题失败: {reason}",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
@@ -243,7 +245,7 @@ class ComicCommandHandler:
             elif status == "duplicate":
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="warning", error_message="该群已有漫画任务正在执行"
+                        event=TaskEvent.WARN, error_message="该群已有漫画任务正在执行"
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
@@ -251,7 +253,7 @@ class ComicCommandHandler:
             elif status == "blocked":
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="warning", error_message="此群未启用漫画生成功能"
+                        event=TaskEvent.WARN, error_message="此群未启用漫画生成功能"
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
@@ -259,14 +261,17 @@ class ComicCommandHandler:
             elif status == "no_topics":
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="warning", error_message="未提取到可用于生成漫画的话题"
+                        event=TaskEvent.WARN,
+                        error_message="未提取到可用于生成漫画的话题",
                     )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("❌ 未提取到可用于生成漫画的话题")
             else:
                 if trace and trace.status == "running":
-                    trace.finish(status="failed", error_message="漫画生成任务未启动")
+                    trace.finish(
+                        event=TaskEvent.FAIL, error_message="漫画生成任务未启动"
+                    )
                 if trace_id and self.active_task_manager:
                     await self.active_task_manager.finish_task(trace_id)
                 yield event.plain_result("⚠️ 漫画生成任务未启动，请查看插件日志")
@@ -274,20 +279,22 @@ class ComicCommandHandler:
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
-                    status="failed", error_message="该群的漫画话题提取任务正在执行"
+                    event=TaskEvent.FAIL, error_message="该群的漫画话题提取任务正在执行"
                 )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             yield event.plain_result("🎨 该群的漫画话题提取任务正在执行，请稍后再试哦~")
         except asyncio.CancelledError:
             if trace and trace.status == "running":
-                trace.finish(status="aborted", error_message="Task cancelled by system")
+                trace.finish(
+                    event=TaskEvent.ABORT, error_message="Task cancelled by system"
+                )
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             logger.info("手动漫画任务被取消（插件正在关闭或重载）")
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
+                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
             if trace_id and self.active_task_manager:
                 await self.active_task_manager.finish_task(trace_id)
             logger.error(f"手动漫画生成失败: {e}", exc_info=True)
