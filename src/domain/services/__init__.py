@@ -6,7 +6,10 @@
 """
 
 from .incremental_merge_service import IncrementalMergeService
+from .task_state_machine import IllegalStateTransitionError, TaskStateMachine
 
 __all__ = [
+    "IllegalStateTransitionError",
     "IncrementalMergeService",
+    "TaskStateMachine",
 ]
