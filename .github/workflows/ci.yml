@@ -11,6 +11,9 @@ jobs:
   detect-changes:
     name: Detect Changed Paths
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       python: ${{ steps.filter.outputs.python }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -50,32 +53,75 @@ jobs:
         id: merge_commit
         env:
           EVENT_NAME: ${{ github.event_name }}
-          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-          PUSH_COMMIT_COUNT: ${{ github.event.commits && github.event.commits.length || 0 }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
 
+          (async () => {
           const eventName = process.env.EVENT_NAME || '';
-          const message = process.env.HEAD_COMMIT_MESSAGE || '';
-          const pushCommitCount = Number(process.env.PUSH_COMMIT_COUNT || 0);
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const commits = Array.isArray(event.commits) ? event.commits : [];
+          const message = typeof event.head_commit?.message === 'string'
+            ? event.head_commit.message
+            : '';
           const subject = message.split(/\r?\n/, 1)[0].trim();
-          const hasPrNumberSuffix = /\s+\(#\d+\)$/.test(subject);
+          const prNumberMatch = subject.match(/\s+\(#(\d+)\)$/);
           const conventionalSubject = subject.replace(/\s+\(#\d+\)$/, '');
           const hasConventionalHeader =
             /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\([^)]+\))?:\s+\S.*$/.test(
               conventionalSubject,
             );
-          const skip =
+          let isVerifiedSquashMerge = false;
+
+          if (
             eventName === 'push' &&
-            pushCommitCount === 1 &&
-            hasPrNumberSuffix &&
-            hasConventionalHeader;
+            commits.length === 1 &&
+            prNumberMatch &&
+            hasConventionalHeader &&
+            /^[0-9a-f]{40}$/i.test(event.after || '')
+          ) {
+            const [owner, repository] = process.env.GITHUB_REPOSITORY.split('/');
+            const apiUrl =
+              `https://api.github.com/repos/${owner}/${repository}/commits/${event.after}/pulls`;
+
+            try {
+              const response = await fetch(apiUrl, {
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+              });
+              if (response.ok) {
+                const pullRequests = await response.json();
+                isVerifiedSquashMerge =
+                  Array.isArray(pullRequests) &&
+                  pullRequests.some((pullRequest) =>
+                    pullRequest.number === Number(prNumberMatch[1]) &&
+                    pullRequest.merged_at &&
+                    pullRequest.merge_commit_sha?.toLowerCase() === event.after.toLowerCase(),
+                  );
+              } else {
+                console.warn(
+                  `Could not verify the associated PR (GitHub API returned ${response.status}); commit lint will run.`,
+                );
+              }
+            } catch (error) {
+              console.warn(`Could not verify the associated PR; commit lint will run: ${error}`);
+            }
+          }
+
+          const skip = isVerifiedSquashMerge;
 
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `skip=${skip}\n`);
           console.log(skip
             ? `Skipping push commit lint for PR merge subject: ${subject}`
             : `Commit lint will run for event '${eventName}'.`);
+          })().catch((error) => {
+            console.error(`Commit lint skip detection failed; CI will fail closed: ${error}`);
+            process.exitCode = 1;
+          });
           NODE
 
   commit-lint:
