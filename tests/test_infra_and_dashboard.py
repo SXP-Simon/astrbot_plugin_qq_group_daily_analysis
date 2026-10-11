@@ -881,6 +881,7 @@ async def test_plugin_config_api(tmp_path: Path):
     """测试插件配置中心 GET / POST API 接口与持久化"""
     mock_context = MagicMock()
     mock_dispatcher = MagicMock()
+    mock_auto_scheduler = MagicMock()
     mock_analysis_service = MagicMock()
 
     mock_config = MagicMock()
@@ -903,18 +904,26 @@ async def test_plugin_config_api(tmp_path: Path):
         trace_store=TraceSQLiteStore(tmp_path / "test_bridge.db"),
         analysis_service=mock_analysis_service,
         report_dispatcher=mock_dispatcher,
+        auto_scheduler=mock_auto_scheduler,
     )
 
     # 1. 验证 api_get_config
     get_res = await bridge.api_get_config()
     assert get_res is not None
     # 2. 验证 api_save_config
-    with patch("src.infrastructure.webui.plugin_page_bridge.request") as mock_req:
+    with patch("src.infrastructure.webui.routes.config_routes.request") as mock_req:
         mock_req.json = AsyncMock(
-            return_value={"config": {"basic": {"enabled": False}}}
+            return_value={
+                "config": {
+                    "basic": {"enabled": False},
+                    "auto_analysis": {"auto_analysis_time": []},
+                }
+            }
         )
         save_res = await bridge.api_save_config()
         assert save_res is not None
+        assert mock_config_dict["auto_analysis"]["auto_analysis_time"] == []
+        mock_auto_scheduler.schedule_jobs.assert_called_once_with(mock_context)
 
 
 @pytest.mark.asyncio

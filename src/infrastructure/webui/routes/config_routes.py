@@ -19,6 +19,8 @@ from ....utils.logger import logger
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
+    from astrbot.api.star import Context
+
     from ....application.dto.webui_dto import (
         ConfigFileContentQueryDTO,
         ConfigSaveDTO,
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ...reporting.dispatcher import ReportDispatcher
+    from ...scheduler.auto_scheduler import AutoScheduler
 
 
 def _sanitize_path_segment(segment: str) -> str:
@@ -51,14 +54,20 @@ class ConfigRoutes:
 
     analysis_service: AnalysisApplicationService | None
     report_dispatcher: ReportDispatcher | None
+    context: Context | None
+    auto_scheduler: AutoScheduler | None
 
     def __init__(
         self,
         analysis_service: AnalysisApplicationService | None,
         report_dispatcher: ReportDispatcher | None = None,
+        context: Context | None = None,
+        auto_scheduler: AutoScheduler | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
+        self.context = context
+        self.auto_scheduler = auto_scheduler
 
     async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
@@ -196,6 +205,9 @@ class ConfigRoutes:
 
             if cfg_mgr:
                 cfg_mgr.save_config()
+
+            if self.auto_scheduler is not None and self.context is not None:
+                self.auto_scheduler.schedule_jobs(self.context)
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
             return json_response(

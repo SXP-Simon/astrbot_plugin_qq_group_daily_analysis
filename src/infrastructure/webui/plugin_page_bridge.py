@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     )
     from ..persistence.trace_sqlite_store import TraceSQLiteStore
     from ..reporting.dispatcher import ReportDispatcher
+    from ..scheduler.auto_scheduler import AutoScheduler
     from .active_task_manager import ActiveTaskManager
 
 __all__ = [
@@ -64,6 +65,7 @@ class PluginPageWebUIBridge:
         analysis_service: AnalysisApplicationService | None = None,
         report_dispatcher: ReportDispatcher | None = None,
         report_output_dir: Path | None = None,
+        auto_scheduler: AutoScheduler | None = None,
     ):
         self.context = context
         self.trace_store = trace_store
@@ -71,6 +73,7 @@ class PluginPageWebUIBridge:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
+        self.auto_scheduler = auto_scheduler
         TraceContext.set_active_task_manager(self.active_task_manager)
 
         # 实例化各领域路由子模块
@@ -102,6 +105,8 @@ class PluginPageWebUIBridge:
         self.config_routes = ConfigRoutes(
             analysis_service=self.analysis_service,
             report_dispatcher=self.report_dispatcher,
+            context=self.context,
+            auto_scheduler=self.auto_scheduler,
         )
         self.data_management_routes = DataManagementRoutes(
             trace_store=self.trace_store,
