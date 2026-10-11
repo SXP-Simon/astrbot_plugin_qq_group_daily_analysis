@@ -16,6 +16,7 @@ from src.shared.constants import TaskStatus
         (TaskEvent.SUCCEED, TaskStatus.SUCCEEDED),
         (TaskEvent.WARN, TaskStatus.WARNING),
         (TaskEvent.FAIL, TaskStatus.FAILED),
+        (TaskEvent.TIMEOUT, TaskStatus.FAILED),
         (TaskEvent.CANCEL, TaskStatus.ABORTED),
         (TaskEvent.ABORT, TaskStatus.ABORTED),
         (TaskEvent.SKIP, TaskStatus.SKIPPED),
