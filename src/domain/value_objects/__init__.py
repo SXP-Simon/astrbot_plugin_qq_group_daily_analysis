@@ -28,6 +28,8 @@ from .analysis_results import (
     UserTitle,
 )
 from .platform_capabilities import PLATFORM_CAPABILITIES, PlatformCapabilities
+from .task_event import TaskEvent
+from .task_status import TaskStatus
 from .unified_group import UnifiedGroup, UnifiedMember
 from .unified_message import MessageContent, MessageContentType, UnifiedMessage
 
@@ -61,6 +63,8 @@ __all__ = [
     "QualityDimension",
     "QualityReview",
     "SummaryTopic",
+    "TaskEvent",
+    "TaskStatus",
     "TokenUsage",
     "UnifiedGroup",
     "UnifiedMember",
