@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 class PlatformAdapterProtocol(Protocol):
     """跨平台适配器标准行为协议。"""
 
+    bot_self_ids: list[str]
+
     @property
     def platform_id(self) -> str:
         """获取平台实例唯一标识。"""
