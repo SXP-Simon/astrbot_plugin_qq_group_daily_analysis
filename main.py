@@ -34,6 +34,7 @@ from .src.application.services.message_processing_service import (
     MessageProcessingService,
 )
 from .src.application.services.report_query_service import ReportQueryService
+from .src.application.services.task_lifecycle_service import TaskLifecycleService
 from .src.application.services.template_command_service import (
     TemplateCommandService,
 )
@@ -100,6 +101,7 @@ class GroupDailyAnalysis(Star):
     auto_scheduler: AutoScheduler
     message_sender: MessageSender
     trace_store: TraceSQLiteStore
+    task_lifecycle_service: TaskLifecycleService
     event_dedup_store: EventDeduplicationStore
     checkpoint_store: CheckpointStore
     active_task_manager: ActiveTaskManager
@@ -138,6 +140,8 @@ class GroupDailyAnalysis(Star):
         # 1.1 Trace & Checkpoint 基础设施 (持久化)
         self.trace_store = TraceSQLiteStore(plugin_data_dir / "traces.db")
         TraceContext.set_global_store(self.trace_store)
+        self.task_lifecycle_service = TaskLifecycleService(self.trace_store)
+        TraceContext.set_global_lifecycle_service(self.task_lifecycle_service)
         TraceContext.set_metrics_enabled(
             self.config_manager.get_enable_runtime_metrics()
         )
@@ -216,7 +220,9 @@ class GroupDailyAnalysis(Star):
         )
 
         # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
-        self.active_task_manager = ActiveTaskManager(trace_store=self.trace_store)
+        self.active_task_manager = ActiveTaskManager(
+            lifecycle_service=self.task_lifecycle_service,
+        )
         TraceContext.set_active_task_manager(self.active_task_manager)
         self.active_task_manager.start_reaper(interval_seconds=30, timeout_seconds=300)
         self.webui_bridge = PluginPageWebUIBridge(
@@ -235,6 +241,7 @@ class GroupDailyAnalysis(Star):
             checkpoint_store=self.checkpoint_store,
             analysis_service=self.analysis_service,
             report_dispatcher=self.auto_scheduler.report_dispatcher,
+            lifecycle_service=self.task_lifecycle_service,
         )
 
         # 指令处理器
