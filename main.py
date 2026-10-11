@@ -232,6 +232,7 @@ class GroupDailyAnalysis(Star):
             analysis_service=self.analysis_service,
             report_dispatcher=self.auto_scheduler.report_dispatcher,
             report_output_dir=plugin_data_dir / "reports",
+            auto_scheduler=self.auto_scheduler,
         )
         self.webui_bridge.register_routes()
 
