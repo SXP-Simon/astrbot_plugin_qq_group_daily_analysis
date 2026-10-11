@@ -1018,8 +1018,15 @@ class TraceSQLiteStore:
             conditions.append("t.group_id = ?")
             params.append(str(group_id))
         if status:
-            conditions.append("t.status = ?")
-            params.append(status)
+            if status == TaskStatus.SUCCEEDED.value:
+                conditions.append("t.status IN (?, ?)")
+                params.extend([TaskStatus.SUCCEEDED.value, TaskStatus.COMPLETED.value])
+            elif status == TaskStatus.ABORTED.value:
+                conditions.append("t.status IN (?, ?)")
+                params.extend([TaskStatus.ABORTED.value, TaskStatus.CANCELLED.value])
+            else:
+                conditions.append("t.status = ?")
+                params.append(status)
         if trigger_type:
             conditions.append("t.trigger_type = ?")
             params.append(trigger_type)
@@ -1103,10 +1110,10 @@ class TraceSQLiteStore:
                 """
                 SELECT
                     COUNT(*) as total_traces,
-                    SUM(CASE WHEN status IN ('succeeded', 'warning') THEN 1 ELSE 0 END) as succeeded_count,
+                    SUM(CASE WHEN status IN ('succeeded', 'warning', 'completed') THEN 1 ELSE 0 END) as succeeded_count,
                     SUM(CASE WHEN status = 'warning' THEN 1 ELSE 0 END) as warning_count,
                     SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
-                    AVG(CASE WHEN status IN ('succeeded', 'warning') THEN duration_ms ELSE NULL END) as avg_duration_ms
+                    AVG(CASE WHEN status IN ('succeeded', 'warning', 'completed') THEN duration_ms ELSE NULL END) as avg_duration_ms
                 FROM analysis_traces;
                 """
             ).fetchone()
@@ -1223,7 +1230,7 @@ class TraceSQLiteStore:
                     SELECT
                         strftime('%Y-%m-%d %H:00', datetime(t.started_at, 'unixepoch', 'localtime')) as hour_str,
                         COUNT(t.trace_id) as request_count,
-                        SUM(CASE WHEN t.status IN ('succeeded', 'warning') THEN 1 ELSE 0 END) as succeeded_count,
+                        SUM(CASE WHEN t.status IN ('succeeded', 'warning', 'completed') THEN 1 ELSE 0 END) as succeeded_count,
                         SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
                         COALESCE(SUM(tu.prompt_tokens), 0) as prompt_tokens,
                         COALESCE(SUM(tu.completion_tokens), 0) as completion_tokens,
@@ -1296,7 +1303,7 @@ class TraceSQLiteStore:
                     SELECT
                         date(t.started_at, 'unixepoch', 'localtime') as day_str,
                         COUNT(t.trace_id) as request_count,
-                        SUM(CASE WHEN t.status IN ('succeeded', 'warning') THEN 1 ELSE 0 END) as succeeded_count,
+                        SUM(CASE WHEN t.status IN ('succeeded', 'warning', 'completed') THEN 1 ELSE 0 END) as succeeded_count,
                         SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
                         COALESCE(SUM(tu.prompt_tokens), 0) as prompt_tokens,
                         COALESCE(SUM(tu.completion_tokens), 0) as completion_tokens,
