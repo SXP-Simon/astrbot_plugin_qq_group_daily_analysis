@@ -333,7 +333,7 @@ export interface components {
             platform: string;
             trigger_type: string;
             /** @enum {string} */
-            status: "running" | "succeeded" | "warning" | "failed" | "aborted" | "skipped";
+            status: "pending" | "running" | "succeeded" | "completed" | "warning" | "failed" | "aborted" | "cancelled" | "skipped";
             started_at: number;
             completed_at?: number | null;
             duration_ms?: number | null;

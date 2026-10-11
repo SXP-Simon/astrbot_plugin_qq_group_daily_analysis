@@ -666,11 +666,14 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "status": {
                             "type": "string",
                             "enum": [
+                                "pending",
                                 "running",
                                 "succeeded",
+                                "completed",
                                 "warning",
                                 "failed",
                                 "aborted",
+                                "cancelled",
                                 "skipped",
                             ],
                         },
