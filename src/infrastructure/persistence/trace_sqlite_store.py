@@ -11,6 +11,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
+from ...domain.services.task_state_machine import TaskStateMachine
+from ...domain.value_objects.task_event import TaskEvent
+from ...domain.value_objects.task_status import TaskStatus
 from ...shared.constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
@@ -192,10 +195,13 @@ class TraceSQLiteStore:
                 pass
 
     def save_trace(self, trace_dict: TraceContextSnapshot | dict[str, object]) -> None:
-        """保存或全量更新 Trace 链路及其关联的 Spans、ContextMetrics、TokenUsage"""
+        """保存追踪快照；已有任务的生命周期字段只能由条件跃迁接口修改。"""
         trace_id = trace_dict.get("trace_id", "")
         if not trace_id:
             return
+
+        requested_status = str(trace_dict.get("status", "running"))
+        initial_status = "pending" if requested_status == "pending" else "running"
 
         with self._get_connection() as conn:
             extra_raw = trace_dict.get("extra")
@@ -278,12 +284,6 @@ class TraceSQLiteStore:
                     group_name=CASE WHEN excluded.group_name != '' AND excluded.group_name != '未知群' THEN excluded.group_name ELSE analysis_traces.group_name END,
                     platform=CASE WHEN excluded.platform != '' AND excluded.platform NOT IN ('auto', 'default', 'all') THEN excluded.platform ELSE analysis_traces.platform END,
                     trigger_type=CASE WHEN excluded.trigger_type != '' THEN excluded.trigger_type ELSE analysis_traces.trigger_type END,
-                    status=excluded.status,
-                    completed_at=excluded.completed_at,
-                    duration_ms=excluded.duration_ms,
-                    error_stage=excluded.error_stage,
-                    error_message=excluded.error_message,
-                    stack_trace=excluded.stack_trace,
                     extra_json=excluded.extra_json,
                     pid=CASE WHEN excluded.pid != 0 THEN excluded.pid ELSE analysis_traces.pid END,
                     boot_id=CASE WHEN excluded.boot_id != '' THEN excluded.boot_id ELSE analysis_traces.boot_id END;
@@ -294,13 +294,13 @@ class TraceSQLiteStore:
                     str(trace_dict.get("group_name", "")),
                     str(trace_dict.get("platform", "")),
                     str(trace_dict.get("trigger_type", "manual")),
-                    str(trace_dict.get("status", "running")),
+                    initial_status,
                     started_val,
-                    trace_dict.get("completed_at"),
-                    trace_dict.get("duration_ms"),
-                    trace_dict.get("error_stage"),
-                    trace_dict.get("error_message"),
-                    trace_dict.get("stack_trace"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
                     json.dumps(extra_payload, ensure_ascii=False),
                     pid_val,
                     boot_id_val,
@@ -308,11 +308,32 @@ class TraceSQLiteStore:
             )
 
             # 2. 写入 Spans (增量覆写)
+            persisted_status_row = conn.execute(
+                "SELECT status FROM analysis_traces WHERE trace_id = ?", (trace_id,)
+            ).fetchone()
+            terminal_span_status: str | None = None
+            if persisted_status_row:
+                try:
+                    terminal_span_status = {
+                        TaskStatus.SUCCEEDED: "success",
+                        TaskStatus.WARNING: "warning",
+                        TaskStatus.COMPLETED: "success",
+                        TaskStatus.FAILED: "failed",
+                        TaskStatus.CANCELLED: "aborted",
+                        TaskStatus.ABORTED: "aborted",
+                        TaskStatus.SKIPPED: "skipped",
+                    }.get(TaskStatus(str(persisted_status_row["status"])))
+                except ValueError:
+                    pass
+
             spans_raw = trace_dict.get("spans")
             spans = spans_raw if isinstance(spans_raw, list) else []
             for span in spans:
                 if not isinstance(span, dict):
                     continue
+                span_status = str(span.get("status", "success"))
+                if span_status == "running" and terminal_span_status:
+                    span_status = terminal_span_status
                 span_started_raw = span.get("started_at")
                 span_started = (
                     float(span_started_raw)
@@ -333,7 +354,7 @@ class TraceSQLiteStore:
                         span.get("span_id", f"{trace_id}_{span.get('stage_name')}"),
                         trace_id,
                         str(span.get("stage_name", "")),
-                        str(span.get("status", "success")),
+                        span_status,
                         span_started,
                         span.get("duration_ms"),
                         json.dumps(span.get("payload", {}), ensure_ascii=False),
@@ -454,6 +475,97 @@ class TraceSQLiteStore:
                             """,
                             (fn, trace_id, grp_id, fmt, rel_path, rf_ts),
                         )
+
+    def get_task_status(self, trace_id: str) -> TaskStatus | None:
+        """读取单条 Trace 的领域状态。
+
+        Args:
+            trace_id: 任务追踪标识。
+
+        Returns:
+            TaskStatus | None: 当前任务状态；记录不存在时返回 None。
+        """
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT status FROM analysis_traces WHERE trace_id = ?",
+                (trace_id,),
+            ).fetchone()
+        return TaskStatus(str(row["status"])) if row else None
+
+    def transition_trace_status(
+        self,
+        trace_id: str,
+        expected_status: TaskStatus,
+        event: TaskEvent,
+        *,
+        completed_at: float,
+        duration_ms: float | None,
+        error_stage: str | None,
+        error_message: str | None,
+        stack_trace: str | None,
+    ) -> bool:
+        """通过事件与旧状态条件原子更新生命周期字段和未完成 Span。
+
+        Args:
+            trace_id: 任务追踪标识。
+            expected_status: 调用方观察到的旧状态。
+            event: 请求的生命周期事件；目标状态由领域状态机决定。
+            completed_at: 任务完成时间。
+            duration_ms: 已知的任务耗时；为空时按 Trace 开始时间计算。
+            error_stage: 失败或中止阶段。
+            error_message: 失败或中止原因。
+            stack_trace: 失败堆栈文本。
+
+        Returns:
+            bool: 仅当数据库中的状态仍等于 expected_status 且更新成功时返回 True。
+        """
+        target_status = TaskStateMachine.transition(expected_status, event)
+        if target_status == expected_status:
+            return self.get_task_status(trace_id) == expected_status
+
+        terminal_span_status = {
+            TaskStatus.SUCCEEDED: "success",
+            TaskStatus.WARNING: "warning",
+            TaskStatus.FAILED: "failed",
+            TaskStatus.ABORTED: "aborted",
+            TaskStatus.SKIPPED: "skipped",
+        }[target_status]
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE analysis_traces
+                SET status = ?, completed_at = ?,
+                    duration_ms = COALESCE(?, ROUND(MAX(0, (? - started_at) * 1000), 2)),
+                    error_stage = COALESCE(?, error_stage),
+                    error_message = COALESCE(?, error_message),
+                    stack_trace = COALESCE(?, stack_trace)
+                WHERE trace_id = ? AND status = ?;
+                """,
+                (
+                    target_status.value,
+                    completed_at,
+                    duration_ms,
+                    completed_at,
+                    error_stage,
+                    error_message,
+                    stack_trace,
+                    trace_id,
+                    expected_status.value,
+                ),
+            )
+            if cursor.rowcount != 1:
+                return False
+
+            conn.execute(
+                """
+                UPDATE trace_spans
+                SET status = ?,
+                    duration_ms = COALESCE(duration_ms, ROUND(MAX(0, (? - started_at) * 1000), 2))
+                WHERE trace_id = ? AND status = 'running';
+                """,
+                (terminal_span_status, completed_at, trace_id),
+            )
+        return True
 
     def get_trace(self, trace_id: str) -> dict[str, object] | None:
         """获取单个 Trace 的完整树状结构（包含 Spans、ContextMetrics、TokenUsage、PerformanceMetrics）"""
@@ -733,32 +845,77 @@ class TraceSQLiteStore:
 
         若指定 current_boot_id，则仅回收真正死亡的历史进程任务，不碰当前进程热重载存活任务。
         """
+        target_status = TaskStateMachine.transition(TaskStatus.RUNNING, TaskEvent.ABORT)
         with self._get_connection() as conn:
             if current_boot_id:
-                cursor = conn.execute(
+                rows = conn.execute(
                     """
-                    UPDATE analysis_traces
-                    SET status = 'aborted',
-                        error_stage = 'CRASH_RECOVERY',
-                        error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
-                        completed_at = strftime('%s', 'now')
+                    SELECT trace_id FROM analysis_traces
                     WHERE status = 'running'
                       AND (boot_id != ? OR boot_id = '' OR boot_id IS NULL)
                     """,
                     (current_boot_id,),
-                )
+                ).fetchall()
             else:
-                cursor = conn.execute(
-                    """
-                    UPDATE analysis_traces
-                    SET status = 'aborted',
-                        error_stage = 'CRASH_RECOVERY',
-                        error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
-                        completed_at = strftime('%s', 'now')
-                    WHERE status = 'running'
-                    """
-                )
-            return cursor.rowcount
+                rows = conn.execute(
+                    "SELECT trace_id FROM analysis_traces WHERE status = 'running'"
+                ).fetchall()
+
+            reconciled = 0
+            for row in rows:
+                completed_at = time.time()
+                if current_boot_id:
+                    cursor = conn.execute(
+                        """
+                        UPDATE analysis_traces
+                        SET status = ?, error_stage = 'CRASH_RECOVERY',
+                            error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
+                            completed_at = ?,
+                            duration_ms = COALESCE(
+                                duration_ms, ROUND(MAX(0, (? - started_at) * 1000), 2)
+                            )
+                        WHERE trace_id = ? AND status = 'running'
+                          AND (boot_id != ? OR boot_id = '' OR boot_id IS NULL)
+                        """,
+                        (
+                            target_status.value,
+                            completed_at,
+                            completed_at,
+                            row["trace_id"],
+                            current_boot_id,
+                        ),
+                    )
+                else:
+                    cursor = conn.execute(
+                        """
+                        UPDATE analysis_traces
+                        SET status = ?, error_stage = 'CRASH_RECOVERY',
+                            error_message = 'AstrBot/容器在任务执行期间异常终止，开机已自动回收',
+                            completed_at = ?,
+                            duration_ms = COALESCE(
+                                duration_ms, ROUND(MAX(0, (? - started_at) * 1000), 2)
+                            )
+                        WHERE trace_id = ? AND status = 'running'
+                        """,
+                        (
+                            target_status.value,
+                            completed_at,
+                            completed_at,
+                            row["trace_id"],
+                        ),
+                    )
+                if cursor.rowcount == 1:
+                    conn.execute(
+                        """
+                        UPDATE trace_spans
+                        SET status = 'aborted',
+                            duration_ms = COALESCE(duration_ms, MAX(0, (? - started_at) * 1000))
+                        WHERE trace_id = ? AND status = 'running'
+                        """,
+                        (completed_at, row["trace_id"]),
+                    )
+                reconciled += cursor.rowcount
+            return reconciled
 
     def get_distinct_groups(self) -> list[dict[str, str]]:
         """获取所有有历史分析记录的唯一群组列表（按 group_id 分组，取每个群最新一次运行的群名与平台标识）"""
