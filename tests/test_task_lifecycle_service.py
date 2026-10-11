@@ -44,6 +44,40 @@ def test_trace_finish_is_event_only_and_terminal_state_is_immutable(lifecycle):
     assert store.get_trace("terminal-trace")["status"] == TaskStatus.SUCCEEDED.value
 
 
+def test_repeated_terminal_event_is_idempotent_without_changing_completion_time(
+    lifecycle,
+):
+    store, _ = lifecycle
+    trace = TraceContext.set("idempotent-trace")
+    trace.finish(event=TaskEvent.SUCCEED)
+    completed_at = store.get_trace("idempotent-trace")["completed_at"]
+
+    trace.finish(event=TaskEvent.SUCCEED)
+
+    assert trace.status == TaskStatus.SUCCEEDED.value
+    assert store.get_trace("idempotent-trace")["completed_at"] == completed_at
+
+
+def test_stale_expected_terminal_status_is_checked_before_idempotent_success(
+    lifecycle,
+):
+    store, service = lifecycle
+    store.save_trace(
+        {"trace_id": "stale-idempotent-trace", "group_id": "group", "status": "running"}
+    )
+
+    with pytest.raises(ConcurrentTaskTransitionError):
+        service.transition(
+            "stale-idempotent-trace",
+            TaskEvent.SUCCEED,
+            expected_status=TaskStatus.SUCCEEDED,
+        )
+
+    persisted = store.get_trace("stale-idempotent-trace")
+    assert persisted is not None
+    assert persisted["status"] == TaskStatus.RUNNING.value
+
+
 def test_cancel_finalizes_open_spans_as_aborted(lifecycle):
     store, _ = lifecycle
     trace = TraceContext.set("cancelled-trace")

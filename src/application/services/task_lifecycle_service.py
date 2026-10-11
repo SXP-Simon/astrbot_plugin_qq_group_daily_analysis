@@ -67,9 +67,6 @@ class TaskLifecycleService:
             raise KeyError(f"任务追踪记录不存在: {trace_id}")
 
         target = TaskStateMachine.transition(current, event)
-        if current == target:
-            return target
-
         transition_time = completed_at if completed_at is not None else time.time()
         changed = self.lifecycle_repository.transition_trace_status(
             trace_id=trace_id,
