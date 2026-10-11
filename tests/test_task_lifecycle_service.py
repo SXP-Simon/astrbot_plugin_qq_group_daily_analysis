@@ -111,6 +111,18 @@ def test_stale_transition_is_rejected_without_replacing_terminal_state(lifecycle
     assert store.get_trace("stale-trace")["status"] == TaskStatus.SUCCEEDED.value
 
 
+def test_trace_context_surfaces_conflicting_concurrent_terminal_event(lifecycle):
+    store, service = lifecycle
+    trace = TraceContext.set("conflicting-trace")
+    service.transition("conflicting-trace", TaskEvent.CANCEL)
+
+    with pytest.raises(ConcurrentTaskTransitionError):
+        trace.finish(event=TaskEvent.FAIL)
+
+    assert trace.status == TaskStatus.ABORTED.value
+    assert store.get_trace("conflicting-trace")["status"] == TaskStatus.ABORTED.value
+
+
 def test_repository_rejects_transition_event_not_in_domain_matrix(lifecycle):
     store, service = lifecycle
     store.save_trace(

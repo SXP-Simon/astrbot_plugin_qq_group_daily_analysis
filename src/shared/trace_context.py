@@ -365,7 +365,7 @@ class TraceContext:
 
             if self.status != "running" and _global_trace_store is not None:
                 try:
-                    _global_trace_store.save_trace(self.to_dict())
+                    self.persist_snapshot()
                 except Exception:
                     pass
 
@@ -495,8 +495,7 @@ class TraceContext:
 
         current_status = self._status
         target_status = TaskStateMachine.transition(current_status, effective_event)
-        if self.status == target_status.value:
-            return
+        is_idempotent = current_status == target_status
 
         completed_at = time.time()
         duration_ms = round((completed_at - self.started_at) * 1000, 2)
@@ -506,6 +505,7 @@ class TraceContext:
             TaskEvent.SUCCEED: "success",
             TaskEvent.WARN: "warning",
             TaskEvent.FAIL: "failed",
+            TaskEvent.TIMEOUT: "failed",
             TaskEvent.ABORT: "aborted",
             TaskEvent.CANCEL: "aborted",
             TaskEvent.SKIP: "skipped",
@@ -583,6 +583,8 @@ class TraceContext:
                 if isinstance(latest_spans, list):
                     self._spans = cast("list[SpanRecord]", latest_spans)
                 _active_traces.pop(self.trace_id, None)
+                if self._status != target_status:
+                    raise
                 return
         elif _global_trace_store is not None:
             transitioned = _global_trace_store.transition_trace_status(
@@ -602,6 +604,9 @@ class TraceContext:
                         f"Trace {self.trace_id} 已被并发改变状态，拒绝覆盖"
                     )
 
+        if is_idempotent:
+            return
+
         self._status = target_status
         self.completed_at = completed_at
         self.duration_ms = duration_ms
@@ -615,7 +620,7 @@ class TraceContext:
 
         if _global_trace_store is not None:
             try:
-                _global_trace_store.save_trace(self.to_dict())
+                self.persist_snapshot()
             except Exception as e:
                 from ..utils.logger import logger
 
@@ -659,11 +664,16 @@ class TraceContext:
             "checkpoints": {k: v.isoformat() for k, v in self._checkpoints.items()},
         }
 
+    def persist_snapshot(self) -> None:
+        """持久化 Trace 快照元数据，不修改任务生命周期状态。"""
+        if _global_trace_store is not None:
+            _global_trace_store.save_trace(self.to_dict())
+
     def __enter__(self) -> TraceContext:
         self._token = _current_trace.set(self)
         _active_traces[self.trace_id] = self
         if _global_trace_store is not None and self.status == TaskStatus.RUNNING.value:
-            _global_trace_store.save_trace(self.to_dict())
+            self.persist_snapshot()
         return self
 
     def __exit__(
@@ -765,7 +775,7 @@ class TraceContext:
         ctx._token = _current_trace.set(ctx)
         _active_traces[ctx.trace_id] = ctx
         if _global_trace_store is not None:
-            _global_trace_store.save_trace(ctx.to_dict())
+            ctx.persist_snapshot()
         return ctx
 
     @classmethod
