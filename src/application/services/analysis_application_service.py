@@ -214,6 +214,47 @@ class AnalysisApplicationService:
         """观察并占用一次 LLM 分析槽位。"""
         return self._task_guard.llm_slot(group_id, stage)
 
+    def _resolve_daily_analysis_sections(
+        self, requested_sections: list[str] | set[str] | None
+    ) -> AnalysisSections:
+        """合并调用方选择与配置开关，得到本次实际执行的 LLM 分析模块。
+
+        Args:
+            requested_sections: 调用方请求的分析模块；为空时按配置执行。
+
+        Returns:
+            AnalysisSections: 本次实际启用的 LLM 分析模块。
+        """
+        requested = set(requested_sections) if requested_sections is not None else None
+        topic = self.config_manager.get_topic_analysis_enabled()
+        if requested is not None:
+            topic = topic and bool(requested.intersection({"topics", "话题", "topic"}))
+
+        user_titles = self.config_manager.get_user_title_analysis_enabled()
+        if requested is not None:
+            user_titles = user_titles and bool(
+                requested.intersection({"user_titles", "用户称号", "称号"})
+            )
+
+        golden_quotes = self.config_manager.get_golden_quote_analysis_enabled()
+        if requested is not None:
+            golden_quotes = golden_quotes and bool(
+                requested.intersection({"golden_quotes", "金句", "quotes"})
+            )
+
+        chat_quality = self.config_manager.get_chat_quality_analysis_enabled()
+        if requested is not None:
+            chat_quality = chat_quality and bool(
+                requested.intersection({"chat_quality_review", "聊天质量分析", "质量"})
+            )
+
+        return AnalysisSections(
+            topic=topic,
+            user_titles=user_titles,
+            golden_quotes=golden_quotes,
+            chat_quality=chat_quality,
+        )
+
     async def execute_daily_analysis(
         self,
         group_id: str,
@@ -360,63 +401,18 @@ class AnalysisApplicationService:
                 user_activity, limit=max_user_titles
             )
 
-            if self.checkpoint_store:
-                try:
-                    cur_trace_id = trace.trace_id if trace else ""
-                    self.checkpoint_store.save_checkpoint(
-                        group_id=group_id,
-                        date_str=date_str,
-                        stage_name=AnalysisStage.CLEAN_MESSAGES.value,
-                        data={
-                            "group_id": group_id,
-                            "platform_id": platform_id,
-                            "date_str": date_str,
-                            "statistics": self._to_json_friendly(statistics),
-                            "user_activity": self._to_json_friendly(user_activity),
-                            "top_users": self._to_json_friendly(top_users),
-                            "unified_messages": [
-                                self._to_json_friendly(m) for m in unified_messages
-                            ],
-                        },
-                        trace_id=cur_trace_id,
-                    )
-                except Exception as e:
-                    logger.warning(f"保存前置 Checkpoint 失败: {e}")
-
-            # 计算实际执行模块：用户请求模块 ∩ 配置已启用模块
-            req_sections = (
-                set(analysis_sections) if analysis_sections is not None else None
+            self._save_daily_analysis_checkpoint(
+                group_id=group_id,
+                platform_id=platform_id,
+                date_str=date_str,
+                trace_id=trace.trace_id if trace else "",
+                statistics=statistics,
+                user_activity=user_activity,
+                top_users=top_users,
+                unified_messages=unified_messages,
             )
 
-            topic_enabled = self.config_manager.get_topic_analysis_enabled()
-            if req_sections is not None:
-                topic_enabled = topic_enabled and bool(
-                    req_sections.intersection({"topics", "话题", "topic"})
-                )
-
-            user_title_enabled = self.config_manager.get_user_title_analysis_enabled()
-            if req_sections is not None:
-                user_title_enabled = user_title_enabled and bool(
-                    req_sections.intersection({"user_titles", "用户称号", "称号"})
-                )
-
-            golden_quote_enabled = (
-                self.config_manager.get_golden_quote_analysis_enabled()
-            )
-            if req_sections is not None:
-                golden_quote_enabled = golden_quote_enabled and bool(
-                    req_sections.intersection({"golden_quotes", "金句", "quotes"})
-                )
-
-            chat_quality_enabled = (
-                self.config_manager.get_chat_quality_analysis_enabled()
-            )
-            if req_sections is not None:
-                chat_quality_enabled = chat_quality_enabled and bool(
-                    req_sections.intersection(
-                        {"chat_quality_review", "聊天质量分析", "质量"}
-                    )
-                )
+            sections = self._resolve_daily_analysis_sections(analysis_sections)
 
             legacy_messages = self.statistics_service._convert_to_legacy_dict(
                 unified_messages
@@ -435,12 +431,7 @@ class AnalysisApplicationService:
                 user_activity,
                 top_users,
                 unified_msg_origin,
-                AnalysisSections(
-                    topic=topic_enabled,
-                    user_titles=user_title_enabled,
-                    golden_quotes=golden_quote_enabled,
-                    chat_quality=chat_quality_enabled,
-                ),
+                sections,
                 trace,
             )
             if llm_result.failed:
@@ -461,33 +452,16 @@ class AnalysisApplicationService:
                 "chat_quality_review": llm_result.chat_quality_review,
             }
 
-            async with pipeline.step(
-                AnalysisStage.SAVE_SUMMARY,
-                save_checkpoint=True,
-                serializer=self._serialize_analysis_result,
-            ) as step:
-                await self.history_manager.save_analysis(group_id, analysis_result)
-                if self.checkpoint_store:
-                    try:
-                        cur_trace_id = trace.trace_id if trace else ""
-                        target_stage = (
-                            checkpoint_stage_name or AnalysisStage.LLM_ANALYSIS.value
-                        )
-                        self.checkpoint_store.save_checkpoint(
-                            group_id=group_id,
-                            date_str=date_str,
-                            stage_name=target_stage,
-                            data=self._serialize_analysis_result(analysis_result),
-                            trace_id=cur_trace_id,
-                        )
-                    except Exception as e:
-                        logger.warning(f"保存分析 Checkpoint 失败: {e}")
-                step.set_payload(
-                    date=date_str,
-                    topics_persisted=len(llm_result.topics),
-                    titles_persisted=len(llm_result.user_titles),
-                    checkpoint_saved=bool(self.checkpoint_store),
-                )
+            await self._persist_daily_analysis_summary(
+                pipeline=pipeline,
+                group_id=group_id,
+                date_str=date_str,
+                trace_id=trace.trace_id if trace else "",
+                checkpoint_stage_name=checkpoint_stage_name,
+                analysis_result=analysis_result,
+                topics_count=len(llm_result.topics),
+                titles_count=len(llm_result.user_titles),
+            )
 
             return {
                 "success": True,
@@ -497,6 +471,103 @@ class AnalysisApplicationService:
                 "group_id": group_id,
                 "platform_id": adapter.platform_id or platform_id,
             }
+
+    def _save_daily_analysis_checkpoint(
+        self,
+        *,
+        group_id: str,
+        platform_id: str | None,
+        date_str: str,
+        trace_id: str,
+        statistics: GroupStatistics,
+        user_activity: dict[str, UserActivityStats],
+        top_users: list[dict[str, object]],
+        unified_messages: list[UnifiedMessage],
+    ) -> None:
+        """持久化统计阶段之后供恢复流程使用的清洗快照。
+
+        Args:
+            group_id: 目标群组 ID。
+            platform_id: 实际请求的平台实例标识。
+            date_str: 本次分析日期。
+            trace_id: 当前 Trace 标识。
+            statistics: 已计算的群聊统计结果。
+            user_activity: 用户活跃度分析结果。
+            top_users: 限定数量后的活跃用户。
+            unified_messages: 清洗后的统一消息列表。
+        """
+        if self.checkpoint_store is None:
+            return
+        try:
+            self.checkpoint_store.save_checkpoint(
+                group_id=group_id,
+                date_str=date_str,
+                stage_name=AnalysisStage.CLEAN_MESSAGES.value,
+                data={
+                    "group_id": group_id,
+                    "platform_id": platform_id,
+                    "date_str": date_str,
+                    "statistics": self._to_json_friendly(statistics),
+                    "user_activity": self._to_json_friendly(user_activity),
+                    "top_users": self._to_json_friendly(top_users),
+                    "unified_messages": [
+                        self._to_json_friendly(message) for message in unified_messages
+                    ],
+                },
+                trace_id=trace_id,
+            )
+        except Exception as e:
+            logger.warning(f"保存前置 Checkpoint 失败: {e}")
+
+    async def _persist_daily_analysis_summary(
+        self,
+        *,
+        pipeline: PipelineContext,
+        group_id: str,
+        date_str: str,
+        trace_id: str,
+        checkpoint_stage_name: str | None,
+        analysis_result: dict[str, object],
+        topics_count: int,
+        titles_count: int,
+    ) -> None:
+        """完成保存摘要阶段并持久化可续跑的最终分析产物。
+
+        Args:
+            pipeline: 当前分析的阶段与快照上下文。
+            group_id: 目标群组 ID。
+            date_str: 本次分析日期。
+            trace_id: 当前 Trace 标识。
+            checkpoint_stage_name: 本次调用指定的检查点阶段。
+            analysis_result: 统计、话题、用户称号和聊天质量产物。
+            topics_count: 本次产出的热门话题数量。
+            titles_count: 本次产出的用户称号数量。
+        """
+        async with pipeline.step(
+            AnalysisStage.SAVE_SUMMARY,
+            save_checkpoint=True,
+            serializer=self._serialize_analysis_result,
+        ) as step:
+            await self.history_manager.save_analysis(group_id, analysis_result)
+            if self.checkpoint_store:
+                try:
+                    self.checkpoint_store.save_checkpoint(
+                        group_id=group_id,
+                        date_str=date_str,
+                        stage_name=(
+                            checkpoint_stage_name or AnalysisStage.LLM_ANALYSIS.value
+                        ),
+                        data=self._serialize_analysis_result(analysis_result),
+                        trace_id=trace_id,
+                    )
+                except Exception as e:
+                    logger.warning(f"保存分析 Checkpoint 失败: {e}")
+            step.set_payload(
+                date=date_str,
+                topics_persisted=topics_count,
+                titles_persisted=titles_count,
+                checkpoint_saved=bool(self.checkpoint_store),
+            )
 
     async def _fetch_daily_messages(
         self,

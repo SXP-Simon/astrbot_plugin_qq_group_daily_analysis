@@ -95,6 +95,11 @@ def test_llm_slot_exposes_stage_metadata_to_trace_context():
 def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
     """普通全量分析观测应区分手动命令和定时调度来源。"""
     stages = []
+    saved_checkpoints: list[dict[str, object]] = []
+
+    class FakeCheckpointStore:
+        def save_checkpoint(self, **kwargs: object) -> None:
+            saved_checkpoints.append(kwargs)
 
     class FakeConfig:
         def get_llm_max_concurrent(self):
@@ -209,6 +214,7 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
         llm_analyzer=FakeAnalyzer(),
         statistics_service=FakeStatisticsService(),
         analysis_domain_service=FakeDomainService(),
+        checkpoint_store=FakeCheckpointStore(),
     )
 
     @asynccontextmanager
@@ -219,15 +225,33 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
     service._llm_slot = capture_llm_slot
 
     async def scenario():
-        manual_result = await service.execute_daily_analysis(
-            "group-1", "onebot-main", manual=True
-        )
-        scheduled_result = await service.execute_daily_analysis(
-            "group-1", "onebot-main", manual=False
-        )
-        assert manual_result["success"] is True
-        assert scheduled_result["success"] is True
-        assert stages == ["full_manual", "full_scheduled"]
+        with TraceContext(trace_id="daily-pipeline-stages") as trace:
+            manual_result = await service.execute_daily_analysis(
+                "group-1", "onebot-main", manual=True
+            )
+            scheduled_result = await service.execute_daily_analysis(
+                "group-1", "onebot-main", manual=False
+            )
+            assert manual_result["success"] is True
+            assert scheduled_result["success"] is True
+            assert stages == ["full_manual", "full_scheduled"]
+            expected_stages = [
+                "FETCH_MESSAGES",
+                "CLEAN_MESSAGES",
+                "STATS_ANALYSIS",
+                "LLM_ANALYSIS",
+                "SAVE_SUMMARY",
+            ]
+            assert [span["stage_name"] for span in trace._spans] == (
+                expected_stages * 2
+            )
+
+        assert [item["stage_name"] for item in saved_checkpoints] == [
+            "CLEAN_MESSAGES",
+            "LLM_ANALYSIS",
+            "CLEAN_MESSAGES",
+            "LLM_ANALYSIS",
+        ]
 
     asyncio.run(scenario())
 
