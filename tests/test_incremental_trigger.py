@@ -467,3 +467,26 @@ def test_incremental_mode_only_registers_scheduled_report_jobs():
 
     scheduler.unschedule_jobs.assert_called_once_with(context)
     scheduler._schedule_report_time_jobs.assert_called_once_with(cron_scheduler)
+
+
+def test_empty_schedule_time_list_removes_existing_report_jobs():
+    scheduler = object.__new__(AutoScheduler)
+    scheduler.config_manager = SimpleNamespace(
+        is_auto_analysis_enabled=Mock(return_value=True),
+        get_auto_analysis_time=Mock(return_value=[]),
+        get_incremental_enabled=Mock(return_value=False),
+    )
+    scheduler.scheduler_job_ids = ["existing-report-job"]
+    scheduler._terminating = False
+    cron_scheduler = SimpleNamespace(
+        get_job=Mock(return_value=object()),
+        remove_job=Mock(),
+        add_job=Mock(),
+    )
+    context = SimpleNamespace(cron_manager=SimpleNamespace(scheduler=cron_scheduler))
+
+    scheduler.schedule_jobs(context)
+
+    cron_scheduler.remove_job.assert_called_once_with("existing-report-job")
+    cron_scheduler.add_job.assert_not_called()
+    assert scheduler.scheduler_job_ids == []

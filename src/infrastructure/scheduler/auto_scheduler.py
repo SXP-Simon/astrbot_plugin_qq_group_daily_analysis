@@ -179,6 +179,9 @@ class AutoScheduler:
         time_config = self.config_manager.get_auto_analysis_time()
         if isinstance(time_config, str):
             time_config = [time_config]
+        if not time_config:
+            logger.info("未配置定时分析时间，不注册定时报告任务。")
+            return
 
         for i, t_str in enumerate(time_config):
             try:
