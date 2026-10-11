@@ -34,7 +34,7 @@ def temp_db(tmp_path: Path):
 @pytest.fixture
 def bridge_setup(temp_db: Path, tmp_path: Path):
     trace_store = TraceSQLiteStore(temp_db)
-    active_mgr = ActiveTaskManager(trace_store)
+    active_mgr = ActiveTaskManager()
     mock_context = MagicMock()
     mock_analysis_svc = MagicMock()
     mock_dispatcher = MagicMock()

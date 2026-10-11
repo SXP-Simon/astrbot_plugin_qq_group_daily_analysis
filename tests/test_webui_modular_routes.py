@@ -6,6 +6,8 @@ WebUI 模块化路由单元测试 (WebUI Modular Routes Tests)
 
 from __future__ import annotations
 
+import asyncio
+import importlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,8 +34,8 @@ def mock_trace_store(tmp_path):
 
 
 @pytest.fixture
-def mock_active_mgr(mock_trace_store: TraceSQLiteStore):
-    return ActiveTaskManager(trace_store=mock_trace_store)
+def mock_active_mgr():
+    return ActiveTaskManager()
 
 
 @pytest.mark.asyncio
@@ -58,6 +60,89 @@ async def test_task_routes_direct(
         req.json = AsyncMock(return_value={"task_id": "non_existent"})
         cancel_res = await routes.api_cancel_task()
         assert cancel_res.get("status_code", 404) == 404
+
+
+@pytest.mark.asyncio
+async def test_resume_task_uses_new_trace_and_preserves_terminal_source(
+    mock_trace_store: TraceSQLiteStore,
+    mock_active_mgr: ActiveTaskManager,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """验证终态任务续跑使用新 Trace，并从旧 Trace 读取 Checkpoint。"""
+    from astrbot_plugin_qq_group_daily_analysis.src.application.services.task_lifecycle_service import (
+        TaskLifecycleService,
+    )
+
+    route_module = importlib.import_module(TaskRoutes.__module__)
+    trace_context = route_module.TraceContext
+    trace_context.set_global_store(mock_trace_store)
+    trace_context.set_global_lifecycle_service(None)
+
+    mock_trace_store.save_trace(
+        {
+            "trace_id": "resume-source",
+            "group_id": "123",
+            "group_name": "测试群",
+            "platform": "onebot",
+            "status": "running",
+        }
+    )
+    TaskLifecycleService(mock_trace_store).transition(
+        "resume-source", route_module.TaskEvent.FAIL
+    )
+
+    class FakeRequest:
+        query: dict[str, str] = {}
+
+        async def json(self) -> dict[str, object]:
+            return {}
+
+    monkeypatch.setattr(route_module, "request", FakeRequest())
+    monkeypatch.setattr(
+        route_module,
+        "json_response",
+        lambda data, **kwargs: {"status_code": kwargs.get("status_code", 200), "data": data},
+    )
+    monkeypatch.setattr(
+        route_module,
+        "error_response",
+        lambda message, **kwargs: {
+            "status_code": kwargs.get("status_code", 400),
+            "message": message,
+        },
+    )
+
+    resumed_args: list[dict[str, object]] = []
+
+    async def run_resumed_task(**kwargs: object) -> None:
+        resumed_args.append(kwargs)
+
+    routes = TaskRoutes(mock_trace_store, mock_active_mgr, MagicMock())
+    monkeypatch.setattr(routes, "_run_resumed_task", run_resumed_task)
+
+    response = await routes.api_resume_task("resume-source")
+    await asyncio.sleep(0)
+
+    assert isinstance(response, dict)
+    new_trace_id = response["data"]["data"]["trace_id"]
+    assert new_trace_id != "resume-source"
+    assert resumed_args[0]["trace_id"] == new_trace_id
+    assert resumed_args[0]["checkpoint_trace_id"] == "resume-source"
+    assert mock_trace_store.get_trace("resume-source")["status"] == "failed"
+    assert mock_trace_store.get_trace(new_trace_id)["status"] == "running"
+    await mock_active_mgr.finish_task(new_trace_id)
+
+    mock_trace_store.save_trace(
+        {
+            "trace_id": "already-running",
+            "group_id": "456",
+            "status": "running",
+        }
+    )
+    conflict_response = await routes.api_resume_task("already-running")
+    assert isinstance(conflict_response, dict)
+    assert conflict_response["status_code"] == 409
+    assert len(resumed_args) == 1
 
 
 @pytest.mark.asyncio

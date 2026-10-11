@@ -10,11 +10,12 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ...shared.constants import PROCESS_BOOT_ID, AnalysisStage
+from ...domain.value_objects.task_event import TaskEvent
+from ...shared.constants import AnalysisStage
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
-    from ..persistence.trace_sqlite_store import TraceSQLiteStore
+    from ...application.services.task_lifecycle_service import TaskLifecycleService
 
 
 @dataclass
@@ -46,10 +47,13 @@ class ActiveTaskInfo:
 class ActiveTaskManager:
     """活跃任务管理器与孤儿回收器"""
 
-    trace_store: TraceSQLiteStore | None
+    lifecycle_service: TaskLifecycleService | None
 
-    def __init__(self, trace_store: TraceSQLiteStore | None = None) -> None:
-        self.trace_store = trace_store
+    def __init__(
+        self,
+        lifecycle_service: TaskLifecycleService | None = None,
+    ) -> None:
+        self.lifecycle_service = lifecycle_service
         self._tasks: dict[str, ActiveTaskInfo] = {}
         self._lock = asyncio.Lock()
         self._reaper_task: asyncio.Task[None] | None = None
@@ -164,22 +168,21 @@ class ActiveTaskManager:
             if not task_info:
                 return False
 
+            if self.lifecycle_service:
+                try:
+                    self.lifecycle_service.transition(
+                        task_id,
+                        TaskEvent.CANCEL,
+                        error_message="由 WebUI 手动取消任务",
+                    )
+                except (KeyError, ValueError, RuntimeError) as e:
+                    logger.info(f"拒绝取消已结束或状态冲突的任务 {task_id}: {e}")
+                    return False
+
             if task_info.asyncio_task and not task_info.asyncio_task.done():
                 task_info.asyncio_task.cancel()
 
             self._tasks.pop(task_id, None)
-
-        if self.trace_store:
-            try:
-                self.trace_store.save_trace(
-                    {
-                        "trace_id": task_id,
-                        "status": "aborted",
-                        "error_message": "Task canceled manually via WebUI",
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"更新取消任务状态失败: {e}")
 
         await self._broadcast_event(
             {"event": "task_canceled", "data": {"task_id": task_id}}
@@ -244,28 +247,8 @@ class ActiveTaskManager:
         self,
         interval_seconds: int = 30,
         timeout_seconds: int = 180,
-        boot_id: str | None = None,
     ) -> None:
-        """启动孤儿任务超时扫描守护协程，并在开机时自动对账清理历史遗留 running 记录。
-
-        仅对属于已死亡历史进程（boot_id != current_boot_id）的任务进行开机对账回收，
-        安全跳过当前进程热重载期间活跃运行的旧协程任务。
-        """
-        if self.trace_store and hasattr(
-            self.trace_store, "reconcile_crashed_traces_on_startup"
-        ):
-            try:
-                effective_boot_id = boot_id or PROCESS_BOOT_ID
-                reconciled = self.trace_store.reconcile_crashed_traces_on_startup(
-                    current_boot_id=effective_boot_id
-                )
-                if reconciled > 0:
-                    logger.info(
-                        f"[TaskReaper] 开机自愈对账：已回收 {reconciled} 条异常中断的幽灵任务"
-                    )
-            except Exception as e:
-                logger.error(f"[TaskReaper] 开机自愈对账异常: {e}")
-
+        """启动当前进程的活跃任务超时扫描器。"""
         if self._reaper_task is None or self._reaper_task.done():
             try:
                 loop = asyncio.get_running_loop()
@@ -297,25 +280,35 @@ class ActiveTaskManager:
                     logger.warning(
                         f"[TaskReaper] 任务 {info.task_id} (群 {info.group_id}) 超过 {timeout_seconds}s 未更新心跳，强制回收清理"
                     )
-                    if info.asyncio_task and not info.asyncio_task.done():
-                        info.asyncio_task.cancel()
-
-                    if self.trace_store:
+                    should_cancel = True
+                    if self.lifecycle_service:
                         try:
-                            self.trace_store.save_trace(
-                                {
-                                    "trace_id": info.task_id,
-                                    "status": "failed",
-                                    "error_stage": info.current_stage,
-                                    "error_message": f"Task timed out after {timeout_seconds}s (Reaped)",
-                                }
+                            self.lifecycle_service.transition(
+                                info.task_id,
+                                TaskEvent.FAIL,
+                                error_stage=info.current_stage,
+                                error_message=f"任务超过 {timeout_seconds} 秒未更新心跳，已回收",
+                            )
+                        except KeyError as e:
+                            logger.warning(
+                                f"Reaper 找不到任务 {info.task_id} 的追踪记录: {e}"
                             )
                         except Exception as e:
-                            logger.error(f"Reaper 更新持久化状态失败: {e}")
+                            logger.info(f"Reaper 未改变任务 {info.task_id} 的终态: {e}")
+                            should_cancel = False
+
+                    if (
+                        should_cancel
+                        and info.asyncio_task
+                        and not info.asyncio_task.done()
+                    ):
+                        info.asyncio_task.cancel()
 
                     await self._broadcast_event(
                         {
-                            "event": "task_timed_out",
+                            "event": "task_timed_out"
+                            if should_cancel
+                            else "task_finished",
                             "data": {"task_id": info.task_id},
                         }
                     )

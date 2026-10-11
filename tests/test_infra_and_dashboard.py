@@ -6,7 +6,6 @@ import asyncio
 import sys
 import time
 from pathlib import Path
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +13,7 @@ import pytest
 from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
+from src.application.services.task_lifecycle_service import TaskLifecycleService
 from src.domain.value_objects import (
     GoldenQuote,
     GroupStatistics,
@@ -21,6 +21,7 @@ from src.domain.value_objects import (
     TokenUsage,
     UserTitle,
 )
+from src.domain.value_objects.task_event import TaskEvent
 from src.infrastructure.persistence.checkpoint_store import CheckpointStore
 from src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
 from src.infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -47,10 +48,8 @@ def test_trace_sqlite_store_crud_and_metrics(temp_db: Path):
         "group_name": "测试群A",
         "platform": "qq",
         "trigger_type": "manual",
-        "status": "succeeded",
+        "status": "running",
         "started_at": time.time() - 10,
-        "completed_at": time.time(),
-        "duration_ms": 10000.0,
         "spans": [
             {
                 "span_id": "test_trace_001_FETCH",
@@ -84,6 +83,21 @@ def test_trace_sqlite_store_crud_and_metrics(temp_db: Path):
     }
 
     store.save_trace(trace_data)
+    completed_at = time.time()
+    TaskLifecycleService(store).transition(
+        "test_trace_001",
+        TaskEvent.SUCCEED,
+        completed_at=completed_at,
+        duration_ms=10000.0,
+    )
+    store.save_trace(
+        {
+            **trace_data,
+            "status": "running",
+            "completed_at": completed_at,
+            "duration_ms": 10000.0,
+        }
+    )
 
     # 2. 读取并验证
     retrieved = store.get_trace("test_trace_001")
@@ -134,6 +148,15 @@ def test_trace_startup_crash_reconciliation(temp_db: Path):
             "group_name": "崩溃群",
             "status": "running",
             "started_at": time.time() - 100,
+            "spans": [
+                {
+                    "span_id": "crashed_job_001_ACTIVE",
+                    "stage_name": "LLM_ANALYSIS",
+                    "status": "running",
+                    "started_at": time.time() - 20,
+                    "payload": {},
+                }
+            ],
         }
     )
 
@@ -147,6 +170,9 @@ def test_trace_startup_crash_reconciliation(temp_db: Path):
     assert trace["status"] == "aborted"
     assert trace["error_stage"] == "CRASH_RECOVERY"
     assert "开机已自动回收" in trace["error_message"]
+    assert trace["duration_ms"] >= 99_000
+    assert trace["spans"][0]["status"] == "aborted"
+    assert trace["spans"][0]["duration_ms"] >= 19_000
 
 
 def test_checkpoint_store(temp_db: Path):
@@ -201,7 +227,10 @@ def test_trace_context_spans_and_auto_persistence(temp_db: Path):
 @pytest.mark.asyncio
 async def test_active_task_manager_and_reaper(temp_db: Path):
     store = TraceSQLiteStore(temp_db)
-    manager = ActiveTaskManager(trace_store=store)
+    store.save_trace({"trace_id": "active_001", "group_id": "999", "status": "running"})
+    manager = ActiveTaskManager(
+        lifecycle_service=TaskLifecycleService(store),
+    )
 
     # 1. 注册任务
     async def dummy_job():
@@ -243,7 +272,12 @@ async def test_active_task_manager_and_reaper(temp_db: Path):
 async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
     """测试 Task Reaper 扫描协程能自动回收超过 timeout_seconds 的超时任务。"""
     store = TraceSQLiteStore(temp_db)
-    manager = ActiveTaskManager(trace_store=store)
+    store.save_trace(
+        {"trace_id": "timeout_001", "group_id": "999", "status": "running"}
+    )
+    manager = ActiveTaskManager(
+        lifecycle_service=TaskLifecycleService(store),
+    )
 
     async def hung_job():
         await asyncio.sleep(100)
@@ -270,23 +304,23 @@ async def test_reaper_loop_reaps_timed_out_tasks(temp_db: Path):
     # 验证底层 asyncio task 已被强制取消
     assert hung_task.cancelled()
 
-    # 验证持久化状态被标记为 failed 并记录 Reaped
+    # 验证持久化状态被标记为 failed 并记录超时原因
     reaped_trace = store.get_trace("timeout_001")
     assert reaped_trace is not None
     assert reaped_trace["status"] == "failed"
-    assert "Reaped" in reaped_trace["error_message"]
+    assert "超过 180 秒" in reaped_trace["error_message"]
 
 
 @pytest.mark.asyncio
 async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
     from unittest.mock import AsyncMock, MagicMock
+
     from src.application.services.analysis_application_service import (
         AnalysisApplicationService,
     )
     from src.domain.value_objects import (
         GroupStatistics,
         SummaryTopic,
-        UserTitle,
         TokenUsage,
     )
 
@@ -395,7 +429,7 @@ async def test_rerender_report_using_checkpoint(temp_db: Path, tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_resume_analysis_using_checkpoint(temp_db: Path, tmp_path: Path):
+async def test_resume_analysis_using_checkpoint(temp_db: Path):
     chk_store = CheckpointStore(temp_db)
 
     # 1. 保存前置清洗产物快照
@@ -475,7 +509,7 @@ async def test_resume_analysis_using_checkpoint(temp_db: Path, tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path, tmp_path: Path):
+async def test_resume_analysis_reuses_existing_subtasks(temp_db: Path):
     """验证当已有部分成功子任务时，续跑自动复用已有产物且不重复请求大模型。"""
     chk_store = CheckpointStore(temp_db)
 
@@ -617,8 +651,8 @@ def test_activity_visualizer_and_checkpoint_deserialization_hourly_activity(
     temp_db: Path,
 ):
     """验证从 Checkpoint (JSON 字符串键) 恢复时，活跃度图表数据能够正确解析而不为空。"""
-    from src.infrastructure.visualization.activity_charts import ActivityVisualizer
     from src.domain.value_objects import ActivityVisualization, GroupStatistics
+    from src.infrastructure.visualization.activity_charts import ActivityVisualizer
 
     viz = ActivityVisualizer()
 
@@ -717,6 +751,7 @@ async def test_report_dispatcher_span_tracking():
 
 def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     from unittest.mock import MagicMock
+
     from src.infrastructure.reporting.templates import HTMLTemplates
 
     # 1. 模拟自定义模板目录
@@ -739,9 +774,7 @@ def test_get_available_templates_dynamic_discovery(tmp_path: Path):
     theme3_dir = custom_root / "simple"
     theme3_dir.mkdir()
     builtin_simple_img = (
-        Path(templates_mgr_dummy := HTMLTemplates(MagicMock()).base_dir)
-        / "simple"
-        / "image_template.html"
+        Path(HTMLTemplates(MagicMock()).base_dir) / "simple" / "image_template.html"
     )
     if builtin_simple_img.exists():
         (theme3_dir / "image_template.html").write_bytes(
@@ -856,7 +889,7 @@ async def test_plugin_config_api(tmp_path: Path):
         {"enabled": True} if k == "basic" else {}
     )
     mock_config_dict = {"basic": {"enabled": True}}
-    mock_config.__iter__ = lambda self: iter(mock_config_dict)
+    mock_config.__iter__ = lambda _self: iter(mock_config_dict)
     mock_config.items = lambda: mock_config_dict.items()
     mock_config.save_config = MagicMock()
 
@@ -918,7 +951,6 @@ async def test_template_command_service_list_and_exists():
 @pytest.mark.asyncio
 async def test_render_report_span_reports_correct_template_theme(tmp_path: Path):
     """测试当指定或配置了自定义/内置模板时，RENDER_REPORT span 上报准确的主题名称而非默认 scrapbook。"""
-    from types import SimpleNamespace
     from src.infrastructure.reporting.generators import ReportGenerator
 
     trace = TraceContext.set(
@@ -971,7 +1003,7 @@ async def test_render_report_span_reports_correct_template_theme(tmp_path: Path)
     # 1. 验证 generate_image_report 在 template_theme 未传时自动继承 config 中的 "miku" 并上报
     with trace.span("RENDER_REPORT", {"format": "image"}):
 
-        async def dummy_render(html, data, return_url, options):
+        async def dummy_render(_html, _data, _return_url, _options):
             return b"\xff\xd8\xff\xe0" + b"fake_jpeg_content"
 
         await generator.generate_image_report(

@@ -6,8 +6,11 @@ WebUI 任务管理路由 (Task Routes)
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import TYPE_CHECKING, cast
 
+from ....domain.value_objects.task_event import TaskEvent
+from ....domain.value_objects.task_status import TaskStatus
 from ....shared.constants import AnalysisStage
 from ....shared.trace_context import TraceContext
 from ....utils.logger import logger
@@ -269,11 +272,11 @@ class TaskRoutes:
                         )
 
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(status="succeeded")
+                    trace_ctx.finish(event=TaskEvent.SUCCEED)
             else:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(
-                        status="failed",
+                        event=TaskEvent.FAIL,
                         error_message=str(result.get("reason", "unknown"))
                         if result
                         else "unknown",
@@ -281,10 +284,10 @@ class TaskRoutes:
         except asyncio.CancelledError:
             logger.info(f"触发分析任务已取消: {trace_id}")
             if trace_ctx.status == "running":
-                trace_ctx.finish(status="cancelled", error_message="Task cancelled")
+                trace_ctx.finish(event=TaskEvent.CANCEL, error_message="Task cancelled")
         except Exception as e:
             if trace_ctx.status == "running":
-                trace_ctx.finish(status="failed", error_message=str(e))
+                trace_ctx.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)
@@ -302,6 +305,10 @@ class TaskRoutes:
             group_id = str(trace_record.get("group_id", ""))
             group_name = str(trace_record.get("group_name", ""))
             platform = str(trace_record.get("platform", ""))
+            previous_status = str(trace_record.get("status", ""))
+            if previous_status == TaskStatus.RUNNING.value:
+                return error_response("任务仍在运行，不能重复续跑", status_code=409)
+            resume_trace_id = str(uuid.uuid4())
 
             try:
                 payload = await request.json()
@@ -335,14 +342,26 @@ class TaskRoutes:
             )
 
             resume_dto: TaskResumeRequestDTO = {
-                "trace_id": trace_id,
+                "trace_id": resume_trace_id,
                 "provider_id": provider_id,
                 "template_name": template_name,
             }
 
+            self.trace_store.save_trace(
+                {
+                    "trace_id": resume_trace_id,
+                    "group_id": group_id,
+                    "group_name": group_name,
+                    "platform": platform,
+                    "trigger_type": "resume",
+                    "status": TaskStatus.RUNNING.value,
+                }
+            )
+
             asyncio_task = asyncio.create_task(
                 self._run_resumed_task(
                     trace_id=resume_dto["trace_id"],
+                    checkpoint_trace_id=trace_id,
                     group_id=group_id,
                     group_name=group_name,
                     platform=platform,
@@ -380,6 +399,7 @@ class TaskRoutes:
     async def _run_resumed_task(
         self,
         trace_id: str,
+        checkpoint_trace_id: str,
         group_id: str,
         group_name: str,
         platform: str,
@@ -423,6 +443,7 @@ class TaskRoutes:
 
             result = await self.analysis_service.resume_analysis(
                 trace_id=trace_id,
+                checkpoint_trace_id=checkpoint_trace_id,
                 group_id=group_id,
                 platform_id=target_platform,
                 template_name=template_name,
@@ -468,18 +489,18 @@ class TaskRoutes:
                         )
 
                 if trace_ctx.status == "running":
-                    trace_ctx.finish(status="succeeded")
+                    trace_ctx.finish(event=TaskEvent.SUCCEED)
             else:
                 if trace_ctx.status == "running":
                     trace_ctx.finish(
-                        status="failed",
+                        event=TaskEvent.FAIL,
                         error_message=str(result.get("reason", "unknown"))
                         if result
                         else "unknown",
                     )
         except Exception as e:
             if trace_ctx.status == "running":
-                trace_ctx.finish(status="failed", error_message=str(e))
+                trace_ctx.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"续跑任务 {trace_id} 执行出错: {e}", exc_info=True)
         finally:
             await self.active_task_manager.finish_task(trace_id)
