@@ -15,6 +15,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       frontend: ${{ steps.filter.outputs.frontend }}
       ci: ${{ steps.filter.outputs.ci }}
+      skip_push_commit_lint: ${{ steps.merge_commit.outputs.skip }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,8 +46,44 @@ jobs:
               - 'scripts/verify-commit.js'
               - 'lefthook.yml'
 
+      - name: Detect Conventional Commit with PR Number Suffix
+        id: merge_commit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          PUSH_COMMIT_COUNT: ${{ github.event.commits && github.event.commits.length || 0 }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const eventName = process.env.EVENT_NAME || '';
+          const message = process.env.HEAD_COMMIT_MESSAGE || '';
+          const pushCommitCount = Number(process.env.PUSH_COMMIT_COUNT || 0);
+          const subject = message.split(/\r?\n/, 1)[0].trim();
+          const hasPrNumberSuffix = /\s+\(#\d+\)$/.test(subject);
+          const conventionalSubject = subject.replace(/\s+\(#\d+\)$/, '');
+          const hasConventionalHeader =
+            /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\([^)]+\))?:\s+\S.*$/.test(
+              conventionalSubject,
+            );
+          const skip =
+            eventName === 'push' &&
+            pushCommitCount === 1 &&
+            hasPrNumberSuffix &&
+            hasConventionalHeader;
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `skip=${skip}\n`);
+          console.log(skip
+            ? `Skipping push commit lint for PR merge subject: ${subject}`
+            : `Commit lint will run for event '${eventName}'.`);
+          NODE
+
   commit-lint:
     name: Verify Commit Messages (STAR Standard)
+    needs: detect-changes
+    if: >-
+      ${{ github.event_name != 'push' ||
+          needs.detect-changes.outputs.skip_push_commit_lint != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -209,13 +246,23 @@ jobs:
       - name: Evaluate CI Gate Results
         run: |
           echo "Evaluating CI Results..."
+          echo "detect-changes: ${{ needs.detect-changes.result }}"
           echo "commit-lint: ${{ needs.commit-lint.result }}"
           echo "python-lint: ${{ needs.python-lint.result }}"
           echo "frontend-check: ${{ needs.frontend-check.result }}"
 
+          if [ "${{ needs.detect-changes.result }}" = "failure" ] || [ "${{ needs.detect-changes.result }}" = "cancelled" ]; then
+            echo "::error::detect-changes failed or was cancelled"
+            exit 1
+          fi
+
           if [ "${{ needs.commit-lint.result }}" = "failure" ] || [ "${{ needs.commit-lint.result }}" = "cancelled" ]; then
             echo "::error::commit-lint failed or was cancelled"
             exit 1
+          fi
+
+          if [ "${{ needs.commit-lint.result }}" = "skipped" ]; then
+            echo "Commit message validation was safely skipped for a Conventional Commit with a PR number suffix on push."
           fi
 
           if [ "${{ needs.python-lint.result }}" = "failure" ] || [ "${{ needs.python-lint.result }}" = "cancelled" ]; then
