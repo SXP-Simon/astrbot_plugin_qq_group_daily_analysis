@@ -12,3 +12,4 @@ class TaskEvent(str, Enum):
     CANCEL = "cancel"
     ABORT = "abort"
     SKIP = "skip"
+    TIMEOUT = "timeout"
