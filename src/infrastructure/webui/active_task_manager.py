@@ -11,7 +11,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from ...domain.value_objects.task_event import TaskEvent
+from ...domain.value_objects.task_status import TaskStatus
 from ...shared.constants import AnalysisStage
+from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -168,6 +170,13 @@ class ActiveTaskManager:
             if not task_info:
                 return False
 
+            active_trace = TraceContext.get_active_trace(task_id)
+            if active_trace and active_trace.status == TaskStatus.RUNNING.value:
+                try:
+                    active_trace.persist_snapshot()
+                except Exception as e:
+                    logger.warning(f"取消任务 {task_id} 前保存 Trace 快照失败: {e}")
+
             if self.lifecycle_service:
                 try:
                     self.lifecycle_service.transition(
@@ -280,12 +289,19 @@ class ActiveTaskManager:
                     logger.warning(
                         f"[TaskReaper] 任务 {info.task_id} (群 {info.group_id}) 超过 {timeout_seconds}s 未更新心跳，强制回收清理"
                     )
-                    should_cancel = True
+                    active_trace = TraceContext.get_active_trace(info.task_id)
+                    if active_trace and active_trace.status == TaskStatus.RUNNING.value:
+                        try:
+                            active_trace.persist_snapshot()
+                        except Exception as e:
+                            logger.warning(
+                                f"超时回收任务 {info.task_id} 前保存 Trace 快照失败: {e}"
+                            )
                     if self.lifecycle_service:
                         try:
                             self.lifecycle_service.transition(
                                 info.task_id,
-                                TaskEvent.FAIL,
+                                TaskEvent.TIMEOUT,
                                 error_stage=info.current_stage,
                                 error_message=f"任务超过 {timeout_seconds} 秒未更新心跳，已回收",
                             )
@@ -295,20 +311,13 @@ class ActiveTaskManager:
                             )
                         except Exception as e:
                             logger.info(f"Reaper 未改变任务 {info.task_id} 的终态: {e}")
-                            should_cancel = False
 
-                    if (
-                        should_cancel
-                        and info.asyncio_task
-                        and not info.asyncio_task.done()
-                    ):
+                    if info.asyncio_task and not info.asyncio_task.done():
                         info.asyncio_task.cancel()
 
                     await self._broadcast_event(
                         {
-                            "event": "task_timed_out"
-                            if should_cancel
-                            else "task_finished",
+                            "event": "task_timed_out",
                             "data": {"task_id": info.task_id},
                         }
                     )

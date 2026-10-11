@@ -284,7 +284,12 @@ class TaskRoutes:
         except asyncio.CancelledError:
             logger.info(f"触发分析任务已取消: {trace_id}")
             if trace_ctx.status == "running":
-                trace_ctx.finish(event=TaskEvent.CANCEL, error_message="Task cancelled")
+                try:
+                    trace_ctx.finish(
+                        event=TaskEvent.CANCEL, error_message="Task cancelled"
+                    )
+                except RuntimeError as transition_error:
+                    logger.info(f"取消收尾时任务已由并发事件收敛: {transition_error}")
         except Exception as e:
             if trace_ctx.status == "running":
                 trace_ctx.finish(event=TaskEvent.FAIL, error_message=str(e))
