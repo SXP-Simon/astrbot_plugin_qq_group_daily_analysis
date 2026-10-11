@@ -144,6 +144,37 @@ class ConfigRoutes:
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 
+            auto_analysis_config = new_config.get("auto_analysis")
+            if isinstance(auto_analysis_config, dict) and (
+                "auto_analysis_time" in auto_analysis_config
+            ):
+                configured_times = auto_analysis_config["auto_analysis_time"]
+                if isinstance(configured_times, str):
+                    configured_times = [configured_times]
+                if not isinstance(configured_times, list):
+                    return error_response(
+                        "自动分析时间必须是 HH:MM 格式的字符串列表",
+                        status_code=400,
+                    )
+                for time_value in configured_times:
+                    if not isinstance(time_value, str):
+                        return error_response(
+                            "自动分析时间必须是 HH:MM 格式的字符串列表",
+                            status_code=400,
+                        )
+                    normalized_time = time_value.replace("：", ":").strip()
+                    if not re.fullmatch(r"[0-9]{1,2}:[0-9]{1,2}", normalized_time):
+                        return error_response(
+                            f"无效的自动分析时间：{time_value}，请使用 HH:MM 格式",
+                            status_code=400,
+                        )
+                    hour, minute = map(int, normalized_time.split(":"))
+                    if hour > 23 or minute > 59:
+                        return error_response(
+                            f"无效的自动分析时间：{time_value}，有效范围为 00:00-23:59",
+                            status_code=400,
+                        )
+
             plugin_root = Path(__file__).resolve().parents[4]
 
             def _cleanse_reference_images(val: object) -> object:
@@ -208,6 +239,10 @@ class ConfigRoutes:
 
             if self.auto_scheduler is not None and self.context is not None:
                 self.auto_scheduler.schedule_jobs(self.context)
+                if self.auto_scheduler.incremental_trigger is not None:
+                    await (
+                        self.auto_scheduler.incremental_trigger.refresh_target_states()
+                    )
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
             return json_response(
