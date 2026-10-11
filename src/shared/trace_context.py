@@ -12,13 +12,16 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, ClassVar, ParamSpec, TypedDict, TypeVar
+from typing import TYPE_CHECKING, ClassVar, ParamSpec, TypedDict, TypeVar, cast
 
+from ..domain.value_objects.task_event import TaskEvent
+from ..domain.value_objects.task_status import TaskStatus
 from .constants import PROCESS_BOOT_ID, PROCESS_PID, AnalysisStage
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine, Generator, Mapping
 
+    from ..application.services.task_lifecycle_service import TaskLifecycleService
     from ..infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
     from ..infrastructure.webui.active_task_manager import ActiveTaskManager
 
@@ -158,6 +161,7 @@ _current_trace: ContextVar[TraceContext | None] = ContextVar(
 # 全局持有的 Trace 仓储引用（用于链路自动持久化）
 _global_trace_store: TraceSQLiteStore | None = None
 _global_active_task_manager: ActiveTaskManager | None = None
+_global_task_lifecycle_service: TaskLifecycleService | None = None
 _active_traces: dict[str, TraceContext] = {}
 
 P = ParamSpec("P")
@@ -178,7 +182,7 @@ class TraceContext:
     platform: str = ""
     operation: str = ""
     trigger_type: str = "manual"
-    status: str = "running"
+    _status: TaskStatus = field(default=TaskStatus.RUNNING, init=False, repr=False)
     current_stage: str = ""
     started_at: float = field(default_factory=time.time)
     completed_at: float | None = None
@@ -215,6 +219,11 @@ class TraceContext:
         self._init_memory_mb = init_rss
         self._peak_memory_mb = init_rss
 
+    @property
+    def status(self) -> str:
+        """只读任务状态；外部调用方必须发送生命周期事件。"""
+        return self._status.value
+
     # Token 消耗与成本审计
     _token_usage: TraceTokenUsage = field(
         default_factory=lambda: {
@@ -244,8 +253,16 @@ class TraceContext:
     @classmethod
     def set_global_store(cls, store: TraceSQLiteStore | None) -> None:
         """设置全局持久化仓储实例"""
-        global _global_trace_store
+        global _global_trace_store, _global_task_lifecycle_service
+        if store is not _global_trace_store:
+            _global_task_lifecycle_service = None
         _global_trace_store = store
+
+    @classmethod
+    def set_global_lifecycle_service(cls, service: TaskLifecycleService | None) -> None:
+        """设置应用层任务生命周期服务。"""
+        global _global_task_lifecycle_service
+        _global_task_lifecycle_service = service
 
     @classmethod
     def set_active_task_manager(cls, manager: ActiveTaskManager | None) -> None:
@@ -443,17 +460,30 @@ class TraceContext:
 
     def finish(
         self,
-        status: str = "succeeded",
+        event: TaskEvent,
         error_stage: str | None = None,
         error_message: str | None = None,
         stack_trace: str | None = None,
     ) -> None:
+        """发送生命周期事件，并在跃迁成功后完成本地 Trace。
+
+        Args:
+            event: 请求的生命周期事件，由状态机决定目标状态。
+            error_stage: 错误或中止发生的阶段名称。
+            error_message: 错误或中止原因。
+            stack_trace: 错误堆栈文本。
+
+        Raises:
+            ValueError: 当前 Trace 状态不允许该事件。
+            RuntimeError: 数据库中的任务状态已被其他操作并发改变。
         """
-        标记任务完成，计算总耗时并自动持久化到 SQLite
-        """
-        if status == "succeeded":
+        # 延迟导入，避免 shared 与 domain.services 包初始化时形成循环依赖。
+        from ..domain.services.task_state_machine import TaskStateMachine
+
+        effective_event = event
+        if event == TaskEvent.SUCCEED:
             if any(s.get("status") == "failed" for s in self._spans):
-                status = "failed"
+                effective_event = TaskEvent.FAIL
             elif any(
                 s.get("status") == "warning"
                 or s["payload"].get("success") is False
@@ -461,40 +491,135 @@ class TraceContext:
                 or bool(s["payload"].get("subtask_errors"))
                 for s in self._spans
             ) or self.metadata.get("has_warnings"):
-                status = "warning"
+                effective_event = TaskEvent.WARN
 
-        self.status = status
-        self.completed_at = time.time()
-        self.duration_ms = round((self.completed_at - self.started_at) * 1000, 2)
-        self._final_memory_mb = _get_process_rss_mb() if self._enable_metrics else 0.0
-        if self._final_memory_mb > self._peak_memory_mb:
-            self._peak_memory_mb = self._final_memory_mb
+        current_status = self._status
+        target_status = TaskStateMachine.transition(current_status, effective_event)
+        if self.status == target_status.value:
+            return
 
-        if error_stage:
-            self.error_stage = error_stage
-        if error_message:
-            self.error_message = error_message
-        if stack_trace:
-            self.stack_trace = stack_trace
+        completed_at = time.time()
+        duration_ms = round((completed_at - self.started_at) * 1000, 2)
+        final_memory_mb = _get_process_rss_mb() if self._enable_metrics else 0.0
+        peak_memory_mb = max(self._peak_memory_mb, final_memory_mb)
+        terminal_span_status = {
+            TaskEvent.SUCCEED: "success",
+            TaskEvent.WARN: "warning",
+            TaskEvent.FAIL: "failed",
+            TaskEvent.ABORT: "aborted",
+            TaskEvent.CANCEL: "aborted",
+            TaskEvent.SKIP: "skipped",
+        }[effective_event]
+        finished_spans: list[SpanRecord] = []
+        for span in self._spans:
+            finished_span = dict(span)
+            finished_span["payload"] = dict(span["payload"])
+            if finished_span.get("status") == "running":
+                finished_span["status"] = terminal_span_status
+                started_at = finished_span.get("started_at", self.started_at)
+                if finished_span.get("duration_ms") is None and isinstance(
+                    started_at, (int, float)
+                ):
+                    finished_span["duration_ms"] = round(
+                        (completed_at - started_at) * 1000, 2
+                    )
+            finished_spans.append(cast("SpanRecord", finished_span))
 
-        # 确保所有未完成的 Span 在 Trace 结束时被正确收尾，避免前端面板出现永久运行状态
-        for s in self._spans:
-            if s.get("status") == "running":
-                s["status"] = "success"
-                started_at = s.get("started_at", self.started_at)
-                if s.get("duration_ms") is None:
-                    s["duration_ms"] = round((self.completed_at - started_at) * 1000, 2)
+        snapshot = self.to_dict()
+        snapshot.update(
+            {
+                "status": target_status.value,
+                "completed_at": completed_at,
+                "duration_ms": duration_ms,
+                "error_stage": error_stage or self.error_stage,
+                "error_message": error_message or self.error_message,
+                "stack_trace": stack_trace or self.stack_trace,
+                "spans": finished_spans,
+                "performance_metrics": {
+                    "init_memory_mb": self._init_memory_mb,
+                    "peak_memory_mb": peak_memory_mb,
+                    "final_memory_mb": final_memory_mb,
+                    "delta_memory_mb": round(final_memory_mb - self._init_memory_mb, 2),
+                },
+            }
+        )
 
+        if _global_task_lifecycle_service is not None:
+            try:
+                target_status = _global_task_lifecycle_service.transition(
+                    self.trace_id,
+                    effective_event,
+                    expected_status=current_status,
+                    completed_at=completed_at,
+                    duration_ms=duration_ms,
+                    error_stage=error_stage,
+                    error_message=error_message,
+                    stack_trace=stack_trace,
+                )
+            except RuntimeError:
+                latest = (
+                    _global_trace_store.get_trace(self.trace_id)
+                    if _global_trace_store is not None
+                    else None
+                )
+                if latest is None:
+                    raise
+                latest_status = str(latest.get("status", ""))
+                terminal_statuses = {
+                    TaskStatus.SUCCEEDED.value,
+                    TaskStatus.WARNING.value,
+                    TaskStatus.FAILED.value,
+                    TaskStatus.ABORTED.value,
+                    TaskStatus.SKIPPED.value,
+                    TaskStatus.COMPLETED.value,
+                    TaskStatus.CANCELLED.value,
+                }
+                if latest_status not in terminal_statuses:
+                    raise
+                self._status = TaskStatus(latest_status)
+                self.completed_at = cast("float | None", latest.get("completed_at"))
+                self.duration_ms = cast("float | None", latest.get("duration_ms"))
+                latest_spans = latest.get("spans")
+                if isinstance(latest_spans, list):
+                    self._spans = cast("list[SpanRecord]", latest_spans)
+                _active_traces.pop(self.trace_id, None)
+                return
+        elif _global_trace_store is not None:
+            transitioned = _global_trace_store.transition_trace_status(
+                self.trace_id,
+                current_status,
+                effective_event,
+                completed_at=completed_at,
+                duration_ms=duration_ms,
+                error_stage=error_stage,
+                error_message=error_message,
+                stack_trace=stack_trace,
+            )
+            if not transitioned:
+                latest = _global_trace_store.get_trace(self.trace_id)
+                if not latest or latest.get("status") != target_status.value:
+                    raise RuntimeError(
+                        f"Trace {self.trace_id} 已被并发改变状态，拒绝覆盖"
+                    )
+
+        self._status = target_status
+        self.completed_at = completed_at
+        self.duration_ms = duration_ms
+        self._final_memory_mb = final_memory_mb
+        self._peak_memory_mb = peak_memory_mb
+        self.error_stage = error_stage or self.error_stage
+        self.error_message = error_message or self.error_message
+        self.stack_trace = stack_trace or self.stack_trace
+        self._spans = finished_spans
         _active_traces.pop(self.trace_id, None)
 
-        # 自动落盘
         if _global_trace_store is not None:
             try:
                 _global_trace_store.save_trace(self.to_dict())
             except Exception as e:
                 from ..utils.logger import logger
 
-                logger.warning(f"Trace 持久化保存失败: {e}")
+                logger.warning(f"Trace 快照保存失败: {e}")
 
     def to_dict(self) -> TraceContextSnapshot:
         """将完整链路快照序列化为字典"""
@@ -537,6 +662,8 @@ class TraceContext:
     def __enter__(self) -> TraceContext:
         self._token = _current_trace.set(self)
         _active_traces[self.trace_id] = self
+        if _global_trace_store is not None and self.status == TaskStatus.RUNNING.value:
+            _global_trace_store.save_trace(self.to_dict())
         return self
 
     def __exit__(
@@ -547,14 +674,14 @@ class TraceContext:
     ) -> None:
         if exc_type is not None and self.status == "running":
             self.finish(
-                status="failed",
+                event=TaskEvent.FAIL,
                 error_stage=self._spans[-1]["stage_name"]
                 if self._spans
                 else "PIPELINE",
                 error_message=str(exc_val),
             )
         elif self.status == "running":
-            self.finish(status="succeeded")
+            self.finish(event=TaskEvent.SUCCEED)
 
         if self._token:
             _current_trace.reset(self._token)
@@ -637,6 +764,8 @@ class TraceContext:
         )
         ctx._token = _current_trace.set(ctx)
         _active_traces[ctx.trace_id] = ctx
+        if _global_trace_store is not None:
+            _global_trace_store.save_trace(ctx.to_dict())
         return ctx
 
     @classmethod
