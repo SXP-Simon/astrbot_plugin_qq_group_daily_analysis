@@ -13,6 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from ...application.services.analysis_application_service import DuplicateGroupTaskError
 from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
+from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import PLUGIN_NAME
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -478,7 +479,7 @@ class AutoScheduler:
                 logger.warning(f"群 {group_id} 自动分析跳过：bot管理器未就绪")
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="skipped",
+                        event=TaskEvent.SKIP,
                         error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
                     )
                 return {
@@ -501,7 +502,7 @@ class AutoScheduler:
                 if trace and trace.status == "running":
                     if is_skip:
                         trace.finish(
-                            status="skipped",
+                            event=TaskEvent.SKIP,
                             error_message=skip_msg
                             or AUTO_ANALYSIS_SKIP_REASONS.get(
                                 reason, f"自动分析已跳过 ({reason})"
@@ -509,7 +510,7 @@ class AutoScheduler:
                         )
                     else:
                         trace.finish(
-                            status="failed",
+                            event=TaskEvent.FAIL,
                             error_message=str(
                                 result.get("error") or f"自动分析执行失败: {reason}"
                             ),
@@ -556,7 +557,7 @@ class AutoScheduler:
             if not report_sent:
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="failed", error_message="Report delivery failed"
+                        event=TaskEvent.FAIL, error_message="Report delivery failed"
                     )
                 result["success"] = False
                 result["reason"] = "report_delivery_failed"
@@ -564,20 +565,20 @@ class AutoScheduler:
                 return result
 
             if trace and trace.status == "running":
-                trace.finish(status="succeeded")
+                trace.finish(event=TaskEvent.SUCCEED)
             logger.info(f"群 {group_id} 自动分析及报告发送成功")
             return result
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
-                    status="aborted", error_message="Task already running in group"
+                    event=TaskEvent.ABORT, error_message="Task already running in group"
                 )
             logger.debug(f"群 {group_id} 任务因并发锁冲突而跳过（已在运行）")
             raise
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
+                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"群 {group_id} 自动分析执行失败: {e}", exc_info=True)
             return {
                 "success": False,
@@ -788,7 +789,7 @@ class AutoScheduler:
                 logger.warning(f"群 {group_id} 增量分析跳过：bot管理器未就绪")
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="skipped",
+                        event=TaskEvent.SKIP,
                         error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
                     )
                 return {"success": False, "reason": "bot_not_ready"}
@@ -807,7 +808,7 @@ class AutoScheduler:
                 if trace and trace.status == "running":
                     if is_skip:
                         trace.finish(
-                            status="skipped",
+                            event=TaskEvent.SKIP,
                             error_message=skip_msg
                             or AUTO_ANALYSIS_SKIP_REASONS.get(
                                 reason, f"增量分析已跳过 ({reason})"
@@ -815,7 +816,7 @@ class AutoScheduler:
                         )
                     else:
                         trace.finish(
-                            status="failed",
+                            event=TaskEvent.FAIL,
                             error_message=str(
                                 result.get("error") or f"增量分析失败: {reason}"
                             ),
@@ -835,19 +836,19 @@ class AutoScheduler:
                 f"金句={batch_summary.get('quotes_count', 0)}"
             )
             if trace and trace.status == "running":
-                trace.finish(status="succeeded")
+                trace.finish(event=TaskEvent.SUCCEED)
             return result
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
-                    status="aborted", error_message="Task already running in group"
+                    event=TaskEvent.ABORT, error_message="Task already running in group"
                 )
             logger.debug(f"群 {group_id} 增量分析因并发锁冲突而跳过（已在运行）")
             return {"success": False, "reason": "already_running"}
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
+                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"群 {group_id} 增量分析执行失败: {e}", exc_info=True)
             return {"success": False, "reason": str(e)}
         finally:
@@ -976,7 +977,7 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 已移出增量名单，跳过最终报告")
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="skipped",
+                        event=TaskEvent.SKIP,
                         error_message=AUTO_ANALYSIS_SKIP_REASONS["target_removed"],
                     )
                 return {
@@ -996,7 +997,7 @@ class AutoScheduler:
                 logger.warning(f"群 {group_id} 最终报告跳过：bot管理器未就绪")
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="skipped",
+                        event=TaskEvent.SKIP,
                         error_message=AUTO_ANALYSIS_SKIP_REASONS["bot_not_ready"],
                     )
                 return {
@@ -1019,7 +1020,7 @@ class AutoScheduler:
                 if trace and trace.status == "running":
                     if is_skip:
                         trace.finish(
-                            status="skipped",
+                            event=TaskEvent.SKIP,
                             error_message=skip_msg
                             or AUTO_ANALYSIS_SKIP_REASONS.get(
                                 reason, f"增量最终报告已跳过 ({reason})"
@@ -1027,7 +1028,7 @@ class AutoScheduler:
                         )
                     else:
                         trace.finish(
-                            status="failed",
+                            event=TaskEvent.FAIL,
                             error_message=str(
                                 result.get("error") or f"增量最终报告失败: {reason}"
                             ),
@@ -1086,7 +1087,7 @@ class AutoScheduler:
             if not report_sent:
                 if trace and trace.status == "running":
                     trace.finish(
-                        status="failed", error_message="Report delivery failed"
+                        event=TaskEvent.FAIL, error_message="Report delivery failed"
                     )
                 result["success"] = False
                 result["reason"] = "report_delivery_failed"
@@ -1112,14 +1113,14 @@ class AutoScheduler:
                 )
 
             if trace and trace.status == "running":
-                trace.finish(status="succeeded")
+                trace.finish(event=TaskEvent.SUCCEED)
             logger.info(f"群 {group_id} 增量最终报告发送成功")
             return result
 
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
-                    status="aborted", error_message="Task already running in group"
+                    event=TaskEvent.ABORT, error_message="Task already running in group"
                 )
             logger.debug(f"群 {group_id} 最终报告因并发锁冲突而跳过（已在运行）")
             return {
@@ -1130,7 +1131,7 @@ class AutoScheduler:
             }
         except Exception as e:
             if trace and trace.status == "running":
-                trace.finish(status="failed", error_message=str(e))
+                trace.finish(event=TaskEvent.FAIL, error_message=str(e))
             logger.error(f"群 {group_id} 最终报告执行失败: {e}", exc_info=True)
             return {
                 "success": False,
