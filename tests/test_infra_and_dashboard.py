@@ -889,7 +889,10 @@ async def test_plugin_config_api(tmp_path: Path):
     mock_config.__getitem__.side_effect = lambda k: (
         {"enabled": True} if k == "basic" else {}
     )
-    mock_config_dict = {"basic": {"enabled": True}}
+    mock_config_dict = {
+        "basic": {"enabled": True},
+        "auto_analysis": {"auto_analysis_time": ["09:00"]},
+    }
     mock_config.__iter__ = lambda _self: iter(mock_config_dict)
     mock_config.items = lambda: mock_config_dict.items()
     mock_config.save_config = MagicMock()
@@ -897,6 +900,18 @@ async def test_plugin_config_api(tmp_path: Path):
     cfg_mgr = MagicMock()
     cfg_mgr.config = mock_config_dict
     mock_analysis_service.config_manager = cfg_mgr
+    mock_incremental_trigger = MagicMock()
+    mock_incremental_trigger.refresh_target_states = AsyncMock()
+    mock_auto_scheduler.incremental_trigger = mock_incremental_trigger
+
+    def assert_config_is_saved_before_scheduling(_context: object) -> None:
+        """确认调度器读取到已持久化的新配置。"""
+        cfg_mgr.save_config.assert_called_once()
+        assert mock_config_dict["auto_analysis"]["auto_analysis_time"] == []
+
+    mock_auto_scheduler.schedule_jobs.side_effect = (
+        assert_config_is_saved_before_scheduling
+    )
 
     bridge = PluginPageWebUIBridge(
         context=mock_context,
@@ -917,12 +932,31 @@ async def test_plugin_config_api(tmp_path: Path):
                 "config": {
                     "basic": {"enabled": False},
                     "auto_analysis": {"auto_analysis_time": []},
+                    "incremental": {
+                        "incremental_group_list_mode": "blacklist",
+                        "incremental_group_list": ["onebot:GroupMessage:123456"],
+                    },
                 }
             }
         )
         save_res = await bridge.api_save_config()
         assert save_res is not None
         assert mock_config_dict["auto_analysis"]["auto_analysis_time"] == []
+        mock_auto_scheduler.schedule_jobs.assert_called_once_with(mock_context)
+        mock_incremental_trigger.refresh_target_states.assert_awaited_once_with()
+
+        mock_req.json = AsyncMock(
+            return_value={
+                "config": {"auto_analysis": {"auto_analysis_time": ["24:00"]}}
+            }
+        )
+        invalid_save_res = await bridge.api_save_config()
+        if isinstance(invalid_save_res, dict):
+            assert invalid_save_res["status_code"] == 400
+        else:
+            assert invalid_save_res.status_code == 400
+        assert mock_config_dict["auto_analysis"]["auto_analysis_time"] == []
+        assert cfg_mgr.save_config.call_count == 1
         mock_auto_scheduler.schedule_jobs.assert_called_once_with(mock_context)
 
 
