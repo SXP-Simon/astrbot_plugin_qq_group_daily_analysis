@@ -284,6 +284,7 @@ class AnalysisRecoveryService:
         platform_id: str | None = None,
         date_str: str | None = None,
         template_name: str | None = None,
+        checkpoint_trace_id: str | None = None,
         fallback_daily_func: Callable[..., Awaitable[dict[str, object]]] | None = None,
     ) -> dict[str, object]:
         """从上一次 Checkpoint 检查点执行幂等断点续跑。
@@ -294,6 +295,7 @@ class AnalysisRecoveryService:
             platform_id: 平台标识。
             date_str: 日期字符串（缺省为今日）。
             template_name: 模板主题名称。
+            checkpoint_trace_id: 快照所属的原任务 ID，缺省使用 trace_id。
             fallback_daily_func: 未命中快照时回退执行全量分析的异步函数。
 
         Returns:
@@ -304,6 +306,7 @@ class AnalysisRecoveryService:
         """
         if not date_str:
             date_str = dt.datetime.now().strftime("%Y-%m-%d")
+        checkpoint_trace_id = checkpoint_trace_id or trace_id
 
         trace = TraceContext.current()
         if not trace:
@@ -334,7 +337,7 @@ class AnalysisRecoveryService:
                 group_id,
                 date_str,
                 AnalysisStage.LLM_ANALYSIS.value,
-                trace_id=trace_id or "",
+                trace_id=checkpoint_trace_id,
             )
             if self.checkpoint_store
             else None
@@ -398,7 +401,7 @@ class AnalysisRecoveryService:
                 group_id,
                 date_str,
                 AnalysisStage.CLEAN_MESSAGES.value,
-                trace_id=trace_id or "",
+                trace_id=checkpoint_trace_id,
             )
             if self.checkpoint_store
             else None

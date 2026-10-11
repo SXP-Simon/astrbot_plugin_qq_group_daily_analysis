@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time as time_mod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ...domain.services.message_cleaner_service import MessageCleanerService
@@ -38,6 +39,9 @@ if TYPE_CHECKING:
         ICheckpointStore,
         IIncrementalStore,
     )
+    from ...domain.repositories.platform_adapter_repository import (
+        PlatformAdapterProtocol,
+    )
     from ...domain.repositories.report_repository import IReportGenerator
     from ...domain.services.analysis_domain_service import (
         AnalysisDomainService,
@@ -45,12 +49,50 @@ if TYPE_CHECKING:
     )
     from ...domain.services.incremental_merge_service import IncrementalMergeService
     from ...domain.services.statistics_service import StatisticsService
+    from ...domain.value_objects.analysis_results import (
+        GoldenQuote,
+        GroupStatistics,
+        QualityReview,
+        SummaryTopic,
+        UserTitle,
+    )
     from ...domain.value_objects.unified_message import UnifiedMessage
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
 
 __all__ = ["AnalysisApplicationService", "DuplicateGroupTaskError"]
+
+
+@dataclass(frozen=True)
+class AnalysisSections:
+    """本次执行实际启用的 LLM 分析模块。"""
+
+    topic: bool
+    user_titles: bool
+    golden_quotes: bool
+    chat_quality: bool
+
+
+@dataclass
+class LLMAnalysisStageResult:
+    """单次 LLM 阶段的结构化产物与失败标记。"""
+
+    topics: list[SummaryTopic]
+    user_titles: list[UserTitle]
+    golden_quotes: list[GoldenQuote]
+    chat_quality_review: QualityReview | None
+    token_usage: TokenUsage
+    failed: bool = False
+
+
+@dataclass
+class CleanedDailyMessages:
+    """清洗阶段输出，供后续统计与 LLM 阶段共享。"""
+
+    messages: list[UnifiedMessage]
+    bot_self_ids: list[str]
+    detected_language: str | None
 
 
 class AnalysisApplicationService:
@@ -223,27 +265,22 @@ class AnalysisApplicationService:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
             actual_platform = (
-                (
-                    self.bot_manager.get_adapter_platform_id(adapter)
-                    if hasattr(self.bot_manager, "get_adapter_platform_id")
-                    else ""
-                )
-                or getattr(adapter, "platform_id", "")
-                or getattr(adapter, "platform_name", "")
+                self.bot_manager.get_adapter_platform_id(adapter)
+                or adapter.platform_id
+                or adapter.get_platform_name()
                 or (platform_id or "")
             )
             if trace and actual_platform:
                 trace.platform = str(actual_platform)
 
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.info(
-                            f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次群分析"
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
+            try:
+                if await adapter.is_group_muted(group_id):
+                    logger.info(
+                        f"群 {group_id} 开启了全群禁言或对 Bot 禁言，跳过本次群分析"
+                    )
+                    return {"success": False, "reason": "muted"}
+            except Exception as e:
+                logger.warning(f"检查群 {group_id} 禁言状态时出错: {e}")
 
             date_str = dt.datetime.now().strftime("%Y-%m-%d")
             pipeline = PipelineContext(
@@ -259,32 +296,14 @@ class AnalysisApplicationService:
                 days = int(days)
             max_count = self.config_manager.get_max_messages()
 
-            async with pipeline.step(
-                AnalysisStage.FETCH_MESSAGES,
-                initial_payload={"days": days, "max_count": max_count},
-            ) as step:
-                raw_messages = await adapter.fetch_messages(
-                    group_id=group_id, days=days, max_count=max_count
-                )
-                raw_data_size_kb = round(
-                    sum(
-                        len(
-                            (getattr(m, "text_content", "") or "").encode(
-                                "utf-8", errors="replace"
-                            )
-                        )
-                        for m in raw_messages
-                    )
-                    / 1024,
-                    2,
-                )
-                step.set_payload(
-                    days=days,
-                    max_count=max_count,
-                    fetched_count=len(raw_messages),
-                    raw_data_size_kb=raw_data_size_kb,
-                    source=str(actual_platform or platform_id or ""),
-                )
+            raw_messages = await self._fetch_daily_messages(
+                pipeline,
+                adapter,
+                group_id,
+                days,
+                max_count,
+                str(actual_platform or platform_id or ""),
+            )
             logger.info(
                 "消息拉取完成: group=%s, platform=%s, raw_count=%s, days=%s, max_count=%s",
                 group_id,
@@ -304,76 +323,16 @@ class AnalysisApplicationService:
                     "message": skip_msg,
                 }
 
-            cleaner = MessageCleanerService()
-            bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
-            if hasattr(adapter, "bot_self_ids") and adapter.bot_self_ids:
-                for b_id in adapter.bot_self_ids:
-                    if b_id and str(b_id) not in bot_self_ids:
-                        bot_self_ids.append(str(b_id))
-            if not self.config_manager.get_filter_bot_messages():
-                bot_self_ids = []
-            logger.debug(
-                "filter_bot_messages=%s, bot_self_ids=%s",
-                self.config_manager.get_filter_bot_messages(),
-                bot_self_ids,
-            )
-
-            async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
-                clean_start_ts = time_mod.perf_counter()
-                unified_messages = cleaner.clean_messages(
-                    raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
-                )
-                # 报告语言 auto：按清洗后的群聊消息自动判断（写进上下文，本次任务的
-                # LLM 提示词注入与模板渲染共用同一结果；证据不足时写入 None=不干预）
-                detected_language = apply_auto_language_detection(
-                    getattr(m, "text_content", "") or "" for m in unified_messages
-                )
-                clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
-                cleaned_data_size_kb = round(
-                    sum(
-                        len(
-                            (getattr(m, "text_content", "") or "").encode(
-                                "utf-8", errors="replace"
-                            )
-                        )
-                        for m in unified_messages
-                    )
-                    / 1024,
-                    2,
-                )
-                dropped_cnt = max(len(raw_messages) - len(unified_messages), 0)
-                retention = round(
-                    len(unified_messages) / max(len(raw_messages), 1) * 100,
-                    1,
-                )
-                cleaning_speed_mps = round(len(raw_messages) / clean_duration_s, 1)
-                step.set_payload(
-                    raw_count=len(raw_messages),
-                    cleaned_count=len(unified_messages),
-                    dropped_count=dropped_cnt,
-                    retention_rate=retention,
-                    cleaned_data_size_kb=cleaned_data_size_kb,
-                    cleaning_speed_mps=cleaning_speed_mps,
-                    bot_filter_enabled=bool(
-                        self.config_manager.get_filter_bot_messages()
-                    ),
-                )
-            if trace:
-                trace.set_context_metrics(
-                    raw_message_count=len(raw_messages),
-                    cleaned_message_count=len(unified_messages),
-                )
-            logger.info(
-                "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
+            cleaned_messages = await self._clean_daily_messages(
+                pipeline,
+                trace,
+                adapter,
+                raw_messages,
                 group_id,
                 actual_platform or platform_id or "unknown",
-                len(unified_messages),
-                max(len(raw_messages) - len(unified_messages), 0),
             )
-            logger.info(
-                "报告语言自动判断(auto): %s（按群聊正文投票，某语言占比 >70%% 才判；未命中则不干预）",
-                detected_language or "未命中",
-            )
+            unified_messages = cleaned_messages.messages
+            bot_self_ids = cleaned_messages.bot_self_ids
 
             threshold = self.config_manager.get_min_messages_threshold()
             if len(unified_messages) < threshold and not manual:
@@ -390,27 +349,11 @@ class AnalysisApplicationService:
                     "threshold": threshold,
                 }
 
-            async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
-                statistics = await asyncio.to_thread(
-                    self.statistics_service.calculate_group_statistics, unified_messages
-                )
-                user_activity = await asyncio.to_thread(
-                    self.analysis_domain_service.analyze_user_activity,
-                    unified_messages,
-                    bot_self_ids,
-                )
-                step.set_payload(
-                    message_count=getattr(
-                        statistics,
-                        "message_count",
-                        len(unified_messages),
-                    ),
-                    character_count=getattr(statistics, "total_characters", 0),
-                    participant_count=getattr(statistics, "participant_count", 0),
-                    most_active_period=getattr(statistics, "most_active_period", ""),
-                    emoji_count=getattr(statistics, "emoji_count", 0),
-                    active_users_analyzed=len(user_activity) if user_activity else 0,
-                )
+            statistics, user_activity = await self._calculate_daily_statistics(
+                pipeline,
+                unified_messages,
+                bot_self_ids,
+            )
 
             max_user_titles = self.config_manager.get_max_user_titles()
             top_users = self.analysis_domain_service.get_top_users(
@@ -475,12 +418,6 @@ class AnalysisApplicationService:
                     )
                 )
 
-            topics = []
-            user_titles = []
-            golden_quotes = []
-            chat_quality_review = None
-            total_token_usage = TokenUsage()
-
             legacy_messages = self.statistics_service._convert_to_legacy_dict(
                 unified_messages
             )
@@ -490,84 +427,38 @@ class AnalysisApplicationService:
             )
             analysis_stage = "full_manual" if manual else "full_scheduled"
 
-            if (
-                topic_enabled
-                or user_title_enabled
-                or golden_quote_enabled
-                or chat_quality_enabled
-            ):
-                async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
-                    async with self._llm_slot(group_id, analysis_stage):
-                        logger.debug(
-                            f"[LLM] 已进入普通全量分析队列 "
-                            f"(群: {group_id}, stage: {analysis_stage})"
-                        )
-                        (
-                            topics,
-                            user_titles,
-                            golden_quotes,
-                            total_token_usage,
-                            chat_quality_review,
-                        ) = await self.llm_analyzer.analyze_all_concurrent(
-                            legacy_messages,
-                            user_activity,
-                            umo=unified_msg_origin,
-                            top_users=top_users,
-                            topic_enabled=topic_enabled,
-                            user_title_enabled=user_title_enabled,
-                            golden_quote_enabled=golden_quote_enabled,
-                            chat_quality_enabled=chat_quality_enabled,
-                        )
+            llm_result = await self._run_llm_analysis_stage(
+                pipeline,
+                group_id,
+                analysis_stage,
+                legacy_messages,
+                user_activity,
+                top_users,
+                unified_msg_origin,
+                AnalysisSections(
+                    topic=topic_enabled,
+                    user_titles=user_title_enabled,
+                    golden_quotes=golden_quote_enabled,
+                    chat_quality=chat_quality_enabled,
+                ),
+                trace,
+            )
+            if llm_result.failed:
+                return {
+                    "success": False,
+                    "reason": "llm_analysis_failed",
+                    "error": "大模型文本分析全部子任务失败，已中止后续报告生成与发送",
+                }
 
-                    enabled_count = sum(
-                        [
-                            bool(topic_enabled),
-                            bool(user_title_enabled),
-                            bool(golden_quote_enabled),
-                            bool(chat_quality_enabled),
-                        ]
-                    )
-                    success_count = sum(
-                        [
-                            bool(topics) if topic_enabled else False,
-                            bool(user_titles) if user_title_enabled else False,
-                            bool(golden_quotes) if golden_quote_enabled else False,
-                            bool(chat_quality_review)
-                            if chat_quality_enabled
-                            else False,
-                        ]
-                    )
-
-                    if enabled_count > 0 and success_count == 0:
-                        step.mark_failed(
-                            "大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = False
-                            trace.metadata["failure_stage"] = (
-                                AnalysisStage.LLM_ANALYSIS.value
-                            )
-                        return {
-                            "success": False,
-                            "reason": "llm_analysis_failed",
-                            "error": "大模型文本分析全部子任务失败，已中止后续报告生成与发送",
-                        }
-                    if enabled_count > 0 and success_count < enabled_count:
-                        step.mark_warning(
-                            f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
-                        )
-                        if trace:
-                            trace.metadata["has_warnings"] = True
-
-            statistics.golden_quotes = golden_quotes
-            statistics.token_usage = total_token_usage
+            statistics.golden_quotes = llm_result.golden_quotes
+            statistics.token_usage = llm_result.token_usage
 
             analysis_result = {
                 "statistics": statistics,
-                "topics": topics,
-                "user_titles": user_titles,
+                "topics": llm_result.topics,
+                "user_titles": llm_result.user_titles,
                 "user_analysis": user_activity,
-                "chat_quality_review": chat_quality_review,
+                "chat_quality_review": llm_result.chat_quality_review,
             }
 
             async with pipeline.step(
@@ -593,8 +484,8 @@ class AnalysisApplicationService:
                         logger.warning(f"保存分析 Checkpoint 失败: {e}")
                 step.set_payload(
                     date=date_str,
-                    topics_persisted=len(topics),
-                    titles_persisted=len(user_titles),
+                    topics_persisted=len(llm_result.topics),
+                    titles_persisted=len(llm_result.user_titles),
                     checkpoint_saved=bool(self.checkpoint_store),
                 )
 
@@ -604,8 +495,273 @@ class AnalysisApplicationService:
                 "messages_count": len(unified_messages),
                 "adapter": adapter,
                 "group_id": group_id,
-                "platform_id": getattr(adapter, "platform_id", platform_id),
+                "platform_id": adapter.platform_id or platform_id,
             }
+
+    async def _fetch_daily_messages(
+        self,
+        pipeline: PipelineContext,
+        adapter: PlatformAdapterProtocol,
+        group_id: str,
+        days: int,
+        max_count: int,
+        source_platform: str,
+    ) -> list[UnifiedMessage]:
+        """执行 Fetch 阶段并记录拉取数量与原始文本体积。
+
+        Args:
+            pipeline: 当前分析的阶段与快照上下文。
+            adapter: 已解析的平台消息适配器。
+            group_id: 目标群组 ID。
+            days: 消息回溯天数。
+            max_count: 最大拉取消息数。
+            source_platform: 实际使用的平台标识。
+
+        Returns:
+            list[UnifiedMessage]: 平台返回的统一消息列表。
+        """
+        async with pipeline.step(
+            AnalysisStage.FETCH_MESSAGES,
+            initial_payload={"days": days, "max_count": max_count},
+        ) as step:
+            raw_messages = await adapter.fetch_messages(
+                group_id=group_id, days=days, max_count=max_count
+            )
+            raw_data_size_kb = round(
+                sum(
+                    len(message.text_content.encode("utf-8", errors="replace"))
+                    for message in raw_messages
+                )
+                / 1024,
+                2,
+            )
+            step.set_payload(
+                days=days,
+                max_count=max_count,
+                fetched_count=len(raw_messages),
+                raw_data_size_kb=raw_data_size_kb,
+                source=source_platform,
+            )
+        return raw_messages
+
+    async def _clean_daily_messages(
+        self,
+        pipeline: PipelineContext,
+        trace: TraceContext | None,
+        adapter: PlatformAdapterProtocol,
+        raw_messages: list[UnifiedMessage],
+        group_id: str,
+        actual_platform: str,
+    ) -> CleanedDailyMessages:
+        """执行 Clean 阶段并生成本次任务使用的报告语言线索。
+
+        Args:
+            pipeline: 当前分析的阶段与快照上下文。
+            trace: 当前全链路追踪上下文。
+            adapter: 已解析的平台消息适配器。
+            raw_messages: Fetch 阶段取得的原始统一消息。
+            group_id: 目标群组 ID。
+            actual_platform: 实际使用的平台标识。
+
+        Returns:
+            CleanedDailyMessages: 清洗后的消息、机器人 ID 与识别语言。
+        """
+        bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
+        for bot_id in adapter.bot_self_ids:
+            if bot_id and bot_id not in bot_self_ids:
+                bot_self_ids.append(bot_id)
+        filter_bot_messages = self.config_manager.get_filter_bot_messages()
+        if not filter_bot_messages:
+            bot_self_ids = []
+        logger.debug(
+            "filter_bot_messages=%s, bot_self_ids=%s",
+            filter_bot_messages,
+            bot_self_ids,
+        )
+
+        async with pipeline.step(AnalysisStage.CLEAN_MESSAGES) as step:
+            clean_start_ts = time_mod.perf_counter()
+            unified_messages = MessageCleanerService().clean_messages(
+                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            )
+            detected_language = apply_auto_language_detection(
+                message.text_content for message in unified_messages
+            )
+            clean_duration_s = max(0.001, time_mod.perf_counter() - clean_start_ts)
+            cleaned_data_size_kb = round(
+                sum(
+                    len(message.text_content.encode("utf-8", errors="replace"))
+                    for message in unified_messages
+                )
+                / 1024,
+                2,
+            )
+            dropped_count = max(len(raw_messages) - len(unified_messages), 0)
+            retention = round(
+                len(unified_messages) / max(len(raw_messages), 1) * 100,
+                1,
+            )
+            cleaning_speed_mps = round(len(raw_messages) / clean_duration_s, 1)
+            step.set_payload(
+                raw_count=len(raw_messages),
+                cleaned_count=len(unified_messages),
+                dropped_count=dropped_count,
+                retention_rate=retention,
+                cleaned_data_size_kb=cleaned_data_size_kb,
+                cleaning_speed_mps=cleaning_speed_mps,
+                bot_filter_enabled=bool(filter_bot_messages),
+            )
+
+        if trace:
+            trace.set_context_metrics(
+                raw_message_count=len(raw_messages),
+                cleaned_message_count=len(unified_messages),
+            )
+        logger.info(
+            "消息清洗完成: group=%s, platform=%s, cleaned_count=%s, dropped=%s",
+            group_id,
+            actual_platform,
+            len(unified_messages),
+            max(len(raw_messages) - len(unified_messages), 0),
+        )
+        logger.info(
+            "报告语言自动判断(auto): %s（按群聊正文投票，某语言占比 >70%% 才判；未命中则不干预）",
+            detected_language or "未命中",
+        )
+        return CleanedDailyMessages(
+            messages=unified_messages,
+            bot_self_ids=bot_self_ids,
+            detected_language=detected_language,
+        )
+
+    async def _calculate_daily_statistics(
+        self,
+        pipeline: PipelineContext,
+        unified_messages: list[UnifiedMessage],
+        bot_self_ids: list[str],
+    ) -> tuple[GroupStatistics, dict[str, UserActivityStats]]:
+        """执行 Stats 阶段并记录统计聚合的关键指标。
+
+        Args:
+            pipeline: 当前分析的阶段与快照上下文。
+            unified_messages: Clean 阶段产出的有效消息。
+            bot_self_ids: 当前平台与配置识别出的机器人 ID。
+
+        Returns:
+            tuple[GroupStatistics, dict[str, UserActivityStats]]: 群统计和用户活跃度。
+        """
+        async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
+            statistics = await asyncio.to_thread(
+                self.statistics_service.calculate_group_statistics, unified_messages
+            )
+            user_activity = await asyncio.to_thread(
+                self.analysis_domain_service.analyze_user_activity,
+                unified_messages,
+                bot_self_ids,
+            )
+            step.set_payload(
+                message_count=statistics.message_count,
+                character_count=statistics.total_characters,
+                participant_count=statistics.participant_count,
+                most_active_period=statistics.most_active_period,
+                emoji_count=statistics.emoji_count,
+                active_users_analyzed=len(user_activity) if user_activity else 0,
+            )
+        return statistics, user_activity
+
+    async def _run_llm_analysis_stage(
+        self,
+        pipeline: PipelineContext,
+        group_id: str,
+        analysis_stage: str,
+        legacy_messages: list[dict[str, object]],
+        user_activity: dict[str, UserActivityStats],
+        top_users: list[dict[str, object]],
+        unified_msg_origin: str,
+        sections: AnalysisSections,
+        trace: TraceContext | None,
+    ) -> LLMAnalysisStageResult:
+        """执行已启用的 LLM 子分析，并集中收敛全失败与部分失败结果。
+
+        Args:
+            pipeline: 当前分析的阶段与快照上下文。
+            group_id: 目标群组 ID。
+            analysis_stage: LLM 并发槽位使用的任务类型。
+            legacy_messages: 转换后的兼容消息结构。
+            user_activity: Stats 阶段产出的用户活跃数据。
+            top_users: 限定人数后的活跃用户列表。
+            unified_msg_origin: LLM 分析所使用的平台消息源标识。
+            sections: 本次实际启用的 LLM 子分析模块。
+            trace: 当前全链路追踪上下文。
+
+        Returns:
+            LLMAnalysisStageResult: LLM 产物、Token 统计和全失败标记。
+        """
+        result = LLMAnalysisStageResult(
+            topics=[],
+            user_titles=[],
+            golden_quotes=[],
+            chat_quality_review=None,
+            token_usage=TokenUsage(),
+        )
+        enabled_count = sum(
+            (
+                sections.topic,
+                sections.user_titles,
+                sections.golden_quotes,
+                sections.chat_quality,
+            )
+        )
+        if enabled_count == 0:
+            return result
+
+        async with pipeline.step(AnalysisStage.LLM_ANALYSIS) as step:
+            async with self._llm_slot(group_id, analysis_stage):
+                logger.debug(
+                    f"[LLM] 已进入普通全量分析队列 (群: {group_id}, stage: {analysis_stage})"
+                )
+                (
+                    result.topics,
+                    result.user_titles,
+                    result.golden_quotes,
+                    result.token_usage,
+                    result.chat_quality_review,
+                ) = await self.llm_analyzer.analyze_all_concurrent(
+                    legacy_messages,
+                    user_activity,
+                    umo=unified_msg_origin,
+                    top_users=top_users,
+                    topic_enabled=sections.topic,
+                    user_title_enabled=sections.user_titles,
+                    golden_quote_enabled=sections.golden_quotes,
+                    chat_quality_enabled=sections.chat_quality,
+                )
+
+            success_count = sum(
+                (
+                    bool(result.topics) if sections.topic else False,
+                    bool(result.user_titles) if sections.user_titles else False,
+                    bool(result.golden_quotes) if sections.golden_quotes else False,
+                    bool(result.chat_quality_review)
+                    if sections.chat_quality
+                    else False,
+                )
+            )
+            if success_count == 0:
+                step.mark_failed(
+                    "大模型文本分析所有启用的子任务均调用失败或重试耗尽，已中断后续任务"
+                )
+                if trace:
+                    trace.metadata["has_warnings"] = False
+                    trace.metadata["failure_stage"] = AnalysisStage.LLM_ANALYSIS.value
+                result.failed = True
+            elif success_count < enabled_count:
+                step.mark_warning(
+                    f"大模型文本分析部分子任务未产出结果 ({success_count}/{enabled_count} 成功)"
+                )
+                if trace:
+                    trace.metadata["has_warnings"] = True
+        return result
 
     async def rerender_report(
         self,
@@ -633,6 +789,7 @@ class AnalysisApplicationService:
         platform_id: str | None = None,
         date_str: str | None = None,
         template_name: str | None = None,
+        checkpoint_trace_id: str | None = None,
     ) -> dict[str, object]:
         """从上一次 Checkpoint 检查点执行幂等断点续跑（委托 AnalysisRecoveryService）。"""
         return await self._recovery_service.resume_analysis(
@@ -641,6 +798,7 @@ class AnalysisApplicationService:
             platform_id=platform_id,
             date_str=date_str,
             template_name=template_name,
+            checkpoint_trace_id=checkpoint_trace_id,
             fallback_daily_func=self.execute_daily_analysis,
         )
 
@@ -676,20 +834,19 @@ class AnalysisApplicationService:
             if not adapter:
                 raise ValueError(f"未找到平台 {platform_id} 的适配器")
 
-            if hasattr(adapter, "is_group_muted"):
-                try:
-                    if await adapter.is_group_muted(group_id):
-                        logger.info(
-                            "群 %s 开启了禁言，跳过本次手动漫画话题分析",
-                            group_id,
-                        )
-                        return {"success": False, "reason": "muted"}
-                except Exception as e:
-                    logger.warning(
-                        "检查群 %s 禁言状态时出错: %s",
+            try:
+                if await adapter.is_group_muted(group_id):
+                    logger.info(
+                        "群 %s 开启了禁言，跳过本次手动漫画话题分析",
                         group_id,
-                        e,
                     )
+                    return {"success": False, "reason": "muted"}
+            except Exception as e:
+                logger.warning(
+                    "检查群 %s 禁言状态时出错: %s",
+                    group_id,
+                    e,
+                )
 
             if days is None:
                 days = int(self.config_manager.get_analysis_days() or 1)

@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING, cast
 
 from ...domain.repositories.platform_adapter_repository import PlatformAdapterProtocol
+from ...domain.value_objects.task_event import TaskEvent
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -285,14 +286,14 @@ class AnalysisTriggerService:
                             exc_info=True,
                         )
 
-                trace.finish(status="succeeded")
+                trace.finish(event=TaskEvent.SUCCEED)
                 logger.info(
                     f"[LLM Tool Trigger] 异步任务执行成功: 群 {group_id}, trace={trace_id}"
                 )
             else:
                 reason = str(res.get("reason", "unknown"))
                 trace.finish(
-                    status="failed",
+                    event=TaskEvent.FAIL,
                     error_stage=target_stage_name,
                     error_message=f"分析失败: {reason}",
                 )
@@ -301,7 +302,7 @@ class AnalysisTriggerService:
                 )
         except Exception as exc:
             trace.finish(
-                status="failed",
+                event=TaskEvent.FAIL,
                 error_stage=target_stage_name,
                 error_message=str(exc),
             )

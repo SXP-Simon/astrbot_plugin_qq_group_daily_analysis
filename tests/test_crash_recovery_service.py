@@ -10,6 +10,7 @@ import pytest
 from src.application.services.crash_recovery_service import (
     CrashRecoveryService,
 )
+from src.domain.value_objects.task_event import TaskEvent
 from src.shared.constants import (
     AnalysisStage,
     TaskStatus,
@@ -20,6 +21,7 @@ from src.shared.constants import (
 def mock_trace_store():
     store = MagicMock()
     store.get_crashed_traces_on_startup.return_value = []
+    store.get_task_status.return_value = TaskStatus.RUNNING
     return store
 
 
@@ -73,7 +75,7 @@ async def test_recover_crashed_tasks_same_day_dispatches(
         }
     ]
 
-    mock_checkpoint_store.get_checkpoint.side_effect = lambda g, d, stage, **kwargs: (
+    mock_checkpoint_store.get_checkpoint.side_effect = lambda _g, _d, stage, **_kwargs: (
         {"statistics": {}, "unified_messages": []}
         if stage == AnalysisStage.CLEAN_MESSAGES.value
         else None
@@ -127,7 +129,7 @@ async def test_recover_crashed_tasks_cross_day_silently_archives(
         }
     ]
 
-    mock_checkpoint_store.get_checkpoint.side_effect = lambda g, d, stage, **kwargs: (
+    mock_checkpoint_store.get_checkpoint.side_effect = lambda _g, _d, stage, **_kwargs: (
         {"statistics": {}, "unified_messages": []}
         if stage == AnalysisStage.CLEAN_MESSAGES.value
         else None
@@ -170,6 +172,8 @@ async def test_recover_crashed_tasks_no_checkpoint_aborted(
     ]
 
     mock_checkpoint_store.get_checkpoint.return_value = None
+    mock_trace_store.get_task_status.return_value = TaskStatus.RUNNING
+    mock_trace_store.transition_trace_status.return_value = True
 
     service = CrashRecoveryService(
         mock_trace_store, mock_checkpoint_store, mock_analysis_service, mock_dispatcher
@@ -179,10 +183,17 @@ async def test_recover_crashed_tasks_no_checkpoint_aborted(
     assert result == {"recovered": 0, "archived": 0, "aborted": 1}
     mock_analysis_service.resume_analysis.assert_not_called()
     mock_dispatcher.dispatch.assert_not_called()
-    mock_trace_store.save_trace.assert_called_once()
-    saved_payload = mock_trace_store.save_trace.call_args[0][0]
-    assert saved_payload["trace_id"] == "trace_no_cp"
-    assert saved_payload["status"] == TaskStatus.ABORTED.value
+    mock_trace_store.transition_trace_status.assert_called_once()
+    assert mock_trace_store.transition_trace_status.call_args.kwargs[
+        "expected_status"
+    ] == TaskStatus.RUNNING
+    assert mock_trace_store.transition_trace_status.call_args.kwargs["event"] == (
+        TaskEvent.ABORT
+    )
+    transition_metadata = mock_trace_store.transition_trace_status.call_args.kwargs
+    assert transition_metadata["error_stage"] == "CRASH_RECOVERY"
+    assert "自动回收" in transition_metadata["error_message"]
+    assert transition_metadata["completed_at"] > 0
 
 
 @pytest.mark.asyncio
@@ -256,4 +267,3 @@ def test_sqlite_store_boot_id_filtering_and_migration(tmp_path):
 
     assert trace_dead is not None
     assert trace_dead["status"] == "aborted"  # 死亡进程任务被正确回收
-

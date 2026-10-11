@@ -7,7 +7,7 @@ from astrbot.api.provider import LLMResponse
 from src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
-from src.domain.value_objects import TokenUsage
+from src.domain.value_objects import GroupStatistics, TokenUsage
 from src.domain.value_objects.unified_message import (
     MessageContent,
     MessageContentType,
@@ -15,6 +15,7 @@ from src.domain.value_objects.unified_message import (
 )
 from src.infrastructure.analysis.utils import llm_utils
 from src.infrastructure.analysis.utils.llm_utils import call_provider_with_retry
+from src.domain.value_objects.task_event import TaskEvent
 from src.shared.trace_context import TraceContext
 from src.utils.resilience import GlobalRateLimiter
 
@@ -131,6 +132,13 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
 
     class FakeAdapter:
         platform_id = "onebot-main"
+        bot_self_ids = []
+
+        def get_platform_name(self):
+            return "onebot"
+
+        async def is_group_muted(self, group_id):
+            return False
 
         async def fetch_messages(self, **kwargs):
             return [
@@ -153,7 +161,14 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
 
     class FakeStatisticsService:
         def calculate_group_statistics(self, messages):
-            return SimpleNamespace()
+            return GroupStatistics(
+                message_count=len(messages),
+                total_characters=sum(len(message.text_content) for message in messages),
+                participant_count=1,
+                most_active_period="",
+                golden_quotes=[],
+                emoji_count=0,
+            )
 
         def _convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
@@ -185,7 +200,10 @@ def test_daily_analysis_stage_distinguishes_manual_and_scheduled():
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
-        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        bot_manager=SimpleNamespace(
+            get_adapter=lambda platform_id: FakeAdapter(),
+            get_adapter_platform_id=lambda adapter: adapter.platform_id,
+        ),
         history_manager=FakeHistoryManager(),
         report_generator=None,
         llm_analyzer=FakeAnalyzer(),
@@ -355,6 +373,13 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
 
     class FakeAdapter:
         platform_id = "onebot-main"
+        bot_self_ids = []
+
+        def get_platform_name(self):
+            return "onebot"
+
+        async def is_group_muted(self, group_id):
+            return False
 
         async def fetch_messages(self, **kwargs):
             return [
@@ -377,7 +402,14 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
 
     class FakeStatisticsService:
         def calculate_group_statistics(self, messages):
-            return SimpleNamespace()
+            return GroupStatistics(
+                message_count=len(messages),
+                total_characters=sum(len(message.text_content) for message in messages),
+                participant_count=1,
+                most_active_period="",
+                golden_quotes=[],
+                emoji_count=0,
+            )
 
         def _convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
@@ -400,7 +432,10 @@ def test_daily_analysis_aborts_when_all_enabled_llm_tasks_fail():
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
-        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        bot_manager=SimpleNamespace(
+            get_adapter=lambda platform_id: FakeAdapter(),
+            get_adapter_platform_id=lambda adapter: adapter.platform_id,
+        ),
         history_manager=FakeHistoryManager(),
         report_generator=None,
         llm_analyzer=FakeAnalyzer(),
@@ -463,6 +498,13 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
 
     class FakeAdapter:
         platform_id = "onebot-main"
+        bot_self_ids = []
+
+        def get_platform_name(self):
+            return "onebot"
+
+        async def is_group_muted(self, group_id):
+            return False
 
         async def fetch_messages(self, **kwargs):
             return [
@@ -485,7 +527,14 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
 
     class FakeStatisticsService:
         def calculate_group_statistics(self, messages):
-            return SimpleNamespace()
+            return GroupStatistics(
+                message_count=len(messages),
+                total_characters=sum(len(message.text_content) for message in messages),
+                participant_count=1,
+                most_active_period="",
+                golden_quotes=[],
+                emoji_count=0,
+            )
 
         def _convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
@@ -518,7 +567,10 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
-        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        bot_manager=SimpleNamespace(
+            get_adapter=lambda platform_id: FakeAdapter(),
+            get_adapter_platform_id=lambda adapter: adapter.platform_id,
+        ),
         history_manager=FakeHistoryManager(),
         report_generator=None,
         llm_analyzer=FakeAnalyzer(),
@@ -537,7 +589,7 @@ def test_daily_analysis_warns_when_partial_llm_tasks_fail():
                 s for s in trace._spans if s["stage_name"] == "LLM_ANALYSIS"
             )
             assert llm_span["status"] == "warning"
-            trace.finish()
+            trace.finish(event=TaskEvent.SUCCEED)
             assert trace.status == "warning"
 
     asyncio.run(scenario())
@@ -582,6 +634,13 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
 
     class FakeAdapter:
         platform_id = "onebot-main"
+        bot_self_ids = []
+
+        def get_platform_name(self):
+            return "onebot"
+
+        async def is_group_muted(self, group_id):
+            return False
 
         async def fetch_messages(self, **kwargs):
             return [
@@ -604,7 +663,14 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
 
     class FakeStatisticsService:
         def calculate_group_statistics(self, messages):
-            return SimpleNamespace()
+            return GroupStatistics(
+                message_count=len(messages),
+                total_characters=sum(len(message.text_content) for message in messages),
+                participant_count=1,
+                most_active_period="",
+                golden_quotes=[],
+                emoji_count=0,
+            )
 
         def _convert_to_legacy_dict(self, messages):
             return [{"message": [{"type": "text", "data": {"text": "测试消息"}}]}]
@@ -626,7 +692,10 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
 
     service = AnalysisApplicationService(
         config_manager=FakeConfig(),
-        bot_manager=SimpleNamespace(get_adapter=lambda platform_id: FakeAdapter()),
+        bot_manager=SimpleNamespace(
+            get_adapter=lambda platform_id: FakeAdapter(),
+            get_adapter_platform_id=lambda adapter: adapter.platform_id,
+        ),
         history_manager=FakeHistoryManager(),
         report_generator=None,
         llm_analyzer=FakeAnalyzer(),
@@ -640,7 +709,7 @@ def test_daily_analysis_succeeds_when_all_llm_disabled():
                 "group-1", "onebot-main", manual=True
             )
             assert result["success"] is True
-            trace.finish()
+            trace.finish(event=TaskEvent.SUCCEED)
             assert trace.status == "succeeded"
 
     asyncio.run(scenario())
