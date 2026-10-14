@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from astrbot.api.message_components import (
     BaseMessageComponent,
@@ -15,6 +16,9 @@ from astrbot.api.message_components import (
 )
 
 from ...shared.constants import DEFAULT_ASSETS_CDN_URL
+
+if TYPE_CHECKING:
+    from ...domain.repositories.config_repository import IConfigProvider
 
 
 class TemplateCommandService:
@@ -40,8 +44,11 @@ class TemplateCommandService:
 
     plugin_root: str
 
-    def __init__(self, plugin_root: str) -> None:
+    def __init__(
+        self, plugin_root: str, config_provider: IConfigProvider | None = None
+    ) -> None:
         self.plugin_root = plugin_root
+        self.config_provider = config_provider
 
     def resolve_template_base_dir(self) -> str:
         """解析报告模板目录（兼容新旧目录结构）。"""
@@ -233,7 +240,12 @@ class TemplateCommandService:
                 # 仅内置模板在本地 assets 缺失时尝试从官方 GitHub CDN 加载；
                 # 自定义模板若未提供本地预览图，避免拼接 404 的 CDN 链接
                 if template_name in builtin_template_names():
-                    cdn_url = f"{DEFAULT_ASSETS_CDN_URL}/{template_name}-demo.jpg"
+                    assets_base_url = (
+                        self.config_provider.get_template_assets_base_url()
+                        if self.config_provider is not None
+                        else DEFAULT_ASSETS_CDN_URL
+                    )
+                    cdn_url = f"{assets_base_url}/{template_name}-demo.jpg"
                     node_content = [
                         Plain(f"{num_label} {template_name}{current_mark}"),
                         Image.fromURL(cdn_url),
