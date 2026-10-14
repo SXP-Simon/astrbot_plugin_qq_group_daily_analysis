@@ -198,7 +198,7 @@ class GroupDailyAnalysis(Star):
         )
 
         self.template_command_service = TemplateCommandService(
-            plugin_root=os.path.dirname(__file__)
+            plugin_root=os.path.dirname(__file__), config_provider=self.config_manager
         )
         self.telegram_template_preview_handler = TelegramTemplatePreviewHandler(
             config_manager=self.config_manager,
