@@ -22,6 +22,10 @@ export interface MockHandlerResponse<T = unknown> {
 }
 
 export const mockHandlers = {
+  "POST config/test-template-cdn": () => ({
+    status: "error",
+    message: "演示模式不进行真实网络检测，请连接 AstrBot 插件后再试。",
+  }),
   // 1. 大盘指标与趋势
   "GET metrics/summary": () => ({ status: "ok", data: mockMetricsSummary }),
   "GET metrics/trends": () => ({ status: "ok", data: mockAnalyticsTrends }),

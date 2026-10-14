@@ -37,6 +37,7 @@ import { useTheme } from "../../../shared/lib/useTheme";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
+import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -111,6 +112,7 @@ const ConfigImageThumbnail: React.FC<{
 };
 
 interface FieldRendererProps {
+  templateCdnBaseUrl?: string | null;
   fieldKey: string;
   fieldSchema: SchemaFieldItem;
   value: unknown;
@@ -124,6 +126,7 @@ interface FieldRendererProps {
 }
 
 export const FieldRenderer: React.FC<FieldRendererProps> = ({
+  templateCdnBaseUrl,
   fieldKey,
   fieldSchema,
   value,
@@ -165,6 +168,23 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
+    if (fieldKey === "t2i_cdn_base_url") {
+      const currentValue = typeof value === "string" ? value
+        : typeof defaultValue === "string" ? defaultValue : "";
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Input
+            value={currentValue}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="https://fastly.jsdelivr.net/"
+            status={error ? "error" : undefined}
+            allowClear
+          />
+          <TemplateCdnProbe baseUrl={currentValue} />
+        </div>
+      );
+    }
+
     // 0. 特殊结构：template_list (如 drawing_provider_overrides / comic_characters)
     if (type === "template_list") {
       return (
@@ -216,6 +236,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
                 fieldKey={subKey}
                 fieldSchema={subField}
                 value={subValue}
+                templateCdnBaseUrl={templateCdnBaseUrl}
                 providers={providers}
                 personas={personas}
                 isSubField={true}
@@ -365,6 +386,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
     ) {
       return (
         <TemplateSelectorRenderer
+          cdnBaseUrl={templateCdnBaseUrl}
           value={value}
           options={options}
           defaultValue={defaultValue}

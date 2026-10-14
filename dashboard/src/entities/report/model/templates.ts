@@ -119,14 +119,12 @@ export const KNOWN_TEMPLATES: TemplateVisualInfo[] = [
   },
 ];
 
-export const DEFAULT_CDN_HOST = "https://cdn.jsdmirror.com";
 export const GITHUB_REPO_OWNER = "SXP-Simon";
 export const GITHUB_REPO_NAME = "astrbot_plugin_qq_group_daily_analysis";
 export const GITHUB_REPO_BRANCH = "main";
-export const ASSETS_CDN_BASE = `${DEFAULT_CDN_HOST}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets`;
-
-export function getTemplateCdnUrl(templateKey: string): string {
-  return `${ASSETS_CDN_BASE}/${templateKey}-demo.jpg`;
+export function getTemplateCdnUrl(templateKey: string, cdnBaseUrl: string | null): string | undefined {
+  if (cdnBaseUrl === null) return undefined;
+  return `${cdnBaseUrl}/gh/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}@${GITHUB_REPO_BRANCH}/assets/${templateKey}-demo.jpg`;
 }
 
 export const DEFAULT_REPORT_TEMPLATES: ReportTemplateItem[] = [

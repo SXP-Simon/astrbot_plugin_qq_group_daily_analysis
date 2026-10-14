@@ -51,7 +51,9 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
   }, []);
 
   const {
+    templateCdnBaseUrl,
     loading,
+    configLoaded,
     saving,
     isDirty,
     categories,
@@ -143,7 +145,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
               icon={isDirty ? <SaveOutlined /> : <CheckCircleOutlined />}
               onClick={handleSave}
               loading={saving}
-              disabled={!isDirty || loading}
+              disabled={!isDirty || loading || !configLoaded}
             >
               {isDirty ? "保存配置" : "配置已同步"}
             </Button>
@@ -393,6 +395,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                           fieldKey={field.key}
                           fieldSchema={field.schema}
                           value={field.value}
+                          templateCdnBaseUrl={templateCdnBaseUrl}
                           providers={providers}
                           personas={personas}
                           fullKeyPath={`${activeCategory}.${field.key}`}

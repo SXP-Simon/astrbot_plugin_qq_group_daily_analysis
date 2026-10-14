@@ -1,3 +1,4 @@
+import { DEFAULT_TEMPLATE_CDN_BASE_URL } from "../../../entities/config/model/renderingConfig";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Select,
@@ -69,6 +70,7 @@ const CustomPreviewImage: React.FC<{
 const { Text, Paragraph } = Typography;
 
 interface TemplateSelectorRendererProps {
+  cdnBaseUrl?: string | null;
   value: unknown;
   options?: unknown[];
   defaultValue?: unknown;
@@ -76,6 +78,7 @@ interface TemplateSelectorRendererProps {
 }
 
 export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> = ({
+  cdnBaseUrl = DEFAULT_TEMPLATE_CDN_BASE_URL,
   value,
   options,
   defaultValue,
@@ -179,10 +182,13 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
       tagColor: "blue",
     };
 
-  const currentCdnUrl = getTemplateCdnUrl(currentTemplate);
+  const currentCdnUrl = getTemplateCdnUrl(currentTemplate, cdnBaseUrl);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+      {cdnBaseUrl === null && (
+        <Text type="danger">CDN 地址没填对，请先到「图片渲染策略」改一下，再来看模板预览。</Text>
+      )}
       {/* 顶部下拉选择与快捷按钮 */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <Select
@@ -272,7 +278,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
             />
           ) : (
             <Image
-              src={currentCdnUrl}
+              src={currentCdnUrl || GALLERY_FALLBACK}
               alt={currentTemplate}
               width={72}
               height={96}
@@ -356,7 +362,7 @@ export const TemplateSelectorRenderer: React.FC<TemplateSelectorRendererProps> =
                         <CustomPreviewImage templateName={tmpl.key} />
                       ) : (
                         <Image
-                          src={getTemplateCdnUrl(tmpl.key)}
+                          src={getTemplateCdnUrl(tmpl.key, cdnBaseUrl) || GALLERY_FALLBACK}
                           alt={tmpl.name}
                           style={{
                             width: "100%",

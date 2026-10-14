@@ -1,9 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 
-const classicScriptPlugin = () => ({
+const classicScriptPlugin = (): Plugin => ({
   name: "classic-script-plugin",
+  apply: "build",
   transformIndexHtml(html: string) {
     return html
       .replace(/<script\s+type=["']module["']\s+crossorigin\b/gi, "<script defer")

@@ -1,8 +1,12 @@
+import configSchema from "../../../../_conf_schema.json";
 import { PluginConfigData } from "../../entities/config/model/types";
 import { AvailablePersona, AvailableProvider } from "../../entities/config/api/configApi";
 
 export const mockPluginConfig: PluginConfigData = {
   config: {
+    t2i_rendering: {
+      t2i_cdn_base_url: configSchema.t2i_rendering.items.t2i_cdn_base_url.default,
+    },
     general: {
       analysis_time: "00:00",
       max_history_days: 7,
@@ -36,6 +40,7 @@ export const mockPluginConfig: PluginConfigData = {
     },
   },
   schema: {
+    t2i_rendering: { ...configSchema.t2i_rendering, type: "object" },
     general: {
       description: "群分析基础调度配置",
       type: "object",

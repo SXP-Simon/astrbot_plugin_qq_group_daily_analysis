@@ -1,3 +1,5 @@
+import { renderingRuntimeSchema } from "../../../entities/config/model/renderingConfig";
+import { pluginConfigSaveSchema } from "../../../entities/config/model/configContract";
 import { useState, useEffect, useMemo } from "react";
 import { message } from "antd";
 import {
@@ -56,6 +58,7 @@ export function isFieldVisible(
 
 export function useConfigViewModel(onConfigSaved?: () => void) {
   const [loading, setLoading] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [schema, setSchema] = useState<PluginSchema>({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
@@ -71,6 +74,7 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
 
   const loadConfig = async (isManual = false) => {
     setLoading(true);
+    setConfigLoaded(false);
     try {
       const [configData, providerList, personaList] = await Promise.allSettled([
         fetchPluginConfig(),
@@ -86,14 +90,19 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
         setPersonas(personaList.value || []);
       }
 
-      if (configData.status === "fulfilled" && configData.value) {
+      if (configData.status === "rejected") throw configData.reason;
+      if (configData.status === "fulfilled") {
+        setConfigLoaded(true);
         const data = configData.value;
         setSchema(data.schema || {});
         setOriginalConfig(data.config || {});
         // 深拷贝一份 formData
         setFormData(JSON.parse(JSON.stringify(data.config || {})));
 
-        const keys = Object.keys(data.schema || {});
+        const validation = validateConfigWithZod(data.config, data.schema);
+        setErrors(validation.errorMap);
+        setGroupErrorCounts(validation.groupErrorCounts);
+        const keys = Object.keys(data.schema);
         if (keys.length > 0 && (!activeCategory || !keys.includes(activeCategory))) {
           setActiveCategory(keys[0]);
         }
@@ -101,8 +110,8 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
           message.success("已重新读取最新配置");
         }
       }
-    } catch {
-      message.error("读取配置信息失败，请检查网络或后端状态");
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : "读取配置信息失败，请检查网络或后端状态");
     } finally {
       setLoading(false);
     }
@@ -180,6 +189,10 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
   }, [formData, originalConfig]);
 
   const handleSave = async () => {
+    if (!configLoaded || loading || saving) {
+      message.error("请等待配置成功加载后再保存");
+      return;
+    }
     // 1. 保存前使用 Zod 执行严格校验
     const validationResult = validateConfigWithZod(formData, schema);
 
@@ -225,16 +238,23 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
     // 2. 提交保存
     setSaving(true);
     try {
-      const res = await savePluginConfig(formData);
+      const parsed = pluginConfigSaveSchema.safeParse(formData);
+      if (!parsed.success) {
+        message.error(parsed.error.issues[0].message);
+        return;
+      }
+      const normalized = parsed.data;
+      const res = await savePluginConfig(normalized);
       if (res.success) {
         message.success(res.message || "配置已成功保存并生效");
-        setOriginalConfig(JSON.parse(JSON.stringify(formData)));
+        setOriginalConfig(normalized);
+        setFormData((current) => current === formData ? normalized : current);
         if (onConfigSaved) onConfigSaved();
       } else {
         message.error(res.message || "保存配置失败");
       }
-    } catch {
-      message.error("保存配置请求发生异常");
+    } catch (error: unknown) {
+      message.error(error instanceof Error ? error.message : "保存配置请求发生异常");
     } finally {
       setSaving(false);
     }
@@ -301,8 +321,12 @@ export function useConfigViewModel(onConfigSaved?: () => void) {
       }));
   }, [schema, activeCategory, formData, searchQuery]);
 
+  const renderingConfig = renderingRuntimeSchema.safeParse(formData.t2i_rendering ?? {});
+
   return {
+    templateCdnBaseUrl: renderingConfig.success ? renderingConfig.data.t2i_cdn_base_url : null,
     loading,
+    configLoaded,
     saving,
     isDirty,
     schema,
