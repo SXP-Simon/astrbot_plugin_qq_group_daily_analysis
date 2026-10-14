@@ -9,6 +9,7 @@ from src.domain.value_objects import (
     ActivityVisualization,
 )
 from src.infrastructure.reporting.generators import ReportGenerator
+from src.shared.constants import DEFAULT_ASSETS_CDN_URL, DEFAULT_CDN_HOST
 
 
 class MockConfigManager:
@@ -50,6 +51,12 @@ class MockConfigManager:
 
     def get_t2i_atri_font_mirror(self):
         return "https://mirror.example.com"
+
+    def get_t2i_cdn_base_url(self):
+        return DEFAULT_CDN_HOST
+
+    def get_template_assets_base_url(self):
+        return DEFAULT_ASSETS_CDN_URL
 
     def get_t2i_max_concurrent(self):
         return 2
