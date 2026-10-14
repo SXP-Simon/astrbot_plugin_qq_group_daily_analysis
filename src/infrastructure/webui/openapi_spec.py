@@ -24,7 +24,7 @@ def generate_openapi_spec() -> dict[str, Any]:
         "paths": {
             "/config/test-template-cdn": {
                 "post": {
-                    "summary": "Test GitHub and npm CDN sample resources from the plugin server",
+                    "summary": "从插件服务器通过 HEAD 检查 GitHub 和 npm 资源链接",
                     "operationId": "testTemplateCdn",
                     "requestBody": {
                         "required": True,
@@ -38,7 +38,7 @@ def generate_openapi_spec() -> dict[str, Any]:
                     },
                     "responses": {
                         "200": {
-                            "description": "Sample download results; usable is true only when both samples pass",
+                            "description": "仅返回 HEAD 可访问性检测结果，不下载正文；所有返回的 checks 均通过时 usable 才为 true",
                             "content": {
                                 "application/json": {
                                     "schema": {

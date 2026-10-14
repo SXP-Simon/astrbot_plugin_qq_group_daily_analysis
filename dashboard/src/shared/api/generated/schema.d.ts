@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test GitHub and npm CDN sample resources from the plugin server */
+        /** 从插件服务器通过 HEAD 检查 GitHub 和 npm 资源链接 */
         post: operations["testTemplateCdn"];
         delete?: never;
         options?: never;
@@ -636,7 +636,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Sample download results; usable is true only when both samples pass */
+            /** @description 仅返回 HEAD 可访问性检测结果，不下载正文；所有返回的 checks 均通过时 usable 才为 true */
             200: {
                 headers: {
                     [name: string]: unknown;
