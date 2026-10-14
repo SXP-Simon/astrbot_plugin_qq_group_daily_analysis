@@ -40,15 +40,16 @@ describe("配置响应契约", () => {
   it.each([
     null, {}, { config: {} }, { config: [], schema: {} },
     { config: { t2i_rendering: [] }, schema: {} },
-    { config: { t2i_rendering: { t2i_cdn_base_url: 1 } }, schema: {} },
     { config: {}, schema: { basic: { type: "object", description: "基础", items: { enabled: {} } } } },
   ])("拒绝错误响应结构：%j", (response) => {
     expect(pluginConfigResponseSchema.safeParse(response).success).toBe(false);
   });
 
-  it("旧的格式错误字符串允许加载修正，但不能重新保存", () => {
-    const config = { t2i_rendering: { t2i_cdn_base_url: "wrong" } };
+  it.each(["wrong", 123, null, false, [], { invalid: true }])("旧的错误值 %j 允许加载修正，但不能重新保存", (value) => {
+    const config = { t2i_rendering: { t2i_cdn_base_url: value, extra: "保留" } };
     expect(pluginConfigResponseSchema.parse({ config, schema: {} }).config).toEqual(config);
     expect(pluginConfigSaveSchema.safeParse(config).success).toBe(false);
+    const repaired = { ...config, t2i_rendering: { ...config.t2i_rendering, t2i_cdn_base_url: " https://fastly.jsdelivr.net/ " } };
+    expect(pluginConfigSaveSchema.parse(repaired).t2i_rendering).toEqual({ t2i_cdn_base_url: "https://fastly.jsdelivr.net", extra: "保留" });
   });
 });

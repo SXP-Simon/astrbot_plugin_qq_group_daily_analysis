@@ -41,6 +41,18 @@ describe("模板 CDN 检测", () => {
     expect(screen.getByText("资源请求失败：HTTP 404")).toBeInTheDocument();
   });
 
+  it("已有成功结果时修改地址会清空结果，且不会自动发起新检测", async () => {
+    vi.mocked(testTemplateCdn).mockResolvedValue(result);
+    const view = render(<TemplateCdnProbe baseUrl="https://example.com" />);
+    fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));
+    expect(await screen.findByText("测试链接都能访问，可以保存后试生成报告了")).toBeInTheDocument();
+    expect(screen.getByText(result.checks[0].url)).toBeInTheDocument();
+    view.rerender(<TemplateCdnProbe baseUrl="https://new.example.com" />);
+    expect(screen.queryByText("测试链接都能访问，可以保存后试生成报告了")).not.toBeInTheDocument();
+    expect(screen.queryByText(result.checks[0].url)).not.toBeInTheDocument();
+    expect(testTemplateCdn).toHaveBeenCalledTimes(1);
+  });
+
   it("输入改变后清除结果并忽略旧请求的迟到响应", async () => {
     let resolve!: (value: ProbeResult) => void;
     vi.mocked(testTemplateCdn).mockReturnValue(new Promise((done) => { resolve = done; }));

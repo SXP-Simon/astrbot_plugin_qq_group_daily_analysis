@@ -20,13 +20,18 @@ export const cdnBaseUrlSchema = z.string({ error: "CDN 地址必须是字符串"
     return true;
   }, CDN_FORMAT_ERROR);
 
-// 读取边界只校验字段类型，保留旧配置中的错误字符串，让用户可以在表单中修正。
+// 已声明的渲染配置契约；保存时仍需校验字段类型。
 export const renderingConfigSchema = z.object({
   t2i_cdn_base_url: z.string().optional(),
   t2i_atri_font_mirror: z.string().optional(),
 }).catchall(z.unknown());
 
 export type RenderingConfig = z.infer<typeof renderingConfigSchema>;
+
+// 编辑边界保留旧配置中的异常值，让表单展示错误并允许修正，不影响保存和业务投影的严格校验。
+export const renderingConfigLoadSchema = renderingConfigSchema.extend({
+  t2i_cdn_base_url: z.unknown().optional(),
+});
 
 // 业务投影不携带动态字段；缺省或空值使用默认地址，格式错误必须由调用方显示。
 export const renderingRuntimeSchema = z.object({

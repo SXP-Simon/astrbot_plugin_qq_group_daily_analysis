@@ -22,9 +22,9 @@ it("加载失败要提示且禁止保存空配置", async () => {
   expect(savePluginConfig).not.toHaveBeenCalled();
 });
 
-it("CDN 草稿错误不会驱动默认预览，修正后保存规范化值", async () => {
+it.each(["wrong", 123, null])("CDN 草稿错误 %j 不会驱动默认预览，修正后保存规范化值", async (value) => {
   vi.mocked(fetchPluginConfig).mockResolvedValue({
-    config: { t2i_rendering: { t2i_cdn_base_url: "wrong", extra: "保留" } },
+    config: { t2i_rendering: { t2i_cdn_base_url: value, extra: "保留" } },
     schema: { t2i_rendering: { type: "object", description: "渲染", items: { t2i_cdn_base_url: { type: "string" } } } },
   });
   vi.mocked(savePluginConfig).mockResolvedValue({ success: true });
@@ -32,6 +32,8 @@ it("CDN 草稿错误不会驱动默认预览，修正后保存规范化值", asy
   await waitFor(() => expect(result.current.configLoaded).toBe(true));
   expect(result.current.templateCdnBaseUrl).toBeNull();
   expect(result.current.errors.t2i_rendering.t2i_cdn_base_url).toBeTruthy();
+  await act(async () => { await result.current.handleSave(); });
+  expect(savePluginConfig).not.toHaveBeenCalled();
   act(() => result.current.handleFieldChange("t2i_rendering", "t2i_cdn_base_url", " https://example.com/ "));
   expect(result.current.templateCdnBaseUrl).toBe("https://example.com");
   await act(async () => { await result.current.handleSave(); });

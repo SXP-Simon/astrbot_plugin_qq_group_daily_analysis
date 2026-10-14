@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { SchemaFieldItem, SchemaGroupItem } from "./types";
-import { renderingConfigSchema, renderingSaveSchema } from "./renderingConfig";
+import { renderingConfigLoadSchema, renderingSaveSchema } from "./renderingConfig";
 
 const schemaField: z.ZodType<SchemaFieldItem> = z.lazy(() => z.object({
   type: z.string(),
@@ -28,7 +28,7 @@ const schemaGroup: z.ZodType<SchemaGroupItem> = z.object({
 
 // 未声明的分组及字段原样保留，避免动态表单保存时丢失扩展配置。
 export const pluginConfigSchema = z.object({
-  t2i_rendering: renderingConfigSchema.optional(),
+  t2i_rendering: renderingConfigLoadSchema.optional(),
 }).catchall(z.record(z.string(), z.unknown()));
 
 export const pluginConfigResponseSchema = z.object({

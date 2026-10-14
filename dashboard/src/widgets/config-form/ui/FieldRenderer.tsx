@@ -169,8 +169,9 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
   // 渲染不同的表单控件
   const renderControl = () => {
     if (fieldKey === "t2i_cdn_base_url") {
-      const currentValue = typeof value === "string" ? value
-        : typeof defaultValue === "string" ? defaultValue : "";
+      const currentValue = value === undefined
+        ? typeof defaultValue === "string" ? defaultValue : ""
+        : String(value);
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <Input
