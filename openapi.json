@@ -6,6 +6,52 @@
     "description": "REST API and data contract specification for AstrBot QQ Group Daily Analysis Dashboard"
   },
   "paths": {
+    "/config/test-template-cdn": {
+      "post": {
+        "summary": "Test GitHub and npm CDN sample resources from the plugin server",
+        "operationId": "testTemplateCdn",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateCdnProbeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sample download results; usable is true only when both samples pass",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TemplateCdnProbe"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid CDN root address"
+          },
+          "500": {
+            "description": "Unexpected probe error"
+          }
+        }
+      }
+    },
     "/tasks/active": {
       "get": {
         "summary": "Get active running analysis tasks",
@@ -633,6 +679,100 @@
   },
   "components": {
     "schemas": {
+      "TemplateCdnProbeRequest": {
+        "type": "object",
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "base_url"
+        ]
+      },
+      "TemplateCdnCheck": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "gh",
+              "npm"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "elapsed_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "bytes_received": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "kind",
+          "url",
+          "success",
+          "status_code",
+          "elapsed_ms",
+          "bytes_received",
+          "error"
+        ]
+      },
+      "TemplateCdnProbe": {
+        "type": "object",
+        "properties": {
+          "base_url": {
+            "type": "string"
+          },
+          "usable": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/components/schemas/TemplateCdnCheck"
+            }
+          }
+        },
+        "required": [
+          "base_url",
+          "usable",
+          "checks"
+        ]
+      },
       "ActiveTask": {
         "type": "object",
         "properties": {

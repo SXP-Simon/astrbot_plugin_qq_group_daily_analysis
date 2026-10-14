@@ -279,6 +279,12 @@ class PluginPageWebUIBridge:
                 "Save and persist updated plugin configuration",
             ),
             (
+                f"/{PLUGIN_NAME}/config/test-template-cdn",
+                self.config_routes.api_test_template_cdn,
+                ["POST"],
+                "Test template CDN GitHub and npm resources without saving configuration",
+            ),
+            (
                 f"/{PLUGIN_NAME}/config/upload_file",
                 self.config_routes.api_upload_config_file,
                 ["POST"],

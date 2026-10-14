@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/config/test-template-cdn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test GitHub and npm CDN sample resources from the plugin server */
+        post: operations["testTemplateCdn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/active": {
         parameters: {
             query?: never;
@@ -263,6 +280,27 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TemplateCdnProbeRequest: {
+            base_url: string;
+        };
+        TemplateCdnCheck: {
+            id: string;
+            label: string;
+            description: string;
+            /** @enum {string} */
+            kind: "gh" | "npm";
+            url: string;
+            success: boolean;
+            status_code: number | null;
+            elapsed_ms: number;
+            bytes_received: number;
+            error: string | null;
+        };
+        TemplateCdnProbe: {
+            base_url: string;
+            usable: boolean;
+            checks: components["schemas"]["TemplateCdnCheck"][];
+        };
         ActiveTask: {
             task_id: string;
             group_id: string;
@@ -586,6 +624,47 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    testTemplateCdn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateCdnProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Sample download results; usable is true only when both samples pass */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                        data: components["schemas"]["TemplateCdnProbe"];
+                    };
+                };
+            };
+            /** @description Invalid CDN root address */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unexpected probe error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getActiveTasks: {
         parameters: {
             query?: never;

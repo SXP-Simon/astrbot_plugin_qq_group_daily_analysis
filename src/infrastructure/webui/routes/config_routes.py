@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ....shared.constants import PLUGIN_NAME
+from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
+from ...reporting.cdn_probe import probe_template_cdn
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -118,6 +120,27 @@ class ConfigRoutes:
             logger.error(f"获取配置信息异常: {e}", exc_info=True)
             return error_response(str(e), status_code=500)
 
+    async def api_test_template_cdn(self) -> WebApiResponse:
+        """检测输入的 CDN 地址，不保存配置。
+
+        Returns:
+            各文件的检测结果；输入无效时返回 400。
+        """
+        try:
+            body = await request.json()
+            base_url = body.get("base_url")
+            if not isinstance(base_url, str) or len(base_url) > 2048:
+                return error_response(
+                    "base_url 必须是长度不超过 2048 的字符串", status_code=400
+                )
+            result = await probe_template_cdn(base_url)
+            return json_response({"status": "ok", "data": result})
+        except ValueError as exc:
+            return error_response(str(exc), status_code=400)
+        except Exception as exc:
+            logger.error(f"模板 CDN 检测异常: {exc}", exc_info=True)
+            return error_response("这次检测没能完成，请稍后再试。", status_code=500)
+
     async def api_save_config(self) -> WebApiResponse:
         """保存并更新插件配置"""
         try:
@@ -143,6 +166,27 @@ class ConfigRoutes:
             config_obj = cfg_mgr.config if cfg_mgr else None
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
+
+            if "t2i_rendering" in new_config:
+                rendering_config = new_config["t2i_rendering"]
+                if not isinstance(rendering_config, dict):
+                    return error_response(
+                        "t2i_rendering 必须是配置对象", status_code=400
+                    )
+                if "t2i_cdn_base_url" in rendering_config:
+                    cdn_value = rendering_config["t2i_cdn_base_url"]
+                    if not isinstance(cdn_value, str) or len(cdn_value) > 2048:
+                        return error_response(
+                            "CDN 地址必须是长度不超过 2048 的字符串", status_code=400
+                        )
+                    try:
+                        rendering_config["t2i_cdn_base_url"] = (
+                            normalize_cdn_base_url(cdn_value)
+                            if cdn_value.strip()
+                            else ""
+                        )
+                    except ValueError as exc:
+                        return error_response(str(exc), status_code=400)
 
             auto_analysis_config = new_config.get("auto_analysis")
             if isinstance(auto_analysis_config, dict) and (
@@ -177,19 +221,39 @@ class ConfigRoutes:
 
             plugin_root = Path(__file__).resolve().parents[4]
 
-            def _cleanse_reference_images(val: object) -> object:
+            def _cleanse_reference_images(val: object, config_key: str = "") -> object:
+                """仅清洗漫画角色与参考图，其他动态配置保持原样。
+
+                Args:
+                    val: 待保存的配置节点。
+                    config_key: 当前节点的配置路径。
+
+                Returns:
+                    清洗后的配置节点。
+                """
                 if isinstance(val, list):
+                    if config_key not in (
+                        "daily_comic.comic_characters",
+                        "daily_comic.comic_characters.reference_images",
+                    ):
+                        return val
                     cleaned = []
                     for item in val:
                         if isinstance(item, dict):
-                            cleaned_item = _cleanse_reference_images(item)
-                            if isinstance(cleaned_item, dict) and (
-                                "__template_key" not in cleaned_item
-                                or not cleaned_item["__template_key"]
+                            cleaned_item = _cleanse_reference_images(item, config_key)
+                            if (
+                                config_key == "daily_comic.comic_characters"
+                                and isinstance(cleaned_item, dict)
+                                and (
+                                    "__template_key" not in cleaned_item
+                                    or not cleaned_item["__template_key"]
+                                )
                             ):
                                 cleaned_item["__template_key"] = "character"
                             cleaned.append(cleaned_item)
-                        elif isinstance(item, str):
+                        elif isinstance(item, str) and config_key.endswith(
+                            ".reference_images"
+                        ):
                             folder = _config_key_to_folder(
                                 "daily_comic.comic_characters.templates.character.reference_images"
                             )
@@ -226,7 +290,12 @@ class ConfigRoutes:
                             cleaned.append(item)
                     return cleaned
                 if isinstance(val, dict):
-                    return {k: _cleanse_reference_images(v) for k, v in val.items()}
+                    return {
+                        k: _cleanse_reference_images(
+                            v, f"{config_key}.{k}" if config_key else k
+                        )
+                        for k, v in val.items()
+                    }
                 return val
 
             cleansed = _cleanse_reference_images(save_dto["config"])
