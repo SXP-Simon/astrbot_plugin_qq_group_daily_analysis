@@ -32,6 +32,10 @@ class IConfigProvider(Protocol):
         """获取报告模板名称"""
         ...
 
+    def get_template_assets_base_url(self) -> str:
+        """获取配置的模板 CDN 仓库素材目录。"""
+        ...
+
     def get_llm_max_concurrent(self) -> int:
         """获取 LLM 全局最大并发度"""
         ...
