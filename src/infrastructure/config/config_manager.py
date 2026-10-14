@@ -149,8 +149,10 @@ class ConfigManager:
         )
 
     def _get_group(self, group: str) -> dict:
-        """获取指定分组的配置字典，不存在时返回空字典"""
-        return self.config.get(group, {})
+        """获取配置分组，不存在或不是字典时按空分组读取"""
+        value = self.config.get(group, {})
+        # 异常分组按缺省值读取，保留原始配置以便管理员修正。
+        return value if isinstance(value, dict) else {}
 
     def _ensure_group(self, group: str) -> dict:
         """确保指定分组存在并返回其字典引用"""

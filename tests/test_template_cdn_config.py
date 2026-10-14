@@ -2,13 +2,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from test_template_section_conditional_rendering import create_analysis_result
 
 from src.application.services.template_command_service import TemplateCommandService
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.reporting.render_data_preparer import RenderDataPreparer
 from src.infrastructure.reporting.templates import HTMLTemplates
 from src.shared.constants import DEFAULT_ATRI_ASSETS_CDN_URL, DEFAULT_CDN_HOST
-from test_template_section_conditional_rendering import create_analysis_result
 
 
 @pytest.fixture
@@ -43,6 +43,24 @@ def test_cdn_root_normalization(config_manager, value, expected):
     config_manager.config = {"t2i_rendering": {"t2i_cdn_base_url": value}}
     assert config_manager.get_t2i_cdn_base_url() == expected
     assert config_manager.get_template_assets_base_url().startswith(expected + "/gh/")
+
+
+@pytest.mark.parametrize("group", [None, 123, "broken", [], False])
+def test_malformed_rendering_group_uses_defaults_without_mutation(
+    config_manager, group
+):
+    config_manager.config = {"t2i_rendering": group}
+    assert config_manager.get_t2i_cdn_base_url() == DEFAULT_CDN_HOST
+    assert config_manager.get_template_assets_base_url().startswith(
+        DEFAULT_CDN_HOST + "/gh/"
+    )
+    assert config_manager.get_t2i_atri_font_mirror().endswith("/ATRI")
+    assert config_manager.get_t2i_font_source() == "Overseas"
+    assert (
+        config_manager.get_t2i_google_fonts_mirror() == "https://fonts.googleapis.com"
+    )
+    assert config_manager.get_t2i_gstatic_mirror() == "https://fonts.gstatic.com"
+    assert config_manager.config["t2i_rendering"] is group
 
 
 @pytest.mark.parametrize("legacy_mirror", [None, "", DEFAULT_ATRI_ASSETS_CDN_URL])
