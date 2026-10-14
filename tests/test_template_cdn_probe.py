@@ -63,134 +63,93 @@ def test_probe_files_cover_current_template_path_shapes():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "resource",
-    [r for r in cdn_probe.PROBE_RESOURCES if r.kind == "gh"],
-    ids=lambda r: r.id,
-)
-@pytest.mark.parametrize("damage", ["truncated", "html"])
-async def test_probe_rejects_incomplete_or_replaced_files(resource, damage):
-    body = (Path(__file__).resolve().parents[1] / "assets" / resource.path).read_bytes()
-    body = (
-        body[: len(body) // 2]
-        if damage == "truncated"
-        else b"<html>Please verify</html>"
-    )
-    mime = {
-        "png": "image/png",
-        "webp": "image/webp",
-        "gif": "image/gif",
-        "jpeg": "image/jpeg",
-        "woff2": "font/woff2",
-    }[resource.format]
-
-    async def serve(_request):
-        return web.Response(body=body, content_type=mime)
-
-    app = web.Application()
-    app.router.add_get("/resource", serve)
-    async with TestServer(app) as server, aiohttp.ClientSession() as session:
-        result = await cdn_probe._probe_resource(
-            session, resource, str(server.make_url("/resource"))
-        )
-    assert not result["success"]
-    assert result["status_code"] == 200
-    assert result["error"]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
     "scenario",
     [
         "ok",
-        "npm_404",
-        "html_200",
-        "empty",
-        "wrong_mime",
-        "oversized",
+        "204",
+        "403",
+        "404",
+        "405",
+        "501",
+        "503",
         "timeout",
         "redirect",
         "redirect_loop",
     ],
 )
-async def test_probe_downloads_and_validates_both_resources(scenario, monkeypatch):
-    assets = Path(__file__).resolve().parents[1] / "assets"
-    formats = {
-        "png": "image/png",
-        "webp": "image/webp",
-        "gif": "image/gif",
-        "jpeg": "image/jpeg",
-        "woff2": "font/woff2",
-    }
-    gh_resources = {
-        resource.path: resource
-        for resource in cdn_probe.PROBE_RESOURCES
-        if resource.kind == "gh"
-    }
+async def test_probe_checks_headers_without_downloading(scenario, monkeypatch):
     requested_paths = []
     requested_raw_paths = []
+    requested_methods = []
 
     async def serve(request):
         requested_paths.append(request.path)
         requested_raw_paths.append(request.raw_path)
-        if request.path.startswith("/gh/"):
-            path = request.path.split("/assets/", 1)[1]
-            resource = gh_resources[path]
-            return web.Response(
-                body=(assets / path).read_bytes(), content_type=formats[resource.format]
-            )
-        if scenario == "npm_404":
-            raise web.HTTPNotFound
-        if scenario == "html_200":
-            return web.Response(
-                text="<html>Please verify</html>", content_type="text/html"
-            )
-        if scenario == "empty":
-            return web.Response(body=b"", content_type="text/css")
-        if scenario == "oversized":
-            return web.Response(
-                body=b"x" * (cdn_probe.MAX_PROBE_BYTES + 1), content_type="text/css"
-            )
-        if scenario == "timeout":
-            await asyncio.sleep(0.75)
-        if scenario == "redirect_loop" or (
-            scenario == "redirect" and request.path != "/redirected.css"
-        ):
-            raise web.HTTPFound("/redirected.css")
+        requested_methods.append(request.method)
+        if not request.path.startswith("/gh/"):
+            if scenario.isdigit():
+                return web.Response(status=int(scenario))
+            if scenario == "timeout":
+                await asyncio.sleep(0.75)
+            if scenario == "redirect_loop" or (
+                scenario == "redirect" and request.path != "/redirected.css"
+            ):
+                raise web.HTTPFound("/redirected.css")
+        # 只声明一个大文件的响应头，不提供正文；客户端必须不尝试下载它。
         return web.Response(
-            body=b"/*! normalize.css v8.0.1 | MIT License */\nhtml { line-height: 1.15; }",
-            content_type="text/html" if scenario == "wrong_mime" else "text/css",
+            headers={
+                "Content-Length": "100000000",
+                "Content-Type": "application/octet-stream",
+            }
         )
 
     if scenario == "timeout":
         monkeypatch.setattr(cdn_probe, "PROBE_TIMEOUT_SECONDS", 0.25)
-        selected = (cdn_probe.PROBE_RESOURCES[0], cdn_probe.PROBE_RESOURCES[-1])
-        monkeypatch.setattr(cdn_probe, "PROBE_RESOURCES", selected)
-        gh_resources = {selected[0].path: selected[0]}
+        monkeypatch.setattr(
+            cdn_probe,
+            "PROBE_RESOURCES",
+            (cdn_probe.PROBE_RESOURCES[0], cdn_probe.PROBE_RESOURCES[-1]),
+        )
     app = web.Application()
-    app.router.add_get("/{path:.*}", serve)
+    app.router.add_route("*", "/{path:.*}", serve)
     async with TestServer(app) as server:
         root = str(server.make_url("/"))
-        result = await cdn_probe.probe_template_cdn(" " + root + " ")
+        with (
+            patch.object(
+                aiohttp.ClientSession, "get", side_effect=AssertionError("禁止使用 GET")
+            ),
+            patch.object(
+                aiohttp.ClientResponse,
+                "read",
+                side_effect=AssertionError("禁止读取正文"),
+            ),
+            patch.object(
+                aiohttp.StreamReader,
+                "iter_chunked",
+                side_effect=AssertionError("禁止读取正文流"),
+            ),
+        ):
+            result = await cdn_probe.probe_template_cdn(" " + root + " ")
 
     assert result["base_url"] == root.rstrip("/")
-    assert result["usable"] is (scenario in ("ok", "redirect"))
+    assert result["usable"] is (scenario in ("ok", "204", "redirect"))
     github, npm = result["checks"][:-1], result["checks"][-1]
-    assert len(github) == len(gh_resources)
+    assert len(github) == len(cdn_probe.PROBE_RESOURCES) - 1
     assert all(check["success"] and check["status_code"] == 200 for check in github)
+    assert set(requested_methods) == {"HEAD"}
+    assert all("bytes_received" not in check for check in result["checks"])
     for check in github:
-        path = check["url"].split("/assets/", 1)[1]
-        assert check["bytes_received"] == (assets / path).stat().st_size
-        assert any(path in requested for requested in requested_paths)
+        assert check["url"].split("/assets/", 1)[1] in "\n".join(requested_paths)
     assert npm["success"] is result["usable"]
     assert all(check["elapsed_ms"] >= 0 for check in result["checks"])
-    assert (
-        "/gh/SXP-Simon/astrbot_plugin_qq_group_daily_analysis@main/assets/maria/rose_red.png"
-        in requested_paths
-    )
     assert "/npm/normalize.css@8.0.1/normalize.css" in requested_paths
     if scenario != "timeout":
         assert any("%E7%96%91%E6%83%91" in path for path in requested_raw_paths)
         assert not any("%25E7" in path for path in requested_raw_paths)
+    if scenario.isdigit():
+        assert npm["status_code"] == int(scenario)
+    if scenario in ("405", "501"):
+        assert "不支持 HEAD" in npm["error"]
     if not result["usable"]:
         assert npm["error"]
 
@@ -199,7 +158,7 @@ async def test_probe_downloads_and_validates_both_resources(scenario, monkeypatc
 async def test_probe_network_errors_are_independent_results():
     with patch.object(
         aiohttp.ClientSession,
-        "get",
+        "head",
         side_effect=aiohttp.ClientConnectionError("offline"),
     ):
         result = await cdn_probe.probe_template_cdn("https://example.invalid")
