@@ -10,8 +10,8 @@ const result: ProbeResult = {
   base_url: "https://example.com",
   usable: true,
   checks: [
-    { id: "maria-png", label: "装饰图片", description: "Maria 模板的蔷薇图片", kind: "gh", url: "https://example.com/gh/sample.png", success: true, status_code: 200, elapsed_ms: 123, bytes_received: 1024, error: null },
-    { id: "npm-css", label: "npm 兼容性", description: "额外检查 normalize.css；当前内置模板没有使用它", kind: "npm", url: "https://example.com/npm/sample.css", success: true, status_code: 200, elapsed_ms: 456, bytes_received: 2048, error: null },
+    { id: "maria-png", label: "装饰图片", description: "Maria 模板的蔷薇图片", kind: "gh", url: "https://example.com/gh/sample.png", success: true, status_code: 200, elapsed_ms: 123, error: null },
+    { id: "npm-css", label: "npm 兼容性", description: "额外检查 normalize.css；当前内置模板没有使用它", kind: "npm", url: "https://example.com/npm/sample.css", success: true, status_code: 200, elapsed_ms: 456, error: null },
   ],
 };
 
@@ -23,11 +23,11 @@ describe("模板 CDN 检测", () => {
     render(<TemplateCdnProbe baseUrl=" https://example.com/ " />);
     fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));
     expect(testTemplateCdn).toHaveBeenCalledWith(" https://example.com/ ");
-    expect(await screen.findByText("测试文件都能加载，可以保存后试生成报告了")).toBeInTheDocument();
-    expect(screen.getByText("装饰图片：加载成功")).toBeInTheDocument();
-    expect(screen.getByText("npm 兼容性：加载成功")).toBeInTheDocument();
+    expect(await screen.findByText("测试链接都能访问，可以保存后试生成报告了")).toBeInTheDocument();
+    expect(screen.getByText("装饰图片：可访问")).toBeInTheDocument();
+    expect(screen.getByText("npm 兼容性：可访问")).toBeInTheDocument();
     expect(screen.getByText("额外检查 normalize.css；当前内置模板没有使用它")).toBeInTheDocument();
-    expect(screen.getAllByText("查看下载详情")).toHaveLength(2);
+    expect(screen.getAllByText("查看检测详情")).toHaveLength(2);
   });
 
   it("单项失败时给出原因且不宣称可用", async () => {
@@ -37,7 +37,7 @@ describe("模板 CDN 检测", () => {
     });
     render(<TemplateCdnProbe baseUrl="https://example.com" />);
     fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));
-    expect(await screen.findByText("1 / 2 个文件加载成功，请看看下面哪些没有加载出来")).toBeInTheDocument();
+    expect(await screen.findByText("1 / 2 个链接确认可访问，其他结果请看下方说明")).toBeInTheDocument();
     expect(screen.getByText("资源请求失败：HTTP 404")).toBeInTheDocument();
   });
 
@@ -48,12 +48,12 @@ describe("模板 CDN 检测", () => {
     fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));
     view.rerender(<TemplateCdnProbe baseUrl="https://new.example.com" />);
     await act(async () => resolve(result));
-    expect(screen.queryByText("测试文件都能加载，可以保存后试生成报告了")).not.toBeInTheDocument();
-    vi.mocked(testTemplateCdn).mockRejectedValue(new Error("下载超时"));
+    expect(screen.queryByText("测试链接都能访问，可以保存后试生成报告了")).not.toBeInTheDocument();
+    vi.mocked(testTemplateCdn).mockRejectedValue(new Error("请求超时"));
     fireEvent.click(screen.getByRole("button", { name: "检测可用性" }));
     await waitFor(() => expect(testTemplateCdn).toHaveBeenLastCalledWith("https://new.example.com"));
-    expect(await screen.findByText("下载超时")).toBeInTheDocument();
+    expect(await screen.findByText("请求超时")).toBeInTheDocument();
     view.rerender(<TemplateCdnProbe baseUrl="" />);
-    expect(screen.queryByText("下载超时")).not.toBeInTheDocument();
+    expect(screen.queryByText("请求超时")).not.toBeInTheDocument();
   });
 });

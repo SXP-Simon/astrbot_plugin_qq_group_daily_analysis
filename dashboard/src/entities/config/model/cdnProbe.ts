@@ -16,7 +16,6 @@ export const templateCdnProbeSchema: z.ZodType<TemplateCdnProbe> = z.object({
     success: z.boolean(),
     status_code: z.number().int().nullable(),
     elapsed_ms: z.number().nonnegative(),
-    bytes_received: z.number().int().nonnegative(),
     error: z.string().nullable(),
   })).min(2),
 }).refine(

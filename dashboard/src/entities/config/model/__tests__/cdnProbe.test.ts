@@ -3,7 +3,7 @@ import { templateCdnProbeSchema } from "../cdnProbe";
 
 describe("CDN 检测响应契约", () => {
   it("支持多份实际模板文件，不能用同一文件重复凑数", () => {
-    const base = { url: "https://example.com/file", success: true, status_code: 200, elapsed_ms: 10, bytes_received: 100, error: null };
+    const base = { url: "https://example.com/file", success: true, status_code: 200, elapsed_ms: 10, error: null };
     const checks = [
       { ...base, id: "maria-png", label: "装饰图片", description: "Maria", kind: "gh" },
       { ...base, id: "atri-font", label: "报告字体", description: "ATRI", kind: "gh" },
@@ -19,7 +19,7 @@ describe("CDN 检测响应契约", () => {
   });
 
   it("拒绝重复资源类型和矛盾的成功汇总", () => {
-    const check = { id: "maria-png", label: "装饰图片", description: "Maria 模板图片", kind: "gh", url: "https://example.com/gh/sample", success: true, status_code: 200, elapsed_ms: 10, bytes_received: 100, error: null };
+    const check = { id: "maria-png", label: "装饰图片", description: "Maria 模板图片", kind: "gh", url: "https://example.com/gh/sample", success: true, status_code: 200, elapsed_ms: 10, error: null };
     expect(templateCdnProbeSchema.safeParse({ base_url: "https://example.com", usable: true, checks: [check, check] }).success).toBe(false);
     expect(templateCdnProbeSchema.safeParse({ base_url: "https://example.com", usable: true, checks: [check, { ...check, id: "npm-css", kind: "npm", success: false }] }).success).toBe(false);
   });
