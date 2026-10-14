@@ -54,6 +54,7 @@ from src.domain.value_objects import (  # noqa: E402
     TokenUsage,
 )
 from src.infrastructure.reporting.generators import ReportGenerator  # noqa: E402
+from src.shared.constants import DEFAULT_ASSETS_CDN_URL, DEFAULT_CDN_HOST  # noqa: E402
 
 
 class MockConfigManager:
@@ -100,6 +101,12 @@ class MockConfigManager:
 
     def get_t2i_atri_font_mirror(self) -> str:
         return "https://tc.ciallo.ccwu.cc"
+
+    def get_t2i_cdn_base_url(self) -> str:
+        return DEFAULT_CDN_HOST
+
+    def get_template_assets_base_url(self) -> str:
+        return DEFAULT_ASSETS_CDN_URL
 
     def get_profile_display_mode(self) -> str:
         return "mbti"
