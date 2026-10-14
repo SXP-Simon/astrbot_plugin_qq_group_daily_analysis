@@ -7,7 +7,7 @@ Web 控制台请求与响应数据传输对象 (Rest DTOs)
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 # ============================================================================
 # 1. 任务控制与调度 DTO (Task Control & Scheduling)
@@ -362,6 +362,29 @@ class TemplateUninstallDTO(TypedDict):
 # ============================================================================
 # 7. 配置管理 DTO (Config Management)
 # ============================================================================
+
+
+class TemplateCdnCheckDTO(TypedDict):
+    """单项 CDN 资源下载检测结果。"""
+
+    id: str
+    label: str
+    description: str
+    kind: Literal["gh", "npm"]
+    url: str
+    success: bool
+    status_code: int | None
+    elapsed_ms: float
+    bytes_received: int
+    error: str | None
+
+
+class TemplateCdnProbeDTO(TypedDict):
+    """插件服务器发起的 CDN 检测汇总。"""
+
+    base_url: str
+    usable: bool
+    checks: list[TemplateCdnCheckDTO]
 
 
 class ConfigSaveDTO(TypedDict):
