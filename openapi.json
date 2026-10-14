@@ -726,10 +726,6 @@
             "type": "number",
             "minimum": 0
           },
-          "bytes_received": {
-            "type": "integer",
-            "minimum": 0
-          },
           "error": {
             "type": [
               "string",
@@ -746,7 +742,6 @@
           "success",
           "status_code",
           "elapsed_ms",
-          "bytes_received",
           "error"
         ]
       },

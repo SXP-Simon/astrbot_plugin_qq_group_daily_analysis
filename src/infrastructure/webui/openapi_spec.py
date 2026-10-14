@@ -577,7 +577,6 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "success": {"type": "boolean"},
                         "status_code": {"type": ["integer", "null"]},
                         "elapsed_ms": {"type": "number", "minimum": 0},
-                        "bytes_received": {"type": "integer", "minimum": 0},
                         "error": {"type": ["string", "null"]},
                     },
                     "required": [
@@ -589,7 +588,6 @@ def generate_openapi_spec() -> dict[str, Any]:
                         "success",
                         "status_code",
                         "elapsed_ms",
-                        "bytes_received",
                         "error",
                     ],
                 },

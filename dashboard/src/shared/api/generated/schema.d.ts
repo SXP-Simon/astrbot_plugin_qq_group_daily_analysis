@@ -293,7 +293,6 @@ export interface components {
             success: boolean;
             status_code: number | null;
             elapsed_ms: number;
-            bytes_received: number;
             error: string | null;
         };
         TemplateCdnProbe: {
