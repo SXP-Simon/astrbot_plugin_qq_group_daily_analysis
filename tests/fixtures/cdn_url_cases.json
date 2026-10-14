@@ -1,0 +1,142 @@
+[
+  {
+    "input": "",
+    "normalized": ""
+  },
+  {
+    "input": " \t\n ",
+    "normalized": ""
+  },
+  {
+    "input": " https://fastly.jsdelivr.net///  ",
+    "normalized": "https://fastly.jsdelivr.net"
+  },
+  {
+    "input": "https://cdn.jsdmirror.com",
+    "normalized": "https://cdn.jsdmirror.com"
+  },
+  {
+    "input": "http://localhost:8080/",
+    "normalized": "http://localhost:8080"
+  },
+  {
+    "input": "HTTPS://Example.COM/",
+    "normalized": "HTTPS://Example.COM"
+  },
+  {
+    "input": "https://[::1]:443/",
+    "normalized": "https://[::1]:443"
+  },
+  {
+    "input": "https://xn--fiqs8s.example/",
+    "normalized": "https://xn--fiqs8s.example"
+  },
+  {
+    "input": "https://example.com:65535/",
+    "normalized": "https://example.com:65535"
+  },
+  {
+    "input": null,
+    "normalized": null
+  },
+  {
+    "input": 42,
+    "normalized": null
+  },
+  {
+    "input": "/",
+    "normalized": null
+  },
+  {
+    "input": "///",
+    "normalized": null
+  },
+  {
+    "input": "fastly.jsdelivr.net",
+    "normalized": null
+  },
+  {
+    "input": "https:example.com",
+    "normalized": null
+  },
+  {
+    "input": "https:///example.com",
+    "normalized": null
+  },
+  {
+    "input": "file:///tmp",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com/gh/repo",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com/./",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com?",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com#",
+    "normalized": null
+  },
+  {
+    "input": "https://user:pass@example.com",
+    "normalized": null
+  },
+  {
+    "input": "https://@example.com",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com\\",
+    "normalized": null
+  },
+  {
+    "input": "https://exa mple.com",
+    "normalized": null
+  },
+  {
+    "input": "https://exam\nple.com",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com:0",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com:65536",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com:bad",
+    "normalized": null
+  },
+  {
+    "input": "https://example.com:",
+    "normalized": null
+  },
+  {
+    "input": "https://%65xample.com",
+    "normalized": null
+  },
+  {
+    "input": "https://-example.com",
+    "normalized": null
+  },
+  {
+    "input": "https://example..com",
+    "normalized": null
+  },
+  {
+    "input": "https://[invalid",
+    "normalized": null
+  },
+  {
+    "input": "https://[:::]",
+    "normalized": null
+  }
+]

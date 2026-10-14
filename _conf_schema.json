@@ -329,6 +329,12 @@
                 },
                 "hint": "回退尝试通常针对复杂页面，建议设置更长的超时时间（如 100000ms+）。"
             },
+            "t2i_cdn_base_url": {
+                "type": "string",
+                "description": "模板资源 CDN 基础地址",
+                "default": "https://cdn.jsdmirror.com",
+                "hint": "用于模板图片、字体和预览图，也提供 npm 资源地址。推荐填写 https://fastly.jsdelivr.net/ 这样的 CDN 网站地址，需支持 /gh/ 和 /npm/ 路径。只填网站地址，不要带具体文件路径；末尾的 / 和多余空格会自动去掉，留空使用默认地址。填好后可以点“检测可用性”，看看机器人所在服务器能否顺畅加载。使用远程图片渲染服务时，请再生成一份报告确认。Google 字体仍使用单独的镜像设置。"
+            },
             "t2i_font_source": {
                 "type": "string",
                 "description": "t2i 渲染环境切换",

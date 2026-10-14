@@ -14,7 +14,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from astrbot.api.star import StarTools
 
-from ...shared.constants import DEFAULT_ATRI_ASSETS_CDN_URL, PLUGIN_NAME
+from ...shared.constants import (
+    DEFAULT_ATRI_ASSETS_CDN_URL,
+    DEFAULT_CDN_HOST,
+    GITHUB_REPO_BRANCH,
+    GITHUB_REPO_NAME,
+    GITHUB_REPO_OWNER,
+    PLUGIN_NAME,
+)
+from ...utils.cdn_utils import normalize_cdn_base_url
 from ...utils.logger import logger
 from .config_migrator import ConfigMigrator
 
@@ -431,12 +439,38 @@ class ConfigManager:
             return group.get("t2i_mainland_gstatic", "https://gstatic.loli.net")
         return group.get("t2i_overseas_gstatic", "https://fonts.gstatic.com")
 
+    def get_t2i_cdn_base_url(self) -> str:
+        """获取不带末尾斜杠的模板 CDN 根地址。
+
+        Returns:
+            HTTP(S) 根地址；空值或不符合根地址格式时使用默认 CDN。
+        """
+        value = self._get_group("t2i_rendering").get("t2i_cdn_base_url", "")
+        try:
+            return normalize_cdn_base_url(value if isinstance(value, str) else "")
+        except ValueError:
+            pass
+        return DEFAULT_CDN_HOST
+
+    def get_template_assets_base_url(self) -> str:
+        """获取当前 CDN 下的仓库素材目录。
+
+        Returns:
+            可拼接主题目录或预览图文件名的素材 URL。
+        """
+        return (
+            f"{self.get_t2i_cdn_base_url()}/gh/"
+            f"{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}@{GITHUB_REPO_BRANCH}/assets"
+        )
+
     def get_t2i_atri_font_mirror(self) -> str:
         """获取 ATRI 主题字体与静态资源镜像地址"""
-        return self._get_group("t2i_rendering").get(
-            "t2i_atri_font_mirror",
-            DEFAULT_ATRI_ASSETS_CDN_URL,
-        )
+        mirror = self._get_group("t2i_rendering").get("t2i_atri_font_mirror", "")
+        if isinstance(mirror, str):
+            mirror = mirror.strip().rstrip("/")
+            if mirror and mirror != DEFAULT_ATRI_ASSETS_CDN_URL:
+                return mirror
+        return f"{self.get_template_assets_base_url()}/ATRI"
 
     def get_llm_provider_id(self) -> str:
         """获取主 LLM Provider ID"""
