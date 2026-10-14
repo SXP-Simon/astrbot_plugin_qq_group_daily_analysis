@@ -365,7 +365,7 @@ class TemplateUninstallDTO(TypedDict):
 
 
 class TemplateCdnCheckDTO(TypedDict):
-    """单项 CDN 资源下载检测结果。"""
+    """单项 CDN 资源 HEAD 可访问性检测结果。"""
 
     id: str
     label: str
@@ -375,7 +375,6 @@ class TemplateCdnCheckDTO(TypedDict):
     success: bool
     status_code: int | None
     elapsed_ms: float
-    bytes_received: int
     error: str | None
 
 
