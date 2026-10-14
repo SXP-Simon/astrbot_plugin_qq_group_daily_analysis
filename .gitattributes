@@ -12,8 +12,13 @@
 *.md text eol=lf
 pages/** text eol=lf
 
-### CDN 使用的素材必须保留在 Git 导出包中，否则 CDN 的仓库文件清单可能缺失这些资源。
-# 插件模板会直接引用 assets/ 下的图片与字体，不能在这里使用 export-ignore。
+### 模板预览图与设计资源 — 仅用于文档/仓库展示/CDN，插件运行时不需要
+assets/*.jpg              export-ignore
+assets/*.png              export-ignore
+assets/HatsuneMiku/       export-ignore
+assets/ATRI/              export-ignore
+assets/deepseek_maid/     export-ignore
+assets/maria/             export-ignore
 
 ### 前端开发源码 — 运行时只需要已编译的 pages/ 单 Bundle 产物
 dashboard/                export-ignore

@@ -191,11 +191,7 @@ jobs:
         run: |
           TAG="${{ steps.vars.outputs.tag }}"
           ZIP_NAME="astrbot_plugin_qq_group_daily_analysis_${TAG}.zip"
-          # 仅 Release 安装包排除远程素材；仓库导出必须保留它们供 CDN 读取。
-          git archive --format=zip -o "$ZIP_NAME" HEAD -- . \
-            ':(exclude)assets/*.jpg' ':(exclude)assets/*.png' \
-            ':(exclude)assets/HatsuneMiku/**' ':(exclude)assets/ATRI/**' \
-            ':(exclude)assets/deepseek_maid/**' ':(exclude)assets/maria/**'
+          git archive --format=zip -o "$ZIP_NAME" HEAD
           if command -v zip >/dev/null 2>&1; then
             zip -u "$ZIP_NAME" pages/daily-analysis/index.html pages/daily-analysis/assets/* 2>/dev/null || true
           fi
