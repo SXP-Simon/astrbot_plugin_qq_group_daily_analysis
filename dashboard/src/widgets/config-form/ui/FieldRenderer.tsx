@@ -38,6 +38,7 @@ import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
 import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
+import { ComicPromptSettings } from "../../../features/edit-comic-prompt/ui/ComicPromptSettings";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -168,6 +169,10 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
+    if (fieldKey === "comic_analysis_prompts" && type === "object") {
+      return <ComicPromptSettings value={value} onChange={onChange} idPrefix={fullKeyPath || fieldKey} />;
+    }
+
     if (fieldKey === "t2i_cdn_base_url") {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""

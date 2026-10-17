@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, ClassVar, ParamSpec, TypedDict, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, Literal, ParamSpec, TypedDict, TypeVar, cast
 
 from ..domain.value_objects.task_event import TaskEvent
 from ..domain.value_objects.task_status import TaskStatus
@@ -757,9 +757,24 @@ class TraceContext:
         return "_".join(parts)
 
     @staticmethod
-    def make_report_caption() -> str:
+    def make_report_caption(
+        kind: Literal["report", "comic", "wordcloud"] = "report",
+    ) -> str:
+        """按图片内容生成发送提示，沿用统一时间格式。
+
+        Args:
+            kind: 图片种类；省略时保持原来的日报提示。
+
+        Returns:
+            内容对应的标题和生成时间。
+        """
+        titles = {
+            "report": "📊 每日群聊分析报告已生成",
+            "comic": "🎨 每日群漫画已生成",
+            "wordcloud": "☁️ 群聊词云已生成",
+        }
         ts = datetime.now().strftime("%m-%d %H:%M:%S")
-        return f"📊 每日群聊分析报告已生成 | {ts}"
+        return f"{titles[kind]} | {ts}"
 
     @classmethod
     def set(

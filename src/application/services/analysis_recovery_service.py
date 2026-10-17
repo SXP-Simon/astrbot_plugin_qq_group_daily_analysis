@@ -19,6 +19,7 @@ from ...domain.value_objects import (
     GroupStatistics,
     TokenUsage,
 )
+from ...domain.value_objects.wordcloud import WordCloudData
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -573,6 +574,9 @@ class AnalysisRecoveryService:
                 "user_analysis": user_activity,
                 "chat_quality_review": chat_quality_review,
             }
+            wordcloud_raw = clean_checkpoint.get("wordcloud")
+            if isinstance(wordcloud_raw, dict):
+                analysis_result["wordcloud"] = WordCloudData.from_dict(wordcloud_raw)
 
             async with pipeline.step(
                 AnalysisStage.SAVE_SUMMARY,

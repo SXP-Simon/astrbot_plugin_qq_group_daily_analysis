@@ -56,6 +56,7 @@ class ConfigMigrator:
         self.migrate_daily_comic_character_references()
         self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
+        self.migrate_comic_prompt_template_inheritance()
         self.protect_upgrade_data()
 
     def migrate_legacy_configs(self) -> bool:
@@ -253,7 +254,7 @@ class ConfigMigrator:
                 "enable": True,
                 "persona_id": specific_persona_id,
                 "reference_images": migrated_references,
-                "storyboard_prompt": self.cm.get_comic_storyboard_prompt(),
+                "storyboard_prompt": "",
             }
         ]
         daily_comic["drawing_reference_image"] = []
@@ -279,7 +280,8 @@ class ConfigMigrator:
             for character in characters:
                 if not isinstance(character, dict):
                     continue
-                if not str(character.get("storyboard_prompt", "")).strip():
+                # 显式留空表示继承全局模板；只迁移没有此字段的旧角色。
+                if "storyboard_prompt" not in character:
                     character["storyboard_prompt"] = default_prompt
                     modified = True
 
@@ -334,6 +336,53 @@ class ConfigMigrator:
                 )
             except Exception as exc:
                 logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
+
+    def migrate_comic_prompt_template_inheritance(self) -> None:
+        """一次性将旧角色的原版默认全文改为留空继承，后续尊重显式提示词。"""
+        from ...shared.comic_prompts import DEFAULT_COMIC_STORYBOARD_PROMPT
+
+        state_path = (
+            self.star_tools.get_data_dir(PLUGIN_NAME)
+            / "comic_prompt_template_migration.json"
+        )
+        if state_path.exists():
+            return
+
+        characters = self.cm._get_group("daily_comic").get("comic_characters", [])
+        changes = []
+        if isinstance(characters, list):
+            for character in characters:
+                if not isinstance(character, dict):
+                    continue
+                prompt = character.get("storyboard_prompt")
+                if (
+                    isinstance(prompt, str)
+                    and prompt.strip() == DEFAULT_COMIC_STORYBOARD_PROMPT.strip()
+                ):
+                    changes.append((character, prompt))
+
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = state_path.with_suffix(".tmp")
+            # 先确认标记可写，避免目录不可写时修改用户配置。
+            temporary_path.write_text(json.dumps({"completed": True}), encoding="utf-8")
+            if changes:
+                if not self.write_comic_config_backup(
+                    {"comic_characters": characters}, star_tools=self.star_tools
+                ):
+                    logger.warning("漫画模板继承迁移备份失败，保留原角色提示词。")
+                    return
+                for character, _prompt in changes:
+                    character["storyboard_prompt"] = ""
+                try:
+                    self._save_config()
+                except Exception:
+                    for character, prompt in changes:
+                        character["storyboard_prompt"] = prompt
+                    raise
+            temporary_path.replace(state_path)
+        except Exception as exc:
+            logger.warning(f"漫画模板继承迁移失败，将在下次重载时重试: {exc}")
 
     def protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置。"""

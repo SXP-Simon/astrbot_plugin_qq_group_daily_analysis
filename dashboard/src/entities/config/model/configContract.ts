@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { SchemaFieldItem, SchemaGroupItem } from "./types";
 import { renderingConfigLoadSchema, renderingSaveSchema } from "./renderingConfig";
+import { wordCloudOptionsSchema } from "../../wordcloud/model/types";
+import { comicRotationConfigSchema, hasEmptyRotatingCustomPrompt } from "./comicRotationConfig";
 
 const schemaField: z.ZodType<SchemaFieldItem> = z.lazy(() => z.object({
   type: z.string(),
@@ -38,4 +40,10 @@ export const pluginConfigResponseSchema = z.object({
 
 export const pluginConfigSaveSchema = pluginConfigSchema.extend({
   t2i_rendering: renderingSaveSchema.optional(),
+  wordcloud: wordCloudOptionsSchema.optional(),
+  daily_comic: comicRotationConfigSchema.optional(),
+}).superRefine((value, context) => {
+  if (hasEmptyRotatingCustomPrompt(value.daily_comic, value.prompts)) {
+    context.addIssue({ code: "custom", path: ["daily_comic", "comic_template_candidates"], message: "候选包含自定义，请先填写自定义漫画场景分析提示词" });
+  }
 });

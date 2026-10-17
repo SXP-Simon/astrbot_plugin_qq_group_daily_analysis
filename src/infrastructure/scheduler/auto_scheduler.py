@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 
 _SCHEDULED_DISPATCH_INFO_SECONDS = 1.0
 _SCHEDULED_DISPATCH_WARN_SECONDS = 15.0
+_SCHEDULED_ANALYSIS_TIMEOUT_SECONDS = 1800
+_INCREMENTAL_CLEANUP_TIMEOUT_SECONDS = 60
 
 AUTO_ANALYSIS_SKIP_REASONS: dict[str, str] = {
     "below_threshold": "群聊有效发言数未达到设定的自动分析阈值，已安全跳过本次分析",
@@ -427,10 +429,19 @@ class AutoScheduler:
     ):
         """为指定群执行自动分析并返回真实的分析与发送状态。"""
         try:
-            return await asyncio.wait_for(
-                self._perform_auto_analysis_for_group(group_id, target_platform_id),
-                timeout=1800,
-            )
+            async with asyncio.timeout(_SCHEDULED_ANALYSIS_TIMEOUT_SECONDS) as deadline:
+                # 合并服务自行限制收集、发送与归档时间，不再共用分析阶段的余量。
+                def begin_merged_dispatch() -> None:
+                    deadline.reschedule(None)
+
+                # 保留原 wait_for 的子任务边界，隔离业务流程中的 TraceContext。
+                return await asyncio.create_task(
+                    self._perform_auto_analysis_for_group(
+                        group_id,
+                        target_platform_id,
+                        on_merged_dispatch=begin_merged_dispatch,
+                    )
+                )
         except TimeoutError:
             logger.error(f"群 {group_id} 分析超时（30分钟），跳过该群分析")
             return {
@@ -449,9 +460,22 @@ class AutoScheduler:
             }
 
     async def _perform_auto_analysis_for_group(
-        self, group_id: str, target_platform_id: str | None = None
+        self,
+        group_id: str,
+        target_platform_id: str | None = None,
+        *,
+        on_merged_dispatch: Callable[[], None] | None = None,
     ):
-        """为指定群执行自动分析（业务逻辑委派给 AnalysisApplicationService）"""
+        """执行自动分析，进入合并投递时移交超时控制。
+
+        Args:
+            group_id: 目标群号。
+            target_platform_id: 平台实例标识。
+            on_merged_dispatch: 开始合并投递前执行的本次调用回调。
+
+        Returns:
+            分析与报告实际投递结果。
+        """
         trace = None
         try:
             # 解析可读群名以生成语义化的 TraceID
@@ -539,7 +563,13 @@ class AutoScheduler:
             )
 
             # 调度导出并发送报告
-            if self.plugin_instance is not None:
+            merged_enabled = bool(
+                self.report_dispatcher.merged_delivery
+                and self.report_dispatcher.merged_delivery.enabled_for(
+                    dispatch_platform_id
+                )
+            )
+            if self.plugin_instance is not None and not merged_enabled:
                 try:
                     self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
                         group_id, dispatch_platform_id, analysis_result
@@ -549,6 +579,8 @@ class AutoScheduler:
                         f"群 {group_id} 触发定时报告漫画失败: {exc}", exc_info=True
                     )
 
+            if merged_enabled and on_merged_dispatch is not None:
+                on_merged_dispatch()
             report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
@@ -868,17 +900,34 @@ class AutoScheduler:
 
         若增量汇报失败（非 '消息不足' 或 '正在运行' 导致的），
         且启用了自动回退，则将该群转由传统模式执行全量分析。
+        已开始合并投递时不再回退，避免部分成功或回执不明时重复发图。
         """
+        merged_dispatch_started = False
+
         try:
-            result = await asyncio.wait_for(
-                self._perform_incremental_final_report_for_group(
-                    group_id, target_platform_id
-                ),
-                timeout=1800,
-            )
+            async with asyncio.timeout(_SCHEDULED_ANALYSIS_TIMEOUT_SECONDS) as deadline:
+
+                def begin_merged_dispatch() -> None:
+                    """移交超时控制，并记录已经投递，禁止重复回退。"""
+                    nonlocal merged_dispatch_started
+                    merged_dispatch_started = True
+                    deadline.reschedule(None)
+
+                result = await asyncio.create_task(
+                    self._perform_incremental_final_report_for_group(
+                        group_id,
+                        target_platform_id,
+                        on_merged_dispatch=begin_merged_dispatch,
+                    )
+                )
 
             # 判定是否需要触发回退 (例如：无增量数据等)
             if not result.get("success"):
+                if merged_dispatch_started:
+                    logger.warning(
+                        f"群 {group_id} 已进入合并投递，保留本次失败结果，不自动回退重复发送"
+                    )
+                    return result
                 reason = result.get("reason", "")
                 if reason in ("below_threshold", "already_running", "target_removed"):
                     return result  # 正常跳过，无需回退
@@ -895,24 +944,30 @@ class AutoScheduler:
 
         except TimeoutError:
             logger.error(f"群 {group_id} 最终报告超时（30分钟）")
-            if self.config_manager.get_incremental_fallback_enabled():
+            if (
+                not merged_dispatch_started
+                and self.config_manager.get_incremental_fallback_enabled()
+            ):
                 logger.warning(f"群 {group_id} 增量报告超时，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
             return {
                 "success": False,
-                "analysis_success": False,
+                "analysis_success": merged_dispatch_started,
                 "report_sent": False,
                 "reason": "timeout",
             }
 
         except Exception as e:
             logger.error(f"群 {group_id} 最终报告任务执行失败: {e}")
-            if self.config_manager.get_incremental_fallback_enabled():
+            if (
+                not merged_dispatch_started
+                and self.config_manager.get_incremental_fallback_enabled()
+            ):
                 logger.warning(f"群 {group_id} 增量报告异常，正在回退到传统全量分析...")
                 return await self._fallback_to_traditional(group_id, target_platform_id)
             return {
                 "success": False,
-                "analysis_success": False,
+                "analysis_success": merged_dispatch_started,
                 "report_sent": False,
                 "reason": str(e),
             }
@@ -945,9 +1000,22 @@ class AutoScheduler:
             }
 
     async def _perform_incremental_final_report_for_group(
-        self, group_id: str, target_platform_id: str | None = None
+        self,
+        group_id: str,
+        target_platform_id: str | None = None,
+        *,
+        on_merged_dispatch: Callable[[], None] | None = None,
     ):
-        """为指定群生成增量最终报告（业务逻辑委派给 AnalysisApplicationService）"""
+        """为指定群生成增量最终报告，合并投递前通知上层禁止重复回退。
+
+        Args:
+            group_id: 目标群号。
+            target_platform_id: 平台实例标识。
+            on_merged_dispatch: 开始合并投递前执行的本次调用回调。
+
+        Returns:
+            分析与报告实际投递结果。
+        """
         trace = None
         try:
             # 解析可读群名以生成语义化的 TraceID
@@ -1068,7 +1136,13 @@ class AutoScheduler:
                 logger.info(f"群 {group_id} 已移出增量名单，取消发送最终报告")
                 return result
 
-            if self.plugin_instance is not None:
+            merged_enabled = bool(
+                self.report_dispatcher.merged_delivery
+                and self.report_dispatcher.merged_delivery.enabled_for(
+                    dispatch_platform_id
+                )
+            )
+            if self.plugin_instance is not None and not merged_enabled:
                 try:
                     self.plugin_instance.comic_command_handler.try_trigger_comic_generation(
                         group_id, dispatch_platform_id, analysis_result
@@ -1079,6 +1153,8 @@ class AutoScheduler:
                         exc_info=True,
                     )
 
+            if merged_enabled and on_merged_dispatch is not None:
+                on_merged_dispatch()
             report_sent = await self.report_dispatcher.dispatch(
                 group_id,
                 analysis_result,
@@ -1103,9 +1179,10 @@ class AutoScheduler:
                 before_ts = time_mod.time() - (analysis_days * 2 * 24 * 3600)
                 incremental_store = self.analysis_service.incremental_store
                 if incremental_store:
-                    cleaned = await incremental_store.cleanup_old_batches(
-                        group_id, before_ts
-                    )
+                    async with asyncio.timeout(_INCREMENTAL_CLEANUP_TIMEOUT_SECONDS):
+                        cleaned = await incremental_store.cleanup_old_batches(
+                            group_id, before_ts
+                        )
                     if cleaned > 0:
                         logger.debug(
                             f"群 {group_id} 报告发送后清理了 {cleaned} 个过期批次"

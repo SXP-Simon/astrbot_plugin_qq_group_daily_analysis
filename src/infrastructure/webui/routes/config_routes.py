@@ -10,14 +10,19 @@ import base64
 import json
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from astrbot.api.star import StarTools
+
+from ....shared.comic_prompts import COMIC_STORYBOARD_PROMPTS
 from ....shared.constants import PLUGIN_NAME
 from ....utils.cdn_utils import normalize_cdn_base_url
 from ....utils.logger import logger
 from ...reporting.cdn_probe import probe_template_cdn
+from ...reporting.wordcloud_renderer import WordCloudRenderer
 from ..web_compat import WebApiResponse, error_response, json_response, request
 
 if TYPE_CHECKING:
@@ -51,6 +56,60 @@ def _config_key_to_folder(key_path: str) -> str:
     return "/".join(parts) if parts else "_"
 
 
+def validate_comic_template_rotation_config(config: Mapping[str, object]) -> None:
+    """校验漫画模板轮换配置，兼容没有新增字段的旧配置。
+
+    Args:
+        config: 将要保存的完整有效配置。
+
+    Raises:
+        ValueError: 模式、范围或候选模板配置不合法。
+    """
+    daily = config.get("daily_comic", {})
+    if not isinstance(daily, dict):
+        raise ValueError("每日漫画配置必须是对象")
+    mode = daily.get("comic_template_mode", "fixed")
+    if not isinstance(mode, str) or mode not in {
+        "fixed",
+        "sequential",
+        "daily_sequential",
+        "random",
+        "daily_random",
+        "shuffle",
+    }:
+        raise ValueError("漫画模板切换模式无效")
+    scope = daily.get("comic_template_scope", "global")
+    if not isinstance(scope, str) or scope not in {"global", "group"}:
+        raise ValueError("漫画模板切换范围无效")
+    candidates = daily.get("comic_template_candidates", list(COMIC_STORYBOARD_PROMPTS))
+    if not isinstance(candidates, list) or any(
+        not isinstance(item, str) for item in candidates
+    ):
+        raise ValueError("漫画模板候选池必须是模板标识列表")
+    if len(candidates) != len(set(candidates)):
+        raise ValueError("漫画模板候选池不能包含重复模板")
+    if any(
+        item not in COMIC_STORYBOARD_PROMPTS and item != "custom" for item in candidates
+    ):
+        raise ValueError("漫画模板候选池包含未知模板")
+    if mode != "fixed" and not candidates:
+        raise ValueError("启用漫画模板切换时，候选池至少需要一个模板")
+    if mode != "fixed" and "custom" in candidates:
+        prompts = config.get("prompts", {})
+        comic_prompts = (
+            prompts.get("comic_analysis_prompts", {})
+            if isinstance(prompts, dict)
+            else {}
+        )
+        custom = (
+            comic_prompts.get("comic_storyboard_prompt", "")
+            if isinstance(comic_prompts, dict)
+            else ""
+        )
+        if not isinstance(custom, str) or not custom.strip():
+            raise ValueError("候选池包含自定义模板时，必须填写自定义漫画场景分析提示词")
+
+
 class ConfigRoutes:
     """插件配置中心 Web API 路由处理器。"""
 
@@ -65,11 +124,17 @@ class ConfigRoutes:
         report_dispatcher: ReportDispatcher | None = None,
         context: Context | None = None,
         auto_scheduler: AutoScheduler | None = None,
+        wordcloud_renderer: WordCloudRenderer | None = None,
+        resource_lock: asyncio.Lock | None = None,
     ) -> None:
         self.analysis_service = analysis_service
         self.report_dispatcher = report_dispatcher
         self.context = context
         self.auto_scheduler = auto_scheduler
+        self.wordcloud_renderer = wordcloud_renderer
+        self._wordcloud_resource_lock = (
+            resource_lock if resource_lock is not None else asyncio.Lock()
+        )
 
     async def api_get_config(self) -> WebApiResponse:
         """获取插件当前配置数据与完整 Schema 结构定义"""
@@ -167,6 +232,30 @@ class ConfigRoutes:
             if config_obj is None:
                 return error_response("配置管理器未初始化", status_code=500)
 
+            if "basic" in new_config:
+                basic = new_config["basic"]
+                if not isinstance(basic, dict):
+                    return error_response("基础设置必须是对象", status_code=400)
+                if (
+                    "enable_merged_forward" in basic
+                    and type(basic["enable_merged_forward"]) is not bool
+                ):
+                    return error_response("合并转发开关必须为布尔值", status_code=400)
+                if "merged_forward_timeout" in basic:
+                    timeout = basic["merged_forward_timeout"]
+                    if type(timeout) is not int or not 10 <= timeout <= 3600:
+                        return error_response(
+                            "合并转发等待超时必须为 10–3600 秒的整数",
+                            status_code=400,
+                        )
+
+            wordcloud: dict[str, object] | None = None
+            if "wordcloud" in new_config:
+                raw_wordcloud = new_config["wordcloud"]
+                if not isinstance(raw_wordcloud, dict):
+                    return error_response("词云配置必须是对象", status_code=400)
+                wordcloud = raw_wordcloud
+
             if "t2i_rendering" in new_config:
                 rendering_config = new_config["t2i_rendering"]
                 if not isinstance(rendering_config, dict):
@@ -219,92 +308,123 @@ class ConfigRoutes:
                             status_code=400,
                         )
 
-            plugin_root = Path(__file__).resolve().parents[4]
+            async with self._wordcloud_resource_lock:
+                # 与持久化共用锁，防止并发保存后使用过期的提示词校验候选池。
+                effective_config = {**dict(config_obj), **new_config}
+                try:
+                    validate_comic_template_rotation_config(effective_config)
+                except ValueError as exc:
+                    return error_response(str(exc), status_code=400)
 
-            def _cleanse_reference_images(val: object, config_key: str = "") -> object:
-                """仅清洗漫画角色与参考图，其他动态配置保持原样。
-
-                Args:
-                    val: 待保存的配置节点。
-                    config_key: 当前节点的配置路径。
-
-                Returns:
-                    清洗后的配置节点。
-                """
-                if isinstance(val, list):
-                    if config_key not in (
-                        "daily_comic.comic_characters",
-                        "daily_comic.comic_characters.reference_images",
-                    ):
-                        return val
-                    cleaned = []
-                    for item in val:
-                        if isinstance(item, dict):
-                            cleaned_item = _cleanse_reference_images(item, config_key)
-                            if (
-                                config_key == "daily_comic.comic_characters"
-                                and isinstance(cleaned_item, dict)
-                                and (
-                                    "__template_key" not in cleaned_item
-                                    or not cleaned_item["__template_key"]
-                                )
-                            ):
-                                cleaned_item["__template_key"] = "character"
-                            cleaned.append(cleaned_item)
-                        elif isinstance(item, str) and config_key.endswith(
-                            ".reference_images"
-                        ):
-                            folder = _config_key_to_folder(
-                                "daily_comic.comic_characters.templates.character.reference_images"
-                            )
-                            if item.startswith("data:image/"):
-                                try:
-                                    _, b64 = item.split(",", 1)
-                                    file_bytes = base64.b64decode(b64)
-                                    ts = int(time.time() * 1000)
-                                    filename = f"{ts}_migrated_image.png"
-                                    for d in [
-                                        Path.cwd()
-                                        / "data"
-                                        / "plugin_data"
-                                        / PLUGIN_NAME
-                                        / "files"
-                                        / Path(folder),
-                                        plugin_root / "files" / Path(folder),
-                                    ]:
-                                        d.mkdir(parents=True, exist_ok=True)
-                                        (d / filename).write_bytes(file_bytes)
-                                    cleaned.append(f"files/{folder}/{filename}")
-                                except Exception:
-                                    pass
-                            elif item.startswith("files/"):
-                                expected_prefix = f"files/{folder}/"
-                                if item.startswith(expected_prefix):
-                                    cleaned.append(item.strip())
-                                else:
-                                    clean_name = Path(item).name
-                                    cleaned.append(f"files/{folder}/{clean_name}")
-                            elif item.strip():
-                                cleaned.append(item.strip())
-                        else:
-                            cleaned.append(item)
-                    return cleaned
-                if isinstance(val, dict):
-                    return {
-                        k: _cleanse_reference_images(
-                            v, f"{config_key}.{k}" if config_key else k
+                if wordcloud is not None:
+                    if self.wordcloud_renderer is None:
+                        # 兼容旧装配入口，但仍使用正式目录进行资源校验。
+                        assert cfg_mgr is not None
+                        self.wordcloud_renderer = WordCloudRenderer(
+                            cfg_mgr, StarTools.get_data_dir(PLUGIN_NAME)
                         )
-                        for k, v in val.items()
-                    }
-                return val
+                    try:
+                        await asyncio.to_thread(
+                            self.wordcloud_renderer.validate_config_resources, wordcloud
+                        )
+                    except ValueError as exc:
+                        return error_response(str(exc), status_code=400)
 
-            cleansed = _cleanse_reference_images(save_dto["config"])
-            if isinstance(cleansed, dict):
-                for k, v in cleansed.items():
-                    config_obj[k] = v
+                plugin_root = Path(__file__).resolve().parents[4]
 
-            if cfg_mgr:
-                cfg_mgr.save_config()
+                def _cleanse_reference_images(
+                    val: object, config_key: str = ""
+                ) -> object:
+                    """仅清洗漫画角色与参考图，其他动态配置保持原样。
+
+                    Args:
+                        val: 待保存的配置节点。
+                        config_key: 当前节点的配置路径。
+
+                    Returns:
+                        清洗后的配置节点。
+                    """
+                    if isinstance(val, list):
+                        if config_key not in (
+                            "daily_comic.comic_characters",
+                            "daily_comic.comic_characters.reference_images",
+                        ):
+                            return val
+                        cleaned = []
+                        for item in val:
+                            if isinstance(item, dict):
+                                cleaned_item = _cleanse_reference_images(
+                                    item, config_key
+                                )
+                                if (
+                                    config_key == "daily_comic.comic_characters"
+                                    and isinstance(cleaned_item, dict)
+                                    and (
+                                        "__template_key" not in cleaned_item
+                                        or not cleaned_item["__template_key"]
+                                    )
+                                ):
+                                    cleaned_item["__template_key"] = "character"
+                                cleaned.append(cleaned_item)
+                            elif isinstance(item, str) and config_key.endswith(
+                                ".reference_images"
+                            ):
+                                folder = _config_key_to_folder(
+                                    "daily_comic.comic_characters.templates.character.reference_images"
+                                )
+                                if item.startswith("data:image/"):
+                                    try:
+                                        _, b64 = item.split(",", 1)
+                                        file_bytes = base64.b64decode(b64)
+                                        ts = int(time.time() * 1000)
+                                        filename = f"{ts}_migrated_image.png"
+                                        for d in [
+                                            Path.cwd()
+                                            / "data"
+                                            / "plugin_data"
+                                            / PLUGIN_NAME
+                                            / "files"
+                                            / Path(folder),
+                                            plugin_root / "files" / Path(folder),
+                                        ]:
+                                            d.mkdir(parents=True, exist_ok=True)
+                                            (d / filename).write_bytes(file_bytes)
+                                        cleaned.append(f"files/{folder}/{filename}")
+                                    except Exception:
+                                        pass
+                                elif item.startswith("files/"):
+                                    expected_prefix = f"files/{folder}/"
+                                    if item.startswith(expected_prefix):
+                                        cleaned.append(item.strip())
+                                    else:
+                                        clean_name = Path(item).name
+                                        cleaned.append(f"files/{folder}/{clean_name}")
+                                elif item.strip():
+                                    cleaned.append(item.strip())
+                            else:
+                                cleaned.append(item)
+                        return cleaned
+                    if isinstance(val, dict):
+                        return {
+                            k: _cleanse_reference_images(
+                                v, f"{config_key}.{k}" if config_key else k
+                            )
+                            for k, v in val.items()
+                        }
+                    return val
+
+                cleansed = _cleanse_reference_images(save_dto["config"])
+                previous_config = deepcopy(dict(config_obj))
+                try:
+                    if isinstance(cleansed, dict):
+                        config_obj.update(cleansed)
+                    if cfg_mgr:
+                        cfg_mgr.save_config()
+                except Exception:
+                    # 在保存锁内恢复，既保留配置对象引用，也移除本次新增的键。
+                    config_obj.clear()
+                    config_obj.update(previous_config)
+                    raise
 
             if self.auto_scheduler is not None and self.context is not None:
                 self.auto_scheduler.schedule_jobs(self.context)
@@ -314,11 +434,16 @@ class ConfigRoutes:
                     )
 
             logger.info("WebUI 配置中心已更新并保存插件配置。")
+            # 宿主 Page Bridge 会优先转发响应的 data，成功回执必须在解包后仍然存在。
             return json_response(
                 {
                     "status": "ok",
                     "message": "配置已成功保存并持久化生效",
-                    "data": dict(config_obj),
+                    "data": {
+                        "status": "ok",
+                        "message": "配置已成功保存并持久化生效",
+                        "config": dict(config_obj),
+                    },
                 }
             )
         except Exception as e:

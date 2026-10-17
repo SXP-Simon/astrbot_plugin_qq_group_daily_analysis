@@ -1,0 +1,11 @@
+{
+  "font": "wenkai",
+  "min_font_size": 34,
+  "max_font_size": 90,
+  "max_words": 80,
+  "word_spacing": 10,
+  "width": 1200,
+  "height": 900,
+  "rotation": "horizontal",
+  "palette": ["#315d78", "#46748d", "#a45f7c", "#726293"]
+}

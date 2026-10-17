@@ -31,6 +31,10 @@ if TYPE_CHECKING:
     from ...infrastructure.platform.bot_manager import BotManager
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
     from ..services.comic_application_service import ComicApplicationService
+    from ..services.merged_forward_delivery import (
+        MergedForwardDeliveryService,
+        PreparedForwardMessage,
+    )
 
 
 class ComicCommandHandler:
@@ -57,6 +61,7 @@ class ComicCommandHandler:
         active_task_manager: ActiveTaskManager | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: PluginHostProtocol | None = None,
+        merged_delivery: MergedForwardDeliveryService | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -67,6 +72,7 @@ class ComicCommandHandler:
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
         self.plugin_instance = plugin_instance
+        self.merged_delivery = merged_delivery
         self.terminating: bool = False
 
         try:
@@ -329,15 +335,66 @@ class ComicCommandHandler:
         Returns:
             str: 触发状态 ("started", "duplicate", "blocked", "no_topics", "disabled", "auto_disabled", "terminating")。
         """
+        status, comic_topics = self._get_comic_generation_inputs(
+            group_id,
+            platform_id,
+            analysis_result,
+            require_auto_enabled=require_auto_enabled,
+        )
+        if status != "ready":
+            return status
+        umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        task_key = f"{platform_id or 'default'}:{group_id}"
+        existing_task = self._comic_group_tasks.get(task_key)
+        if existing_task and not existing_task.done():
+            logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过重复任务。")
+            return "duplicate"
+
+        task = asyncio.create_task(
+            self._trigger_comic_generation(
+                comic_topics, group_id, platform_id, umo, trace=trace
+            )
+        )
+        self._comic_group_tasks[task_key] = task
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        task.add_done_callback(
+            lambda completed_task: (
+                self._comic_group_tasks.pop(task_key, None)
+                if self._comic_group_tasks.get(task_key) is completed_task
+                else None
+            )
+        )
+        return "started"
+
+    def _get_comic_generation_inputs(
+        self,
+        group_id: str,
+        platform_id: str | None,
+        analysis_result: AnalysisResultPayload,
+        *,
+        require_auto_enabled: bool,
+    ) -> tuple[str, list[dict[str, object]]]:
+        """统一后台发送和合并准备流程的开关、名单与话题校验。
+
+        Args:
+            group_id: 目标群号。
+            platform_id: 平台实例标识。
+            analysis_result: 包含话题的分析结果。
+            require_auto_enabled: 是否要求开启自动生成。
+
+        Returns:
+            校验状态，以及清理后的漫画话题。
+        """
         if self.terminating:
-            return "terminating"
+            return "terminating", []
         enabled_getter = getattr(self.config_manager, "get_enable_daily_comic", None)
         if callable(enabled_getter) and not enabled_getter():
-            return "disabled"
+            return "disabled", []
         auto_getter = getattr(self.config_manager, "get_enable_auto_daily_comic", None)
         auto_enabled = auto_getter() if callable(auto_getter) else True
         if require_auto_enabled and not auto_enabled:
-            return "auto_disabled"
+            return "auto_disabled", []
 
         umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
         inherit_allowed = True if require_auto_enabled else None
@@ -346,7 +403,7 @@ class ComicCommandHandler:
             logger.info(
                 f"群 {group_id} 未通过漫画名单判定，跳过漫画生成。platform={platform_id or 'default'}"
             )
-            return "blocked"
+            return "blocked", []
 
         topics = analysis_result.get("topics", [])
         statistics = analysis_result.get("statistics")
@@ -376,30 +433,146 @@ class ComicCommandHandler:
                 )
         if not comic_topics:
             logger.warning(f"群 {group_id} 没有有效话题，跳过漫画生成。")
-            return "no_topics"
+            return "no_topics", []
+        return "ready", comic_topics
 
+    async def prepare_for_report(
+        self,
+        group_id: str,
+        platform_id: str | None,
+        analysis_result: AnalysisResultPayload,
+    ) -> list[PreparedForwardMessage]:
+        """准备随日报合并的漫画，不在生成流程中自行发送。
+
+        Args:
+            group_id: 目标群号。
+            platform_id: 平台实例标识。
+            analysis_result: 日报产生的同一批话题。
+
+        Returns:
+            漫画节点与发送成功后的归档回调；关闭、重复或失败时为空。
+
+        Raises:
+            asyncio.CancelledError: 协调任务被取消或等待期限到达。
+        """
+        status, topics = self._get_comic_generation_inputs(
+            group_id, platform_id, analysis_result, require_auto_enabled=True
+        )
+        if status != "ready":
+            return []
         task_key = f"{platform_id or 'default'}:{group_id}"
+        current_task = asyncio.current_task()
         existing_task = self._comic_group_tasks.get(task_key)
         if existing_task and not existing_task.done():
-            logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过重复任务。")
-            return "duplicate"
-
-        task = asyncio.create_task(
-            self._trigger_comic_generation(
-                comic_topics, group_id, platform_id, umo, trace=trace
+            logger.info(f"群 {group_id} 已有漫画任务等待或执行，跳过合并漫画。")
+            return []
+        if current_task is None:
+            return []
+        self._comic_group_tasks[task_key] = current_task
+        self._background_tasks.add(current_task)
+        umo = f"{platform_id}:GroupMessage:{group_id}" if platform_id else group_id
+        try:
+            return await self._prepare_comic_messages(
+                topics, group_id, platform_id, umo
             )
-        )
-        self._comic_group_tasks[task_key] = task
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
-        task.add_done_callback(
-            lambda completed_task: (
+        finally:
+            if self._comic_group_tasks.get(task_key) is current_task:
                 self._comic_group_tasks.pop(task_key, None)
-                if self._comic_group_tasks.get(task_key) is completed_task
-                else None
-            )
-        )
-        return "started"
+            self._background_tasks.discard(current_task)
+
+    async def _prepare_comic_messages(
+        self,
+        topics: list[dict[str, object]],
+        group_id: str,
+        platform_id: str | None,
+        umo: str,
+        trace: TraceContext | None = None,
+    ) -> list[PreparedForwardMessage]:
+        """在限流范围内生成并保存漫画，返回静态节点和成功归档回调。
+
+        Args:
+            topics: 经过校验的漫画话题。
+            group_id: 目标群号。
+            platform_id: 平台实例标识。
+            umo: 完整目标会话。
+            trace: 可选的父任务追踪。
+
+        Returns:
+            可投递的漫画节点；没有有效绘图输出或生成失败时为空。
+
+        Raises:
+            asyncio.CancelledError: 取消信号向上游传播。
+        """
+        from ..services.merged_forward_delivery import PreparedForwardMessage
+
+        cur_trace = trace or TraceContext.current()
+        async with self._comic_semaphore:
+            if self.terminating:
+                return []
+            try:
+                if cur_trace and self.active_task_manager:
+                    await self.active_task_manager.update_stage(
+                        cur_trace.trace_id, "COMIC_STORYBOARD"
+                    )
+                comic_bytes, fallback_url = await self.comic_service.generate_comic(
+                    topics, group_id, umo
+                )
+                # 生成途中发生关闭时不再把产物交给发送器。
+                if self.terminating:
+                    return []
+                show_caption = (
+                    self.config_manager.get_show_report_caption()
+                    if self.config_manager
+                    else True
+                )
+                caption = (
+                    TraceContext.make_report_caption("comic") if show_caption else ""
+                )
+                if comic_bytes:
+                    ext = self.detect_image_ext(comic_bytes)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    trace_suffix = f"_{cur_trace.trace_id}" if cur_trace else ""
+                    filename = f"comic_{group_id}_{timestamp}{trace_suffix}{ext}"
+                    reports_dir = self.plugin_data_dir / "reports"
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    comic_path = reports_dir / filename
+                    comic_path.write_bytes(comic_bytes)
+                    if cur_trace:
+                        files = cur_trace.metadata.setdefault("report_files", [])
+                        if isinstance(files, list):
+                            files.append(
+                                {
+                                    "filename": filename,
+                                    "format": "image",
+                                    "size_bytes": len(comic_bytes),
+                                    "stage": "COMIC_GENERATION",
+                                }
+                            )
+
+                    async def upload_after_send() -> None:
+                        """仅在合并消息确认发送后上传群相册。"""
+                        await self._try_upload_image(
+                            group_id, str(comic_path), platform_id, is_comic=True
+                        )
+
+                    return [
+                        PreparedForwardMessage(
+                            kind="comic",
+                            text=caption,
+                            image_url=str(comic_path),
+                            after_send=upload_after_send,
+                        )
+                    ]
+                if fallback_url:
+                    return [
+                        PreparedForwardMessage(
+                            kind="comic", text=caption, image_url=fallback_url
+                        )
+                    ]
+                logger.warning(f"群 {group_id} 漫画生成未产生有效输出。")
+            except Exception as exc:
+                logger.error(f"群 {group_id} 合并漫画准备失败: {exc}", exc_info=True)
+            return []
 
     async def _trigger_comic_generation(
         self,
@@ -416,6 +589,19 @@ class ComicCommandHandler:
 
             _current_trace.set(cur_trace)
 
+        if self.merged_delivery and self.merged_delivery.enabled_for(platform_id):
+
+            async def prepare() -> list[PreparedForwardMessage]:
+                """复用已通过检查的独立漫画任务，避免再次触发生成。"""
+                return await self._prepare_comic_messages(
+                    topics, group_id, platform_id, umo, trace=cur_trace
+                )
+
+            await self.merged_delivery.deliver(
+                group_id, platform_id, {"comic": prepare}
+            )
+            return
+
         async with self._comic_semaphore:
             if self.terminating:
                 return
@@ -427,6 +613,15 @@ class ComicCommandHandler:
 
                 comic_bytes, fallback_url = await self.comic_service.generate_comic(
                     topics, group_id, umo
+                )
+                show_caption_fn = (
+                    getattr(self.config_manager, "get_show_report_caption", None)
+                    if self.config_manager
+                    else None
+                )
+                show_caption = show_caption_fn() if callable(show_caption_fn) else True
+                caption = (
+                    TraceContext.make_report_caption("comic") if show_caption else ""
                 )
                 if comic_bytes:
                     logger.info(f"群 {group_id} 漫画生成成功，准备发送和保存副本...")
@@ -466,19 +661,6 @@ class ComicCommandHandler:
                         else None
                     )
                     if adapter:
-                        show_caption_fn = (
-                            getattr(
-                                self.config_manager, "get_show_report_caption", None
-                            )
-                            if self.config_manager
-                            else None
-                        )
-                        show_caption = (
-                            show_caption_fn() if callable(show_caption_fn) else True
-                        )
-                        caption = (
-                            TraceContext.make_report_caption() if show_caption else ""
-                        )
                         sent = await adapter.send_image(
                             group_id, str(comic_file_path), caption=caption
                         )
@@ -517,7 +699,9 @@ class ComicCommandHandler:
                 elif fallback_url:
                     adapter = self.bot_manager.get_adapter(platform_id)
                     if adapter:
-                        await adapter.send_image(group_id, fallback_url)
+                        await adapter.send_image(
+                            group_id, fallback_url, caption=caption
+                        )
                 else:
                     logger.warning(f"群 {group_id} 漫画生成未产生有效输出。")
             except Exception as e:

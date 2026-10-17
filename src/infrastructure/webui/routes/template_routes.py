@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
+from ....shared.comic_prompts import COMIC_PROMPT_PREVIEWS, COMIC_STORYBOARD_PROMPTS
 from ....utils.logger import logger
 from ...reporting.template_installer import (
     MAX_ZIP_B64_SIZE,
@@ -22,6 +24,10 @@ from ...reporting.template_installer import (
     validate_template_name,
 )
 from ..web_compat import WebApiResponse, error_response, json_response, request
+
+COMIC_PREVIEW_DIRECTORY = (
+    Path(__file__).resolve().parents[4] / "assets" / "comic_previews"
+)
 
 if TYPE_CHECKING:
     from ....application.dto.webui_dto import (
@@ -129,6 +135,123 @@ class TemplateRoutes:
         except Exception as e:
             logger.error(f"获取模板预览图异常: {e}", exc_info=True)
             return error_response("读取模板预览图失败。", status_code=500)
+
+    async def api_get_comic_template_preview(self) -> WebApiResponse:
+        """读取内置漫画模板示例图，沿用报告预览的宿主解包结构。
+
+        Returns:
+            包含 data_url 的成功响应；已知无图模板返回空值，非法模板返回 400，
+            缺失资源返回 404，读取异常返回 500。
+        """
+        template_name = str(request.query.get("template_name") or "").strip()
+        if template_name not in COMIC_STORYBOARD_PROMPTS:
+            return error_response("未知的内置漫画模板", status_code=400)
+        variant = request.query.get("variant", "full")
+        if variant not in {"thumbnail", "full"}:
+            return error_response("漫画预览图尺寸选项无效", status_code=400)
+        query_dto: TemplatePreviewQueryDTO = {"template_name": template_name}
+        filename = COMIC_PROMPT_PREVIEWS.get(query_dto["template_name"])
+        if not filename:
+            return json_response({"status": "ok", "data": {"data_url": None}})
+        if variant == "thumbnail":
+            filename = f"{Path(filename).stem}-thumb.webp"
+
+        try:
+            # 仅接受目录白名单资源，并拒绝指向目录外部的符号链接。
+            candidate = COMIC_PREVIEW_DIRECTORY / filename
+            if candidate.is_symlink() or not is_path_within(
+                candidate, COMIC_PREVIEW_DIRECTORY
+            ):
+                return error_response("该漫画模板没有预览图", status_code=404)
+            content = await asyncio.to_thread(candidate.read_bytes)
+            data_url = (
+                f"data:image/webp;base64,{base64.b64encode(content).decode('ascii')}"
+            )
+            return json_response({"status": "ok", "data": {"data_url": data_url}})
+        except FileNotFoundError:
+            return error_response("该漫画模板没有预览图", status_code=404)
+        except Exception as e:
+            logger.error(f"读取漫画模板预览图失败: {e}", exc_info=True)
+            return error_response("读取漫画模板预览图失败。", status_code=500)
+
+    async def api_get_comic_template_rotation_status(self) -> WebApiResponse:
+        """只读获取已保存配置的模板轮换进度，不预占生成次数。
+
+        Returns:
+            当前范围的轮换状态；未选择群会话时返回引导提示。
+        """
+        # 防腐边界显式收窄宿主输入，兼容不遵循查询契约的旧宿主。
+        group_id = cast("object", request.query.get("group_id", ""))
+        umo = cast("object", request.query.get("umo"))
+        if not isinstance(group_id, str) or len(group_id) > 128:
+            return error_response("群号必须是长度不超过 128 的字符串", status_code=400)
+        if umo is not None and (not isinstance(umo, str) or len(umo) > 512):
+            return error_response(
+                "群会话必须是长度不超过 512 的字符串", status_code=400
+            )
+        cfg_mgr = (
+            self.analysis_service.config_manager
+            if self.analysis_service
+            else self.report_dispatcher.config_manager
+            if self.report_dispatcher
+            else None
+        )
+        if cfg_mgr is None:
+            return error_response("配置管理器未初始化", status_code=503)
+        try:
+            status = await asyncio.to_thread(
+                cfg_mgr.get_comic_template_rotation_status, group_id=group_id, umo=umo
+            )
+            return json_response({"status": "ok", "data": status})
+        except ValueError as exc:
+            return error_response(str(exc), status_code=400)
+        except Exception as exc:
+            logger.error(f"读取漫画模板轮换状态失败: {exc}", exc_info=True)
+            return error_response("读取漫画模板轮换状态失败。", status_code=500)
+
+    async def api_reset_comic_template_rotation(self) -> WebApiResponse:
+        """重置所选范围的轮换进度，不清理其他群会话。
+
+        Returns:
+            重置后的状态；群独立模式缺少完整会话时返回 400。
+        """
+        try:
+            body = cast("object", await request.json())
+        except Exception:
+            return error_response("重置请求必须是 JSON 对象", status_code=400)
+        if not isinstance(body, dict):
+            return error_response("重置请求必须是 JSON 对象", status_code=400)
+        if body.get("action") != "reset":
+            return error_response(
+                "重置请求缺少明确的 action=reset 操作", status_code=400
+            )
+        group_id = body.get("group_id", "")
+        umo = body.get("umo")
+        if not isinstance(group_id, str) or len(group_id) > 128:
+            return error_response("群号必须是长度不超过 128 的字符串", status_code=400)
+        if umo is not None and (not isinstance(umo, str) or len(umo) > 512):
+            return error_response(
+                "群会话必须是长度不超过 512 的字符串", status_code=400
+            )
+        cfg_mgr = (
+            self.analysis_service.config_manager
+            if self.analysis_service
+            else self.report_dispatcher.config_manager
+            if self.report_dispatcher
+            else None
+        )
+        if cfg_mgr is None:
+            return error_response("配置管理器未初始化", status_code=503)
+        try:
+            status = await asyncio.to_thread(
+                cfg_mgr.reset_comic_template_rotation, group_id=group_id, umo=umo
+            )
+            return json_response({"status": "ok", "data": status})
+        except ValueError as exc:
+            return error_response(str(exc), status_code=400)
+        except Exception as exc:
+            logger.error(f"重置漫画模板轮换进度失败: {exc}", exc_info=True)
+            return error_response("重置漫画模板轮换进度失败。", status_code=500)
 
     async def api_install_template_from_url(self) -> WebApiResponse:
         """从 GitHub 仓库链接安装自定义报告视觉模板"""

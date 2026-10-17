@@ -12,6 +12,9 @@ import {
   Badge,
   Spin,
   Alert,
+  Drawer,
+  Modal,
+  Popconfirm,
 } from "antd";
 import {
   SaveOutlined,
@@ -23,11 +26,16 @@ import {
   AppstoreOutlined,
   DownOutlined,
   UpOutlined,
+  UndoOutlined,
 } from "@ant-design/icons";
 import { useConfigViewModel } from "../model/useConfigViewModel";
 import { FieldRenderer } from "../../../widgets/config-form/ui/FieldRenderer";
 import { useTheme } from "../../../shared/lib/useTheme";
 import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
+import { WordCloudEditor } from "../../../features/edit-wordcloud/ui/WordCloudEditor";
+import { WordCloudSettings } from "./WordCloudSettings";
+import { ComicTemplateRotationSettings } from "../../../features/edit-comic-prompt/ui/ComicTemplateRotationSettings";
+import { COMIC_ROTATION_FIELDS } from "../../../features/edit-comic-prompt/model/comicTemplateRotation";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -41,6 +49,9 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     typeof window !== "undefined" ? window.innerWidth < 768 : false
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [wordCloudEditorOpen, setWordCloudEditorOpen] = useState(false);
+  const [wordCloudCatalogRevision, setWordCloudCatalogRevision] = useState(0);
+  const [wordCloudScope, setWordCloudScope] = useState<string | undefined>();
 
   useEffect(() => {
     const handleResize = () => {
@@ -70,9 +81,40 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
     handleFieldChange,
     handleSave,
     handleReload,
+    formData,
+    wordCloudDirty,
+    comicDirty,
+    savedDailyComic,
+    reloadConfirmationOpen,
+    cancelReload,
+    confirmReload,
+    handleGroupPatch,
+    restoreSavedWordCloud,
   } = viewModel;
 
   const activeCategoryInfo = categories.find((c) => c.key === activeCategory);
+  const wordCloudValue = formData.wordcloud ?? {};
+  const groupOverrides = wordCloudValue.group_overrides;
+  const overridesObject: Record<string, unknown> = groupOverrides && typeof groupOverrides === "object" && !Array.isArray(groupOverrides) ? groupOverrides as Record<string, unknown> : {};
+  const scopedOverride = wordCloudScope ? overridesObject[wordCloudScope] : undefined;
+  const scopedObject: Record<string, unknown> = scopedOverride && typeof scopedOverride === "object" && !Array.isArray(scopedOverride) ? scopedOverride as Record<string, unknown> : {};
+  const editorValue = wordCloudScope ? { ...wordCloudValue, ...scopedObject } : wordCloudValue;
+  const patchEditor = (patch: Record<string, unknown>) => {
+    if (wordCloudScope) {
+      const nextOverride = { ...scopedObject };
+      for (const [key, next] of Object.entries(patch)) {
+        if (next === undefined) delete nextOverride[key];
+        else nextOverride[key] = next;
+      }
+      const nextOverrides = { ...overridesObject };
+      if (Object.keys(nextOverride).length) nextOverrides[wordCloudScope] = nextOverride;
+      else delete nextOverrides[wordCloudScope];
+      handleGroupPatch("wordcloud", { group_overrides: nextOverrides });
+    } else handleGroupPatch("wordcloud", patch);
+  };
+  const protectedFonts = [wordCloudValue.font, ...(groupOverrides && typeof groupOverrides === "object" && !Array.isArray(groupOverrides) ? Object.values(groupOverrides).map((entry: unknown) => entry && typeof entry === "object" && "font" in entry ? entry.font : undefined) : [])].filter((font): font is string => typeof font === "string");
+  const comicPrompts = formData.prompts?.comic_analysis_prompts;
+  const comicCustomPrompt = comicPrompts && typeof comicPrompts === "object" && "comic_storyboard_prompt" in comicPrompts ? comicPrompts.comic_storyboard_prompt : undefined;
 
   return (
     <div
@@ -127,7 +169,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
             </Paragraph>
           </div>
 
-          <Space size="small">
+          <Space size="small" wrap>
             <Tag color="blue" style={{ fontSize: 12, padding: "2px 8px" }}>
               {categories.length} 个配置分组
             </Tag>
@@ -311,7 +353,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
             </Col>
 
             {/* 右侧：分组详情与表单项 */}
-            <Col xs={24} md={18} style={{ padding: "20px 24px" }}>
+            <Col xs={24} md={18} style={{ padding: isMobileScreen ? "16px 12px" : "20px 24px", minWidth: 0 }}>
               {activeGroupMeta && (
                 <div
                   style={{
@@ -367,9 +409,23 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
                   }
                   style={{ margin: "60px 0" }}
                 />
+              ) : activeCategory === "wordcloud" ? (
+                <WordCloudSettings fields={currentGroupFields} value={formData.wordcloud} errors={errors.wordcloud} disabled={!configLoaded || saving} editorOpen={wordCloudEditorOpen} catalogRevision={wordCloudCatalogRevision} searching={!!searchQuery.trim()} dirty={wordCloudDirty} onRestoreSaved={restoreSavedWordCloud} onEditGroupAppearance={(umo) => { setWordCloudScope(umo); setWordCloudEditorOpen(true); }} onChange={(key, value) => handleFieldChange("wordcloud", key, value)} onOpenEditor={() => { setWordCloudScope(undefined); setWordCloudEditorOpen(true); }} />
               ) : (
                 <Row gutter={[16, 0]}>
-                  {currentGroupFields.map((field) => {
+                  {activeCategory === "daily_comic" && (!searchQuery.trim() || currentGroupFields.some(({ key }) => COMIC_ROTATION_FIELDS.includes(key))) && <Col span={24}>
+                    <ComicTemplateRotationSettings
+                      value={formData.daily_comic ?? {}}
+                      savedValue={savedDailyComic}
+                      dirty={comicDirty}
+                      disabled={!configLoaded || saving}
+                      customPrompt={comicCustomPrompt}
+                      errors={errors.daily_comic}
+                      onPatch={(patch) => handleGroupPatch("daily_comic", patch)}
+                      onOpenPromptSettings={() => { setSearchQuery(""); setActiveCategory("prompts"); requestAnimationFrame(() => document.getElementById("cfg-field-prompts-comic_analysis_prompts")?.scrollIntoView({ block: "center" })); }}
+                    />
+                  </Col>}
+                  {currentGroupFields.filter(({ key }) => activeCategory !== "daily_comic" || !COMIC_ROTATION_FIELDS.includes(key)).map((field) => {
                     const isLongField =
                       field.schema.type === "template_list" ||
                       field.schema.type === "object" ||
@@ -414,6 +470,25 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ viewModel }) => {
           </Row>
         </Spin>
       </Card>
+      <Modal title="重新读取会替换未保存的修改" open={reloadConfirmationOpen} onCancel={cancelReload} onOk={confirmReload} okText="舍弃修改并重新读取" cancelText="继续编辑" okButtonProps={{ danger: true }}>
+        <Paragraph>配置中心还有未保存的草稿。重新读取会使用服务器上的已保存配置替换这些修改。</Paragraph>
+      </Modal>
+      <Drawer
+        title={<Space wrap><span>{wordCloudScope ? `本群词云 · ${wordCloudScope.split(":GroupMessage:")[1]}` : "全局词云外观编辑器"}</span>{wordCloudDirty && <Tag color="warning">词云有未保存修改</Tag>}</Space>}
+        open={wordCloudEditorOpen}
+        onClose={() => { setWordCloudEditorOpen(false); setWordCloudCatalogRevision((current) => current + 1); }}
+        width="min(1480px, 100vw)"
+        destroyOnHidden
+        styles={{ body: { padding: isMobileScreen ? 16 : 24 } }}
+        extra={<Space wrap>
+          <Popconfirm title="恢复词云上次保存的设置？" description="词云的全局设置和群级覆盖将恢复，其他分组的草稿会保留。" okText="恢复" cancelText="取消" onConfirm={restoreSavedWordCloud} disabled={!wordCloudDirty || saving}>
+            <Button icon={<UndoOutlined />} disabled={!wordCloudDirty || saving}>撤销词云修改</Button>
+          </Popconfirm>
+          <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving} disabled={!isDirty || loading || !configLoaded}>保存配置</Button>
+        </Space>}
+      >
+        <WordCloudEditor key={wordCloudScope || "global"} value={editorValue} onChange={(key, value) => patchEditor({ [key]: value })} onPatch={patchEditor} protectedFonts={protectedFonts} scopeUmo={wordCloudScope} overrideKeys={wordCloudScope ? Object.keys(scopedObject) : undefined} disabled={saving || loading || !configLoaded} />
+      </Drawer>
     </div>
   );
 };

@@ -96,7 +96,7 @@ export async function savePluginConfig(
       }
       break;
     }
-    return { success: false, message: "保存配置失败，未收到有效的成功响应" };
+    return { success: false, message: "保存请求已发送，但无法确认结果。请重新读取配置核对，或刷新页面后重试。" };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, message: msg || "保存配置请求失败" };

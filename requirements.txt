@@ -1,3 +1,4 @@
 diskcache
 ulid-py
-psutil
+psutil
+jieba>=0.42.1,<0.43

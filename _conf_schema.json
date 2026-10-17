@@ -97,7 +97,7 @@
                 "default": [
                     "image"
                 ],
-                "hint": "选择分析报告的输出方式（可多选）。image=图片、text=纯文本摘要、html=可交互式网页文件。多选仅在定时分析发送时时报告按顺序依次发送，手动触发时只发送第一个选中的格式，例如 image+html 会发送图片并通过外链提供 HTML 报告。QQ 官方图片/HTML 报告优先显示事件昵称，昵称缺失时使用群内稳定匿名名；文本报告由独立 Markdown 模块使用成员艾特展示身份。其他平台保持原有昵称文本格式。"
+                "hint": "选择分析报告的输出方式（可多选）。image=图片、text=纯文本摘要、html=可交互式网页文件。关闭合并转发时，定时分析按所选格式依次发送，手动触发只发送第一个格式；开启合并转发时，手动和定时分析均将所有选中格式加入同一条合并消息。合并中的 HTML 在启用仅外链且配置有效外链时发送链接，否则发送文本摘要，HTML 文件仍保留在报告历史。QQ 官方图片/HTML 报告优先显示事件昵称，昵称缺失时使用群内稳定匿名名；文本报告由独立 Markdown 模块使用成员艾特展示身份。其他平台保持原有昵称文本格式。"
             },
             "report_template": {
                 "type": "string",
@@ -193,13 +193,35 @@
                 "type": "bool",
                 "description": "发送文本/表情回复",
                 "default": false,
-                "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。"
+                "hint": "开启后，/群分析 将通过发送文本消息提示进度；关闭（默认）则使用表情回应。此设置不受生成结果合并转发开关影响。"
             },
             "show_report_caption": {
                 "type": "bool",
-                "description": "发送报告时附带 \"📊 每日群聊分析报告已生成\" 前缀",
+                "description": "发送报告、漫画和词云时附带生成提示",
                 "default": true,
-                "hint": "关闭后，发送图片/HTML 报告时将只发送文件本身，不附带 \"📊 每日群聊分析报告已生成\" 等文字前缀。"
+                "hint": "按发送内容显示对应提示及时间：📊 每日群聊分析报告已生成、🎨 每日群漫画已生成、☁️ 群聊词云已生成。关闭后只发送图片或文件，不附带这些提示。"
+            },
+            "enable_merged_forward": {
+                "type": "bool",
+                "description": "合并转发生成结果",
+                "default": false,
+                "hint": "仅将本次已启用且成功生成的分析报告、词云、漫画结果合并为一条消息。可只开启其中任意一项或两项；只有一项结果也使用合并转发，不会自动开启其他功能。开始、进度、失败等提示仍按原设置单独发送。独立词云、词云重发和独立漫画的生成结果同样适用。仅支持 QQ OneBot，其他平台沿用原发送方式。默认关闭。"
+            },
+            "merged_forward_timeout": {
+                "type": "int",
+                "description": "合并转发等待结果超时（秒）",
+                "default": 600,
+                "min": 10,
+                "max": 3600,
+                "slider": {
+                    "min": 10,
+                    "max": 3600,
+                    "step": 10
+                },
+                "condition": {
+                    "enable_merged_forward": true
+                },
+                "hint": "等待本次已启用的报告、词云、漫画结果就绪的最长时间，范围 10–3600 秒，默认 600 秒；未启用的功能不会参与等待。一项失败或超时后仍发送其他已完成结果。开始、进度、失败等提示不进入合并等待。此项仅控制结果收集；合并转发发送请求自身固定最多等待 60 秒。"
             }
         }
     },
@@ -593,6 +615,117 @@
                 "default": false,
                 "hint": "开启后每天首次生成漫画时，会从下方已启用的角色方案随机选择一个，并按运行环境时区在当天持续使用；重启不会改变当天选择。关闭时固定使用第一个已启用方案。"
             },
+            "comic_template_mode": {
+                "description": "漫画模板切换模式",
+                "type": "string",
+                "default": "fixed",
+                "options": [
+                    "fixed",
+                    "sequential",
+                    "daily_sequential",
+                    "random",
+                    "daily_random",
+                    "shuffle"
+                ],
+                "labels": [
+                    "固定模板",
+                    "每次按顺序",
+                    "每日按顺序",
+                    "每次随机",
+                    "每日随机",
+                    "洗牌轮播"
+                ],
+                "hint": "固定模式沿用默认漫画提示词模板；每次按顺序在新任务开始时前进，失败任务也占用一次；每日按顺序按日历日期推进；每日随机当天保持一致；洗牌轮播每轮遍历候选池一次。内部重试、预览和重发不推进。"
+            },
+            "comic_template_scope": {
+                "description": "漫画模板切换范围",
+                "type": "string",
+                "default": "global",
+                "options": [
+                    "global",
+                    "group"
+                ],
+                "labels": [
+                    "全局共用进度",
+                    "各群独立进度"
+                ],
+                "hint": "全局共用同一轮换进度；各群独立按完整群会话区分，避免不同机器人下同号群混用。每日模式使用运行环境时区，进度持久化后重启仍保留。"
+            },
+            "comic_template_candidates": {
+                "description": "漫画模板候选池（按列表顺序）",
+                "type": "list",
+                "default": [
+                    "classic",
+                    "scp_dossier",
+                    "noir_detective",
+                    "pixel_rpg",
+                    "cyberpunk_hud",
+                    "showa_kidan",
+                    "steampunk_blueprint",
+                    "alchemist_botanical",
+                    "wasteland_radio",
+                    "ukiyo_e",
+                    "golden_age_comic",
+                    "deep_sea_log",
+                    "phantom_thief",
+                    "scrapbook_diary"
+                ],
+                "options": [
+                    "classic",
+                    "scp_dossier",
+                    "noir_detective",
+                    "pixel_rpg",
+                    "cyberpunk_hud",
+                    "showa_kidan",
+                    "steampunk_blueprint",
+                    "alchemist_botanical",
+                    "wasteland_radio",
+                    "ukiyo_e",
+                    "golden_age_comic",
+                    "deep_sea_log",
+                    "phantom_thief",
+                    "scrapbook_diary",
+                    "custom"
+                ],
+                "labels": [
+                    "原版漫画",
+                    "SCP 异常调查档案风",
+                    "黑色电影侦探风",
+                    "像素 RPG 每日冒险日志",
+                    "赛博朋克义体HUD日志",
+                    "复古昭和怪谈画报风",
+                    "蒸汽朋克发明家手稿",
+                    "炼金术士魔导植物志",
+                    "废土生存广播电台日志",
+                    "浮世绘锦绘町人见闻录",
+                    "美式黄金时代超英漫画",
+                    "深海科考潜航器观测录",
+                    "怪盗团预告信剪报拼贴",
+                    "手账剪贴簿拍立得日记",
+                    "自定义"
+                ],
+                "items": {
+                    "type": "string",
+                    "options": [
+                        "classic",
+                        "scp_dossier",
+                        "noir_detective",
+                        "pixel_rpg",
+                        "cyberpunk_hud",
+                        "showa_kidan",
+                        "steampunk_blueprint",
+                        "alchemist_botanical",
+                        "wasteland_radio",
+                        "ukiyo_e",
+                        "golden_age_comic",
+                        "deep_sea_log",
+                        "phantom_thief",
+                        "scrapbook_diary",
+                        "custom"
+                    ]
+                },
+                "hint": "选择参与切换的模板，顺序模式按此列表的先后顺序轮换；插件 WebUI 支持调整顺序。自定义不会自动加入，明确加入时必须填写自定义漫画场景分析提示词。角色专属提示词非空时优先使用，不占用轮换进度。"
+            },
             "comic_characters": {
                 "description": "漫画角色方案",
                 "type": "template_list",
@@ -638,8 +771,8 @@
                                 "type": "text",
                                 "editor_mode": true,
                                 "editor_language": "markdown",
-                                "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
-                                "hint": "此角色专属的分镜、画风和台词规则。留空时回退到下方全局默认模板。"
+                                "default": "",
+                                "hint": "留空继承“默认漫画场景分析提示词”中的模板选择。非空提示词始终优先，包括手动填入的原版全文；升级时旧默认全文会一次性备份并转换为留空继承。"
                             }
                         }
                     }
@@ -1781,7 +1914,7 @@
     "qq_group_upload": {
         "description": "群文件/群相册上传设置",
         "type": "object",
-        "hint": "图片报告生成后自动上传到群文件目录或群相册。支持 NapCat、LLOneBot 及各标准 OneBot v11 驱动。仅对 QQ（OneBot）平台的图片格式报告生效",
+        "hint": "图片报告可自动上传到群文件目录或群相册，词云和漫画可分别启用群相册上传。支持具备相册接口的 QQ（OneBot）平台；其他平台自动跳过",
         "items": {
             "enable_group_file_upload": {
                 "type": "bool",
@@ -1805,13 +1938,25 @@
                 "type": "string",
                 "description": "目标群相册名称",
                 "default": "",
-                "hint": "指定上传到哪个群相册（如“群分析”）。严格模式下未找到同名相册将放弃上传；关闭严格模式则回退到群默认相册"
+                "hint": "图片报告上传到的目标群相册（如“群分析”）；词云未单独设置相册名称时也使用此处。严格模式下名称为空或未找到同名相册将放弃上传；关闭严格模式则回退到群默认相册"
             },
             "group_album_strict_mode": {
                 "type": "bool",
                 "description": "群相册上传严格模式",
                 "default": true,
-                "hint": "当启用该开关且设置了目标群相册名称时：如果插件在目标群组中找不到同名的相册，将安全停止上传，杜绝误传到群内其他无关相册。关闭该开关时，找不到目标相册将回退到群组默认的第一个相册。"
+                "hint": "日报、词云和漫画共用此开关。开启时，如果插件在目标群中找不到各自指定名称的相册，将停止上传，避免误传到其他相册。关闭时，找不到指定相册将回退到群内默认的第一个相册。词云未单独填写相册名称时沿用上方“目标群相册名称”。"
+            },
+            "enable_wordcloud_album_upload": {
+                "type": "bool",
+                "description": "启用词云相册上传",
+                "default": false,
+                "hint": "词云图片成功发送到群聊后，再静默上传到下方“词云相册名称”，并遵循“群相册上传严格模式”。适用于随报告发送、/群词云和/重发词云，与日报和漫画相册开关独立；相册失败不会重发已发送的词云"
+            },
+            "wordcloud_album_name": {
+                "type": "string",
+                "description": "词云相册名称",
+                "default": "",
+                "hint": "指定词云图片上传到的群相册名称（如“群词云”）。留空时沿用上方“目标群相册名称”。遵循上方“群相册上传严格模式”：开启时，最终名称为空或找不到同名相册将停止上传；关闭时，找不到指定相册将回退到群内默认的第一个相册"
             },
             "enable_comic_album_upload": {
                 "type": "bool",
@@ -1898,15 +2043,58 @@
             "comic_analysis_prompts": {
                 "description": "默认漫画场景分析提示词",
                 "type": "object",
-                "hint": "仅供未配置角色方案，或角色方案未填写专属提示词时回退使用。角色专属提示词请在“漫画角色方案”中配置。",
+                "hint": "选择内置漫画风格，或使用自定义提示词。角色方案填写了专属提示词时优先使用角色内容；角色留空则继承这里的选择。",
                 "items": {
+                    "comic_storyboard_template": {
+                        "description": "默认漫画提示词模板",
+                        "type": "string",
+                        "default": "custom",
+                        "options": [
+                            "classic",
+                            "scp_dossier",
+                            "noir_detective",
+                            "pixel_rpg",
+                            "cyberpunk_hud",
+                            "showa_kidan",
+                            "steampunk_blueprint",
+                            "alchemist_botanical",
+                            "wasteland_radio",
+                            "ukiyo_e",
+                            "golden_age_comic",
+                            "deep_sea_log",
+                            "phantom_thief",
+                            "scrapbook_diary",
+                            "custom"
+                        ],
+                        "labels": [
+                            "原版漫画",
+                            "SCP 异常调查档案风",
+                            "黑色电影侦探风",
+                            "像素 RPG 每日冒险日志",
+                            "赛博朋克义体HUD日志",
+                            "复古昭和怪谈画报风",
+                            "蒸汽朋克发明家手稿",
+                            "炼金术士魔导植物志",
+                            "废土生存广播电台日志",
+                            "浮世绘锦绘町人见闻录",
+                            "美式黄金时代超英漫画",
+                            "深海科考潜航器观测录",
+                            "怪盗团预告信剪报拼贴",
+                            "手账剪贴簿拍立得日记",
+                            "自定义"
+                        ],
+                        "hint": "十四种内置风格和自定义模式。初始保留现有自定义内容；选择内置模板后直接使用该风格，不覆盖自定义文本。插件 WebUI 可查看已提供的风格示例图；角色专属提示词非空时仍优先使用角色内容。"
+                    },
                     "comic_storyboard_prompt": {
-                        "description": "默认漫画场景分析提示词",
+                        "description": "自定义漫画场景分析提示词",
                         "type": "text",
                         "editor_mode": true,
                         "editor_language": "markdown",
                         "default": "你是一个资深的漫画分镜师与 AI 绘画提示词专家。\n请根据以下给出的【群聊每日核心话题列表】，站在你【当前的人格角色设定】（详见系统注入的身份）的视角与语气，将其改编并设计为一个精彩的多格连环漫画（Comic Strip）全景视觉画图提示词 (Prompt)。\n\n【核心视觉、台词与双层排版规则】：\n1. 【全话题必须覆盖（共 ${topic_count} 个分格）】：给出的待创作核心话题列表中共有 ${topic_count} 个话题，你必须为每一个话题分别设计一个分格 Panel（即 Panel 1 到 Panel ${topic_count}），绝对不许随意裁减、挑选或遗漏任何一个话题！\n2. 【人设口语化台词改编】：绝对严禁将报告分析总结原文直接放进对话框！必须以【你当前的人格语气/性格/口吻】（例如傲娇、萌系或专属说话风格），将每个话题的事件提炼改编为一句角色在漫画中的生动台词或吐槽，【每条台词控制在 15 个汉字以内】（例如：“呜呜！家里云又断网了啦！”、“萝卜子才没有降智！那都是Gemini的错！”）。\n3. 【精美双层文字排版（气泡 + 可爱旁白字幕条）】：\n   - 【角色的气泡】：在描述英文 Prompt 时，指定样式为“adorable kawaii anime speech bubble, soft rounded cloud-like shape, cute pointer tail pointing to the speaker”。\n   - 【分格底部的事件旁白条】：将每个话题概括为生动精炼的短标题（控制在 30 字以内，严禁带有“【事件】”字样），在 Prompt 中指定样式为“cute pastel-colored kawaii caption strip at the bottom of the panel with soft rounded corners”，严禁死板白框！\n4. 【中文文本显式渲染】：画面整体构图与场景描述使用英文，但气泡与底部旁白条内渲染的中文必须显式指定（指令格式：containing a speech bubble with exact Chinese text \"人设吐槽台词\" 以及 and a cute caption strip at bottom with exact Chinese text \"精炼话题短标题\"），绝对禁止将中文翻译成英文！\n5. 【话题内容直传与文字渲染约束】：在生成传给生图 LLM 的英文提示词 (scene) 时，对于每一个分格，除了描述具体的视觉画面外，你必须将该话题的【完整详情（翻译为英文）】作为 Background Context 附加在该分格的提示词中，帮助生图模型理解剧情。但同时，必须极其强烈地警告生图模型：“绝对禁止将长篇上下文写在画面上，仅允许渲染短标题字幕条和气泡台词！”（示例：Background Context: [Details]. STRICT RULE: DO NOT render the background context text! ONLY render the exact Chinese text in the bubble and caption strip!）。\n6. 【核心角色强制全覆盖】：在提示词中必须明确要求并描述，每一个分格 (Panel) 都必须无一例外地出现你当前的人格设定（即参考图中的核心角色，例如 1girl, [特定外貌特征] 等），保持整篇连环画的主角绝对连贯！\n\n【待创作的群聊核心话题列表】：\n${chat_content}\n\n【输出格式与正反例规范 (GOOD & BAD EXAMPLES)】：\n⚠️ 核心要求：AI 绘图引擎会直接读取 \"scene\" 字段作为唯一生图指令。你必须将全局角色总设以及 Panel 1 到 Panel ${topic_count} 的每一格完整描述全部写入 \"scene\" 字符串中！\n\n✅ 正确示范 (GOOD EXAMPLE - 必须严格遵循此格式输出纯 JSON)：\n{\n  \"scene\": \"A ${topic_count}-panel comic strip featuring [protagonist description] observing a chaotic QQ group chat.\\n\\nPanel 1: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\nPanel 2: [Visual action] containing a speech bubble with exact Chinese text \\\"[人设吐槽台词 15字内]\\\" and a cute pastel caption strip at bottom with exact Chinese text \\\"[精炼短标题]\\\". Background Context: [English Details]. STRICT RULE: DO NOT render the background context text!\\n\\n... (必须依次写完 Panel 1 到 Panel ${topic_count})\"\n}\n\n❌ 错误示范 (BAD EXAMPLE - 严禁以下行为)：\n1. 严禁把 scene 写成一句简短概括，却把具体话题藏在 panels 列表中（生图模型直接读取 scene，必须全内联写入 scene）！\n2. 严禁丢失气泡或字幕条里的 exact Chinese text 显式中文台词与短标题！\n3. 严禁在 JSON 之外输出任何多余的 Markdown 或闲聊文字！\n",
-                        "hint": "让大模型根据核心话题生成丰富生动的多格连环漫画画图提示词"
+                        "hint": "选择“自定义”时使用；留空回退到原版漫画。切换内置模板会保留这里的内容，支持 ${topic_count} 和 ${chat_content}。",
+                        "condition": {
+                            "comic_storyboard_template": "custom"
+                        }
                     }
                 }
             }
@@ -1940,6 +2128,194 @@
                 "description": "多群分析交错间隔（秒）",
                 "default": 30,
                 "hint": "当同时启动多个群组的定时分析任务时，每个任务之间的延迟间隔（秒），建议根据实际的 LLM 服务速度填写，过短可能导致请求堆积，过长则分析效率降低。"
+            }
+        }
+    },
+    "wordcloud": {
+        "description": "词云",
+        "type": "object",
+        "hint": "从同一批群消息提取词频；在插件控制台的词云编辑器调整外观并预览。支持 /群词云 与 /重发词云。",
+        "items": {
+            "enabled": {
+                "description": "启用词云",
+                "type": "bool",
+                "default": true
+            },
+            "send_with_report": {
+                "description": "随群分析报告发送",
+                "type": "bool",
+                "default": true,
+                "hint": "报告发送成功后再发送词云；失败可用 /重发词云 单独重试。"
+            },
+            "template": {
+                "description": "词云模板",
+                "type": "string",
+                "default": "ATRI",
+                "options": [
+                    "ATRI"
+                ],
+                "labels": [
+                    "亚托莉（ATRI）"
+                ],
+                "hint": "独立于分析报告模板。这里提供内置词云模板；新安装的词云模板可在插件控制台中选择，已有配置不会因打开本页而重置。"
+            },
+            "font": {
+                "description": "字体",
+                "type": "string",
+                "default": "wenkai",
+                "options": [
+                    "wenkai",
+                    "sans",
+                    "serif"
+                ],
+                "labels": [
+                    "霞鹜文楷",
+                    "无衬线",
+                    "衬线"
+                ],
+                "hint": "这里选择内置字体；已上传字体请在插件控制台选择。已有自定义字体 ID 会保留，选择其他字体后才会替换。"
+            },
+            "min_font_size": {
+                "description": "最小字号",
+                "type": "int",
+                "default": 34,
+                "slider": {
+                    "min": 12,
+                    "max": 160,
+                    "step": 1
+                }
+            },
+            "max_font_size": {
+                "description": "最大字号",
+                "type": "int",
+                "default": 90,
+                "slider": {
+                    "min": 12,
+                    "max": 160,
+                    "step": 1
+                }
+            },
+            "max_words": {
+                "description": "最多词语数量",
+                "type": "int",
+                "default": 80,
+                "hint": "实际数量取决于有效词频和画布可容纳空间。",
+                "slider": {
+                    "min": 1,
+                    "max": 200,
+                    "step": 1
+                }
+            },
+            "word_spacing": {
+                "description": "词语间距",
+                "type": "int",
+                "default": 10,
+                "hint": "词语之间的留白（逻辑像素）；越小排列越紧密。",
+                "slider": {
+                    "min": 0,
+                    "max": 40,
+                    "step": 1
+                }
+            },
+            "width": {
+                "description": "画布宽度",
+                "type": "int",
+                "default": 1200,
+                "slider": {
+                    "min": 800,
+                    "max": 2400,
+                    "step": 1
+                }
+            },
+            "height": {
+                "description": "画布高度",
+                "type": "int",
+                "default": 900,
+                "slider": {
+                    "min": 600,
+                    "max": 1800,
+                    "step": 1
+                }
+            },
+            "rotation": {
+                "description": "排列方向",
+                "type": "string",
+                "default": "horizontal",
+                "options": [
+                    "horizontal",
+                    "mixed"
+                ],
+                "labels": [
+                    "全部横排",
+                    "横竖混排"
+                ]
+            },
+            "palette": {
+                "description": "自定义配色",
+                "type": "list",
+                "default": [],
+                "hint": "留空使用模板配色；颜色填写 #RGB 或 #RRGGBB。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "weight_mode": {
+                "description": "词频计算方式",
+                "type": "string",
+                "default": "message_count",
+                "hint": "按消息数统计可减少同一条消息中重复刷词的影响。",
+                "options": [
+                    "message_count",
+                    "occurrence_count"
+                ],
+                "labels": [
+                    "包含该词的消息数",
+                    "词语总出现次数"
+                ]
+            },
+            "min_word_length": {
+                "description": "最短词长",
+                "type": "int",
+                "default": 2,
+                "slider": {
+                    "min": 1,
+                    "max": 20,
+                    "step": 1
+                }
+            },
+            "min_frequency": {
+                "description": "最小词频",
+                "type": "int",
+                "default": 2,
+                "slider": {
+                    "min": 1,
+                    "max": 10000,
+                    "step": 1
+                }
+            },
+            "stopwords": {
+                "description": "额外停用词",
+                "type": "list",
+                "default": [],
+                "hint": "不显示的词语。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "keep_words": {
+                "description": "保留词 / 自定义词典",
+                "type": "list",
+                "default": [],
+                "hint": "分词时优先识别的完整词语，可覆盖停用词和最短词长限制。",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "group_overrides": {
+                "description": "群级覆盖（高级）",
+                "type": "dict",
+                "default": {},
+                "hint": "建议在插件控制台使用可视化群级覆盖设置。此处以 /sid 返回的完整群会话标识为键，值为需要覆盖的词云设置；留空使用全局默认。"
             }
         }
     }

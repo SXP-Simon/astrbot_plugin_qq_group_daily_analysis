@@ -163,6 +163,17 @@ if "astrbot.api" not in sys.modules:
     )
     astrbot_core_message_components_module.File = File
 
+    astrbot_core_star_module = types.ModuleType("astrbot.core.star")
+    astrbot_core_star_filter_module = types.ModuleType("astrbot.core.star.filter")
+    astrbot_core_star_command_module = types.ModuleType(
+        "astrbot.core.star.filter.command"
+    )
+
+    class GreedyStr(str):
+        """保留框架贪婪字符串标记，使指令签名使用正式类型。"""
+
+    astrbot_core_star_command_module.GreedyStr = GreedyStr
+
     astrbot_web_module = types.ModuleType("astrbot.api.web")
 
     class PluginMultiDict:
@@ -194,6 +205,11 @@ if "astrbot.api" not in sys.modules:
         "astrbot.api.message_components", astrbot_message_components_module
     )
     sys.modules.setdefault("astrbot.core", astrbot_core_module)
+    sys.modules.setdefault("astrbot.core.star", astrbot_core_star_module)
+    sys.modules.setdefault("astrbot.core.star.filter", astrbot_core_star_filter_module)
+    sys.modules.setdefault(
+        "astrbot.core.star.filter.command", astrbot_core_star_command_module
+    )
     sys.modules.setdefault("astrbot.core.message", astrbot_core_message_module)
     sys.modules.setdefault(
         "astrbot.core.message.components", astrbot_core_message_components_module

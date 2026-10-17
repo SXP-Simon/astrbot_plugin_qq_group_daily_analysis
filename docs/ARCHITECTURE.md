@@ -95,6 +95,7 @@ src/application/services/
 ├── analysis_recovery_service.py       # 断点快照续跑 (Resume) 与免 Token 重绘 (Rerender)
 ├── analysis_serializer.py             # 领域分析结果与 JSON/Dict 之间的双向序列化器
 ├── incremental_batch_builder.py       # 增量原始消息批次切分与小时级统计预构建
+├── merged_forward_delivery.py         # 同任务产物并发准备、限时收集与一次合并转发
 ├── pipeline_context.py                # 跨阶段上下文与产物容器 PipelineContext
 └── task_guard.py                      # 基于异步互斥锁的单群并发排他管控 (TaskGuard)
 ```
@@ -111,6 +112,20 @@ src/application/services/
    - `resume_from_checkpoint`：根据已生成的阶段快照跳过已耗费 Token 的 LLM 阶段，无缝续跑剩余流程；
    - `rerender_report`：纯前端/排版重绘，免 LLM 消耗快速切换视觉模板。
 
+### 3.2 报告、词云与漫画合并投递
+
+`MergedForwardDeliveryService` 在 `basic.enable_merged_forward=true` 且目标适配器支持图文合并转发时仅接管最终生成结果的投递。报告、词云和漫画遵循各自开关，可启用其中任意一项或两项，关闭的功能不参与生成与等待；此开关不自动启用其他功能。开关默认 `false`；当前使用此路径的是 QQ OneBot，QQ 官方机器人及其他不支持该能力的平台沿用原发送流程。独立漫画、独立词云和词云重发也复用该服务，只有一个产物时仍发送一条合并转发。
+
+指令启动、进度、权限和失败提示由各处理器按原逻辑普通发送，不放入合并产物，也不因合并开关而隐藏。手动群分析仍遵循 `basic.enable_analysis_reply` 的文本或表情回应选择。
+
+`ReportDispatcher` 将 `report:image`、`report:html`、`report:text` 分别注册为独立的准备函数，词云和漫画注册各自的准备函数。准备过程并发执行，不直接发送群消息；每个完成项返回 `PreparedForwardMessage`，携带类型、文字、图片来源及发送后回调。任一格式或附属功能失败时，其余已完成的产物仍可投递。每次调用只收集本次任务的结果，不会混入其他群或其他任务的结果。
+
+结果收集使用 `basic.merged_forward_timeout`，默认 `600` 秒，可配置 `10–3600` 秒。超过收集期限时取消未完成的准备工作，再把已完成节点交给平台。发送请求单独限制为 `60` 秒，并且只执行一次；异常、返回失败或超时均不自动拆分为普通消息补发，以避免平台已接收而本地未确认时出现重复消息。
+
+定时全量分析与增量最终报告在准备合并投递前受 `1800` 秒分析期限约束；进入合并投递时同步撤销该期限，后续由合并服务管理各阶段时限，分析耗时不占用收集预算。业务仍在独立子任务内运行以隔离追踪上下文，外部取消继续向下传播；增量报告成功后的过期批次清理单独限制为 `60` 秒，清理失败不改变发送结果。
+
+历史报告副本和 Trace 的 `report_files` 在准备阶段保留。HTML 同时配置 `html_only_url` 与有效 `html_base_url` 时转换为外链节点，否则以文本报告节点投递，HTML 文件仍保留。图片归档、词云成功状态和漫画上传等发送后工作，仅在平台确认发送成功后执行；词云失败状态通过独立失败回调记录。分发器仅在已成功投递的类型包含 `report` 时认定日报发送成功，因此“漫画或词云成功、所有报告失败”不会误报为日报成功。
+
 ---
 
 ## 4. 基础设施层解耦规范 (Infrastructure Layer)
@@ -119,6 +134,7 @@ src/application/services/
 
 ### 4.1 报表与视觉排版 (`infrastructure/reporting/`)
 - `generators.py` (`ReportGenerator`)：专职负责 Jinja2 模板加载、Playwright T2I 渲染与双轮降级输出；
+- `dispatcher.py` (`ReportDispatcher`)：按输出格式准备报告、保留历史与追踪信息，并按合并开关选择统一投递或原有逐格式发送；
 - `render_data_preparer.py` (`RenderDataPreparer`)：专职负责脱敏、活跃度图表装配、MBTI/SBTI/ACGTI 人格卡片徽章映射及 HTML 上下文胶囊打包；
 - `profile_mappings.py`：维护 MBTI、SBTI、ACGTI 多套视觉主题的查表与映射规则。
 

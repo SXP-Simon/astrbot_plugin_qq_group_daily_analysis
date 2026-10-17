@@ -210,6 +210,14 @@ class IConfigProvider(Protocol):
         """获取是否发送报告前缀文字"""
         ...
 
+    def get_enable_merged_forward(self) -> bool:
+        """获取是否通过合并转发发送报告、词云和漫画。"""
+        ...
+
+    def get_merged_forward_timeout(self) -> int:
+        """获取合并转发收集结果的等待秒数（10–3600 秒）。"""
+        ...
+
     def get_html_only_url(self) -> bool:
         """获取是否只发送 HTML 网页链接"""
         ...
@@ -236,6 +244,14 @@ class IConfigProvider(Protocol):
 
     def get_group_album_name(self) -> str:
         """获取目标群相册名称"""
+        ...
+
+    def get_enable_wordcloud_album_upload(self) -> bool:
+        """获取是否启用词云群相册上传。"""
+        ...
+
+    def get_wordcloud_album_name(self) -> str:
+        """获取词云目标相册名称，未单独设置时沿用图片报告相册。"""
         ...
 
     def get_group_album_strict_mode(self) -> bool:

@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import copy
 import os
 import sys
 import time
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from astrbot.api.message_components import Image, Nodes, Plain
 
 # 确保父路径在 sys.path 中以支持相对包导入
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -558,6 +560,155 @@ async def test_view_templates_router_handled(plugin):
 
     assert len(results) == 1
     assert results[0]["text"] == "Telegram preview keyboard"
+
+
+@pytest.mark.asyncio
+async def test_view_comic_templates_qq_uses_forwarded_full_catalog(plugin):
+    """QQ 查看漫画模板沿用合并转发，且不进入报告模板交互路由。"""
+    from astrbot_plugin_qq_group_daily_analysis.src.shared.comic_prompts import (
+        COMIC_TEMPLATE_NAMES,
+    )
+
+    event = MockEvent(group_id="123456")
+    plugin.template_preview_router.handle_view_templates = AsyncMock()
+
+    results = [result async for result in plugin.view_comic_templates(event, "")]
+
+    assert len(results) == 1
+    assert results[0]["type"] == "chain"
+    components = results[0]["components"]
+    assert len(components) == 1 and isinstance(components[0], Nodes)
+    nodes = components[0].nodes
+    assert len(nodes) == len(COMIC_TEMPLATE_NAMES) + 1
+    for node, (template_id, name) in zip(
+        nodes[1:], COMIC_TEMPLATE_NAMES.items(), strict=True
+    ):
+        text = "\n".join(part.text for part in node.content if isinstance(part, Plain))
+        assert template_id in text and name in text
+        assert any(isinstance(part, Image) for part in node.content)
+    plugin.template_preview_router.handle_view_templates.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_name", ["telegram", "discord", "qqofficial"])
+async def test_view_comic_templates_other_platform_lists_query_parameters(
+    plugin, platform_name: str
+):
+    """不支持 QQ 合并转发的平台先给目录，再按参数查看单张。"""
+    event = MockEvent(group_id=None, platform_name=platform_name)
+    plugin.template_preview_router.handle_view_templates = AsyncMock()
+
+    results = [result async for result in plugin.view_comic_templates(event, "")]
+
+    assert len(results) == 1 and results[0]["type"] == "plain"
+    assert "/查看漫画模板" in results[0]["text"]
+    assert "classic" in results[0]["text"]
+    assert "scrapbook_diary" in results[0]["text"]
+    plugin.template_preview_router.handle_view_templates.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform_name", ["aiocqhttp", "telegram", "discord"])
+@pytest.mark.parametrize("template_input", ["3", "noir_detective"])
+async def test_view_comic_templates_single_selection_is_plain_image_chain(
+    plugin, platform_name: str, template_input: str
+):
+    """指定模板时各平台都只发送这一款的普通图文消息。"""
+    event = MockEvent(group_id=None, platform_name=platform_name)
+
+    results = [
+        result async for result in plugin.view_comic_templates(event, template_input)
+    ]
+
+    assert len(results) == 1 and results[0]["type"] == "chain"
+    components = results[0]["components"]
+    assert not any(isinstance(part, Nodes) for part in components)
+    assert len([part for part in components if isinstance(part, Image)]) == 1
+    text = "\n".join(part.text for part in components if isinstance(part, Plain))
+    assert "noir_detective" in text
+    assert "③" in text
+    assert "classic" not in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("template_input", ["custom", "自定义", "15", "../classic"])
+async def test_view_comic_templates_invalid_or_custom_returns_only_explanation(
+    plugin, template_input: str
+):
+    """自定义与错误参数只说明情况，不读取其他模板图片。"""
+    event = MockEvent(group_id="123456")
+
+    results = [
+        result async for result in plugin.view_comic_templates(event, template_input)
+    ]
+
+    assert len(results) == 1 and results[0]["type"] == "plain"
+    assert results[0]["text"]
+    if template_input in {"custom", "自定义"}:
+        assert "自定义" in results[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_view_comic_templates_missing_single_image_keeps_text(plugin):
+    """单张资源缺失时仍返回模板名称和提示。"""
+    event = MockEvent(group_id=None, platform_name="telegram")
+    with patch.object(
+        plugin.template_command_service,
+        "resolve_comic_template_preview_path",
+        return_value=None,
+    ):
+        results = [
+            result async for result in plugin.view_comic_templates(event, "classic")
+        ]
+
+    assert len(results) == 1
+    if results[0]["type"] == "chain":
+        components = results[0]["components"]
+        assert not any(isinstance(part, Image) for part in components)
+        text = "\n".join(part.text for part in components if isinstance(part, Plain))
+    else:
+        text = results[0]["text"]
+    assert "classic" in text
+    assert "预览" in text or "示例" in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("template_input", ["", "classic", "custom"])
+async def test_view_comic_templates_does_not_select_templates_or_write_configuration(
+    plugin, tmp_path: Path, template_input: str
+):
+    """浏览不消耗模板/人物轮换，也不改变固定模板或保存配置。"""
+    event = MockEvent(group_id="123456")
+    event.should_call_llm(True)
+    config_before = copy.deepcopy(plugin.config_manager.config)
+    state_path = tmp_path / "plugin_data" / "comic_template_rotation_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_bytes(b'{"version":1,"states":{}}')
+    state_before = state_path.read_bytes()
+
+    with (
+        patch.object(plugin.config_manager, "select_comic_template") as select,
+        patch.object(
+            plugin.config_manager, "get_comic_generation_snapshot"
+        ) as snapshot,
+        patch.object(
+            plugin.config_manager, "get_selected_comic_character"
+        ) as character,
+        patch.object(plugin.config_manager, "set_report_template") as set_report,
+        patch.object(plugin.config_manager, "reset_comic_template_rotation") as reset,
+        patch.object(plugin.config_manager, "save_config") as save,
+    ):
+        results = [
+            result
+            async for result in plugin.view_comic_templates(event, template_input)
+        ]
+
+    assert results
+    for mutation in (select, snapshot, character, set_report, reset, save):
+        mutation.assert_not_called()
+    assert plugin.config_manager.config == config_before
+    assert state_path.read_bytes() == state_before
+    assert event._llm_called is False
 
 
 # ==============================================================================

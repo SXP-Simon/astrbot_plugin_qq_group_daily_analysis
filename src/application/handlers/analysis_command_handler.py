@@ -45,8 +45,10 @@ if TYPE_CHECKING:
     from ...infrastructure.messaging.message_sender import MessageSender
     from ...infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
     from ...infrastructure.platform.bot_manager import BotManager
+    from ...infrastructure.reporting.dispatcher import ReportDispatcher
     from ...infrastructure.reporting.generators import ReportGenerator
     from ...infrastructure.webui.active_task_manager import ActiveTaskManager
+    from ..services.wordcloud_delivery_service import WordCloudDeliveryService
     from .comic_command_handler import ComicCommandHandler
 
 
@@ -79,6 +81,8 @@ class AnalysisCommandHandler:
         comic_handler: ComicCommandHandler | None = None,
         plugin_data_dir: Path | None = None,
         plugin_instance: PluginHostProtocol | None = None,
+        wordcloud_delivery: WordCloudDeliveryService | None = None,
+        report_dispatcher: ReportDispatcher | None = None,
     ) -> None:
         self.config_manager = config_manager
         self.bot_manager = bot_manager
@@ -93,6 +97,8 @@ class AnalysisCommandHandler:
             plugin_data_dir or Path.cwd() / "data" / "plugin_data" / PLUGIN_NAME
         )
         self.plugin_instance = plugin_instance
+        self.wordcloud_delivery = wordcloud_delivery
+        self.report_dispatcher = report_dispatcher
         self.terminating: bool = False
 
     def set_terminating(self, terminating: bool) -> None:
@@ -199,7 +205,6 @@ class AnalysisCommandHandler:
                 adapter_platform_name in {"qq_official", "qq_official_webhook"}
                 or self.config_manager.get_enable_analysis_reply()
             )
-
             if use_text_reply:
                 yield event.plain_result("🔍 正在启动分析引擎，正在拉取最近消息...")
             elif adapter and orig_msg_id:
@@ -309,6 +314,23 @@ class AnalysisCommandHandler:
             logger.warning(f"群 {group_id} 未找到对应的平台适配器，无法发送报告")
             return
 
+        if (
+            self.report_dispatcher
+            and self.report_dispatcher.merged_delivery
+            and self.report_dispatcher.merged_delivery.enabled_for(platform_id)
+        ):
+            sent = await self.report_dispatcher.dispatch(
+                group_id, analysis_result, platform_id
+            )
+            if not sent:
+                trace = TraceContext.current()
+                if trace and trace.status == "running":
+                    trace.finish(
+                        event=TaskEvent.WARN,
+                        error_message="合并转发中的分析报告未确认发送成功，请查看其他产物及日志",
+                    )
+            return
+
         if self.comic_handler:
             self.comic_handler.try_trigger_comic_generation(
                 group_id, platform_id, analysis_result
@@ -401,6 +423,12 @@ class AnalysisCommandHandler:
                 )
                 sent = await adapter.send_image(group_id, image_url, caption=caption)
                 if sent:
+                    if self.wordcloud_delivery:
+                        await self.wordcloud_delivery.send_with_report(
+                            analysis_result.get("wordcloud"),
+                            group_id,
+                            platform_id or adapter.platform_id,
+                        )
                     upload_img = getattr(
                         self.plugin_instance, "_try_upload_image", None
                     )
@@ -477,9 +505,17 @@ class AnalysisCommandHandler:
                         encoded_url_path = quote(url_path.lstrip("/"), safe="/")
                         report_url = f"{base_url.rstrip('/')}/{encoded_url_path}"
 
-                        yield event.plain_result(
-                            f"📊 今日群聊分析报告已生成：\n{report_url}"
+                        sent = await adapter.send_text(
+                            group_id, f"📊 今日群聊分析报告已生成：\n{report_url}"
                         )
+                        if sent and self.wordcloud_delivery:
+                            await self.wordcloud_delivery.send_with_report(
+                                analysis_result.get("wordcloud"),
+                                group_id,
+                                platform_id or adapter.platform_id,
+                            )
+                        elif not sent:
+                            yield event.plain_result("报告外链发送失败，请稍后重试。")
                         should_send_file = False
                     else:
                         logger.warning(
@@ -504,11 +540,20 @@ class AnalysisCommandHandler:
                             await adapter.send_text(group_id, caption)
 
                     if not sent:
-                        yield event.chain_result(
-                            [File(name=Path(html_path).name, file=html_path)]
+                        await event.send(
+                            event.chain_result(
+                                [File(name=Path(html_path).name, file=html_path)]
+                            )
                         )
                         if caption:
                             yield event.plain_result(caption)
+                        sent = True
+                    if sent and self.wordcloud_delivery:
+                        await self.wordcloud_delivery.send_with_report(
+                            analysis_result.get("wordcloud"),
+                            group_id,
+                            platform_id or adapter.platform_id,
+                        )
             else:
                 yield event.plain_result("⚠️ HTML 生成失败。")
 
@@ -548,14 +593,22 @@ class AnalysisCommandHandler:
                 ) = await self.report_generator.generate_markdown_report(
                     analysis_result, self.html_render, mention_style="qq"
                 )
-                await adapter.send_text_report(
+                sent = await adapter.send_text_report(
                     group_id, text_report, fallback_content=fallback_report
                 )
+                if sent and self.wordcloud_delivery:
+                    await self.wordcloud_delivery.send_with_report(
+                        analysis_result.get("wordcloud"), group_id, adapter.platform_id
+                    )
                 return
 
             text = self.report_generator.generate_text_report(analysis_result)
             if text and text.strip():
-                await adapter.send_text_report(group_id, text)
+                sent = await adapter.send_text_report(group_id, text)
+                if sent and self.wordcloud_delivery:
+                    await self.wordcloud_delivery.send_with_report(
+                        analysis_result.get("wordcloud"), group_id, adapter.platform_id
+                    )
         except Exception as e:
             logger.error(f"发送纯文本报告失败 (群 {group_id}): {e}", exc_info=True)
 
