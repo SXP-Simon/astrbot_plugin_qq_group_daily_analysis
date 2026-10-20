@@ -6,6 +6,7 @@ AstrBot 插件 Pages 后端 Web API 桥接服务
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from ...shared.constants import PLUGIN_NAME
@@ -22,6 +23,7 @@ from .routes import (
     TraceRoutes,
 )
 from .routes.config_routes import _config_key_to_folder, _sanitize_path_segment
+from .routes.wordcloud_routes import WordCloudRoutes
 from .web_compat import (
     WebApiResponse,
     error_response,
@@ -39,7 +41,9 @@ if TYPE_CHECKING:
         AnalysisApplicationService,
     )
     from ..persistence.trace_sqlite_store import TraceSQLiteStore
+    from ..persistence.wordcloud_store import WordCloudStore
     from ..reporting.dispatcher import ReportDispatcher
+    from ..reporting.wordcloud_renderer import WordCloudRenderer
     from ..scheduler.auto_scheduler import AutoScheduler
     from .active_task_manager import ActiveTaskManager
 
@@ -66,6 +70,8 @@ class PluginPageWebUIBridge:
         report_dispatcher: ReportDispatcher | None = None,
         report_output_dir: Path | None = None,
         auto_scheduler: AutoScheduler | None = None,
+        wordcloud_renderer: WordCloudRenderer | None = None,
+        wordcloud_store: WordCloudStore | None = None,
     ):
         self.context = context
         self.trace_store = trace_store
@@ -74,6 +80,10 @@ class PluginPageWebUIBridge:
         self.report_dispatcher = report_dispatcher
         self.report_output_dir = report_output_dir
         self.auto_scheduler = auto_scheduler
+        wordcloud_resource_lock = asyncio.Lock()
+        self.wordcloud_routes = WordCloudRoutes(
+            wordcloud_renderer, wordcloud_store, resource_lock=wordcloud_resource_lock
+        )
         TraceContext.set_active_task_manager(self.active_task_manager)
 
         # 实例化各领域路由子模块
@@ -107,6 +117,8 @@ class PluginPageWebUIBridge:
             report_dispatcher=self.report_dispatcher,
             context=self.context,
             auto_scheduler=self.auto_scheduler,
+            wordcloud_renderer=wordcloud_renderer,
+            resource_lock=wordcloud_resource_lock,
         )
         self.data_management_routes = DataManagementRoutes(
             trace_store=self.trace_store,
@@ -117,6 +129,54 @@ class PluginPageWebUIBridge:
     def register_routes(self) -> None:
         """向 AstrBot 注册所有 Web API 端点"""
         routes = [
+            (
+                f"/{PLUGIN_NAME}/wordcloud/templates",
+                self.wordcloud_routes.api_templates,
+                ["GET"],
+                "获取词云模板和字体",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/preview",
+                self.wordcloud_routes.api_preview,
+                ["POST"],
+                "预览词云草稿",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/fonts",
+                self.wordcloud_routes.api_upload_font,
+                ["POST"],
+                "上传词云字体",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/snapshots",
+                self.wordcloud_routes.api_snapshots,
+                ["GET"],
+                "读取最近群词频缓存",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/fonts/preview",
+                self.wordcloud_routes.api_font_preview,
+                ["POST"],
+                "预览字体样张",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/fonts/rename",
+                self.wordcloud_routes.api_rename_font,
+                ["POST"],
+                "重命名上传字体",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/fonts/delete",
+                self.wordcloud_routes.api_delete_font,
+                ["POST"],
+                "将未使用字体移入回收目录",
+            ),
+            (
+                f"/{PLUGIN_NAME}/wordcloud/fonts/restore",
+                self.wordcloud_routes.api_restore_font,
+                ["POST"],
+                "恢复最近删除的字体",
+            ),
             # 1. 活跃任务与控制
             (
                 f"/{PLUGIN_NAME}/tasks/active",
@@ -221,6 +281,24 @@ class PluginPageWebUIBridge:
                 self.template_routes.api_get_template_preview,
                 ["GET"],
                 "Get preview image of a custom report template as base64 data URL",
+            ),
+            (
+                f"/{PLUGIN_NAME}/comic/templates/preview",
+                self.template_routes.api_get_comic_template_preview,
+                ["GET"],
+                "获取内置漫画模板示例图",
+            ),
+            (
+                f"/{PLUGIN_NAME}/comic/templates/rotation/status",
+                self.template_routes.api_get_comic_template_rotation_status,
+                ["GET"],
+                "只读获取漫画模板轮换状态",
+            ),
+            (
+                f"/{PLUGIN_NAME}/comic/templates/rotation/reset",
+                self.template_routes.api_reset_comic_template_rotation,
+                ["POST"],
+                "重置所选范围的漫画模板轮换进度",
             ),
             (
                 f"/{PLUGIN_NAME}/templates/install_from_url",
@@ -478,6 +556,15 @@ class PluginPageWebUIBridge:
 
     async def api_get_template_preview(self) -> WebApiResponse:
         return await self.template_routes.api_get_template_preview()
+
+    async def api_get_comic_template_preview(self) -> WebApiResponse:
+        return await self.template_routes.api_get_comic_template_preview()
+
+    async def api_get_comic_template_rotation_status(self) -> WebApiResponse:
+        return await self.template_routes.api_get_comic_template_rotation_status()
+
+    async def api_reset_comic_template_rotation(self) -> WebApiResponse:
+        return await self.template_routes.api_reset_comic_template_rotation()
 
     async def api_install_template_from_url(self) -> WebApiResponse:
         return await self.template_routes.api_install_template_from_url()

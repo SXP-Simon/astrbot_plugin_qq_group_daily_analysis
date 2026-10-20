@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from contextlib import nullcontext
 from pathlib import Path
@@ -69,16 +70,17 @@ class ComicApplicationService:
         if not self.config_manager.get_enable_daily_comic():
             return None, None
 
-        character = self.config_manager.get_selected_comic_character()
-        character_name = (
-            str(character.get("name", "")).strip() if character else ""
-        ) or "默认配置"
-        persona_id = self.config_manager.get_comic_character_persona_id(character)
-        prompt_template = self.config_manager.get_comic_character_storyboard_prompt(
-            character
+        snapshot = await asyncio.to_thread(
+            self.config_manager.get_comic_generation_snapshot, group_id, umo
         )
+        character_name = snapshot.character_name
+        persona_id = snapshot.persona_id
+        prompt_template = snapshot.template.prompt
         logger.info(
-            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}"
+            f"[Comic] 开始为群 {group_id} 生成每日漫画，角色方案: {character_name}，"
+            f"漫画模板: {snapshot.template.template_name} ({snapshot.template.template_id})，"
+            f"切换模式: {snapshot.template.mode}，范围: {snapshot.template.scope}，"
+            f"角色专属提示词: {'是' if snapshot.template.character_override else '否'}"
         )
 
         trace = TraceContext.current()
@@ -127,6 +129,10 @@ class ComicApplicationService:
                 sb_rec.setdefault("payload", {}).update(
                     {
                         "character_name": character_name,
+                        "comic_template_id": snapshot.template.template_id,
+                        "comic_template_name": snapshot.template.template_name,
+                        "comic_template_mode": snapshot.template.mode,
+                        "comic_template_scope": snapshot.template.scope,
                         "topics_count": len(topics),
                         "storyboards_count": len(storyboards) if storyboards else 0,
                         "prompt_tokens": getattr(storyboard_usage, "prompt_tokens", 0),
@@ -163,7 +169,7 @@ class ComicApplicationService:
 
         # 3. 加载当前角色方案配置的全部参考图。
         images_data = []
-        reference_image_paths = self.config_manager.get_drawing_reference_images()
+        reference_image_paths = snapshot.reference_images
         for reference_image_path in reference_image_paths:
             reference_image = await self._fetch_reference_image(reference_image_path)
             if reference_image:

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 from ...utils.logger import logger
 from ..entities.incremental_state import IncrementalBatch, IncrementalState
@@ -28,6 +29,7 @@ from ..value_objects import (
     SummaryTopic,
     TokenUsage,
 )
+from .wordcloud_statistics_service import WordCloudStatisticsService
 
 
 class IncrementalMergeService:
@@ -66,6 +68,17 @@ class IncrementalMergeService:
             created_at=window_start,
             updated_at=time.time(),
         )
+
+        unique_wordcloud_batches = {
+            batch.batch_id: batch.wordcloud
+            for batch in batches
+            if batch.wordcloud is not None
+        }
+        if unique_wordcloud_batches:
+            state.wordcloud = replace(
+                WordCloudStatisticsService.merge(unique_wordcloud_batches.values()),
+                date_str=state.get_window_date_str(),
+            )
 
         for batch in batches:
             # 累加消息和字符计数
@@ -376,6 +389,8 @@ class IncrementalMergeService:
             "user_analysis": state.user_activities,
             "chat_quality_review": statistics.chat_quality_review,
         }
+        if state.wordcloud is not None:
+            analysis_result["wordcloud"] = state.wordcloud
 
         logger.info(
             f"从增量状态构建完整分析结果: "

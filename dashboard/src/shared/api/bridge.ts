@@ -41,6 +41,7 @@ export interface AstrBotPluginPageBridge {
     path: string,
     body?: unknown
   ) => Promise<ApiResponse<T> | null>;
+  upload?: <T = unknown>(path: string, file: File) => Promise<ApiResponse<T> | null>;
   subscribeSSE: (
     path: string,
     handlers: {
@@ -100,29 +101,89 @@ export async function apiPost<T = unknown>(
   return null;
 }
 
-export function subscribeSSE(handlers: {
+/** 通过宿主的文件上传桥接保留鉴权和 multipart 文件内容。 */
+export async function apiUpload<T = unknown>(path: string, file: File): Promise<ApiResponse<T> | null> {
+  const bridge = getBridge();
+  if (bridge?.upload) return bridge.upload<T>(path, file);
+  if (import.meta.env.DEV) {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`/api/plugins/astrbot_plugin_qq_group_daily_analysis/${path.replace(/^\/+/, "")}`, {
+      method: "POST",
+      body,
+    });
+    if (!response.ok) throw new Error(`上传字体失败（${response.status}）`);
+    return response.json() as Promise<ApiResponse<T>>;
+  }
+  throw new Error("当前宿主不支持文件上传，请更新 AstrBot 后重试");
+}
+
+interface SSEHandlers {
   onMessage: (event: unknown) => void;
   onError?: () => void;
-}): (() => void) | null {
+}
+
+interface SharedHostSubscription {
+  listeners: Set<SSEHandlers>;
+  id: string | number | null;
+  closed: boolean;
+}
+
+// 同一插件页面的总览和日志共享一条连接，避免占满 HTTP/1.1 同源连接池。
+const hostSubscriptions = new WeakMap<AstrBotPluginPageBridge, SharedHostSubscription>();
+
+export function subscribeSSE(handlers: SSEHandlers): (() => void) | null {
   const bridge = getBridge();
   if (bridge && typeof bridge.subscribeSSE === "function") {
-    let subId: string | number | null = null;
-    bridge
-      .subscribeSSE("events/stream", {
-        onMessage: (evt: SSEEventWrapper) => {
-          const payload = evt.parsed !== undefined ? evt.parsed : evt.raw;
-          handlers.onMessage(payload);
-        },
-        onError: handlers.onError,
-      })
-      .then((id) => {
-        subId = id;
-      });
+    // 即便重复传入同一 handlers 对象，每次订阅也拥有独立的取消句柄。
+    const listener = { ...handlers };
+    let subscription = hostSubscriptions.get(bridge);
+    const creating = !subscription;
+    if (!subscription) {
+      subscription = { listeners: new Set(), id: null, closed: false };
+      hostSubscriptions.set(bridge, subscription);
+    }
+    const current = subscription;
+    current.listeners.add(listener);
+
+    if (creating) {
+      const dispatch = (notify: (subscriber: SSEHandlers) => void) => {
+        if (current.closed) return;
+        for (const subscriber of [...current.listeners]) {
+          if (!current.listeners.has(subscriber)) continue;
+          try { notify(subscriber); }
+          catch { /* 单个视图处理失败不应打断其他视图的事件分发。 */ }
+        }
+      };
+      const failed = () => {
+        if (current.closed) return;
+        if (hostSubscriptions.get(bridge) === current) hostSubscriptions.delete(bridge);
+        dispatch((subscriber) => subscriber.onError?.());
+        current.closed = true;
+        current.listeners.clear();
+      };
+      try {
+        void bridge.subscribeSSE("events/stream", {
+          onMessage: (evt) => {
+            const payload = evt.parsed !== undefined ? evt.parsed : evt.raw;
+            dispatch((subscriber) => subscriber.onMessage(payload));
+          },
+          onError: () => dispatch((subscriber) => subscriber.onError?.()),
+        }).then((id) => {
+          // 卸载可能早于宿主返回订阅 ID，迟到的连接仍必须立即释放。
+          if (current.closed) bridge.unsubscribeSSE(id);
+          else current.id = id;
+        }).catch(failed);
+      } catch {
+        failed();
+      }
+    }
 
     return () => {
-      if (subId !== null && typeof bridge.unsubscribeSSE === "function") {
-        bridge.unsubscribeSSE(subId);
-      }
+      if (!current.listeners.delete(listener) || current.listeners.size > 0 || current.closed) return;
+      current.closed = true;
+      if (hostSubscriptions.get(bridge) === current) hostSubscriptions.delete(bridge);
+      if (current.id !== null) bridge.unsubscribeSSE(current.id);
     };
   }
   if (import.meta.env.DEV) {

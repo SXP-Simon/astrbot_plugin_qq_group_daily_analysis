@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN" data-t2i-state="pending">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" href="data:,">
+  <meta name="viewport" content="width={{ options.width }}, initial-scale=1">
+  <meta name="t2i-viewport-width" content="{{ options.width }}">
+  <meta name="t2i-viewport-height" content="{{ options.height }}">
+  <title>群聊词云 · ATRI</title>
+  <style>
+    * { box-sizing:border-box; }
+    html,body { width:{{ options.width }}px; height:{{ options.height }}px; margin:0; overflow:hidden; color-scheme:light; }
+    body { --cloud-font:'WordCloud Font',sans-serif; font:18px/1.5 var(--cloud-font); color:#49677c; }
+    .report { --scale:{{ options.width / 1200 }}; position:relative; isolation:isolate; width:100%; height:100%; padding:calc(40px * var(--scale)); display:grid; grid-template-rows:auto minmax(0,1fr) auto; overflow:hidden; background-color:#eaf4fa; background-image:radial-gradient(ellipse at 10% 2%,#f9fdff,transparent 60%),radial-gradient(ellipse at 100% 100%,#fbeaf2,transparent 65%),linear-gradient(rgba(116,163,186,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(116,163,186,.08) 1px,transparent 1px); background-size:auto,auto,32px 32px,32px 32px; }
+    .report::before { content:'ATRI'; position:absolute; top:15px; right:34px; font:400 calc(108px * var(--scale))/1 Georgia,serif; letter-spacing:8px; color:rgba(68,128,177,.1); pointer-events:none; z-index:-1; }
+    .report::after { content:''; position:absolute; width:330px; height:330px; right:-160px; bottom:-180px; border:38px solid rgba(148,205,238,.16); border-radius:50%; pointer-events:none; z-index:-1; }
+    .report-header { position:relative; margin-bottom:calc(33px * var(--scale)); }
+    .report-eyebrow { font:calc(16px * var(--scale))/1.4 Arial,sans-serif; letter-spacing:3px; color:#647f91; display:flex; align-items:center; gap:14px; }
+    .report-eyebrow::before { content:''; width:34px; height:3px; background:#719cb1; }
+    .report-title { font:400 calc(48px * var(--scale))/1.45 var(--cloud-font); margin:calc(8px * var(--scale)) 0; letter-spacing:.04em; color:#395f76; }
+    .report-subtitle { display:flex; align-items:center; gap:15px; font-size:calc(18px * var(--scale)); color:#687d8b; }
+    .report-subtitle time { border-left:1px solid #b7cbd5; padding-left:15px; }
+    .cloud-region { min-width:0; min-height:0; width:100%; position:relative; isolation:isolate; border-radius:12px 36px 20px 33px; background:#fffefb; border:1px solid #cbdce3; box-shadow:6px 8px 0 #d8e8ed,12px 15px 0 #f1dfe9,0 18px 34px rgba(74,100,119,.08); }
+    .cloud-region::before { content:''; position:absolute; inset:14px; border:1px dashed #dce5e9; border-radius:7px 25px 12px 22px; pointer-events:none; }
+    .paper-tape { position:absolute; top:-13px; right:40px; width:106px; height:29px; z-index:4; opacity:.8; background:repeating-linear-gradient(45deg,#f0dce5 0 10px,#f9edf1 10px 20px); clip-path:polygon(3% 4%,97% 0,100% 91%,1% 100%); transform:rotate(5deg); }
+    .paper-kicker { position:absolute; top:25px; left:30px; z-index:3; color:#7c8f9b; font:16px/1.4 Arial,sans-serif; letter-spacing:2px; }
+    .paper-signature { position:absolute; bottom:24px; left:50%; transform:translateX(-50%) rotate(-5deg); z-index:3; color:#68859a; font:italic 26px/1.4 Georgia,serif; letter-spacing:3px; white-space:nowrap; }
+    .portrait { position:absolute; z-index:1; width:auto; height:51%; max-width:28%; object-fit:contain; bottom:19px; opacity:.82; pointer-events:none; filter:saturate(.76) drop-shadow(0 6px 9px rgba(94,118,133,.1)); -webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 8%,#000 77%,rgba(0,0,0,.32) 100%); mask-image:linear-gradient(to bottom,transparent 0%,#000 8%,#000 77%,rgba(0,0,0,.32) 100%); }
+    .portrait-left { left:20px; transform:scaleX(-1); }
+    .portrait-right { right:20px; height:49%; }
+    .cloud-region svg { display:block; width:100%; height:100%; position:absolute; inset:0; z-index:2; overflow:hidden; }
+    .report-footer { display:flex; justify-content:space-between; gap:10px; margin-top:calc(33px * var(--scale)); font-size:calc(17px * var(--scale)); color:#657d8e; position:relative; }
+    .empty-cloud { color:#687d8b; font-size:24px; position:absolute; inset:0; display:flex; justify-content:center; align-items:center; text-align:center; padding:50px; z-index:5; }
+    .empty-cloud[hidden] { display:none; }
+  </style>
+</head>
+<body>
+  <article class="report" id="wc-report" aria-label="群聊词云">
+    <header class="report-header">
+      <div class="report-eyebrow">地 球 に 私 も 含 ま れ ま す か ？</div>
+      <h1 class="report-title">ATRI - My Dear Moments</h1>
+      <div class="report-subtitle"><span>{% if data.group_id %}群 {{ data.group_id }}{% else %}群聊时光{% endif %} · {{ data.message_count }} 条消息</span><time>{{ data.date_str or '本次词云' }}</time></div>
+    </header>
+    <div id="wc-region" class="cloud-region">
+      <span class="paper-tape" aria-hidden="true"></span>
+      <span id="wc-paper-kicker" class="paper-kicker">WORDS WE SHARED</span>
+      <img class="portrait portrait-left" width="1256" height="1697" src="{{ assets.portrait_left }}" alt="" decoding="async">
+      <img class="portrait portrait-right" width="1280" height="1856" src="{{ assets.portrait_right }}" alt="" decoding="async">
+      <svg id="wc-svg" role="img" aria-label="群聊热词"></svg>
+      <div id="wc-empty" class="empty-cloud" hidden></div>
+    </div>
+    <footer class="report-footer"><span id="wc-caption">{% if options.weight_mode == 'occurrence_count' %}按词语出现总次数统计{% else %}按包含该词的消息数统计{% endif %}</span><span id="wc-shown">正在排版</span></footer>
+  </article>
+  <script id="wordcloud-data" type="application/json">{{ payload_json | safe }}</script>
+  <script>{% include 'wordcloud_layout.js' %}</script>
+</body>
+</html>

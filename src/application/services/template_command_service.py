@@ -15,6 +15,7 @@ from astrbot.api.message_components import (
     Plain,
 )
 
+from ...shared.comic_prompts import COMIC_PROMPT_PREVIEWS, COMIC_TEMPLATE_NAMES
 from ...shared.constants import DEFAULT_ASSETS_CDN_URL
 
 if TYPE_CHECKING:
@@ -262,3 +263,125 @@ class TemplateCommandService:
         return Nodes(node_list)
 
     build_preview_nodes = build_template_preview_nodes
+
+    @staticmethod
+    def list_comic_templates() -> list[str]:
+        """按与 WebUI 相同的目录顺序返回内置漫画模板标识。"""
+        return list(COMIC_TEMPLATE_NAMES)
+
+    def parse_comic_template_input(
+        self, template_input: str
+    ) -> tuple[str | None, str | None]:
+        """解析漫画模板序号、标识或完整显示名称。
+
+        Args:
+            template_input: 用户输入的模板选择。
+
+        Returns:
+            内置模板标识与错误提示，其中至多一项非空。
+        """
+        value = template_input.strip()
+        if value in {"custom", "自定义"}:
+            return (
+                None,
+                "💡 自定义漫画提示词没有内置示例图，请在插件 WebUI 的提示词设置中查看或编辑。",
+            )
+        templates = self.list_comic_templates()
+        try:
+            template_id, error = self.parse_template_input(value, templates)
+        except ValueError:
+            return None, f"❌ 无效的漫画模板序号，有效范围: 1-{len(templates)}"
+        if error:
+            return None, error
+        if template_id in COMIC_TEMPLATE_NAMES:
+            return template_id, None
+        for candidate, name in COMIC_TEMPLATE_NAMES.items():
+            if value == name:
+                return candidate, None
+        return (
+            None,
+            "❌ 未找到该漫画模板，请使用 /查看漫画模板 查看目录，或填写有效序号、标识、完整名称。",
+        )
+
+    def resolve_comic_template_preview_path(self, template_id: str) -> str | None:
+        """解析白名单漫画模板的完整示例图，拒绝符号链接和目录逃逸。
+
+        Args:
+            template_id: 漫画目录中的内置标识。
+
+        Returns:
+            可发送的本地完整示例图路径；无图或非法路径时返回 None。
+        """
+        if template_id not in COMIC_TEMPLATE_NAMES:
+            return None
+        filename = COMIC_PROMPT_PREVIEWS.get(template_id)
+        if not filename:
+            return None
+        assets = Path(self.plugin_root).resolve() / "assets"
+        previews = assets / "comic_previews"
+        candidate = previews / filename
+        if (
+            assets.is_symlink()
+            or previews.is_symlink()
+            or candidate.is_symlink()
+            or candidate.resolve().parent != previews.resolve()
+            or not candidate.is_file()
+        ):
+            return None
+        return str(candidate)
+
+    def build_comic_template_list_text(self) -> str:
+        """构建不支持合并转发的平台使用的漫画模板文字目录。"""
+        items = "\n".join(
+            f"{self._format_index_label(index)} {COMIC_TEMPLATE_NAMES[template_id]} ({template_id})"
+            for index, template_id in enumerate(self.list_comic_templates())
+        )
+        return (
+            f"🎬 可用漫画模板（共 {len(COMIC_TEMPLATE_NAMES)} 款）\n\n{items}\n\n"
+            "💡 使用 /查看漫画模板 [序号/标识/完整名称] 查看单张示例。\n"
+            "模板选择与自动切换可在插件 WebUI 中设置。"
+        )
+
+    def build_comic_template_preview_nodes(
+        self, available_templates: list[str], bot_id: str
+    ) -> Nodes:
+        """复用报告模板的合并转发结构展示漫画风格，不读取生成状态。
+
+        Args:
+            available_templates: 需要展示的内置模板标识。
+            bot_id: 预览节点展示的机器人账号。
+
+        Returns:
+            一个说明节点和各漫画模板图文节点组成的合并转发。
+        """
+        nodes = [
+            Node(
+                uin=bot_id,
+                name="漫画模板预览",
+                content=[
+                    Plain(
+                        f"🎬 漫画模板风格示例（共 {len(available_templates)} 款）\n"
+                        "💡 使用 /查看漫画模板 [序号/标识/完整名称] 单独查看。\n"
+                        "模板选择与自动切换可在插件 WebUI 中设置。\n"
+                        "这些是静态风格示例，查看不会生成漫画或推进轮换。"
+                    )
+                ],
+            )
+        ]
+        indices = {
+            template_id: index
+            for index, template_id in enumerate(self.list_comic_templates())
+        }
+        for template_id in available_templates:
+            name = COMIC_TEMPLATE_NAMES[template_id]
+            label = self._format_index_label(indices[template_id])
+            content: list[BaseMessageComponent] = [
+                Plain(f"{label} {name}\n标识：{template_id}")
+            ]
+            preview_path = self.resolve_comic_template_preview_path(template_id)
+            if preview_path:
+                content.append(Image.fromFileSystem(preview_path))
+            else:
+                content.append(Plain("\n（示例图缺失，请更新插件资源后重试）"))
+            nodes.append(Node(uin=bot_id, name=name, content=content))
+        return Nodes(nodes)

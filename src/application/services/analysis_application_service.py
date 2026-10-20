@@ -12,11 +12,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ...domain.services.message_cleaner_service import MessageCleanerService
+from ...domain.services.wordcloud_statistics_service import WordCloudStatisticsService
 from ...domain.value_objects import (
     AnalysisResultPayload,
     DailyAnalysisExecutionResult,
     TokenUsage,
 )
+from ...infrastructure.analysis.jieba_tokenizer import JiebaWordTokenizer
 from ...shared.constants import AnalysisStage
 from ...shared.report_language import apply_auto_language_detection
 from ...shared.trace_context import TraceContext
@@ -57,6 +59,7 @@ if TYPE_CHECKING:
         UserTitle,
     )
     from ...domain.value_objects.unified_message import UnifiedMessage
+    from ...domain.value_objects.wordcloud import WordCloudData
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -396,6 +399,23 @@ class AnalysisApplicationService:
                 bot_self_ids,
             )
 
+            wordcloud: WordCloudData | None = None
+            try:
+                wordcloud_options = self.config_manager.get_wordcloud_options(
+                    f"{actual_platform}:GroupMessage:{group_id}"
+                )
+                if wordcloud_options.enabled:
+                    wordcloud = await asyncio.to_thread(
+                        WordCloudStatisticsService(JiebaWordTokenizer()).collect,
+                        unified_messages,
+                        wordcloud_options,
+                        group_id,
+                        str(actual_platform),
+                        date_str,
+                    )
+            except Exception as error:
+                logger.warning(f"群 {group_id} 词云统计失败，继续生成报告: {error}")
+
             max_user_titles = self.config_manager.get_max_user_titles()
             top_users = self.analysis_domain_service.get_top_users(
                 user_activity, limit=max_user_titles
@@ -410,6 +430,7 @@ class AnalysisApplicationService:
                 user_activity=user_activity,
                 top_users=top_users,
                 unified_messages=unified_messages,
+                wordcloud=wordcloud,
             )
 
             sections = self._resolve_daily_analysis_sections(analysis_sections)
@@ -451,6 +472,8 @@ class AnalysisApplicationService:
                 "user_analysis": user_activity,
                 "chat_quality_review": llm_result.chat_quality_review,
             }
+            if wordcloud is not None:
+                analysis_result["wordcloud"] = wordcloud
 
             await self._persist_daily_analysis_summary(
                 pipeline=pipeline,
@@ -483,6 +506,7 @@ class AnalysisApplicationService:
         user_activity: dict[str, UserActivityStats],
         top_users: list[dict[str, object]],
         unified_messages: list[UnifiedMessage],
+        wordcloud: WordCloudData | None = None,
     ) -> None:
         """持久化统计阶段之后供恢复流程使用的清洗快照。
 
@@ -495,6 +519,7 @@ class AnalysisApplicationService:
             user_activity: 用户活跃度分析结果。
             top_users: 限定数量后的活跃用户。
             unified_messages: 清洗后的统一消息列表。
+            wordcloud: 独立持久化的完整词频，用于恢复和重新渲染。
         """
         if self.checkpoint_store is None:
             return
@@ -513,6 +538,7 @@ class AnalysisApplicationService:
                     "unified_messages": [
                         self._to_json_friendly(message) for message in unified_messages
                     ],
+                    "wordcloud": wordcloud.to_dict() if wordcloud else None,
                 },
                 trace_id=trace_id,
             )
@@ -567,6 +593,66 @@ class AnalysisApplicationService:
                 topics_persisted=topics_count,
                 titles_persisted=titles_count,
                 checkpoint_saved=bool(self.checkpoint_store),
+            )
+
+    async def collect_wordcloud(
+        self,
+        group_id: str,
+        platform_id: str | None = None,
+        days: int = 1,
+    ) -> WordCloudData:
+        """独立获取词云统计，不调用 LLM、不改动日报游标或检查点。
+
+        Args:
+            group_id: 目标群标识。
+            platform_id: 平台实例标识。
+            days: 回溯天数，范围为 1 至 30。
+
+        Returns:
+            可重复渲染的完整词频快照。
+
+        Raises:
+            ValueError: 平台、天数无效或词云已关闭。
+        """
+        if isinstance(days, bool) or not 1 <= days <= 30:
+            raise ValueError("词云回溯天数必须为 1～30 的整数")
+        adapter = self.bot_manager.get_adapter(platform_id)
+        if adapter is None:
+            raise ValueError(f"未找到平台 {platform_id} 的适配器")
+        actual_platform = (
+            self.bot_manager.get_adapter_platform_id(adapter)
+            or adapter.platform_id
+            or adapter.get_platform_name()
+            or platform_id
+            or ""
+        )
+        options = self.config_manager.get_wordcloud_options(
+            f"{actual_platform}:GroupMessage:{group_id}"
+        )
+        if not options.enabled:
+            raise ValueError("当前群的词云功能已关闭")
+        async with self.group_lock(f"{actual_platform}:{group_id}", "wordcloud"):
+            raw_messages = await adapter.fetch_messages(
+                group_id=group_id,
+                days=days,
+                max_count=self.config_manager.get_max_messages(),
+            )
+            bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
+            for bot_id in adapter.bot_self_ids:
+                if bot_id and bot_id not in bot_self_ids:
+                    bot_self_ids.append(bot_id)
+            if not self.config_manager.get_filter_bot_messages():
+                bot_self_ids = []
+            messages = MessageCleanerService().clean_messages(
+                raw_messages, bot_self_ids=bot_self_ids, filter_commands=True
+            )
+            return await asyncio.to_thread(
+                WordCloudStatisticsService(JiebaWordTokenizer()).collect,
+                messages,
+                options,
+                group_id,
+                str(actual_platform),
+                dt.datetime.now().strftime("%Y-%m-%d"),
             )
 
     async def _fetch_daily_messages(

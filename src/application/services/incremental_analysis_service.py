@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING
 
 from ...domain.entities.incremental_state import IncrementalBatch
 from ...domain.services.message_cleaner_service import MessageCleanerService
+from ...domain.services.wordcloud_statistics_service import WordCloudStatisticsService
 from ...domain.value_objects import DailyAnalysisExecutionResult, TokenUsage
+from ...infrastructure.analysis.jieba_tokenizer import JiebaWordTokenizer
 from ...shared.constants import AnalysisStage
 from ...shared.trace_context import TraceContext
 from ...utils.logger import logger
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
     from ...domain.services.analysis_domain_service import AnalysisDomainService
     from ...domain.services.incremental_merge_service import IncrementalMergeService
     from ...domain.services.statistics_service import StatisticsService
+    from ...domain.value_objects.wordcloud import WordCloudData
     from ...infrastructure.config.config_manager import ConfigManager
     from ...infrastructure.persistence.history_manager import HistoryManager
     from ...infrastructure.platform.bot_manager import BotManager
@@ -189,7 +192,10 @@ class IncrementalAnalysisService:
                 return {"success": False, "reason": "no_messages", "messages_count": 0}
 
             cleaner = MessageCleanerService()
-            bot_self_ids = self.config_manager.get_bot_self_ids()
+            bot_self_ids = list(self.config_manager.get_bot_self_ids() or [])
+            for bot_id in adapter.bot_self_ids:
+                if bot_id and bot_id not in bot_self_ids:
+                    bot_self_ids.append(bot_id)
             if not self.config_manager.get_filter_bot_messages():
                 bot_self_ids = []
             logger.debug(
@@ -229,6 +235,20 @@ class IncrementalAnalysisService:
                 )
             ]
 
+            # 分页接口偶尔会重复返回同一消息；先去重再决定批次边界。
+            seen_message_ids: set[tuple[str, str, str]] = set()
+            unique_messages = []
+            for message in unified_messages:
+                message_identity = (
+                    message.message_id
+                    or f"{message.timestamp}:{message.sender_id}:{message.text_content}"
+                )
+                identity = (message.platform, message.group_id, message_identity)
+                if identity not in seen_message_ids:
+                    seen_message_ids.add(identity)
+                    unique_messages.append(message)
+            unified_messages = unique_messages
+
             eligible_count = len(unified_messages)
             logger.debug(
                 "增量消息筛选完成: platform=%s, group=%s, raw=%s, cleaned=%s, "
@@ -261,6 +281,29 @@ class IncrementalAnalysisService:
             unified_messages.sort(key=lambda msg: (msg.timestamp, msg.message_id))
             if len(unified_messages) > min_messages:
                 unified_messages = unified_messages[:min_messages]
+
+            wordcloud: WordCloudData | None = None
+            actual_platform = (
+                self.bot_manager.get_adapter_platform_id(adapter)
+                or adapter.platform_id
+                or platform_id
+                or ""
+            )
+            try:
+                wordcloud_options = self.config_manager.get_wordcloud_options(
+                    f"{actual_platform}:GroupMessage:{group_id}"
+                )
+                if wordcloud_options.enabled:
+                    wordcloud = await asyncio.to_thread(
+                        WordCloudStatisticsService(JiebaWordTokenizer()).collect,
+                        unified_messages,
+                        wordcloud_options,
+                        group_id,
+                        str(actual_platform),
+                        date_str,
+                    )
+            except Exception as error:
+                logger.warning(f"群 {group_id} 增量词云统计失败，继续分析: {error}")
 
             async with pipeline.step(AnalysisStage.STATS_ANALYSIS) as step:
                 statistics = await asyncio.to_thread(
@@ -408,6 +451,7 @@ class IncrementalAnalysisService:
                 chat_quality_review=chat_quality_dict,
                 last_message_timestamp=last_message_timestamp,
                 participant_ids=participant_ids,
+                wordcloud=wordcloud,
             )
 
             if not await self.incremental_store.save_batch(batch):

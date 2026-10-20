@@ -38,6 +38,7 @@ import { MarkdownHint } from "../../../shared/ui/MarkdownHint";
 import { TemplateListRenderer } from "./TemplateListRenderer";
 import { TemplateSelectorRenderer } from "./TemplateSelectorRenderer";
 import { TemplateCdnProbe } from "../../../features/test-template-cdn/ui/TemplateCdnProbe";
+import { ComicPromptSettings } from "../../../features/edit-comic-prompt/ui/ComicPromptSettings";
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -168,6 +169,10 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
 
   // 渲染不同的表单控件
   const renderControl = () => {
+    if (fieldKey === "comic_analysis_prompts" && type === "object") {
+      return <ComicPromptSettings value={value} onChange={onChange} idPrefix={fullKeyPath || fieldKey} />;
+    }
+
     if (fieldKey === "t2i_cdn_base_url") {
       const currentValue = value === undefined
         ? typeof defaultValue === "string" ? defaultValue : ""
@@ -502,14 +507,16 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({
         <Select
           mode="multiple"
           allowClear
+          aria-label={title}
+          optionFilterProp="label"
           style={{ width: "100%" }}
           status={error ? "error" : undefined}
-          placeholder="请选择配置项（支持多选）"
+          placeholder={fieldKey === "enable_merged_forward" ? "选择需要打包的结果，留空时全部普通发送" : "请选择配置项（支持多选）"}
           value={selectedVals}
           onChange={(vals) => onChange(vals)}
           options={listOptions.map((opt: string) => {
-            let optLabel = opt;
-            if (fieldKey === "output_format") {
+            let optLabel = resolveOptionLabel(opt, listOptions, fieldSchema.labels);
+            if (fieldKey === "output_format" && optLabel === opt) {
               if (opt === "image") optLabel = "图片报告 (image)";
               else if (opt === "text") optLabel = "纯文本摘要 (text)";
               else if (opt === "html") optLabel = "HTML网页报告 (html)";

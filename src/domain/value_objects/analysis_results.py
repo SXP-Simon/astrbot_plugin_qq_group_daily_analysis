@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from ..repositories.platform_adapter_repository import PlatformAdapterProtocol
+    from .wordcloud import WordCloudData
 
 
 @dataclass
@@ -695,6 +696,7 @@ class ComicTopic:
 
 class _AnalysisResultOptional(TypedDict, total=False):
     timestamp: str
+    wordcloud: WordCloudData
 
 
 class AnalysisResultPayload(_AnalysisResultOptional):

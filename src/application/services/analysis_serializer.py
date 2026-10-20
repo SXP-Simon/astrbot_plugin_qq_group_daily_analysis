@@ -17,6 +17,7 @@ from ...domain.value_objects import (
     SummaryTopic,
     UserTitle,
 )
+from ...domain.value_objects.wordcloud import WordCloudData
 
 
 class AnalysisResultSerializer:
@@ -77,6 +78,7 @@ class AnalysisResultSerializer:
             "chat_quality_review": cls.to_json_friendly(
                 analysis_result.get("chat_quality_review")
             ),
+            "wordcloud": cls.to_json_friendly(analysis_result.get("wordcloud")),
         }
 
     @classmethod
@@ -136,10 +138,16 @@ class AnalysisResultSerializer:
             raw_user_analysis if isinstance(raw_user_analysis, dict) else {}
         )
 
-        return {
+        result: AnalysisResultPayload = {
             "statistics": stats,
             "topics": topics,
             "user_titles": user_titles,
             "user_analysis": user_analysis,
             "chat_quality_review": quality_review,
         }
+        wordcloud = data.get("wordcloud")
+        if isinstance(wordcloud, WordCloudData):
+            result["wordcloud"] = wordcloud
+        elif isinstance(wordcloud, dict):
+            result["wordcloud"] = WordCloudData.from_dict(wordcloud)
+        return result

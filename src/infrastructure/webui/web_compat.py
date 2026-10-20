@@ -86,6 +86,10 @@ class RequestProtocol(Protocol):
         """异步解析 JSON 请求体。"""
         ...
 
+    async def uploaded_files(self) -> dict[str, object]:
+        """异步读取宿主 multipart 上传文件映射。"""
+        ...
+
 
 class _RequestProxy:
     """动态 Request 代理对象，自动路由至真实环境或测试 Mock 目标。"""
@@ -174,6 +178,35 @@ class _RequestProxy:
                 return dict(res)
             if hasattr(res, "items") and not callable(res):
                 return dict(res.items())
+        return {}
+
+    async def uploaded_files(self) -> dict[str, object]:
+        """兼容新宿主异步 files() 与旧宿主同步映射。
+
+        Returns:
+            字段名到上传文件对象的映射。
+        """
+        from inspect import isawaitable
+
+        target = self._get_target()
+        value = getattr(target, "files", None)
+        if callable(value):
+            value = value()
+        if isawaitable(value):
+            value = await value
+        if isinstance(value, dict):
+            return dict(value)
+        items = getattr(value, "items", None)
+        if callable(items):
+            pairs = items()
+            if isinstance(pairs, (list, tuple)):
+                return {
+                    pair[0]: pair[1]
+                    for pair in pairs
+                    if isinstance(pair, (list, tuple))
+                    and len(pair) == 2
+                    and isinstance(pair[0], str)
+                }
         return {}
 
     async def json(self) -> dict[str, object]:

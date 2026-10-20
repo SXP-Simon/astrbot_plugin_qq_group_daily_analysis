@@ -148,6 +148,9 @@ class HTMLTemplates:
                             "is_custom": False,
                             "has_image": has_image,
                             "has_html": has_html,
+                            "has_wordcloud": os.path.isfile(
+                                os.path.join(p, "wordcloud_template.html")
+                            ),
                             "display_name": meta.get("name") or entry,
                             "desc": meta.get("desc", ""),
                             "tag": meta.get("tag", ""),
@@ -193,6 +196,7 @@ class HTMLTemplates:
                             "is_custom": True,
                             "has_image": has_image,
                             "has_html": has_html,
+                            "has_wordcloud": (p / "wordcloud_template.html").is_file(),
                             "display_name": meta_name or entry,
                             "desc": meta.get("desc", ""),
                             "tag": meta.get("tag", ""),

@@ -16,6 +16,7 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, MessageEventResult, filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, StarTools
+from astrbot.core.star.filter.command import GreedyStr
 
 from .src.application.handlers.analysis_command_handler import (
     AnalysisCommandHandler,
@@ -24,12 +25,16 @@ from .src.application.handlers.comic_command_handler import ComicCommandHandler
 from .src.application.handlers.settings_command_handler import (
     SettingsCommandHandler,
 )
+from .src.application.handlers.wordcloud_command_handler import WordCloudCommandHandler
 from .src.application.services.analysis_application_service import (
     AnalysisApplicationService,
 )
 from .src.application.services.analysis_trigger_service import AnalysisTriggerService
 from .src.application.services.comic_application_service import ComicApplicationService
 from .src.application.services.crash_recovery_service import CrashRecoveryService
+from .src.application.services.merged_forward_delivery import (
+    MergedForwardDeliveryService,
+)
 from .src.application.services.message_processing_service import (
     MessageProcessingService,
 )
@@ -37,6 +42,9 @@ from .src.application.services.report_query_service import ReportQueryService
 from .src.application.services.task_lifecycle_service import TaskLifecycleService
 from .src.application.services.template_command_service import (
     TemplateCommandService,
+)
+from .src.application.services.wordcloud_delivery_service import (
+    WordCloudDeliveryService,
 )
 from .src.domain.services.analysis_domain_service import AnalysisDomainService
 from .src.domain.services.incremental_merge_service import IncrementalMergeService
@@ -55,12 +63,14 @@ from .src.infrastructure.persistence.platform_group_registry import (
     PlatformGroupRegistry,
 )
 from .src.infrastructure.persistence.trace_sqlite_store import TraceSQLiteStore
+from .src.infrastructure.persistence.wordcloud_store import WordCloudStore
 from .src.infrastructure.platform.bot_manager import BotManager
 from .src.infrastructure.platform.template_preview import (
     TelegramTemplatePreviewHandler,
     TemplatePreviewRouter,
 )
 from .src.infrastructure.reporting.generators import ReportGenerator
+from .src.infrastructure.reporting.wordcloud_renderer import WordCloudRenderer
 from .src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 from .src.infrastructure.visualization.activity_charts import ActivityVisualizer
 from .src.infrastructure.webui.active_task_manager import ActiveTaskManager
@@ -210,6 +220,23 @@ class GroupDailyAnalysis(Star):
 
         # 调度与发送
         self.message_sender = MessageSender(self.bot_manager, self.config_manager)
+        self.merged_delivery = MergedForwardDeliveryService(
+            self.config_manager, self.bot_manager
+        )
+        self.wordcloud_renderer = WordCloudRenderer(
+            self.config_manager, plugin_data_dir, self.html_render
+        )
+        self.wordcloud_store = WordCloudStore(plugin_data_dir / "wordcloud.db")
+        self.wordcloud_delivery = WordCloudDeliveryService(
+            self.config_manager,
+            self.wordcloud_renderer,
+            self.wordcloud_store,
+            self.message_sender,
+        )
+        self.wordcloud_delivery.merged_delivery = self.merged_delivery
+        self.wordcloud_command_handler = WordCloudCommandHandler(
+            self.analysis_service, self.wordcloud_delivery
+        )
         self.auto_scheduler = AutoScheduler(
             self.config_manager,
             self.analysis_service,
@@ -220,6 +247,9 @@ class GroupDailyAnalysis(Star):
         )
 
         # 1.2 WebUI 控制台与 Task Reaper 孤儿回收器
+        self.auto_scheduler.report_dispatcher.wordcloud_delivery = (
+            self.wordcloud_delivery
+        )
         self.active_task_manager = ActiveTaskManager(
             lifecycle_service=self.task_lifecycle_service,
         )
@@ -233,6 +263,8 @@ class GroupDailyAnalysis(Star):
             report_dispatcher=self.auto_scheduler.report_dispatcher,
             report_output_dir=plugin_data_dir / "reports",
             auto_scheduler=self.auto_scheduler,
+            wordcloud_renderer=self.wordcloud_renderer,
+            wordcloud_store=self.wordcloud_store,
         )
         self.webui_bridge.register_routes()
 
@@ -265,6 +297,9 @@ class GroupDailyAnalysis(Star):
             plugin_data_dir=plugin_data_dir,
             plugin_instance=self,
         )
+        self.comic_command_handler.merged_delivery = self.merged_delivery
+        self.auto_scheduler.report_dispatcher.merged_delivery = self.merged_delivery
+        self.auto_scheduler.report_dispatcher.comic_handler = self.comic_command_handler
         self.analysis_command_handler = AnalysisCommandHandler(
             config_manager=self.config_manager,
             bot_manager=self.bot_manager,
@@ -277,6 +312,8 @@ class GroupDailyAnalysis(Star):
             comic_handler=self.comic_command_handler,
             plugin_data_dir=plugin_data_dir,
             plugin_instance=self,
+            wordcloud_delivery=self.wordcloud_delivery,
+            report_dispatcher=self.auto_scheduler.report_dispatcher,
         )
 
         # 6. LLM Tool 业务服务
@@ -586,6 +623,24 @@ class GroupDailyAnalysis(Star):
         ):
             yield result
 
+    @filter.command("群词云", alias={"group_wordcloud"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def generate_group_wordcloud(
+        self, event: AstrMessageEvent, days: int | None = None
+    ) -> AsyncGenerator[MessageEventResult]:
+        """独立生成群词云，可指定最近几天的消息。"""
+        async for result in self.wordcloud_command_handler.handle(event, days):
+            yield result
+
+    @filter.command("重发词云", alias={"retry_wordcloud"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def retry_group_wordcloud(
+        self, event: AstrMessageEvent
+    ) -> AsyncGenerator[MessageEventResult]:
+        """用当前外观重绘已保存的词频，仅发送词云。"""
+        async for result in self.wordcloud_command_handler.handle(event, retry=True):
+            yield result
+
     @filter.command("群漫画", alias={"group_comic", "daily_comic"})
     @filter.permission_type(PermissionType.ADMIN)
     async def generate_group_comic(
@@ -626,6 +681,17 @@ class GroupDailyAnalysis(Star):
         platform_id = str(self._get_platform_id_from_event(event) or "")
         async for result in self.settings_command_handler.handle_view_templates(
             event, platform_id
+        ):
+            yield result
+
+    @filter.command("查看漫画模板", alias={"view_comic_templates"})
+    @filter.permission_type(PermissionType.ADMIN)
+    async def view_comic_templates(
+        self, event: AstrMessageEvent, template_input: GreedyStr
+    ) -> AsyncGenerator[MessageEventResult]:
+        """查看内置漫画风格示例，可指定序号、标识或完整名称。"""
+        async for result in self.settings_command_handler.handle_view_comic_templates(
+            event, template_input
         ):
             yield result
 

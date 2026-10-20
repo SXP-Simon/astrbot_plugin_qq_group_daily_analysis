@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import shutil
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -51,12 +52,48 @@ class ConfigMigrator:
 
     def run_all_migrations(self) -> None:
         """执行所有版本升级、数据结构迁移与结构保护检查。"""
+        self.migrate_merged_forward_selection()
         self.migrate_legacy_configs()
         self.upgrade_prompt_templates()
         self.migrate_daily_comic_character_references()
         self.migrate_daily_comic_character_prompts()
         self.migrate_legacy_comic_storyboard_prompts()
+        self.migrate_comic_prompt_template_inheritance()
         self.protect_upgrade_data()
+
+    def migrate_merged_forward_selection(self) -> bool:
+        """备份后将旧合并转发布尔开关转换为结果类型多选。
+
+        Returns:
+            旧配置成功保存为多选时返回 True；无需迁移或备份、保存失败返回 False。
+        """
+        basic = self.cm._get_group("basic")
+        previous = basic.get("enable_merged_forward")
+        if type(previous) is not bool:
+            return False
+        try:
+            if not self.write_upgrade_config_backup(
+                deepcopy(dict(self.cm.config)),
+                self.get_plugin_version(self.get_plugin_root()),
+                star_tools=self.star_tools,
+            ):
+                logger.warning(
+                    "合并转发多选迁移备份失败，保留原开关并在下次重载时重试。"
+                )
+                return False
+            basic["enable_merged_forward"] = (
+                ["report", "wordcloud", "comic"] if previous else []
+            )
+            try:
+                self.cm.save_config()
+            except Exception:
+                basic["enable_merged_forward"] = previous
+                raise
+            logger.info("已将合并转发开关迁移为结果类型多选，原配置已备份。")
+            return True
+        except Exception as exc:
+            logger.warning(f"合并转发多选迁移失败，将在下次重载时重试: {exc}")
+            return False
 
     def migrate_legacy_configs(self) -> bool:
         """升级旧版配置项的类型与数据结构，确保兼容新 Schema。
@@ -253,7 +290,7 @@ class ConfigMigrator:
                 "enable": True,
                 "persona_id": specific_persona_id,
                 "reference_images": migrated_references,
-                "storyboard_prompt": self.cm.get_comic_storyboard_prompt(),
+                "storyboard_prompt": "",
             }
         ]
         daily_comic["drawing_reference_image"] = []
@@ -279,7 +316,8 @@ class ConfigMigrator:
             for character in characters:
                 if not isinstance(character, dict):
                     continue
-                if not str(character.get("storyboard_prompt", "")).strip():
+                # 显式留空表示继承全局模板；只迁移没有此字段的旧角色。
+                if "storyboard_prompt" not in character:
                     character["storyboard_prompt"] = default_prompt
                     modified = True
 
@@ -334,6 +372,53 @@ class ConfigMigrator:
                 )
             except Exception as exc:
                 logger.warning(f"自动迁移漫画分镜提示词失败: {exc}")
+
+    def migrate_comic_prompt_template_inheritance(self) -> None:
+        """一次性将旧角色的原版默认全文改为留空继承，后续尊重显式提示词。"""
+        from ...shared.comic_prompts import DEFAULT_COMIC_STORYBOARD_PROMPT
+
+        state_path = (
+            self.star_tools.get_data_dir(PLUGIN_NAME)
+            / "comic_prompt_template_migration.json"
+        )
+        if state_path.exists():
+            return
+
+        characters = self.cm._get_group("daily_comic").get("comic_characters", [])
+        changes = []
+        if isinstance(characters, list):
+            for character in characters:
+                if not isinstance(character, dict):
+                    continue
+                prompt = character.get("storyboard_prompt")
+                if (
+                    isinstance(prompt, str)
+                    and prompt.strip() == DEFAULT_COMIC_STORYBOARD_PROMPT.strip()
+                ):
+                    changes.append((character, prompt))
+
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path = state_path.with_suffix(".tmp")
+            # 先确认标记可写，避免目录不可写时修改用户配置。
+            temporary_path.write_text(json.dumps({"completed": True}), encoding="utf-8")
+            if changes:
+                if not self.write_comic_config_backup(
+                    {"comic_characters": characters}, star_tools=self.star_tools
+                ):
+                    logger.warning("漫画模板继承迁移备份失败，保留原角色提示词。")
+                    return
+                for character, _prompt in changes:
+                    character["storyboard_prompt"] = ""
+                try:
+                    self._save_config()
+                except Exception:
+                    for character, prompt in changes:
+                        character["storyboard_prompt"] = prompt
+                    raise
+            temporary_path.replace(state_path)
+        except Exception as exc:
+            logger.warning(f"漫画模板继承迁移失败，将在下次重载时重试: {exc}")
 
     def protect_upgrade_data(self) -> None:
         """在插件升级且配置结构发生变更时备份旧配置。"""

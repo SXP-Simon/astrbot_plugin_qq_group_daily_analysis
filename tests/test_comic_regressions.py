@@ -12,6 +12,11 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock
 from zoneinfo import ZoneInfoNotFoundError
 
+from src.domain.value_objects.comic_template_rotation import (
+    ComicGenerationSnapshot,
+    ComicTemplateSelection,
+)
+from src.infrastructure.config.comic_template_rotation import ComicTemplateRotationStore
 from src.infrastructure.reporting.generators import ReportGenerator
 from src.infrastructure.reporting.templates import HTMLTemplates
 
@@ -150,7 +155,7 @@ def load_main_method(name: str):
             return await target_func(plugin, *args, **kwargs)
 
         return async_wrapper
-    elif inspect.isasyncgenfunction(target_func):
+    if inspect.isasyncgenfunction(target_func):
 
         @functools.wraps(target_func)
         async def async_gen_wrapper(plugin, *args, **kwargs):
@@ -159,14 +164,13 @@ def load_main_method(name: str):
                 yield item
 
         return async_gen_wrapper
-    else:
 
-        @functools.wraps(target_func)
-        def sync_wrapper(plugin, *args, **kwargs):
-            _ensure_plugin_handlers(plugin)
-            return target_func(plugin, *args, **kwargs)
+    @functools.wraps(target_func)
+    def sync_wrapper(plugin, *args, **kwargs):
+        _ensure_plugin_handlers(plugin)
+        return target_func(plugin, *args, **kwargs)
 
-        return sync_wrapper
+    return sync_wrapper
 
 
 def load_comic_service_method(name: str):
@@ -211,11 +215,13 @@ def load_comic_service_method(name: str):
     )
     from collections.abc import Sequence
     from contextlib import nullcontext
+
     from src.domain.value_objects import ComicStoryboard, SummaryTopic
     from src.shared.trace_context import TraceContext
 
     namespace = {
         "Path": Path,
+        "asyncio": asyncio,
         "mimetypes": mimetypes,
         "logger": Mock(),
         "Any": Any,
@@ -340,6 +346,7 @@ def load_config_manager_class(plugin_data_dir: Path):
             "src.infrastructure.config.config_migrator",
             fromlist=["ConfigMigrator"],
         ).ConfigMigrator,
+        "ComicTemplateRotationStore": ComicTemplateRotationStore,
     }
     exec(compile(isolated_module, str(config_path), "exec"), namespace)
     return namespace["ConfigManagerHarness"]
@@ -507,15 +514,21 @@ def test_comic_generation_passes_character_storyboard_prompt():
     """漫画生成应把选中角色的专属模板传给分镜分析器。"""
     generate_comic = load_comic_service_method("generate_comic")
     topics = [{"topic": "话题", "detail": "详情"}]
-    character = {"name": "角色甲", "storyboard_prompt": "角色模板"}
     llm_analyzer = SimpleNamespace(
         analyze_comic_storyboards=AsyncMock(return_value=([], object()))
     )
     config_manager = SimpleNamespace(
         get_enable_daily_comic=Mock(return_value=True),
-        get_selected_comic_character=Mock(return_value=character),
-        get_comic_character_persona_id=Mock(return_value="persona-a"),
-        get_comic_character_storyboard_prompt=Mock(return_value="角色模板"),
+        get_comic_generation_snapshot=Mock(
+            return_value=ComicGenerationSnapshot(
+                "角色甲",
+                "persona-a",
+                (),
+                ComicTemplateSelection(
+                    "character", "角色甲专属提示词", "fixed", "global", "角色模板", True
+                ),
+            )
+        ),
     )
     service = SimpleNamespace(
         config_manager=config_manager,
@@ -532,8 +545,8 @@ def test_comic_generation_passes_character_storyboard_prompt():
     )
 
 
-def test_comic_character_schema_has_storyboard_prompt_default():
-    """新建角色方案时应自带可编辑的默认分镜提示词。"""
+def test_comic_character_schema_inherits_storyboard_prompt_default():
+    """新建角色留空继承全局风格，全局仍保留可编辑的原版全文。"""
     schema = json.loads(
         (Path(__file__).parents[1] / "_conf_schema.json").read_text(encoding="utf-8")
     )
@@ -545,8 +558,8 @@ def test_comic_character_schema_has_storyboard_prompt_default():
     ]["default"]
 
     assert schema["daily_comic"]["items"]["comic_characters"]["default"] == []
-    assert character_prompt.strip()
-    assert character_prompt == global_prompt
+    assert character_prompt == ""
+    assert global_prompt.strip()
 
 
 def test_daily_random_character_is_stable_and_recovers_from_disabled_choice(
@@ -1099,6 +1112,17 @@ def _comic_config_manager(**overrides):
         "get_drawing_output_exception_retry_keywords": Mock(return_value=[]),
     }
     defaults.update(overrides)
+    defaults.setdefault(
+        "get_comic_generation_snapshot",
+        Mock(
+            return_value=ComicGenerationSnapshot(
+                "默认配置",
+                "",
+                tuple(defaults["get_drawing_reference_images"]()),
+                ComicTemplateSelection("classic", "原版漫画", "fixed", "global", ""),
+            )
+        ),
+    )
     return SimpleNamespace(**defaults)
 
 
@@ -1542,7 +1566,7 @@ def test_comic_storyboard_assembler_combines_scene_and_panels():
         ensure_ascii=False,
     )
 
-    success, result, error = analyzer.parse_structured_response(llm_output)
+    success, result, _error = analyzer.parse_structured_response(llm_output)
     assert success is True
     assert result is not None
     assert len(result) == 1
@@ -1657,11 +1681,8 @@ def test_comic_legacy_prompt_auto_migration(tmp_path: Path):
         == DEFAULT_COMIC_STORYBOARD_PROMPT
     )
 
-    # 2. 角色列表中的旧版默认应被迁移为新版
-    assert (
-        raw_config["daily_comic"]["comic_characters"][0]["storyboard_prompt"]
-        == DEFAULT_COMIC_STORYBOARD_PROMPT
-    )
+    # 2. 角色旧默认升级后一次性转为留空继承，不再由运行时比较文本。
+    assert raw_config["daily_comic"]["comic_characters"][0]["storyboard_prompt"] == ""
 
     # 3. 用户的自定义专属提示词必须完好保留
     assert (

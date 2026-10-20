@@ -95,6 +95,7 @@ src/application/services/
 ├── analysis_recovery_service.py       # 断点快照续跑 (Resume) 与免 Token 重绘 (Rerender)
 ├── analysis_serializer.py             # 领域分析结果与 JSON/Dict 之间的双向序列化器
 ├── incremental_batch_builder.py       # 增量原始消息批次切分与小时级统计预构建
+├── merged_forward_delivery.py         # 同任务产物并发准备、限时收集与一次合并转发
 ├── pipeline_context.py                # 跨阶段上下文与产物容器 PipelineContext
 └── task_guard.py                      # 基于异步互斥锁的单群并发排他管控 (TaskGuard)
 ```
@@ -111,6 +112,20 @@ src/application/services/
    - `resume_from_checkpoint`：根据已生成的阶段快照跳过已耗费 Token 的 LLM 阶段，无缝续跑剩余流程；
    - `rerender_report`：纯前端/排版重绘，免 LLM 消耗快速切换视觉模板。
 
+### 3.2 报告、词云与漫画合并投递
+
+`basic.enable_merged_forward` 是投递类型列表，取值为 `report`、`wordcloud`、`comic`，默认 `[]`。`MergedForwardDeliveryService.enabled_for(platform_id, kind)` 按所选类型及平台能力决定是否合并；留空 `kind` 检查是否有任一选择。未选中的类型正常发送，空列表全部沿用原流程。选择不启用生成，功能开关、权限及生成条件仍独立生效。旧布尔配置先备份再迁移，`true` 对应全选，`false` 对应空列表，保存失败恢复原值；读取器仍兼容旧布尔值。独立漫画、独立词云和重发也只检查自身类型。当前使用此路径的是 QQ OneBot，不支持的平台保持原流程。
+
+指令启动、进度、权限和失败提示由各处理器按原逻辑普通发送，不放入合并产物，也不因合并开关而隐藏。手动群分析仍遵循 `basic.enable_analysis_reply` 的文本或表情回应选择。
+
+`ReportDispatcher` 只将选中类型注册到合并准备函数：报告选中时按 `report:image`、`report:html`、`report:text` 分开准备，词云和漫画各自注册。完成项返回 `PreparedForwardMessage`，携带类型、文字、图片来源及发送后回调。未选中的报告和词云与合并收集并行普通投递，各自有界等待；未选漫画沿用后台触发入口。普通发送不等待合并结果，任一路径失败不阻止其他已完成结果。每次调用只收集本次任务的结果，不会混入其他群或任务。
+
+所选结果收集使用 `basic.merged_forward_timeout`，默认 `600` 秒，可配置 `10–3600` 秒。超过期限只取消未完成的合并准备，再投递已完成节点，不取消未选中的普通产物。发送请求单独限制为 `60` 秒，并且只执行一次；异常、返回失败或超时均不自动拆分为普通消息补发，以避免平台已接收而本地未确认时出现重复消息。
+
+定时全量分析与增量最终报告在准备合并投递前受 `1800` 秒分析期限约束；进入合并投递时同步撤销该期限，后续由合并服务管理各阶段时限，分析耗时不占用收集预算。业务仍在独立子任务内运行以隔离追踪上下文，外部取消继续向下传播；增量报告成功后的过期批次清理单独限制为 `60` 秒，清理失败不改变发送结果。
+
+历史报告副本和 Trace 的 `report_files` 在准备阶段保留。选入合并的 HTML 同时配置 `html_only_url` 与有效 `html_base_url` 时转换为外链节点，否则以文本节点投递，HTML 文件仍保留；普通 HTML 使用原有发送逻辑。归档、词云成功状态和漫画上传等后处理只在对应投递确认成功后执行，词云失败通过独立回调记录。分发器仅在普通报告或合并中的报告确实成功时认定日报成功，不用漫画或词云成功替代。
+
 ---
 
 ## 4. 基础设施层解耦规范 (Infrastructure Layer)
@@ -119,6 +134,7 @@ src/application/services/
 
 ### 4.1 报表与视觉排版 (`infrastructure/reporting/`)
 - `generators.py` (`ReportGenerator`)：专职负责 Jinja2 模板加载、Playwright T2I 渲染与双轮降级输出；
+- `dispatcher.py` (`ReportDispatcher`)：按输出格式准备报告、保留历史与追踪信息，并按合并开关选择统一投递或原有逐格式发送；
 - `render_data_preparer.py` (`RenderDataPreparer`)：专职负责脱敏、活跃度图表装配、MBTI/SBTI/ACGTI 人格卡片徽章映射及 HTML 上下文胶囊打包；
 - `profile_mappings.py`：维护 MBTI、SBTI、ACGTI 多套视觉主题的查表与映射规则。
 

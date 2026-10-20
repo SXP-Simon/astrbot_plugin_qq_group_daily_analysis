@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+
 from src.infrastructure.reporting.dispatcher import ReportDispatcher
 from src.infrastructure.scheduler.auto_scheduler import AutoScheduler
 
@@ -44,7 +46,7 @@ def test_traditional_analysis_is_failed_when_report_delivery_fails():
             )
         )
         scheduler.report_dispatcher = SimpleNamespace(
-            dispatch=AsyncMock(side_effect=failing_dispatch)
+            dispatch=AsyncMock(side_effect=failing_dispatch), merged_delivery=None
         )
         scheduler.plugin_instance = SimpleNamespace(
             comic_command_handler=mock_comic_handler
@@ -109,7 +111,7 @@ def test_incremental_final_report_requires_successful_delivery():
             incremental_store=None,
         )
         scheduler.report_dispatcher = SimpleNamespace(
-            dispatch=AsyncMock(side_effect=failing_dispatch)
+            dispatch=AsyncMock(side_effect=failing_dispatch), merged_delivery=None
         )
         scheduler.config_manager = SimpleNamespace(
             get_analysis_days=Mock(return_value=1)
@@ -294,3 +296,65 @@ def test_fallback_does_not_mask_failed_report_delivery():
         assert result["report_sent"] is False
 
     asyncio.run(scenario())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "incremental", [False, True], ids=["traditional", "incremental"]
+)
+@pytest.mark.parametrize(
+    "sent", [False, True], ids=["delivery-failed", "delivery-success"]
+)
+async def test_merged_scheduled_analysis_dispatches_once_without_duplicate_comic(
+    incremental, sent
+):
+    """两种调度入口只交给合并分发，不另行启动漫画，并保持报告回执语义。"""
+    analysis = {"topics": [{"topic": "高性能", "detail": "完成日报"}]}
+    daily = AsyncMock(return_value={"success": True, "analysis_result": analysis})
+    final = AsyncMock(return_value={"success": True, "analysis_result": analysis})
+    comic = Mock()
+    merged = SimpleNamespace(enabled_for=Mock(return_value=True))
+    dispatcher = SimpleNamespace(
+        merged_delivery=merged, dispatch=AsyncMock(return_value=sent)
+    )
+    scheduler = object.__new__(AutoScheduler)
+    scheduler._terminating = False
+    scheduler._get_group_name_safe = AsyncMock(return_value="测试群")
+    scheduler.bot_manager = SimpleNamespace(
+        is_ready_for_auto_analysis=Mock(return_value=True)
+    )
+    scheduler.analysis_service = SimpleNamespace(
+        execute_daily_analysis=daily,
+        execute_incremental_final_report=final,
+        incremental_store=None,
+    )
+    scheduler.incremental_trigger = None
+    scheduler.config_manager = SimpleNamespace(get_analysis_days=Mock(return_value=1))
+    scheduler.report_dispatcher = dispatcher
+    scheduler.plugin_instance = SimpleNamespace(
+        comic_command_handler=SimpleNamespace(try_trigger_comic_generation=comic)
+    )
+
+    if incremental:
+        result = await scheduler._perform_incremental_final_report_for_group(
+            "123456", "onebot-main"
+        )
+        final.assert_awaited_once_with(group_id="123456", platform_id="onebot-main")
+        daily.assert_not_awaited()
+    else:
+        result = await scheduler._perform_auto_analysis_for_group(
+            "123456", "onebot-main"
+        )
+        daily.assert_awaited_once_with(
+            group_id="123456", platform_id="onebot-main", manual=False
+        )
+        final.assert_not_awaited()
+
+    dispatcher.dispatch.assert_awaited_once_with("123456", analysis, "onebot-main")
+    merged.enabled_for.assert_called_once_with("onebot-main")
+    comic.assert_not_called()
+    assert result["analysis_success"] is True
+    assert result["report_sent"] is sent
+    assert result["success"] is sent
+    if not sent:
+        assert result["reason"] == "report_delivery_failed"

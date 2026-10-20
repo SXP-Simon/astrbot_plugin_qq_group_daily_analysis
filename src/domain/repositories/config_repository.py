@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -210,6 +210,18 @@ class IConfigProvider(Protocol):
         """获取是否发送报告前缀文字"""
         ...
 
+    def get_enable_merged_forward(self) -> bool:
+        """获取是否至少选择一种结果进行合并转发。"""
+        ...
+
+    def get_merged_forward_types(self) -> list[Literal["report", "wordcloud", "comic"]]:
+        """获取参与合并转发的生成结果类型，未选类型仍普通发送。"""
+        ...
+
+    def get_merged_forward_timeout(self) -> int:
+        """获取合并转发收集结果的等待秒数（10–3600 秒）。"""
+        ...
+
     def get_html_only_url(self) -> bool:
         """获取是否只发送 HTML 网页链接"""
         ...
@@ -236,6 +248,14 @@ class IConfigProvider(Protocol):
 
     def get_group_album_name(self) -> str:
         """获取目标群相册名称"""
+        ...
+
+    def get_enable_wordcloud_album_upload(self) -> bool:
+        """获取是否启用词云群相册上传。"""
+        ...
+
+    def get_wordcloud_album_name(self) -> str:
+        """获取词云目标相册名称，未单独设置时沿用图片报告相册。"""
         ...
 
     def get_group_album_strict_mode(self) -> bool:

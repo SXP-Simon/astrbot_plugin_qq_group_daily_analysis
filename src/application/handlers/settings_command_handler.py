@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time as time_mod
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -219,6 +220,55 @@ class SettingsCommandHandler:
             bot_id=bot_id,
         )
         yield event.chain_result([preview_nodes])
+
+    async def handle_view_comic_templates(
+        self, event: AstrMessageEvent, template_input: str = ""
+    ) -> AsyncGenerator[MessageEventResult]:
+        """只读展示漫画模板，QQ 默认合并转发，其他平台按参数查看单图。
+
+        Args:
+            event: AstrBot 消息事件对象。
+            template_input: 可选的序号、模板标识或完整名称。
+
+        Returns:
+            漫画示例图、文字目录或参数错误消息。
+        """
+        event.should_call_llm(False)
+        value = template_input.strip()
+        templates = self.template_command_service.list_comic_templates()
+        if not templates:
+            yield event.plain_result("❌ 未找到任何可用的漫画模板")
+            return
+        if value:
+            template_id, error = (
+                self.template_command_service.parse_comic_template_input(value)
+            )
+            if error:
+                yield event.plain_result(error)
+                return
+            if template_id is None:
+                yield event.plain_result(
+                    "❌ 无法解析漫画模板，请使用 /查看漫画模板 查看目录。"
+                )
+                return
+            templates = [template_id]
+        elif event.get_platform_name() != "aiocqhttp":
+            yield event.plain_result(
+                self.template_command_service.build_comic_template_list_text()
+            )
+            return
+
+        previews = await asyncio.to_thread(
+            self.template_command_service.build_comic_template_preview_nodes,
+            templates,
+            event.get_self_id(),
+        )
+        if value:
+            # 单张图文链兼容各平台，跳过仅用于合并转发的总说明节点。
+            for node in previews.nodes[1:]:
+                yield event.chain_result(node.content)
+        else:
+            yield event.chain_result([previews])
 
     async def handle_analysis_settings(
         self,

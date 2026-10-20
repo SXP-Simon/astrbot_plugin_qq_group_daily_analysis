@@ -18,6 +18,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from ..value_objects.wordcloud import WordCloudData
+
 
 @dataclass
 class IncrementalBatch:
@@ -78,6 +80,7 @@ class IncrementalBatch:
     chat_quality_review: dict[str, object] | None = None
     last_message_timestamp: int = 0
     participant_ids: list[str] = field(default_factory=list)
+    wordcloud: WordCloudData | None = None
 
     def to_dict(self) -> dict:
         """序列化为字典，用于 KV 存储"""
@@ -97,6 +100,7 @@ class IncrementalBatch:
             "chat_quality_review": self.chat_quality_review,
             "last_message_timestamp": self.last_message_timestamp,
             "participant_ids": self.participant_ids,
+            "wordcloud": self.wordcloud.to_dict() if self.wordcloud else None,
         }
 
     @classmethod
@@ -125,6 +129,11 @@ class IncrementalBatch:
             chat_quality_review=data.get("chat_quality_review"),
             last_message_timestamp=data.get("last_message_timestamp", 0),
             participant_ids=data.get("participant_ids", []),
+            wordcloud=(
+                WordCloudData.from_dict(data["wordcloud"])
+                if isinstance(data.get("wordcloud"), dict)
+                else None
+            ),
         )
 
     def get_summary(self) -> dict:
@@ -205,6 +214,7 @@ class IncrementalState:
     # 增量跟踪
     last_analyzed_message_timestamp: int = 0
     all_participant_ids: set[str] = field(default_factory=set)
+    wordcloud: WordCloudData | None = None
 
     # 元数据
     created_at: float = field(default_factory=time.time)
