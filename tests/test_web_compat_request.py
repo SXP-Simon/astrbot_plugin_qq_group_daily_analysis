@@ -17,6 +17,23 @@ class NoScanModules(dict):
     def items(self):
         raise AssertionError("正式请求不应扫描 sys.modules")
 
+    def __iter__(self):
+        raise AssertionError("正式请求不应扫描 sys.modules")
+
+    def keys(self):
+        raise AssertionError("正式请求不应扫描 sys.modules")
+
+    def values(self):
+        raise AssertionError("正式请求不应扫描 sys.modules")
+
+
+@pytest.mark.parametrize("access", ["__iter__", "items", "keys", "values"])
+def test_module_scan_guard_rejects_iteration(access):
+    """守卫自身应拦截逐键遍历以及各类字典视图扫描。"""
+    registry = NoScanModules({"example": object()})
+    with pytest.raises(AssertionError, match="不应扫描"):
+        getattr(registry, access)()
+
 
 @pytest.mark.parametrize("attribute", ["query", "query_params", "headers", "files"])
 def test_host_request_does_not_scan_modules(monkeypatch, attribute):
@@ -54,7 +71,8 @@ def test_falsey_host_request_is_not_discarded(monkeypatch):
     """宿主请求的真假值不应参与请求对象的选择。"""
 
     class FalseyRequest:
-        query = {"limit": "0"}
+        def __init__(self):
+            self.query = {"limit": "0"}
 
         def __bool__(self):
             return False
@@ -64,6 +82,17 @@ def test_falsey_host_request_is_not_discarded(monkeypatch):
     monkeypatch.setattr(web_compat, "sys", SimpleNamespace(modules=NoScanModules()))
 
     assert web_compat._RequestProxy()._get_target() is target
+
+
+def test_host_proxy_with_same_class_name_is_not_discarded(monkeypatch):
+    """宿主代理即使与本地兼容代理同名，也应保留当前请求数据。"""
+    host_proxy_type = type("_RequestProxy", (), {"query": {"limit": "10"}})
+    target = host_proxy_type()
+    monkeypatch.setattr(web_compat, "_real_request", target)
+    monkeypatch.setattr(web_compat, "sys", SimpleNamespace(modules=NoScanModules()))
+
+    assert web_compat._RequestProxy()._get_target() is target
+    assert web_compat._RequestProxy().query == {"limit": "10"}
 
 
 @pytest.mark.asyncio
@@ -101,7 +130,16 @@ async def test_concurrent_requests_keep_host_context(monkeypatch):
     await asyncio.gather(read_request("first"), read_request("second"))
 
 
-def test_fallback_ignores_foreign_webui_module(monkeypatch):
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "other_plugin.infrastructure.webui.routes",
+        "src.infrastructure.webui.unrelated",
+        "src.infrastructure.webui.plugin_page_bridge_extra",
+        "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.unrelated",
+    ],
+)
+def test_fallback_ignores_foreign_webui_module(monkeypatch, module_name):
     """无宿主接口时，也不能误选其他插件的测试请求。"""
     monkeypatch.setattr(web_compat, "_real_request", None)
     monkeypatch.setattr(
@@ -109,7 +147,7 @@ def test_fallback_ignores_foreign_webui_module(monkeypatch):
         "sys",
         SimpleNamespace(
             modules={
-                "other_plugin.infrastructure.webui.routes": SimpleNamespace(
+                module_name: SimpleNamespace(
                     request=SimpleNamespace(query={"search": "foreign"})
                 )
             }
@@ -119,15 +157,55 @@ def test_fallback_ignores_foreign_webui_module(monkeypatch):
     assert web_compat._RequestProxy().query == {}
 
 
-def test_fallback_preserves_local_bridge_mock(monkeypatch):
+@pytest.mark.parametrize(
+    "package_name",
+    [
+        "src.infrastructure.webui",
+        "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui",
+        "data.plugins.astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui",
+    ],
+)
+@pytest.mark.parametrize(
+    "bridge_name",
+    [
+        "src.infrastructure.webui.plugin_page_bridge",
+        "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge",
+    ],
+)
+def test_fallback_preserves_local_bridge_mock(monkeypatch, package_name, bridge_name):
     """无宿主接口的离线单测仍可在本插件桥接模块替换请求。"""
+    monkeypatch.setattr(web_compat, "_real_request", None)
+    monkeypatch.setattr(web_compat, "__package__", package_name)
+    monkeypatch.setattr(
+        web_compat,
+        "sys",
+        SimpleNamespace(
+            modules=NoScanModules(
+                {
+                    bridge_name: SimpleNamespace(
+                        request=SimpleNamespace(query={"limit": "10"})
+                    )
+                }
+            )
+        ),
+    )
+
+    assert web_compat._RequestProxy().query == {"limit": "10"}
+
+
+def test_fallback_preserves_current_package_bridge_mock(monkeypatch):
+    """宿主通过额外包前缀加载插件时，应按当前包名直接查找桥接。"""
+    package_name = (
+        "data.plugins.astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui"
+    )
+    monkeypatch.setattr(web_compat, "__package__", package_name)
     monkeypatch.setattr(web_compat, "_real_request", None)
     monkeypatch.setattr(
         web_compat,
         "sys",
         SimpleNamespace(
             modules={
-                "src.infrastructure.webui.plugin_page_bridge": SimpleNamespace(
+                f"{package_name}.plugin_page_bridge": SimpleNamespace(
                     request=SimpleNamespace(query={"limit": "10"})
                 )
             }

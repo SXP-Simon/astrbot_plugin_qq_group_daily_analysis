@@ -98,16 +98,18 @@ class _RequestProxy:
             Mock，否则返回 None。
         """
         # 正式请求必须直接使用宿主上下文，避免扫描全局模块及误选其他插件。
-        if (
-            _real_request is not None
-            and type(_real_request).__name__ != "_RequestProxy"
-        ):
+        if _real_request is not None:
             return _real_request
 
         # 仅离线测试保留桥接模块 Mock，兼容完整包名和 src 两种导入路径。
-        module_prefixes = (f"{__package__}.", "src.infrastructure.webui.")
-        for mod_name, mod in list(sys.modules.items()):
-            if mod and mod_name.startswith(module_prefixes):
+        bridge_modules = (
+            f"{__package__}.plugin_page_bridge",
+            "src.infrastructure.webui.plugin_page_bridge",
+            "astrbot_plugin_qq_group_daily_analysis.src.infrastructure.webui.plugin_page_bridge",
+        )
+        for module_name in bridge_modules:
+            mod = sys.modules.get(module_name)
+            if mod:
                 req = getattr(mod, "request", None)
                 if req is not None and type(req).__name__ != "_RequestProxy":
                     return req
