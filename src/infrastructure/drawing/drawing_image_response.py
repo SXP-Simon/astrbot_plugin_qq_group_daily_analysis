@@ -58,6 +58,34 @@ class DrawingImageResponseService:
         self, data: object, proxy: str | None = None
     ) -> bytes | None:
         """递归提取绘图响应中的图片数据。"""
+        if isinstance(data, dict) and "candidates" in data:
+            # Google 响应仅接受最终图片字段，不能回退到思考签名或中间图片。
+            candidates = data["candidates"]
+            for candidate in candidates if isinstance(candidates, list) else []:
+                if not isinstance(candidate, dict):
+                    continue
+                content = candidate.get("content")
+                parts = content.get("parts") if isinstance(content, dict) else None
+                for part in parts if isinstance(parts, list) else []:
+                    if not isinstance(part, dict) or part.get("thought") is True:
+                        continue
+                    inline_data = part.get("inlineData", part.get("inline_data"))
+                    if not isinstance(inline_data, dict):
+                        continue
+                    mime = inline_data.get("mimeType", inline_data.get("mime_type"))
+                    encoded_image = inline_data.get("data")
+                    if not isinstance(mime, str) or not mime.lower().startswith(
+                        "image/"
+                    ):
+                        continue
+                    if not isinstance(encoded_image, str) or not encoded_image.strip():
+                        continue
+                    try:
+                        return self.decode_base64(encoded_image)
+                    except ValueError as exc:
+                        logger.debug(f"[Comic] 跳过无效 Google Gemini 最终图片: {exc}")
+            return None
+
         encoded: list[tuple[str, str]] = []
         image_fields: list[tuple[str, str]] = []
         content_images: list[tuple[str, str]] = []
@@ -194,12 +222,13 @@ class DrawingImageResponseService:
             b"MM\x00*",
             b"\x00\x00\x00\x0cjP  ",
         )
-        starts_with_sig = any(probe.find(sig) < 4 for sig in signatures)
+        starts_with_sig = any(0 <= probe.find(sig) < 4 for sig in signatures)
         if starts_with_sig or is_webp or is_avif or is_jp2:
             return
         head = data[:64].decode("ascii", errors="ignore").lower()
         if head.startswith(("<!doctype", "<html", "{", "[")):
             raise ValueError("响应内容不是图片（检测到 HTML/JSON）")
+        raise ValueError("响应内容不是支持的图片格式")
 
     async def download_public_image(
         self, url: str, proxy: str | None = None
