@@ -2442,12 +2442,16 @@
             var cs = info.cs;
             var isGrid = info.isGrid;
             var cols = info.cols;
+            var gapKey = isGrid ? (cs.columnGap + "|" + cs.rowGap) : "";
             var want = Math.min(group.items.length, cols * (cols > 1 ? 2 : 3));
 
-            /* 结构没变就直接退出：既省掉无谓的样式写入，也避免 ResizeObserver 自激 */
-            if (want === group.visible && cols === group.cols && isGrid === group.isGrid) return;
+            /* 结构没变就直接退出：既省掉无谓的样式写入，也避免 ResizeObserver 自激。
+               间距也算进判断——断点只调 gap 不改列数时，内层折叠区仍要跟着同步。 */
+            if (want === group.visible && cols === group.cols
+                && isGrid === group.isGrid && gapKey === group.gapKey) return;
             group.cols = cols;
             group.isGrid = isGrid;
+            group.gapKey = gapKey;
 
             group.wrap.classList.toggle("is-grid", isGrid);
             if (isGrid) {
@@ -2480,8 +2484,8 @@
             }
 
             var hiddenCount = group.items.length - group.visible;
-            /* 全露出来了：视为「已展开」，否则导航的「全部展开」会一直亮着 */
-            if (hiddenCount <= 0) group.open = true;
+            /* 全部露完只说明「当前宽度用不到折叠」，不代表用户点过展开，所以不动 open；
+               是否真的展开由 hiddenCount 一起决定。 */
             group.wrap.classList.toggle("is-open", !!group.open && hiddenCount > 0);
             group.paint();
         }
@@ -2515,8 +2519,11 @@
 
             group.paint = function () {
                 var hiddenCount = group.items.length - group.visible;
-                if (hiddenCount <= 0) { group.btn.style.display = "none"; return; }
-                group.btn.style.display = "";
+                /* 全部露完时按钮和折叠区一起退出布局：空的折叠区仍会占掉一个网格行和行间距 */
+                var fits = hiddenCount <= 0;
+                group.btn.style.display = fits ? "none" : "";
+                group.wrap.style.display = fits ? "none" : "";
+                if (fits) return;
                 group.btn.textContent = group.open
                     ? (L.foldLess + " " + group.visible + " " + group.unit)
                     : (L.foldMore + " " + group.items.length + " " + group.unit
@@ -2525,9 +2532,18 @@
             };
 
             group.setOpen = function (v) {
-                if (group.items.length - group.visible <= 0) { group.open = true; group.paint(); return; }
+                if (group.items.length - group.visible <= 0) {
+                    /* 当前宽度用不到折叠：保持收起态，等窄回来时按收起态呈现 */
+                    group.open = false;
+                    group.wrap.classList.remove("is-open");
+                    group.paint();
+                    return;
+                }
                 var target = !!v;
-                if (target === group.open) return;
+                if (target === group.open) {
+                    group.wrap.classList.toggle("is-open", target);
+                    return;
+                }
                 group.open = target;
                 group.wrap.classList.toggle("is-open", target);
                 group.paint();
@@ -2574,10 +2590,11 @@
             twoColSections.push(sec);
         });
 
-        /* 折叠按列数重切 + 两列区块重排列位：搬过 DOM，列位必须重算 */
+        /* 折叠按列数重切 + 两列区块重排列位：搬过 DOM，列位必须重算；重排后导航按钮文案也要跟上 */
         function syncFoldLayout() {
             foldGroups.forEach(reflowFold);
             twoColSections.forEach(placeTwoCol);
+            setNavToggle(anyCollapsed());
         }
         syncFoldLayout();
         var gridTimer = null;
@@ -2601,14 +2618,23 @@
             foldGroups.forEach(function (g) { gridObserver.observe(g.parent); });
         }
 
+        /* 当前宽度下还有内容被收着的组才算"收起了"：全部露完的组不该让导航一直亮着「全部展开」 */
         function anyCollapsed() {
-            return foldGroups.some(function (g) { return !g.open; });
+            return foldGroups.some(function (g) {
+                return !g.open && g.items.length - g.visible > 0;
+            });
         }
 
         /* ---------- 2c. 导航标签自适应：完整名放不下就换短名，再放不下才折两行 ---------- */
         var navCompact = false;
         function setNavToggle(collapsed) {
             if (!navToggle) return;
+            /* 当前宽度下没有任何区块可折叠时，这颗按钮没有意义 */
+            var foldable = false;
+            for (var i = 0; i < foldGroups.length; i++) {
+                if (foldGroups[i].items.length - foldGroups[i].visible > 0) { foldable = true; break; }
+            }
+            navToggle.style.display = foldable ? "" : "none";
             navToggle.textContent = navCompact
                 ? (collapsed ? L.toggleAllShort : L.toggleNoneShort)
                 : (collapsed ? L.toggleAll : L.toggleNone);
