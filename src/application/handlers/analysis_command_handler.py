@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from inspect import isawaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 from urllib.parse import quote
 
 # File is only available via astrbot.core (internal API — may change).
@@ -26,6 +26,7 @@ from ...domain.repositories.platform_adapter_repository import (
     PlatformAdapterProtocol,
 )
 from ...domain.value_objects.task_event import TaskEvent
+from ...infrastructure.platform.stop_signal import FrontendStopWatcher, StopRequest
 from ...infrastructure.reporting.html_renderer import bind_group_html_renderer
 from ...shared.constants import PLUGIN_NAME, AnalysisStage
 from ...shared.trace_context import TraceContext
@@ -35,8 +36,51 @@ from ..services.analysis_application_service import (
     DuplicateGroupTaskError,
 )
 
+STOP_GRACE_SECONDS = 5.0
+"""取消子任务后等待其退出的上限；超时仍继续收尾，避免 handler 无限挂住。"""
+
+T = TypeVar("T")
+
+
+def _consume_orphan_task_exception(task: asyncio.Task[object]) -> None:
+    """取回孤儿任务的异常。
+
+    宽限期结束后仍未退出的子任务会被放弃等待，若它随后以异常结束，
+    没有回调取回就会由事件循环打印 Task exception was never retrieved。
+
+    Args:
+        task: 被放弃等待的后台任务。
+    """
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.warning(f"孤儿前台任务结束后抛出异常（已取回）: {error!r}")
+
+
+def _abandon_task(task: asyncio.Task[object]) -> None:
+    """放弃等待不响应取消的任务，并接管它后续的异常。
+
+    宽限期结束后仍未退出的子任务无法再强杀，只能不再等待；若它之后以异常
+    结束而没有回调取回，事件循环会打印 Task exception was never retrieved。
+
+    Args:
+        task: 被放弃等待的后台任务。
+    """
+    task.add_done_callback(_consume_orphan_task_exception)
+
+
+class AnalysisStoppedError(BaseException):
+    """用户通过宿主 /stop 中止了前台分析。
+
+    继承 BaseException 是刻意的：这是控制流信号而非错误，必须穿过各处
+    ``except Exception``（渲染失败回退、发送兜底）继续上抛，否则停止会被
+    当成渲染失败吞掉，用户按了停止仍会收到报告。
+    """
+
+
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator, Callable, Coroutine
 
     from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
@@ -136,6 +180,9 @@ class AnalysisCommandHandler:
         current_task = asyncio.current_task()
         trace = None
         trace_id = ""
+        group_id: str | None = None
+        task_finalized = False
+        stop_watcher: FrontendStopWatcher | None = None
 
         try:
             event.should_call_llm(True)
@@ -208,8 +255,15 @@ class AnalysisCommandHandler:
                     event.get_group_id(), orig_msg_id, "analysis_started"
                 )
 
-            result = await self.analysis_service.execute_daily_analysis(
-                group_id=group_id, platform_id=platform_id, manual=True, days=days
+            # 真正的工作放进独立子任务：/stop 只取消这个子任务，绝不取消驱动本
+            # 生成器的宿主任务，否则会打断宿主的发送与后续收尾流程。
+            stop_watcher = FrontendStopWatcher(event)
+            await stop_watcher.start()
+            result = await self._await_with_stop(
+                self.analysis_service.execute_daily_analysis(
+                    group_id=group_id, platform_id=platform_id, manual=True, days=days
+                ),
+                stop_watcher.stop_request,
             )
 
             if not result.get("success"):
@@ -248,12 +302,20 @@ class AnalysisCommandHandler:
             if self.active_task_manager:
                 await self.active_task_manager.update_stage(trace_id, "RENDER_REPORT")
 
-            async for res in self.send_analysis_report(event, result):
+            async for res in self.send_analysis_report(
+                event, result, stop_watcher.stop_request
+            ):
                 yield res
 
             if trace and trace.status == "running":
                 trace.finish(event=TaskEvent.SUCCEED)
 
+        except AnalysisStoppedError:
+            if stop_watcher is not None:
+                await stop_watcher.stop()
+            await self._finalize_stopped_analysis(trace_id, trace, group_id)
+            task_finalized = True
+            return
         except DuplicateGroupTaskError:
             if trace and trace.status == "running":
                 trace.finish(
@@ -277,11 +339,100 @@ class AnalysisCommandHandler:
                 f"❌ 分析失败: {e!s}。请检查网络连接和LLM配置，或联系管理员"
             )
         finally:
-            if trace_id and self.active_task_manager:
-                await self.active_task_manager.finish_task(trace_id)
+            # 收尾路径全部用同步或单次 await，避免二次取消跳过后续清理。
+            if stop_watcher is not None:
+                stop_watcher.stop_now()
+            if not task_finalized and trace_id and self.active_task_manager:
+                try:
+                    await self.active_task_manager.finish_task(trace_id)
+                except asyncio.CancelledError:
+                    logger.warning("收尾时被二次取消，活跃任务记录可能残留")
+                    raise
+
+    async def _await_with_stop(
+        self, awaitable: Coroutine[object, object, T], stop_request: StopRequest | None
+    ) -> T:
+        """等待协程的同时监听宿主停止请求。
+
+        命中停止时取消协程并等待其退出（最长 STOP_GRACE_SECONDS），随后抛出
+        AnalysisStoppedError，由调用链统一收尾。分析与渲染都走这里，避免渲染
+        这类几十秒的长请求成为不可中断的盲区。
+
+        Args:
+            awaitable: 需要执行的前台工作协程。
+            stop_request: 停止请求；为 None 时退化为普通 await。
+
+        Returns:
+            协程的返回值。
+
+        Raises:
+            AnalysisStoppedError: 宿主请求停止。
+        """
+        if stop_request is None:
+            return await awaitable
+
+        work = asyncio.create_task(awaitable)
+        stop_task = asyncio.create_task(stop_request.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {work, stop_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+        except asyncio.CancelledError:
+            # 宿主取消（插件重载/卸载）时也要收掉子任务，避免群锁被泄漏。
+            work.cancel()
+            exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
+            if work not in exited:
+                logger.error(
+                    f"前台任务在宿主取消后 {STOP_GRACE_SECONDS}s 内未退出，放弃等待"
+                )
+                _abandon_task(work)
+            raise
+        finally:
+            if not stop_task.done():
+                stop_task.cancel()
+
+        if work in done:
+            if work.cancelled():
+                raise RuntimeError("分析子任务被内部取消")
+            return work.result()
+
+        work.cancel()
+        exited, _ = await asyncio.wait({work}, timeout=STOP_GRACE_SECONDS)
+        if work not in exited:
+            logger.error(f"前台任务在取消后 {STOP_GRACE_SECONDS}s 内未退出，继续收尾")
+            _abandon_task(work)
+        raise AnalysisStoppedError
+
+    async def _finalize_stopped_analysis(
+        self, trace_id: str, trace: TraceContext | None, group_id: str | None
+    ) -> None:
+        """收尾被用户停止的分析任务。
+
+        顺序刻意固定为：先结 trace 状态，再释放活跃任务，最后才由调用方发送回执。
+        这样即使宿主发送环节卡住，任务记录也已经清理，不会把群锁或活跃任务拖住。
+
+        Args:
+            trace_id: 本次分析的链路追踪 ID。
+            trace: 当前链路追踪对象，未建立时为空。
+            group_id: 群号，仅用于日志。
+        """
+        if trace is not None and trace.status == "running":
+            try:
+                trace.finish(
+                    event=TaskEvent.CANCEL,
+                    error_message="Task cancelled by frontend stop request",
+                )
+            except RuntimeError as transition_error:
+                logger.info(f"停止收尾时任务已由并发事件收敛: {transition_error}")
+        if trace_id and self.active_task_manager:
+            await self.active_task_manager.finish_task(trace_id)
+        logger.info(f"群 {group_id} 的群分析被用户停止 (宿主 /stop)")
 
     async def send_analysis_report(
-        self, event: AstrMessageEvent, result: dict[str, object]
+        self,
+        event: AstrMessageEvent,
+        result: dict[str, object],
+        stop_request: StopRequest | None = None,
     ) -> AsyncGenerator[MessageEventResult]:
         """处理分析结果的渲染和发送。
 
@@ -360,7 +511,25 @@ class AnalysisCommandHandler:
                     (
                         image_url,
                         _html_content,
-                    ) = await self.report_generator.generate_image_report(
+                    ) = await self._await_with_stop(
+                        self.report_generator.generate_image_report(
+                            analysis_result,
+                            group_id,
+                            html_render,
+                            avatar_url_getter=avatar_url_getter,
+                            nickname_getter=nickname_getter,
+                            avatar_cache_namespace=platform_id,
+                            allow_alphanumeric_user_ids=is_qq_official,
+                            template_theme=template_theme,
+                        ),
+                        stop_request,
+                    )
+            else:
+                (
+                    image_url,
+                    _html_content,
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_image_report(
                         analysis_result,
                         group_id,
                         html_render,
@@ -369,20 +538,8 @@ class AnalysisCommandHandler:
                         avatar_cache_namespace=platform_id,
                         allow_alphanumeric_user_ids=is_qq_official,
                         template_theme=template_theme,
-                    )
-            else:
-                (
-                    image_url,
-                    _html_content,
-                ) = await self.report_generator.generate_image_report(
-                    analysis_result,
-                    group_id,
-                    html_render,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
+                    ),
+                    stop_request,
                 )
 
             if image_url:
@@ -438,7 +595,25 @@ class AnalysisCommandHandler:
                     (
                         html_path,
                         _json_path,
-                    ) = await self.report_generator.generate_html_report(
+                    ) = await self._await_with_stop(
+                        self.report_generator.generate_html_report(
+                            analysis_result,
+                            group_id,
+                            avatar_url_getter=avatar_url_getter,
+                            nickname_getter=nickname_getter,
+                            avatar_cache_namespace=platform_id,
+                            allow_alphanumeric_user_ids=is_qq_official,
+                            template_theme=template_theme,
+                            trace_id=cur_trace_id,
+                        ),
+                        stop_request,
+                    )
+            else:
+                (
+                    html_path,
+                    _json_path,
+                ) = await self._await_with_stop(
+                    self.report_generator.generate_html_report(
                         analysis_result,
                         group_id,
                         avatar_url_getter=avatar_url_getter,
@@ -447,20 +622,8 @@ class AnalysisCommandHandler:
                         allow_alphanumeric_user_ids=is_qq_official,
                         template_theme=template_theme,
                         trace_id=cur_trace_id,
-                    )
-            else:
-                (
-                    html_path,
-                    _json_path,
-                ) = await self.report_generator.generate_html_report(
-                    analysis_result,
-                    group_id,
-                    avatar_url_getter=avatar_url_getter,
-                    nickname_getter=nickname_getter,
-                    avatar_cache_namespace=platform_id,
-                    allow_alphanumeric_user_ids=is_qq_official,
-                    template_theme=template_theme,
-                    trace_id=cur_trace_id,
+                    ),
+                    stop_request,
                 )
             if html_path:
                 is_only_url = self.config_manager.get_html_only_url()
