@@ -2,7 +2,8 @@ import asyncio
 
 import pytest
 
-from src.infrastructure.platform.stop_signal import FrontendStopWatcher, StopRequest
+from src.application.services.stop_request import StopRequest
+from src.infrastructure.platform.stop_signal import FrontendStopWatcher
 
 
 class HostStopEvent:
@@ -23,6 +24,8 @@ async def test_delivery_check_reads_host_flag_between_polls():
     try:
         await asyncio.wait_for(event.read.wait(), timeout=1)
         event.extras["agent_stop_requested"] = True
+        assert watcher.stop_request.requested is False
+        assert watcher.stop_request.refresh() is True
         assert watcher.stop_request.requested is True
         await asyncio.wait_for(watcher.stop_request.wait(), timeout=1)
     finally:
@@ -58,7 +61,8 @@ async def test_stop_only_cancels_owned_tasks_once():
 async def test_task_registered_after_stop_never_starts():
     event = HostStopEvent()
     event.extras["agent_stop_requested"] = True
-    request = StopRequest(event)
+    watcher = FrontendStopWatcher(event)
+    request = watcher.stop_request
     started = False
 
     async def work():

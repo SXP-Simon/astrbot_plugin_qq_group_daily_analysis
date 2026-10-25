@@ -1,7 +1,7 @@
 """宿主前台停止信号桥接
 
 AstrBot 的 /stop 是协作式取消：它给本会话的活跃事件打上 ``agent_stop_requested``
-标记，并不会取消任何 asyncio 任务。命令式插件默认不读这个标记，长任务因此停不下来。
+标记。命令式插件需要主动读取标记，才能取消自己创建的工作任务。
 
 本模块只读宿主的公开事件状态（``event.get_extra``），把它翻译成一个可等待的停止请求。
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Protocol, cast
 
+from ...application.services.stop_request import StopRequest
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
@@ -40,65 +41,6 @@ class StopSignalEvent(Protocol):
     def get_extra(self, key: str, default: object = None) -> object: ...
 
 
-class StopRequest:
-    """一次前台任务的停止请求，可被重复置位。"""
-
-    def __init__(self, event: StopSignalEvent | None = None) -> None:
-        self._requested = False
-        self._event = asyncio.Event()
-        self._host_event = event
-        self._read_error_logged = False
-        self._tasks: set[asyncio.Task[object]] = set()
-
-    @property
-    def requested(self) -> bool:
-        """检查停止请求，并即时补读宿主标记，避免轮询间隔内漏停。"""
-        if not self._requested and self._host_event is not None:
-            get_extra = cast(
-                "Callable[[str], object] | None",
-                getattr(self._host_event, "get_extra", None),
-            )
-            if callable(get_extra):
-                try:
-                    if bool(get_extra(STOP_EXTRA_KEY)):
-                        self.request()
-                except Exception as e:
-                    if not self._read_error_logged:
-                        self._read_error_logged = True
-                        logger.warning(f"读取宿主停止标记失败，将继续重试: {e}")
-        return self._requested
-
-    def request(self) -> None:
-        """置位停止请求，重复调用无副作用。"""
-        if self._requested:
-            return
-        self._requested = True
-        self._event.set()
-        for task in self._tasks:
-            task.cancel()
-
-    def cancel_on_stop(self, task: asyncio.Task[object]) -> None:
-        """将本次前台分析启动的后台任务关联到停止请求。
-
-        Args:
-            task: 本次分析拥有的后台任务，不能传入其他分析的任务。
-
-        Returns:
-            None。
-        """
-        if task.done():
-            return
-        if self.requested:
-            task.cancel()
-            return
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    async def wait(self) -> None:
-        """等待停止请求置位。"""
-        await self._event.wait()
-
-
 class FrontendStopWatcher:
     """把宿主停止标记桥接为 StopRequest。
 
@@ -114,7 +56,8 @@ class FrontendStopWatcher:
         self._event = event
         self._poll_interval = poll_interval
         self._poll_task: asyncio.Task[None] | None = None
-        self._stop_request = StopRequest(event)
+        self._stop_request = StopRequest(self._read_host_stop)
+        self._read_error_logged = False
 
     @property
     def stop_request(self) -> StopRequest:
@@ -165,13 +108,32 @@ class FrontendStopWatcher:
         if task is not None and not task.done():
             task.cancel()
 
+    def _read_host_stop(self) -> bool:
+        """读取宿主停止标记，兼容缺少接口及临时读取失败的宿主。
+
+        Returns:
+            是否观察到宿主的停止请求；读取失败时保持当前任务继续运行。
+        """
+        get_extra = cast(
+            "Callable[[str], object] | None", getattr(self._event, "get_extra", None)
+        )
+        if not callable(get_extra):
+            return False
+        try:
+            return bool(get_extra(STOP_EXTRA_KEY))
+        except Exception as e:
+            if not self._read_error_logged:
+                self._read_error_logged = True
+                logger.warning(f"读取宿主停止标记失败，将继续重试: {e}")
+            return False
+
     async def _poll_loop(self) -> None:
         """轮询宿主停止标记。
 
         单次读取异常只记一次警告并继续轮询，不因此永久放弃监听。
         """
         while True:
-            if self._stop_request.requested:
+            if self._stop_request.refresh():
                 logger.info("检测到宿主停止标记 (agent_stop_requested)，中止前台任务")
                 return
             await asyncio.sleep(self._poll_interval)
