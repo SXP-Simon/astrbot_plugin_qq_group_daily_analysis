@@ -17,13 +17,15 @@ AstrBot 的 /stop 是协作式取消：它给本会话的活跃事件打上 ``ag
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, cast
 
 from ...application.services.stop_request import StopRequest
 from ...utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from astrbot.api.event import AstrMessageEvent
 
 STOP_EXTRA_KEY = "agent_stop_requested"
 """宿主 /stop 命令写入的停止标记键名。"""
@@ -32,28 +34,23 @@ STOP_POLL_INTERVAL_SECONDS = 0.5
 """轮询间隔（秒），与宿主 Agent 运行器的检查节奏一致。"""
 
 
-class StopSignalEvent(Protocol):
-    """宿主事件中与停止相关的接口。
-
-    只声明本模块真正读取的成员；旧版宿主缺失 get_extra 时由运行时能力探测兜底。
-    """
-
-    def get_extra(self, key: str, default: object = None) -> object: ...
-
-
 class FrontendStopWatcher:
     """把宿主停止标记桥接为 StopRequest。
 
     生命周期由调用方管理：处理开始前 ``start()``，结束后 ``stop()``。
+
+    Args:
+        event: AstrBot 原始命令事件，按该事件读取停止标记。
+        poll_interval: 后台轮询间隔，发送边界仍会显式即时读取。
     """
 
     def __init__(
         self,
-        event: StopSignalEvent,
+        event: AstrMessageEvent,
         *,
         poll_interval: float = STOP_POLL_INTERVAL_SECONDS,
     ) -> None:
-        self._event = event
+        self._event: AstrMessageEvent = event
         self._poll_interval = poll_interval
         self._poll_task: asyncio.Task[None] | None = None
         self._stop_request = StopRequest(self._read_host_stop)

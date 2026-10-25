@@ -36,7 +36,6 @@ from src.domain.value_objects.task_event import TaskEvent
 from src.infrastructure.platform.stop_signal import (
     STOP_EXTRA_KEY,
     FrontendStopWatcher,
-    StopSignalEvent,
 )
 
 if TYPE_CHECKING:
@@ -94,7 +93,7 @@ async def test_watcher_keeps_polling_after_read_errors():
 
 @pytest.mark.asyncio
 async def test_watcher_without_get_extra_does_not_start():
-    watcher = FrontendStopWatcher(cast("StopSignalEvent", NoExtraEvent()))
+    watcher = FrontendStopWatcher(NoExtraEvent())
     await watcher.start()
     assert watcher.watching is False
     await watcher.stop()
